@@ -5,6 +5,7 @@ const realSetTimeout = setTimeout
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const { writeDatadogParentId, writeDatadogTraceId } = require('../../dd-trace/src/carrier')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
@@ -112,6 +113,7 @@ class JestPlugin extends CiPlugin {
       hasUnskippableSuites,
       hasForcedToRunSuites,
       error,
+      isTestSessionFinalizationError,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
@@ -122,6 +124,9 @@ class JestPlugin extends CiPlugin {
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
         if (error) {
+          if (isTestSessionFinalizationError) {
+            this.tracer._exporter.setDeferredTestSuiteError?.(error)
+          }
           this.testSessionSpan.setTag('error', error)
           this.testModuleSpan.setTag('error', error)
         }
@@ -158,6 +163,7 @@ class JestPlugin extends CiPlugin {
           this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
+        this.tracer._exporter.exportDeferredTestSuiteSpans?.()
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
@@ -197,7 +203,7 @@ class JestPlugin extends CiPlugin {
         config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
-        config._ddEarlyFlakeDetectionSlowTestRetries = this.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
+        config._ddEarlyFlakeDetectionRetryPolicy = this.libraryConfig?.earlyFlakeDetectionRetryPolicy
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
@@ -230,10 +236,10 @@ class JestPlugin extends CiPlugin {
         _ddItrSkippingEnabledTags: itrSkippingEnabledTags,
       } = testEnvironmentOptions
 
-      const testSessionSpanContext = this.tracer.extract('text_map', {
-        'x-datadog-trace-id': testSessionId,
-        'x-datadog-parent-id': testModuleId,
-      })
+      const carrier = /** @type {Record<string, unknown>} */ ({})
+      writeDatadogTraceId(carrier, testSessionId)
+      writeDatadogParentId(carrier, testModuleId)
+      const testSessionSpanContext = this.tracer.extract('text_map', carrier)
 
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
@@ -299,23 +305,6 @@ class JestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:jest:worker-report:telemetry', data => {
-      const telemetryEvents = JSON.parse(data)
-      for (const event of telemetryEvents) {
-        if (event.type === 'ciVisEvent') {
-          this.telemetry.ciVisEvent(event.name, event.testLevel, {
-            ...event.tags,
-            testFramework: event.testFramework,
-            isUnsupportedCIProvider: event.isUnsupportedCIProvider,
-          })
-        } else if (event.type === 'count') {
-          this.telemetry.count(event.name, event.tags, event.value)
-        } else if (event.type === 'distribution') {
-          this.telemetry.distribution(event.name, event.tags, event.measure)
-        }
-      }
-    })
-
     this.addSub('ci:jest:test-suite:finish', ({
       status,
       errorMessage,
@@ -345,6 +334,7 @@ class JestPlugin extends CiPlugin {
       this.pendingTestSuiteFinishes.add(pendingFinish)
 
       const finish = () => {
+        this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
         testSuiteSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
         // Suites potentially run in a different process than the session,

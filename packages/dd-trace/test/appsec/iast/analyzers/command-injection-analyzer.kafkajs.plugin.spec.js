@@ -1,6 +1,6 @@
 'use strict'
 
-const { testOutsideRequestHasVulnerability } = require('../utils')
+const { testOutsideRequestHasVulnerability, invokeCommandInjectionSink } = require('../utils')
 const { withVersions } = require('../../../setup/mocha')
 
 const topic = 'test-topic'
@@ -37,14 +37,8 @@ describe('command-injection-analyzer with kafkajs', () => {
 
         await consumer.run({
           eachMessage: ({ topic, message }) => {
-            try {
-              const { execSync } = require('child_process')
-
-              const command = message.value.toString()
-              execSync(command)
-            } catch (e) {
-              // do nothing
-            }
+            const command = message.value.toString()
+            invokeCommandInjectionSink(command)
           },
         })
 

@@ -41,6 +41,7 @@ describe('test optimization validation report', () => {
         foundationalReportingEstablished: true,
       }),
       result('ci-wiring', 'fail', 'Test Optimization is not initialized in the selected CI job.', {
+        ciConfigurationStatus: 'not_configured',
         conclusion: 'confirmed_misconfigured',
         evidenceStrength: 'confirmed_static',
         recommendation: 'Add dd-trace/ci/init to this exact test job.',
@@ -49,12 +50,27 @@ describe('test optimization validation report', () => {
     ])
     const report = readReport()
 
-    assert.match(report, /library reported this project test correctly/)
-    assert.match(report, /customer CI configuration has a confirmed static problem/)
+    assert.match(report, /\*\*Report state: FINAL\*\*/)
+    assert.match(report, /Local library compatibility/)
+    assert.match(report, /PASS — controlled offline reporting worked/)
+    assert.match(report, /NOT CONFIGURED — initialization or reporting transport is missing/)
     assert.match(report, /Add dd-trace\/ci\/init to this exact test job/)
     assert.match(report, /\| PASS \|/)
-    assert.match(report, /\| FAIL \|/)
+    assert.match(report, /\| NOT CONFIGURED \|/)
     assert.doesNotMatch(report, /### .*Early Flake Detection/)
+  })
+
+  it('labels only the execution plan carrying the current approval digest', () => {
+    const approvedPlanSha256 = 'a'.repeat(64)
+    const planPath = path.join(out, 'execution-plan.md')
+    fs.writeFileSync(planPath, `node validator.js --sha256 ${'b'.repeat(64)}\n`)
+
+    write([], { approvedPlanSha256 })
+    assert.doesNotMatch(readReport(), /Approved execution plan/)
+
+    fs.writeFileSync(planPath, `node validator.js --sha256 ${approvedPlanSha256}\n`)
+    write([], { approvedPlanSha256 })
+    assert.match(readReport(), /Approved execution plan: `execution-plan\.md`/)
   })
 
   it('surfaces a confirmed advanced failure ahead of Basic Reporting success', () => {
@@ -68,15 +84,35 @@ describe('test optimization validation report', () => {
     ])
     const report = readReport()
 
-    assert.match(
-      report,
-      /What This Means[\s\S]*Basic Reporting passed, but Early Flake Detection failed: The generated test did not/
-    )
+    assert.match(report, /What This Means[\s\S]*ACTION REQUIRED — Early Flake Detection/)
+    assert.match(report, /The generated test did not receive an Early Flake Detection retry/)
+  })
+
+  it('reports unavailable generated checks as incomplete instead of not eligible', () => {
+    const recommendation = 'Report the generated-test collection limitation to validator engineering.'
+    write([
+      result('basic-reporting', 'pass', 'The direct test emitted the complete event hierarchy.'),
+      result('efd', 'skip', 'The generated test strategy is unavailable.', {
+        blockerCategory: 'VALIDATOR_LIMITATION',
+        featureEligibility: {
+          eligible: false,
+          reasonCode: 'generated-test-strategy-not-possible',
+        },
+        manifestIncomplete: true,
+        recommendation,
+      }),
+    ])
+    const report = readReport()
+
+    assert.match(report, /INCOMPLETE — one or more selected checks were not reached/)
+    assert.doesNotMatch(report, /NOT ELIGIBLE/)
+    assert.match(report, new RegExp(recommendation.replace('.', String.raw`\.`)))
   })
 
   it('distinguishes incomplete validation from a tracer failure', () => {
     write([
       result('basic-reporting', 'blocked', 'The browser could not launch in this sandbox.', {
+        blockerCategory: 'EXECUTION_ENVIRONMENT_BLOCKED',
         commandFailure: { blockedByExecutionEnvironment: true },
         recommendation: 'Run the exact approved command in a normal project terminal.',
         validationIncomplete: true,
@@ -85,6 +121,7 @@ describe('test optimization validation report', () => {
         ciFacts: {
           initialization: { status: 'missing' },
           runnerInvocation: { status: 'unresolved' },
+          transport: { mode: 'none', status: 'missing' },
         },
         conclusion: 'incomplete',
         validationIncomplete: true,
@@ -97,24 +134,71 @@ describe('test optimization validation report', () => {
     const report = readReport()
 
     assert.match(report, /\*\*Status: INCOMPLETE\*\*/)
-    assert.match(report, /Local library behavior was not validated/)
+    assert.match(report, /NOT VALIDATED — EXECUTION ENVIRONMENT BLOCKED/)
     assert.match(report, /\| INCOMPLETE \|/)
     assert.match(report, /"ciFacts"/)
     assert.match(report, /"initialization"[\s\S]*"status": "missing"/)
+    assert.match(report, /initialization not visible; transport not visible; runner path unresolved/)
     assert.match(report, /Run the exact approved command in a normal project terminal/)
+    assert.match(report, /rerun that exact CI test step with DD_TRACE_DEBUG=1/)
+    assert.match(report, /Static absence alone is not a confirmed failure/)
+    assert.match(report, /Validation scope: some selected checks are incomplete/)
+    assert.match(
+      report,
+      /Validator exit code: 2 \(one or more selected checks are incomplete or blocked; completed conclusions remain valid\)/
+    )
+    assert.doesNotMatch(report, /^Coverage:/m)
   })
 
   it('reports a confirmed CI problem when no local check ran', () => {
     write([
       result('ci-wiring', 'fail', 'Test Optimization is not initialized in the selected CI job.', {
+        ciConfigurationStatus: 'not_configured',
         conclusion: 'confirmed_misconfigured',
         evidenceStrength: 'confirmed_static',
       }),
     ])
     const report = readReport()
 
-    assert.match(report, /customer CI configuration has a confirmed static problem/)
-    assert.match(report, /Local library behavior was not validated/)
+    assert.match(report, /NOT CONFIGURED — initialization or reporting transport is missing/)
+    assert.match(report, /NOT VALIDATED/)
+  })
+
+  it('names closed-form CI incompleteness and de-duplicates blocked advanced actions', () => {
+    const recommendation = 'Resolve the one static project binding before retrying validation.'
+    write([
+      result('basic-reporting', 'blocked', 'The project selection is unsupported.', {
+        blockerCategory: 'VALIDATOR_LIMITATION',
+        recommendation,
+        validationIncomplete: true,
+      }),
+      result('efd', 'skip', 'Not reached.', {
+        blockerCategory: 'VALIDATOR_LIMITATION',
+        recommendation,
+        validationIncomplete: true,
+      }),
+      result('atr', 'skip', 'Not reached.', {
+        blockerCategory: 'VALIDATOR_LIMITATION',
+        recommendation,
+        validationIncomplete: true,
+      }),
+      result('ci-wiring', 'error', 'No supported CI file was found.', {
+        reasonCode: 'no-supported-ci-configuration',
+        validationIncomplete: true,
+      }),
+    ], {
+      executionStatus: 'incomplete',
+      validationCoverage: 'partial',
+      validatorExitCode: 2,
+    })
+    const report = readReport()
+    const nextActions = report.slice(report.indexOf('## Next Actions'), report.indexOf('## Debugging Evidence'))
+
+    assert.match(report, /INCOMPLETE — no repository-controlled CI configuration was found/)
+    assert.strictEqual(
+      nextActions.match(/Resolve the one static project binding before retrying validation\./g).length,
+      1
+    )
   })
 
   it('leads with the specific project setup action', () => {
@@ -154,7 +238,7 @@ describe('test optimization validation report', () => {
     write([bug])
     const report = readReport()
 
-    assert.match(report, /possible library bug/)
+    assert.match(report, /POSSIBLE LIBRARY BUG/)
     assert.ok(report.includes(`Artifacts: \`${path.join('mocha-root', 'basic-reporting', 'debug')}\``))
     assert.match(report, /"missingEventLevels"/)
     assert.match(report, /Attach the debug artifact/)
@@ -195,9 +279,12 @@ describe('test optimization validation report', () => {
     writePendingReport({ manifest, out })
     const report = readReport()
 
-    assert.match(report, /\*\*Status: INCOMPLETE\*\*/)
+    assert.match(report, /\*\*Report state: PENDING\*\*/)
+    assert.match(report, /\*\*Status: PENDING\*\*/)
     assert.match(report, /did not finish/)
+    assert.match(report, /not a final report/)
     assert.match(report, /Do not draw a Test Optimization conclusion/)
+    assert.doesNotMatch(report, /Report state: FINAL/)
   })
 
   it('reports incomplete temporary-file cleanup explicitly', () => {
@@ -234,6 +321,50 @@ describe('test optimization validation report', () => {
 
     assert.match(report, /Keep the validation artifacts and report this validator failure to engineering/)
     assert.doesNotMatch(report, /Prepare the project so the selected direct test passes/)
+    assert.match(report, /Validator exit code: 3 \(validator implementation or orchestration error\)/)
+  })
+
+  it('preserves a specific recovery action for validator-owned state collisions', () => {
+    const validatorBlocker = result('all', 'blocked', 'A validator output path already exists.', {
+      blockerKind: 'command-output-exists',
+      domain: 'validator_state',
+      recommendation: 'Inspect the exact output path and approve a fresh plan.',
+      validationIncomplete: true,
+    })
+    validatorBlocker.frameworkId = 'validator'
+
+    write([validatorBlocker], {
+      executionStatus: 'incomplete',
+      validationCoverage: 'partial',
+      validatorExitCode: 2,
+    })
+    const report = readReport()
+
+    assert.match(report, /Inspect the exact output path and approve a fresh plan/)
+    assert.doesNotMatch(report, /report this validator failure to engineering/)
+    assert.match(report, /Validator exit code: 2 \(one or more selected checks are incomplete or blocked/)
+  })
+
+  it('explains a confirmed finding without calling it a validator failure', () => {
+    write([
+      result('basic-reporting', 'pass', 'The direct test emitted the complete event hierarchy.'),
+      result('ci-wiring', 'fail', 'Test Optimization is not initialized in the selected CI job.', {
+        conclusion: 'confirmed_misconfigured',
+        evidenceStrength: 'confirmed_static',
+      }),
+    ])
+    const report = readReport()
+    const consoleSummary = consoleLog.lastCall.args[0]
+
+    assert.match(report, /Validation scope: all selected checks reached a conclusion/)
+    assert.match(
+      report,
+      /Validator exit code: 1 \(confirmed actionable finding; this does not by itself mean dd-trace or the validator failed\)/
+    )
+    assert.match(consoleSummary, /Validation scope: all selected checks reached a conclusion/)
+    assert.match(consoleSummary, /Validator exit code: 1 \(confirmed actionable finding/)
+    assert.match(consoleSummary, /^Report state: FINAL/m)
+    assert.doesNotMatch(consoleSummary, /^Coverage:/m)
   })
 
   /**

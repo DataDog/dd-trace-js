@@ -111,7 +111,7 @@ async function runBasicReporting ({ framework, out, options }) {
     }
 
     if (!run.offline.initialized || !evidence.settingsLoadedFromCache) {
-      return failWithDebugRerun({
+      return failBasicWithDebugRerun({
         command,
         diagnosis: run.offline.initialized
           ? 'The clean test passed, but Test Optimization did not load the validator-owned offline settings.'
@@ -131,7 +131,7 @@ async function runBasicReporting ({ framework, out, options }) {
     }
 
     if (run.result.exitCode !== 0) {
-      evidence.commandFailure = classifyFailure(framework, run.result)
+      evidence.commandFailure = classifyFailure(framework, run.result, run.events)
       const confirmation = await runCleanConfirmation({ command, framework, options, out })
       evidence.cleanConfirmation = confirmation.evidence
       if (!confirmation.evidence.matchesPreflight) {
@@ -144,7 +144,7 @@ async function runBasicReporting ({ framework, out, options }) {
           confirmation.artifacts
         )
       }
-      const result = await failWithDebugRerun({
+      const result = await failBasicWithDebugRerun({
         command,
         diagnosis: complete
           ? `The test passed twice without Datadog but exited ${run.result.exitCode} when initialized, after ` +
@@ -169,7 +169,7 @@ async function runBasicReporting ({ framework, out, options }) {
     }
 
     const missing = getMissingLevels(evidence)
-    return failWithDebugRerun({
+    return failBasicWithDebugRerun({
       command,
       diagnosis: 'The direct test passed cleanly and while initialized, but no complete Test Optimization event ' +
         `hierarchy was captured. Missing levels: ${missing.join(', ')}. This is a possible dd-trace adapter bug.`,
@@ -192,6 +192,50 @@ async function runBasicReporting ({ framework, out, options }) {
     failure.evidence.validationIncomplete = true
     return failure
   }
+}
+
+async function failBasicWithDebugRerun (input) {
+  const result = await failWithDebugRerun(input)
+  const debug = result.evidence?.debugRerun
+  if (!isSuccessfulDebugRerun(debug, result.evidence?.selector)) return result
+
+  const initialDiagnosis = result.diagnosis
+  delete result.evidence.possibleLibraryBug
+  result.status = 'error'
+  result.diagnosis = 'The first initialized run failed, but the unchanged DD_TRACE_DEBUG=1 rerun exited cleanly ' +
+    'and emitted the complete event hierarchy. Basic Reporting is intermittent, so no library-bug conclusion ' +
+    'was reached.'
+  result.evidence.initialInstrumentedDiagnosis = initialDiagnosis
+  result.evidence.intermittentInstrumentedResult = true
+  result.evidence.recommendation = 'Repeat the approved initialized command without changing its test selection. ' +
+    'If the failure recurs, send both initialized runs and the clean confirmations to engineering.'
+  result.evidence.validationIncomplete = true
+  return result
+}
+
+function isSuccessfulDebugRerun (debug, selector) {
+  return isDebugSelectorVerified(debug, selector) &&
+    debug?.ran === true &&
+    debug.commandExitCode === 0 &&
+    debug.commandTimedOut === false &&
+    debug.offlineExporterInitialized === true &&
+    debug.settingsLoadedFromCache === true &&
+    debug.testSessionEvents > 0 &&
+    debug.testModuleEvents > 0 &&
+    debug.testSuiteEvents > 0 &&
+    debug.testEvents > 0
+}
+
+// A wrapper rerun is comparable only when events identify the approved representative and no other file.
+function isDebugSelectorVerified (debug, selector) {
+  if (selector?.verified !== true) return false
+  if (selector.mode === 'bounded_direct_runner') return true
+  if (selector.mode !== 'instrumented_event_identity' ||
+    typeof selector.expectedTestFile !== 'string' ||
+    debug?.testEventsWithoutSourceFile !== 0 ||
+    debug?.testSourceFileCount !== 1 ||
+    debug?.testSourceFiles?.length !== 1) return false
+  return sourceFilesMatch(debug.testSourceFiles[0], selector.expectedTestFile)
 }
 
 /**
@@ -234,10 +278,17 @@ async function runCleanConfirmation ({ command, framework, options, out }) {
  */
 function summarizePreflight (preflight = {}) {
   return {
+    attempts: (preflight.attempts || []).map(attempt => ({
+      exitCode: attempt.exitCode,
+      observedTestCount: attempt.observedTestCount,
+      testFile: attempt.testFile,
+      timedOut: attempt.timedOut === true,
+    })),
     durationMs: preflight.durationMs,
     exitCode: preflight.exitCode,
     observedTestCount: preflight.observedTestCount,
     ran: preflight.ran === true,
+    selectedTestFile: preflight.selectedTestFile,
     selectorVerification: preflight.selectorVerification,
     timedOut: preflight.timedOut === true,
   }
@@ -312,12 +363,15 @@ function normalizeSourceFile (filename) {
  *
  * @param {object} framework framework entry
  * @param {object} result command result
+ * @param {object[]} [events] normalized captured events
  * @returns {object|undefined} blocker
  */
-function classifyFailure (framework, result) {
+function classifyFailure (framework, result, events = []) {
   return getCommandBlocker(result, {
     browserRequired: framework.browserRequired,
     framework: framework.framework,
+    packageJson: framework.project?.packageJson,
+    testsRan: eventsOfType(events, 'test').length > 0,
   })
 }
 

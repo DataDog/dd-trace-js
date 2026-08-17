@@ -61,6 +61,10 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'FUNCTIONS_WORKER_RUNTIME',
   'GCP_PROJECT',
   'K_SERVICE',
+  'VERCEL',
+  'VERCEL_ENV',
+  'VERCEL_PROJECT_ID',
+  'VERCEL_REGION',
   'WEBSITE_SKU',
   // lambda RITM target path (computed once at module load)
   'LAMBDA_TASK_ROOT',
@@ -806,7 +810,6 @@ module.exports = {
    *
    * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   assertSomeTraces (callback, options) {
     return runCallbackAgainstTraces(callback, options, traceHandlers)
@@ -836,7 +839,6 @@ module.exports = {
    *
    * @param {testAssertionSpanCallback|Record<string|symbol, unknown>} callbackOrExpected - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   assertFirstTraceSpan (callbackOrExpected, options) {
     return runCallbackAgainstTraces(function (traces) {
@@ -863,7 +865,6 @@ module.exports = {
    *
    * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   expectPipelineStats (callback, options) {
     return runCallbackAgainstTraces(callback, options, statsHandlers)
@@ -944,6 +945,9 @@ module.exports = {
       tracer.use(plugin, { enabled: false })
     }
     loadedPlugins.clear()
+    // The propagation-hash singleton is not in `RELOAD_EVICTION_IDS`, so the
+    // `Config` this tracer installed would stay live for every later spec file.
+    require('../../src/propagation-hash').configure(null)
     // Force the next `agent.load` through the gate-fired rebuild path
     // so cross-file leaks (`code_origin` tags sticking across files,
     // `router`'s path-stack accumulating, …) cannot silently inherit

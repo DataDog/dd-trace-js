@@ -1941,6 +1941,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_TEST_MANAGEMENT_REPORT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",
@@ -2438,6 +2446,13 @@
       }
     ],
     "DD_TRACE_BODY_PARSER_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_BROWSER_BUNYAN_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -2991,6 +3006,16 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_HTTP_SERVER_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "500-599",
+        "aliases": [
+          "DD_HTTP_SERVER_ERROR_STATUSES"
+        ]
+      }
+    ],
     "DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED": [
       {
         "implementation": "A",
@@ -3494,6 +3519,13 @@
       }
     ],
     "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_TRACE_OTEL_CTX_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

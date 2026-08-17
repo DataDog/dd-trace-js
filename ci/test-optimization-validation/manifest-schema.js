@@ -3,6 +3,7 @@
 const path = require('node:path')
 
 const { getArtifactId } = require('./artifact-id')
+const { BLOCKER_CATEGORY_VALUES } = require('./blocker-category')
 const {
   MAX_GENERATED_FILES,
   getGeneratedFileContentError,
@@ -111,6 +112,12 @@ function validateFrameworks (manifest, errors) {
     requiredString(framework, 'id', prefix, errors)
     requiredString(framework, 'framework', prefix, errors)
     enumString(framework, 'status', STATUSES, prefix, errors)
+    if (framework.blockerCategory !== undefined &&
+      !BLOCKER_CATEGORY_VALUES.has(framework.blockerCategory)) {
+      errors.push(
+        `${prefix}.blockerCategory must be one of ${[...BLOCKER_CATEGORY_VALUES].join(', ')} when provided.`
+      )
+    }
     requiredObject(framework, 'project', prefix, errors)
     rejectExecutionFields(framework, prefix, errors)
 
@@ -132,6 +139,12 @@ function validateFrameworks (manifest, errors) {
     validateCiWiring(manifest.repository?.root, framework.ciWiring, `${prefix}.ciWiring`, errors)
 
     if (framework.status === 'runnable') {
+      if (typeof framework.allCandidatesRequireLocalSocket !== 'boolean') {
+        errors.push(`${prefix}.allCandidatesRequireLocalSocket must be a boolean.`)
+      }
+      if (typeof framework.buildArtifactRequired !== 'boolean') {
+        errors.push(`${prefix}.buildArtifactRequired must be a boolean.`)
+      }
       validateRunnableFramework(manifest.repository?.root, framework, prefix, generatedPaths, errors)
     } else {
       for (const field of ['validation', 'preflight', 'generatedTestStrategy']) {
@@ -198,12 +211,13 @@ function validateRunnableFramework (repositoryRoot, framework, prefix, generated
   }
   containedPath(repositoryRoot, validation.runner, `${prefix}.validation.runner`, errors)
   containedPath(repositoryRoot, validation.testFile, `${prefix}.validation.testFile`, errors)
+  validateFallbackTests(repositoryRoot, validation, `${prefix}.validation`, errors)
   const runnerArgsError = getRunnerArgsError(framework.framework, validation.runnerArgs)
   if (runnerArgsError) errors.push(`${prefix}.validation.runnerArgs ${runnerArgsError}.`)
   if (validation.omittedRunnerOptions !== undefined) {
     validateStringArray(validation.omittedRunnerOptions, `${prefix}.validation.omittedRunnerOptions`, errors)
     for (const option of Array.isArray(validation.omittedRunnerOptions) ? validation.omittedRunnerOptions : []) {
-      if (!['--run', '--typecheck'].includes(option)) {
+      if (!['-R', '--reporter', '--run', '--typecheck'].includes(option)) {
         errors.push(`${prefix}.validation.omittedRunnerOptions contains unsupported option ${option}.`)
       }
     }
@@ -225,21 +239,23 @@ function validateRunnableFramework (repositoryRoot, framework, prefix, generated
     if (runnerInputError) errors.push(`${prefix}.validation runner configuration ${runnerInputError}.`)
   }
   validateStringArray(validation.requiredEnvVars, `${prefix}.validation.requiredEnvVars`, errors)
-  for (const name of validation.requiredEnvVars || []) {
-    if (!ENV_NAME_PATTERN.test(name)) {
-      errors.push(`${prefix}.validation.requiredEnvVars contains an invalid environment name.`)
-    }
-    if (/^(?:DD_|DATADOG_|OTEL_|NODE_OPTIONS$|TS_NODE_PROJECT$)/i.test(name)) {
-      errors.push(
-        `${prefix}.validation.requiredEnvVars must not inherit Datadog, OpenTelemetry, NODE_OPTIONS, or ` +
-          'TS_NODE_PROJECT.'
-      )
-    }
-    if (SECRET_ENV_PATTERN.test(name)) {
-      errors.push(`${prefix}.validation.requiredEnvVars must not inherit secret-like environment variables.`)
-    }
-    if (EXECUTION_ENV_PATTERN.test(name)) {
-      errors.push(`${prefix}.validation.requiredEnvVars must not inherit executable-loading environment variables.`)
+  if (validation.requiredEnvVars) {
+    for (const name of validation.requiredEnvVars) {
+      if (!ENV_NAME_PATTERN.test(name)) {
+        errors.push(`${prefix}.validation.requiredEnvVars contains an invalid environment name.`)
+      }
+      if (/^(?:DD_|DATADOG_|OTEL_|NODE_OPTIONS$|TS_NODE_PROJECT$)/i.test(name)) {
+        errors.push(
+          `${prefix}.validation.requiredEnvVars must not inherit Datadog, OpenTelemetry, NODE_OPTIONS, or ` +
+            'TS_NODE_PROJECT.'
+        )
+      }
+      if (SECRET_ENV_PATTERN.test(name)) {
+        errors.push(`${prefix}.validation.requiredEnvVars must not inherit secret-like environment variables.`)
+      }
+      if (EXECUTION_ENV_PATTERN.test(name)) {
+        errors.push(`${prefix}.validation.requiredEnvVars must not inherit executable-loading environment variables.`)
+      }
     }
   }
   if (!Number.isInteger(validation.timeoutMs) || validation.timeoutMs < 1 || validation.timeoutMs > MAX_TIMEOUT_MS) {
@@ -251,6 +267,51 @@ function validateRunnableFramework (repositoryRoot, framework, prefix, generated
     return
   }
   validateGeneratedStrategy(repositoryRoot, framework, prefix, generatedPaths, errors)
+}
+
+/**
+ * Validates bounded fallback test paths and their statically discovered prerequisites.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object} validation direct-runner validation data
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function validateFallbackTests (repositoryRoot, validation, prefix, errors) {
+  if (validation.fallbackTests === undefined) return
+  if (!Array.isArray(validation.fallbackTests)) {
+    errors.push(`${prefix}.fallbackTests must be an array.`)
+    return
+  }
+  if (validation.fallbackTests.length > 2) {
+    errors.push(`${prefix}.fallbackTests must contain at most 2 entries.`)
+  }
+
+  const testFiles = new Set()
+  for (const [index, fallback] of validation.fallbackTests.slice(0, 2).entries()) {
+    const fallbackPrefix = `${prefix}.fallbackTests[${index}]`
+    if (!isObject(fallback)) {
+      errors.push(`${fallbackPrefix} must be an object.`)
+      continue
+    }
+    rejectExecutionFields(fallback, fallbackPrefix, errors)
+    requiredAbsolutePath(fallback, 'testFile', fallbackPrefix, errors)
+    containedPath(repositoryRoot, fallback.testFile, `${fallbackPrefix}.testFile`, errors)
+    if (typeof fallback.buildArtifactRequired !== 'boolean') {
+      errors.push(`${fallbackPrefix}.buildArtifactRequired must be a boolean.`)
+    }
+    if (typeof fallback.localSocketRequired !== 'boolean') {
+      errors.push(`${fallbackPrefix}.localSocketRequired must be a boolean.`)
+    }
+    if (fallback.testFile === validation.testFile) {
+      errors.push(`${fallbackPrefix}.testFile must differ from ${prefix}.testFile.`)
+    }
+    if (testFiles.has(fallback.testFile)) {
+      errors.push(`${prefix}.fallbackTests must contain unique testFile values.`)
+    }
+    testFiles.add(fallback.testFile)
+  }
 }
 
 /**
@@ -450,7 +511,9 @@ function validateAllStrings (value, prefix, errors) {
   if (errors.full()) return
   if (typeof value === 'string') {
     if (Buffer.byteLength(value) > MAX_STRING_BYTES) errors.push(`${prefix} exceeds the string size limit.`)
-    if (hasUnsafeInvisibleCharacter(value)) errors.push(`${prefix} contains an unsafe invisible character.`)
+    const inertCiLabel = /\.ciWiring\.(?:job|step)$/.test(prefix)
+    const text = inertCiLabel ? value.replaceAll(/[\uFE0E\uFE0F]/g, '') : value
+    if (hasUnsafeInvisibleCharacter(text)) errors.push(`${prefix} contains an unsafe invisible character.`)
     return
   }
   if (Array.isArray(value)) {

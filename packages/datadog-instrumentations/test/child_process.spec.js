@@ -190,7 +190,7 @@ describe('child process', () => {
                 it('should execute error callback', async () => {
                   try {
                     await promisify(childProcess[methodName])('invalid_command_test')
-                  } catch (e) {
+                  } catch {
                     sinon.assert.calledOnce(start)
                     assertObjectContains(start.firstCall.firstArg, { command: 'invalid_command_test', shell: false })
 
@@ -220,7 +220,7 @@ describe('child process', () => {
 
                   try {
                     await promisify(childProcess[methodName])('node -e "process.exit(1)"', { shell: true })
-                  } catch (e) {
+                  } catch {
                     sinon.assert.calledOnce(start)
                     assertObjectContains(start.firstCall.firstArg, {
                       command: 'node -e "process.exit(1)"',
@@ -342,7 +342,7 @@ describe('child process', () => {
                 try {
                   await promisify(childProcess[methodName])('invalid_command_test')
                   return Promise.reject(new Error('Command expected to fail'))
-                } catch (e) {
+                } catch {
                   sinon.assert.calledOnce(start)
                   sinon.assert.calledWithMatch(start, {
                     command: 'invalid_command_test',
@@ -359,7 +359,7 @@ describe('child process', () => {
                 try {
                   await promisify(childProcess[methodName])('node -e "process.exit(1)"')
                   return Promise.reject(new Error('Command expected to fail'))
-                } catch (e) {
+                } catch {
                   sinon.assert.calledOnce(start)
                   sinon.assert.calledWithMatch(start, {
                     command: 'node -e "process.exit(1)"',
@@ -713,7 +713,7 @@ describe('child process', () => {
         })
 
         after(() => {
-          try { fs.unlinkSync(tmpScript) } catch (e) { /* ignore */ }
+          try { fs.unlinkSync(tmpScript) } catch { /* ignore */ }
         })
 
         it('should execute success callbacks', (done) => {

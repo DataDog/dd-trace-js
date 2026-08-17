@@ -71,7 +71,7 @@ function decomposeServerUrl (rawUrl, obfuscatedUrl) {
       address = stripIpv6Brackets(hostname)
     }
     if (parsed.port) {
-      const parsedPort = Number.parseInt(parsed.port)
+      const parsedPort = Number.parseInt(parsed.port, 10)
       if (parsedPort > 0) port = parsedPort
     }
     path = parsed.pathname || '/'
@@ -210,7 +210,7 @@ function applyHttpOtelSemantics (formattedSpan) {
     // metric (the OTLP exporter serializes meta as stringValue but metrics as
     // intValue) — mirroring how server.port is handled below. Guard against a
     // non-numeric status, which would otherwise write a NaN metric.
-    statusCode = Number.parseInt(status)
+    statusCode = Number.parseInt(status, 10)
     if (Number.isFinite(statusCode)) newMetrics[HTTP_RESPONSE_STATUS_CODE] = statusCode
   }
 

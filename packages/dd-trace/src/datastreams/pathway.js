@@ -5,22 +5,24 @@
 // this inconsistency is ok because hashes do not need to be consistent across services
 const crypto = require('crypto')
 const { LRUCache } = require('../../../../vendor/dist/lru-cache')
+const {
+  hasDsmBase64,
+  hasDsmBinary,
+  pickDsm,
+  readDsmBase64,
+  readDsmBinary,
+  writeDsmBase64,
+} = require('../carrier')
 const log = require('../log')
-const pick = require('../../../datadog-core/src/utils/src/pick')
 const { encodeVarintInto, decodeVarint } = require('./encoding')
 
 const cache = new LRUCache({ max: 500 })
-
-const CONTEXT_PROPAGATION_KEY = 'dd-pathway-ctx'
-const CONTEXT_PROPAGATION_KEY_BASE64 = 'dd-pathway-ctx-base64'
 
 const PATHWAY_CONTEXT_BYTES = 20
 
 // Reused across `encodePathwayContext` calls; the buffer is fully rewritten before each
 // `Buffer.from(...)` copy-out so callers never observe mutation between checkpoints.
 const pathwayScratch = Buffer.allocUnsafe(PATHWAY_CONTEXT_BYTES)
-
-const logKeys = [CONTEXT_PROPAGATION_KEY, CONTEXT_PROPAGATION_KEY_BASE64]
 
 function shaHash (checkpointString) {
   // Copy out of the 32-byte digest so the LRU cache doesn't retain it.
@@ -114,7 +116,7 @@ function decodePathwayContext (pathwayContext) {
 }
 
 /**
- * @param {string} pathwayContext
+ * @param {string | Buffer} pathwayContext
  * @returns {ReturnType<typeof decodePathwayContext>|undefined}
  */
 function decodePathwayContextBase64 (pathwayContext) {
@@ -142,10 +144,10 @@ const DsmPathwayCodec = {
   encode (dataStreamsContext, carrier) {
     if (!dataStreamsContext || !dataStreamsContext.hash) return
     carrier ??= {}
-    carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)
+    writeDsmBase64(carrier, encodePathwayContextBase64(dataStreamsContext))
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Injected into DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
+    log.debug(() => `Injected into DSM carrier: ${JSON.stringify(pickDsm(carrier))}.`)
 
     return carrier
   },
@@ -155,25 +157,25 @@ const DsmPathwayCodec = {
    * @returns {ReturnType<typeof decodePathwayContext>|undefined}
    */
   decode (carrier) {
-    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Attempting extract from DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
-
     if (carrier == null) return
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.debug(() => `Attempting extract from DSM carrier: ${JSON.stringify(pickDsm(carrier))}.`)
+
     let ctx
-    if (CONTEXT_PROPAGATION_KEY_BASE64 in carrier) {
+    if (hasDsmBase64(carrier)) {
       // decode v2 encoding of base64
-      ctx = decodePathwayContextBase64(carrier[CONTEXT_PROPAGATION_KEY_BASE64])
-    } else if (CONTEXT_PROPAGATION_KEY in carrier) {
-      try {
+      const encoded = readDsmBase64(carrier)
+      if (encoded !== undefined) ctx = decodePathwayContextBase64(encoded)
+    } else if (hasDsmBinary(carrier)) {
+      const encoded = readDsmBinary(carrier)
+      if (Buffer.isBuffer(encoded)) {
         // decode v1 encoding
-        ctx = decodePathwayContext(carrier[CONTEXT_PROPAGATION_KEY])
-      } catch {
-        // pass
+        ctx = decodePathwayContext(encoded)
       }
       // cover case where base64 context was received under wrong key
-      if (!ctx && CONTEXT_PROPAGATION_KEY in carrier) {
-        ctx = decodePathwayContextBase64(carrier[CONTEXT_PROPAGATION_KEY])
+      if (!ctx && encoded !== undefined) {
+        ctx = decodePathwayContextBase64(encoded)
       }
     }
 
@@ -182,7 +184,6 @@ const DsmPathwayCodec = {
 }
 
 module.exports = {
-  CONTEXT_PROPAGATION_KEY_BASE64,
   computePathwayHash: computeHash,
   encodePathwayContext,
   decodePathwayContext,

@@ -14,6 +14,7 @@ const context = describe
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
+const exporters = require('../../../../ext/exporters')
 const { defaults } = require('../../src/config/defaults')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -765,6 +766,19 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, undefined)
   })
 
+  it('should not default OTEL_TRACES_SAMPLER when OTEL_TRACES_EXPORTER is otlp but the exporter is electron', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    const config = getConfig({ experimental: { exporter: 'electron' } })
+    assert.strictEqual(config.sampleRate, undefined)
+  })
+
+  it('should still respect an explicit OTEL_TRACES_SAMPLER when the exporter is electron', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.OTEL_TRACES_SAMPLER = 'always_off'
+    const config = getConfig({ experimental: { exporter: 'electron' } })
+    assert.strictEqual(config.sampleRate, 0)
+  })
+
   it('should keep OTEL_TRACES_EXPORTER=otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
@@ -844,6 +858,42 @@ describe('Config', () => {
     process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'false'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+  })
+
+  describe('HTTP server error statuses', () => {
+    it('should default to 500-599', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
+    })
+
+    it('should initialize from DD_TRACE_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '400-499'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '400-499')
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_SERVER_ERROR_STATUSES', value: '400-499', origin: 'env_var' },
+      ])
+    })
+
+    it('should fall back to DD_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_HTTP_SERVER_ERROR_STATUSES = '400-499'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '400-499')
+    })
+
+    it('should prefer DD_TRACE_HTTP_SERVER_ERROR_STATUSES over DD_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_HTTP_SERVER_ERROR_STATUSES = '400-499'
+      process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '500-599'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
+    })
   })
 
   it('should initialize with the correct defaults', () => {
@@ -3026,6 +3076,34 @@ describe('Config', () => {
     })
   })
 
+  for (const exporter of [
+    exporters.CUCUMBER_WORKER,
+    exporters.JEST_WORKER,
+    exporters.MOCHA_WORKER,
+    exporters.PLAYWRIGHT_WORKER,
+    exporters.VITEST_WORKER,
+  ]) {
+    it(`should disable telemetry by default for the ${exporter} Test Optimization worker`, () => {
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
+    })
+
+    it(`should ignore explicit telemetry enablement in the ${exporter} Test Optimization worker`, () => {
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
+    })
+  }
+
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
     const origTelemetryHeartbeatIntervalValue = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
     process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = '42'
@@ -3568,6 +3646,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+      delete process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
       delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
@@ -3695,6 +3774,15 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
       })
+      it('should leave the Test Management report setting unset by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_MANAGEMENT_REPORT_ENABLED, undefined)
+      })
+      it('should disable the Test Management report from the environment', () => {
+        process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_MANAGEMENT_REPORT_ENABLED, false)
+      })
       it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'
         const config = getConfig(options)
@@ -3759,12 +3847,6 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER = provider
         assert.strictEqual(getConfig(options).testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, provider)
       }
-    })
-
-    it('disables telemetry if inside a jest worker', () => {
-      process.env.JEST_WORKER_ID = '1'
-      const config = getConfig(options)
-      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
     })
   })
 
@@ -4741,6 +4823,11 @@ rules:
         // 'foo:bar',
         'x-custom-header:custom.tag',
       ])
+    })
+
+    it('collapses only whitespace adjacent to a colon in header tags', () => {
+      const config = getConfig({ headerTags: ['  a : b  ', 'k : : v'] })
+      assert.deepStrictEqual(config.headerTags, ['  a:b  ', 'k::v'])
     })
 
     it('should map tracing_tags to tags', () => {

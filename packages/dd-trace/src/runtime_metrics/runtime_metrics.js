@@ -11,11 +11,13 @@ const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
 const { createMetricsClient } = require('./client')
 
 const eventLoopDelayResolution = 4
-const EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 || (NODE_MAJOR === 26 && NODE_MINOR >= 5)
+const EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 ||
+  (NODE_MAJOR === 26 && NODE_MINOR >= 5) ||
+  (NODE_MAJOR === 24 && NODE_MINOR >= 19)
 
 // @datadog/native-metrics is only needed on Node versions where
 // monitorEventLoopDelay's samplePerIteration option is unavailable.
-// TODO: remove @datadog/native-metrics and this branch once Node < 26.5 is no longer supported.
+// TODO: remove @datadog/native-metrics and this branch once all supported Node versions provide this option.
 const NATIVE_METRICS_REQUIRED = !EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE
 
 let nativeMetrics = null

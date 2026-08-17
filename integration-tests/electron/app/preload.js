@@ -15,7 +15,7 @@ ipcRenderer.on('check-bridge', () => {
   try {
     bridge.send('test-payload')
     sendSuccess = true
-  } catch (_e) {
+  } catch {
     // sendSuccess stays false
   }
 

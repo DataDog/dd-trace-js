@@ -825,7 +825,7 @@ describe('Plugin', () => {
             app.use(/\/foo\/(bar|baz|bez)/, (req, res, next) => {
               next()
             })
-          } catch (err) {
+          } catch {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
@@ -860,7 +860,7 @@ describe('Plugin', () => {
             app.use(/\/foo\/(bar|baz|bez)/i, (req, res, next) => {
               next()
             })
-          } catch (err) {
+          } catch {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()
@@ -897,7 +897,7 @@ describe('Plugin', () => {
               next()
             })
             app.use('/foo', router)
-          } catch (err) {
+          } catch {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
             this.skip()

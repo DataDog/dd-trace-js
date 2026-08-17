@@ -86,9 +86,24 @@ function getSource (url, { format }) {
 }
 
 /**
+ * @typedef {[typeof LOAD_OPERATION, URL, object] | [typeof RESOLVE_OPERATION, string, object]} GetExportsOperation
+ */
+
+/**
+ * @typedef {{ done: false, value: GetExportsOperation } | { done: true, value: Set<string> }} GetExportsResult
+ */
+
+/**
+ * @typedef {{
+ *   next: (value?: unknown) => GetExportsResult,
+ *   throw: (error?: unknown) => GetExportsResult,
+ * }} GetExportsGenerator
+ */
+
+/**
  * Drives the generator returned by import-in-the-middle >=3.1.0 export discovery.
  *
- * @param {Generator<Array, Set<string>>} exportsGenerator Generator returned by getExports
+ * @param {GetExportsGenerator} exportsGenerator Generator returned by getExports
  * @param {(url: URL, context: object) => { source: string, format: string }} getSource
  * Function that loads module source
  * @returns {Set<string>}

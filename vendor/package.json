@@ -5,6 +5,7 @@
   },
   "dependencies": {
     "@apm-js-collab/code-transformer": "^0.18.1",
+    "@datadog/openfeature-node-server": "2.1.0",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/source-map": "npm:source-map@^0.6.0",
     "@isaacs/ttlcache": "^2.1.5",
@@ -22,7 +23,7 @@
     "meriyah": "^6.1.4",
     "module-details-from-path": "^1.0.4",
     "mutexify": "^1.4.0",
-    "pprof-format": "^2.2.3",
+    "pprof-format": "^2.3.0",
     "protobufjs": "^8.7.1",
     "retry": "^0.13.1",
     "rfdc": "^1.4.1",

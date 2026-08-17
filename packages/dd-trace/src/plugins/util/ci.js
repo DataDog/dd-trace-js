@@ -76,7 +76,7 @@ function normalizeRef (ref) {
   if (!ref) {
     return ref
   }
-  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//gm, '')
+  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//g, '')
 }
 
 function resolveTilde (filePath) {
@@ -114,6 +114,9 @@ const uniq = (items) => [...new Set(items)]
  *
  * This is much more robust than relying on hardcoded paths, especially on self-hosted runners
  * and GHES environments where the runner may be installed under arbitrary directories/users.
+ *
+ * @param {string | undefined} runnerTemp value of the `RUNNER_TEMP` environment variable
+ * @returns {string[]}
  */
 function getGithubDiagnosticDirsFromEnv (runnerTemp) {
   const dirs = []
@@ -182,6 +185,9 @@ function expandGlobPattern (pattern) {
 /**
  * Expands a mixed list of literal directories and glob patterns into concrete
  * directories. Literals pass through unchanged (existence is checked later).
+ *
+ * @param {string[]} candidates
+ * @returns {string[]}
  */
 function expandDiagnosticDirCandidates (candidates) {
   const expanded = []
@@ -216,7 +222,7 @@ const githubWellKnownDiagnosticDirPatternsUnix = [
 ]
 const githubWellKnownDiagnosticDirPatternsWin = ['C:/actions-runner/*/_diag', 'C:/actions-runner/*/*/_diag']
 
-const githubJobIDRegex = /"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
+const githubJobIDRegex = /"job":\s*\{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
 
 function getJobIDFromDiagFile () {
   const runnerTemp = getEnvironmentVariable('RUNNER_TEMP')
@@ -650,7 +656,7 @@ module.exports = {
         [GIT_TAG]: BITBUCKET_TAG,
         [GIT_REPOSITORY_URL]: BITBUCKET_GIT_SSH_ORIGIN || BITBUCKET_GIT_HTTP_ORIGIN,
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
-        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/[{}]/gm, ''),
+        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/[{}]/g, ''),
         [GIT_PULL_REQUEST_BASE_BRANCH]: BITBUCKET_PR_DESTINATION_BRANCH,
         [PR_NUMBER]: BITBUCKET_PR_ID,
       }

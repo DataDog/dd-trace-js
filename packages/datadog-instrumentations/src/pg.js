@@ -1,12 +1,24 @@
 'use strict'
 
 const { errorMonitor } = require('node:events')
+const { performance } = require('node:perf_hooks')
 
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook,
 } = require('./helpers/instrument')
+const {
+  clearPoolWaitTime,
+  dispatchesAcquireSynchronously,
+  isPoolQueryAcquire,
+  runOutsidePoolQueryAcquire,
+  runPoolAcquireError,
+  runWithPoolWait,
+  takePoolWaitTime,
+  wrapPoolAcquireCarrier,
+  wrapPoolQueryMethod,
+} = require('./helpers/pool-acquire')
 
 const startCh = channel('apm:pg:query:start')
 const finishCh = channel('apm:pg:query:finish')
@@ -17,6 +29,14 @@ const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
 
 const poolConnectStartCh = channel('apm:pg:pool:connect:start')
 const poolConnectFinishCh = channel('apm:pg:pool:connect:finish')
+
+const poolAcquireStartCh = channel('apm:pg:pool:acquire:start')
+const poolAcquireFinishCh = channel('apm:pg:pool:acquire:finish')
+const poolAcquireChannels = {
+  connectionFinishCh: poolConnectFinishCh,
+  acquireStartCh: poolAcquireStartCh,
+  acquireFinishCh: poolAcquireFinishCh,
+}
 
 // Drivers like pg-promise reuse the same prepared-statement query object across executions; cache
 // the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
@@ -33,23 +53,118 @@ addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/client.js' }, Client => 
 })
 
 addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
+  const poolWaitTransfer = { deferred: false }
+  const deferredPoolAcquire = !dispatchesAcquireSynchronously(
+    pg.Pool.prototype.query,
+    Object.assign(Object.create(pg.Pool.prototype), { Promise }),
+    'connect',
+    ['SELECT 1', () => {}]
+  )
+
   // pg defers a busy pool's connect callback and runs it in the releasing query's async context;
   // capture the caller's context and restore it around the callback so spans attach to the caller.
-  shimmer.wrap(pg.Pool.prototype, 'connect', connect => function (cb) {
-    if (typeof cb !== 'function' || !poolConnectStartCh.hasSubscribers) {
-      return connect.apply(this, arguments)
+  shimmer.wrap(pg.Pool.prototype, 'connect', connect => {
+    /**
+     * @param {Function|undefined} callback
+     * @returns {unknown}
+     */
+    const wrappedConnect = function (callback) {
+      // Pool.query always supplies a callback, so a missing callback is an explicit acquire.
+      if (typeof callback !== 'function') {
+        if (!poolAcquireStartCh.hasSubscribers) {
+          return connect.apply(this, arguments)
+        }
+
+        const start = acquireStart(this)
+        const acquireCtx = { poolOptions: this.options }
+        poolAcquireStartCh.publish(acquireCtx)
+
+        return connectForAcquire(connect, this, arguments, acquireCtx, start).then(client => {
+          clearPoolWaitTime(client)
+          acquireCtx.params = client.connectionParameters
+          finishAcquire(acquireCtx, start)
+          return client
+        }, error => {
+          acquireCtx.error = error
+          finishAcquire(acquireCtx, start)
+          throw error
+        })
+      }
+
+      if (!poolConnectStartCh.hasSubscribers) {
+        return connect.apply(this, arguments)
+      }
+
+      const ctx = {}
+      const poolOptions = this.options
+      const start = acquireStart(this)
+      const poolQueryAcquire = isPoolQueryAcquire()
+      let acquireCtx
+
+      if (poolQueryAcquire) {
+        arguments[0] = function (...args) {
+          const client = args[1]
+          if (client !== undefined) {
+            const waitTime = acquireWait(start)
+            return runWithPoolWait(
+              poolWaitTransfer,
+              client,
+              waitTime,
+              poolConnectFinishCh,
+              ctx,
+              callback,
+              this,
+              args
+            )
+          }
+          if (args[0] && poolAcquireStartCh.hasSubscribers) {
+            return runPoolAcquireError(
+              start,
+              args[0],
+              { poolOptions },
+              poolAcquireChannels,
+              ctx,
+              callback,
+              this,
+              args
+            )
+          }
+          return poolConnectFinishCh.runStores(ctx, callback, this, ...args)
+        }
+      } else {
+        acquireCtx = { poolOptions: this.options }
+        poolAcquireStartCh.publish(acquireCtx)
+
+        arguments[0] = function (...args) {
+          const client = args[1]
+          acquireCtx.error = args[0]
+          // A failed acquire has no client, so keep the parameters `connectForAcquire` snapshotted.
+          if (client !== undefined) {
+            clearPoolWaitTime(client)
+            acquireCtx.params = client.connectionParameters
+          }
+          finishAcquire(acquireCtx, start)
+          return poolConnectFinishCh.runStores(ctx, callback, this, ...args)
+        }
+      }
+
+      poolConnectStartCh.publish(ctx)
+
+      if (acquireCtx === undefined) return runOutsidePoolQueryAcquire(connect, this, arguments)
+
+      return connectForAcquire(connect, this, arguments, acquireCtx, start)
     }
 
-    const ctx = {}
-    arguments[0] = function (...args) {
-      return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
-    }
-
-    poolConnectStartCh.publish(ctx)
-
-    return connect.apply(this, arguments)
+    return wrapPoolAcquireCarrier(
+      wrappedConnect,
+      connect,
+      poolConnectStartCh,
+      deferredPoolAcquire
+    )
   })
-  shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
+  shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(
+    wrapPoolQueryMethod(query, poolConnectStartCh, deferredPoolAcquire)
+  ))
   return pg
 })
 
@@ -83,6 +198,12 @@ function wrapQuery (query) {
       abortController,
       stream,
     }
+
+    const waitTime = takePoolWaitTime(this)
+    if (waitTime !== undefined) {
+      ctx.poolWaitTime = waitTime
+    }
+
     const finish = (error, res) => {
       if (error) {
         ctx.error = error
@@ -185,6 +306,83 @@ function wrapQuery (query) {
 const finish = (ctx) => {
   finishPoolQueryCh.publish(ctx)
 }
+
+/**
+ * @typedef {{ database?: string, user?: string, host?: string, port?: number }} PoolConnectionParameters
+ * @typedef {{ connectionParameters?: PoolConnectionParameters }} PoolClient
+ * @typedef {{
+ *   options?: PoolConnectionParameters,
+ *   idleCount: number,
+ *   waitingCount: number,
+ *   _clients?: PoolClient[]
+ * }} InstrumentedPool
+ * @typedef {{
+ *   poolOptions?: PoolConnectionParameters,
+ *   params?: PoolConnectionParameters,
+ *   error?: unknown,
+ *   poolWaitTime?: number
+ * }} AcquireContext
+ * @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike
+ */
+
+// pg drains its pending queue FIFO on the next tick, so an idle client is only ours when it
+// outnumbers the requests already queued ahead of us. That handoff is not a wait on the pool.
+/**
+ * @param {InstrumentedPool} pool
+ */
+function acquireStart (pool) {
+  return pool.idleCount > pool.waitingCount ? undefined : performance.now()
+}
+
+/**
+ * @param {number | undefined} start
+ */
+function acquireWait (start) {
+  return start === undefined ? 0 : performance.now() - start
+}
+
+/**
+ * @param {InstrumentedPool} pool
+ */
+function latestPoolConnectionParameters (pool) {
+  // pg-pool removes a failed client before invoking the acquire callback, so snapshot it while
+  // connect is still pending.
+  const clients = pool._clients
+  return clients?.at(-1)?.connectionParameters
+}
+
+/**
+ * @param {Function} connect
+ * @param {InstrumentedPool} pool
+ * @param {ArgumentsLike} args
+ * @param {AcquireContext} acquireCtx
+ * @param {number | undefined} start
+ */
+function connectForAcquire (connect, pool, args, acquireCtx, start) {
+  let result
+  try {
+    result = connect.apply(pool, args)
+  } catch (error) {
+    // pg throws synchronously when it cannot even build a client, from a malformed connection
+    // string or a caller-supplied `Client` constructor, so the span needs finishing here.
+    acquireCtx.error = error
+    finishAcquire(acquireCtx, start)
+    throw error
+  }
+
+  acquireCtx.params = latestPoolConnectionParameters(pool)
+  return result
+}
+
+/**
+ * @param {AcquireContext} ctx
+ * @param {number | undefined} start
+ */
+function finishAcquire (ctx, start) {
+  ctx.poolWaitTime = acquireWait(start)
+  poolAcquireFinishCh.publish(ctx)
+}
+
 function wrapPoolQuery (query) {
   return function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {

@@ -55,7 +55,7 @@ class Http2ClientPlugin extends ClientPlugin {
         'out.host': sessionDetails.host,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port),
+        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port, 10),
       },
     }, false)
 

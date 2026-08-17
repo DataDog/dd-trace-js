@@ -3,8 +3,10 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const DSMTextMapPropagator = require('../../../src/opentracing/propagation/text_map_dsm')
+const log = require('../../../src/log')
 
 const context = {
   hash: Buffer.alloc(8),
@@ -37,5 +39,20 @@ describe('DSMTextMapPropagator', () => {
     const propagator = new DSMTextMapPropagator({ dsmEnabled: true })
 
     assert.strictEqual(propagator.inject(undefined), undefined)
+  })
+
+  it('extracts a pathway context and evaluates managed-field debug projections', () => {
+    const debug = sinon.stub(log, 'debug').callsFake(callback => callback())
+    const propagator = new DSMTextMapPropagator({ dsmEnabled: true })
+
+    try {
+      const carrier = propagator.inject(context)
+      const extracted = propagator.extract(carrier)
+
+      assert.deepStrictEqual(extracted.hash, context.hash)
+      assert.strictEqual(debug.callCount, 4)
+    } finally {
+      debug.restore()
+    }
   })
 })

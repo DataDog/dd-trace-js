@@ -70,6 +70,7 @@ function getPipeline () {
  * During module loading, we set noop: true to prevent fs plugin from
  * triggering, which would try to create spans, which would try to load
  * this module again.
+ * @param {() => typeof import('./native-spans')} loader Module loader
  */
 function loadWithNoop (loader) {
   if (isLoading) {

@@ -307,6 +307,8 @@ module.exports = {
    *
    * This should only be called once in config.js to avoid copying the object frequently.
    *
+   * @param {typeof process.env} [source] The environment to read from
+   * @param {boolean} [internalOnly] Only return configurations marked as internal
    * @returns {TracerEnv} The environment variables
    */
   getEnvironmentVariables (source = process.env, internalOnly = false) {
