@@ -16,6 +16,7 @@ const id = require('../../src/id')
 const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics')
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
 const { createOtlpTraceExporter } = require('../../src/opentelemetry/trace')
+const processTags = require('../../src/process-tags')
 const { SpanBuckets } = require('../../src/span_stats')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
@@ -1039,6 +1040,7 @@ describe('OpenTelemetry Traces', () => {
         service: 'svc',
         tags: { 'runtime-id': 'initial-stats-id' },
       }
+      processTags.initialize(statsConfig)
       const statsExporter = createOtlpSpanStatsExporter(statsConfig)
 
       traceConfig.tags['runtime-id'] = 'refreshed-trace-id'
