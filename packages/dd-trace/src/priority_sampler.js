@@ -127,11 +127,11 @@ class PrioritySampler {
         const instrumentationResource = tags[INSTRUMENTATION_HTTP_RESOURCE]
         const resourceName = tags['resource.name']
         const resource = tags.resource
-        const resourceIsUnset = resourceName === undefined && resource === undefined
         const resourceIsOwnedByInstrumentation =
-          resourceIsUnset ||
+          instrumentationResource !== undefined &&
           (resourceName === undefined || resourceName === instrumentationResource) &&
           (resource === undefined || resource === instrumentationResource)
+        const resourceIsUnset = resourceName === undefined && resource === undefined
         if (resourceIsOwnedByInstrumentation && resourceIsUnset) {
           tags['resource.name'] = samplingResource
         } else if (resourceIsOwnedByInstrumentation) {

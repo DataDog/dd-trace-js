@@ -143,6 +143,7 @@ class NextPlugin extends ServerPlugin {
     span.setTag(COMPONENT, this.constructor.id)
     span.setTag('next.page', page)
     if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      span.setTag('http.route', page)
       setInstrumentationHttpResource(span, resource)
     } else {
       span.setTag('resource.name', resource)
