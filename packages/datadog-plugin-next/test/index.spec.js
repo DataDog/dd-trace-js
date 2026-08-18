@@ -1327,6 +1327,7 @@ describe('compiled Next runtimes', () => {
 
       it(`does not create a request span for stale ${label} background revalidation`, async () => {
         let responseGenerator
+        const backgroundResource = `background-work-${runtime}`
 
         class CompiledRouteModule extends RouteModule {
           /** @param {{responseGenerator: () => Promise<unknown>}} options */
@@ -1336,6 +1337,7 @@ describe('compiled Next runtimes', () => {
           }
 
           [method] () {
+            tracer.trace(backgroundResource, () => {})
             return Promise.reject(new Error(`stale ${label} revalidation error`))
           }
 
@@ -1383,10 +1385,21 @@ describe('compiled Next runtimes', () => {
           }
           assert.strictEqual(nextRequestSpanCount, 0)
         }
+
+        /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
+        function assertBackgroundTrace (traces) {
+          const span = traces[0].find(span => span.resource === backgroundResource)
+          assert.ok(span)
+          assert.strictEqual(span.parent_id, 0n)
+        }
+
         const parentResource = `stale-revalidation-${runtime}`
         const tracePromise = agent.assertSomeTraces(assertNoNextRequestTrace, {
           rejectFirst: true,
           spanResourceMatch: new RegExp(parentResource),
+        })
+        const backgroundTrace = agent.assertSomeTraces(assertBackgroundTrace, {
+          spanResourceMatch: new RegExp(backgroundResource),
         })
         const revalidate = () => assert.rejects(
           () => responseGenerator({ hasResolved: true }),
@@ -1396,6 +1409,7 @@ describe('compiled Next runtimes', () => {
         await Promise.all([
           tracer.trace(parentResource, revalidate),
           tracePromise,
+          backgroundTrace,
         ])
         response.emit('finish')
         if (runtime === 'app-page') {
