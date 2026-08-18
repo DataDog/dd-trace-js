@@ -24,6 +24,7 @@ class AgentExporter {
       lookup,
       protocolVersion,
       headers,
+      onFlush: this.#trackWriterFlush.bind(this),
     })
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
@@ -77,15 +78,31 @@ class AgentExporter {
     for (const flush of activeFlushes) flush.callbacks.push(complete)
   }
 
-  #flush () {
-    const flush = { callbacks: [] }
+  #flush (done) {
+    const flush = { callbacks: done ? [done] : [] }
     this.#activeFlushes.add(flush)
     const complete = () => {
       this.#activeFlushes.delete(flush)
       for (const callback of flush.callbacks) callback()
     }
     try {
-      this._writer.flush(complete)
+      const flush = this._writer.flushDirect ?? this._writer.flush
+      flush.call(this._writer, complete)
+    } catch (error) {
+      complete()
+      throw error
+    }
+  }
+
+  #trackWriterFlush (flush, done) {
+    const activeFlush = { callbacks: done ? [done] : [] }
+    this.#activeFlushes.add(activeFlush)
+    const complete = () => {
+      this.#activeFlushes.delete(activeFlush)
+      for (const callback of activeFlush.callbacks) callback()
+    }
+    try {
+      flush(complete)
     } catch (error) {
       complete()
       throw error

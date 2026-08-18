@@ -48,6 +48,8 @@ describe('TracerProxy', () => {
   let OpenFeatureProvider
   let openfeatureProvider
   let registerTelemetryFlusher
+  let initializeServerlessTelemetry
+  let flushAll
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -185,6 +187,8 @@ describe('TracerProxy', () => {
     }
 
     registerTelemetryFlusher = sinon.stub().returns(() => {})
+    initializeServerlessTelemetry = sinon.spy()
+    flushAll = sinon.spy()
 
     profiler = {
       start: sinon.spy(),
@@ -275,8 +279,9 @@ describe('TracerProxy', () => {
       './openfeature/flagging_provider': OpenFeatureProvider,
       './serverless': {
         IS_SERVERLESS: false,
+        initializeServerlessTelemetry,
       },
-      './flush': { registerTelemetryFlusher },
+      './flush': { flushAll, registerTelemetryFlusher },
     })
 
     proxy = new ProxyClass()
@@ -602,6 +607,19 @@ describe('TracerProxy', () => {
         registerTelemetryFlusher.firstCall.args[0](done)
 
         sinon.assert.calledOnceWithExactly(runtimeMetrics.flush, done)
+      })
+
+      it('registers Vercel telemetry retention when tracing is disabled', () => {
+        config.DD_TRACE_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.calledOnce(initializeServerlessTelemetry)
+        const telemetry = initializeServerlessTelemetry.firstCall.args[0]
+        assert.strictEqual(typeof telemetry.flushAll, 'function')
+        const done = sinon.spy()
+        telemetry.flushAll(done)
+        sinon.assert.calledOnceWithExactly(flushAll, proxy._tracer, done, undefined)
       })
 
       it('should expose noop metrics methods prior to initialization', () => {

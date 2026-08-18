@@ -15,6 +15,7 @@ describe('span-stats exporter', () => {
   let exporter
   let Writer
   let writer
+  let log
 
   beforeEach(() => {
     url = new URL('http://www.example.com:8126')
@@ -23,9 +24,11 @@ describe('span-stats exporter', () => {
       flush: sinon.spy(),
     }
     Writer = sinon.stub().returns(writer)
+    log = { error: sinon.spy() }
 
     Exporter = proxyquire('../../../src/exporters/span-stats', {
       './writer': { Writer },
+      '../../log': log,
     }).SpanStatsExporter
   })
 
@@ -84,6 +87,7 @@ describe('span-stats exporter', () => {
     sinon.assert.notCalled(done)
     inFlightDone()
     sinon.assert.calledOnce(done)
+    sinon.assert.calledOnceWithExactly(log.error, 'Failed to flush span stats: %s', 'encode failed')
   })
 
   it('should set url from config', () => {

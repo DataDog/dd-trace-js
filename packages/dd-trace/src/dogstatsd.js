@@ -41,6 +41,7 @@ class DogStatsDClient {
     this._tags = options.tags
     this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
     this._queue = []
+    this._activeFlushes = new Set()
     this._buffer = ''
     this._offset = 0
     this._udp4 = this._socket('udp4')
@@ -69,18 +70,39 @@ class DogStatsDClient {
 
   flush (done) {
     const queue = this._enqueue()
+    const activeFlushes = [...this._activeFlushes]
 
-    if (queue.length === 0) return done?.()
+    if (queue.length === 0) return this._joinFlushes(activeFlushes, done)
 
     log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
     this._queue = []
 
+    const flush = { callbacks: [] }
+    this._activeFlushes.add(flush)
+    activeFlushes.push(flush)
+    this._joinFlushes(activeFlushes, done)
+
     if (this._httpOptions) {
-      this._sendHttp(queue, done)
+      this._sendHttp(queue, () => this._completeFlush(flush))
     } else {
-      this._sendUdp(queue, done)
+      this._sendUdp(queue, () => this._completeFlush(flush))
     }
+  }
+
+  _joinFlushes (flushes, done) {
+    if (!done) return
+    let pending = flushes.length
+    if (pending === 0) return done()
+    const complete = () => {
+      if (--pending === 0) done()
+    }
+    for (const flush of flushes) flush.callbacks.push(complete)
+  }
+
+  _completeFlush (flush) {
+    this._activeFlushes.delete(flush)
+    for (const done of flush.callbacks) done()
   }
 
   _sendHttp (queue, done) {

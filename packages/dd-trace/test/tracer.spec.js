@@ -70,6 +70,19 @@ describe('Tracer', () => {
       unregister()
     })
 
+    it('flushes registered telemetry pipelines without a trace exporter', () => {
+      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const telemetryFlusher = sinon.stub().callsFake(done => done())
+      const unregister = registerTelemetryFlusher(telemetryFlusher)
+      const done = sinon.spy()
+
+      flushAll(undefined, done)
+
+      sinon.assert.calledOnce(telemetryFlusher)
+      sinon.assert.calledOnce(done)
+      unregister()
+    })
+
     it('bounds configured telemetry flushing', () => {
       const { flushAll, registerTelemetryFlusher } = require('../src/flush')
       const timeout = sinon.stub(global, 'setTimeout')

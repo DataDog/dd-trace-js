@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../../log')
 const { Writer } = require('./writer')
 
 class SpanStatsExporter {
@@ -21,8 +22,9 @@ class SpanStatsExporter {
       this._writer.append(payload)
       try {
         this.#flush(complete)
-      } catch {
+      } catch (error) {
         // `#flush` has notified the boundary request; keep waiting for prior exports.
+        log.error('Failed to flush span stats: %s', error.message)
       }
       return
     }

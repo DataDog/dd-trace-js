@@ -248,6 +248,28 @@ describe('dogstatsd', () => {
     })
   })
 
+  it('joins an already in-flight UDP flush', (done) => {
+    let completeFirstFlush
+    udp4.send = sinon.stub().callsFake((...args) => {
+      completeFirstFlush = args.at(-1)
+    })
+    client = createDogStatsDClient()
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    client.flush(() => {
+      try {
+        sinon.assert.calledOnce(udp4.send)
+        done()
+      } catch (error) {
+        done(error)
+      }
+    })
+
+    assert.strictEqual(completeFirstFlush instanceof Function, true)
+    completeFirstFlush()
+  })
+
   it('logs the metric count and the UDP transport on a non-empty flush', () => {
     client = createDogStatsDClient()
 

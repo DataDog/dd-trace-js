@@ -18,6 +18,7 @@ describe('Exporter', () => {
   let writer
   let prioritySampler
   let span
+  let writerOptions
 
   beforeEach(() => {
     url = 'http://www.example.com:8126'
@@ -29,7 +30,10 @@ describe('Exporter', () => {
       setUrl: sinon.spy(),
     }
     prioritySampler = {}
-    Writer = sinon.stub().returns(writer)
+    Writer = sinon.stub().callsFake(options => {
+      writerOptions = options
+      return writer
+    })
 
     Exporter = proxyquire('../../../src/exporters/agent', {
       './writer': Writer,
@@ -120,6 +124,24 @@ describe('Exporter', () => {
       const flushed = sinon.spy()
 
       exporter.export([span])
+      exporter.flush(flushed)
+
+      callbacks[1]()
+      sinon.assert.notCalled(flushed)
+      callbacks[0]()
+      sinon.assert.calledOnce(flushed)
+    })
+
+    it('waits for an encoder-triggered writer flush already in flight', () => {
+      const callbacks = []
+      const flushDirect = sinon.spy(done => callbacks.push(done))
+      writer.flushDirect = flushDirect
+      writer.flush = sinon.spy(done => writerOptions.onFlush(flushDirect, done))
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      // This is the path the encoder uses when it crosses its soft limit.
+      exporter._writer.flush()
       exporter.flush(flushed)
 
       callbacks[1]()

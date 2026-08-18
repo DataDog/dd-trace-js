@@ -109,6 +109,20 @@ function describeWriter (protocolVersion) {
       writer.flush(done)
     })
 
+    it('routes flushes through the configured lifecycle hook', (done) => {
+      const onFlush = sinon.spy((flush, done) => flush(done))
+      writer = new Writer({ url, prioritySampler, protocolVersion, onFlush })
+
+      writer.flush(() => {
+        try {
+          sinon.assert.calledOnce(onFlush)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
+    })
+
     it('should flush its traces to the agent, and call callback', (done) => {
       const expectedData = Buffer.from('prefixed')
 

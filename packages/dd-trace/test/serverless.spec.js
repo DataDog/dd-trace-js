@@ -17,6 +17,7 @@ const {
   initializeServerlessTelemetry,
 } = require('../src/serverless')
 const { registerVercelTelemetryRetention } = require('../src/serverless/vercel')
+const { flushAll, registerTelemetryFlusher } = require('../src/flush')
 const Tracer = require('../src/tracer')
 const { initializeOpenTelemetryLogs } = require('../src/opentelemetry/logs')
 const { initializeOpenTelemetryMetrics } = require('../src/opentelemetry/metrics')
@@ -272,6 +273,40 @@ describe('Vercel telemetry retention', () => {
       assert.strictEqual(flushes, 1)
     } finally {
       unregister()
+    }
+  })
+
+  it('retains a configured telemetry-only pipeline without a trace exporter', async () => {
+    let retained
+    const completeTelemetry = []
+    let flushes = 0
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: promise => { retained = promise } }),
+    }
+    const telemetryFlusher = done => {
+      flushes++
+      completeTelemetry.push(done)
+    }
+    const unregisterTelemetry = registerTelemetryFlusher(telemetryFlusher)
+    const unregister = registerVercelTelemetryRetention({
+      flushAll: (done, options) => flushAll(undefined, done, options),
+    })
+    try {
+      channel('apm:http:server:request:finish').publish({})
+      await new Promise(resolve => setImmediate(resolve))
+
+      assert.ok(flushes >= 1)
+      assert.ok(completeTelemetry.every(done => typeof done === 'function'))
+      let settled = false
+      retained.then(() => { settled = true })
+      await new Promise(resolve => setImmediate(resolve))
+      assert.strictEqual(settled, false)
+
+      for (const done of completeTelemetry) done()
+      await retained
+    } finally {
+      unregister()
+      unregisterTelemetry()
     }
   })
 
