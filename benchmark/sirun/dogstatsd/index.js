@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const guard = require('../startup-guard')
 
-const { VARIANT } = process.env
+const { BASELINE_OR_CANDIDATE, VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)
 const WITH_AGGREGATION = VARIANT === 'aggregated'
 
@@ -74,7 +74,8 @@ function preflight () {
 
   const payload = Buffer.concat(payloads).toString()
   assert.ok(payload.includes(NAME) && payload.includes('env:bench'), 'the metric did not reach the transport')
-  if (WITH_AGGREGATION) {
+  // The older baseline source predates client telemetry, but candidate and local runs must exercise it.
+  if (WITH_AGGREGATION && BASELINE_OR_CANDIDATE !== 'baseline') {
     assert.ok(payload.includes('datadog.dogstatsd.client.metrics:'), 'client telemetry is not enabled')
   }
 
