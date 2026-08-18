@@ -74,10 +74,6 @@ for (let i = 0; i < OPERATIONS; i++) {
   startCh.runStores(ctx, NOOP)
   finishCh.publish(ctx)
 }
-// This is the heaviest per-iteration loop in the suite (a full span lifecycle
-// through the real processor), so the instruction-counting pass on the stable
-// machine scales steeply with the count: ~600k overran the one-minute budget,
-// 450k keeps the variant under it while staying deterministic. At that count the
-// fixed full-tracer init still settles around 15% of the run -- pushing it below
-// 10% would need a count that overruns the budget -- so allow an 18% startup share.
+// The full traced lifecycle cannot grow enough to meet the default startup
+// share without exceeding the benchmark runtime budget.
 guard.done(0.18)

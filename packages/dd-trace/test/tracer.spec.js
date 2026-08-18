@@ -25,7 +25,7 @@ describe('Tracer', () => {
   let config
 
   beforeEach(() => {
-    config = getConfig({ service: 'service' })
+    config = getConfig({ service: 'service', experimental: { exporter: 'log' } })
 
     tracer = new Tracer(config)
     tracer._exporter.setUrl = sinon.stub()

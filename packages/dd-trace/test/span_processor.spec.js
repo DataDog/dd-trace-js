@@ -5,7 +5,7 @@ const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const proxyquire = require('proxyquire').noCallThru()
 
 require('./setup/core')
 
@@ -24,6 +24,8 @@ describe('SpanProcessor', () => {
   let config
   let SpanSampler
   let sample
+  let SpanStatsProcessor
+  let onSpanFinished
 
   before(() => {
     require('../src/process-tags').initialize()
@@ -34,6 +36,7 @@ describe('SpanProcessor', () => {
     trace = {
       started: [],
       finished: [],
+      tags: {},
     }
 
     let tags = {}
@@ -65,20 +68,45 @@ describe('SpanProcessor', () => {
         DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
       appsec: {},
+      sampler: {},
     }
-    spanFormat = sinon.stub().returns({ formatted: true })
+    spanFormat = sinon.stub().returns({ formatted: true, meta: {}, metrics: {} })
 
     sample = sinon.stub()
     SpanSampler = sinon.stub().returns({
       sample,
     })
+    onSpanFinished = sinon.stub()
+    SpanStatsProcessor = sinon.stub().returns({ onSpanFinished })
 
     SpanProcessor = proxyquire('../src/span_processor', {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
+      './span_stats': { SpanStatsProcessor },
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
   })
+
+  /** @param {string} name */
+  function createFinishedSpan (name) {
+    let tags = {}
+    const context = {
+      _trace: trace,
+      _sampling: {},
+      getTags: () => tags,
+      getTag: key => tags[key],
+      setTag: (key, value) => { tags[key] = value },
+      hasTag: key => key in tags,
+      clearTags: () => { tags = Object.create(null) },
+    }
+
+    return {
+      name,
+      _duration: 100,
+      tracer: sinon.stub().returns(tracer),
+      context: sinon.stub().returns(context),
+    }
+  }
 
   it('should generate sampling priority', () => {
     processor.process(finishedSpan)
@@ -131,10 +159,11 @@ describe('SpanProcessor', () => {
     trace.finished = [finishedSpan, finishedSpan, finishedSpan]
     processor.process(finishedSpan)
 
-    sinon.assert.calledWith(exporter.export, [
-      { formatted: true },
-      { formatted: true },
-      { formatted: true },
+    sinon.assert.calledOnce(exporter.export)
+    assert.deepStrictEqual(exporter.export.firstCall.args[0], [
+      { formatted: true, meta: {}, metrics: {} },
+      { formatted: true, meta: {}, metrics: {} },
+      { formatted: true, meta: {}, metrics: {} },
     ])
 
     assert.ok('started' in trace)
@@ -235,65 +264,52 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
   })
 
-  it('should add APM disabled marker to every span in a chunk when APM tracing is disabled', () => {
+  it('should add APM disabled marker to the first span in a chunk when APM tracing is disabled', () => {
     config.apmTracingEnabled = false
-    config.flushMinSpans = 2
     const processor = new SpanProcessor(exporter, prioritySampler, config)
-    const firstFormatted = { metrics: {} }
-    const secondFormatted = { metrics: {} }
-    spanFormat.onFirstCall().returns(firstFormatted)
-    spanFormat.onSecondCall().returns(secondFormatted)
-    trace.started = [activeSpan, finishedSpan, finishedSpan]
-    trace.finished = [finishedSpan, finishedSpan]
+    const first = createFinishedSpan('first')
+    const second = createFinishedSpan('second')
+    trace.started = [first, second]
+    trace.finished = [first, second]
 
-    processor.process(finishedSpan)
+    processor.process(first)
 
-    assert.strictEqual(firstFormatted.metrics[APM_TRACING_ENABLED_KEY], 0)
-    assert.strictEqual(secondFormatted.metrics[APM_TRACING_ENABLED_KEY], 0)
-    sinon.assert.calledWith(exporter.export, [firstFormatted, secondFormatted])
+    assert.strictEqual(first.context().getTag(APM_TRACING_ENABLED_KEY), 0)
+    assert.strictEqual(second.context().getTag(APM_TRACING_ENABLED_KEY), undefined)
+    sinon.assert.calledWithExactly(spanFormat.firstCall, first, true, false)
+    sinon.assert.calledWithExactly(spanFormat.secondCall, second, false, false)
   })
 
   it('should add APM disabled marker to every chunk when a delayed child flushes alone', () => {
-    // Reproduces the standalone-ASM billing regression: the entry span flushes
-    // in one chunk, then a long-lived child (e.g. delayed http.request) flushes
-    // later in its own chunk. Both chunks must carry _dd.apm.enabled:0.
     config.apmTracingEnabled = false
     const processor = new SpanProcessor(exporter, prioritySampler, config)
-    const parentFormatted = { metrics: {} }
-    const childFormatted = { metrics: {} }
-    spanFormat.onFirstCall().returns(parentFormatted)
-    spanFormat.onSecondCall().returns(childFormatted)
-
-    const parentSpan = { ...finishedSpan }
-    const childSpan = { ...finishedSpan }
+    const parentSpan = createFinishedSpan('parent')
+    const childSpan = createFinishedSpan('child')
     trace.started = [parentSpan]
     trace.finished = [parentSpan]
 
     processor.process(parentSpan)
 
-    assert.strictEqual(parentFormatted.metrics[APM_TRACING_ENABLED_KEY], 0)
-    sinon.assert.calledWith(exporter.export, [parentFormatted])
+    assert.strictEqual(parentSpan.context().getTag(APM_TRACING_ENABLED_KEY), 0)
 
     trace.started = [childSpan]
     trace.finished = [childSpan]
-
     processor.process(childSpan)
 
-    assert.strictEqual(childFormatted.metrics[APM_TRACING_ENABLED_KEY], 0)
-    sinon.assert.calledWith(exporter.export.secondCall, [childFormatted])
+    assert.strictEqual(childSpan.context().getTag(APM_TRACING_ENABLED_KEY), 0)
+    sinon.assert.calledTwice(exporter.export)
   })
 
   it('should not add APM disabled marker when APM tracing is enabled', () => {
     config.apmTracingEnabled = true
     const processor = new SpanProcessor(exporter, prioritySampler, config)
-    const formattedSpan = { metrics: {} }
-    spanFormat.returns(formattedSpan)
-    trace.started = [finishedSpan]
-    trace.finished = [finishedSpan]
+    const span = createFinishedSpan('enabled')
+    trace.started = [span]
+    trace.finished = [span]
 
-    processor.process(finishedSpan)
+    processor.process(span)
 
-    assert.ok(!Object.hasOwn(formattedSpan.metrics, APM_TRACING_ENABLED_KEY))
+    assert.strictEqual(span.context().getTag(APM_TRACING_ENABLED_KEY), undefined)
   })
 
   describe('with DD_TRACE_OTEL_SEMANTICS_ENABLED', () => {
@@ -354,5 +370,59 @@ describe('SpanProcessor', () => {
 
       assert.deepStrictEqual(statsView, { method: 'GET', statusCode: '200', endpoint: '/u' })
     })
+  })
+  it('computes v0.6 APM stats when client-side stats are enabled', () => {
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    const span = createFinishedSpan('web.request')
+    trace.started = [span]
+    trace.finished = [span]
+
+    processor.process(span)
+
+    sinon.assert.calledWithNew(SpanStatsProcessor)
+    sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, undefined)
+    sinon.assert.calledOnceWithExactly(onSpanFinished, spanFormat.firstCall.returnValue)
+  })
+
+  it('does not compute APM stats for CI Visibility spans', () => {
+    config.isCiVisibility = true
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    const span = createFinishedSpan('ci.test')
+    trace.started = [span]
+    trace.finished = [span]
+
+    processor.process(span)
+
+    sinon.assert.notCalled(SpanStatsProcessor)
+    sinon.assert.notCalled(onSpanFinished)
+  })
+
+  it('does not duplicate APM stats when native stats own the trace', () => {
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, true)
+    const span = createFinishedSpan('web.request')
+    trace.started = [span]
+    trace.finished = [span]
+
+    processor.process(span)
+
+    sinon.assert.notCalled(SpanStatsProcessor)
+    sinon.assert.notCalled(onSpanFinished)
+  })
+
+  it('uses an injected OTLP span metrics exporter when provided', () => {
+    const otlpStatsExporter = { export: sinon.stub() }
+    const processor = new SpanProcessor(exporter, prioritySampler, config, otlpStatsExporter)
+    const span = createFinishedSpan('web.request')
+    trace.started = [span]
+    trace.finished = [span]
+
+    processor.process(span)
+
+    sinon.assert.calledWithNew(SpanStatsProcessor)
+    sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, otlpStatsExporter)
+    sinon.assert.calledOnceWithExactly(onSpanFinished, spanFormat.firstCall.returnValue)
   })
 })

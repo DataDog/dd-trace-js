@@ -33,6 +33,8 @@ variables:
   needs: [ ]
   tags: ["runner:apm-k8s-m7i-metal"]
   image: $MICROBENCHMARKS_CI_IMAGE
+  variables:
+    KUBERNETES_POD_ANNOTATIONS_1: "beta.fabric.datadoghq.com/no-proxy-additions=registry.yarnpkg.com"
   rules:
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
@@ -177,4 +179,10 @@ benchmark-serverless-trigger:
     UPSTREAM_GITLAB_USER_EMAIL: $GITLAB_USER_EMAIL
     # only available on Merge Requests
     UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+    # The downstream serverless-tools hard cap can lag current main layer sizes;
+    # keep PRs gated by size increase while allowing the largest measured current-main layer.
+    MAX_LAYER_UNCOMPRESSED_SIZE_KB: "25280"
+    KUBERNETES_POD_ANNOTATIONS_1: "beta.fabric.datadoghq.com/no-proxy-additions=registry.yarnpkg.com,registry.npmjs.org"
+    YARN_REGISTRY: "https://registry.npmjs.org"
+    YARN_NETWORK_TIMEOUT: "600000"
     DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"

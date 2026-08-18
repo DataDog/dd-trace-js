@@ -360,6 +360,25 @@ describe('spanFormat', () => {
 
         assert.deepStrictEqual(getExtraServices(), ['foo'])
       })
+
+      it('should not register the tracer own service as an extra service', () => {
+        // Every normal span carries the tracer's own service, so registering it
+        // would put the primary service into `client_tracer.extra_services` and
+        // consume one of Remote Configuration's 64 slots.
+        span.context()._tags['service.name'] = 'test'
+
+        trace = spanFormat(span)
+
+        assert.deepStrictEqual(getExtraServices(), [])
+      })
+
+      it('should not register a case-only variant of the tracer service', () => {
+        span.context()._tags['service.name'] = 'TEST'
+
+        trace = spanFormat(span)
+
+        assert.deepStrictEqual(getExtraServices(), [])
+      })
     })
 
     it('should extract Datadog specific tags', () => {

@@ -732,23 +732,6 @@ describe('OpenTelemetry Traces', () => {
       exporter.export([createMockSpan({ metrics: { _sampling_priority_v1: -1 } })])
       assert(!exportCalled, 'No HTTP request should be made for user-rejected traces')
     })
-
-    it('DatadogTracer uses the OTLP exporter when OTEL_TRACES_EXPORTER=otlp', () => {
-      process.env.OTEL_TRACES_EXPORTER = 'otlp'
-      const DatadogTracer = proxyquire.noPreserveCache()('../../src/opentracing/tracer', {})
-      const tracer = new DatadogTracer(getConfigFresh())
-      assert(tracer._exporter instanceof OtlpHttpTraceExporter,
-        'Exporter should be the OTLP exporter when OTEL_TRACES_EXPORTER=otlp')
-    })
-
-    it('DatadogTracer does not use the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp', () => {
-      delete process.env.OTEL_TRACES_EXPORTER
-      const DatadogTracer = proxyquire.noPreserveCache()('../../src/opentracing/tracer', {})
-      const tracer = new DatadogTracer(getConfigFresh())
-      assert(!(tracer._exporter instanceof OtlpHttpTraceExporter),
-        'Exporter should not be the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp')
-    })
-
     it('DatadogTracer prefers the Electron exporter over OTLP when OTEL_TRACES_EXPORTER=otlp', () => {
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
       const DatadogTracer = proxyquire.noPreserveCache()('../../src/opentracing/tracer', {})

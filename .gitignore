@@ -33,6 +33,7 @@ Temporary Items
 logs
 *.log
 node-*-junit.xml
+.junit-tmp/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

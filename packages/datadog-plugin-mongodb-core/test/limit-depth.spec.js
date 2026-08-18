@@ -8,10 +8,14 @@ const sinon = require('sinon')
 
 const MongodbCorePlugin = require('../src/query')
 
-// The sanitisation helpers are module-private; exercise them through `bindStart`,
-// which surfaces their output as `meta['mongodb.query']`.
-function callBindStart (ctx, configOverride) {
-  const startSpan = sinon.stub().returns({ finish () {} })
+/**
+ * @param {object} ctx
+ * @param {object} [configOverride]
+ * @param {{ finish: () => void, setTag: (name: string, value: string) => void }} [span]
+ * @returns {string}
+ */
+function callBindStart (ctx, configOverride, span = { finish () {}, setTag () {} }) {
+  const startSpan = sinon.stub().returns(span)
   const self = {
     config: {
       heartbeatEnabled: true,
@@ -56,13 +60,15 @@ describe('mongodb-core query depth limiter', () => {
   })
 
   it('extracts cmd.filter when no .query is present', () => {
+    const span = { finish () {}, setTag: sinon.stub() }
     const query = callBindStart({
-      ns: 'db.coll',
+      ns: 'db',
       ops: { filter: { user: 'alice' } },
       name: 'find',
-    })
+    }, { dbmPropagationMode: 'service' }, span)
 
     assert.deepStrictEqual(JSON.parse(query), { user: 'alice' })
+    sinon.assert.calledOnceWithExactly(span.setTag, 'peer.service', 'db')
   })
 
   it('extracts cmd.pipeline when no .query / .filter is present', () => {

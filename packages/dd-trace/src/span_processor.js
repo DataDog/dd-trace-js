@@ -12,31 +12,44 @@ const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
+  /**
+   * @param {object} exporter
+   * @param {object} prioritySampler
+   * @param {object} config
+   * @param {object} [otlpStatsExporter]
+   * @param {boolean} [nativeStatsEnabled]
+   */
+  constructor (exporter, prioritySampler, config, otlpStatsExporter, nativeStatsEnabled = false) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
 
-    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
+    if (!config.isCiVisibility && (otlpStatsExporter ||
+      (!nativeStatsEnabled && config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED))) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
     }
 
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
-
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
   }
 
+  /**
+   * @param {import('./opentracing/span')} span
+   */
   sample (span) {
     const spanContext = span.context()
     this._prioritySampler.sample(spanContext)
     this._spanSampler.sample(spanContext)
   }
 
+  /**
+   * @param {import('./opentracing/span')} span
+   */
   process (span) {
     const spanContext = span.context()
     const active = []
@@ -47,7 +60,7 @@ class SpanProcessor {
 
     if (trace.record === false) return
     if (DD_TRACE_ENABLED === false) {
-      this._erase(trace, active)
+      this.#erase(trace, active)
       return
     }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
@@ -57,17 +70,15 @@ class SpanProcessor {
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
 
-      for (const span of started) {
-        if (span._duration === undefined) {
-          active.push(span)
+      for (const startedSpan of started) {
+        if (startedSpan._duration === undefined) {
+          active.push(startedSpan)
         } else {
-          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
-          if (stampApmDisabled) {
-            formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
+          if (stampApmDisabled && isFirstSpanInChunk) {
+            startedSpan.context().setTag(APM_TRACING_ENABLED_KEY, 0)
           }
+          const formattedSpan = spanFormat(startedSpan, isFirstSpanInChunk, this._processTags)
           isFirstSpanInChunk = false
-          // Span stats read Datadog HTTP tag names from the formatted span, so
-          // record them before the OTel rename — an export-only transform.
           this._stats?.onSpanFinished(formattedSpan)
           if (this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
             applyHttpOtelSemantics(formattedSpan)
@@ -80,7 +91,7 @@ class SpanProcessor {
         this._exporter.export(formatted)
       }
 
-      this._erase(trace, active)
+      this.#erase(trace, active)
     }
 
     if (this._killAll) {
@@ -96,7 +107,12 @@ class SpanProcessor {
     this._killAll = true
   }
 
-  _erase (trace, active) {
+  /**
+   * Validate optional span state tracking and retain only active spans.
+   * @param {object} trace Trace state to clear
+   * @param {object[]} active Spans that remain active
+   */
+  #erase (trace, active) {
     if (this._config.DD_TRACE_EXPERIMENTAL_STATE_TRACKING) {
       const started = new Set()
       const startedIds = new Set()

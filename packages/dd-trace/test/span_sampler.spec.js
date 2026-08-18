@@ -168,7 +168,6 @@ describe('span sampler', () => {
       ],
     })
 
-    // Create two span contexts
     const started = []
     const firstSpanContext = {
       _spanId: id('1234567812345678'),
@@ -186,7 +185,6 @@ describe('span sampler', () => {
       _name: 'second operation',
     }
 
-    // Add spans for both to the context
     started.push({
       context: sinon.stub().returns(firstSpanContext),
       tracer: sinon.stub().returns({
@@ -237,7 +235,6 @@ describe('span sampler', () => {
       ],
     })
 
-    // Create two span contexts
     const started = []
     const firstSpanContext = {
       _spanId: id('1234567812345678'),
@@ -255,7 +252,6 @@ describe('span sampler', () => {
       _name: 'second operation',
     }
 
-    // Add spans for both to the context
     started.push({
       context: sinon.stub().returns(firstSpanContext),
       tracer: sinon.stub().returns({

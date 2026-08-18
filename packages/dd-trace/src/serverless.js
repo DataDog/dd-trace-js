@@ -2,6 +2,10 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
+function getIsAWSLambda () {
+  return getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
+}
+
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
     getEnvironmentVariable('FUNCTION_NAME') !== undefined &&
@@ -35,11 +39,10 @@ function getIsFlexConsumptionAzureFunction () {
 }
 
 function isInServerlessEnvironment () {
-  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
   const isGCPFunction = getIsGCPFunction()
   const isAzureFunction = getIsAzureFunction()
 
-  return inAWSLambda || isGCPFunction || isAzureFunction
+  return getIsAWSLambda() || isGCPFunction || isAzureFunction
 }
 
 /**
@@ -79,6 +82,7 @@ function getVercelPlatformTags () {
 }
 
 module.exports = {
+  getIsAWSLambda,
   getServerlessPlatformTags,
   getIsGCPFunction,
   getIsAzureFunction,

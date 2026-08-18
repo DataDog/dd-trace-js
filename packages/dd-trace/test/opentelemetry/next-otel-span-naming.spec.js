@@ -20,10 +20,10 @@ const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const NEXT_HANDLE_REQUEST = 'BaseServer.handleRequest'
 
 // Capture the span as the exporter receives it, i.e. after the trace has been
-// formatted and is about to be written. The Next root span is the only span in
-// its trace, so `Span.end()` -> `_ddSpan.finish()` builds and exports the
-// payload synchronously; asserting here proves the correction reached the wire
-// rather than a post-finish re-format that no exported trace ever sees.
+// formatted on the JS path or passed to the native exporter. The Next root span
+// is the only span in its trace, so `Span.end()` -> `_ddSpan.finish()` builds and
+// exports synchronously; asserting here proves the correction reached the export
+// boundary rather than a post-finish re-format that no exported trace ever sees.
 function captureExportedRootSpan (run) {
   const exporter = tracer._tracer._exporter
   const originalExport = exporter.export
@@ -36,7 +36,15 @@ function captureExportedRootSpan (run) {
   } finally {
     exporter.export = originalExport
   }
-  return exported
+  return normalizeExportedSpan(exported)
+}
+
+function normalizeExportedSpan (span) {
+  const context = span.context?.()
+  return {
+    name: span.name ?? context?._name,
+    resource: span.resource ?? context?.getTag('resource.name'),
+  }
 }
 
 function startNextRootSpan ({ method = 'GET', initialName } = {}) {

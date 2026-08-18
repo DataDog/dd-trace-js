@@ -149,10 +149,10 @@
 /packages/dd-trace/test/plugins/util/test.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/test-environment.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/encode/agentless-ci-visibility.js @DataDog/ci-app-libraries
-/packages/dd-trace/src/encode/agentless-json.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/encode/coverage-ci-visibility.js @DataDog/ci-app-libraries
-/packages/dd-trace/src/encode/tags-processors.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/encode/agentless-json.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/exporters/agentless/ @DataDog/ci-app-libraries
+/packages/dd-trace/src/encode/tags-processors.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/git_metadata.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/git_metadata_tagger.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/ci.js @DataDog/ci-app-libraries
@@ -398,6 +398,7 @@
 /benchmark/sirun/exporting-pipeline/ @DataDog/lang-platform-js
 /benchmark/sirun/id/ @DataDog/lang-platform-js
 /benchmark/sirun/log/ @DataDog/lang-platform-js
+/benchmark/sirun/native-span-drain.js @DataDog/lang-platform-js
 /benchmark/sirun/runtime-metrics/ @DataDog/lang-platform-js
 /benchmark/sirun/scope/ @DataDog/lang-platform-js
 /benchmark/sirun/shimmer-runtime/ @DataDog/lang-platform-js
@@ -430,11 +431,16 @@
 /packages/datadog-shimmer/ @DataDog/lang-platform-js
 /packages/dd-trace/*/crashtracking/ @DataDog/lang-platform-js
 /packages/dd-trace/index.js @DataDog/lang-platform-js
+/packages/dd-trace/src/native/ @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/native/ @DataDog/lang-platform-js
+/packages/dd-trace/test/native/ @DataDog/lang-platform-js
 /packages/dd-trace/src/bootstrap.js @DataDog/lang-platform-js
 /packages/dd-trace/src/constants.js @DataDog/lang-platform-js
 /packages/dd-trace/src/dogstatsd.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporter.js @DataDog/lang-platform-js
 /packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
+/packages/dd-trace/src/js_span_processor.js @DataDog/lang-platform-js
+/packages/dd-trace/test/js_span_processor.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/client-library-headers.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /packages/dd-trace/src/heap_snapshots.js @DataDog/lang-platform-js

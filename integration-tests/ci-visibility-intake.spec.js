@@ -1,11 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { EventEmitter } = require('node:events')
+const { EventEmitter, once } = require('node:events')
+const http = require('node:http')
 
+const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
 
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
+const { assertClientComputedStats } = require('./helpers')
 
 function fakeChildProcess () {
   const child = new EventEmitter()
@@ -17,6 +20,62 @@ function fakeChildProcess () {
   }
   return child
 }
+
+/**
+ * @param {number} port
+ * @param {object[][]} payload
+ */
+async function postV04Trace (port, payload) {
+  const response = await new Promise((resolve, reject) => {
+    const request = http.request({
+      host: '127.0.0.1',
+      method: 'POST',
+      path: '/v0.4/traces',
+      port,
+      headers: { 'content-type': 'application/msgpack' },
+    }, resolve)
+    request.once('error', reject)
+    request.end(msgpack.encode(payload))
+  })
+  const ended = once(response, 'end')
+  response.resume()
+  await ended
+}
+
+describe('FakeCiVisIntake v0.4 endpoint', () => {
+  let intake
+
+  beforeEach(async () => {
+    intake = await new FakeCiVisIntake().start()
+  })
+
+  afterEach(() => intake.stop())
+
+  it('accepts native POST payloads', async () => {
+    const received = intake.payloadReceived(({ url }) => url === '/v0.4/traces')
+    const payload = [[{ name: 'test' }]]
+
+    await postV04Trace(intake.port, payload)
+
+    assert.deepStrictEqual((await received).payload, payload)
+  })
+})
+
+describe('assertClientComputedStats', () => {
+  it('accepts every Agent truthy spelling', () => {
+    for (const value of ['yes', 'true', 't', '1']) {
+      assertClientComputedStats({ 'datadog-client-computed-stats': value })
+    }
+  })
+
+  it('rejects false and missing values', () => {
+    assert.throws(
+      () => assertClientComputedStats({ 'datadog-client-computed-stats': 'false' }),
+      /should be truthy/,
+    )
+    assert.throws(() => assertClientComputedStats({}), /should be truthy/)
+  })
+})
 
 describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
   let clock, intake

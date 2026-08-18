@@ -383,14 +383,19 @@ function buildExpressServer (agent) {
     res.json({ endpoints })
   })
 
-  app.put('/v0.4/traces', (req, res) => {
+  // The native (libdatadog) exporter sends `POST /v0.4/traces` while the legacy
+  // JS exporter uses PUT; the real agent accepts both. Register the same
+  // handler for each so trace payloads are received regardless of exporter.
+  const handleV04Traces = (req, res) => {
     if (req.body.length === 0) return res.status(200).send()
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
     agent.emit('message', {
       headers: req.headers,
       payload: msgpack.decode(req.body, { useBigInt64: true }),
     })
-  })
+  }
+  app.put('/v0.4/traces', handleV04Traces)
+  app.post('/v0.4/traces', handleV04Traces)
 
   app.post('/v0.7/config', (req, res) => {
     const {

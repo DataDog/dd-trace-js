@@ -790,25 +790,25 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
   })
 
-  it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
+  it('should keep OTEL_TRACES_EXPORTER=otlp when DD_TRACE_AGENT_PROTOCOL_VERSION is set to a non-default value', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     const config = getConfig()
-    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
   })
 
-  it('should not disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is unset', () => {
+  it('should keep OTEL_TRACES_EXPORTER=otlp when DD_TRACE_AGENT_PROTOCOL_VERSION is unset', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     delete process.env.DD_TRACE_AGENT_PROTOCOL_VERSION
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
   })
 
-  it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
+  it('should keep OTEL_TRACES_EXPORTER=otlp when DD_TRACE_AGENT_PROTOCOL_VERSION is 0.4', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
     const config = getConfig()
-    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
   })
 
   it('should fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
@@ -5065,7 +5065,6 @@ rules:
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
       const config = getConfig()
-      // Env var has higher priority than calculated; encoder truncation is the safety net
       assert.strictEqual(config.traceId128BitGenerationEnabled, true)
     })
 

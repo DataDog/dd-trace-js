@@ -1,5 +1,2 @@
-This test initializes a tracer with the no-op scope manager. It then creates
-many spans, and depending on the variant, either finishes all of them as they
-are created, or later on once they're all created. Prior to creating any spans,
-it modifies the processor instance so that no span processing (or exporting) is
-done, and it simply stops storing the spans.
+Measures JS span construction and finish with the no-op scope manager while
+bypassing processing and export, isolating the span lifecycle from serialization and transport.

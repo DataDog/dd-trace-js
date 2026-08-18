@@ -24,6 +24,7 @@ const {
 } = require('./helpers')
 const supportedRange = engines.node
 const currentVersionIsSupported = semver.satisfies(NODE_VERSION, supportedRange)
+const nativeInitDebugLines = '(?:Native spans interface initialized\nNative spans mode enabled\n)?'
 // These are on by default in release tests, so we'll turn them off for
 // more fine-grained control of these variables in these tests.
 delete process.env.DD_INJECTION_ENABLED
@@ -162,7 +163,7 @@ false
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
 >=${NODE_MAJOR + 1} <${MAX_NODE_MAJOR}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
-Application instrumentation bootstrapping complete
+${nativeInitDebugLines}Application instrumentation bootstrapping complete
 true
 `, telemetryForced))
         })
@@ -204,7 +205,7 @@ false
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
 ${engines.node} <${NODE_MAJOR}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
-Application instrumentation bootstrapping complete
+${nativeInitDebugLines}Application instrumentation bootstrapping complete
 true
 `, telemetryForced))
         })
