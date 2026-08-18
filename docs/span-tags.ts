@@ -28,11 +28,20 @@ interface Tags {
   object: TagObject
 }
 
+interface ErrorMetaTags {
+  'error.type': Error
+  'error.message': Error
+  'error.stack': Error
+}
+
 type TagUnion = { supported: string } | { unsupported: { nested: { value: string } } }
 
 declare const span: Span
 declare const errorKey: 'error' | 'error.details'
+declare const errorMetaKey: 'error.type' | 'error.message' | 'error.stack'
+declare const mixedErrorMetaKey: 'error.message' | 'error.details'
 declare const errorOrBoolean: Error | boolean
+declare const errorMetaTags: ErrorMetaTags
 declare const opaqueObject: object
 declare const tagObject: TagObject
 declare const tags: Tags
@@ -47,8 +56,11 @@ span.setTag('buffer', Buffer.from('value'))
 span.setTag('url', new URL('https://example.com'))
 span.setTag('object', tagObject)
 span.setTag('error', errorOrBoolean)
+span.setTag('error.message', new Error('boom'))
+span.setTag(errorMetaKey, new Error('boom'))
 span.addTags({ error: new Error('boom') })
 span.addTags({ error: errorOrBoolean })
+span.addTags(errorMetaTags)
 span.addTags(tags)
 tracer.startSpan('test', { tags })
 tracer.trace('test', { tags }, () => {})
@@ -81,12 +93,18 @@ span.setTag('function', () => {})
 span.setTag('date', new Date())
 // @ts-expect-error Values typed only as object may contain unsupported nested values.
 span.setTag('object', opaqueObject)
-// @ts-expect-error Error objects are only supported by the error tag.
+// @ts-expect-error Error objects are not supported by ordinary tags.
 span.setTag('error.details', new Error('boom'))
-// @ts-expect-error Error objects require a key known to be exactly error.
+// @ts-expect-error Error objects require a key known to support them.
 span.setTag(errorKey, new Error('boom'))
-// @ts-expect-error Error objects are only supported by the error tag.
+// @ts-expect-error Error objects are not supported by ordinary tags.
 span.addTags({ 'error.details': new Error('boom') })
+// @ts-expect-error Error metadata tags do not support null values.
+span.setTag('error.message', null)
+// @ts-expect-error Error metadata tags do not support undefined values.
+span.setTag('error.type', undefined)
+// @ts-expect-error Error objects require a key known to support them.
+span.setTag(mixedErrorMetaKey, new Error('boom'))
 // @ts-expect-error Null tag values are not supported.
 span.setTag('null', null)
 // @ts-expect-error Undefined tag values are not supported.
@@ -108,8 +126,11 @@ tracer.init({ tags: { nested: { child: { value: 'value' } } } })
 
 v5Span.setTag('object', tagObject)
 v5Span.setTag('error', errorOrBoolean)
+v5Span.setTag('error.message', new Error('boom'))
+v5Span.setTag(errorMetaKey, new Error('boom'))
 v5Span.addTags({ error: new Error('boom') })
 v5Span.addTags({ error: errorOrBoolean })
+v5Span.addTags(errorMetaTags)
 v5Span.addTags(tags)
 tracerV5.startSpan('test', { tags })
 tracerV5.trace('test', { tags }, () => {})
@@ -130,12 +151,18 @@ void v5TracerOptionsWithNamedTags
 v5Span.setTag('nested', { child: { value: 'value' } })
 // @ts-expect-error Values typed only as object may contain unsupported nested values.
 v5Span.setTag('object', opaqueObject)
-// @ts-expect-error Error objects are only supported by the error tag.
+// @ts-expect-error Error objects are not supported by ordinary tags.
 v5Span.setTag('error.details', new Error('boom'))
-// @ts-expect-error Error objects require a key known to be exactly error.
+// @ts-expect-error Error objects require a key known to support them.
 v5Span.setTag(errorKey, new Error('boom'))
-// @ts-expect-error Error objects are only supported by the error tag.
+// @ts-expect-error Error objects are not supported by ordinary tags.
 v5Span.addTags({ 'error.details': new Error('boom') })
+// @ts-expect-error Error metadata tags do not support null values.
+v5Span.setTag('error.message', null)
+// @ts-expect-error Error metadata tags do not support undefined values.
+v5Span.setTag('error.type', undefined)
+// @ts-expect-error Error objects require a key known to support them.
+v5Span.setTag(mixedErrorMetaKey, new Error('boom'))
 // @ts-expect-error Nested object tag values are not supported.
 v5Span.addTags({ nested: { child: { value: 'value' } } })
 // @ts-expect-error Unsupported members of tag unions are not supported.
