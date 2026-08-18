@@ -10,6 +10,7 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { CLIENT } = require('../../../ext/kinds')
 const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
+const { runHttpRequestHook } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -109,7 +110,7 @@ class HttpClientPlugin extends ClientPlugin {
       addRequestHeaders(req, span, this.config)
     }
 
-    this.config.hooks.request(span, req, res)
+    runHttpRequestHook(span, this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED, this.config.hooks.request, req, res)
 
     super.finish(ctx)
   }

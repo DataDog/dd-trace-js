@@ -17,6 +17,7 @@ const USER_AGENT_ORIGINAL = 'user_agent.original'
 const CLIENT_ADDRESS = 'client.address'
 const NETWORK_PEER_ADDRESS = 'network.peer.address'
 const HTTP_REQUEST_METHOD_ORIGINAL = 'http.request.method_original'
+const RESOURCE_SET_BY_USER = '_dd.otel.resource_set_by_user'
 
 // Known HTTP methods (RFC 9110 + PATCH RFC 5789 + QUERY httpbis draft). A verb
 // outside this set is reported as `_OTHER` with the raw value preserved on
@@ -40,12 +41,21 @@ function isInstrumentationHttpResource (resource, method) {
     resource.startsWith(`${normalizedMethod} `)
 }
 
+function runHttpRequestHook (span, enabled, hook, ...args) {
+  const resourceBeforeHook = span.context().getTag('resource.name')
+  hook(span, ...args)
+  if (enabled && span.context().getTag('resource.name') !== resourceBeforeHook) {
+    span.setTag(RESOURCE_SET_BY_USER, 'true')
+  }
+}
+
 // Datadog HTTP meta keys replaced by OTel names — omitted when rebuilding meta.
 // `http.endpoint` is deliberately absent: it is Datadog-only with no OTel
 // equivalent, and ASM plus endpoint aggregation read it, so it is retained on
 // both the agent and the OTLP payload.
 const DD_HTTP_META_KEYS = new Set([
   'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.url', 'out.host',
+  RESOURCE_SET_BY_USER,
 ])
 const NETWORK_DESTINATION_PORT = 'network.destination.port'
 
@@ -174,10 +184,9 @@ function defaultPortForUrl (url) {
  * Rewrite a formatted span's Datadog HTTP tags to OpenTelemetry HTTP
  * semantic-convention names, in place. Called at serialization time (from
  * `span_format`) when `DD_TRACE_OTEL_SEMANTICS_ENABLED` is set, so every HTTP
- * integration is covered from one place. No-op for non-HTTP spans. The span
- * keeps the Datadog tag names throughout its lifetime — only the serialized
- * output is renamed — so runtime consumers (peer.service, AppSec, trace stats)
- * are unaffected.
+ * integration is covered from one place. No-op for non-HTTP spans. In
+ * OTel-semantics mode this runs before trace-stat aggregation, so stats and the
+ * OTLP exporter consume the same normalized names and attributes.
  *
  * @param {FormattedHttpSpan} formattedSpan
  */
@@ -213,7 +222,12 @@ function applyHttpOtelSemantics (formattedSpan) {
       newMeta[HTTP_REQUEST_METHOD] = '_OTHER'
       newMeta[HTTP_REQUEST_METHOD_ORIGINAL] = method
     }
-    if (isInstrumentationHttpResource(formattedSpan.resource, method)) {
+    // Request hooks mark ownership explicitly because a user resource can have
+    // the same method-prefixed shape as an instrumentation-generated resource.
+    if (
+      meta[RESOURCE_SET_BY_USER] !== 'true' &&
+      isInstrumentationHttpResource(formattedSpan.resource, method)
+    ) {
       formattedSpan.resource = otelHttpResourceName(method, meta['http.route'])
     }
   }
@@ -235,9 +249,7 @@ function applyHttpOtelSemantics (formattedSpan) {
 
   if (kind === 'server') {
     // A server integration that does not populate `http.url` gets no `url.*` /
-    // `server.*` attributes, since there is nothing here to derive them from. The
-    // fix belongs in the integration: see `packages/datadog-plugin-next`, which
-    // sets `http.url` under the flag for exactly this reason.
+    // `server.*` attributes, since there is nothing here to derive them from.
     if (url !== undefined) {
       // The query in `http.url` is already obfuscated per config, so it is preserved.
       const { scheme, address, port, path, query } = decomposeServerUrl(url, url)
@@ -267,11 +279,9 @@ function applyHttpOtelSemantics (formattedSpan) {
 
   // `error.type` describes an error the span already recorded; it never decides
   // whether the span is an error. The status-code rules live at capture time
-  // (`web.addStatusError` for servers, the client plugins' `validateStatus`), which
-  // is the only place they can live: trace stats read the span before this runs, so
-  // flipping `error` here would make the span and its stats disagree. The
-  // configured error-status ranges therefore apply, and they take precedence over
-  // the OTel defaults.
+  // (`web.addStatusError` for servers, the client plugins' `validateStatus`).
+  // Trace stats run after this conversion and therefore observe the same error
+  // decision and normalized HTTP attributes as the OTLP exporter.
   // No-clobber: an exception already put its class name here. Bounded below at 400
   // so a span that errored for some other reason (a `setTag('error', true)` on a
   // 200) does not end up describing its error as a success status.
@@ -288,5 +298,6 @@ module.exports = {
   decomposeServerUrl, // exercised directly by the helper spec
   isInstrumentationHttpResource,
   otelHttpResourceName,
+  runHttpRequestHook,
   applyHttpOtelSemantics,
 }

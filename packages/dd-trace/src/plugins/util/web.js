@@ -15,7 +15,7 @@ const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
 const { getStatusValidator } = require('./http-error-statuses')
-const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
+const { NETWORK_PEER_ADDRESS, runHttpRequestHook } = require('./http-otel-semantics')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -144,13 +144,13 @@ const web = {
   setRoute (req, path) {
     const context = contexts.get(req)
 
-    if (!context) return
+    if (!context?.span) return
 
     context.paths = [path]
     if (path) {
-      // A downstream request can trigger sampling from inside the route handler. Publish the
-      // matched route now so OTel resource rules do not need to derive a name from the URI path.
-      context.span.setTag('http.route', path)
+      // A downstream request can trigger sampling from inside the route handler.
+      // Publish the low-cardinality route as soon as the framework resolves it.
+      context.span.setTag(HTTP_ROUTE, path)
     }
   },
 
@@ -298,7 +298,13 @@ const web = {
     addRequestHeaders(context)
     addResponseTags(context)
 
-    context.config.hooks.request(context.span, req, res)
+    runHttpRequestHook(
+      context.span,
+      context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
+      context.config.hooks.request,
+      req,
+      res
+    )
     addResourceTag(context)
 
     context.span.finish()

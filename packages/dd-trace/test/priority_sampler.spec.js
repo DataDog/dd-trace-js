@@ -289,6 +289,27 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._sampling.priority, USER_KEEP)
     })
 
+    it('should store the normalization guard on the root context when sampling from a child', () => {
+      context._tags['http.method'] = 'PROPFIND'
+      context._tags['resource.name'] = 'PROPFIND /users/:id'
+      const childContext = {
+        ...context,
+        _tags: { 'service.name': 'child', 'resource.name': 'child-resource' },
+      }
+      prioritySampler = new PrioritySampler(
+        'test',
+        { sampleRate: 0, rules: [{ sampleRate: 1, resource: 'HTTP' }] },
+        { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      )
+
+      prioritySampler.sample(childContext)
+
+      assert.strictEqual(context._tags['resource.name'], 'HTTP')
+      assert.strictEqual(context._otelHttpResourceNormalizedForSampling, true)
+      assert.strictEqual(childContext._otelHttpResourceNormalizedForSampling, undefined)
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+    })
+
     it('should support a customer-defined remote configuration sampling', () => {
       prioritySampler = new PrioritySampler('test', {
         rules: [

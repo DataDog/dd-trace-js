@@ -10,6 +10,7 @@ const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const { CLIENT } = require('../../../ext/kinds')
 const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
+const { runHttpRequestHook } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 
 const {
   HTTP_STATUS_CODE,
@@ -128,7 +129,7 @@ class UndiciPlugin extends HttpClientPlugin {
 
     const { span, store } = ctx
 
-    this.config.hooks.request(span, null, null)
+    runHttpRequestHook(span, this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED, this.config.hooks.request, null, null)
 
     span.finish()
 
@@ -167,7 +168,7 @@ class UndiciPlugin extends HttpClientPlugin {
     const { span, store } = ctx
 
     // Call the request hook if configured
-    this.config.hooks.request(span, null, null)
+    runHttpRequestHook(span, this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED, this.config.hooks.request, null, null)
 
     // Finish the span
     span.finish()
@@ -193,7 +194,7 @@ class UndiciPlugin extends HttpClientPlugin {
     }
 
     // Call the request hook if configured
-    this.config.hooks.request(span, null, null)
+    runHttpRequestHook(span, this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED, this.config.hooks.request, null, null)
 
     // Finish the span
     span.finish()

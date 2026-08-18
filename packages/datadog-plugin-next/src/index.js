@@ -6,7 +6,7 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const { SERVER } = require('../../../ext/kinds')
 const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
-const { NETWORK_PEER_ADDRESS } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
+const { NETWORK_PEER_ADDRESS, runHttpRequestHook } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { extractURL, getQsObfuscator, obfuscateQs } = require('../../dd-trace/src/plugins/util/url')
 const web = require('../../dd-trace/src/plugins/util/web')
 
@@ -42,16 +42,10 @@ class NextPlugin extends ServerPlugin {
       integrationName: this.constructor.id,
     })
 
-    // Next.js does not set `http.url` on its own, so the export-time OTel rename
-    // had nothing to derive `url.path` / `url.scheme` / `server.*` from. Set it
-    // (and the socket peer, which is only reachable here) exactly as
-    // `web.addRequestTags` does, but only under the flag so the default output
-    // stays unchanged.
-    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && req.headers) {
-      span.setTag('http.url', obfuscateQs(this.config, extractURL(req)))
-      const peerAddress = req.socket?.remoteAddress
-      if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
-    }
+    // Next.js does not populate these request tags through web.addRequestTags.
+    // Capture them under the flag so the shared OTel conversion can derive the
+    // canonical url.*, server.*, and network.peer.address attributes.
+    addOtelRequestTags(span, this.config, req)
 
     this.stampIntegrationService(span, serviceName)
 
@@ -98,7 +92,7 @@ class NextPlugin extends ServerPlugin {
       'http.status_code': res.statusCode,
     })
 
-    this.config.hooks.request(span, req, res)
+    runHttpRequestHook(span, this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED, this.config.hooks.request, req, res)
 
     span.finish()
   }
@@ -156,10 +150,20 @@ function normalizeConfig (config) {
 
 const noop = () => {}
 
+function addOtelRequestTags (span, config, req) {
+  if (!config.DD_TRACE_OTEL_SEMANTICS_ENABLED || !req.headers) return
+
+  span.setTag('http.url', obfuscateQs(config, extractURL(req)))
+  const peerAddress = req.socket?.remoteAddress
+  if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
+}
+
 function getHooks (config) {
   const request = config.hooks?.request ?? noop
 
   return { request }
 }
+
+NextPlugin._addOtelRequestTags = addOtelRequestTags
 
 module.exports = NextPlugin

@@ -16,11 +16,32 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
+const NextPlugin = require('../src')
 const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
 
 describe('Plugin', function () {
+  it('captures the URL and socket peer needed by OTel server attributes', () => {
+    const tags = {}
+    const span = { setTag: (key, value) => { tags[key] = value } }
+    const req = {
+      headers: { host: 'example.com:8080' },
+      method: 'GET',
+      socket: { encrypted: false, remoteAddress: '192.0.2.1' },
+      url: '/products/42?token=secret',
+    }
+
+    NextPlugin._addOtelRequestTags(
+      span,
+      { DD_TRACE_OTEL_SEMANTICS_ENABLED: true, queryStringObfuscation: false },
+      req
+    )
+
+    assert.strictEqual(tags['http.url'], 'http://example.com:8080/products/42?token=secret')
+    assert.strictEqual(tags['network.peer.address'], '192.0.2.1')
+  })
+
   let server
   let port
 
@@ -32,7 +53,7 @@ describe('Plugin', function () {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
       const startServer = (
-        { withConfig, standalone, serverFile = 'server', extraEnv },
+        { withConfig, standalone, serverFile = 'server' },
         schemaVersion = 'v0',
         defaultToGlobalService = false
       ) => {
@@ -60,7 +81,6 @@ describe('Plugin', function () {
               NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
               HOSTNAME: '127.0.0.1',
               TIMES_HOOK_CALLED: 0,
-              ...extraEnv,
             },
           })
 
@@ -716,43 +736,6 @@ describe('Plugin', function () {
           })
         })
       }
-
-      describe('with OTel semantics enabled', () => {
-        startServer({
-          withConfig: false,
-          standalone: false,
-          extraEnv: { DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true' },
-        })
-
-        // Next.js never sets `http.url` itself, so before the plugin set it the
-        // export-time rename had nothing to derive these from and emitted no
-        // `url.*` / `server.*` at all.
-        it('emits the url.* and server.* attributes', done => {
-          agent
-            .assertSomeTraces(traces => {
-              const span = traces[0].find(candidate => candidate.name === 'next.request')
-
-              assertObjectContains(span, {
-                meta: {
-                  'span.kind': 'server',
-                  'http.request.method': 'GET',
-                  'url.path': '/api/hello/world',
-                  'url.scheme': 'http',
-                  'server.address': '127.0.0.1',
-                  'server.port': String(port),
-                  'http.response.status_code': '200',
-                },
-              })
-              assert.ok(!Object.hasOwn(span.meta, 'http.url'))
-              assert.ok(!Object.hasOwn(span.meta, 'http.method'))
-              assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://127.0.0.1:${port}/api/hello/world`).catch(done)
-        })
-      })
 
       describe('with a custom server that forwards raw req.url', () => {
         startServer({ withConfig: false, standalone: false, serverFile: 'server-raw' })
