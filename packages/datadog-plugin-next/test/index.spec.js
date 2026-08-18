@@ -29,6 +29,10 @@ function getCompiledRuntimeHook (runtime) {
   return instrumentations.next.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
 }
 
+function getNoFallbackErrorHook () {
+  return instrumentations.next.find(hook => hook.file === 'dist/shared/lib/no-fallback-error.external.js').hook
+}
+
 function getDisabledRuntimeHooks () {
   const hooks = []
   const channels = new Map()
@@ -1578,12 +1582,9 @@ describe('compiled Next runtimes', () => {
       await trace
     })
 
-    it('does not record NoFallbackError when the Next 16 App Page router handles it as a 404', async () => {
-      // Next exposes this CommonJS export through Object.defineProperty.
-      // eslint-disable-next-line eslint-rules/eslint-require-export-exists
-      const { NoFallbackError } = require(
-        '../../../versions/next@16/node_modules/next/dist/shared/lib/no-fallback-error.external'
-      )
+    it('does not record NoFallbackError when the App Page router handles it as a 404', async () => {
+      class NoFallbackError extends Error {}
+      getNoFallbackErrorHook()({ NoFallbackError })
       const noFallbackError = new NoFallbackError()
 
       class AppPageRouteModule extends RouteModule {
