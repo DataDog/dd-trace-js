@@ -557,7 +557,7 @@ function install () {
     // (moleculer's runtime `require('bluebird')` fallback, etc.) are wired
     // through `externals.js` `dep: true, forced: true` so they land as a direct
     // dep of the consuming sandbox rather than as a sibling workspace.
-    exec('bun install --trust', { cwd: folder() })
+    exec('bun install --trust --network-concurrency 8', { cwd: folder() })
   } catch (error) {
     // A failure is most often an unresolvable version: a declared range spans a major version that was never
     // published. Point at the fix instead of leaving a bare bun error.
