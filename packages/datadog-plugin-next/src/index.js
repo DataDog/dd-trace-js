@@ -43,6 +43,7 @@ class NextPlugin extends ServerPlugin {
     super(...args)
     this.addBind('apm:next:request:background-revalidation', req => ({
       ...storage('legacy').getStore(),
+      span: undefined,
       backgroundRevalidationRequest: req,
     }))
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
