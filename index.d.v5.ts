@@ -4001,7 +4001,8 @@ declare namespace tracer {
         id?: string,
         inputData: JSONType,
         expectedOutput?: JSONType,
-        metadata?: Record<string, JSONType>
+        metadata?: Record<string, JSONType>,
+        tags?: string[]
       }>
     }
 
@@ -4034,6 +4035,8 @@ declare namespace tracer {
       expectedRecordCount?: number
       /** Maximum total time to wait, in ms. Default 30000. */
       maxWaitMs?: number
+      /** Filter records by these tags. */
+      tags?: string[]
     }
 
     interface ExperimentResultRow {
@@ -4151,7 +4154,12 @@ declare namespace tracer {
     }
 
     interface Dataset {
-      addRecord (input: JSONType, expectedOutput?: JSONType, metadata?: Record<string, JSONType>): Dataset
+      addRecord (
+        input: JSONType,
+        expectedOutput?: JSONType,
+        metadata?: Record<string, JSONType>,
+        tags?: string[]
+      ): Dataset
       /** Update fields on an existing dataset record. */
       update (index: number, fields: {
         input?: JSONType
@@ -4160,6 +4168,12 @@ declare namespace tracer {
       }): Dataset
       /** Delete an existing dataset record. */
       delete (index: number): Dataset
+      /** Add tags to a dataset record. */
+      addTags (index: number, tags: string[]): Dataset
+      /** Remove tags from a dataset record. */
+      removeTags (index: number, tags: string[]): Dataset
+      /** Replace all tags on a dataset record. */
+      replaceTags (index: number, tags: string[]): Dataset
       /** Creates the dataset remotely if needed and pushes any unpushed records. */
       push (): Promise<DatasetPushResult>
       name (): string
@@ -4172,8 +4186,11 @@ declare namespace tracer {
         id: string | null,
         input: JSONType,
         expectedOutput: JSONType,
-        metadata: Record<string, JSONType>
+        metadata: Record<string, JSONType>,
+        tags: string[]
       }>
+      /** Return the tags used to filter this dataset. */
+      filterTags (): string[]
       /** Dashboard URL for the dataset, or null until pushed. */
       url (): string | null
     }
