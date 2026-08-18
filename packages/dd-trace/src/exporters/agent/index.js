@@ -58,9 +58,16 @@ class AgentExporter {
   flush (done = () => {}) {
     clearTimeout(this.#timer)
     this.#timer = undefined
-    this.#flush()
 
-    const activeFlushes = [...this.#activeFlushes]
+    // Snapshot before the boundary flush so a failed encoding cannot cause a
+    // Vercel lifecycle flush to abandon exports that were already in flight.
+    let activeFlushes = [...this.#activeFlushes]
+    try {
+      this.#flush()
+    } catch (error) {
+      log.error('Failed to flush traces: %s', error.message)
+    }
+    activeFlushes = [...new Set([...activeFlushes, ...this.#activeFlushes])]
     if (activeFlushes.length === 0) return done()
 
     let pending = activeFlushes.length

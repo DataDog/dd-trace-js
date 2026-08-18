@@ -140,6 +140,22 @@ describe('Exporter', () => {
 
       sinon.assert.calledOnce(flushed)
     })
+
+    it('waits for an earlier export when the boundary flush fails', () => {
+      let inFlightDone
+      writer.flush = sinon.stub()
+      writer.flush.onFirstCall().callsFake(done => { inFlightDone = done })
+      writer.flush.onSecondCall().throws(new Error('encode failed'))
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      exporter.export([span])
+      exporter.flush(flushed)
+
+      sinon.assert.notCalled(flushed)
+      inFlightDone()
+      sinon.assert.calledOnce(flushed)
+    })
   })
 
   describe('setUrl', () => {
