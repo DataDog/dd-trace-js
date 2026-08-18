@@ -54,7 +54,12 @@ function clientWithMockBackend ({ createDatasetError } = {}) {
 describe('LLMObs Experiments — dataset + experiment run', () => {
   it('runs task inside an LLMObs experiment span', async () => {
     const { client: c, requests } = clientWithMockBackend()
-    const dataset = new Dataset(c, 'demo').addRecord({ q: 'apple' }, 'apple', { row: 0 })
+    const dataset = new Dataset(c, 'demo').addRecord(
+      { q: 'apple' },
+      'apple',
+      { row: 0 },
+      ['topic:math', 'topic:logic']
+    )
     const callsToLlmobs = []
     const llmobs = {
       enabled: true,
@@ -80,11 +85,60 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[0][1].name, 'task')
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
+    assert.deepEqual(callsToLlmobs[1][1].tags.topic, ['math', 'logic'])
     assert.equal(result.rows[0].spanId, '000000000000abcd')
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
     assert.deepEqual(requests.find(request => request.method === 'createExperiment').attributes.config, {
       temperature: 0,
     })
+  })
+
+  it('preserves repeated record tags in fallback experiment spans', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord(
+      'input',
+      'expected',
+      {},
+      ['topic:math', 'topic:logic']
+    )
+
+    await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: input => input,
+    }).run()
+
+    const spans = requests.find(request => request.method === 'postExperimentEvents').attributes.spans
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('topic:')), ['topic:math', 'topic:logic'])
+  })
+
+  it('keeps automatic tags authoritative in fallback experiment spans', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord(
+      'input',
+      'expected',
+      {},
+      [
+        'experiment_id:fake',
+        'dataset_id:fake',
+        'project_id:fake',
+        'dataset_name:fake',
+        'experiment_name:fake',
+      ]
+    )
+
+    await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: input => input,
+    }).run()
+
+    const spans = requests.find(request => request.method === 'postExperimentEvents').attributes.spans
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('experiment_id:')), ['experiment_id:exp'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('dataset_id:')), ['dataset_id:ds'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('project_id:')), ['project_id:proj'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('dataset_name:')), ['dataset_name:demo'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('experiment_name:')), ['experiment_name:exp-demo'])
   })
 
   it('surfaces backend failures', async () => {
@@ -164,6 +218,207 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(requests.at(-1).attributes.update_records, [
       { id: dataset.recordIds()[0], metadata: { changed: true }, expected_output: 'during' },
     ])
+  })
+
+  it('keeps inverse tag edits made while a push is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let isFirstPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (isFirstPush) {
+        isFirstPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, {}, 'record-0', ['split:eval'])],
+      1,
+      1
+    )
+
+    const push = dataset.removeTags(0, ['split:eval']).push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.addTags(0, ['split:eval'])
+    resolvePush()
+    await push
+
+    assert.deepEqual(requests[0].attributes.update_records, [{
+      id: 'record-0',
+      tag_operations: { remove: ['split:eval'] },
+    }])
+
+    await dataset.push()
+    assert.deepEqual(requests[1].attributes.update_records, [{
+      id: 'record-0',
+      tag_operations: { add: ['split:eval'] },
+    }])
+    await dataset.push()
+    assert.equal(requests.length, 2)
+  })
+
+  it('keeps tag edits made while an insert is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let isFirstPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (isFirstPush) {
+        isFirstPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+    dataset.addTags(0, ['topic:initial'])
+
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.removeTags(0, ['topic:initial'])
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.insert_records, [{
+      id: dataset.recordIds()[0],
+      input: 'input',
+      expected_output: null,
+      metadata: {},
+      tags: ['topic:initial'],
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: dataset.recordIds()[0],
+      tag_operations: { remove: ['topic:initial'] },
+    }])
+  })
+
+  it('combines replace tag operations and clears inverse changes', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, {}, 'record-0', ['topic:old'])],
+      1,
+      1
+    )
+
+    dataset.replaceTags(0, ['topic:new', 'topic:keep'])
+    dataset.addTags(0, ['topic:add'])
+    dataset.removeTags(0, ['topic:new'])
+    dataset.update(0, { metadata: { changed: true } })
+    await dataset.push()
+
+    assert.deepEqual(requests[0].attributes.update_records, [{
+      id: 'record-0',
+      metadata: { changed: true },
+      tag_operations: { set: ['topic:add', 'topic:keep'] },
+    }])
+
+    dataset.addTags(0, ['topic:temporary'])
+    dataset.removeTags(0, ['topic:temporary'])
+    await dataset.push()
+    assert.equal(requests.length, 1)
+  })
+
+  it('retains field updates when inverse tag edits cancel', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, {}, 'record-0')],
+      1,
+      1
+    )
+
+    dataset.update(0, { metadata: { changed: true } })
+    dataset.addTags(0, ['topic:temporary'])
+    dataset.removeTags(0, ['topic:temporary'])
+    await dataset.push()
+
+    assert.deepEqual(requests[0].attributes.update_records, [{
+      id: 'record-0',
+      metadata: { changed: true },
+    }])
+  })
+
+  it('restores tag operations when a push fails', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, {}, 'record-0')],
+      1,
+      1
+    )
+    let shouldFail = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (shouldFail) {
+        shouldFail = false
+        throw new Error('temporary failure')
+      }
+      return { records: [], version: 2 }
+    }
+
+    dataset.addTags(0, ['topic:retry'])
+    await assert.rejects(() => dataset.push(), /temporary failure/)
+    await dataset.push()
+
+    assert.deepEqual(requests[1].attributes.update_records, [{
+      id: 'record-0',
+      tag_operations: { add: ['topic:retry'] },
+    }])
+  })
+
+  it('clears tags for a deleted new record before reusing its id', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let isFirstPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (isFirstPush) {
+        isFirstPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = new Dataset(c, 'demo')
+      .addRecord(new DatasetRecord('deleted', null, {}, 'record-0'))
+
+    dataset.addTags(0, ['topic:stale'])
+    dataset.delete(0)
+    dataset.addRecord(new DatasetRecord('before', null, {}, 'record-0'))
+
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.update(0, { input: 'after' })
+    resolvePush()
+    await push
+    await dataset.push()
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[1].attributes.update_records, [{
+      id: 'record-0',
+      input: 'after',
+    }])
   })
 
   it('preserves edits to a new record made while its insert is in flight', async () => {
@@ -482,6 +737,14 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     const dataset = Dataset.fromExisting(c, 'demo', '', 'ds', 'proj', [existing], 1, 1)
     assert.deepEqual(dataset.recordIds(), ['record-0'])
     assert.equal(dataset.records()[0], existing)
+
+    const taggedDataset = Dataset.fromExisting(c, 'tagged', '', 'tagged-ds', 'proj', [{
+      input: 'tagged-input',
+      metadata: {},
+      id: 'tagged-record',
+      tags: ['topic:math'],
+    }], 1, 1)
+    assert.deepEqual(taggedDataset.records()[0].tags, ['topic:math'])
   })
 
   it('exposes dataset getters and accepts a DatasetRecord instance', () => {
@@ -497,7 +760,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(record.expectedOutput, 'out')
     assert.deepEqual(record.metadata, { m: 1 })
     assert.equal(record.id, 'rec')
-    assert.deepEqual({ ...record }, { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, id: 'rec' })
+    assert.deepEqual({ ...record }, { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, tags: [], id: 'rec' })
     assert.deepEqual(dataset.records()[1].input, { inputData: 'payload' })
     assert.equal(dataset.records()[1].expectedOutput, 'expected')
     assert.deepEqual(dataset.records()[1].metadata, { explicit: true })

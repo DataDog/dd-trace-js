@@ -13,6 +13,7 @@ const {
   normalizeEvaluators,
   mergeTags,
   normalizeJsonMetricValue,
+  recordTagsToObject,
   sleep,
   stringify,
   timestampMs,
@@ -20,7 +21,7 @@ const {
 } = require('./util')
 
 // One span per experiment row (LLM Obs experiment span wire format).
-function toSpan (row, metadata, ids, spanName, userTags) {
+function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
   const meta = {
     input: row.input ?? null,
     output: row.output ?? null,
@@ -33,6 +34,20 @@ function toSpan (row, metadata, ids, spanName, userTags) {
     meta.error = { type: row.errorType ?? '', message: row.errorMessage ?? '', stack: row.errorStack ?? '' }
   }
 
+  const tags = buildTags({
+    ...userTags,
+    ...recordTagsToObject(recordTags),
+  }, {
+    experiment_id: ids.experimentId,
+    run_id: ids.runId,
+    run_iteration: ids.runIteration,
+    project_id: ids.projectId,
+    dataset_id: ids.datasetId,
+    dataset_record_id: ids.datasetRecordId,
+    dataset_name: ids.datasetName,
+    experiment_name: ids.experimentName,
+  })
+
   return {
     span_id: row.spanId,
     trace_id: row.traceId,
@@ -43,13 +58,7 @@ function toSpan (row, metadata, ids, spanName, userTags) {
     duration: row.durationNs,
     status: row.isError ? 'error' : 'ok',
     meta,
-    tags: buildTags(userTags, {
-      experiment_id: ids.experimentId,
-      run_id: ids.runId,
-      run_iteration: ids.runIteration,
-      dataset_id: ids.datasetId,
-      dataset_record_id: ids.datasetRecordId,
-    }),
+    tags,
   }
 }
 
@@ -152,6 +161,8 @@ class Experiment {
     this.#evaluators = normalizeEvaluators(options.evaluators, 'row')
     this.#summaryEvaluators = normalizeEvaluators(options.summaryEvaluators, 'summary')
     this.#config = { ...options.config }
+    const filterTags = this.#dataset.filterTags?.() ?? []
+    if (filterTags.length > 0) this.#config.filtered_record_tags = filterTags
     this.#tags = { ...options.tags }
     this.#metadata = { ...options.metadata }
     this.#projectId = null
@@ -454,9 +465,11 @@ class Experiment {
             projectId,
             datasetId,
             datasetRecordId,
+            datasetName: this.#dataset.name(),
+            experimentName: this.#name,
             runId,
             runIteration,
-          }, this.#task.name || this.#name, this.#tags))
+          }, this.#task.name || this.#name, this.#tags, record.tags))
         }
       }
 
@@ -521,7 +534,7 @@ class Experiment {
       dataset_name: this.#dataset.name(),
       experiment_name: this.#name,
     }
-    const tags = mergeTags(this.#tags, autoTags)
+    const tags = mergeTags(this.#tags, { ...recordTagsToObject(record.tags), ...autoTags })
 
     const execute = () => this.#runWithRetries(
       () => this.#task(record.input, this.#config, record.metadata),

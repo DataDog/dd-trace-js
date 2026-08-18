@@ -11,20 +11,29 @@ class NoopDataset {
   #name
   #description
   #records
+  #filterTags
 
   constructor (name = '', options = {}) {
     this.#name = name
     this.#description = typeof options === 'string' ? options : (options.description ?? '')
+    this.#filterTags = typeof options === 'string' ? [] : [...(options.filterTags ?? [])]
     this.#records = (typeof options === 'string' ? [] : (options.records ?? [])).map(record => ({
       id: record.id ?? null,
       input: record.inputData,
       expectedOutput: record.expectedOutput ?? null,
       metadata: record.metadata ?? {},
+      tags: [...(record.tags ?? [])],
     }))
   }
 
-  addRecord (input, expectedOutput, metadata) {
-    this.#records.push({ id: null, input, expectedOutput: expectedOutput ?? null, metadata: metadata ?? {} })
+  addRecord (input, expectedOutput, metadata, tags) {
+    this.#records.push({
+      id: null,
+      input,
+      expectedOutput: expectedOutput ?? null,
+      metadata: metadata ?? {},
+      tags: [...(tags ?? [])],
+    })
     return this
   }
 
@@ -44,6 +53,49 @@ class NoopDataset {
 
   push () {
     return Promise.resolve({ pushedCount: 0, totalCount: 0 })
+  }
+
+  /**
+   * Add tags to a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {NoopDataset} This dataset for chaining.
+   */
+  addTags (index, tags) {
+    const record = this.#records[index]
+    if (!record) return this
+    const normalizedTags = tags ?? []
+    record.tags = [...new Set([...(record.tags ?? []), ...normalizedTags])].sort()
+    return this
+  }
+
+  /**
+   * Remove tags from a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {NoopDataset} This dataset for chaining.
+   */
+  removeTags (index, tags) {
+    const record = this.#records[index]
+    if (!record) return this
+    const normalizedTags = tags ?? []
+    const removed = new Set(normalizedTags)
+    record.tags = (record.tags ?? []).filter(tag => !removed.has(tag)).sort()
+    return this
+  }
+
+  /**
+   * Replace all tags on a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {NoopDataset} This dataset for chaining.
+   */
+  replaceTags (index, tags) {
+    const record = this.#records[index]
+    if (!record) return this
+    const normalizedTags = tags ?? []
+    record.tags = [...normalizedTags]
+    return this
   }
 
   name () {
@@ -68,6 +120,14 @@ class NoopDataset {
 
   latestVersion () {
     return null
+  }
+
+  /**
+   * Return the tags used to filter this dataset.
+   * @returns {string[]} Dataset record filter tags.
+   */
+  filterTags () {
+    return [...this.#filterTags]
   }
 
   records () {
@@ -156,9 +216,9 @@ class NoopExperiments {
     return new NoopDataset(name, options)
   }
 
-  pullDataset (name) {
+  pullDataset (name, options = {}) {
     this.#warn()
-    return Promise.resolve(new NoopDataset(name))
+    return Promise.resolve(new NoopDataset(name, { filterTags: options.tags }))
   }
 
   experiment (options = {}) {
