@@ -15,7 +15,7 @@ function replaceFile (filename, content) {
 
   try {
     const { mode } = fs.statSync(filename)
-    // A fresh inode keeps Bun's Linux hardlink cache immutable.
+    // Isolated installs hardlink package files from Bun's shared cache. A fresh inode keeps the patch local.
     fs.writeFileSync(temporaryFile, content, { mode })
     fs.renameSync(temporaryFile, filename)
   } finally {

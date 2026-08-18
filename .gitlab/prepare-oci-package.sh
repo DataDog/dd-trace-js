@@ -7,10 +7,11 @@ cd ..
 archive=$(npm pack --silent)
 test -f "$archive"
 
-bun=$(node -e "process.stdout.write(require('./scripts/bun').getBunBinary())")
+bun=$(node scripts/bun.js)
 
 mkdir -p packaging/sources
 
+# Install from the manifest before unpacking dd-trace, otherwise its prepare script recursively rebuilds vendor.
 tar -xOf "$archive" package/package.json > packaging/sources/package.json
 npm pkg delete scripts.prepare --prefix packaging/sources
 cp bun.lock packaging/sources/bun.lock
@@ -19,6 +20,7 @@ cp bun.lock packaging/sources/bun.lock
 
 rm packaging/sources/package.json packaging/sources/bun.lock
 mkdir -p packaging/sources/node_modules/dd-trace
+# The OCI layout expects dd-trace beside its hoisted production dependencies in the shared node_modules.
 tar -xzf "$archive" --strip-components=1 -C packaging/sources/node_modules/dd-trace
 
 if [ -n "$CI_COMMIT_TAG" ] && [ -z "$JS_PACKAGE_VERSION" ]; then

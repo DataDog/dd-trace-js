@@ -169,6 +169,7 @@ const IGNORED_WORKFLOWS = {
   all: [
     'audit.yml',
     'codeql-analysis.yml',
+    'dependabot-audit.yml',
     'dependabot-automation.yml',
     'flakiness.yml',
     'pr-labels.yml',

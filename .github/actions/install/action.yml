@@ -11,5 +11,5 @@ runs:
         shell: bash
         # A retry against Bun's partial install state can skip lifecycle scripts. Start every attempt clean.
         command: >-
-          node -e "require('node:fs').rmSync('node_modules', { recursive: true, force: true })" &&
+          rm -rf node_modules &&
           bun install --frozen-lockfile --linker=hoisted --network-concurrency 8

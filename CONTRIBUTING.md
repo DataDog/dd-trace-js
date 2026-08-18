@@ -172,6 +172,10 @@ in our installs. The Datadog-owned packages listed in `minimumReleaseAgeExcludes
 the wait because our publishing pipeline is their trust boundary. Bun only supports exact package
 names in this list; it does not expand the `@datadog/*` pattern used by Dependabot.
 
+`trustedDependencies` in `package.json` is a separate, intentionally smaller boundary. It permits
+lifecycle scripts only for Bun and the native packages that need to build during install; it does not
+inherit the broader list of internal packages whose release age is trusted.
+
 CI runs `bun install --frozen-lockfile` (see `.github/actions/install/action.yml`); a `bun.lock`
 that disagrees with `package.json` fails the install step. If you change `package.json`, rerun
 `bun install` locally and commit the regenerated `bun.lock` in the same PR. Dependabot uses its
