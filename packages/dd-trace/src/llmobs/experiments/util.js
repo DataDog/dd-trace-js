@@ -22,6 +22,26 @@ function hasEntries (value) {
   return false
 }
 
+function validateTagsList (tags) {
+  if (tags == null) return []
+  if (!Array.isArray(tags)) throw new TypeError('Tags must be an array of strings')
+  for (const tag of tags) {
+    if (typeof tag !== 'string') throw new TypeError('Each tag must be a string')
+    if (tag.indexOf(':') <= 0) {
+      throw new Error(`Tag '${tag}' is malformed. Tags must be in 'key:value' format (e.g., 'env:prod').`)
+    }
+  }
+  return [...tags]
+}
+
+function tagOperationsAreEmpty (operations) {
+  return operations == null || (
+    !Object.hasOwn(operations, 'replace') &&
+    !Object.hasOwn(operations, 'add') &&
+    !Object.hasOwn(operations, 'remove')
+  )
+}
+
 /**
  * @param {string} name
  */
@@ -165,16 +185,20 @@ function stringify (value) {
  * @returns {string[]}
  */
 function buildTags (userTags, autoTags) {
-  const tags = new Map()
+  const tagsByKey = new Map()
   if ((userTags) != null) {
     for (const [key, value] of Object.entries(userTags)) {
-      tags.set(key, `${key}:${value}`)
+      const values = Array.isArray(value) ? value : [value]
+      tagsByKey.set(key, values.map(item => `${key}:${item}`))
     }
   }
   for (const [key, value] of Object.entries(autoTags)) {
-    if (value !== undefined && value !== null && value !== '') tags.set(key, `${key}:${value}`)
+    if (value !== undefined && value !== null && value !== '') tagsByKey.set(key, [`${key}:${value}`])
   }
-  return [...tags.values()]
+
+  const tags = []
+  for (const values of tagsByKey.values()) tags.push(...values)
+  return tags
 }
 
 /**
@@ -184,6 +208,35 @@ function buildTags (userTags, autoTags) {
  */
 function mergeTags (baseTags, overrideTags) {
   return { ...baseTags, ...overrideTags }
+}
+
+/**
+ * @param {string[] | undefined} tags
+ * @returns {Record<string, string | string[]>}
+ */
+function recordTagsToObject (tags) {
+  const result = {}
+  if (!Array.isArray(tags)) return result
+  for (const tag of tags) {
+    const separator = tag.indexOf(':')
+    if (separator <= 0) continue
+
+    const key = tag.slice(0, separator)
+    const value = tag.slice(separator + 1)
+    if (!Object.hasOwn(result, key)) {
+      Object.defineProperty(result, key, {
+        configurable: true,
+        enumerable: true,
+        value,
+        writable: true,
+      })
+    } else if (Array.isArray(result[key])) {
+      result[key].push(value)
+    } else {
+      result[key] = [result[key], value]
+    }
+  }
+  return result
 }
 
 /**
@@ -249,8 +302,11 @@ module.exports = {
   mergeTags,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  recordTagsToObject,
   sleep,
   stringify,
+  tagOperationsAreEmpty,
   timestampMs,
   validateEvaluatorName,
+  validateTagsList,
 }
