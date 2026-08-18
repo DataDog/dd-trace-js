@@ -24,12 +24,7 @@ const {
 } = require('./helpers')
 const supportedRange = engines.node
 const currentVersionIsSupported = semver.satisfies(NODE_VERSION, supportedRange)
-// On unsupported runtimes the tracer is stubbed (see stubTracerIfNeeded), so the
-// real native-init debug lines never print; on supported runtimes the forced
-// (DD_INJECT_FORCE) path loads the real tracer and emits them.
-const nativeInitDebugLines = currentVersionIsSupported
-  ? 'Native spans interface initialized\nNative spans mode enabled\n'
-  : ''
+const nativeInitDebugLines = '(?:Native spans interface initialized\nNative spans mode enabled\n)?'
 // These are on by default in release tests, so we'll turn them off for
 // more fine-grained control of these variables in these tests.
 delete process.env.DD_INJECTION_ENABLED

@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
+const http = require('node:http')
 
 const sinon = require('sinon')
 
@@ -199,5 +201,114 @@ describe('Native Spans Integration', () => {
     assert.strictEqual(extracted._traceId.toString(), span.context()._traceId.toString())
     span.finish()
     await materialize()
+  })
+})
+
+describe('Native Agentless Integration', () => {
+  const envNames = [
+    '_DD_APM_TRACING_AGENTLESS_ENABLED',
+    'DD_API_KEY',
+    'DD_APM_REPLACE_TAGS',
+  ]
+  let beforeExitHandlers
+  let handlersBefore
+  let previousEnv
+  let server
+
+  beforeEach(() => {
+    beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+    handlersBefore = new Set(beforeExitHandlers)
+    previousEnv = new Map(envNames.map(name => [name, process.env[name]]))
+  })
+
+  afterEach(async () => {
+    for (const [name, value] of previousEnv) {
+      if (value === undefined) {
+        delete process.env[name]
+      } else {
+        process.env[name] = value
+      }
+    }
+    for (const handler of beforeExitHandlers) {
+      if (!handlersBefore.has(handler)) beforeExitHandlers.delete(handler)
+    }
+    delete require.cache[require.resolve('../../src/config')]
+    delete require.cache[require.resolve('../../src/tracer')]
+    sinon.restore()
+    if (server) {
+      server.closeAllConnections?.()
+      const closed = once(server, 'close')
+      server.close()
+      await closed
+    }
+  })
+
+  it('obfuscates finalized spans while preserving structured metadata', async function () {
+    const libdatadog = require('@datadog/libdatadog')
+    const pipeline = libdatadog.maybeLoad?.('pipeline') ?? libdatadog.load?.('pipeline')
+    if (typeof pipeline?.WasmSpanState?.prototype?.setAgentlessEndpoint !== 'function') {
+      this.skip()
+    }
+
+    let resolveRequest
+    const requestReceived = new Promise(resolve => { resolveRequest = resolve })
+    server = http.createServer((request, response) => {
+      const chunks = []
+      request.on('data', chunk => chunks.push(chunk))
+      request.on('end', () => {
+        resolveRequest({
+          apiKey: request.headers['dd-api-key'],
+          body: Buffer.concat(chunks),
+          method: request.method,
+          url: request.url,
+        })
+        response.writeHead(200)
+        response.end()
+      })
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const { port } = server.address()
+
+    process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+    process.env.DD_API_KEY = 'test-api-key'
+    process.env.DD_APM_REPLACE_TAGS = JSON.stringify([{
+      name: 'custom.secret',
+      pattern: 'sensitive-value',
+      repl: '?',
+    }])
+    delete require.cache[require.resolve('../../src/config')]
+    delete require.cache[require.resolve('../../src/tracer')]
+
+    const getConfig = require('../../src/config')
+    const config = getConfig({ flushInterval: 60_000, service: 'agentless-service' })
+    const Tracer = require('../../src/tracer')
+    const tracer = new Tracer(config)
+    tracer.setUrl(`http://127.0.0.1:${port}`)
+
+    const span = tracer.startSpan('agentless-request')
+    span.setTag('custom.secret', 'sensitive-value')
+    span.meta_struct = {
+      '_dd.appsec.s.req.body': {
+        blocked: true,
+        omitted: undefined,
+        value: 'appsec-value',
+      },
+    }
+    span.finish()
+    await new Promise(resolve => tracer._exporter.flush(resolve))
+
+    const request = await requestReceived
+    assert.strictEqual(request.method, 'POST')
+    assert.strictEqual(request.url, '/api/v2/spans')
+    assert.strictEqual(request.apiKey, 'test-api-key')
+    assert.strictEqual(request.body.includes(Buffer.from('sensitive-value')), false)
+    const payload = JSON.parse(request.body)
+    const exported = payload.traces[0].spans[0]
+    assert.strictEqual(exported.meta['custom.secret'], '?')
+    assert.deepStrictEqual(exported.meta_struct['_dd.appsec.s.req.body'], {
+      blocked: true,
+      value: 'appsec-value',
+    })
   })
 })

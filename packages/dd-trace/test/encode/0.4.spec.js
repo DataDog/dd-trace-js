@@ -151,6 +151,19 @@ describe('encode', () => {
       assert.throws(() => encoder.encode(data), /something else/)
     })
 
+    it('should reset and report non-overflow encoder errors when the writer handles them', () => {
+      const error = new Error('something else')
+      writer.onError = sinon.stub()
+      sinon.stub(encoder._traceBytes, 'reserve').throws(error)
+      const reset = sinon.spy(encoder, 'reset')
+
+      encoder.encode(data)
+
+      assert.strictEqual(encoder.count(), 0)
+      sinon.assert.calledOnceWithExactly(writer.onError, error)
+      sinon.assert.calledOnce(reset)
+    })
+
     it('should reset after making a payload', () => {
       encoder.encode(data)
       encoder.makePayload()

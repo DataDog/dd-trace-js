@@ -13,6 +13,7 @@ const log = require('../../log')
 const { isLoopbackHost, parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
+const { MAX_ACTIVE_BUFFER_SIZE } = require('./limits')
 const {
   getMaxAttempts,
   getRetryDelay,
@@ -21,8 +22,6 @@ const {
 } = require('./retry')
 
 const legacyStorage = storage('legacy')
-
-const maxActiveBufferSize = 1024 * 1024 * 64
 
 let activeBufferSize = 0
 
@@ -250,7 +249,7 @@ function byteLength (data) {
 
 Object.defineProperty(request, 'writable', {
   get () {
-    return activeBufferSize < maxActiveBufferSize
+    return activeBufferSize < MAX_ACTIVE_BUFFER_SIZE
   },
 })
 

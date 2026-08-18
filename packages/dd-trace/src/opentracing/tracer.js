@@ -1,7 +1,6 @@
 'use strict'
 
 const os = require('os')
-const fs = require('fs')
 const { URL, format } = require('url')
 const SpanProcessor = require('../span_processor')
 const getExporter = require('../exporter')
@@ -13,7 +12,6 @@ const runtimeMetrics = require('../runtime_metrics')
 const NativeExporter = require('../exporters/native')
 const defaults = require('../config/defaults')
 const { getIsAWSLambda } = require('../serverless')
-const { DATADOG_LAMBDA_EXTENSION_PATH, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const pkg = require('../../../../package.json')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
@@ -34,25 +32,22 @@ function getNativeModule () {
   return nativeModule
 }
 
-// Two distinct ways the native exporter can be unavailable on a runtime that is
-// otherwise fine, both of which must degrade to a JS exporter rather than
-// abort tracer construction (proxy.js swallows the throw into a NoopTracer, so
-// rethrowing here silently disables tracing altogether):
-//
-//   1. the optional dependency was not installed;
-//   2. the runtime has no `WebAssembly` - `node --jitless`, and any hardened or
-//      JIT-disabled deployment. libdatadog's loader throws a bare ReferenceError
-//      there, with no `code` to match on.
-//
-// A corrupt native install is neither, and still fails hard.
+// An omitted or outdated binding and runtimes without WebAssembly can use the
+// JS exporter. Other loader failures indicate a corrupt install and still fail hard.
 function isNativeUnavailable (error) {
   if (typeof WebAssembly === 'undefined') return true
+  if (error?.code === NATIVE_PIPELINE_UNAVAILABLE) return true
+  if (error?.code === NATIVE_AGENTLESS_UNAVAILABLE) return true
   return error?.code === 'MODULE_NOT_FOUND' &&
     /^Cannot find module ['"]@datadog\/libdatadog['"]/.test(String(error.message))
 }
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
+const PIPELINE_API_VERSION = 1
+const NATIVE_PIPELINE_UNAVAILABLE = 'DD_NATIVE_PIPELINE_UNAVAILABLE'
+const NATIVE_AGENTLESS_UNAVAILABLE = 'DD_NATIVE_AGENTLESS_UNAVAILABLE'
+const JS_ONLY_EXPORTERS = new Set([exporters.ELECTRON, exporters.LOG])
 
 class DatadogTracer {
   constructor (config, prioritySampler) {
@@ -71,32 +66,14 @@ class DatadogTracer {
     // Exporters that consume JS-formatted spans stay on the JS exporter pipeline. Lambda
     // also uses it unless native-only OTLP trace export was requested.
     const configuredExporter = config.experimental?.exporter
-    const useOtlpExporter = config.OTEL_TRACES_EXPORTER === 'otlp'
-    const useElectronExporter = configuredExporter === exporters.ELECTRON
-    const useLogExporter = configuredExporter === exporters.LOG
     const useAgentlessExporter = configuredExporter === exporters.AGENTLESS
-    const useConfiguredJsExporter = useElectronExporter || useLogExporter || useAgentlessExporter
+    const useOtlpExporter = config.OTEL_TRACES_EXPORTER === 'otlp'
+    const useConfiguredJsExporter = JS_ONLY_EXPORTERS.has(configuredExporter)
     const useLambdaJsPipeline = getIsAWSLambda() &&
       !config.isCiVisibility &&
       !useConfiguredJsExporter &&
+      !useAgentlessExporter &&
       !useOtlpExporter
-    // A Lambda with neither the Datadog extension layer nor the mini agent has no
-    // local agent to receive traces: the Datadog Forwarder ships them from stdout
-    // instead. Probe for both markers exactly as the previous exporter
-    // selection did, otherwise these functions POST every span to a loopback port
-    // nothing listens on (config forces flushInterval=0 there) and lose all traces.
-    //
-    // An explicit `exporter: 'agent'` still wins: master's `getExporter` matched
-    // the configured name in a switch and returned before it ever reached this
-    // probe, so a Lambda told to use the agent must use the agent.
-    //
-    // Kept independent of `useLambdaJsPipeline` (which excludes OTLP) so the
-    // missing-libdatadog degrade path below can reuse it.
-    const lambdaWithoutLocalAgent = getIsAWSLambda() &&
-      configuredExporter !== exporters.AGENT &&
-      !fs.existsSync(DATADOG_LAMBDA_EXTENSION_PATH) &&
-      !fs.existsSync(DATADOG_MINI_AGENT_PATH)
-    const useLambdaLogExporter = useLambdaJsPipeline && lambdaWithoutLocalAgent
     // A custom DNS `lookup` cannot be honoured by the native exporter. libdatadog's
     // shipped transport builds its own `http.request` options and exposes no hook
     // for them (only `setStorage` and the response-header observer), so the
@@ -128,10 +105,12 @@ class DatadogTracer {
     const useCustomLookup = hasCustomLookup &&
       !config.isCiVisibility &&
       !useConfiguredJsExporter &&
+      !useAgentlessExporter &&
       !useOtlpExporter
     const unsupportedApmExporter = configuredExporter &&
       configuredExporter !== exporters.AGENT &&
       !useConfiguredJsExporter &&
+      !useAgentlessExporter &&
       !useLambdaJsPipeline &&
       !config.isCiVisibility
 
@@ -146,31 +125,20 @@ class DatadogTracer {
 
     if (config.isCiVisibility || useConfiguredJsExporter || useLambdaJsPipeline || useCustomLookup) {
       this._isCiVisibility = config.isCiVisibility === true
-      const Exporter = useElectronExporter
-        ? require('../exporters/electron')
-        : useLogExporter
-          ? require('../exporters/log')
-          : useAgentlessExporter
-            ? require('../exporters/agentless')
-            : useLambdaLogExporter
-              ? require('../exporters/log')
-              : useLambdaJsPipeline || useCustomLookup
-                ? require('../exporters/agent')
-                : getExporter(configuredExporter)
+      const Exporter = getExporter(configuredExporter)
       this._exporter = new Exporter(config, this._prioritySampler)
       this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, otlpStatsExporter)
       this._url = this._exporter._url
 
-      log.debug(useConfiguredJsExporter
-        ? 'Configured "%s" exporter enabled (JS span pipeline)'
-        : useLambdaLogExporter
-          ? 'AWS Lambda environment detected without a local agent (JS span pipeline, stdout export)'
-          : useLambdaJsPipeline
-            ? 'AWS Lambda environment detected (JS span pipeline)'
-            : config.isCiVisibility
-              ? 'CI Visibility mode enabled (JS span pipeline)'
-              : 'Custom DNS lookup configured (JS span pipeline)',
-      configuredExporter)
+      let message = 'Custom DNS lookup configured (JS span pipeline)'
+      if (useConfiguredJsExporter) {
+        message = 'Configured "%s" exporter enabled (JS span pipeline)'
+      } else if (useLambdaJsPipeline) {
+        message = 'AWS Lambda environment detected (JS span pipeline)'
+      } else if (config.isCiVisibility) {
+        message = 'CI Visibility mode enabled (JS span pipeline)'
+      }
+      log.debug(message, configuredExporter)
     } else {
       if (unsupportedApmExporter) {
         log.warn(
@@ -181,22 +149,42 @@ class DatadogTracer {
       let useNativeExporter = true
       let NativeSpansInterface
       try {
-        NativeSpansInterface = getNativeModule().NativeSpansInterface
+        const native = getNativeModule()
+        if (native.pipelineApiVersion < PIPELINE_API_VERSION) {
+          throw Object.assign(new Error('Installed libdatadog predates encoded trace export'), {
+            code: NATIVE_PIPELINE_UNAVAILABLE,
+          })
+        }
+        const statePrototype = native.WasmSpanState?.prototype
+        if (typeof statePrototype?.sendEncodedTraces !== 'function') {
+          throw Object.assign(new Error('Installed libdatadog does not support encoded trace export'), {
+            code: NATIVE_PIPELINE_UNAVAILABLE,
+          })
+        }
+        if (useAgentlessExporter && typeof statePrototype.setAgentlessEndpoint !== 'function') {
+          throw Object.assign(new Error('Installed libdatadog does not support native agentless export'), {
+            code: NATIVE_AGENTLESS_UNAVAILABLE,
+          })
+        }
+        NativeSpansInterface = native.NativeSpansInterface
       } catch (error) {
         if (isNativeUnavailable(error)) {
-          const reason = typeof WebAssembly === 'undefined'
-            ? 'this runtime has no WebAssembly support'
-            : 'optional dependency @datadog/libdatadog is not installed'
-          const useJsOtlpExporter = config.OTEL_TRACES_EXPORTER === 'otlp'
+          let reason = 'optional dependency @datadog/libdatadog is not installed'
+          if (typeof WebAssembly === 'undefined') {
+            reason = 'this runtime has no WebAssembly support'
+          } else if (error?.code === NATIVE_PIPELINE_UNAVAILABLE) {
+            reason = 'the installed @datadog/libdatadog does not support encoded trace export'
+          } else if (error?.code === NATIVE_AGENTLESS_UNAVAILABLE) {
+            reason = 'the installed @datadog/libdatadog does not support agentless export'
+          }
+          const useJsOtlpExporter = useOtlpExporter && !useAgentlessExporter
           useNativeExporter = false
           this._isCiVisibility = false
           if (useJsOtlpExporter) {
             const { createOtlpTraceExporter } = require('../opentelemetry/trace')
             this._exporter = createOtlpTraceExporter(config)
           } else {
-            const Exporter = lambdaWithoutLocalAgent
-              ? require('../exporters/log')
-              : require('../exporters/agent')
+            const Exporter = getExporter(configuredExporter)
             this._exporter = new Exporter(config, this._prioritySampler)
           }
           this._processor = new SpanProcessor(
@@ -215,7 +203,8 @@ class DatadogTracer {
       if (useNativeExporter) {
         const { url, hostname = defaults.hostname, port } = config
         const nativeStatsEnabled = config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED === true &&
-          !config.OTEL_TRACES_SPAN_METRICS_ENABLED
+          !config.OTEL_TRACES_SPAN_METRICS_ENABLED &&
+          !useAgentlessExporter
         const agentUrl = url || new URL(format({
           protocol: 'http:',
           hostname,

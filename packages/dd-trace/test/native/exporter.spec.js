@@ -44,6 +44,7 @@ describe('NativeExporter', () => {
       flushStats: sinon.stub().resolves(true),
       sendEncodedTraces: sinon.stub().resolves('unchanged'),
       setAgentUrl: sinon.stub(),
+      setAgentlessEndpoint: sinon.stub(),
       setOtlpEndpoint: sinon.stub(),
       setOtlpHeaders: sinon.stub(),
       setOtlpProtocol: sinon.stub(),
@@ -120,6 +121,16 @@ describe('NativeExporter', () => {
       sinon.assert.calledOnceWithExactly(nativeSpans.setUseV05, true)
     })
 
+    it('uses a pre-parsed Agent URL for v0.5 negotiation', () => {
+      config.protocolVersion = '0.5'
+      config.url = new URL('http://agent.internal:8126')
+      fetchAgentInfo.callsArgWith(1, undefined, { endpoints: [] })
+
+      createExporter()
+
+      sinon.assert.calledOnceWithExactly(fetchAgentInfo, config.url, sinon.match.func)
+    })
+
     it('ignores malformed v0.5 capability responses', () => {
       config.protocolVersion = '0.5'
       fetchAgentInfo.callsArgWith(1, undefined, { endpoints: '/v0.5/traces' })
@@ -142,6 +153,73 @@ describe('NativeExporter', () => {
       sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpProtocol, 'http/protobuf')
       sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpHeaders, ['authorization', 'token', 'count', '2'])
       sinon.assert.notCalled(fetchAgentInfo)
+    })
+
+    it('configures agentless intake before OTLP and v0.5', () => {
+      config.experimental = { exporter: 'agentless' }
+      config.site = 'datadoghq.eu'
+      config.DD_API_KEY = 'test-api-key'
+      config.OTEL_TRACES_EXPORTER = 'otlp'
+      config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://collector:4318/v1/traces'
+      config.protocolVersion = '0.5'
+
+      createExporter()
+
+      sinon.assert.calledOnceWithExactly(
+        nativeSpans.setAgentlessEndpoint,
+        'https://public-trace-http-intake.logs.datadoghq.eu/api/v2/spans',
+        'test-api-key',
+      )
+      sinon.assert.notCalled(nativeSpans.setOtlpEndpoint)
+      sinon.assert.notCalled(fetchAgentInfo)
+      assert.strictEqual(exporter._url.href, 'https://public-trace-http-intake.logs.datadoghq.eu/')
+    })
+
+    it('disables agentless export when the API key is missing', () => {
+      config.experimental = { exporter: 'agentless' }
+
+      createExporter()
+      exportChunk()
+      clock.tick(config.flushInterval)
+      const done = sinon.stub()
+      exporter.flush(done)
+
+      sinon.assert.notCalled(nativeSpans.setAgentlessEndpoint)
+      sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnceWithExactly(
+        logError,
+        'DD_API_KEY is required for native agentless trace intake. Traces will not be sent.',
+      )
+    })
+
+    it('disables agentless export when native configuration fails', () => {
+      const error = new Error('invalid replacement rule')
+      config.experimental = { exporter: 'agentless' }
+      config.DD_API_KEY = 'test-api-key'
+      nativeSpans.setAgentlessEndpoint.throws(error)
+
+      createExporter()
+      exportChunk()
+      clock.tick(config.flushInterval)
+
+      sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
+      sinon.assert.calledOnceWithExactly(logError, 'Failed to configure native agentless trace intake: %s', error)
+    })
+
+    it('registers a process callback when the shared before-exit registry is unavailable', () => {
+      const globalState = globalThis[Symbol.for('dd-trace')]
+      const handlers = globalState.beforeExitHandlers
+      const processOnce = sinon.stub(process, 'once')
+      globalState.beforeExitHandlers = undefined
+      try {
+        createExporter()
+
+        sinon.assert.calledOnceWithMatch(processOnce, 'beforeExit', sinon.match.func)
+      } finally {
+        globalState.beforeExitHandlers = handlers
+        processOnce.restore()
+      }
     })
 
     it('warns and keeps the agent route when OTLP has no endpoint', () => {
@@ -204,15 +282,27 @@ describe('NativeExporter', () => {
 
       exportChunk([span])
 
-      const message = logDebug.firstCall.args[0]()
+      const message = logDebug.firstCall.args[0](...logDebug.firstCall.args.slice(1))
       assert.match(message, /"value":"1"/)
     })
 
-    it('encodes finalized data when the batching window ends', () => {
+    it('formats unserializable values in lazy debug payloads', () => {
+      createExporter()
+      const span = createSpan()
+      span.meta.value = span.meta
+
+      exportChunk([span])
+
+      const message = logDebug.firstCall.args[0](...logDebug.firstCall.args.slice(1))
+      assert.strictEqual(message, 'Queueing payload: [unserializable]')
+    })
+
+    it('encodes finalized data before the batching window ends', () => {
       createExporter()
       const span = createSpan(1)
 
       exportChunk([span])
+      span.resource = 'changed after export'
 
       sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
       clock.tick(config.flushInterval)
@@ -220,17 +310,6 @@ describe('NativeExporter', () => {
       sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
       const decoded = msgpack.decode(nativeSpans.sendEncodedTraces.firstCall.args[0], { useBigInt64: true })
       assert.strictEqual(decoded[0][0].resource, 'GET /')
-    })
-
-    it('flushes at the pending span limit', () => {
-      createExporter()
-      const spans = Array.from({ length: 1999 }, (_, index) => createSpan(index + 1))
-
-      exportChunk(spans)
-      sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
-      exportChunk([createSpan(2000)])
-
-      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
     })
 
     it('uses native span events for the feature flag and OTLP', () => {
@@ -291,6 +370,16 @@ describe('NativeExporter', () => {
       assert.strictEqual(decoded[0][0].span_id, 1n)
       assert.strictEqual(decoded[1][0].span_id, 2n)
     })
+
+    it('flushes when the encoded payload reaches the byte limit', () => {
+      createExporter()
+      const span = createSpan()
+      span.meta.value = 'x'.repeat(8 * 1024 * 1024)
+
+      exportChunk([span])
+
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
+    })
   })
 
   describe('flush', () => {
@@ -339,6 +428,38 @@ describe('NativeExporter', () => {
 
       sinon.assert.calledTwice(nativeSpans.sendEncodedTraces)
       sinon.assert.calledOnce(done)
+    })
+
+    it('bounds staged and in-flight payload bytes', async () => {
+      const sizingEncoder = new AgentEncoder({ flush: sinon.stub() })
+      sizingEncoder.encode([createSpan()])
+      const payloadSize = sizingEncoder.makePayload().length
+      const BoundedNativeExporter = proxyquire('../../src/exporters/native', {
+        '../../agent/info': { fetchAgentInfo },
+        '../../log': {
+          debug: logDebug,
+          error: logError,
+          warn: logWarn,
+        },
+        '../../runtime_metrics': { increment: metricsIncrement },
+        '../common/limits': { MAX_ACTIVE_BUFFER_SIZE: payloadSize * 2 },
+      })
+      let releaseFirst
+      nativeSpans.sendEncodedTraces.onFirstCall().returns(new Promise(resolve => { releaseFirst = resolve }))
+      nativeSpans.sendEncodedTraces.onSecondCall().resolves('unchanged')
+      config.flushInterval = 0
+      exporter = new BoundedNativeExporter(config, prioritySampler, nativeSpans)
+
+      exportChunk()
+      exportChunk()
+      exportChunk()
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
+
+      releaseFirst('unchanged')
+      await settle()
+
+      sinon.assert.calledTwice(nativeSpans.sendEncodedTraces)
+      sinon.assert.calledWith(logDebug, 'Maximum native export buffer size reached: payload is discarded')
     })
 
     it('sends one request per chunk at zero interval', async () => {
@@ -433,6 +554,61 @@ describe('NativeExporter', () => {
       sinon.assert.calledOnce(logError)
     })
 
+    it('handles non-Error encoding failures', () => {
+      createExporter()
+      const span = createSpan()
+      Object.defineProperty(span, 'meta', {
+        get () { throw null }, // eslint-disable-line no-throw-literal
+      })
+
+      exportChunk([span])
+
+      sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
+      sinon.assert.calledWith(metricsIncrement, `${METRIC_PREFIX}.errors.by.name`, 'name:Error', true)
+      sinon.assert.calledOnce(logError)
+    })
+
+    it('handles payload assembly errors without sending', () => {
+      const makePayload = sinon.stub(AgentEncoder.prototype, 'makePayload').throws(new Error('assembly failed'))
+      try {
+        createExporter()
+        exportChunk()
+        const done = sinon.stub()
+
+        exporter.flush(done)
+
+        sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
+        sinon.assert.calledOnce(done)
+        sinon.assert.calledOnce(logError)
+      } finally {
+        makePayload.restore()
+      }
+    })
+
+    it('keeps an in-flight send serialized after an encoding error', async () => {
+      let releaseSend
+      nativeSpans.sendEncodedTraces.returns(new Promise(resolve => { releaseSend = resolve }))
+      createExporter()
+      exportChunk([createSpan(1)])
+      exporter.flush()
+      const span = createSpan(2)
+      Object.defineProperty(span, 'meta', {
+        get () { throw new Error('invalid meta') },
+      })
+      exportChunk([span])
+      const done = sinon.stub()
+
+      exporter.flush(done)
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
+      sinon.assert.notCalled(done)
+      releaseSend('unchanged')
+      await settle()
+
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnce(logError)
+    })
+
     it('settles without sending when the encoder drops an oversized trace', () => {
       const encode = sinon.stub(AgentEncoder.prototype, 'encode')
       try {
@@ -521,6 +697,23 @@ describe('NativeExporter', () => {
       assert.strictEqual(exporter._url.href, 'http://agent.internal:9126/')
     })
 
+    it('updates the complete agentless intake endpoint instead of the Agent URL', () => {
+      config.experimental = { exporter: 'agentless' }
+      config.DD_API_KEY = 'test-api-key'
+      createExporter()
+      nativeSpans.setAgentlessEndpoint.resetHistory()
+
+      exporter.setUrl('http://intake.internal:9126/custom/path')
+
+      sinon.assert.calledOnceWithExactly(
+        nativeSpans.setAgentlessEndpoint,
+        'http://intake.internal:9126/api/v2/spans',
+        'test-api-key',
+      )
+      sinon.assert.notCalled(nativeSpans.setAgentUrl)
+      assert.strictEqual(exporter._url.href, 'http://intake.internal:9126/custom/path')
+    })
+
     it('flushes pending chunks before replacing native state', async () => {
       let releaseSend
       nativeSpans.sendEncodedTraces.returns(new Promise(resolve => { releaseSend = resolve }))
@@ -567,6 +760,24 @@ describe('NativeExporter', () => {
 
       sinon.assert.notCalled(nativeSpans.setAgentUrl)
       sinon.assert.calledOnce(logWarn)
+    })
+
+    it('drops URL updates after a fatal native build failure', async () => {
+      let rejectSend
+      const error = new Error('build failed')
+      error.name = 'NativeExporterBuildError'
+      nativeSpans.sendEncodedTraces.returns(new Promise((_resolve, reject) => { rejectSend = reject }))
+      createExporter()
+      exportChunk()
+      exporter.flush()
+
+      exporter.setUrl('http://queued-agent.internal:9126')
+      rejectSend(error)
+      await settle()
+      exporter.setUrl('http://later-agent.internal:9126')
+
+      sinon.assert.notCalled(nativeSpans.setAgentUrl)
+      assert.strictEqual(exporter._url, 'http://localhost:8126')
     })
   })
 

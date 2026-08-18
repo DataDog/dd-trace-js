@@ -44,6 +44,9 @@ function normalizeStatsFlushResult (result) {
  * Configures libdatadog and transfers finalized trace payloads to WASM.
  */
 class NativeSpansInterface {
+  #agentUrl
+  #agentlessApiKey
+  #agentlessEndpoint
   #operations = new Map()
   #options
   #otlpEndpoint
@@ -89,7 +92,8 @@ class NativeSpansInterface {
       runtimeId: options.runtimeId || '',
       clientComputedStats: options.clientComputedStats || false,
     }
-    this.#state = this.#createWasmState(options.agentUrl)
+    this.#agentUrl = options.agentUrl
+    this.#state = this.#createWasmState(this.#agentUrl)
 
     if (typeof this.#state.sendEncodedTraces !== 'function') {
       this.#state.free()
@@ -168,6 +172,9 @@ class NativeSpansInterface {
 
     try {
       if (this.#useV05) state.setUseV05(true)
+      if (this.#agentlessEndpoint !== undefined) {
+        state.setAgentlessEndpoint(this.#agentlessEndpoint, this.#agentlessApiKey)
+      }
       if (this.#otlpEndpoint !== undefined) {
         state.setOtlpEndpoint(this.#otlpEndpoint)
         if (this.#otlpProtocol !== undefined) state.setOtlpProtocol(this.#otlpProtocol)
@@ -187,6 +194,38 @@ class NativeSpansInterface {
   setUseV05 (useV05) {
     this.#state.setUseV05(useV05)
     this.#useV05 = useV05
+  }
+
+  /**
+   * Select agentless trace export before the first send or replace its intake endpoint.
+   * @param {string} endpoint Complete agentless trace intake URL
+   * @param {string} apiKey Datadog API key
+   */
+  setAgentlessEndpoint (endpoint, apiKey) {
+    if (this.#agentlessEndpoint === undefined) {
+      this.#state.setAgentlessEndpoint(endpoint, apiKey)
+      this.#agentlessEndpoint = endpoint
+      this.#agentlessApiKey = apiKey
+      return
+    }
+
+    const previousEndpoint = this.#agentlessEndpoint
+    const previousApiKey = this.#agentlessApiKey
+    this.#agentlessEndpoint = endpoint
+    this.#agentlessApiKey = apiKey
+
+    let state
+    try {
+      state = this.#createWasmState(this.#agentUrl)
+    } catch (error) {
+      this.#agentlessEndpoint = previousEndpoint
+      this.#agentlessApiKey = previousApiKey
+      throw error
+    }
+
+    const oldState = this.#state
+    this.#state = state
+    this.#releaseState(oldState)
   }
 
   /**
@@ -223,6 +262,7 @@ class NativeSpansInterface {
   setAgentUrl (url) {
     const state = this.#createWasmState(url)
     const oldState = this.#state
+    this.#agentUrl = url
     this.#state = state
     this.#releaseState(oldState)
     log.debug('Native spans interface reinitialized with new URL: %s', url)

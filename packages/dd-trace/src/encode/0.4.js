@@ -140,7 +140,7 @@ class AgentEncoder {
   #formatSpan
 
   /**
-   * @param {{ flush: Function }} writer
+   * @param {{ flush: () => void, onError?: (error: unknown) => void }} writer
    * @param {number} [limit]
    * @param {boolean} [nativeSpanEvents]
    */
@@ -173,7 +173,12 @@ class AgentEncoder {
     try {
       this._encode(bytes, trace)
     } catch (error) {
-      if (error.code !== 'ERR_MSGPACK_CHUNK_OVERFLOW') throw error
+      if (error?.code !== 'ERR_MSGPACK_CHUNK_OVERFLOW') {
+        if (this.#writer.onError === undefined) throw error
+        this.reset()
+        this.#writer.onError(error)
+        return
+      }
       // The trace, or the queued payload it joined, hit the chunk cap.
       // Rolling back just the in-flight trace is unsafe: the string cache
       // may already hold subarrays / indices pointing at bytes we'd

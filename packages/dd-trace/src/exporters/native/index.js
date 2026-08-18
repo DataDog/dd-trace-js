@@ -4,16 +4,16 @@ const { URL, format } = require('url')
 
 const { channel } = require('dc-polyfill')
 
+const exporters = require('../../../../../ext/exporters')
 const defaults = require('../../config/defaults')
 const { AgentEncoder } = require('../../encode/0.4')
 const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const { fetchAgentInfo } = require('../../agent/info')
+const { computeIntakeUrl, INTAKE_PATH } = require('../agentless/intake')
+const { MAX_ACTIVE_BUFFER_SIZE } = require('../common/limits')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
-
-// Bound finalized span objects retained until the next batch flush.
-const MAX_PENDING_SPANS = 2000
 
 // Native sends mirror legacy exporter request/response/error health metrics.
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
@@ -25,26 +25,27 @@ const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
  */
 function formatSpansForDebug (spans) {
   try {
-    return JSON.stringify(spans, (_key, value) => (typeof value === 'bigint' ? value.toString() : value))
+    const payload = JSON.stringify(spans, (_key, value) => (typeof value === 'bigint' ? value.toString() : value))
+    return `Queueing payload: ${payload}`
   } catch {
     // A pathological tag value (e.g. circular) must never throw out of export().
-    return '[unserializable]'
+    return 'Queueing payload: [unserializable]'
   }
 }
 
 /**
- * Batches finalized spans and delegates serialization and transport to libdatadog.
+ * Encodes finalized spans and delegates transport to libdatadog.
  */
 class NativeExporter {
+  #agentless = false
   #nativeSpans
+  #bufferedBytes = 0
   #timer
   #flushInFlight = false
   #firstFlushSent = false
   #flushCallbacks = []
   #encoder
   #pendingPayloads = []
-  #pendingSpanCount = 0
-  #pendingTraces = []
   #urlUpdateCallbacks = []
   // Fatal native exporter construction errors cannot recover.
   #disabled = false
@@ -57,22 +58,35 @@ class NativeExporter {
     this._config = config
     this._prioritySampler = prioritySampler
     this.#nativeSpans = nativeSpans
-    const nativeSpanEvents = config.DD_TRACE_NATIVE_SPAN_EVENTS || config.OTEL_TRACES_EXPORTER === 'otlp'
-    this.#encoder = new AgentEncoder({ flush: () => this.#stageEncodedPayload() }, undefined, nativeSpanEvents)
+    this.#agentless = config.experimental?.exporter === exporters.AGENTLESS
+    const nativeSpanEvents = this.#agentless ||
+      config.DD_TRACE_NATIVE_SPAN_EVENTS ||
+      config.OTEL_TRACES_EXPORTER === 'otlp'
+    this.#encoder = new AgentEncoder({
+      flush: () => {
+        this.#stageEncodedPayload()
+        this.flush()
+      },
+      onError: error => this.#handleEncodeError(error),
+    }, undefined, nativeSpanEvents)
     this._writer = { flush: this.#flushWithStats.bind(this) }
 
-    const { url, hostname = defaults.hostname, port } = config
-    this._url = url || new URL(format({
-      protocol: 'http:',
-      hostname,
-      port,
-    }))
+    if (this.#agentless) {
+      this.#configureAgentless()
+    } else {
+      const { url, hostname = defaults.hostname, port } = config
+      this._url = url || new URL(format({
+        protocol: 'http:',
+        hostname,
+        port,
+      }))
 
-    // OTLP takes precedence over explicit, capability-gated v0.5 output.
-    if (config.OTEL_TRACES_EXPORTER === 'otlp') {
-      this.#configureOtlp()
-    } else if (config.protocolVersion === '0.5') {
-      this.#negotiateV05()
+      // OTLP takes precedence over explicit, capability-gated v0.5 output.
+      if (config.OTEL_TRACES_EXPORTER === 'otlp') {
+        this.#configureOtlp()
+      } else if (config.protocolVersion === '0.5') {
+        this.#negotiateV05()
+      }
     }
 
     // Use the shared registry to avoid per-tracer process listeners. Flush
@@ -89,6 +103,30 @@ class NativeExporter {
       handlers.add(finalFlush)
     } else {
       process.once('beforeExit', finalFlush)
+    }
+  }
+
+  /**
+   * Apply agentless intake configuration before the first native send.
+   */
+  #configureAgentless () {
+    const apiKey = this._config.DD_API_KEY
+    if (!apiKey) {
+      this.#disabled = true
+      this._url = undefined
+      log.error('DD_API_KEY is required for native agentless trace intake. Traces will not be sent.')
+      return
+    }
+
+    try {
+      const url = new URL(computeIntakeUrl(this._config.site))
+      const endpoint = new URL(INTAKE_PATH, url).toString()
+      this.#nativeSpans.setAgentlessEndpoint(endpoint, apiKey)
+      this._url = url
+    } catch (error) {
+      this.#disabled = true
+      this._url = undefined
+      log.error('Failed to configure native agentless trace intake: %s', error)
     }
   }
 
@@ -174,6 +212,8 @@ class NativeExporter {
    * @param {string|URL} url - New agent URL
    */
   setUrl (url) {
+    if (this.#disabled) return
+
     let parsed
     try {
       parsed = new URL(url)
@@ -184,14 +224,17 @@ class NativeExporter {
 
     const applyUrl = () => {
       try {
-        // Reinitialize native state with new URL. Only commit `_url` after
-        // setAgentUrl succeeds — otherwise a thrown setAgentUrl would leave
-        // `_url` reflecting the new URL while the WASM state still points at
-        // the old one (silent JS/WASM divergence).
-        this.#nativeSpans.setAgentUrl(parsed.toString())
+        if (this.#agentless) {
+          const endpoint = new URL(INTAKE_PATH, parsed).toString()
+          this.#nativeSpans.setAgentlessEndpoint(endpoint, this._config.DD_API_KEY)
+        } else {
+          this.#nativeSpans.setAgentUrl(parsed.toString())
+        }
+        // Only commit `_url` after native state replacement succeeds. Otherwise
+        // JS and WASM would report different active destinations.
         this._url = parsed
       } catch (error) {
-        log.warn('Failed to apply new agent URL to native state %s: %s', url, error.message)
+        log.warn('Failed to apply new native export URL %s: %s', url, error.message)
       }
     }
 
@@ -200,29 +243,24 @@ class NativeExporter {
   }
 
   /**
-   * Queue one finalized trace chunk.
+   * Encode one finalized trace chunk.
    * @param {Array<object>} spans Finalized spans to export
    */
   export (spans) {
     if (this.#disabled || spans.length === 0) return
 
-    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Queueing payload: ${formatSpansForDebug(spans)}`)
+    log.debug(formatSpansForDebug, spans)
+
+    this.#encoder.encode(spans)
 
     const { flushInterval } = this._config
     if (flushInterval === 0) {
-      this.#encoder.encode(spans)
       this.#stageEncodedPayload()
       this.flush()
       return
     }
 
-    this.#pendingTraces.push(spans)
-    this.#pendingSpanCount += spans.length
-
-    if (this.#pendingSpanCount >= MAX_PENDING_SPANS) {
-      this.flush()
-    } else if (this.#timer === undefined) {
+    if (this.#timer === undefined && this.#encoder.count() > 0) {
       this.#timer = setTimeout(() => {
         this.flush()
         this.#timer = undefined
@@ -286,23 +324,42 @@ class NativeExporter {
   }
 
   /**
-   * @param {Error & { code?: string }} error Native send error
+   * @param {unknown} error Export error
    */
-  #handleSendError (error) {
-    this.#flushInFlight = false
+  #recordError (error) {
+    const name = error?.name ?? 'Error'
+    const code = error?.code
     runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
-    runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${error.name}`, true)
-    if (error.code) {
-      runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${error.code}`, true)
+    runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${name}`, true)
+    if (code) {
+      runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${code}`, true)
     }
-    log.error('Error sending spans to agent via native exporter: %s', error)
+  }
+
+  /**
+   * @param {unknown} error Encoding error
+   */
+  #handleEncodeError (error) {
+    this.#recordError(error)
+    log.error('Error encoding spans for native export: %s', error)
+  }
+
+  /**
+   * @param {Error & { code?: string }} error Native send error
+   * @param {number} payloadBytes Size charged to the export buffer
+   */
+  #handleSendError (error, payloadBytes) {
+    this.#bufferedBytes -= payloadBytes
+    this.#flushInFlight = false
+    this.#recordError(error)
+    log.error('Error sending spans via native exporter: %s', error)
     // Stop after a one-shot native exporter build failure.
     if (error?.name === 'NativeExporterBuildError') {
       this.#disabled = true
       this.#encoder.reset()
       this.#pendingPayloads = []
-      this.#pendingSpanCount = 0
-      this.#pendingTraces = []
+      this.#urlUpdateCallbacks = []
+      this.#bufferedBytes = 0
       clearTimeout(this.#timer)
       this.#timer = undefined
       log.error('Native exporter disabled after a fatal build error; no further spans will be sent')
@@ -314,7 +371,7 @@ class NativeExporter {
   }
 
   /**
-   * Flush pending spans to the agent.
+   * Flush pending spans to the configured destination.
    *
    * @param {Function} [done] - Callback when flush completes
    */
@@ -340,19 +397,17 @@ class NativeExporter {
 
     if (this.#pendingPayloads.length === 0) {
       try {
-        this.#encodePendingTraces()
+        this.#stageEncodedPayload()
       } catch (error) {
-        this.#handleSendError(error)
+        this.#encoder.reset()
+        this.#handleEncodeError(error)
+        this.#finishFlushCallbacks()
+        this.#finishUrlUpdateCallbacks()
         return
       }
     }
 
     const payload = this.#pendingPayloads.shift()
-    if (payload === undefined) {
-      this.#finishFlushCallbacks()
-      this.#finishUrlUpdateCallbacks()
-      return
-    }
 
     // Serialize preparation and sends because libdatadog allows only one
     // prepared-send transaction at a time.
@@ -367,20 +422,21 @@ class NativeExporter {
     try {
       send = this.#nativeSpans.sendEncodedTraces(payload)
     } catch (error) {
-      this.#handleSendError(error)
+      this.#handleSendError(error, payload.length)
       return
     }
     this.#flushInFlight = true
     send
       .then((response) => {
+        this.#bufferedBytes -= payload.length
         this.#updateSamplingRates(response)
         this.#flushInFlight = false
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         // Flush callbacks wait until the exporter is idle so explicit flush
-        // endpoints only acknowledge once all queued sends have reached the agent.
+        // endpoints only acknowledge once all queued sends have reached the destination.
         this.#finishSend()
       }, (error) => {
-        this.#handleSendError(error)
+        this.#handleSendError(error, payload.length)
       })
   }
 
@@ -389,34 +445,21 @@ class NativeExporter {
    */
   #stageEncodedPayload () {
     if (this.#encoder.count() > 0) {
-      this.#pendingPayloads.push(this.#encoder.makePayload())
-    }
-  }
-
-  /**
-   * Encode all finalized trace chunks in the current batch.
-   */
-  #encodePendingTraces () {
-    const traces = this.#pendingTraces
-    this.#pendingTraces = []
-    this.#pendingSpanCount = 0
-
-    try {
-      for (const trace of traces) {
-        this.#encoder.encode(trace)
+      const payload = this.#encoder.makePayload()
+      if (this.#bufferedBytes + payload.length > MAX_ACTIVE_BUFFER_SIZE) {
+        log.debug('Maximum native export buffer size reached: payload is discarded')
+        return
       }
-      this.#stageEncodedPayload()
-    } catch (error) {
-      this.#encoder.reset()
-      throw error
+      this.#bufferedBytes += payload.length
+      this.#pendingPayloads.push(payload)
     }
   }
 
   /**
-   * @returns {boolean} Whether finalized or encoded trace data is waiting to be sent
+   * @returns {boolean} Whether encoded trace data is waiting to be sent
    */
   #hasPendingWork () {
-    return this.#pendingPayloads.length > 0 || this.#pendingTraces.length > 0
+    return this.#pendingPayloads.length > 0 || this.#encoder.count() > 0
   }
 
   /**

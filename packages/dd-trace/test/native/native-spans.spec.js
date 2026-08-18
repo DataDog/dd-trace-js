@@ -33,6 +33,7 @@ function createState () {
     flushStats: sinon.stub().resolves(true),
     free: sinon.stub(),
     sendEncodedTraces: sinon.stub().resolves('OK'),
+    setAgentlessEndpoint: sinon.stub(),
     setOtlpEndpoint: sinon.stub(),
     setOtlpHeaders: sinon.stub(),
     setOtlpProtocol: sinon.stub(),
@@ -237,6 +238,58 @@ describe('NativeSpansInterface', () => {
     sinon.assert.calledOnceWithExactly(states[1].setOtlpProtocol, 'http/protobuf')
     sinon.assert.calledOnceWithExactly(states[1].setOtlpHeaders, ['authorization', 'secret'])
     sinon.assert.calledOnce(states[0].free)
+  })
+
+  it('replays agentless configuration when native state is replaced', () => {
+    const nativeSpans = createInterface()
+    nativeSpans.setAgentlessEndpoint('https://intake.example/api/v2/spans', 'test-api-key')
+
+    nativeSpans.setAgentUrl('http://new-agent:8126')
+
+    sinon.assert.calledOnceWithExactly(
+      states[1].setAgentlessEndpoint,
+      'https://intake.example/api/v2/spans',
+      'test-api-key',
+    )
+    sinon.assert.calledOnce(states[0].free)
+  })
+
+  it('replaces native state when the agentless endpoint changes', () => {
+    const nativeSpans = createInterface()
+    nativeSpans.setAgentlessEndpoint('https://first.example/api/v2/spans', 'first-key')
+
+    nativeSpans.setAgentlessEndpoint('https://second.example/api/v2/spans', 'second-key')
+
+    sinon.assert.calledOnceWithExactly(
+      states[1].setAgentlessEndpoint,
+      'https://second.example/api/v2/spans',
+      'second-key',
+    )
+    sinon.assert.calledOnce(states[0].free)
+  })
+
+  it('keeps the active agentless state when replacement configuration fails', async () => {
+    const error = new Error('invalid replacement rule')
+    const nativeSpans = createInterface()
+    nativeSpans.setAgentlessEndpoint('https://first.example/api/v2/spans', 'first-key')
+    const replacement = createState()
+    replacement.setAgentlessEndpoint.throws(error)
+    WasmSpanState.onSecondCall().returns(replacement)
+
+    assert.throws(
+      () => nativeSpans.setAgentlessEndpoint('https://second.example/api/v2/spans', 'second-key'),
+      error,
+    )
+    sinon.assert.calledOnce(replacement.free)
+    sinon.assert.notCalled(states[0].free)
+    assert.strictEqual(await nativeSpans.sendEncodedTraces(encodedPayload), 'OK')
+
+    nativeSpans.setAgentUrl('http://new-agent:8126')
+    sinon.assert.calledOnceWithExactly(
+      states[1].setAgentlessEndpoint,
+      'https://first.example/api/v2/spans',
+      'first-key',
+    )
   })
 
   it('keeps the old state until all of its asynchronous operations settle', async () => {

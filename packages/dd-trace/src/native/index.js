@@ -10,14 +10,12 @@
 
 const { storage } = require('../../../datadog-core')
 
-// Cached module references to avoid repeated require() calls
-// which can cause infinite recursion if fs plugin is active during require
-let NativeSpansInterfaceModule = null
+let NativeSpansInterfaceModule
 
 // Flag to track if we're currently loading a module to prevent recursion
 let isLoading = false
 
-let pipeline = null
+let pipeline
 
 const CONTAINER_TAGS_HASH_HEADER = 'datadog-container-tags-hash'
 
@@ -46,23 +44,24 @@ function observeResponseHeaders (rawHeaders) {
 function getPipeline () {
   if (pipeline) return pipeline
   const libdatadog = require('@datadog/libdatadog')
-  pipeline = libdatadog.load('pipeline')
-  if (pipeline?.WasmSpanState == null) {
+  const loadedPipeline = libdatadog.load('pipeline')
+  if (loadedPipeline?.WasmSpanState == null) {
     throw new Error('@datadog/libdatadog pipeline crate is missing WasmSpanState; install may be corrupt')
   }
-  pipeline.init()
+  loadedPipeline.init()
   const legacyStorage = storage('legacy')
   // Provide libdatadog with a `run(callback)` hook that executes the callback
   // in a noop async context, so internal HTTP/IO done by the native exporter
   // doesn't get re-instrumented by our http/fs plugins.
-  pipeline.setStorage(legacyStorage.run.bind(legacyStorage, { noop: true }))
+  loadedPipeline.setStorage(legacyStorage.run.bind(legacyStorage, { noop: true }))
   // The agent returns `Datadog-Container-Tags-Hash` whenever the request carried
   // a container id. The legacy writer feeds it to the propagation hash so DBM SQL
   // comments and DSM pathway hashes correlate with container tags; without this
   // the libdatadog transport keeps hashing process tags alone. Registered on the module
   // (not the state), so it survives the `setAgentUrl` state rebuild.
-  pipeline.setResponseHeaderObserver(observeResponseHeaders)
-  return pipeline
+  loadedPipeline.setResponseHeaderObserver(observeResponseHeaders)
+  pipeline = loadedPipeline
+  return loadedPipeline
 }
 
 /**
@@ -79,8 +78,8 @@ function loadWithNoop (loader) {
   isLoading = true
   const legacy = storage('legacy')
   const oldStore = legacy.getStore()
-  legacy.enterWith({ noop: true })
   try {
+    legacy.enterWith({ noop: true })
     return loader()
   } finally {
     legacy.enterWith(oldStore)
@@ -89,6 +88,14 @@ function loadWithNoop (loader) {
 }
 
 module.exports = {
+  /**
+   * The pipeline contract exposed by the installed binding without loading its addon.
+   * @type {number}
+   */
+  get pipelineApiVersion () {
+    return require('@datadog/libdatadog').pipelineApiVersion ?? 0
+  },
+
   /**
    * The WasmSpanState class from the pipeline crate.
    * @type {typeof import('@datadog/libdatadog').WasmSpanState}
