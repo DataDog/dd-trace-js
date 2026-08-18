@@ -531,6 +531,27 @@ function findPropertyName (property) {
 }
 
 /**
+ * @param {import('estree').Node} node
+ * @returns {{ name: string, value: string } | undefined}
+ */
+function findStaticClassProperty (node) {
+  let name
+  let value
+  if (node.type === 'PropertyDefinition' && node.static) {
+    name = findPropertyName(node)
+    value = node.value ? findStaticString(node.value) : undefined
+  } else if (node.type === 'MethodDefinition' && node.static && node.kind === 'get' &&
+      node.value.body.body.length === 1) {
+    const statement = node.value.body.body[0]
+    name = findPropertyName(node)
+    value = statement.type === 'ReturnStatement' && statement.argument
+      ? findStaticString(statement.argument)
+      : undefined
+  }
+  if (name && value !== undefined) return { name, value }
+}
+
+/**
  * @param {import('estree').Program} program
  * @returns {import('estree').ObjectExpression | undefined}
  */
@@ -962,32 +983,22 @@ function findSchemaRegistrations (filenames, publicIds) {
       if (step.type !== 'visit' || step.phase !== 1) continue
 
       const node = step.target
-      let name
-      let value
-      if (node.type === 'PropertyDefinition' && node.static) {
-        name = findPropertyName(node)
-        value = node.value ? findStaticString(node.value) : undefined
-      } else if (node.type === 'MethodDefinition' && node.static && node.kind === 'get' &&
-          node.value.body.body.length === 1) {
-        const statement = node.value.body.body[0]
-        name = findPropertyName(node)
-        value = statement.type === 'ReturnStatement' && statement.argument
-          ? findStaticString(statement.argument)
-          : undefined
-      } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
-          (findPropertyName(node.callee) === 'operationName' || findPropertyName(node.callee) === 'serviceName') &&
-          node.arguments[0]?.type === 'ObjectExpression') {
-        for (const property of node.arguments[0].properties) {
-          if (property.type !== 'Property') continue
-
-          name = findPropertyName(property)
-          value = findStaticString(property.value)
-          if (name !== 'operation' && value !== undefined) coordinates.get(name)?.add(value)
-        }
+      const coordinate = findStaticClassProperty(node)
+      if (coordinate) {
+        coordinates.get(coordinate.name)?.add(coordinate.value)
         continue
       }
+      if (node.type !== 'CallExpression' || node.callee.type !== 'MemberExpression' ||
+          (findPropertyName(node.callee) !== 'operationName' && findPropertyName(node.callee) !== 'serviceName') ||
+          node.arguments[0]?.type !== 'ObjectExpression') continue
 
-      if (value !== undefined) coordinates.get(name)?.add(value)
+      for (const property of node.arguments[0].properties) {
+        if (property.type !== 'Property') continue
+
+        const name = findPropertyName(property)
+        const value = findStaticString(property.value)
+        if (name !== 'operation' && value !== undefined) coordinates.get(name)?.add(value)
+      }
     }
   }
 
@@ -1047,14 +1058,16 @@ function findReferences (mode, traits, hasRewriter) {
 
 /**
  * @param {string} integration
+ * @param {string} mode
  * @param {string[]} traits
  * @returns {{ integration: string, files: string[], registrations: string[] } | undefined}
  */
-function findClosestReference (integration, traits) {
+function findClosestReference (integration, mode, traits) {
   if (traits.length === 0) return
 
+  const isServerless = mode === 'serverless'
   const isShimmer = traits.includes('shimmer')
-  const directory = isShimmer
+  const directory = isShimmer || isServerless
     ? 'packages/datadog-instrumentations/src'
     : 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations'
   const requestedBase = traits.find(trait => PLUGIN_BASE_TRAITS.has(trait))
@@ -1063,13 +1076,15 @@ function findClosestReference (integration, traits) {
   let closestScore = 0
 
   for (const filename of listRelativeFiles(directory, SOURCE_SUFFIXES)) {
-    if (isShimmer && path.posix.dirname(filename) !== directory) continue
+    if ((isShimmer || isServerless) && path.posix.dirname(filename) !== directory) continue
 
     const candidate = path.basename(filename, path.extname(filename))
     if (candidate === 'index' || candidate === integration) continue
 
     const source = read(filename)
-    if (isShimmer
+    if (isServerless) {
+      if (findHookPackages(candidate).size === 0) continue
+    } else if (isShimmer
       ? !source.includes('datadog-shimmer') || findHookPackages(candidate).size === 0
       : findRewriterRegistrations(candidate).length === 0) continue
 
@@ -1077,8 +1092,27 @@ function findClosestReference (integration, traits) {
     const registrations = findIntegrationRegistrations(candidate)
     const pluginSources = listPluginFiles(registrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
     const contractSources = findContractSources(pluginSources, registrations.pluginDirectories)
-    let score = isShimmer || traits.includes('orchestrion') ? 1 : 0
+    let hasServerlessType = false
+    let hasRequestedKind = false
+    if (isServerless) {
+      for (const pluginSource of pluginSources) {
+        const sourceCode = parseJavaScript(pluginSource)
+        if (!sourceCode) continue
+
+        for (const step of sourceCode.traverse()) {
+          if (step.type !== 'visit' || step.phase !== 1) continue
+
+          const coordinate = findStaticClassProperty(step.target)
+          if (coordinate?.name === 'type' && coordinate.value === 'serverless') hasServerlessType = true
+          if (coordinate?.name === 'kind' && coordinate.value === requestedBase) hasRequestedKind = true
+        }
+      }
+      if (!hasServerlessType) continue
+    }
+
+    let score = isServerless || isShimmer || traits.includes('orchestrion') ? 1 : 0
     if (requestedSource && contractSources.includes(requestedSource)) score += 8
+    if (hasRequestedKind) score += 8
     if (traits.includes('cjs-esm') && /(?:cjs|commonjs)/i.test(source) && /esm/i.test(source)) score += 4
     for (const [trait, kind] of TRAIT_KINDS) {
       if (traits.includes(trait) && (
@@ -1165,7 +1199,7 @@ function inspectIntegration (integration, packageName, mode, traits) {
       ...ledger,
       schemas: findSchemaRegistrations([...plugins, ...contractSources], publicIds),
     },
-    reference: findClosestReference(integration, traits),
+    reference: findClosestReference(integration, mode, traits),
     references: findReferences(mode, traits, rewriter !== undefined),
   }
 }
