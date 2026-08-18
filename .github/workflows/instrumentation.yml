@@ -111,6 +111,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test
 
+  # The 1.0-1.3 line has no Node 24 prebuild, and its fallback source build fails under Bun.
   instrumentation-confluentinc-kafka-javascript:
     runs-on: ubuntu-latest
     permissions:
@@ -120,6 +121,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test
+        with:
+          node-ceiling: '24'
+          node-ceiling-package-range: '>=1.4.0'
 
   instrumentation-connect:
     runs-on: ubuntu-latest
@@ -167,7 +171,6 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn config set ignore-engines true
       - run: npm run test:instrumentations:ci
       - uses: ./.github/actions/coverage
         with:
@@ -648,9 +651,9 @@ jobs:
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: npm run test:integration:esbuild:coverage
-        env:
+      - env:
           ESBUILD_VERSION: ${{ matrix.esbuild_version }}
+        run: npm run test:integration:esbuild:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-integration-esbuild-${{ matrix.esbuild_version }}-${{ matrix.version }}

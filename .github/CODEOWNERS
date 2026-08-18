@@ -111,6 +111,7 @@
 /packages/dd-trace/src/propagation-hash/ @DataDog/apm-idm-js
 /packages/dd-trace/test/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/test/process-tags.spec.js @DataDog/apm-idm-js
+/versions/bunfig.toml @DataDog/lang-platform-js
 /packages/dd-trace/src/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/payload_tagging.spec.js @DataDog/apm-idm-js
@@ -328,6 +329,7 @@
 # CI
 /.github/actions/upload-coverage-artifact/ @DataDog/ci-app-libraries
 /.github/actions/upload-junit-artifacts/ @DataDog/ci-app-libraries
+/.github/all-green/ @DataDog/lang-platform-js
 /.github/editorconfig-checker/ @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/ci-app-libraries
 /.github/selenium/ @DataDog/ci-app-libraries
@@ -337,6 +339,7 @@
 /.github/workflows/mirror-image.yml @Datadog/lang-platform-js
 /.github/workflows/all-green.yml @Datadog/lang-platform-js
 /.github/workflows/audit.yml @DataDog/lang-platform-js
+/.github/workflows/dependabot-audit.yml @DataDog/lang-platform-js
 /.github/workflows/custom-node-version-dispatch.yml @Datadog/lang-platform-js
 /.github/workflows/dependabot-automation.yml @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
 /.github/workflows/flakiness.yml @DataDog/lang-platform-js
@@ -384,9 +387,13 @@
 /openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
 /.github/CODEOWNERS @DataDog/lang-platform-js
+/.github/audit-allowlist.json @DataDog/lang-platform-js
 /.github/dependabot.yml @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
 /.github/pull_request_template.md @DataDog/lang-platform-js
 /.github/vendored-dependencies.csv @DataDog/lang-platform-js
+
+/docs/bun.lock @DataDog/lang-platform-js
+/vendor/bun.lock @DataDog/lang-platform-js
 
 /benchmark/* @DataDog/lang-platform-js
 /benchmark/openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk

@@ -161,12 +161,12 @@ jobs:
         run: |
           content=$(tr '\n' ' ' < ./package.json)
           echo "json=$content" >> "$GITHUB_OUTPUT"
-      - run: yarn
+      - run: bun install --frozen-lockfile
       - name: Build
         working-directory: docs
         run: |
-          yarn
-          yarn build
+          bun install --frozen-lockfile
+          bun run build
           mv out /tmp/out
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
