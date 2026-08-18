@@ -18,8 +18,8 @@ describe('direct EVP route', () => {
     log = { debug: sinon.spy() }
 
     ;({ createDirectEVPRoute } = proxyquire('../../src/evp_proxy/direct', {
-      'https-proxy-agent': { HttpsProxyAgent },
-      'proxy-from-env': { getProxyForUrl },
+      '../../../../vendor/dist/https-proxy-agent': { HttpsProxyAgent },
+      '../../../../vendor/dist/proxy-from-env': { getProxyForUrl },
       '../log': log,
     }))
   })
