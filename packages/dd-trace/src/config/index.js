@@ -422,7 +422,9 @@ class Config extends ConfigBase {
       setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'otlp')
     }
 
-    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
+    if (!this.DD_TRACE_OTEL_SEMANTICS_ENABLED &&
+        this.OTEL_TRACES_EXPORTER === 'otlp' &&
+        trackedConfigOrigins.has('protocolVersion')) {
       log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
       setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
     }
@@ -450,7 +452,10 @@ class Config extends ConfigBase {
         log.warn('DD_TRACE_OTEL_SEMANTICS_ENABLED overrides DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0')
       }
       if (this.spanComputePeerService) {
-        log.warn('DD_TRACE_OTEL_SEMANTICS_ENABLED overrides DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to false')
+        log.warn(
+          'DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED is set to true, but %s is enabled. Using false instead.',
+          'DD_TRACE_OTEL_SEMANTICS_ENABLED'
+        )
       }
       setAndTrack(this, 'spanAttributeSchema', 'v0')
       setAndTrack(this, 'spanComputePeerService', false)

@@ -289,10 +289,29 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(span.resource, 'checkout-custom')
     })
 
+    it('preserves a method-prefixed resource marked as user-defined by a request hook', () => {
+      const span = {
+        meta: {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.route': '/users/{id}',
+          'http.url': 'http://h/users/1',
+          '_dd.otel.resource_set_by_user': 'true',
+        },
+        metrics: {},
+        error: 0,
+        resource: 'GET /products',
+      }
+
+      applyHttpOtelSemantics(span)
+
+      assert.strictEqual(span.resource, 'GET /products')
+      assert.ok(!Object.hasOwn(span.meta, '_dd.otel.resource_set_by_user'))
+    })
+
     // Whether an HTTP status makes the span an error is decided at capture time,
     // from the configured error-status ranges (see http-error-statuses.js). Trace
-    // stats read the formatted span before this transform runs, so deciding it here
-    // would make the span and its stats disagree. The transform only derives
+    // stats run after this transform and consume that same decision. The transform only derives
     // `error.type` from the decision the span already carries, and never changes
     // `error` itself.
     it('derives error.type from the error the span already carries', () => {

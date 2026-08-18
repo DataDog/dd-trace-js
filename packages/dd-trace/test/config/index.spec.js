@@ -804,9 +804,10 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
   })
 
-  it('should force OTLP traces export when OTel HTTP semantics are enabled', () => {
+  it('should force OTLP traces export over explicit exporter and agent protocol settings with OTel semantics', () => {
     process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
 
     const config = getConfig()
 
@@ -2468,7 +2469,8 @@ describe('Config', () => {
         'DD_TRACE_OTEL_SEMANTICS_ENABLED overrides DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0'
       ))
       assert(log.warn.calledWith(
-        'DD_TRACE_OTEL_SEMANTICS_ENABLED overrides DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to false'
+        'DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED is set to true, but %s is enabled. Using false instead.',
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED'
       ))
     })
   })

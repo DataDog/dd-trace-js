@@ -116,10 +116,13 @@ class PrioritySampler {
 
     const root = context._trace.started[0]
 
-    if (this._otelHttpSemanticsEnabled && root && !context._otelHttpResourceNormalizedForSampling) {
-      const tags = root.context().getTags()
+    const rootContext = root?.context()
+    if (this._otelHttpSemanticsEnabled && rootContext && !rootContext._otelHttpResourceNormalizedForSampling) {
+      const tags = rootContext.getTags()
       const method = tags['http.method']
       if (method !== undefined) {
+        // Sampling can run before route resolution, so fall back to the method-only
+        // name. When the framework already published a route, preserve it.
         const samplingResource = otelHttpResourceName(method, tags['http.route'])
         const resourceIsOwnedByInstrumentation =
           isInstrumentationHttpResource(tags.resource, method) &&
@@ -134,7 +137,7 @@ class PrioritySampler {
             tags['resource.name'] = samplingResource
           }
         }
-        context._otelHttpResourceNormalizedForSampling = true
+        rootContext._otelHttpResourceNormalizedForSampling = true
       }
     }
 
