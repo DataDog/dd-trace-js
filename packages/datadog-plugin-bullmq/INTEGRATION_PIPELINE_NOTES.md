@@ -32,12 +32,15 @@ and the products that act on that event.
 | File | Responsibility |
 | --- | --- |
 | `packages/dd-trace/src/plugins/integration-pipeline.js` | Definition compiler, lifecycle engine, stores, correlation facade, and default Orchestrion source adapter. |
+| `packages/dd-trace/src/plugins/integration-pipeline-agent-guide.md` | Agent handoff, declaration reference, migration workflow, invariants, verification, and open work. |
 | `packages/dd-trace/src/opentracing/span_context_factory.js` | Creates a real `DatadogSpanContext` without creating a span and lets a later span adopt it once. |
 | `packages/dd-trace/src/opentracing/tracer.js` | Exposes internal context reservation and accepts an already reserved context when starting a span. |
 | `packages/dd-trace/src/plugins/plugin.js` | Supports binding named stores and subscribing inside a legacy no-op scope when requested. |
 | `packages/datadog-plugin-bullmq/src/index.js` | Compiles the BullMQ integration definition into the plugin-manager class. |
 | `packages/datadog-plugin-bullmq/src/producer.js` | Producer operation declarations and propagation/DSM stages. |
 | `packages/datadog-plugin-bullmq/src/consumer.js` | Consumer declaration, carrier extraction, parent selection, and DSM stage. |
+| `packages/datadog-plugin-azure-cosmos/src/index.js` | Declares an async database operation and selects `DatabasePlugin` as its compatibility base. |
+| `benchmark/sirun/plugin-azure-cosmos-pipeline` | Baseline/candidate hot-path benchmark for accepted, rejected, and inherited no-op calls. |
 
 ## 1. An integration is a definition
 
@@ -51,7 +54,9 @@ module.exports = createIntegrationPlugin({
 })
 ```
 
-The result is a class named `IntegrationPipeline` that still extends `TracingPlugin`. It has the static `id` and
+The result is a class named `IntegrationPipeline` that extends `TracingPlugin` by default. A definition can select a
+`TracingPlugin` subclass with `base`; Azure Cosmos uses `DatabasePlugin` so existing storage service naming,
+peer-service finalization, and code-origin behavior remain in force. The generated class has the static `id` and
 `operation` fields expected by the current plugin manager, so loading and configuration do not need a separate path.
 
 The definition is validated before subscriptions are registered. It rejects missing IDs, empty operation lists,
@@ -76,15 +81,20 @@ An operation has the following main parts:
 
 - `target` identifies the source event.
 - `lifecycle` selects synchronous `end` or promise-aware `asyncEnd` completion.
-- `extract.start` and `extract.complete` populate `frame.data`.
+- `extract.start` and `extract.complete` populate `frame.data`. Use a field record for independent values or a
+  whole-record function when several values share parsing/computation; the latter avoids an intermediate wrapper and
+  is the preferred coarse-grained Lego block for hot integrations.
 - `when` is an early operation gate.
 - `context.parent` can override the inherited correlation parent.
 - `span` describes optional recording behavior.
 - `stages` contain ordered product work.
 - `skip: 'noop'` asks a rejected operation to suppress nested legacy tracing rather than simply inherit its parent.
+  It may also be a frame resolver when one source target needs different skip behavior for different invocations.
 
 Helper extractors such as `argument(0)`, `self('name')`, `result('status')`, and `field('queueName')` keep common paths
-short. An ordinary function is used when extraction needs integration-specific behavior.
+short. An ordinary function is used when extraction needs integration-specific behavior. Span `tags`, `metrics`, and
+`resultTags` likewise accept either per-field records or a function returning the complete record, so shared parsing
+and allocation happen once.
 
 ## 3. The source adapter isolates Orchestrion
 
@@ -287,10 +297,24 @@ headers until sampling is independently planned at the context layer.
 
 Producer and consumer differences are declarations and stages; subscription and tracing lifecycle code is shared.
 
+## 13. Azure Cosmos database flow
+
+`executePlugins` declares one async database operation:
+
+1. Extract the SDK request context and whether the invocation represents an operation or an individual request.
+2. Reject request-level hooks already represented by an enclosing operation span while inheriting that parent scope.
+3. Reject empty-path account reads with a no-op scope so their nested HTTP request is suppressed as before.
+4. Extract the low-cardinality resource, database, container, connection mode, endpoint, and user agent.
+5. Materialize a `cosmosdb.query` span through `DatabasePlugin`, preserving its storage service and peer-service rules.
+6. Add status and substatus fields from either the response or the SDK error before the span finishes.
+
+This migration added two source-independent contracts: definitions can select a compatible `TracingPlugin` base, and
+the skip mode can resolve from the extracted frame. The lifecycle engine still owns subscriptions and completion.
+
 ## Current boundaries
 
-- The compiled class still extends `TracingPlugin`; tracing is private to the pipeline but not yet an independently
-  loadable capability.
+- The compiled class still extends `TracingPlugin`, directly or through a selected compatibility base; tracing is
+  private to the pipeline but not yet an independently loadable capability.
 - `storage('legacy')` remains necessary for compatibility with code outside the experiment.
 - BullMQ propagation cannot safely move before tracing until sampling decisions can be made from context alone.
 - `DD_TRACE_ENABLED=false` still selects a global no-op tracer that cannot reserve real unique correlation contexts.
