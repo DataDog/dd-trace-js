@@ -65,4 +65,6 @@ function getBunBinary () {
   return bunBinary
 }
 
+if (require.main === module) process.stdout.write(getBunBinary())
+
 module.exports = { getBunBinary }

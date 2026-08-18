@@ -74,6 +74,11 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.strictEqual(resolvedVersions['pino@>=5 <6.8.0'], '6.7.0')
     assert.deepStrictEqual(readVersionsManifest().trustedDependencies, ['pino', 'pino-pretty'])
 
+    const lockPath = path.join(versionsDir, 'bun.lock')
+    const firstLock = fs.readFileSync(lockPath, 'utf8')
+    runInstall('pino')
+    assert.strictEqual(fs.readFileSync(lockPath, 'utf8'), firstLock)
+
     const packageManagerCalls = fs.readFileSync(traceFile, 'utf8')
       .trim()
       .split('\n')

@@ -1,14 +1,24 @@
 name: Audit
 
 on:
+  workflow_call:
   pull_request:
     paths:
-      - ".github/workflows/audit.yml"
       - ".github/actions/datadog-ci/bun.lock"
+      - ".github/actions/datadog-ci/package.json"
       - ".github/all-green/bun.lock"
+      - ".github/all-green/package.json"
+      - ".github/audit-allowlist.json"
+      - ".github/workflows/audit.yml"
+      - ".github/workflows/dependabot-audit.yml"
       - "bun.lock"
       - "docs/bun.lock"
+      - "docs/package.json"
+      - "package.json"
+      - "scripts/audit.js"
+      - "scripts/bun.js"
       - "vendor/bun.lock"
+      - "vendor/package.json"
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
@@ -23,17 +33,18 @@ permissions:
 jobs:
   dependencies:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+          - "."
+          - ".github/actions/datadog-ci"
+          - ".github/all-green"
+          - "docs"
+          - "vendor"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/latest
-      # Mocha cannot take serialize-javascript 7.x yet; the vulnerable path only serializes its own test metadata.
-      - run: bun audit --audit-level high --ignore GHSA-5c6j-r48x-rmvq
-      # The patched OpenTelemetry major is outside the compatibility range bundled by vendor.
-      - run: bun audit --audit-level moderate --ignore GHSA-8988-4f7v-96qf
-        working-directory: vendor
-      - run: bun audit --audit-level high
-        working-directory: docs
-      - run: bun audit --audit-level high
-        working-directory: .github/all-green
-      - run: bun audit --audit-level high
-        working-directory: .github/actions/datadog-ci
+      - run: node scripts/audit.js "$DIRECTORY"
+        env:
+          DIRECTORY: ${{ matrix.directory }}
