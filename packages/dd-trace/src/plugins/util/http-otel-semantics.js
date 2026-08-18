@@ -17,7 +17,8 @@ const USER_AGENT_ORIGINAL = 'user_agent.original'
 const CLIENT_ADDRESS = 'client.address'
 const NETWORK_PEER_ADDRESS = 'network.peer.address'
 const HTTP_REQUEST_METHOD_ORIGINAL = 'http.request.method_original'
-const RESOURCE_SET_BY_USER = '_dd.otel.resource_set_by_user'
+const INSTRUMENTATION_HTTP_RESOURCE = '_dd.otel.instrumentation_http_resource'
+const HTTP_STATUS_ERROR = '_dd.otel.status_error'
 
 // Known HTTP methods (RFC 9110 + PATCH RFC 5789 + QUERY httpbis draft). A verb
 // outside this set is reported as `_OTHER` with the raw value preserved on
@@ -32,21 +33,13 @@ function otelHttpResourceName (method, route) {
   return normalizedMethod
 }
 
-function isInstrumentationHttpResource (resource, method) {
-  if (typeof resource !== 'string' || resource.length === 0) return true
-  const normalizedMethod = KNOWN_METHODS.has(method) ? method : 'HTTP'
-  return resource === method ||
-    resource === normalizedMethod ||
-    resource.startsWith(`${method} `) ||
-    resource.startsWith(`${normalizedMethod} `)
+function runHttpRequestHook (span, hook, arg1, arg2) {
+  hook(span, arg1, arg2)
 }
 
-function runHttpRequestHook (span, enabled, hook, ...args) {
-  const resourceBeforeHook = span.context().getTag('resource.name')
-  hook(span, ...args)
-  if (enabled && span.context().getTag('resource.name') !== resourceBeforeHook) {
-    span.setTag(RESOURCE_SET_BY_USER, 'true')
-  }
+function setInstrumentationHttpResource (span, resource) {
+  span.setTag('resource.name', resource)
+  span.setTag(INSTRUMENTATION_HTTP_RESOURCE, resource)
 }
 
 // Datadog HTTP meta keys replaced by OTel names — omitted when rebuilding meta.
@@ -55,7 +48,7 @@ function runHttpRequestHook (span, enabled, hook, ...args) {
 // both the agent and the OTLP payload.
 const DD_HTTP_META_KEYS = new Set([
   'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.url', 'out.host',
-  RESOURCE_SET_BY_USER,
+  INSTRUMENTATION_HTTP_RESOURCE, HTTP_STATUS_ERROR,
 ])
 const NETWORK_DESTINATION_PORT = 'network.destination.port'
 
@@ -195,7 +188,13 @@ function applyHttpOtelSemantics (formattedSpan) {
   const metrics = formattedSpan.metrics
   const method = meta['http.method']
   const url = meta['http.url']
-  if (method === undefined && url === undefined) return
+  if (method === undefined && url === undefined) {
+    // A hook can remove the last HTTP attribute after instrumentation recorded
+    // provenance. Internal coordination tags must never reach either exporter.
+    delete meta[INSTRUMENTATION_HTTP_RESOURCE]
+    delete meta[HTTP_STATUS_ERROR]
+    return
+  }
 
   // Rebuild meta/metrics as fresh objects that omit the renamed Datadog HTTP
   // keys. Deleting them in place demotes the formatted span to V8 dictionary
@@ -222,12 +221,9 @@ function applyHttpOtelSemantics (formattedSpan) {
       newMeta[HTTP_REQUEST_METHOD] = '_OTHER'
       newMeta[HTTP_REQUEST_METHOD_ORIGINAL] = method
     }
-    // Request hooks mark ownership explicitly because a user resource can have
-    // the same method-prefixed shape as an instrumentation-generated resource.
-    if (
-      meta[RESOURCE_SET_BY_USER] !== 'true' &&
-      isInstrumentationHttpResource(formattedSpan.resource, method)
-    ) {
+    // The automatic value is recorded at its assignment site. Comparing values
+    // preserves manual resources even when they look like "GET /custom".
+    if (meta[INSTRUMENTATION_HTTP_RESOURCE] === formattedSpan.resource) {
       formattedSpan.resource = otelHttpResourceName(method, meta['http.route'])
     }
   }
@@ -282,10 +278,15 @@ function applyHttpOtelSemantics (formattedSpan) {
   // (`web.addStatusError` for servers, the client plugins' `validateStatus`).
   // Trace stats run after this conversion and therefore observe the same error
   // decision and normalized HTTP attributes as the OTLP exporter.
-  // No-clobber: an exception already put its class name here. Bounded below at 400
-  // so a span that errored for some other reason (a `setTag('error', true)` on a
-  // 200) does not end up describing its error as a success status.
-  if (status !== undefined && formattedSpan.error && newMeta[ERROR_TYPE] === undefined && Number(status) >= 400) {
+  // No-clobber: an exception already put its class name here. For successful
+  // statuses, only a validator-created error may use the status as its type.
+  const statusCausedError = meta[HTTP_STATUS_ERROR] === 'true'
+  if (
+    status !== undefined &&
+    formattedSpan.error &&
+    newMeta[ERROR_TYPE] === undefined &&
+    (Number(status) >= 400 || statusCausedError)
+  ) {
     newMeta[ERROR_TYPE] = status
   }
 
@@ -294,10 +295,12 @@ function applyHttpOtelSemantics (formattedSpan) {
 }
 
 module.exports = {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
   NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
   decomposeServerUrl, // exercised directly by the helper spec
-  isInstrumentationHttpResource,
   otelHttpResourceName,
   runHttpRequestHook,
+  setInstrumentationHttpResource,
   applyHttpOtelSemantics,
 }

@@ -10,7 +10,11 @@ const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const { CLIENT } = require('../../../ext/kinds')
 const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
-const { runHttpRequestHook } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  runHttpRequestHook,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 
 const {
   HTTP_STATUS_CODE,
@@ -78,6 +82,7 @@ class UndiciPlugin extends HttpClientPlugin {
         'span.kind': 'client',
         'http.method': method,
         'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
+        ...(otelSemantics && { [INSTRUMENTATION_HTTP_RESOURCE]: method }),
         'out.host': hostname,
       },
       metrics: {
@@ -129,7 +134,7 @@ class UndiciPlugin extends HttpClientPlugin {
 
     const { span, store } = ctx
 
-    runHttpRequestHook(span, this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED, this.config.hooks.request, null, null)
+    runHttpRequestHook(span, this.config.hooks.request, null, null)
 
     span.finish()
 
@@ -152,6 +157,9 @@ class UndiciPlugin extends HttpClientPlugin {
 
       if (!this.config.validateStatus(statusCode)) {
         span.setTag('error', 1)
+        if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+          span.setTag(HTTP_STATUS_ERROR, 'true')
+        }
       }
     }
 
@@ -168,7 +176,7 @@ class UndiciPlugin extends HttpClientPlugin {
     const { span, store } = ctx
 
     // Call the request hook if configured
-    runHttpRequestHook(span, this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED, this.config.hooks.request, null, null)
+    runHttpRequestHook(span, this.config.hooks.request, null, null)
 
     // Finish the span
     span.finish()
@@ -194,7 +202,7 @@ class UndiciPlugin extends HttpClientPlugin {
     }
 
     // Call the request hook if configured
-    runHttpRequestHook(span, this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED, this.config.hooks.request, null, null)
+    runHttpRequestHook(span, this.config.hooks.request, null, null)
 
     // Finish the span
     span.finish()

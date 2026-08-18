@@ -6,9 +6,15 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const { SERVER } = require('../../../ext/kinds')
 const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
-const { NETWORK_PEER_ADDRESS, runHttpRequestHook } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
-const { extractURL, getQsObfuscator, obfuscateQs } = require('../../dd-trace/src/plugins/util/url')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  runHttpRequestHook,
+  setInstrumentationHttpResource,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
+const { getQsObfuscator } = require('../../dd-trace/src/plugins/util/url')
 const web = require('../../dd-trace/src/plugins/util/web')
+const addOtelRequestTags = require('./request-tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 
@@ -34,6 +40,9 @@ class NextPlugin extends ServerPlugin {
         [COMPONENT]: this.constructor.id,
         'service.name': serviceName,
         'resource.name': req.method,
+        ...(this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && {
+          [INSTRUMENTATION_HTTP_RESOURCE]: req.method,
+        }),
         'span.type': 'web',
         'span.kind': 'server',
         'http.method': req.method,
@@ -85,6 +94,9 @@ class NextPlugin extends ServerPlugin {
     } else if (!this.config.validateStatus(res.statusCode)) {
       // where there's no error, we still need to validate status
       span.setTag('error', true)
+      if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        span.setTag(HTTP_STATUS_ERROR, 'true')
+      }
       web.addError(req, true)
     }
 
@@ -92,7 +104,7 @@ class NextPlugin extends ServerPlugin {
       'http.status_code': res.statusCode,
     })
 
-    runHttpRequestHook(span, this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED, this.config.hooks.request, req, res)
+    runHttpRequestHook(span, this.config.hooks.request, req, res)
 
     span.finish()
   }
@@ -127,11 +139,14 @@ class NextPlugin extends ServerPlugin {
         : '/public/*'
     }
 
-    span.addTags({
-      [COMPONENT]: this.constructor.id,
-      'resource.name': `${req.method} ${page}`.trim(),
-      'next.page': page,
-    })
+    const resource = `${req.method} ${page}`.trim()
+    span.setTag(COMPONENT, this.constructor.id)
+    span.setTag('next.page', page)
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      setInstrumentationHttpResource(span, resource)
+    } else {
+      span.setTag('resource.name', resource)
+    }
     web.setRoute(req, page)
   }
 
@@ -150,20 +165,10 @@ function normalizeConfig (config) {
 
 const noop = () => {}
 
-function addOtelRequestTags (span, config, req) {
-  if (!config.DD_TRACE_OTEL_SEMANTICS_ENABLED || !req.headers) return
-
-  span.setTag('http.url', obfuscateQs(config, extractURL(req)))
-  const peerAddress = req.socket?.remoteAddress
-  if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
-}
-
 function getHooks (config) {
   const request = config.hooks?.request ?? noop
 
   return { request }
 }
-
-NextPlugin._addOtelRequestTags = addOtelRequestTags
 
 module.exports = NextPlugin

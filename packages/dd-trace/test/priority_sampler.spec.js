@@ -21,6 +21,7 @@ const {
   SAMPLING_KNUTH_RATE,
 } = require('../src/constants')
 const { ASM } = require('../src/standalone/product')
+const { INSTRUMENTATION_HTTP_RESOURCE } = require('../src/plugins/util/http-otel-semantics')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
@@ -289,9 +290,68 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._sampling.priority, USER_KEEP)
     })
 
-    it('should store the normalization guard on the root context when sampling from a child', () => {
+    for (const resource of ['GET /custom', 'GET checkout']) {
+      it(`should preserve a manually assigned method-prefixed resource before sampling: ${resource}`, () => {
+        context._tags['http.method'] = 'GET'
+        context._tags['http.route'] = '/users/:id'
+        context._tags['resource.name'] = resource
+        context._tags[INSTRUMENTATION_HTTP_RESOURCE] = 'GET'
+        prioritySampler = new PrioritySampler(
+          'test',
+          { sampleRate: 0, rules: [{ sampleRate: 1, resource }] },
+          { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+        )
+
+        prioritySampler.sample(context)
+
+        assert.strictEqual(context._tags['resource.name'], resource)
+        assert.strictEqual(context._sampling.priority, USER_KEEP)
+      })
+    }
+
+    it('should preserve a manual resource alias when the automatic resource name is still present', () => {
+      context._tags['http.method'] = 'GET'
+      context._tags['http.route'] = '/users/:id'
+      context._tags['resource.name'] = 'GET'
+      context._tags.resource = 'GET /custom'
+      context._tags[INSTRUMENTATION_HTTP_RESOURCE] = 'GET'
+      prioritySampler = new PrioritySampler(
+        'test',
+        { sampleRate: 1 },
+        { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      )
+
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._tags['resource.name'], 'GET')
+      assert.strictEqual(context._tags.resource, 'GET /custom')
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+    })
+
+    it('should refresh an early normalization after the route resolves and before deciding', () => {
+      context._tags['http.method'] = 'GET'
+      delete context._tags['resource.name']
+      prioritySampler = new PrioritySampler(
+        'test',
+        { sampleRate: 0, rules: [{ sampleRate: 1, resource: 'GET /users/:id' }] },
+        { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      )
+
+      prioritySampler.sample(context, false)
+      assert.strictEqual(context._tags['resource.name'], 'GET')
+      assert.strictEqual(context._sampling.priority, undefined)
+
+      context._tags['http.route'] = '/users/:id'
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._tags['resource.name'], 'GET /users/:id')
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+    })
+
+    it('should track automatic normalization on the root context when sampling from a child', () => {
       context._tags['http.method'] = 'PROPFIND'
       context._tags['resource.name'] = 'PROPFIND /users/:id'
+      context._tags[INSTRUMENTATION_HTTP_RESOURCE] = 'PROPFIND /users/:id'
       const childContext = {
         ...context,
         _tags: { 'service.name': 'child', 'resource.name': 'child-resource' },
@@ -305,8 +365,8 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(childContext)
 
       assert.strictEqual(context._tags['resource.name'], 'HTTP')
-      assert.strictEqual(context._otelHttpResourceNormalizedForSampling, true)
-      assert.strictEqual(childContext._otelHttpResourceNormalizedForSampling, undefined)
+      assert.strictEqual(context._tags[INSTRUMENTATION_HTTP_RESOURCE], 'HTTP')
+      assert.strictEqual(childContext._tags[INSTRUMENTATION_HTTP_RESOURCE], undefined)
       assert.strictEqual(context._sampling.priority, USER_KEEP)
     })
 

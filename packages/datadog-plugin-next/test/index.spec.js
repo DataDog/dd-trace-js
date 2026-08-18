@@ -16,7 +16,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
-const NextPlugin = require('../src')
+const addOtelRequestTags = require('../src/request-tags')
 const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
@@ -32,7 +32,7 @@ describe('Plugin', function () {
       url: '/products/42?token=secret',
     }
 
-    NextPlugin._addOtelRequestTags(
+    addOtelRequestTags(
       span,
       { DD_TRACE_OTEL_SEMANTICS_ENABLED: true, queryStringObfuscation: false },
       req

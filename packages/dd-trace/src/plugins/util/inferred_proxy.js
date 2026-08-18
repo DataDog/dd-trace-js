@@ -2,6 +2,7 @@
 
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
+const { INSTRUMENTATION_HTTP_RESOURCE } = require('./http-otel-semantics')
 
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -66,6 +67,7 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
   }
 
   const proxySpanInfo = supportedProxies[proxyContext.proxySystemName]
+  const resourceName = `${proxyContext.method} ${proxyContext.resourcePath || proxyContext.path}`
 
   log.debug('Successfully extracted inferred span info %s for proxy:', proxyContext, proxyContext.proxySystemName)
 
@@ -81,6 +83,9 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
       [SPAN_KIND]: 'server',
       [HTTP_METHOD]: proxyContext.method,
       [HTTP_URL]: 'https://' + proxyContext.domainName + proxyContext.path,
+      ...(config.DD_TRACE_OTEL_SEMANTICS_ENABLED && {
+        [INSTRUMENTATION_HTTP_RESOURCE]: resourceName,
+      }),
       stage: proxyContext.stage,
       region: proxyContext.region,
       ...(proxyContext.resourcePath && { [HTTP_ROUTE]: proxyContext.resourcePath }),

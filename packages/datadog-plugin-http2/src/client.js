@@ -10,6 +10,10 @@ const formats = require('../../../ext/formats')
 const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
@@ -49,6 +53,7 @@ class Http2ClientPlugin extends ClientPlugin {
         [COMPONENT]: this.constructor.id,
         [SPAN_KIND]: CLIENT,
         'resource.name': method,
+        ...(otelSemantics && { [INSTRUMENTATION_HTTP_RESOURCE]: method }),
         'span.type': 'http',
         'http.method': method,
         'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
@@ -108,6 +113,9 @@ class Http2ClientPlugin extends ClientPlugin {
 
     if (!this.config.validateStatus(status)) {
       storage('legacy').run(store, () => this.addError())
+      if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        store.span.setTag(HTTP_STATUS_ERROR, 'true')
+      }
     }
 
     addHeaderTags(store.span, headers, HTTP_RESPONSE_HEADERS, this.config)

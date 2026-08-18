@@ -5,6 +5,9 @@ const tags = require('../../../ext/tags.js')
 const { HTTP_HEADERS } = require('../../../ext/formats')
 const { getSegment } = require('../../dd-trace/src/util')
 const {
+  INSTRUMENTATION_HTTP_RESOURCE,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
+const {
   createWebSocketSpanContext,
   hasTraceHeaders,
   initWebSocketMessageCounters,
@@ -58,6 +61,9 @@ class WSServerPlugin extends TracingPlugin {
         'http.url': uri,
         'resource.name': resourceName,
         'span.kind': 'server',
+        ...(this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && {
+          [INSTRUMENTATION_HTTP_RESOURCE]: resourceName,
+        }),
       },
 
     }, ctx)

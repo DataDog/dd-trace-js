@@ -15,7 +15,12 @@ const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
 const { getStatusValidator } = require('./http-error-statuses')
-const { NETWORK_PEER_ADDRESS, runHttpRequestHook } = require('./http-otel-semantics')
+const {
+  HTTP_STATUS_ERROR,
+  NETWORK_PEER_ADDRESS,
+  runHttpRequestHook,
+  setInstrumentationHttpResource,
+} = require('./http-otel-semantics')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -253,10 +258,16 @@ const web = {
 
     if (!spanHasExistingError && !isValidStatusCode) {
       span.setTag(ERROR, error || true)
+      if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        span.setTag(HTTP_STATUS_ERROR, 'true')
+      }
     }
 
     if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
       inferredProxySpan.setTag(ERROR, error || true)
+      if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        inferredProxySpan.setTag(HTTP_STATUS_ERROR, 'true')
+      }
     }
   },
 
@@ -300,7 +311,6 @@ const web = {
 
     runHttpRequestHook(
       context.span,
-      context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
       context.config.hooks.request,
       req,
       res
@@ -492,7 +502,7 @@ function applyRouteOrEndpointTag (context) {
 }
 
 function addResourceTag (context) {
-  const { req, span } = context
+  const { req, span, config } = context
   const spanContext = span.context()
 
   if (spanContext.getTag(RESOURCE_NAME)) return
@@ -501,7 +511,11 @@ function addResourceTag (context) {
     .filter(Boolean)
     .join(' ')
 
-  span.setTag(RESOURCE_NAME, resource)
+  if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    setInstrumentationHttpResource(span, resource)
+  } else {
+    span.setTag(RESOURCE_NAME, resource)
+  }
 }
 
 function addRequestHeaders (context) {
