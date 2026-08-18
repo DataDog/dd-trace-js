@@ -601,6 +601,29 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     )
   })
 
+  it('selects a serverless closest reference from plugin type', () => {
+    const packet = inspect(runTool, 'new-cloud', ['--mode', 'serverless', '--traits', 'server'], (root) => {
+      writeFixtureFile(
+        root,
+        'packages/datadog-instrumentations/src/unregistered-serverless.js',
+        'module.exports = {}\n'
+      )
+      writeFixtureFile(root, 'packages/datadog-plugin-fixture/src/unavailable.js', '{\n')
+      const filename = join(root, 'packages/datadog-plugin-fixture/src/index.js')
+      const source = readFileSync(filename, 'utf8').replace(
+        "static type = 'missing-schema'",
+        "static type = 'serverless'\n  static kind = 'server'"
+      )
+      writeFileSync(filename, source)
+    })
+
+    assert.strictEqual(packet.reference.integration, 'fixture')
+    assert.strictEqual(
+      packet.reference.files.includes('packages/datadog-instrumentations/src/fixture.js'),
+      true
+    )
+  })
+
   it('ignores unregistered rewriters as closest references', () => {
     const packet = inspect(runTool, 'new-plugin', ['--traits', 'orchestrion'], (root) => {
       writeFixtureFile(
@@ -689,7 +712,7 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
       [['--inspect', '../fixture'], /integration id must contain only lowercase letters/],
     ]
 
-    assert.deepStrictEqual(underscore.registrations.workflows, ['.github/workflows/apm-integrations.yml:221'])
+    assert.deepStrictEqual(underscore.registrations.workflows, ['.github/workflows/apm-integrations.yml:232'])
     for (const [args, expected] of cases) {
       const { status, stderr } = spawnSync(process.execPath, [verifierPath, ...args], { encoding: 'utf8' })
       assert.strictEqual(status, 1)
