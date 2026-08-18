@@ -2,8 +2,8 @@
 
 const { format } = require('node:url')
 
-const { HttpsProxyAgent } = require('https-proxy-agent')
-const { getProxyForUrl } = require('proxy-from-env')
+const { HttpsProxyAgent } = require('../../../../vendor/dist/https-proxy-agent')
+const { getProxyForUrl } = require('../../../../vendor/dist/proxy-from-env')
 const log = require('../log')
 
 /**
