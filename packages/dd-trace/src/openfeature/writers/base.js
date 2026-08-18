@@ -40,7 +40,18 @@ const log = require('../../log')
  * @returns {boolean} Whether direct retry is safe
  */
 function isDefinitiveRejection (error, statusCode) {
-  return error?.code === 'ECONNREFUSED' || statusCode === 403 || statusCode === 404 || statusCode === 405
+  return error?.code === 'ECONNREFUSED' || error?.code === 'ENOENT' ||
+    statusCode === 403 || statusCode === 404 || statusCode === 405
+}
+
+/**
+ * Tests whether a local route can have accepted an event batch before failing.
+ *
+ * @param {Error | null} error - Request error
+ * @returns {boolean} Whether the current batch must not be replayed
+ */
+function isAmbiguousNetworkFailure (error) {
+  return error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT'
 }
 
 /**
@@ -74,6 +85,7 @@ class BaseFFEWriter {
         'Content-Type': 'application/json',
       },
       method: 'POST',
+      retry: false,
       timeout: this._timeout,
       url: this._baseUrl,
       path: this._endpoint,
@@ -211,6 +223,7 @@ class BaseFFEWriter {
           'Content-Type': 'application/json',
         },
         method: 'POST',
+        retry: false,
         timeout: this._timeout,
         url: route.url,
         path: route.endpoint,
@@ -265,6 +278,17 @@ class BaseFFEWriter {
         this._fallbackRoute = undefined
         this.#sendRequest(payload, eventCount, fallbackRoute)
         return
+      }
+
+      if (fallbackRoute && isAmbiguousNetworkFailure(error)) {
+        log.debug(
+          '%s switching future batches from %s%s to direct intake after ambiguous failure',
+          this.constructor.name,
+          route.url.href,
+          route.endpoint
+        )
+        this.#activateRoute(fallbackRoute)
+        this._fallbackRoute = undefined
       }
 
       if (error) {

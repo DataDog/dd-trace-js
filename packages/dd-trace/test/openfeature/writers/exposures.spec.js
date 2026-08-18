@@ -348,6 +348,7 @@ describe('OpenFeature Exposures Writer', () => {
       const [payload, options] = request.getCall(0).args
 
       assert.strictEqual(options.method, 'POST')
+      assert.strictEqual(options.retry, false)
       assert.match(options.path, /\/evp_proxy\/v2\//)
       assert.strictEqual(options.headers['Content-Type'], 'application/json')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
@@ -416,6 +417,7 @@ describe('OpenFeature Exposures Writer', () => {
       const [, options] = request.getCall(0).args
       assert.strictEqual(options.url, url)
       assert.strictEqual(options.path, '/api/v2/exposures')
+      assert.strictEqual(options.retry, false)
       assert.strictEqual(options.agent, agent)
       assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], undefined)
@@ -423,6 +425,10 @@ describe('OpenFeature Exposures Writer', () => {
 
     for (const [name, error, statusCode] of [
       ['connection refusal', Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })],
+      ['missing Unix socket', Object.assign(
+        new Error('connect ENOENT /var/run/datadog/apm.socket'),
+        { code: 'ENOENT' }
+      )],
       ['HTTP 403', Object.assign(new Error('Forbidden'), { status: 403 }), 403],
       ['HTTP 404', Object.assign(new Error('Not Found'), { status: 404 }), 404],
       ['HTTP 405', Object.assign(new Error('Method Not Allowed'), { status: 405 }), 405],
@@ -471,13 +477,50 @@ describe('OpenFeature Exposures Writer', () => {
     for (const [name, error, statusCode] of [
       ['connection reset', Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })],
       ['timeout', Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' })],
+    ]) {
+      it(`should switch future batches after ambiguous local ${name} without replaying the current batch`, async () => {
+        const localUrl = new URL('http://serverless-init:8126')
+        const directUrl = new URL('https://event-platform-intake.datadoghq.com')
+        request.onFirstCall().yieldsAsync(error, null, statusCode)
+        writer.setEnabled(true, {
+          url: localUrl,
+          basePath: '/evp_proxy/v4',
+          headers: {
+            'X-Datadog-EVP-Subdomain': 'event-platform-intake',
+          },
+          fallback: {
+            url: directUrl,
+            basePath: '',
+            headers: {
+              'DD-API-KEY': 'test-api-key',
+            },
+          },
+        })
+        writer.append(exposureEvent)
+
+        writer.flush()
+        await clock.tickAsync(0)
+
+        sinon.assert.calledOnce(request)
+        assert.strictEqual(request.firstCall.args[1].url, localUrl)
+
+        writer.append(exposureEvent)
+        writer.flush()
+
+        sinon.assert.calledTwice(request)
+        assert.strictEqual(request.secondCall.args[1].url, directUrl)
+      })
+    }
+
+    for (const [name, error, statusCode] of [
       ['HTTP 429', Object.assign(new Error('Too Many Requests'), { status: 429 }), 429],
       ['HTTP 500', Object.assign(new Error('Internal Server Error'), { status: 500 }), 500],
     ]) {
-      it(`should not retry ambiguous local ${name} through direct intake`, async () => {
-        request.yieldsAsync(error, null, statusCode)
+      it(`should not replay ${name} through direct intake or switch future batches`, async () => {
+        const localUrl = new URL('http://serverless-init:8126')
+        request.onFirstCall().yieldsAsync(error, null, statusCode)
         writer.setEnabled(true, {
-          url: new URL('http://serverless-init:8126'),
+          url: localUrl,
           basePath: '/evp_proxy/v4',
           headers: {
             'X-Datadog-EVP-Subdomain': 'event-platform-intake',
@@ -496,6 +539,12 @@ describe('OpenFeature Exposures Writer', () => {
         await clock.tickAsync(0)
 
         sinon.assert.calledOnce(request)
+
+        writer.append(exposureEvent)
+        writer.flush()
+
+        sinon.assert.calledTwice(request)
+        assert.strictEqual(request.secondCall.args[1].url, localUrl)
       })
     }
 
