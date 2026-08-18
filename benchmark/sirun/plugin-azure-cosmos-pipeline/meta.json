@@ -1,0 +1,22 @@
+{
+  "name": "plugin-azure-cosmos-pipeline",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 15,
+  "instructions": true,
+  "variants": {
+    "accepted": {
+      "env": { "VARIANT": "accepted", "OPERATIONS": "1000000" }
+    },
+    "duplicate": {
+      "env": { "VARIANT": "duplicate", "OPERATIONS": "3000000" }
+    },
+    "empty-path": {
+      "env": { "VARIANT": "empty-path", "OPERATIONS": "3000000" }
+    },
+    "inherited-noop": {
+      "env": { "VARIANT": "inherited-noop", "OPERATIONS": "5000000" }
+    }
+  }
+}
