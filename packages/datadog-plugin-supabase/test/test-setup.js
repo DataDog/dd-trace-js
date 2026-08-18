@@ -200,6 +200,19 @@ class SupabaseTestSetup {
     return this.createSupabaseClient().from('items').select('*').then(onFulfilled)
   }
 
+  /**
+   * @param {(error: Error) => unknown} onRejected Query rejection callback.
+   * @returns {Promise<unknown>}
+   */
+  postgrestBuilderThenWithRejectionCallback (onRejected) {
+    return this.createSupabaseClient({ reject: true })
+      .from('items')
+      .select('*')
+      .retry(false)
+      .throwOnError()
+      .then(undefined, onRejected)
+  }
+
   /** @returns {Promise<object>} */
   postgrestBuilderThenHead () {
     return this.createSupabaseClient().from('items').select('*', { head: true })
