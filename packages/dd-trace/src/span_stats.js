@@ -260,7 +260,11 @@ class SpanStatsProcessor {
         RuntimeID: this.tags['runtime-id'],
         Sequence: ++this.sequence,
         ProcessTags: processTags.serialized,
-      }, done)
+      })
+      // `export` can overlap an interval export. Use the exporter's barrier so
+      // this lifecycle flush waits for both that existing request and this
+      // boundary payload before Vercel releases the invocation.
+      if (done) this.exporter.flush(done)
     } else if (this.otlpExporter && drained.length > 0) {
       this.otlpExporter.export(drained, this.bucketSizeNs, () => {
         if (typeof this.otlpExporter.flush === 'function') this.otlpExporter.flush(done)

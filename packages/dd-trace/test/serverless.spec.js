@@ -275,6 +275,34 @@ describe('Vercel telemetry retention', () => {
     }
   })
 
+  it('retains telemetry again when an outer Vercel response follows a nested request', async () => {
+    const retained = []
+    const flushes = []
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: promise => { retained.push(promise) } }),
+    }
+    const unregister = registerVercelTelemetryRetention({
+      flushAll (done) {
+        flushes.push(done)
+      },
+    })
+    try {
+      channel('apm:http:server:request:finish').publish({ req: {} })
+      await new Promise(resolve => setImmediate(resolve))
+      channel('apm:http:server:request:finish').publish({ req: {} })
+      await new Promise(resolve => setImmediate(resolve))
+
+      // Other tracers initialized by this file can share this request context;
+      // the callback count below isolates this test's tracer.
+      assert.ok(retained.length >= 2)
+      assert.strictEqual(flushes.length, 2)
+      flushes[0]()
+      flushes[1]()
+    } finally {
+      unregister()
+    }
+  })
+
   it('passes Vercel retention timeout to the telemetry flush barrier', async () => {
     let retained
     let options

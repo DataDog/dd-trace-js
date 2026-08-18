@@ -9,7 +9,6 @@ const http2ResponseEmitChannel = channel('apm:http2:server:response:emit')
 const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
 const VERCEL_FLUSH_TIMEOUT = 2000
 const vercelRetentionHandlers = new WeakMap()
-const retainedVercelRequests = new WeakMap()
 
 /**
  * @typedef {{ flushAll?: (done: () => void, options?: { timeout?: number }) => void }} TelemetryFlusher
@@ -36,13 +35,6 @@ function registerVercelRequestFlush (tracer) {
 
   const { waitUntil } = requestContext
   if (typeof waitUntil !== 'function') return
-  let retainedTracers = retainedVercelRequests.get(requestContext)
-  if (!retainedTracers) {
-    retainedTracers = new WeakSet()
-    retainedVercelRequests.set(requestContext, retainedTracers)
-  }
-  if (retainedTracers.has(tracer)) return
-  retainedTracers.add(tracer)
 
   // Retain the invocation synchronously, then flush after the response completes.
   let done
