@@ -1,5 +1,5 @@
 'use strict'
-const { DsmPathwayCodec, getSizeOrZero } = require('../../../dd-trace/src/datastreams')
+const { DsmPathwayCodec, getSizeOrZero, PATHWAY_FIELD_BYTES } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
@@ -15,12 +15,6 @@ const MAX_TRACKED_SHARD_ITERATORS = 1000
 // The default Kinesis record limit is 1 MiB. Streams configured for larger records
 // conservatively skip propagation above this point because the request does not expose that limit.
 const KINESIS_DEFAULT_MAX_RECORD_BYTES = 1_048_576
-
-// The DSM pathway field (`dd-pathway-ctx-base64`) always serializes to a fixed 55 bytes: a
-// 21-char key, a 28-char base64 value, and 6 bytes of JSON framing. Mirrors PATHWAY_HEADER_BYTES
-// in dd-trace/src/datastreams/processor.js. Reserved in the size gate so setDSMCheckpoint never
-// runs for a record that would ship over the cap once the pathway context is attached.
-const DSM_PATHWAY_FIELD_BYTES = 55
 
 class Kinesis extends BaseAwsSdkPlugin {
   static id = 'kinesis'
@@ -196,14 +190,11 @@ class Kinesis extends BaseAwsSdkPlugin {
       try {
         parsedAttributes = JSON.parse(recordDataAsString(record.Data))
       } catch {
-        // Non-JSON record. Skip DSM context for this entry; the
-        // checkpoint payload size below is still reported.
+        // Non-JSON record: it carries no context, so the checkpoint below starts a new pathway.
       }
 
       const payloadSize = getSizeOrZero(record.Data)
-      if (parsedAttributes?._datadog) {
-        this.tracer.decodeDataStreamsContext(parsedAttributes._datadog)
-      }
+      this.tracer.decodeDataStreamsContext(parsedAttributes?._datadog)
       this.tracer.setCheckpoint(tags, span, payloadSize)
     }
   }
@@ -279,7 +270,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     // Gate before setDSMCheckpoint: a record we can't ship must not record a checkpoint.
     // Reserve the pathway field that DSM appends after the gate.
     let serialized = JSON.stringify(parsedData)
-    const reservedBytes = dsmEnabled ? DSM_PATHWAY_FIELD_BYTES : 0
+    const reservedBytes = dsmEnabled ? PATHWAY_FIELD_BYTES : 0
     const partitionKeyBytes = Buffer.byteLength(params.PartitionKey ?? '', 'utf8')
     if (
       Buffer.byteLength(serialized, 'utf8') + partitionKeyBytes + reservedBytes >

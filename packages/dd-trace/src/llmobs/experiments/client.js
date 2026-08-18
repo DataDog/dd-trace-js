@@ -27,13 +27,37 @@ function appHost (site) {
 
 function datasetRecordFromResource (resource) {
   const attrs = resource?.attributes ?? resource ?? {}
+  const id = String(resource?.id ?? attrs.id ?? '')
+  if (id === '') throw new Error('Dataset record response is missing an id')
   return new DatasetRecord(
     attrs.input ?? null,
     attrs.expected_output ?? null,
     attrs.metadata ?? {},
-    String(resource?.id ?? attrs.id ?? '') || null,
-    attrs.valid_from_version ?? attrs.version ?? null
+    id,
+    attrs.tags ?? []
   )
+}
+
+function datasetVersionFromResource (resource) {
+  const attrs = resource?.attributes ?? resource ?? {}
+  return attrs.valid_from_version ?? attrs.version ?? null
+}
+
+function datasetVersionFromResources (resources) {
+  const versions = resources
+    .map(datasetVersionFromResource)
+    .filter(version => version != null)
+    .map(Number)
+    .filter(Number.isFinite)
+  if (versions.length === 0) return null
+  return Math.max(...versions)
+}
+
+function datasetMutationResultFromResources (resources) {
+  return {
+    records: resources.map(datasetRecordFromResource),
+    version: datasetVersionFromResources(resources),
+  }
 }
 
 function datasetFromResource (client, projectId, resource) {
@@ -46,15 +70,14 @@ function datasetFromResource (client, projectId, resource) {
     resource?.id ?? attrs.id ?? null,
     projectId,
     [],
-    [],
     version,
     version
   )
 }
 
 function experimentFromResource (client, resource) {
-  const id = resource?.id ?? null
-  return new ExperimentResult(id, [], id === null ? null : `${client.appBase}/llm/experiments/${id}`)
+  const id = resource?.id
+  return new ExperimentResult(id, [], id == null ? null : `${client.appBase}/llm/experiments/${id}`)
 }
 
 class ExperimentsClient {
@@ -63,16 +86,16 @@ class ExperimentsClient {
   #site
   #projectName
   #timeout
-  #apiBase
+  apiBase
   #cachedProjectId
 
-  constructor ({ apiKey, appKey, site, apiBase, projectName, timeout = 30_000 } = {}) {
+  constructor ({ apiKey, appKey, site, projectName, timeout = 30_000 } = {}) {
     this.#apiKey = apiKey
     this.#appKey = appKey
     this.#site = site
     this.#projectName = projectName
     this.#timeout = timeout
-    this.#apiBase = apiBase?.replace(/\/$/, '') ?? `https://${apiHost(this.#site)}`
+    this.apiBase = `https://${apiHost(this.#site)}`
     this.#cachedProjectId = null
   }
 
@@ -98,7 +121,7 @@ class ExperimentsClient {
   // Low-level request. Builds https://api.<site><path>, attaches both keys, and
   // returns the parsed JSON body. Throws with status + body on a non-2xx.
   async request (method, path, body) {
-    const url = `${this.#apiBase}${path}`
+    const url = `${this.apiBase}${path}`
     const headers = {
       'DD-API-KEY': this.#apiKey,
       'DD-APPLICATION-KEY': this.#appKey,
@@ -155,8 +178,7 @@ class ExperimentsClient {
   async listDatasets (projectId, options = {}) {
     const query = new URLSearchParams()
     if (options.name !== undefined) query.set('filter[name]', options.name)
-    const queryString = query.toString() ? `?${query.toString()}` : ''
-    const response = await this.request('GET', `${API_BASE_PATH}/${projectId}/datasets${queryString}`)
+    const response = await this.request('GET', `${API_BASE_PATH}/${projectId}/datasets?${query.toString()}`)
     const resources = Array.isArray(response?.data) ? response.data : []
     return resources.map(resource => datasetFromResource(this, projectId, resource))
   }
@@ -174,17 +196,43 @@ class ExperimentsClient {
     const resources = Array.isArray(response?.records)
       ? response.records
       : (Array.isArray(response?.data) ? response.data : [])
-    return resources.map(datasetRecordFromResource)
+    return datasetMutationResultFromResources(resources)
+  }
+
+  async batchUpdateDatasetRecords (projectId, datasetId, attributes) {
+    const response = await this.request(
+      'POST',
+      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/batch_update`,
+      {
+        data: {
+          type: 'datasets',
+          id: datasetId,
+          attributes: {
+            insert_records: attributes.insert_records ?? [],
+            update_records: attributes.update_records ?? [],
+            delete_records: attributes.delete_records ?? [],
+            deduplicate: attributes.deduplicate !== false,
+            create_new_version: attributes.create_new_version !== false,
+          },
+        },
+      }
+    )
+    const resources = Array.isArray(response?.records)
+      ? response.records
+      : (Array.isArray(response?.data) ? response.data : [])
+    return datasetMutationResultFromResources(resources)
   }
 
   async listDatasetRecords (projectId, datasetId, options = {}) {
     const query = new URLSearchParams()
     if (options.cursor) query.set('page[cursor]', options.cursor)
     if (options.version !== undefined && options.version !== null) query.set('filter[version]', String(options.version))
-    const queryString = query.toString() ? `?${query.toString()}` : ''
+    if (Array.isArray(options.tags)) {
+      for (const tag of options.tags) query.append('filter[tags]', tag)
+    }
     const response = await this.request(
       'GET',
-      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${queryString}`
+      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`
     )
     const records = Array.isArray(response?.data) ? response.data.map(datasetRecordFromResource) : []
     return { records, after: response?.meta?.after ?? '' }

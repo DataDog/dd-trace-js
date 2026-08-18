@@ -79,7 +79,7 @@ function getGeneratedTestContent ({ framework, moduleSystem, scenarioId, stateFi
     const requireCall = 'require'
     imports.push(moduleSystem === 'esm'
       ? "import { describe, expect, test } from '@jest/globals'"
-      : `const { describe, expect, test } = ${requireCall}('@jest/globals')`)
+      : `const jestGlobals = ${requireCall}('@jest/globals')`)
   }
   if (framework === 'vitest' && moduleSystem === 'esm') {
     imports.push("import { describe, expect, it } from 'vitest'")
@@ -97,8 +97,12 @@ function getGeneratedTestContent ({ framework, moduleSystem, scenarioId, stateFi
     }
   }
 
-  const assertion = framework === 'mocha' ? 'assert.equal(1, 1)' : 'expect(true).toBe(true)'
-  const testFunction = framework === 'jest' ? 'test' : 'it'
+  const commonJsJest = framework === 'jest' && moduleSystem === 'commonjs'
+  const assertion = framework === 'mocha'
+    ? 'assert.equal(1, 1)'
+    : `${commonJsJest ? 'jestGlobals.' : ''}expect(true).toBe(true)`
+  const testFunction = framework === 'jest' ? `${commonJsJest ? 'jestGlobals.' : ''}test` : 'it'
+  const describeFunction = commonJsJest ? 'jestGlobals.describe' : 'describe'
   const body = scenarioId === 'atr-fail-once'
     ? getAtrBody({ moduleSystem, assertion, stateFile })
     : `    ${assertion}`
@@ -106,7 +110,7 @@ function getGeneratedTestContent ({ framework, moduleSystem, scenarioId, stateFi
   return [
     ...imports,
     imports.length > 0 ? '' : undefined,
-    "describe('dd-test-optimization-validation', () => {",
+    `${describeFunction}('dd-test-optimization-validation', () => {`,
     `  ${testFunction}('${scenario.testName}', () => {`,
     body,
     '  })',

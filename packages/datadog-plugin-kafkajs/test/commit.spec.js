@@ -6,8 +6,108 @@ const { describe, it } = require('mocha')
 const sinon = require('sinon')
 
 require('../../dd-trace/test/setup/core')
+const KafkajsBatchConsumerPlugin = require('../src/batch-consumer')
 const KafkajsConsumerPlugin = require('../src/consumer')
 const KafkajsProducerPlugin = require('../src/producer')
+
+describe('kafkajs producer start', () => {
+  /**
+   * @param {Record<string, string | Buffer | Array<string | Buffer>>} [headers]
+   */
+  function checkpointPayloadSize (headers) {
+    const setCheckpoint = sinon.stub()
+    const plugin = new KafkajsProducerPlugin({ setCheckpoint }, {})
+    plugin.config = { dsmEnabled: true }
+
+    plugin.start({
+      topic: 'topic',
+      messages: [{ key: 'key', value: 'value', headers }],
+      currentStore: { span: {} },
+    })
+
+    return setCheckpoint.firstCall.args[2]
+  }
+
+  it('counts the header key once per repeated value', () => {
+    // Every array element becomes its own wire record, so 'content-type' ships twice.
+    assert.strictEqual(checkpointPayloadSize({ 'content-type': ['text', 'application/json'] }), 52)
+  })
+
+  it('counts a single header key once', () => {
+    assert.strictEqual(checkpointPayloadSize({ 'content-type': 'application/json' }), 36)
+  })
+
+  it('counts no bytes for a header key with no values', () => {
+    assert.strictEqual(checkpointPayloadSize({ 'content-type': [] }), 8)
+  })
+
+  it('sizes a message the caller sent without headers', () => {
+    assert.strictEqual(checkpointPayloadSize(undefined), 8)
+  })
+})
+
+describe('kafkajs consumer start', () => {
+  /**
+   * @param {Record<string, string | Buffer | Array<string | Buffer>> | Array<Record<string, string | Buffer>>} headers
+   */
+  function checkpointPayloadSize (headers) {
+    const setCheckpoint = sinon.stub()
+    const plugin = new KafkajsConsumerPlugin({
+      decodeDataStreamsContext: sinon.stub(),
+      setCheckpoint,
+    }, {})
+    plugin.config = { dsmEnabled: true }
+
+    plugin.start({
+      topic: 'topic',
+      message: { key: 'key', value: 'value', headers },
+      groupId: 'group',
+      currentStore: { span: {} },
+    })
+
+    return setCheckpoint.firstCall.args[2]
+  }
+
+  it('counts every repeated KafkaJS header key', () => {
+    assert.strictEqual(checkpointPayloadSize({
+      'content-type': ['text', 'application/json'],
+    }), 52)
+  })
+
+  it('counts every native header-list entry', () => {
+    assert.strictEqual(checkpointPayloadSize([
+      { 'content-type': 'text' },
+      { 'content-type': Buffer.from('application/json') },
+    ]), 52)
+  })
+})
+
+describe('kafkajs batch consumer start', () => {
+  it('counts every repeated header key for each message', () => {
+    const setCheckpoint = sinon.stub()
+    const plugin = new KafkajsBatchConsumerPlugin({
+      decodeDataStreamsContext: sinon.stub(),
+      extract: sinon.stub(),
+      setCheckpoint,
+    }, {})
+    plugin.config = { dsmEnabled: true }
+    plugin.startSpan = sinon.stub().returns({ addLink: sinon.stub() })
+
+    plugin.bindStart({
+      topic: 'topic',
+      partition: 0,
+      messages: [{
+        key: 'key',
+        value: 'value',
+        headers: { 'content-type': ['text', 'application/json'] },
+      }],
+      groupId: 'group',
+      currentStore: {},
+    })
+
+    assert.strictEqual(setCheckpoint.firstCall.args[2], 52)
+  })
+})
 
 describe('kafkajs producer finish', () => {
   /**

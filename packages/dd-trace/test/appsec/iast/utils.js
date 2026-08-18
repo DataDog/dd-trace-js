@@ -120,6 +120,22 @@ function copyFileToTmp (src) {
   return dest
 }
 
+/**
+ * @param {string} command
+ */
+function invokeCommandInjectionSink (command) {
+  const childProcess = require('node:child_process')
+
+  // The tracing start hook runs before Node rejects cwd, avoiding a child process.
+  assert.throws(
+    () => childProcess.execSync(command, { cwd: '\0' }),
+    {
+      code: 'ERR_INVALID_ARG_VALUE',
+      message: /without null bytes/,
+    }
+  )
+}
+
 function beforeEachIastTest (iastConfig) {
   iastConfig = iastConfig || {
     enabled: true,
@@ -403,7 +419,7 @@ function prepareTestServerForIastInExpress (
       try {
         const cookieParser = require('../../../../../versions/cookie-parser').get()
         expressApp.use(cookieParser())
-      } catch (e) {
+      } catch {
         // do nothing, in some scenarios we don't have cookie-parser dependency available, and we don't need
         // it in all the iast tests
       }
@@ -470,7 +486,7 @@ function prepareTestServerForIastInFastify (description, fastifyVersion, tests, 
           } else {
             finish()
           }
-        } catch (e) {
+        } catch {
           if (!headersSent()) {
             reply.code(500).send()
           } else if (reply.raw && typeof reply.raw.end === 'function') {
@@ -530,6 +546,7 @@ module.exports = {
   testOutsideRequestHasVulnerability,
   testInRequest,
   copyFileToTmp,
+  invokeCommandInjectionSink,
   prepareTestServerForIast,
   prepareTestServerForIastInExpress,
   prepareTestServerForIastInFastify,

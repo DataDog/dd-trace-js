@@ -5,29 +5,25 @@ const log = require('../../log')
 
 const { Row, ExperimentResult, ExperimentRun } = require('./result')
 const {
-  buildExperimentTagObject,
   buildSpanMetadata,
   buildTags,
+  durationNs,
   generateRunId,
   hasEntries,
   inferMetricType,
+  mergeTags,
   normalizeEvaluators,
   normalizeJsonMetricValue,
   normalizePositiveInteger,
+  recordTagsToObject,
   sleep,
   stringify,
+  timestampMs,
   validateEvaluatorName,
 } = require('./util')
 
-function mergeTags (baseTags, overrideTags) {
-  const tags = {}
-  for (const [key, value] of Object.entries(baseTags ?? {})) tags[key] = value
-  for (const [key, value] of Object.entries(overrideTags ?? {})) tags[key] = value
-  return tags
-}
-
 // One span per experiment row (LLM Obs experiment span wire format).
-function toSpan (row, metadata, ids, spanName, userTags) {
+function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
   const meta = {
     input: row.input ?? null,
     output: row.output ?? null,
@@ -40,6 +36,20 @@ function toSpan (row, metadata, ids, spanName, userTags) {
     meta.error = { type: row.errorType ?? '', message: row.errorMessage ?? '', stack: row.errorStack ?? '' }
   }
 
+  const tags = buildTags({
+    ...userTags,
+    ...recordTagsToObject(recordTags),
+  }, {
+    experiment_id: ids.experimentId,
+    run_id: ids.runId,
+    run_iteration: ids.runIteration,
+    project_id: ids.projectId,
+    dataset_id: ids.datasetId,
+    dataset_record_id: ids.datasetRecordId,
+    dataset_name: ids.datasetName,
+    experiment_name: ids.experimentName,
+  })
+
   return {
     span_id: row.spanId,
     trace_id: row.traceId,
@@ -50,13 +60,7 @@ function toSpan (row, metadata, ids, spanName, userTags) {
     duration: row.durationNs,
     status: row.isError ? 'error' : 'ok',
     meta,
-    tags: buildTags(userTags, {
-      experiment_id: ids.experimentId,
-      run_id: ids.runId,
-      run_iteration: ids.runIteration,
-      dataset_id: ids.datasetId,
-      dataset_record_id: ids.datasetRecordId,
-    }),
+    tags,
   }
 }
 
@@ -104,32 +108,8 @@ function createFallbackSpanContext (startNs) {
   return { spanId, traceId }
 }
 
-function timestampMs (value, fallback = Date.now()) {
-  if (value === null || value === undefined) return fallback
-  if (value instanceof Date) {
-    const timestamp = value.getTime()
-    return Number.isFinite(timestamp) ? timestamp : fallback
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  const parsed = Date.parse(String(value))
-  return Number.isFinite(parsed) ? parsed : fallback
-}
-
-function durationNs (row, startMs) {
-  if (typeof row.durationMs === 'number' && Number.isFinite(row.durationMs)) {
-    return Math.max(0, Math.round(row.durationMs * 1e6))
-  }
-
-  if (row.completedAt !== undefined) {
-    const completedMs = timestampMs(row.completedAt, startMs)
-    return Math.max(0, Math.round((completedMs - startMs) * 1e6))
-  }
-
-  return 0
-}
-
 function normalizeError (error) {
-  if (error === null || error === undefined) {
+  if (error == null) {
     return { errorType: null, errorMessage: null, errorStack: '' }
   }
 
@@ -145,7 +125,7 @@ function normalizeError (error) {
 }
 
 function errorMessage (error) {
-  if (error === null || error === undefined) return null
+  if (error == null) return null
   if (typeof error === 'string') return error
   return error.message ?? String(error)
 }
@@ -187,6 +167,8 @@ class Experiment {
   #runs
   #projectId
   #experimentId
+  #runId
+  #runIteration
 
   constructor (client, options = {}, llmobs) {
     if (!options.name) throw new Error('Experiment name is required')
@@ -205,11 +187,15 @@ class Experiment {
     this.#evaluators = normalizeEvaluators(options.evaluators, 'row')
     this.#summaryEvaluators = normalizeEvaluators(options.summaryEvaluators, 'summary')
     this.#config = { ...options.config }
+    const filterTags = this.#dataset.filterTags?.() ?? []
+    if (filterTags.length > 0) this.#config.filtered_record_tags = filterTags
     this.#tags = { ...options.tags }
     this.#metadata = { ...options.metadata }
     this.#runs = this.#external ? 1 : normalizePositiveInteger(options.runs ?? 1, 'runs')
     this.#projectId = null
     this.#experimentId = null
+    this.#runId = null
+    this.#runIteration = null
   }
 
   name () {
@@ -240,6 +226,7 @@ class Experiment {
       dataset_id: dataset.id,
       description: this.#description,
       ensure_unique: true,
+      run_count: 1,
     }
     if (dataset.version != null) attributes.dataset_version = dataset.version
     if (hasEntries(this.#config)) attributes.config = this.#config
@@ -255,6 +242,8 @@ class Experiment {
       throw new Error(`Failed to create experiment '${this.#name}': ${err.message}`)
     }
     this.#experimentId = created.experimentId
+    this.#runId = id().toString(16).padStart(16, '0')
+    this.#runIteration = 0
     return this
   }
 
@@ -300,7 +289,6 @@ class Experiment {
     const { spanId, traceId } = createFallbackSpanContext(startNs)
     const error = normalizeError(input.error)
     const row = new Row({
-      index: input.id ?? '',
       spanId,
       traceId,
       startNs,
@@ -320,8 +308,8 @@ class Experiment {
       projectId: this.#projectId,
       datasetId: this.#dataset.id,
       datasetRecordId: input.datasetRecordId,
-      runId: input.runId,
-      runIteration: input.runIteration,
+      runId: input.runId ?? this.#runId,
+      runIteration: input.runIteration ?? this.#runIteration,
     }, input.name ?? this.#name, mergeTags(this.#tags, input.tags))
 
     await this.#postEvents(this.#experimentId, [span], [])
@@ -351,6 +339,9 @@ class Experiment {
     if (experimentId !== this.#experimentId) {
       throw new Error(`Experiment span belongs to '${experimentId}', not '${this.#experimentId}'`)
     }
+    if (!span.traceId) {
+      throw new Error('Experiment trace id is required')
+    }
 
     const payload = []
     for (const metric of metrics) {
@@ -365,7 +356,7 @@ class Experiment {
         metric.value,
         metricError,
         span.spanId,
-        span.traceId ?? '',
+        span.traceId,
         timestampMs(metric.timestamp),
         experimentId,
         mergeTags(this.#tags, metric.tags),
@@ -547,9 +538,11 @@ class Experiment {
           projectId,
           datasetId,
           datasetRecordId: i < recordIds.length ? recordIds[i] : '',
+          datasetName: this.#dataset.name(),
+          experimentName: this.#name,
           runId,
           runIteration,
-        }, this.#task.name || this.#name, this.#tags))
+        }, this.#task.name || this.#name, this.#tags, records[i].tags))
       }
     }
 
@@ -773,7 +766,7 @@ class Experiment {
       dataset_name: this.#dataset.name(),
       experiment_name: this.#name,
     }
-    const tags = buildExperimentTagObject(this.#tags, autoTags)
+    const tags = mergeTags(this.#tags, { ...recordTagsToObject(record.tags), ...autoTags })
 
     const execute = () => this.#runWithRetries(
       () => this.#task(record.input, this.#config, record.metadata),
@@ -974,4 +967,62 @@ class Experiment {
   }
 }
 
-module.exports = { Experiment, normalizeEvaluators, validateEvaluatorName }
+class ExternalExperiment {
+  #experiment
+
+  /**
+   * @param {Pick<Experiment, 'name' | 'experimentId' | 'url' | 'submitSpan' | 'submitEvaluationMetrics' |
+   *   'close'>} experiment
+   */
+  constructor (experiment) {
+    this.#experiment = experiment
+  }
+
+  /**
+   * @returns {string}
+   */
+  name () {
+    return this.#experiment.name()
+  }
+
+  /**
+   * @returns {string | null}
+   */
+  experimentId () {
+    return this.#experiment.experimentId()
+  }
+
+  /**
+   * @returns {string | null}
+   */
+  url () {
+    return this.#experiment.url()
+  }
+
+  /**
+   * @param {object} [input]
+   * @returns {Promise<object>}
+   */
+  submitSpan (input) {
+    return this.#experiment.submitSpan(input)
+  }
+
+  /**
+   * @param {object} span
+   * @param {object[]} metrics
+   * @returns {Promise<void>}
+   */
+  submitEvaluationMetrics (span, metrics) {
+    return this.#experiment.submitEvaluationMetrics(span, metrics)
+  }
+
+  /**
+   * @param {object} [options]
+   * @returns {Promise<void>}
+   */
+  close (options) {
+    return this.#experiment.close(options)
+  }
+}
+
+module.exports = { Experiment, ExternalExperiment, normalizeEvaluators, validateEvaluatorName }

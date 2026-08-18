@@ -5,17 +5,23 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { assertApprovalDigest } = require('./approval')
+const { assertApprovalDigest, getApprovalProjectSnapshot } = require('./approval')
 const { loadApprovedPlan } = require('./approval-artifacts')
+const { BLOCKER_CATEGORIES, getBlockerDomain } = require('./blocker-category')
 const { annotateCiDiscovery } = require('./ci-discovery')
 const { cleanupGeneratedFiles } = require('./generated-files')
 const { verifyGeneratedTestStrategy } = require('./generated-verifier')
+const {
+  acquireExecutionLock,
+  releaseExecutionLock,
+} = require('./execution-lock')
 const { loadManifest } = require('./manifest-loader')
 const { createManifestScaffold } = require('./manifest-scaffold')
 const {
   formatExecutionPlanArtifacts,
   getExecutionPlanPath,
 } = require('./plan-writer')
+const { checkInstalledPackage, getInstalledPackageFailure } = require('./package-check')
 const { runFrameworkPreflight } = require('./preflight-runner')
 const { sanitizeConsoleText } = require('./redaction')
 const {
@@ -34,6 +40,7 @@ const { runEarlyFlakeDetection } = require('./scenarios/early-flake-detection')
 const { runTestManagement } = require('./scenarios/test-management')
 const { ensureSafeDirectory } = require('./safe-files')
 const { getStaticBlocker, runStaticDiagnosis } = require('./static-diagnosis')
+const { getValidationBlockerEvidence } = require('./validation-blocker')
 
 const DEFAULT_MANIFEST = './dd-test-optimization-validation-manifest.json'
 const DEFAULT_OUT = './dd-test-optimization-validation-results'
@@ -111,9 +118,11 @@ function parseArgs (argv) {
  * @returns {Promise<void>} completion
  */
 async function main (argv) {
+  let activeApprovedPlanSha256
   let activeManifest
   let activeOut
   let cleanupOutcome = { status: 'not_started' }
+  let executionLock
 
   try {
     const options = parseArgs(argv)
@@ -150,8 +159,16 @@ async function main (argv) {
       keepTempFiles: options.keepTempFiles,
       verbose: options.verbose,
     })
+    activeApprovedPlanSha256 = options.approvedPlanSha256
+    const packageCheck = hasLocalScenarios(options.scenarios)
+      ? checkInstalledPackage()
+      : undefined
     options.requireExecutableApproval = true
     ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
+    executionLock = acquireExecutionLock({
+      out,
+      approvedPlanSha256: options.approvedPlanSha256,
+    })
     writePendingReport({ manifest, out })
 
     const staticDiagnosis = runStaticDiagnosis({ manifest, out })
@@ -162,7 +179,7 @@ async function main (argv) {
       for (const framework of selectedFrameworks) {
         // Each framework is independent. A setup blocker must not discard useful results from another adapter.
         // eslint-disable-next-line no-await-in-loop
-        await validateFramework({ framework, manifest, options, out, results, staticDiagnosis })
+        await validateFramework({ framework, manifest, options, out, packageCheck, results, staticDiagnosis })
       }
     } finally {
       try {
@@ -186,6 +203,7 @@ async function main (argv) {
       results: annotatedResults,
       staticDiagnosis,
       runSummary: {
+        approvedPlanSha256: activeApprovedPlanSha256,
         checkedScenarios: [...options.scenarios],
         cleanup: cleanupOutcome,
         executionStatus,
@@ -197,32 +215,67 @@ async function main (argv) {
         validatorExitCode,
       },
     })
+    releaseExecutionLock(executionLock)
+    executionLock = undefined
     console.log(`Validation report: ${path.join(out, 'report.md')}`)
     console.log('Present the report and stop. Any correction or retry requires a fresh plan and approval.')
     process.exitCode = validatorExitCode
   } catch (error) {
-    process.exitCode = 3
-    if (activeManifest && activeOut) {
+    let reportError = error
+    if (executionLock) {
+      await publishFailureReport({
+        approvedPlanSha256: activeApprovedPlanSha256,
+        cleanup: cleanupOutcome,
+        error: reportError,
+        manifest: activeManifest,
+        out: activeOut,
+      })
+    }
+    if (executionLock) {
       try {
-        await writeReport({
+        releaseExecutionLock(executionLock)
+        executionLock = undefined
+      } catch (releaseError) {
+        reportError = releaseError
+        await publishFailureReport({
+          approvedPlanSha256: activeApprovedPlanSha256,
+          cleanup: cleanupOutcome,
+          error: reportError,
           manifest: activeManifest,
           out: activeOut,
-          results: [getOrchestrationFailure(error)],
-          runSummary: {
-            checkedScenarios: [],
-            cleanup: cleanupOutcome,
-            executionStatus: 'validator_error',
-            omittedScenarios: getSelectableScenarios(),
-            runCompleted: true,
-            selectedFrameworkIds: [],
-            validationCoverage: 'partial',
-            validatorExitCode: 3,
-          },
         })
-      } catch {}
+      }
     }
-    console.error(sanitizeConsoleText(error?.stack || error))
+    const validatorExitCode = reportError?.validationExitCode || 3
+    process.exitCode = validatorExitCode
+    const blockerRecommendation = reportError?.validationBlocker?.recommendation
+    const displayedError = reportError?.validationExitCode
+      ? `${reportError.message}${blockerRecommendation ? ` ${blockerRecommendation}` : ''}`
+      : (reportError?.stack || reportError)
+    console.error(sanitizeConsoleText(displayedError))
   }
+}
+
+async function publishFailureReport ({ approvedPlanSha256, cleanup, error, manifest, out }) {
+  if (!manifest || !out || error?.suppressReport) return
+  try {
+    await writeReport({
+      manifest,
+      out,
+      results: [getOrchestrationFailure(error)],
+      runSummary: {
+        approvedPlanSha256,
+        checkedScenarios: [],
+        cleanup,
+        executionStatus: error?.validationBlocker ? 'incomplete' : 'validator_error',
+        omittedScenarios: getSelectableScenarios(),
+        runCompleted: true,
+        selectedFrameworkIds: [],
+        validationCoverage: 'partial',
+        validatorExitCode: error?.validationExitCode || 3,
+      },
+    })
+  } catch {}
 }
 
 /**
@@ -233,11 +286,12 @@ async function main (argv) {
  * @param {object} input.manifest validation manifest
  * @param {object} input.options validator options
  * @param {string} input.out output directory
+ * @param {object|undefined} input.packageCheck installed package-load result
  * @param {object[]} input.results accumulated results
  * @param {object} input.staticDiagnosis static diagnosis
  * @returns {Promise<void>} completion
  */
-async function validateFramework ({ framework, manifest, options, out, results, staticDiagnosis }) {
+async function validateFramework ({ framework, manifest, options, out, packageCheck, results, staticDiagnosis }) {
   let ciResult
   if (options.scenarios.has(CI_WIRING)) {
     logPhase(framework, 'CI configuration audit', 'start')
@@ -256,18 +310,38 @@ async function validateFramework ({ framework, manifest, options, out, results, 
     return
   }
 
+  if (packageCheck?.ok === false) {
+    const packageFailure = getInstalledPackageFailure(framework, packageCheck)
+    results.push(packageFailure)
+    if (ciResult) results.push(ciResult)
+    addAdvancedNotReached(results, framework, options.scenarios, packageFailure)
+    return
+  }
+
   const unavailable = getUnavailableExecutable(getBasicCommand(framework))
   if (unavailable) {
-    results.push(getUnavailableRunnerResult(framework, unavailable))
+    const unavailableResult = getUnavailableRunnerResult(framework, unavailable)
+    results.push(unavailableResult)
     if (ciResult) results.push(ciResult)
-    addNotReachedLocalResults(results, framework, options.scenarios, 'runner-unavailable')
+    addNotReachedLocalResults(
+      results,
+      framework,
+      options.scenarios,
+      'runner-unavailable',
+      unavailableResult.evidence.blockerCategory
+    )
     return
   }
 
   const blocker = getStaticBlocker(framework, staticDiagnosis.report)
   if (blocker) {
     const staticFailure = getStaticFailure(framework, blocker, staticDiagnosis.reportPath)
-    const basicNotReached = getBasicNotReached(framework, blocker.reason, 'static-project-blocker')
+    const basicNotReached = getBasicNotReached(
+      framework,
+      blocker.reason,
+      'static-project-blocker',
+      blocker.blockerCategory
+    )
     results.push(staticFailure, basicNotReached)
     if (ciResult) results.push(ciResult)
     addAdvancedNotReached(results, framework, options.scenarios, basicNotReached)
@@ -321,8 +395,15 @@ function initializeManifest (options) {
   if (path.dirname(manifestPath) !== process.cwd()) {
     throw new Error('The generated manifest must be stored directly in the current repository root.')
   }
+  if (fs.existsSync(manifestPath)) return reuseExistingManifest(manifestPath)
+
   const manifest = createManifestScaffold({ root: process.cwd(), frameworks: options.frameworks })
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
+  try {
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
+  } catch (error) {
+    if (error.code === 'EEXIST') return reuseExistingManifest(manifestPath)
+    throw error
+  }
   const targets = manifest.ciDiscovery.reviewTargets
   console.log(sanitizeConsoleText([
     `Created a data-only validation manifest: ${manifestPath}`,
@@ -347,25 +428,132 @@ function initializeManifest (options) {
 function printPlan (manifest, options) {
   const out = validateOutputPath(manifest, options.out)
   const approvalManifest = getApprovalManifest(manifest, options.frameworks)
-  const { plan } = formatExecutionPlanArtifacts({
-    manifest: approvalManifest,
-    out,
-    selectedFrameworkIds: options.frameworks.size > 0
-      ? approvalManifest.frameworks.map(framework => framework.id)
-      : [],
-    requestedScenario: options.requestedScenario,
-    keepTempFiles: options.keepTempFiles,
-    verbose: options.verbose,
-  })
+  const localScenariosSelected = hasLocalScenarios(options.scenarios)
+  if (!localScenariosSelected ||
+    !approvalManifest.frameworks.some(framework => framework.status === 'runnable')) {
+    return writeStaticOnlyReport(approvalManifest, out, options)
+  }
+  ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
+  const publicationLock = acquireExecutionLock({ out, approvedPlanSha256: 'plan-publication' })
+  try {
+    const packageCheck = localScenariosSelected
+      ? checkInstalledPackage()
+      : undefined
+    if (packageCheck?.ok === false) throw getInstalledPackageCheckError(packageCheck)
+
+    const projectSnapshot = getApprovalProjectSnapshot(approvalManifest, {
+      includeLocal: options.requestedScenario !== CI_WIRING,
+    })
+    const ciPreflightResults = options.scenarios.has(CI_WIRING)
+      ? new Map(approvalManifest.frameworks.map(framework => [
+        framework.id,
+        runCiWiring({ manifest: approvalManifest, framework, projectFileSources: projectSnapshot.sources }),
+      ]))
+      : new Map()
+    const { plan } = formatExecutionPlanArtifacts({
+      manifest: approvalManifest,
+      out,
+      selectedFrameworkIds: options.frameworks.size > 0
+        ? approvalManifest.frameworks.map(framework => framework.id)
+        : [],
+      requestedScenario: options.requestedScenario,
+      keepTempFiles: options.keepTempFiles,
+      packageCheck,
+      ciPreflightResults,
+      expectedProjectFiles: projectSnapshot.projectFiles,
+      verbose: options.verbose,
+    })
+    console.log(sanitizeConsoleText([
+      '===== CUSTOMER APPROVAL PLAN =====',
+      plan,
+      '===== END CUSTOMER APPROVAL PLAN =====',
+      '',
+      `Saved execution plan: ${getExecutionPlanPath(out)}`,
+      'LIVE VALIDATION HAS NOT RUN.',
+      'Present the complete delimited plan and ask exactly: Approve executing exactly the plan above?',
+    ].join('\n')))
+  } finally {
+    releaseExecutionLock(publicationLock)
+  }
+}
+
+function writeStaticOnlyReport (manifest, out, options) {
+  const results = []
+  const localScenariosSelected = hasLocalScenarios(options.scenarios)
+  for (const framework of manifest.frameworks) {
+    if (localScenariosSelected) {
+      results.push(getFrameworkStatusResult(framework))
+      addNotReachedLocalResults(results, framework, options.scenarios, 'framework-not-runnable')
+    }
+    if (options.scenarios.has(CI_WIRING)) results.push(runCiWiring({ manifest, framework }))
+  }
+  const annotatedResults = annotateResults(results)
+  const executionStatus = getExecutionStatus(annotatedResults)
+  const validatorExitCode = getValidatorExitCode(annotatedResults, executionStatus)
+  ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
+  const publicationLock = acquireExecutionLock({ out, approvedPlanSha256: 'static-only-report' })
+  try {
+    writeReport({
+      manifest,
+      out,
+      results: annotatedResults,
+      runSummary: {
+        checkedScenarios: [...options.scenarios],
+        cleanup: { directoriesRemoved: 0, filesRemoved: 0, status: 'completed' },
+        executionStatus,
+        omittedScenarios: getSelectableScenarios().filter(scenario => !options.scenarios.has(scenario)),
+        requestedScenario: options.requestedScenario,
+        runCompleted: true,
+        selectedFrameworkIds: manifest.frameworks.map(framework => framework.id),
+        validationCoverage: getValidationCoverage(annotatedResults),
+        validatorExitCode,
+      },
+    })
+  } finally {
+    releaseExecutionLock(publicationLock)
+  }
+  const reason = localScenariosSelected
+    ? 'No selected framework has an eligible local command.'
+    : 'The selected CI-only audit does not require local execution.'
+  console.log(sanitizeConsoleText(
+    `${reason} A final static-only report was written; no new approval artifact or live validation command was ` +
+    'created. Present the report and stop.'
+  ))
+  process.exitCode = validatorExitCode
+}
+
+function reuseExistingManifest (manifestPath) {
+  try {
+    const manifest = loadManifest(manifestPath)
+    if (fs.realpathSync(manifest.repository.root) !== fs.realpathSync(process.cwd())) {
+      throw new Error('repository.root does not identify the current physical repository')
+    }
+  } catch (error) {
+    const recovery = new Error(
+      `The existing validation manifest cannot be reused: ${error.message}. ` +
+      `Inspect and remove only ${manifestPath}, then rerun --init-manifest. The validator did not delete or replace it.`
+    )
+    recovery.validationExitCode = 2
+    throw recovery
+  }
+
   console.log(sanitizeConsoleText([
-    '===== CUSTOMER APPROVAL PLAN =====',
-    plan,
-    '===== END CUSTOMER APPROVAL PLAN =====',
-    '',
-    `Saved execution plan: ${getExecutionPlanPath(out)}`,
-    'LIVE VALIDATION HAS NOT RUN.',
-    'Present the complete delimited plan and ask exactly: Approve executing exactly the plan above?',
+    `Existing validation manifest is valid for this repository: ${manifestPath}`,
+    'Reuse it, refresh only its ciWiring evidence if needed, then run --validate-manifest and --print-plan.',
+    'The validator did not overwrite the manifest or delete existing approval and report artifacts.',
   ].join('\n')))
+}
+
+function hasLocalScenarios (scenarios) {
+  return [...scenarios].some(scenario => scenario !== CI_WIRING)
+}
+
+function getInstalledPackageCheckError (packageCheck) {
+  const error = new Error(
+    `INSTALLED DD-TRACE PACKAGE BLOCKER: ${packageCheck.diagnosis} ${packageCheck.recommendation}`
+  )
+  error.validationExitCode = 2
+  return error
 }
 
 /**
@@ -442,6 +630,9 @@ function addAdvancedNotReached (results, framework, scenarios, blocker) {
       diagnosis: 'Not reached because Basic Reporting did not establish the direct reporting path.',
       evidence: {
         blockedBy: blocker?.scenario || 'basic-reporting',
+        ...(blocker?.evidence?.blockerCategory
+          ? { blockerCategory: blocker.evidence.blockerCategory }
+          : {}),
         validationIncomplete: true,
       },
       artifacts: [],
@@ -456,9 +647,15 @@ function addAdvancedNotReached (results, framework, scenarios, blocker) {
  * @param {object} framework framework entry
  * @param {Set<string>} scenarios selected scenarios
  * @param {string} reasonCode blocker id
+ * @param {string} [blockerCategoryOverride] blocker category supplied by a runtime result
  * @returns {void}
  */
-function addNotReachedLocalResults (results, framework, scenarios, reasonCode) {
+function addNotReachedLocalResults (results, framework, scenarios, reasonCode, blockerCategoryOverride) {
+  const blockerCategory = blockerCategoryOverride || framework.blockerCategory || (
+    framework.status === 'requires_manual_setup'
+      ? BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED
+      : BLOCKER_CATEGORIES.VALIDATOR_LIMITATION
+  )
   for (const scenario of scenarios) {
     if (scenario === CI_WIRING) continue
     results.push({
@@ -466,7 +663,7 @@ function addNotReachedLocalResults (results, framework, scenarios, reasonCode) {
       scenario,
       status: 'skip',
       diagnosis: 'Not reached because this framework has no available direct-runner validation target.',
-      evidence: { reasonCode, validationIncomplete: true },
+      evidence: { blockerCategory, reasonCode, validationIncomplete: true },
       artifacts: [],
     })
   }
@@ -534,7 +731,7 @@ function normalizeScenarioSelection (scenario) {
  * @returns {string} normalized target
  */
 function normalizeFrameworkTarget (target) {
-  const normalized = String(target).trim().replaceAll(/:+$/g, '')
+  const normalized = String(target).trim().replace(/(?<!:):+$/, '')
   if (!normalized) throw new Error('Framework target cannot be empty.')
   return normalized
 }
@@ -621,21 +818,31 @@ function logPhase (framework, phase, status) {
  * @returns {object} result
  */
 function getFrameworkStatusResult (framework) {
-  const requiresProjectSetup = framework.status === 'requires_manual_setup'
+  const blockerCategory = framework.blockerCategory || (
+    framework.status === 'requires_manual_setup'
+      ? BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED
+      : BLOCKER_CATEGORIES.VALIDATOR_LIMITATION
+  )
+  const domain = getBlockerDomain(blockerCategory)
   return {
     frameworkId: framework.id,
     scenario: 'all',
     status: 'skip',
     diagnosis: framework.notes?.[0] || `Framework status is ${framework.status}.`,
     evidence: {
+      blockerCategory,
+      domain,
       frameworkStatus: framework.status,
       validationIncomplete: true,
-      ...(requiresProjectSetup
+      ...(blockerCategory === BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED
         ? {
             blockedByProjectSetup: true,
             ...(framework.notes?.[0] ? { recommendation: framework.notes[0] } : {}),
           }
-        : { validatorAdapterUnavailable: true }),
+        : {
+            validatorAdapterUnavailable: true,
+            ...(framework.notes?.[0] ? { recommendation: framework.notes[0] } : {}),
+          }),
     },
     artifacts: [],
   }
@@ -654,7 +861,12 @@ function getUnavailableRunnerResult (framework, unavailable) {
     scenario: 'all',
     status: 'skip',
     diagnosis: `The direct runner is unavailable: ${unavailable}. Complete normal project setup and retry.`,
-    evidence: { blockedByProjectSetup: true, unavailableRunner: unavailable, validationIncomplete: true },
+    evidence: {
+      blockerCategory: BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED,
+      blockedByProjectSetup: true,
+      unavailableRunner: unavailable,
+      validationIncomplete: true,
+    },
     artifacts: [],
   }
 }
@@ -668,12 +880,22 @@ function getUnavailableRunnerResult (framework, unavailable) {
  * @returns {object} result
  */
 function getStaticFailure (framework, blocker, reportPath) {
+  const blockerCategory = blocker.blockerCategory || BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED
   return {
     frameworkId: framework.id,
     scenario: 'all',
     status: 'error',
     diagnosis: blocker.reason,
-    evidence: { blockedByProjectSetup: true, staticDiagnosis: reportPath, validationIncomplete: true },
+    evidence: {
+      blockerCategory,
+      domain: getBlockerDomain(blockerCategory),
+      recommendation: blocker.recommendation,
+      staticDiagnosis: reportPath,
+      validationIncomplete: true,
+      ...(blockerCategory === BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED
+        ? { blockedByProjectSetup: true }
+        : {}),
+    },
     artifacts: [reportPath],
   }
 }
@@ -684,15 +906,20 @@ function getStaticFailure (framework, blocker, reportPath) {
  * @param {object} framework framework entry
  * @param {string} diagnosis blocker diagnosis
  * @param {string} reasonCode blocker id
+ * @param {string | undefined} blockerCategory blocker category
  * @returns {object} result
  */
-function getBasicNotReached (framework, diagnosis, reasonCode) {
+function getBasicNotReached (framework, diagnosis, reasonCode, blockerCategory) {
   return {
     frameworkId: framework.id,
     scenario: BASIC_REPORTING,
     status: 'skip',
     diagnosis: `Basic Reporting was not reached: ${diagnosis}`,
-    evidence: { reasonCode, validationIncomplete: true },
+    evidence: {
+      ...(blockerCategory ? { blockerCategory } : {}),
+      reasonCode,
+      validationIncomplete: true,
+    },
     artifacts: [],
   }
 }
@@ -725,12 +952,13 @@ function getCleanupFailure (error, cleanup) {
  * @returns {object} result
  */
 function getOrchestrationFailure (error) {
+  const blockerEvidence = getValidationBlockerEvidence(error)
   return {
     frameworkId: 'validator',
     scenario: 'all',
-    status: 'error',
+    status: blockerEvidence ? 'blocked' : 'error',
     diagnosis: error?.message || String(error),
-    evidence: { validationIncomplete: true, validationOrchestrationFailed: true },
+    evidence: blockerEvidence || { validationIncomplete: true, validationOrchestrationFailed: true },
     artifacts: [],
   }
 }

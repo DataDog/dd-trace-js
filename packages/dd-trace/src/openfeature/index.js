@@ -40,12 +40,15 @@ function enable (config) {
     return
   }
 
-  exposuresWriter = new ExposuresWriter(config)
+  const writer = new ExposuresWriter(config)
+  exposuresWriter = writer
   exposureSubmitCh.subscribe(_handleExposureSubmit)
   flushCh.subscribe(_handleFlush)
 
-  setAgentStrategy(config, hasAgent => {
-    exposuresWriter?.setEnabled(hasAgent)
+  setAgentStrategy(config, (hasAgent, route) => {
+    if (exposuresWriter !== writer) return
+
+    writer.setEnabled(hasAgent, route)
   })
 }
 

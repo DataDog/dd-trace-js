@@ -121,6 +121,7 @@ describe('test optimization validation Basic Reporting diagnosis', () => {
     const { runBasicReporting } = getBasicReporting({
       cleanExitCode: 0,
       complete: true,
+      debugComplete: false,
       exitCode: 1,
       initialized: true,
       settingsLoaded: true,
@@ -130,6 +131,65 @@ describe('test optimization validation Basic Reporting diagnosis', () => {
     assert.strictEqual(result.status, 'fail')
     assert.strictEqual(result.evidence.possibleLibraryBug, true)
     assert.match(result.diagnosis, /possible dd-trace compatibility bug/)
+  })
+
+  it('keeps an initialized failure intermittent when the unchanged debug rerun passes', async () => {
+    const { runBasicReporting } = getBasicReporting({
+      cleanExitCode: 0,
+      complete: false,
+      debugComplete: true,
+      exitCode: 1,
+      initialized: true,
+      settingsLoaded: true,
+    })
+    const result = await runBasicReporting(getInput())
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.intermittentInstrumentedResult, true)
+    assert.strictEqual(result.evidence.validationIncomplete, true)
+    assert.strictEqual(result.evidence.possibleLibraryBug, undefined)
+    assert.match(result.evidence.initialInstrumentedDiagnosis, /possible dd-trace adapter or compatibility bug/)
+    assert.match(result.diagnosis, /unchanged DD_TRACE_DEBUG=1 rerun exited cleanly/)
+  })
+
+  it('does not clear a library finding when a wrapper debug rerun reports another test file', async () => {
+    const { runBasicReporting } = getBasicReporting({
+      cleanExitCode: 0,
+      complete: true,
+      debugComplete: true,
+      debugTestSourceFiles: ['test/other.spec.js'],
+      events: [{ type: 'test', testSourceFile: 'test/example.spec.js' }],
+      exitCode: 1,
+      initialized: true,
+      settingsLoaded: true,
+    })
+    const input = getInput()
+    input.framework.validation.selectorScope = 'instrumented_event_identity'
+    const result = await runBasicReporting(input)
+
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.evidence.possibleLibraryBug, true)
+    assert.strictEqual(result.evidence.intermittentInstrumentedResult, undefined)
+  })
+
+  it('accepts an intermittent wrapper debug rerun for the same approved test file', async () => {
+    const { runBasicReporting } = getBasicReporting({
+      cleanExitCode: 0,
+      complete: true,
+      debugComplete: true,
+      debugTestSourceFiles: ['test/example.spec.js'],
+      events: [{ type: 'test', testSourceFile: 'test/example.spec.js' }],
+      exitCode: 1,
+      initialized: true,
+      settingsLoaded: true,
+    })
+    const input = getInput()
+    input.framework.validation.selectorScope = 'instrumented_event_identity'
+    const result = await runBasicReporting(input)
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.intermittentInstrumentedResult, true)
+    assert.strictEqual(result.evidence.possibleLibraryBug, undefined)
   })
 
   it('flags a passing initialized test with missing event levels as a possible adapter bug', async () => {
@@ -153,6 +213,9 @@ describe('test optimization validation Basic Reporting diagnosis', () => {
  * @param {string} [options.artifactDirectory] directory attached to a simulated runner error
  * @param {number} [options.cleanExitCode] clean confirmation exit code
  * @param {boolean} options.complete whether the complete event hierarchy exists
+ * @param {boolean} [options.debugComplete] whether the debug rerun establishes the complete path
+ * @param {number} [options.debugTestEventsWithoutSourceFile] source-less debug test event count
+ * @param {string[]} [options.debugTestSourceFiles] debug test event source files
  * @param {object[]} [options.events] normalized test events
  * @param {number} [options.exitCode] initialized command exit code
  * @param {boolean} options.initialized whether the offline exporter initialized
@@ -163,6 +226,9 @@ function getBasicReporting ({
   artifactDirectory,
   cleanExitCode = 0,
   complete,
+  debugComplete = false,
+  debugTestEventsWithoutSourceFile = 0,
+  debugTestSourceFiles = [],
   events = [],
   exitCode = 0,
   initialized,
@@ -204,6 +270,20 @@ function getBasicReporting ({
         }
       },
       async failWithDebugRerun (input) {
+        input.evidence.debugRerun = {
+          ran: true,
+          commandExitCode: debugComplete ? 0 : 1,
+          commandTimedOut: false,
+          offlineExporterInitialized: true,
+          settingsLoadedFromCache: true,
+          testSessionEvents: debugComplete ? 1 : 0,
+          testModuleEvents: debugComplete ? 1 : 0,
+          testSuiteEvents: debugComplete ? 1 : 0,
+          testEvents: debugComplete ? 1 : 0,
+          testEventsWithoutSourceFile: debugTestEventsWithoutSourceFile,
+          testSourceFileCount: new Set(debugTestSourceFiles).size,
+          testSourceFiles: debugTestSourceFiles,
+        }
         return {
           artifacts: [],
           diagnosis: input.diagnosis,

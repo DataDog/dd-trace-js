@@ -2,12 +2,15 @@
 
 const {
   EXPOSURES_ENDPOINT,
-  EVP_PROXY_AGENT_BASE_PATH,
-  EVP_SUBDOMAIN_HEADER_NAME,
-  EVP_SUBDOMAIN_VALUE,
   EVP_PAYLOAD_SIZE_LIMIT,
   EVP_EVENT_SIZE_LIMIT,
 } = require('../constants/constants')
+const {
+  EVP_PROXY_PATH_V2,
+  EVP_SUBDOMAIN_HEADER_NAME,
+  EVP_EVENT_PLATFORM_SUBDOMAIN,
+} = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const log = require('../../log')
 const BaseFFEWriter = require('./base')
 
@@ -61,19 +64,20 @@ class ExposuresWriter extends BaseFFEWriter {
 
   /**
    * @param {import('../../config/config-base')} config - Tracer configuration object
+   * @param {{url: URL, basePath: string}} [route] - Caller-supplied local EVP route
    */
-  constructor (config) {
-    const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/+$/, '')
-    const endpoint = EXPOSURES_ENDPOINT.replace(/^\/+/, '')
-    const fullEndpoint = `${basePath}/${endpoint}`
+  constructor (config, route) {
+    route ??= { url: config.url, basePath: EVP_PROXY_PATH_V2 }
+    const fullEndpoint = joinEVPProxyPath(route.basePath, EXPOSURES_ENDPOINT)
 
     super({
       config,
+      agentUrl: route.url,
       endpoint: fullEndpoint,
       payloadSizeLimit: EVP_PAYLOAD_SIZE_LIMIT,
       eventSizeLimit: EVP_EVENT_SIZE_LIMIT,
       headers: {
-        [EVP_SUBDOMAIN_HEADER_NAME]: EVP_SUBDOMAIN_VALUE,
+        [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
       },
     })
 
@@ -95,8 +99,13 @@ class ExposuresWriter extends BaseFFEWriter {
 
   /**
    * @param {boolean} enabled - Whether to enable the writer
+   * @param {{url: URL, basePath: string}} [route] - Discovered local EVP route
    */
-  setEnabled (enabled) {
+  setEnabled (enabled, route) {
+    if (route) {
+      this.#setRoute(route)
+    }
+
     this.#enabled = enabled
 
     if (enabled && this.#pendingEvents.length > 0) {
@@ -104,6 +113,21 @@ class ExposuresWriter extends BaseFFEWriter {
       super.append(this.#pendingEvents)
       this.#pendingEvents = []
     }
+  }
+
+  /**
+   * Applies caller-supplied route data without performing discovery.
+   *
+   * @param {{url: URL, basePath: string}} route - Local EVP route
+   * @returns {void}
+   */
+  #setRoute (route) {
+    const endpoint = joinEVPProxyPath(route.basePath, EXPOSURES_ENDPOINT)
+
+    this._baseUrl = route.url
+    this._endpoint = endpoint
+    this._requestOptions.url = route.url
+    this._requestOptions.path = endpoint
   }
 
   /**

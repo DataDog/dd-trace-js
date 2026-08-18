@@ -22,7 +22,7 @@ class BatchLogRecordProcessor {
   /**
    * Creates a new BatchLogRecordProcessor instance.
    *
-   * @param {OtlpHttpLogExporter} exporter - Log processor for exporting batches to Datadog Agent
+   * @param {import('./otlp_http_log_exporter')} exporter - Log processor for exporting batches to Datadog Agent
    * @param {number} batchTimeout - Timeout in milliseconds for batch processing
    * @param {number} maxExportBatchSize - Maximum number of log records per batch
    */
@@ -42,7 +42,8 @@ class BatchLogRecordProcessor {
    */
   onEmit (logRecord, instrumentationScope) {
     // Store the log record (already enriched by Logger.emit)
-    this.#logRecords.push({ ...logRecord, instrumentationScope })
+    logRecord.instrumentationScope = instrumentationScope
+    this.#logRecords.push(logRecord)
 
     if (this.#logRecords.length >= this.#maxExportBatchSize) {
       this.#export()
