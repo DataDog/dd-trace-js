@@ -11,8 +11,23 @@ class SpanStatsExporter {
   }
 
   export (payload, done) {
+    if (done) {
+      const activeFlushes = [...this.#activeFlushes]
+      let pending = activeFlushes.length + 1
+      const complete = () => {
+        if (--pending === 0) done()
+      }
+      for (const flush of activeFlushes) flush.callbacks.push(complete)
+      this._writer.append(payload)
+      try {
+        this.#flush(complete)
+      } catch {
+        // `#flush` has notified the boundary request; keep waiting for prior exports.
+      }
+      return
+    }
     this._writer.append(payload)
-    this.#flush(done)
+    this.#flush()
   }
 
   flush (done) {

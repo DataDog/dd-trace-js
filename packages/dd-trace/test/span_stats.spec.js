@@ -666,8 +666,7 @@ describe('SpanStatsProcessor', () => {
   it('force flushes pending agent span statistics', () => {
     exporter.export.resetHistory()
     exporter.flush.resetHistory()
-    exporter.export.callsFake(() => {})
-    exporter.flush.callsFake(done => done())
+    exporter.export.callsFake((_payload, done) => done())
     const p = new SpanStatsProcessor(config)
     clearTimeout(p.timer)
     p.onSpanFinished(topLevelSpan)
@@ -676,11 +675,10 @@ describe('SpanStatsProcessor', () => {
     p.forceFlush(() => { flushed = true })
 
     assert.ok(exporter.export.calledOnce)
-    assert.ok(exporter.flush.calledOnce)
+    assert.ok(exporter.flush.notCalled)
     assert.ok(flushed)
     assert.strictEqual(p.buckets.size, 0)
     exporter.export.resetBehavior()
-    exporter.flush.resetBehavior()
   })
 
   it('joins an in-flight agent span statistics export during force flush', () => {
@@ -691,16 +689,16 @@ describe('SpanStatsProcessor', () => {
     p.onSpanFinished(topLevelSpan)
 
     let flushDone
-    exporter.flush.callsFake(done => { flushDone = done })
+    exporter.export.callsFake((_payload, done) => { flushDone = done })
     let flushed = false
     p.forceFlush(() => { flushed = true })
 
     assert.ok(exporter.export.calledOnce)
-    assert.ok(exporter.flush.calledOnce)
+    assert.ok(exporter.flush.notCalled)
     assert.strictEqual(flushed, false)
     flushDone()
     assert.strictEqual(flushed, true)
-    exporter.flush.resetBehavior()
+    exporter.export.resetBehavior()
   })
 
   it('should record spans when only OTLP is enabled', () => {

@@ -67,23 +67,23 @@ class DogStatsDClient {
     this._add(stat, value, TYPE_HISTOGRAM, tags)
   }
 
-  flush () {
+  flush (done) {
     const queue = this._enqueue()
 
-    if (queue.length === 0) return
+    if (queue.length === 0) return done?.()
 
     log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
     this._queue = []
 
     if (this._httpOptions) {
-      this._sendHttp(queue)
+      this._sendHttp(queue, done)
     } else {
-      this._sendUdp(queue)
+      this._sendUdp(queue, done)
     }
   }
 
-  _sendHttp (queue) {
+  _sendHttp (queue, done) {
     const buffer = Buffer.concat(queue)
     request(buffer, this._httpOptions, (err) => {
       if (err) {
@@ -95,32 +95,46 @@ class DogStatsDClient {
           // options. Either way, we can give UDP a try.
           this._httpOptions = undefined
         }
-        this._sendUdp(queue)
+        this._sendUdp(queue, done)
+      } else {
+        done?.()
       }
     })
   }
 
-  _sendUdp (queue) {
+  _sendUdp (queue, done) {
     // dgram resolves the local address via the instrumented dns.lookup when it
     // binds on first send; the noop store keeps that self-traffic off the trace.
     legacyStorage.run({ noop: true }, () => {
       if (this._family === 0) {
         this.#lookup(this._host, (error, address, family) => {
-          if (error) return log.error('DogStatsDClient: Host not found', error)
-          this._sendUdpFromQueue(queue, address, family)
+          if (error) {
+            log.error('DogStatsDClient: Host not found', error)
+            return done?.()
+          }
+          this._sendUdpFromQueue(queue, address, family, done)
         })
       } else {
-        this._sendUdpFromQueue(queue, this._host, this._family)
+        this._sendUdpFromQueue(queue, this._host, this._family, done)
       }
     })
   }
 
-  _sendUdpFromQueue (queue, address, family) {
+  _sendUdpFromQueue (queue, address, family, done) {
     const socket = family === 6 ? this._udp6 : this._udp4
+    let pending = queue.length
+    const complete = () => {
+      if (--pending === 0) done?.()
+    }
 
     for (const buffer of queue) {
       log.debug('Sending to DogStatsD: %s', buffer)
-      socket.send(buffer, 0, buffer.length, this._port, address)
+      try {
+        socket.send(buffer, 0, buffer.length, this._port, address, complete)
+      } catch (error) {
+        log.error('DogStatsDClient: UDP error sending metrics', error)
+        complete()
+      }
     }
   }
 
@@ -212,12 +226,12 @@ class MetricsAggregationClient {
     this.reset()
   }
 
-  flush () {
+  flush (done) {
     this._captureCounters()
     this._captureGauges()
     this._captureHistograms()
 
-    this._client.flush()
+    this._client.flush(done)
   }
 
   reset () {

@@ -13,6 +13,7 @@ const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS, initializeServerlessTelemetry } = require('./serverless')
+const { registerTelemetryFlusher } = require('./flush')
 const processTags = require('./process-tags')
 const { isTrue } = require('./util')
 const {
@@ -40,6 +41,8 @@ const OFFLINE_VALIDATION_EXPORTERS = new Set([
 const OPENFEATURE_STATE_NOOP = 0
 const OPENFEATURE_STATE_LAZY = 1
 const OPENFEATURE_STATE_ACTIVE = 2
+
+let unregisterRuntimeMetricsFlusher
 
 class LazyModule {
   constructor (provider) {
@@ -253,8 +256,11 @@ class Tracer extends NoopProxy {
         initializeOpenTelemetryMetrics(config)
       }
 
+      unregisterRuntimeMetricsFlusher?.()
+      unregisterRuntimeMetricsFlusher = undefined
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
+        unregisterRuntimeMetricsFlusher = registerTelemetryFlusher(done => runtimeMetrics.flush(done))
       }
 
       this.#updateTracing(config)

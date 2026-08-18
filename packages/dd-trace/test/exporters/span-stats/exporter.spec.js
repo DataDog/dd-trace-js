@@ -70,6 +70,22 @@ describe('span-stats exporter', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('waits for an in-flight export when the boundary flush fails', () => {
+    writer.flush = sinon.stub()
+    let inFlightDone
+    writer.flush.onFirstCall().callsFake(done => { inFlightDone = done })
+    writer.flush.onSecondCall().throws(new Error('encode failed'))
+    exporter = new Exporter({ url })
+    const done = sinon.spy()
+
+    exporter.export('in flight')
+    exporter.export('failed boundary', done)
+
+    sinon.assert.notCalled(done)
+    inFlightDone()
+    sinon.assert.calledOnce(done)
+  })
+
   it('should set url from config', () => {
     const url = new URL('http://0.0.0.0:1234')
 

@@ -47,6 +47,7 @@ describe('TracerProxy', () => {
   let NoopDogStatsDClient
   let OpenFeatureProvider
   let openfeatureProvider
+  let registerTelemetryFlusher
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -180,7 +181,10 @@ describe('TracerProxy', () => {
 
     runtimeMetrics = {
       start: sinon.spy(),
+      flush: sinon.spy(),
     }
+
+    registerTelemetryFlusher = sinon.stub().returns(() => {})
 
     profiler = {
       start: sinon.spy(),
@@ -272,6 +276,7 @@ describe('TracerProxy', () => {
       './serverless': {
         IS_SERVERLESS: false,
       },
+      './flush': { registerTelemetryFlusher },
     })
 
     proxy = new ProxyClass()
@@ -587,6 +592,16 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.called(runtimeMetrics.start)
+      })
+
+      it('registers the runtime metrics flush with the serverless lifecycle', () => {
+        config.runtimeMetrics.enabled = true
+        const done = sinon.spy()
+
+        proxy.init()
+        registerTelemetryFlusher.firstCall.args[0](done)
+
+        sinon.assert.calledOnceWithExactly(runtimeMetrics.flush, done)
       })
 
       it('should expose noop metrics methods prior to initialization', () => {

@@ -237,6 +237,17 @@ describe('dogstatsd', () => {
     sinon.assert.notCalled(log.debug)
   })
 
+  it('calls the flush callback after UDP accepts the metrics', (done) => {
+    udp4.send = sinon.stub().callsFake((...args) => args.at(-1)())
+    client = createDogStatsDClient()
+
+    client.gauge('test.avg', 1)
+    client.flush(() => {
+      sinon.assert.calledOnce(udp4.send)
+      done()
+    })
+  })
+
   it('logs the metric count and the UDP transport on a non-empty flush', () => {
     client = createDogStatsDClient()
 
@@ -388,6 +399,22 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
+  it('calls the flush callback after the HTTP proxy responds', (done) => {
+    client = createDogStatsDClient({
+      metricsProxyUrl: `http://localhost:${httpPort}`,
+    })
+
+    client.gauge('test.avg', 1)
+    client.flush(() => {
+      try {
+        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\n')
+        done()
+      } catch (error) {
+        done(error)
+      }
+    })
+  })
+
   it('should support HTTP via URL object', (done) => {
     assertData = () => {
       try {
@@ -444,13 +471,23 @@ describe('dogstatsd', () => {
       }
     })
 
-    statusCode = null
+    const request = sinon.stub().callsFake((buffer, options, callback) => {
+      callback(new Error('connection refused'))
+    })
+    const { DogStatsDClient: FailingDogStatsDClient } = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
+      dgram,
+      '../../datadog-core': datadogCore,
+      './exporters/common/docker': docker,
+      './exporters/common/request': request,
+      './log': log,
+    })
 
-    // host exists but port does not, ECONNREFUSED
-    client = createDogStatsDClient({
-      metricsProxyUrl: 'http://localhost:32700',
+    client = new FailingDogStatsDClient({
       host: 'localhost',
+      lookup: dns.lookup,
+      metricsProxyUrl: 'http://localhost:8126',
       port: 8125,
+      tags: [],
     })
 
     client.increment('test.foo', 10)
