@@ -29,9 +29,10 @@ const TRAILING_SLASHES = /\/+$/
  * `/info` endpoint returns an error through the shared request timeout and
  * retry policy. A valid response without a compatible path returns no route.
  * Discovery sends no events, so the caller can safely select direct intake
- * after either result. The caller also owns later delivery failures. It can
- * switch future batches after an ambiguous timeout or reset, but it must not
- * replay the current batch because the first receiver might have accepted it.
+ * after either result. The caller also owns later delivery failures. Exposure
+ * delivery uses retries and can therefore produce duplicates. After local
+ * retries fail, the caller can retry through direct intake and use that route
+ * for future batches.
  *
  * Reference implementations:
  *

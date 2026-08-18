@@ -424,11 +424,13 @@ describe('OpenFeature Exposures Writer', () => {
     })
 
     for (const [name, error, statusCode] of [
+      ['temporary DNS failure', Object.assign(new Error('getaddrinfo EAI_AGAIN'), { code: 'EAI_AGAIN' })],
       ['connection refusal', Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })],
       ['missing Unix socket', Object.assign(
         new Error('connect ENOENT /var/run/datadog/apm.socket'),
         { code: 'ENOENT' }
       )],
+      ['unresolvable hostname', Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' })],
       ['HTTP 403', Object.assign(new Error('Forbidden'), { status: 403 }), 403],
       ['HTTP 404', Object.assign(new Error('Not Found'), { status: 404 }), 404],
       ['HTTP 405', Object.assign(new Error('Method Not Allowed'), { status: 405 }), 405],
@@ -476,9 +478,10 @@ describe('OpenFeature Exposures Writer', () => {
 
     for (const [name, error, statusCode] of [
       ['connection reset', Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })],
+      ['broken pipe', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' })],
       ['timeout', Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' })],
     ]) {
-      it(`should switch future batches after ambiguous local ${name} without replaying the current batch`, async () => {
+      it(`should retry ambiguous local ${name} through direct intake and switch future batches`, async () => {
         const localUrl = new URL('http://serverless-init:8126')
         const directUrl = new URL('https://event-platform-intake.datadoghq.com')
         request.onFirstCall().yieldsAsync(error, null, statusCode)
@@ -501,14 +504,15 @@ describe('OpenFeature Exposures Writer', () => {
         writer.flush()
         await clock.tickAsync(0)
 
-        sinon.assert.calledOnce(request)
+        sinon.assert.calledTwice(request)
         assert.strictEqual(request.firstCall.args[1].url, localUrl)
+        assert.strictEqual(request.secondCall.args[1].url, directUrl)
 
         writer.append(exposureEvent)
         writer.flush()
 
-        sinon.assert.calledTwice(request)
-        assert.strictEqual(request.secondCall.args[1].url, directUrl)
+        sinon.assert.calledThrice(request)
+        assert.strictEqual(request.thirdCall.args[1].url, directUrl)
       })
     }
 

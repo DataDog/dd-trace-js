@@ -40,7 +40,8 @@ const log = require('../../log')
  * @returns {boolean} Whether direct retry is safe
  */
 function isDefinitiveRejection (error, statusCode) {
-  return error?.code === 'ECONNREFUSED' || error?.code === 'ENOENT' ||
+  return error?.code === 'EAI_AGAIN' || error?.code === 'ECONNREFUSED' ||
+    error?.code === 'ENOENT' || error?.code === 'ENOTFOUND' ||
     statusCode === 403 || statusCode === 404 || statusCode === 405
 }
 
@@ -48,10 +49,10 @@ function isDefinitiveRejection (error, statusCode) {
  * Tests whether a local route can have accepted an event batch before failing.
  *
  * @param {Error | null} error - Request error
- * @returns {boolean} Whether the current batch must not be replayed
+ * @returns {boolean} Whether the delivery result is ambiguous
  */
 function isAmbiguousNetworkFailure (error) {
-  return error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT'
+  return error?.code === 'ECONNRESET' || error?.code === 'EPIPE' || error?.code === 'ETIMEDOUT'
 }
 
 /**
@@ -257,7 +258,7 @@ class BaseFFEWriter {
   }
 
   /**
-   * Sends an encoded batch and retries it directly only after definitive rejection.
+   * Sends an encoded batch and retries it through direct intake after a local route failure.
    *
    * @param {string} payload - Encoded event batch
    * @param {number} eventCount - Event count
@@ -282,13 +283,15 @@ class BaseFFEWriter {
 
       if (fallbackRoute && isAmbiguousNetworkFailure(error)) {
         log.debug(
-          '%s switching future batches from %s%s to direct intake after ambiguous failure',
+          '%s retrying through direct intake and switching future batches from %s%s after ambiguous failure',
           this.constructor.name,
           route.url.href,
           route.endpoint
         )
         this.#activateRoute(fallbackRoute)
         this._fallbackRoute = undefined
+        this.#sendRequest(payload, eventCount, fallbackRoute)
+        return
       }
 
       if (error) {
