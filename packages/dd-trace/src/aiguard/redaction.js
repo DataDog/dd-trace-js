@@ -112,6 +112,7 @@ function resolveWritableString (root, path) {
 
 /**
  * Applies redaction replacements to an AI Guard message list.
+ * The input is never mutated.
  *
  * @param {Array<object>} messages
  * @param {unknown} replacements
@@ -126,6 +127,7 @@ function redactMessages (messages, replacements) {
     if (!Array.isArray(replacements)) {
       return { messages, redacted: false, failures: 1 }
     }
+    if (replacements.length === 0) return { messages, redacted: false, failures: 0 }
 
     const replacementsByPath = new Map()
     const conflictingPaths = new Set()

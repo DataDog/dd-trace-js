@@ -312,13 +312,16 @@ class EvaluationReporter {
     let remainingContentSize = this.#maxContentSize
     let truncated = false
     for (const part of content) {
-      if (typeof part.text !== 'string') continue
+      const text = part?.text
+      if (typeof text !== 'string') continue
 
-      if (part.text.length > remainingContentSize) {
-        part.text = part.text.slice(0, remainingContentSize)
+      if (text.length > remainingContentSize) {
+        part.text = text.slice(0, remainingContentSize)
         truncated = true
+        remainingContentSize = 0
+      } else {
+        remainingContentSize -= text.length
       }
-      remainingContentSize -= part.text.length
     }
     return truncated
   }

@@ -75,7 +75,7 @@ describe('AI Guard evaluation response', () => {
           action: 'DENY',
           reason: 'Sensitive data detected.',
           tags: ['prompt-injection'],
-          sds_findings: [{ category: 'email_address' }],
+          sds_findings: [{ category: 'email_address', matched_text: 'ops@acme.io' }],
           tag_probs: { 'prompt-injection': 0.9 },
           is_blocking_enabled: true,
           redaction_replacements: [
@@ -94,7 +94,7 @@ describe('AI Guard evaluation response', () => {
         reason: 'Sensitive data detected.',
         tags: ['prompt-injection'],
         tagProbabilities: { 'prompt-injection': 0.9 },
-        sds: [{ category: 'email_address' }],
+        sds: [{ category: 'email_address', matched_text: 'ops@acme.io' }],
         messages: [{ role: 'user', content: 'My SSN is <REDACTED>' }],
         redactionReplacements: [{ path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' }],
       },
@@ -106,6 +106,7 @@ describe('AI Guard evaluation response', () => {
         failures: 0,
       },
     })
+    assert.notStrictEqual(outcome.result.messages, messages)
     assert.strictEqual(messages[0].content, 'My SSN is 123-45-6789')
   })
 

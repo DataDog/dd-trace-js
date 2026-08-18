@@ -789,7 +789,7 @@ declare namespace tracer {
          */
         maxMessagesLength?: number,
         /**
-         * Whether AI Guard applies sensitive data redaction replacements.
+         * Whether AI Guard applies backend-provided sensitive-data redaction replacements.
          * @default true
          * @env DD_AI_GUARD_REDACTION_ENABLED
          * Programmatic configuration takes precedence over the environment variables listed above.

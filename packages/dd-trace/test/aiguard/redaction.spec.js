@@ -87,11 +87,25 @@ describe('AI Guard redaction', () => {
     assert.strictEqual(redacted[0].content, '')
   })
 
-  it('accepts zero-padded indexes in canonical paths', () => {
+  it('accepts zero-padded indexes', () => {
     const messages = [{ role: 'user', content: 'secret' }]
     const result = redactMessages(messages, [{ path: 'messages[00].content', replacement: '<REDACTED>' }])
 
     assert.deepStrictEqual(result.messages, [{ role: 'user', content: '<REDACTED>' }])
+    assert.strictEqual(result.redacted, true)
+    assert.strictEqual(result.failures, 0)
+  })
+
+  it('applies zero-padded aliases as independent raw paths', () => {
+    const messages = [{ role: 'user', content: 'secret' }]
+    const result = redactMessages(messages, [
+      { path: 'messages[0].content', replacement: '<A>' },
+      { path: 'messages[00].content', replacement: '<B>' },
+    ])
+
+    assert.notStrictEqual(result.messages, messages)
+    assert.strictEqual(result.messages[0].content, '<B>')
+    assert.strictEqual(messages[0].content, 'secret')
     assert.strictEqual(result.redacted, true)
     assert.strictEqual(result.failures, 0)
   })
@@ -163,7 +177,17 @@ describe('AI Guard redaction', () => {
     })
   })
 
-  it('fails safe when copying a message throws', () => {
+  it('returns the original messages for an empty replacement array', () => {
+    const messages = [{ role: 'user', content: 'secret' }]
+
+    const result = redactMessages(messages, [])
+
+    assert.strictEqual(result.messages, messages)
+    assert.strictEqual(result.redacted, false)
+    assert.strictEqual(result.failures, 0)
+  })
+
+  it('fails safe when cloning messages throws', () => {
     const message = { role: 'user' }
     Object.defineProperty(message, 'content', {
       enumerable: true,
@@ -176,6 +200,22 @@ describe('AI Guard redaction', () => {
     assert.deepStrictEqual(redactMessages(messages, [
       { path: 'messages[0].content', replacement: '<REDACTED>' },
     ]), { messages, redacted: false, failures: 1 })
+  })
+
+  it('fails safe when replacement preprocessing throws', () => {
+    const messages = [{ role: 'user', content: 'secret' }]
+    const replacements = new Proxy([{}], {
+      get (target, property, receiver) {
+        if (property === Symbol.iterator) throw new Error('unreadable')
+        return Reflect.get(target, property, receiver)
+      },
+    })
+
+    const result = redactMessages(messages, replacements)
+
+    assert.strictEqual(result.messages, messages)
+    assert.strictEqual(result.redacted, false)
+    assert.strictEqual(result.failures, 1)
   })
 
   for (const path of [
