@@ -332,10 +332,13 @@ interface Plugins {
 }
 
 type SpanTagScalar = string | number | boolean | Buffer | URL
+type ErrorMetaTag = 'error.type' | 'error.message' | 'error.stack'
 type SpanTagValueForKey<Key, Value> =
   [Key] extends ['error']
     ? Value extends Error ? Value : tracer.SpanTagValue<Value>
-    : tracer.SpanTagValue<Value>
+    : [Key] extends [ErrorMetaTag]
+      ? NonNullable<Value>
+      : tracer.SpanTagValue<Value>
 type TracerOptionsWithTags<Tags extends object> = Omit<tracer.TracerOptions, 'tags'> & {
   tags?: Tags & tracer.SpanTags<Tags>
 }
