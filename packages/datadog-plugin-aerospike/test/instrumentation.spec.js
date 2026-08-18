@@ -131,4 +131,25 @@ describe('packages/datadog-instrumentations/src/aerospike.js', () => {
     assert.equal(starts, 1)
     assert.equal(asyncStarts, 1)
   })
+
+  it('passes through callback helper calls without a callback', () => {
+    const Command = wrapCommandFactory(() => class FakeCommand {
+      constructor () {
+        this.args = ['arg']
+        this.client = { config: { hosts: '127.0.0.1:3000' } }
+      }
+
+      process () {}
+
+      executeWithCallback () {
+        return 'result'
+      }
+    })
+
+    const result = new Command().executeWithCallback()
+
+    assert.equal(result, 'result')
+    assert.equal(starts, 0)
+    assert.equal(asyncStarts, 0)
+  })
 })
