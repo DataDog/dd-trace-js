@@ -489,6 +489,43 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
       })
     })
 
+    it('does not attribute fulfillment callback errors to a successful query', async () => {
+      let parentSpan
+
+      return runServerlessContract({
+        agent,
+        tracer: meta.tracer,
+        operationName: 'supabase.database.query',
+        scenario: 'happy',
+        expectedSpan: {
+          name: 'supabase.database.query',
+          service: 'test',
+          resource: 'SELECT items',
+          type: 'sql',
+          meta: {
+            component: 'supabase',
+            'span.kind': 'client',
+            'db.type': 'postgres',
+            'db.name': 'public',
+            'db.operation': 'SELECT',
+            'out.host': 'project.supabase.co',
+          },
+          metrics: {},
+          error: 0,
+        },
+        run: () => {
+          parentSpan = meta.tracer.scope().active()
+          return testSetup.postgrestBuilderThenWithCallback(async () => {
+            assert.strictEqual(meta.tracer.scope().active(), parentSpan)
+            await Promise.resolve()
+            assert.strictEqual(meta.tracer.scope().active(), parentSpan)
+            throw new Error('Application callback failed')
+          })
+        },
+        shouldReject: true,
+      })
+    })
+
     it('should satisfy the serverless ownership contract (error path)', async () => {
       return runServerlessContract({
         agent,
