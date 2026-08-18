@@ -339,6 +339,7 @@
 /.github/workflows/mirror-image.yml @Datadog/lang-platform-js
 /.github/workflows/all-green.yml @Datadog/lang-platform-js
 /.github/workflows/audit.yml @DataDog/lang-platform-js
+/.github/workflows/dependabot-audit.yml @DataDog/lang-platform-js
 /.github/workflows/custom-node-version-dispatch.yml @Datadog/lang-platform-js
 /.github/workflows/dependabot-automation.yml @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
 /.github/workflows/flakiness.yml @DataDog/lang-platform-js
@@ -386,6 +387,7 @@
 /openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
 /.github/CODEOWNERS @DataDog/lang-platform-js
+/.github/audit-allowlist.json @DataDog/lang-platform-js
 /.github/dependabot.yml @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
 /.github/pull_request_template.md @DataDog/lang-platform-js
 /.github/vendored-dependencies.csv @DataDog/lang-platform-js
