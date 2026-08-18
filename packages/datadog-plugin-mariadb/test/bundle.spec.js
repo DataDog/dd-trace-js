@@ -460,6 +460,63 @@ describe('Plugin', () => {
           }
         })
 
+        it('keeps bundled pool acquisition tracking after acquire listeners are removed', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+          const rootName = 'bundle.promise.removed_acquire_listeners'
+          const sql = 'SELECT * FROM dd_missing_bundle_listener_probe'
+
+          try {
+            await pool.query('SELECT 1')
+            pool.on('removeListener', () => {})
+            pool.removeAllListeners('acquire')
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const trace = traces.find(trace => trace.some(span => span.name === rootName))
+              assert.ok(trace, `${rootName} trace has not flushed yet`)
+
+              const querySpan = trace.find(span => span.resource === sql)
+              assert.ok(querySpan, `missing query span: ${inspect(trace.map(span => span.resource))}`)
+              assert.strictEqual(typeof querySpan.metrics['mariadb.pool.wait_time'], 'number')
+              assert.strictEqual(trace.find(span => span.name === 'mariadb.pool.acquire'), undefined)
+            }, { spanResourceMatch: new RegExp(`^${rootName}$`) })
+
+            await assert.rejects(tracer.trace(rootName, () => pool.query(sql)))
+            await assertion
+          } finally {
+            await pool.end()
+          }
+        })
+
+        it('reports failed bundled promise cluster node acquisitions', async () => {
+          const cluster = mariadb.createPoolCluster({ canRetry: false })
+          const rootName = 'bundle.promise.cluster_acquire_failure'
+          cluster.add('failing', {
+            ...connectionOptions,
+            acquireTimeout: 500,
+            connectTimeout: 100,
+            host: '127.0.0.1',
+            minimumIdle: 0,
+            port: await getClosedPort(),
+          })
+
+          try {
+            const assertion = agent.assertSomeTraces(traces => {
+              const trace = traces.find(trace => trace.some(span => span.name === rootName))
+              assert.ok(trace, `${rootName} trace has not flushed yet`)
+
+              const acquireSpan = trace.find(span => span.name === 'mariadb.pool.acquire')
+              assert.ok(acquireSpan, `missing acquire span: ${inspect(trace.map(span => span.name))}`)
+              assert.strictEqual(acquireSpan.error, 1)
+              assert.strictEqual(typeof acquireSpan.metrics['mariadb.pool.wait_time'], 'number')
+            }, { spanResourceMatch: new RegExp(`^${rootName}$`) })
+
+            await assert.rejects(tracer.trace(rootName, () => cluster.of('failing').query('SELECT 36')))
+            await assertion
+          } finally {
+            await cluster.end()
+          }
+        })
+
         it('traces pool clusters, falsy selectors, and selected node metadata', async () => {
           const cluster = mariadb.createPoolCluster()
           cluster.add('primary', { ...connectionOptions, minimumIdle: 0 })
@@ -856,6 +913,58 @@ describe('Plugin', () => {
               pool.query('SELECT 35 AS bundle_closed_pool_acquire_failure', callback)
             })),
           ])
+        })
+
+        it('keeps bundled callback pool acquisition tracking after acquire listeners are removed', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+          const rootName = 'bundle.callback.removed_acquire_listeners'
+          const sql = 'SELECT * FROM dd_missing_callback_listener_probe'
+
+          try {
+            await callbackResult(callback => pool.query('SELECT 1', callback))
+            pool.removeAllListeners('acquire')
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const trace = traces.find(trace => trace.some(span => span.name === rootName))
+              assert.ok(trace, `${rootName} trace has not flushed yet`)
+
+              const querySpan = trace.find(span => span.resource === sql)
+              assert.ok(querySpan, `missing query span: ${inspect(trace.map(span => span.resource))}`)
+              assert.strictEqual(typeof querySpan.metrics['mariadb.pool.wait_time'], 'number')
+              assert.strictEqual(trace.find(span => span.name === 'mariadb.pool.acquire'), undefined)
+            }, { spanResourceMatch: new RegExp(`^${rootName}$`) })
+
+            await assert.rejects(tracer.trace(rootName, () => {
+              return callbackResult(callback => pool.query(sql, callback))
+            }))
+            await assertion
+          } finally {
+            await callbackResult(callback => pool.end(callback))
+          }
+        })
+
+        it('reports failed bundled callback cluster acquisitions without a matching node', async () => {
+          const cluster = mariadb.createPoolCluster({ canRetry: false })
+          const rootName = 'bundle.callback.cluster_acquire_failure'
+
+          try {
+            const assertion = agent.assertSomeTraces(traces => {
+              const trace = traces.find(trace => trace.some(span => span.name === rootName))
+              assert.ok(trace, `${rootName} trace has not flushed yet`)
+
+              const acquireSpan = trace.find(span => span.name === 'mariadb.pool.acquire')
+              assert.ok(acquireSpan, `missing acquire span: ${inspect(trace.map(span => span.name))}`)
+              assert.strictEqual(acquireSpan.error, 1)
+              assert.strictEqual(typeof acquireSpan.metrics['mariadb.pool.wait_time'], 'number')
+            }, { spanResourceMatch: new RegExp(`^${rootName}$`) })
+
+            await assert.rejects(tracer.trace(rootName, () => {
+              return callbackResult(callback => cluster.of('missing').query('SELECT 37', callback))
+            }))
+            await assertion
+          } finally {
+            await callbackResult(callback => cluster.end(callback))
+          }
         })
 
         it('traces pool clusters and uses selected node metadata', async () => {

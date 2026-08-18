@@ -335,13 +335,35 @@ function finishExplicitPoolAcquisition (acquisition, error) {
 }
 
 /**
- * Observes the public acquire event forwarded by a bundled pool.
+ * Restores the acquisition observer if application listener cleanup removed it.
+ *
+ * @param {object} pool
+ * @param {Function} observer
+ * @returns {void}
+ */
+function restorePoolAcquisitionObserver (pool, observer) {
+  const listeners = pool.listeners('acquire')
+  for (const listener of listeners) {
+    if (listener === observer) return
+  }
+  pool.prependListener('acquire', observer)
+}
+
+/**
+ * Observes public acquire events forwarded by a bundled pool.
  *
  * @param {object} pool
  * @returns {void}
  */
 function observePoolAcquisitions (pool) {
-  pool.prependListener('acquire', () => recordPoolAcquisition(pool))
+  const observer = () => recordPoolAcquisition(pool)
+  pool.prependListener('acquire', observer)
+
+  shimmer.wrap(pool, 'removeAllListeners', removeAllListeners => function (event) {
+    const result = removeAllListeners.apply(this, arguments)
+    if (event === undefined || event === 'acquire') restorePoolAcquisitionObserver(pool, observer)
+    return result
+  })
 }
 
 /**
@@ -1134,6 +1156,53 @@ function runClusterGetConnection (getConnection, receiver, args) {
 }
 
 /**
+ * Reports a failed bundled cluster node acquisition.
+ *
+ * @param {ClusterSelection} selection
+ * @param {number | undefined} start
+ * @param {unknown} error
+ * @returns {void}
+ */
+function reportBundledClusterAcquireError (selection, start, error) {
+  if (!acquireStartCh.hasSubscribers) return
+  reportPoolAcquireError(start, error, { conf: selection.options ?? emptyOptions }, poolAcquireChannels)
+}
+
+/**
+ * Restores promise caller context and reports a failed bundled cluster node acquisition.
+ *
+ * @param {object} ctx
+ * @param {ClusterSelection} selection
+ * @param {number | undefined} start
+ * @param {unknown} error
+ * @throws {unknown} The connection acquisition error.
+ */
+function finishPromiseClusterGetConnectionError (ctx, selection, start, error) {
+  return connectionFinishCh.runStores(ctx, () => {
+    reportBundledClusterAcquireError(selection, start, error)
+    throw error
+  })
+}
+
+/**
+ * Restores callback caller context and finishes a bundled cluster acquisition.
+ *
+ * @param {ClusterSelection} selection
+ * @param {number | undefined} start
+ * @param {Function} callback
+ * @param {unknown} receiver
+ * @param {ArgumentsLike} args
+ * @returns {unknown}
+ */
+function finishCallbackClusterGetConnection (selection, start, callback, receiver, args) {
+  const error = args[0]
+  const connection = args[1]
+  if (error) reportBundledClusterAcquireError(selection, start, error)
+  if (connection) wrapCallbackConnection(connection, selection.options ?? emptyOptions)
+  return callback.apply(receiver, args)
+}
+
+/**
  * Wraps promise connections acquired from a bundled pool cluster.
  *
  * @param {ClusterSelectionStorage} selectionStorage
@@ -1145,6 +1214,7 @@ function createWrapPromiseClusterGetConnection (selectionStorage) {
       const ctx = {}
       /** @type {ClusterSelection} */
       const selection = {}
+      const start = acquireStartCh.hasSubscribers ? performance.now() : undefined
 
       connectionStartCh.publish(ctx)
 
@@ -1158,7 +1228,7 @@ function createWrapPromiseClusterGetConnection (selectionStorage) {
 
       return result.then(
         connection => finishPromiseGetConnection(ctx, connection, selection.options ?? emptyOptions),
-        error => finishPromiseGetConnectionError(ctx, error)
+        error => finishPromiseClusterGetConnectionError(ctx, selection, start, error)
       )
     }
   }
@@ -1179,10 +1249,18 @@ function createWrapCallbackClusterGetConnection (selectionStorage) {
       const ctx = {}
       /** @type {ClusterSelection} */
       const selection = {}
+      const start = acquireStartCh.hasSubscribers ? performance.now() : undefined
       arguments[arguments.length - 1] = function () {
-        const connection = arguments[1]
-        if (connection) wrapCallbackConnection(connection, selection.options ?? emptyOptions)
-        return connectionFinishCh.runStores(ctx, callback, this, ...arguments)
+        return connectionFinishCh.runStores(
+          ctx,
+          finishCallbackClusterGetConnection,
+          undefined,
+          selection,
+          start,
+          callback,
+          this,
+          arguments
+        )
       }
 
       connectionStartCh.publish(ctx)
