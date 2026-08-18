@@ -220,7 +220,8 @@ describe('PrioritySampler', () => {
     it('should normalize an unknown HTTP method before rule matching under OTel semantics', () => {
       context._tags['http.method'] = 'PROPFIND'
       context._tags['http.route'] = '/'
-      delete context._tags['resource.name']
+      context._tags['resource.name'] = 'PROPFIND /'
+      context._tags[INSTRUMENTATION_HTTP_RESOURCE] = 'PROPFIND /'
       prioritySampler = new PrioritySampler(
         'test',
         {
@@ -240,7 +241,8 @@ describe('PrioritySampler', () => {
     it('should not use the URI path as an early server resource', () => {
       context._tags['http.method'] = 'GET'
       context._tags['http.url'] = 'http://localhost:7777/make_distant_call?url=http://weblog:7777/'
-      delete context._tags['resource.name']
+      context._tags['resource.name'] = 'GET'
+      context._tags[INSTRUMENTATION_HTTP_RESOURCE] = 'GET'
       prioritySampler = new PrioritySampler(
         'test',
         {
@@ -290,6 +292,23 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._sampling.priority, USER_KEEP)
     })
 
+    it('should preserve an untagged manual span that only has an HTTP method', () => {
+      context._tags['http.method'] = 'GET'
+      delete context._tags['resource.name']
+      delete context._tags.resource
+      prioritySampler = new PrioritySampler(
+        'test',
+        { sampleRate: 1 },
+        { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      )
+
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._tags['resource.name'], undefined)
+      assert.strictEqual(context._tags[INSTRUMENTATION_HTTP_RESOURCE], undefined)
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+    })
+
     for (const resource of ['GET /custom', 'GET checkout']) {
       it(`should preserve a manually assigned method-prefixed resource before sampling: ${resource}`, () => {
         context._tags['http.method'] = 'GET'
@@ -330,7 +349,8 @@ describe('PrioritySampler', () => {
 
     it('should refresh an early normalization after the route resolves and before deciding', () => {
       context._tags['http.method'] = 'GET'
-      delete context._tags['resource.name']
+      context._tags['resource.name'] = 'GET'
+      context._tags[INSTRUMENTATION_HTTP_RESOURCE] = 'GET'
       prioritySampler = new PrioritySampler(
         'test',
         { sampleRate: 0, rules: [{ sampleRate: 1, resource: 'GET /users/:id' }] },
