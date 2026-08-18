@@ -892,11 +892,8 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     }
   })
 
-  it('derives naming schemas from their complete coordinates', () => {
+  it('derives AWS SDK naming schemas from their complete coordinates', () => {
     const awsSchemas = inspect(runRepositoryTool, 'aws-sdk').registrations.schemas
-    const apolloSchemas = inspect(runRepositoryTool, 'apollo').registrations.schemas
-    const graphqlSchemas = inspect(runRepositoryTool, 'graphql').registrations.schemas
-    const cosmosSchemas = inspect(runRepositoryTool, 'azure-cosmos').registrations.schemas
 
     assert.deepStrictEqual(new Set(awsSchemas.map(source => source.replace(/:\d+$/, ''))), new Set([
       'packages/dd-trace/src/service-naming/schemas/v0/messaging.js',
@@ -904,16 +901,31 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
       'packages/dd-trace/src/service-naming/schemas/v1/messaging.js',
       'packages/dd-trace/src/service-naming/schemas/v1/web.js',
     ]))
+  })
+
+  it('derives Apollo naming schemas from their complete coordinates', () => {
+    const apolloSchemas = inspect(runRepositoryTool, 'apollo').registrations.schemas
+
     assert.strictEqual(apolloSchemas.length, 12)
     assert.deepStrictEqual(new Set(apolloSchemas.map(source => source.replace(/:\d+$/, ''))), new Set([
       'packages/dd-trace/src/service-naming/schemas/v0/web.js',
       'packages/dd-trace/src/service-naming/schemas/v1/web.js',
     ]))
+  })
+
+  it('derives GraphQL naming schemas from their complete coordinates', () => {
+    const graphqlSchemas = inspect(runRepositoryTool, 'graphql').registrations.schemas
+
     assert.strictEqual(graphqlSchemas.length, 4)
     assert.deepStrictEqual(new Set(graphqlSchemas.map(source => source.replace(/:\d+$/, ''))), new Set([
       'packages/dd-trace/src/service-naming/schemas/v0/graphql.js',
       'packages/dd-trace/src/service-naming/schemas/v1/graphql.js',
     ]))
+  })
+
+  it('omits naming schemas without complete coordinates', () => {
+    const cosmosSchemas = inspect(runRepositoryTool, 'azure-cosmos').registrations.schemas
+
     assert.deepStrictEqual(cosmosSchemas, [])
   })
 
