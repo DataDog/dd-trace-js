@@ -60,6 +60,21 @@ describe('span-stats exporter', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('waits for an encoder-triggered export during flush', () => {
+    exporter = new Exporter({ url })
+    const onFlush = Writer.firstCall.args[0].onFlush
+    let automaticDone
+    onFlush(done => { automaticDone = done })
+    writer.flush = sinon.stub().callsFake(done => done())
+    const done = sinon.spy()
+
+    exporter.flush(done)
+
+    sinon.assert.notCalled(done)
+    automaticDone()
+    sinon.assert.calledOnce(done)
+  })
+
   it('does not retain a failed writer flush', () => {
     writer.flush = sinon.stub()
     writer.flush.onFirstCall().throws(new Error('encode failed'))
@@ -96,7 +111,7 @@ describe('span-stats exporter', () => {
     exporter = new Exporter({ url })
 
     assert.strictEqual(exporter._url.toString(), url.toString())
-    sinon.assert.calledWith(Writer, {
+    sinon.assert.calledWithMatch(Writer, {
       url: exporter._url,
     })
   })

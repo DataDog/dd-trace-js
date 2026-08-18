@@ -8,7 +8,7 @@ class SpanStatsExporter {
 
   constructor (config) {
     this._url = config.url
-    this._writer = new Writer({ url: this._url })
+    this._writer = new Writer({ url: this._url, onFlush: this.#trackWriterFlush.bind(this) })
   }
 
   export (payload, done) {
@@ -50,7 +50,23 @@ class SpanStatsExporter {
       for (const callback of flush.callbacks) callback()
     }
     try {
-      this._writer.flush(complete)
+      const flushWriter = this._writer.flushDirect ?? this._writer.flush
+      flushWriter.call(this._writer, complete)
+    } catch (error) {
+      complete()
+      throw error
+    }
+  }
+
+  #trackWriterFlush (flush, done) {
+    const activeFlush = { callbacks: done ? [done] : [] }
+    this.#activeFlushes.add(activeFlush)
+    const complete = () => {
+      this.#activeFlushes.delete(activeFlush)
+      for (const callback of activeFlush.callbacks) callback()
+    }
+    try {
+      flush(complete)
     } catch (error) {
       complete()
       throw error

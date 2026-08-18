@@ -663,6 +663,27 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(p.buckets.size, 0)
   })
 
+  it('snapshots prior OTLP exports before starting the boundary export', () => {
+    let priorDone
+    let exportDone
+    const exporter = {
+      flush: sinon.stub().callsFake(done => { priorDone = done }),
+      export: sinon.stub().callsFake((_drained, _bucketSizeNs, done) => { exportDone = done }),
+    }
+    const p = new SpanStatsProcessor(config, exporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    const done = sinon.spy()
+
+    p.forceFlush(done)
+
+    sinon.assert.callOrder(exporter.flush, exporter.export)
+    exportDone()
+    sinon.assert.notCalled(done)
+    priorDone()
+    sinon.assert.calledOnce(done)
+  })
+
   it('force flushes pending agent span statistics', () => {
     exporter.export.resetHistory()
     exporter.flush.resetHistory()

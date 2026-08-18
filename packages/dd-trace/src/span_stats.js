@@ -262,10 +262,18 @@ class SpanStatsProcessor {
         ProcessTags: processTags.serialized,
       }, done)
     } else if (this.otlpExporter && drained.length > 0) {
-      this.otlpExporter.export(drained, this.bucketSizeNs, () => {
-        if (typeof this.otlpExporter.flush === 'function') this.otlpExporter.flush(done)
-        else done?.()
-      })
+      if (typeof this.otlpExporter.flush === 'function' && done) {
+        // Snapshot requests already in flight before starting this boundary
+        // export, so a later invocation cannot extend this lifecycle barrier.
+        let pending = 2
+        const complete = () => {
+          if (--pending === 0) done()
+        }
+        this.otlpExporter.flush(complete)
+        this.otlpExporter.export(drained, this.bucketSizeNs, complete)
+      } else {
+        this.otlpExporter.export(drained, this.bucketSizeNs, done)
+      }
     } else if (this.otlpExporter) {
       if (typeof this.otlpExporter.flush === 'function') this.otlpExporter.flush(done)
       else done?.()

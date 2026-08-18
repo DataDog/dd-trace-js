@@ -8,17 +8,20 @@ const log = require('./log')
 
 /** @type {Set<TelemetryFlusher>} */
 const telemetryFlushers = new Set()
+const postTraceTelemetryFlushers = new Set()
 
 /**
  * Registers a configured telemetry pipeline so serverless lifecycle retention
  * waits for its final export alongside trace delivery.
  * @param {TelemetryFlusher} flusher
+ * @param {{ afterTrace?: boolean }} [options]
  * @returns {() => void} Removes this pipeline when its provider is replaced.
  */
-function registerTelemetryFlusher (flusher) {
-  telemetryFlushers.add(flusher)
+function registerTelemetryFlusher (flusher, options) {
+  const flushers = options?.afterTrace ? postTraceTelemetryFlushers : telemetryFlushers
+  flushers.add(flusher)
   // Avoid retaining a replaced provider or flushing it alongside the new one.
-  return () => telemetryFlushers.delete(flusher)
+  return () => flushers.delete(flusher)
 }
 
 /**
@@ -35,7 +38,7 @@ function flushAll (tracer, done, options) {
   const traceFlusher = traceExporter?.flush
   const spanStatsFlusher = tracer?._processor?._stats?.forceFlush
   // TODO: Include DSM after DataStreamsProcessor exposes a completion-aware flush API.
-  let pending = telemetryFlushers.size +
+  let pending = telemetryFlushers.size + postTraceTelemetryFlushers.size +
     (typeof traceFlusher === 'function' ? 1 : 0) +
     (typeof spanStatsFlusher === 'function' ? 1 : 0)
   let completed = false
@@ -59,12 +62,13 @@ function flushAll (tracer, done, options) {
     }, options.timeout)
   }
 
-  const flush = flusher => {
+  const flush = (flusher, afterFlushed) => {
     let flushed = false
     const onFlushed = error => {
       if (flushed) return
       flushed = true
       if (error) log.error('Error flushing telemetry pipeline:', error)
+      afterFlushed?.()
       complete()
     }
     try {
@@ -76,7 +80,11 @@ function flushAll (tracer, done, options) {
   }
 
   if (typeof traceFlusher === 'function') {
-    flush(done => traceFlusher.call(traceExporter, done))
+    flush(done => traceFlusher.call(traceExporter, done), () => {
+      for (const flusher of postTraceTelemetryFlushers) flush(flusher)
+    })
+  } else {
+    for (const flusher of postTraceTelemetryFlushers) flush(flusher)
   }
   if (typeof spanStatsFlusher === 'function') {
     flush(done => spanStatsFlusher.call(tracer._processor._stats, done))

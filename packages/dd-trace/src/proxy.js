@@ -265,7 +265,10 @@ class Tracer extends NoopProxy {
       unregisterRuntimeMetricsFlusher = undefined
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
-        unregisterRuntimeMetricsFlusher = registerTelemetryFlusher(done => runtimeMetrics.flush(done))
+        // Agent trace response metrics are recorded asynchronously, so drain
+        // runtime metrics after the trace export has completed.
+        unregisterRuntimeMetricsFlusher = registerTelemetryFlusher(
+          done => runtimeMetrics.flush(done), { afterTrace: true })
       }
 
       this.#updateTracing(config)

@@ -8,6 +8,7 @@ const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
 const { entityId } = require('./exporters/common/docker')
+const { registerTelemetryFlusher } = require('./flush')
 
 const legacyStorage = storage('legacy')
 
@@ -406,6 +407,7 @@ class CustomMetrics {
     setInterval(flush, 10 * 1000).unref?.()
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush)
+    registerTelemetryFlusher(done => this.flush(done))
   }
 
   increment (stat, value = 1, tags) {
@@ -428,8 +430,8 @@ class CustomMetrics {
     this.#client.histogram(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
-  flush () {
-    return this.#client.flush()
+  flush (done) {
+    return this.#client.flush(done)
   }
 
   /**

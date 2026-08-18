@@ -70,6 +70,23 @@ describe('Tracer', () => {
       unregister()
     })
 
+    it('flushes post-trace telemetry after the trace exporter completes', () => {
+      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      let traceDone
+      const tracer = { _exporter: { flush: sinon.stub().callsFake(done => { traceDone = done }) } }
+      const runtimeMetricsFlusher = sinon.stub().callsFake(done => done())
+      const unregister = registerTelemetryFlusher(runtimeMetricsFlusher, { afterTrace: true })
+      const done = sinon.spy()
+
+      flushAll(tracer, done)
+
+      sinon.assert.notCalled(runtimeMetricsFlusher)
+      traceDone()
+      sinon.assert.calledOnce(runtimeMetricsFlusher)
+      sinon.assert.calledOnce(done)
+      unregister()
+    })
+
     it('flushes registered telemetry pipelines without a trace exporter', () => {
       const { flushAll, registerTelemetryFlusher } = require('../src/flush')
       const telemetryFlusher = sinon.stub().callsFake(done => done())

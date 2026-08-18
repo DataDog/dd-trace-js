@@ -32,6 +32,7 @@ describe('dogstatsd', () => {
   let assertData
   let docker
   let log
+  let registerTelemetryFlusher
 
   beforeEach((done) => {
     udp6 = {
@@ -74,10 +75,12 @@ describe('dogstatsd', () => {
 
     docker = {}
     log = { debug: sinon.stub(), error: sinon.stub() }
+    registerTelemetryFlusher = sinon.stub()
 
     const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
       dgram,
       '../../datadog-core': datadogCore,
+      './flush': { registerTelemetryFlusher },
       './exporters/common/docker': docker,
       './log': log,
     })
@@ -518,6 +521,18 @@ describe('dogstatsd', () => {
   })
 
   describe('CustomMetrics', () => {
+    it('registers its aggregated metrics flush with the telemetry lifecycle', () => {
+      udp4.send = sinon.stub().callsFake((_buffer, _offset, _length, _port, _host, done) => done())
+      client = createCustomMetrics()
+      client.gauge('test.avg', 10)
+      const done = sinon.spy()
+
+      registerTelemetryFlusher.firstCall.args[0](done)
+
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnce(udp4.send)
+    })
+
     it('.gauge()', () => {
       client = createCustomMetrics()
 
