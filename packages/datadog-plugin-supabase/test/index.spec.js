@@ -25,6 +25,7 @@ async function runServerlessContract ({
   operationName,
   scenario,
   expectedSpan,
+  expectedThrown,
   run,
   shouldReject = false,
 }) {
@@ -87,6 +88,9 @@ async function runServerlessContract ({
 
   assert.strictEqual(ownershipVerified, true, 'span ownership must match the serverless route')
   assert.strictEqual(returnBehaviorPreserved, true, 'instrumentation must preserve return behavior')
+  if (expectedThrown) {
+    assert.strictEqual(thrown, expectedThrown, 'instrumentation must preserve the caller-visible error')
+  }
   assertObjectContains(operationSpan, expectedSpan)
 
   recordServerlessEvidence({
@@ -520,6 +524,49 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
             await Promise.resolve()
             assert.strictEqual(meta.tracer.scope().active(), parentSpan)
             throw new Error('Application callback failed')
+          })
+        },
+        shouldReject: true,
+      })
+    })
+
+    it('does not attribute rejection callback errors to a failed query', async () => {
+      let parentSpan
+      const applicationError = new Error('Application rejection callback failed')
+
+      return runServerlessContract({
+        agent,
+        tracer: meta.tracer,
+        operationName: 'supabase.database.query',
+        scenario: 'error',
+        expectedSpan: {
+          name: 'supabase.database.query',
+          service: 'test',
+          resource: 'SELECT items',
+          type: 'sql',
+          meta: {
+            component: 'supabase',
+            'span.kind': 'client',
+            'db.type': 'postgres',
+            'db.name': 'public',
+            'db.operation': 'SELECT',
+            'out.host': 'project.supabase.co',
+            'error.type': 'Error',
+            'error.message': 'Supabase request failed',
+            'error.stack': ANY_STRING,
+          },
+          metrics: {},
+          error: 1,
+        },
+        expectedThrown: applicationError,
+        run: () => {
+          parentSpan = meta.tracer.scope().active()
+          return testSetup.postgrestBuilderThenWithRejectionCallback(async (error) => {
+            assert.strictEqual(error.message, 'Supabase request failed')
+            assert.strictEqual(meta.tracer.scope().active(), parentSpan)
+            await Promise.resolve()
+            assert.strictEqual(meta.tracer.scope().active(), parentSpan)
+            throw applicationError
           })
         },
         shouldReject: true,
