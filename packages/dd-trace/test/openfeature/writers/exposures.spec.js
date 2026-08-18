@@ -348,7 +348,7 @@ describe('OpenFeature Exposures Writer', () => {
       const [payload, options] = request.getCall(0).args
 
       assert.strictEqual(options.method, 'POST')
-      assert.strictEqual(options.retry, false)
+      assert.strictEqual(options.retry, true)
       assert.match(options.path, /\/evp_proxy\/v2\//)
       assert.strictEqual(options.headers['Content-Type'], 'application/json')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
@@ -417,7 +417,7 @@ describe('OpenFeature Exposures Writer', () => {
       const [, options] = request.getCall(0).args
       assert.strictEqual(options.url, url)
       assert.strictEqual(options.path, '/api/v2/exposures')
-      assert.strictEqual(options.retry, false)
+      assert.strictEqual(options.retry, true)
       assert.strictEqual(options.agent, agent)
       assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], undefined)
