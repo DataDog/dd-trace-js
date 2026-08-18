@@ -7,6 +7,7 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 const tagsExt = require('../../../../../ext/tags')
+const { HTTP_STATUS_ERROR } = require('../../../src/plugins/util/http-otel-semantics')
 
 const ERROR = tagsExt.ERROR
 const HTTP_CLIENT_IP = tagsExt.HTTP_CLIENT_IP
@@ -398,6 +399,26 @@ describe('plugins/util/web', () => {
       web.addStatusError(req, 500)
 
       assert.ok(!(ERROR in tags))
+    })
+
+    it('should record when a custom validator causes a successful status error', () => {
+      config.DD_TRACE_OTEL_SEMANTICS_ENABLED = true
+      config.validateStatus = () => false
+
+      web.addStatusError(req, 200)
+
+      assert.strictEqual(tags[ERROR], true)
+      assert.strictEqual(tags[HTTP_STATUS_ERROR], 'true')
+    })
+
+    it('should not assign status provenance to an existing manual error', () => {
+      config.DD_TRACE_OTEL_SEMANTICS_ENABLED = true
+      config.validateStatus = () => false
+      span.setTag(ERROR, true)
+
+      web.addStatusError(req, 200)
+
+      assert.strictEqual(tags[HTTP_STATUS_ERROR], undefined)
     })
   })
 

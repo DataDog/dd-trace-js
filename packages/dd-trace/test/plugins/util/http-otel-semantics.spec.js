@@ -2,9 +2,32 @@
 
 const assert = require('node:assert/strict')
 
-const { applyHttpOtelSemantics, decomposeServerUrl } = require('../../../src/plugins/util/http-otel-semantics')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  applyHttpOtelSemantics,
+  decomposeServerUrl,
+  runHttpRequestHook,
+} = require('../../../src/plugins/util/http-otel-semantics')
 
 describe('http-otel-semantics', () => {
+  describe('runHttpRequestHook', () => {
+    it('does not read span tags when OTel semantics are disabled', () => {
+      const span = {
+        context: () => {
+          throw new Error('context must not be read')
+        },
+      }
+      let received
+
+      runHttpRequestHook(span, (hookSpan, arg1, arg2) => {
+        received = [hookSpan, arg1, arg2]
+      }, 'request', 'response')
+
+      assert.deepStrictEqual(received, [span, 'request', 'response'])
+    })
+  })
+
   describe('decomposeServerUrl', () => {
     it('splits scheme, address, port, path, and query', () => {
       assert.deepStrictEqual(
@@ -171,6 +194,16 @@ describe('http-otel-semantics', () => {
       assert.deepStrictEqual(meta, { 'span.kind': 'client', 'db.system': 'redis' })
     })
 
+    it('removes internal provenance when a hook cleared the HTTP attributes', () => {
+      const { meta } = run({
+        'span.kind': 'server',
+        [INSTRUMENTATION_HTTP_RESOURCE]: 'GET',
+        [HTTP_STATUS_ERROR]: 'true',
+      })
+
+      assert.deepStrictEqual(meta, { 'span.kind': 'server' })
+    })
+
     it('normalizes an unknown HTTP method to _OTHER and preserves the original', () => {
       const { meta } = run({ 'span.kind': 'server', 'http.method': 'PROPFIND', 'http.url': 'http://h/p' })
 
@@ -231,6 +264,7 @@ describe('http-otel-semantics', () => {
         error: 0,
         resource: 'PROPFIND /p',
       }
+      serverSpan.meta[INSTRUMENTATION_HTTP_RESOURCE] = serverSpan.resource
       applyHttpOtelSemantics(serverSpan)
       assert.strictEqual(serverSpan.resource, 'HTTP')
 
@@ -240,6 +274,7 @@ describe('http-otel-semantics', () => {
         error: 0,
         resource: 'PROPFIND',
       }
+      clientSpan.meta[INSTRUMENTATION_HTTP_RESOURCE] = clientSpan.resource
       applyHttpOtelSemantics(clientSpan)
       assert.strictEqual(clientSpan.resource, 'HTTP')
     })
@@ -251,6 +286,7 @@ describe('http-otel-semantics', () => {
         error: 0,
         resource: 'GET /not/a/route',
       }
+      span.meta[INSTRUMENTATION_HTTP_RESOURCE] = span.resource
       applyHttpOtelSemantics(span)
       assert.strictEqual(span.resource, 'GET')
     })
@@ -267,6 +303,7 @@ describe('http-otel-semantics', () => {
         error: 0,
         resource: 'GET',
       }
+      span.meta[INSTRUMENTATION_HTTP_RESOURCE] = span.resource
       applyHttpOtelSemantics(span)
       assert.strictEqual(span.resource, 'GET /users/{id}')
     })
@@ -289,25 +326,26 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(span.resource, 'checkout-custom')
     })
 
-    it('preserves a method-prefixed resource marked as user-defined by a request hook', () => {
-      const span = {
-        meta: {
-          'span.kind': 'server',
-          'http.method': 'GET',
-          'http.route': '/users/{id}',
-          'http.url': 'http://h/users/1',
-          '_dd.otel.resource_set_by_user': 'true',
-        },
-        metrics: {},
-        error: 0,
-        resource: 'GET /products',
-      }
+    for (const resource of ['GET /custom', 'GET checkout']) {
+      it(`preserves a manually assigned method-prefixed resource: ${resource}`, () => {
+        const span = {
+          meta: {
+            'span.kind': 'server',
+            'http.method': 'GET',
+            'http.route': '/users/{id}',
+            'http.url': 'http://h/users/1',
+            [INSTRUMENTATION_HTTP_RESOURCE]: 'GET',
+          },
+          metrics: {},
+          error: 0,
+          resource,
+        }
 
-      applyHttpOtelSemantics(span)
+        applyHttpOtelSemantics(span)
 
-      assert.strictEqual(span.resource, 'GET /products')
-      assert.ok(!Object.hasOwn(span.meta, '_dd.otel.resource_set_by_user'))
-    })
+        assert.strictEqual(span.resource, resource)
+      })
+    }
 
     // Whether an HTTP status makes the span an error is decided at capture time,
     // from the configured error-status ranges (see http-error-statuses.js). Trace
@@ -316,7 +354,13 @@ describe('http-otel-semantics', () => {
     // `error` itself.
     it('derives error.type from the error the span already carries', () => {
       const errored = run(
-        { 'span.kind': 'server', 'http.method': 'GET', 'http.status_code': '503', 'http.url': 'http://h/p' },
+        {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.status_code': '503',
+          'http.url': 'http://h/p',
+          [HTTP_STATUS_ERROR]: 'true',
+        },
         {},
         1
       )
@@ -345,6 +389,33 @@ describe('http-otel-semantics', () => {
         )
         assert.strictEqual(span.meta['error.type'], status)
       }
+    })
+
+    it('sets error.type for a successful status when a validator caused the error', () => {
+      const span = run(
+        {
+          'span.kind': 'client',
+          'http.method': 'GET',
+          'http.status_code': '200',
+          'http.url': 'http://h/p',
+          [HTTP_STATUS_ERROR]: 'true',
+        },
+        {},
+        1
+      )
+
+      assert.strictEqual(span.meta['error.type'], '200')
+      assert.ok(!Object.hasOwn(span.meta, HTTP_STATUS_ERROR))
+    })
+
+    it('does not describe a manual error on a successful response as a status error', () => {
+      const span = run(
+        { 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '200', 'http.url': 'http://h/p' },
+        {},
+        1
+      )
+
+      assert.ok(!Object.hasOwn(span.meta, 'error.type'))
     })
 
     it('emits the status code verbatim, without reparsing it', () => {

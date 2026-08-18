@@ -106,12 +106,14 @@ function validHttpStatus (value) {
 }
 
 function httpStatusCode (span) {
-  const candidates = [
-    span.meta[HTTP_STATUS_CODE],
-    span.meta['http.response.status_code'],
-    span.metrics?.['http.response.status_code'],
-  ]
-  return candidates.find(validHttpStatus) ?? 0
+  const legacyStatus = span.meta[HTTP_STATUS_CODE]
+  if (validHttpStatus(legacyStatus)) return legacyStatus
+
+  const otelMetaStatus = span.meta['http.response.status_code']
+  if (validHttpStatus(otelMetaStatus)) return otelMetaStatus
+
+  const otelMetricStatus = span.metrics?.['http.response.status_code']
+  return validHttpStatus(otelMetricStatus) ? otelMetricStatus : 0
 }
 
 class SpanAggKey {

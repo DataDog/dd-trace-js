@@ -178,6 +178,36 @@ describe('SpanAggKey', () => {
     assert.strictEqual(key.statusCode, '500')
   })
 
+  it('should preserve legacy-first HTTP status precedence', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_STATUS_CODE]: '201',
+        'http.response.status_code': '202',
+      },
+      metrics: {
+        'http.response.status_code': 203,
+      },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, '201')
+  })
+
+  it('should prefer OTel meta status over the metric fallback', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_STATUS_CODE]: 'invalid',
+        'http.response.status_code': '202',
+      },
+      metrics: {
+        'http.response.status_code': 203,
+      },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, '202')
+  })
+
   it('should include HTTP method and endpoint in aggregation key', () => {
     const span = {
       ...basicSpan,

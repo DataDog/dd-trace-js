@@ -21,7 +21,7 @@ const { setSamplingRules } = require('./startup-log')
 const SamplingRule = require('./sampling_rule')
 const { formatKnuthRate } = require('./util')
 const {
-  isInstrumentationHttpResource,
+  INSTRUMENTATION_HTTP_RESOURCE,
   otelHttpResourceName,
 } = require('./plugins/util/http-otel-semantics')
 
@@ -117,17 +117,22 @@ class PrioritySampler {
     const root = context._trace.started[0]
 
     const rootContext = root?.context()
-    if (this._otelHttpSemanticsEnabled && rootContext && !rootContext._otelHttpResourceNormalizedForSampling) {
+    if (this._otelHttpSemanticsEnabled && rootContext) {
       const tags = rootContext.getTags()
       const method = tags['http.method']
       if (method !== undefined) {
         // Sampling can run before route resolution, so fall back to the method-only
         // name. When the framework already published a route, preserve it.
         const samplingResource = otelHttpResourceName(method, tags['http.route'])
+        const instrumentationResource = tags[INSTRUMENTATION_HTTP_RESOURCE]
+        const resourceName = tags['resource.name']
+        const resource = tags.resource
+        const resourceIsUnset = resourceName === undefined && resource === undefined
         const resourceIsOwnedByInstrumentation =
-          isInstrumentationHttpResource(tags.resource, method) &&
-          isInstrumentationHttpResource(tags['resource.name'], method)
-        if (resourceIsOwnedByInstrumentation && tags.resource === undefined && tags['resource.name'] === undefined) {
+          resourceIsUnset ||
+          (resourceName === undefined || resourceName === instrumentationResource) &&
+          (resource === undefined || resource === instrumentationResource)
+        if (resourceIsOwnedByInstrumentation && resourceIsUnset) {
           tags['resource.name'] = samplingResource
         } else if (resourceIsOwnedByInstrumentation) {
           if (tags.resource !== undefined) {
@@ -137,7 +142,9 @@ class PrioritySampler {
             tags['resource.name'] = samplingResource
           }
         }
-        rootContext._otelHttpResourceNormalizedForSampling = true
+        if (resourceIsOwnedByInstrumentation) {
+          tags[INSTRUMENTATION_HTTP_RESOURCE] = samplingResource
+        }
       }
     }
 
