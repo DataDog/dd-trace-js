@@ -21,7 +21,6 @@ const expectedDependencies = [
   'source-package',
   'transitive-source',
   'unversioned-target',
-  'vendor-peer',
   'vendor-regular',
   'vendor-source',
 ]
