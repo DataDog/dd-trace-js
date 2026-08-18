@@ -95,6 +95,15 @@ describe('sdk', () => {
       assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
       assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
     })
+
+    it('exposes class-based evaluator primitives', () => {
+      assert.strictEqual(typeof llmobs.BaseEvaluator, 'function')
+      assert.strictEqual(typeof llmobs.BaseSummaryEvaluator, 'function')
+      assert.strictEqual(typeof llmobs.EvaluatorContext, 'function')
+      assert.strictEqual(typeof llmobs.SummaryEvaluatorContext, 'function')
+      assert.strictEqual(typeof llmobs.EvaluatorResult, 'function')
+      assert.strictEqual(typeof llmobs.MultiEvaluatorResult, 'function')
+    })
   })
 
   describe('enable', () => {
@@ -110,10 +119,12 @@ describe('sdk', () => {
 
       disabledLLMObs.enable({
         mlApp: 'mlApp',
+        projectName: 'projectName',
       })
 
       assert.strictEqual(disabledLLMObs.enabled, true)
       assert.strictEqual(disabledLLMObs._config.llmobs.mlApp, 'mlApp')
+      assert.strictEqual(disabledLLMObs._config.llmobs.projectName, 'projectName')
       assert.strictEqual(disabledLLMObs._config.llmobs.agentlessEnabled, undefined)
 
       sinon.assert.called(llmobsModule.enable)

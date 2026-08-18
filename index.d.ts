@@ -3604,6 +3604,12 @@ declare namespace tracer {
        * `DD_API_KEY` / `DD_APP_KEY` to be set.
        */
       experiments: Experiments,
+      BaseEvaluator: typeof BaseEvaluator,
+      BaseSummaryEvaluator: typeof BaseSummaryEvaluator,
+      EvaluatorContext: typeof EvaluatorContext,
+      SummaryEvaluatorContext: typeof SummaryEvaluatorContext,
+      EvaluatorResult: typeof EvaluatorResult,
+      MultiEvaluatorResult: typeof MultiEvaluatorResult,
 
       /**
        * Enable LLM Observability tracing.
@@ -3768,37 +3774,109 @@ declare namespace tracer {
     /** JSON-serializable value accepted by LLMObs Experiments. */
     type JSONType = string | number | boolean | null | JSONType[] | { [key: string]: JSONType }
 
-    /**
-     * A task run over each dataset record during an experiment.
-     */
+    /** Context passed to a record-level class evaluator. */
+    class EvaluatorContext {
+      constructor (options: {
+        inputData: JSONType
+        outputData: JSONType
+        expectedOutput?: JSONType
+        metadata?: Record<string, JSONType>
+        spanId?: string
+        traceId?: string
+      })
+      inputData: JSONType
+      outputData: JSONType
+      expectedOutput: JSONType
+      metadata: Record<string, JSONType>
+      spanId?: string
+      traceId?: string
+    }
+
+    /** Context passed to a summary class evaluator. */
+    class SummaryEvaluatorContext {
+      constructor (options: {
+        inputs: JSONType[]
+        outputs: JSONType[]
+        expectedOutputs: JSONType[]
+        evaluationResults: Record<string, JSONType[]>
+        metadata?: Array<Record<string, JSONType>>
+      })
+      inputs: JSONType[]
+      outputs: JSONType[]
+      expectedOutputs: JSONType[]
+      evaluationResults: Record<string, JSONType[]>
+      metadata: Array<Record<string, JSONType>>
+    }
+
+    interface EvaluatorResultOptions {
+      reasoning?: string
+      assessment?: 'pass' | 'fail'
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, JSONType>
+    }
+
+    /** A metric value with optional evaluation details. */
+    class EvaluatorResult {
+      constructor (value: JSONType, options?: EvaluatorResultOptions)
+      constructor (options: EvaluatorResultOptions & { value: JSONType })
+      value: JSONType
+      reasoning?: string
+      assessment?: 'pass' | 'fail'
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, JSONType>
+    }
+
+    /** A result that emits several named metrics from one evaluator invocation. */
+    class MultiEvaluatorResult {
+      constructor (values: Record<string, JSONType | EvaluatorResult>, prefix?: boolean)
+      values: Record<string, JSONType | EvaluatorResult>
+      prefix: boolean
+    }
+
+    /** Base class for reusable record-level evaluators. */
+    class BaseEvaluator {
+      constructor (name?: string)
+      name: string
+      evaluate (context: EvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
+    }
+
+    /** Base class for reusable summary evaluators. */
+    class BaseSummaryEvaluator {
+      constructor (name?: string)
+      name: string
+      evaluate (context: SummaryEvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
+    }
+
+    /** A task run over each dataset record during an experiment. */
     type ExperimentTask = (
       input: JSONType,
       config: Record<string, JSONType>,
       metadata?: Record<string, JSONType>
     ) => JSONType | Promise<JSONType>
 
-    /**
-     * Scores a single task output. The return type selects the metric:
-     * `boolean` -> boolean, `number` -> score, `string` -> categorical, anything else -> json.
-     */
-    type ExperimentEvaluator = (
+    /** Scores a single task output. */
+    type ExperimentEvaluatorFunction = (
       input: JSONType,
       output: JSONType,
       expectedOutput: JSONType
-    ) => JSONType | Promise<JSONType>
+    ) => JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
 
-    /**
-     * Scores all rows in an experiment run and emits a summary metric.
-     */
-    type ExperimentSummaryEvaluator = (
-      inputs: any[],
-      outputs: any[],
-      expectedOutputs: any[],
-      evaluatorResults: Record<string, any[]>,
-      metadata?: Array<Record<string, any>>
-    ) => any | Promise<any>
+    type ExperimentEvaluator = ExperimentEvaluatorFunction | BaseEvaluator
+
+    /** Scores all rows in an experiment run and emits a summary metric. */
+    type ExperimentSummaryEvaluatorFunction = (
+      inputs: JSONType[],
+      outputs: JSONType[],
+      expectedOutputs: JSONType[],
+      evaluatorResults: Record<string, JSONType[]>,
+      metadata?: Array<Record<string, JSONType>>
+    ) => JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
+
+    type ExperimentSummaryEvaluator = ExperimentSummaryEvaluatorFunction | BaseSummaryEvaluator
 
     interface CreateDatasetOptions {
+      /** Override the configured project for this dataset. */
+      projectName?: string
       description?: string
       records?: Array<{
         id?: string,
@@ -3813,9 +3891,11 @@ declare namespace tracer {
       name: string
       dataset: Dataset
       task: ExperimentTask
-      /** Evaluators keyed by metric label, or named functions. */
+      /** Override the configured project for this experiment. */
+      projectName?: string
+      /** Evaluators keyed by metric label, or named functions or class instances. */
       evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
-      /** Summary evaluators keyed by metric label, or named functions. */
+      /** Summary evaluators keyed by metric label, or named functions or class instances. */
       summaryEvaluators?: Record<string, ExperimentSummaryEvaluator> | ExperimentSummaryEvaluator[]
       description?: string
       config?: Record<string, JSONType>
@@ -3832,6 +3912,8 @@ declare namespace tracer {
     }
 
     interface PullDatasetOptions {
+      /** Override the configured project for this dataset pull. */
+      projectName?: string
       /** Dataset version to pull. Defaults to latest. */
       version?: number
       /** Wait until at least this many records are readable (absorbs write lag). */
@@ -4507,6 +4589,13 @@ declare namespace tracer {
      * Options for enabling LLM Observability tracing.
      */
     interface LLMObsEnableOptions {
+      /**
+       * The name of the project used by LLM Observability Experiments.
+       * @env DD_LLMOBS_PROJECT_NAME
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      projectName?: string
+
       /**
        * The name of your ML application.
        * @env DD_LLMOBS_ML_APP
