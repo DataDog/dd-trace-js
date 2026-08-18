@@ -65,7 +65,7 @@ class Profiler extends EventEmitter {
   #profilers
   #spanFinishListener
   #systemInfoReport
-  #tags
+  #currentSnapshotTags
   #timer
   #uploadCompression
 
@@ -173,13 +173,13 @@ class Profiler extends EventEmitter {
     if (this.enabled) return true
     this.#enabled = true
 
-    const { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+    const { tags: snapshotTags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
       buildProfilingRuntime(config)
     this.#config = config
     this.#exporters = exporters
     this.#flushInterval = flushInterval
     this.#profilers = profilers
-    this.#tags = tags
+    this.#currentSnapshotTags = snapshotTags
     this.#uploadCompression = uploadCompression
     this.#systemInfoReport = systemInfoReport
 
@@ -243,7 +243,7 @@ class Profiler extends EventEmitter {
     processInfo(infos, info, profileType)
     this.#submit({
       [profileType]: encodedProfile,
-    }, infos, start, end, this.#tags, snapshotKinds.ON_OUT_OF_MEMORY)
+    }, infos, start, end, this.#currentSnapshotTags, snapshotKinds.ON_OUT_OF_MEMORY)
   }
 
   _setInterval () {
@@ -327,7 +327,7 @@ class Profiler extends EventEmitter {
 
       const startDate = this.#lastStart
       const endDate = new Date()
-      const tags = this.#tags
+      const snapshotTags = this.#currentSnapshotTags
       const profiles = []
 
       crashtracker.withProfilerSerializing(() => {
@@ -344,7 +344,7 @@ class Profiler extends EventEmitter {
       })
 
       if (restart) {
-        this.#tags = getProfilingTags(this.#config)
+        this.#currentSnapshotTags = getProfilingTags(this.#config)
         this._capture(this._timeoutInterval, endDate)
       }
 
@@ -382,7 +382,7 @@ class Profiler extends EventEmitter {
       }))
 
       if (hasEncoded) {
-        await this.#submit(encodedProfiles, infos, startDate, endDate, tags, snapshotKind)
+        await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotTags, snapshotKind)
         profileSubmittedChannel.publish()
         log.debug('Submitted profiles')
       }
@@ -397,10 +397,10 @@ class Profiler extends EventEmitter {
    * @param {Record<string, unknown>} infos
    * @param {Date} start
    * @param {Date} end
-   * @param {Record<string, string|number|boolean|undefined>} tags
+   * @param {Record<string, string|number|boolean|undefined>} snapshotTags
    * @param {string} snapshotKind
    */
-  #submit (profiles, infos, start, end, tags, snapshotKind) {
+  #submit (profiles, infos, start, end, snapshotTags, snapshotKind) {
     // Flatten endpoint counts
     const endpointCounts = {}
     for (const [endpoint, { count }] of this.#endpointCounts) {
@@ -408,12 +408,12 @@ class Profiler extends EventEmitter {
     }
     this.#endpointCounts.clear()
 
-    tags.snapshot = snapshotKind
-    tags.profile_seq = this.#profileSeq++
+    snapshotTags.snapshot = snapshotKind
+    snapshotTags.profile_seq = this.#profileSeq++
     const customAttributes = this.#customLabelKeys.size > 0
       ? [...this.#customLabelKeys]
       : undefined
-    const exportSpec = { profiles, infos, start, end, tags, endpointCounts, customAttributes }
+    const exportSpec = { profiles, infos, start, end, tags: snapshotTags, endpointCounts, customAttributes }
     const tasks = this.#exporters.map(exporter =>
       exporter.export(exportSpec).catch(error => {
         log.warn(error)
