@@ -1,18 +1,21 @@
 'use strict'
 
 const id = require('../../id')
+const log = require('../../log')
 
 const { Row, ExperimentResult, ExperimentRun } = require('./result')
 const {
-  buildExperimentTagObject,
   buildSpanMetadata,
   buildTags,
+  durationNs,
   hasEntries,
   inferMetricType,
   normalizeEvaluators,
+  mergeTags,
   normalizeJsonMetricValue,
   sleep,
   stringify,
+  timestampMs,
   validateEvaluatorName,
 } = require('./util')
 
@@ -27,7 +30,7 @@ function toSpan (row, metadata, ids, spanName, userTags) {
     meta.metadata = metadata
   }
   if (row.isError) {
-    meta.error = { type: row.errorType ?? '', message: row.errorMessage ?? '', stack: '' }
+    meta.error = { type: row.errorType ?? '', message: row.errorMessage ?? '', stack: row.errorStack ?? '' }
   }
 
   return {
@@ -90,11 +93,34 @@ function createFallbackSpanContext (startNs) {
   return { spanId, traceId }
 }
 
+function normalizeError (error) {
+  if (error == null) {
+    return { errorType: null, errorMessage: null, errorStack: '' }
+  }
+
+  if (typeof error === 'string') {
+    return { errorType: 'Error', errorMessage: error, errorStack: '' }
+  }
+
+  return {
+    errorType: error.type ?? error.name ?? 'Error',
+    errorMessage: error.message ?? String(error),
+    errorStack: error.stack ?? '',
+  }
+}
+
+function errorMessage (error) {
+  if (error == null) return null
+  if (typeof error === 'string') return error
+  return error.message ?? String(error)
+}
+
 // Builder + run() orchestration: runs rows sequentially, emits one root span
 // per dataset row, and posts spans + metrics to the experiments events API.
 class Experiment {
   #client
   #llmobs
+  #external
   #name
   #description
   #dataset
@@ -103,24 +129,35 @@ class Experiment {
   #summaryEvaluators
   #config
   #tags
+  #metadata
+  #projectId
   #experimentId
+  #runId
+  #runIteration
 
   constructor (client, options = {}, llmobs) {
     if (!options.name) throw new Error('Experiment name is required')
-    if (!options.dataset) throw new Error('Experiment dataset is required')
-    if (typeof options.task !== 'function') throw new Error('Experiment task is required')
+    this.#external = options.external === true
+    if (!this.#external) {
+      if (!options.dataset) throw new Error('Experiment dataset is required')
+      if (typeof options.task !== 'function') throw new Error('Experiment task is required')
+    }
 
     this.#client = client
     this.#llmobs = llmobs
     this.#name = options.name
     this.#description = options.description ?? ''
-    this.#dataset = options.dataset
+    this.#dataset = options.dataset ?? {}
     this.#task = options.task
     this.#evaluators = normalizeEvaluators(options.evaluators, 'row')
     this.#summaryEvaluators = normalizeEvaluators(options.summaryEvaluators, 'summary')
     this.#config = { ...options.config }
     this.#tags = { ...options.tags }
+    this.#metadata = { ...options.metadata }
+    this.#projectId = null
     this.#experimentId = null
+    this.#runId = null
+    this.#runIteration = null
   }
 
   name () {
@@ -136,7 +173,177 @@ class Experiment {
     return `${this.#client.appBase}/llm/experiments/${this.#experimentId}`
   }
 
+  /**
+   * @returns {Promise<Experiment>}
+   */
+  async start () {
+    if (!this.#external) throw new Error('Experiment is not externally driven')
+
+    this.#projectId = await this.#client.ensureProjectId()
+
+    const dataset = await this.#ensureExternalDataset()
+    const attributes = {
+      name: this.#name,
+      project_id: this.#projectId,
+      dataset_id: dataset.id,
+      description: this.#description,
+      ensure_unique: true,
+      run_count: 1,
+    }
+    if (dataset.version != null) attributes.dataset_version = dataset.version
+    if (hasEntries(this.#config)) attributes.config = this.#config
+
+    const metadata = { ...this.#metadata }
+    if (hasEntries(this.#tags)) metadata.tags = buildTags(this.#tags, {})
+    if (hasEntries(metadata)) attributes.metadata = metadata
+
+    let created
+    try {
+      created = await this.#client.createExperiment(attributes)
+    } catch (err) {
+      throw new Error(`Failed to create experiment '${this.#name}': ${err.message}`)
+    }
+    this.#experimentId = created.experimentId
+    this.#runId = id().toString(16).padStart(16, '0')
+    this.#runIteration = 0
+    return this
+  }
+
+  async #ensureExternalDataset () {
+    if (this.#dataset.id) {
+      return { id: this.#dataset.id, version: this.#dataset.version }
+    }
+
+    const name = this.#dataset.name ?? `${this.#name} dataset`
+    const description = this.#dataset.description ??
+      `Placeholder dataset for externally-driven experiment '${this.#name}'`
+    let response
+    try {
+      response = await this.#client.createDataset(this.#projectId, { name, description })
+    } catch (err) {
+      throw new Error(`Failed to create placeholder dataset '${name}': ${err.message}`)
+    }
+
+    const id = response.id()
+    if (id === null) {
+      throw new Error(`Failed to create placeholder dataset '${name}': backend response is missing dataset id`)
+    }
+
+    this.#dataset = {
+      ...this.#dataset,
+      id,
+      version: this.#dataset.version ?? response.version(),
+    }
+    return { id: this.#dataset.id, version: this.#dataset.version }
+  }
+
+  /**
+   * @param {object} input
+   * @returns {Promise<{experimentId: string, spanId: string, traceId: string, url: string | null}>}
+   */
+  async submitSpan (input = {}) {
+    if (this.#experimentId === null || this.#projectId === null) {
+      throw new Error('Experiment has not been started')
+    }
+
+    const startMs = timestampMs(input.startedAt)
+    const startNs = Math.round(startMs * 1e6)
+    const { spanId, traceId } = createFallbackSpanContext(startNs)
+    const error = normalizeError(input.error)
+    const row = new Row({
+      spanId,
+      traceId,
+      startNs,
+      durationNs: durationNs(input, startMs),
+      input: input.input,
+      output: input.output,
+      expectedOutput: input.expectedOutput,
+      errorType: error.errorType,
+      errorMessage: error.errorMessage,
+      errorStack: error.errorStack,
+      evaluations: {},
+      evaluationErrors: {},
+    })
+
+    const span = toSpan(row, input.metadata, {
+      experimentId: this.#experimentId,
+      projectId: this.#projectId,
+      datasetId: this.#dataset.id,
+      datasetRecordId: input.datasetRecordId,
+      runId: input.runId ?? this.#runId,
+      runIteration: input.runIteration ?? this.#runIteration,
+    }, input.name ?? this.#name, mergeTags(this.#tags, input.tags))
+
+    await this.#postEvents(this.#experimentId, [span], [])
+
+    return {
+      experimentId: this.#experimentId,
+      spanId,
+      traceId,
+      url: this.url(),
+    }
+  }
+
+  /**
+   * @param {{experimentId?: string, spanId: string, traceId?: string}} span
+   * @param {object[]} metrics
+   * @returns {Promise<void>}
+   */
+  async submitEvaluationMetrics (span, metrics) {
+    if (this.#experimentId === null) {
+      throw new Error('Experiment has not been started')
+    }
+    if (!span?.spanId) {
+      throw new Error('Experiment span id is required')
+    }
+
+    const experimentId = span.experimentId ?? this.#experimentId
+    if (experimentId !== this.#experimentId) {
+      throw new Error(`Experiment span belongs to '${experimentId}', not '${this.#experimentId}'`)
+    }
+    if (!span.traceId) {
+      throw new Error('Experiment trace id is required')
+    }
+
+    const payload = []
+    for (const metric of metrics) {
+      validateEvaluatorName(metric.label)
+      const metricError = errorMessage(metric.error)
+      if (metric.value === undefined && metricError == null) {
+        log.warn('LLMObs experiments: skipping external metric %s because it has neither value nor error', metric.label)
+        continue
+      }
+      payload.push(toMetric(
+        metric.label,
+        metric.value,
+        metricError,
+        span.spanId,
+        span.traceId,
+        timestampMs(metric.timestamp),
+        experimentId,
+        mergeTags(this.#tags, metric.tags),
+        metric.source ?? 'custom'
+      ))
+    }
+
+    if (payload.length === 0) return
+    await this.#postEvents(experimentId, [], payload)
+  }
+
+  /**
+   * @param {object} options
+   * @returns {Promise<void>}
+   */
+  async close (options = {}) {
+    if (this.#experimentId === null) return
+    const error = errorMessage(options.error)
+    const status = options.status ?? (error === null ? 'completed' : 'failed')
+    await this.#updateStatus(this.#experimentId, status, error, false)
+  }
+
   async run (options = {}) {
+    if (this.#external) throw new Error('Externally-driven experiments cannot run local tasks')
+
     const {
       maxRetries = 0,
       retryDelay = (attempt) => 100 * (attempt + 1),
@@ -167,6 +374,7 @@ class Experiment {
     }
     const datasetVersion = this.#dataset.version()
     if (datasetVersion !== null) attributes.dataset_version = datasetVersion
+    // eslint-disable-next-line no-restricted-syntax -- faster than tracking entries while copying arbitrary config
     if (Object.keys(this.#config).length > 0) attributes.config = this.#config
 
     let created
@@ -313,7 +521,7 @@ class Experiment {
       dataset_name: this.#dataset.name(),
       experiment_name: this.#name,
     }
-    const tags = buildExperimentTagObject(this.#tags, autoTags)
+    const tags = mergeTags(this.#tags, autoTags)
 
     const execute = () => this.#runWithRetries(
       () => this.#task(record.input, this.#config, record.metadata),
@@ -454,17 +662,76 @@ class Experiment {
     await this.#client.postExperimentEvents(experimentId, attributes)
   }
 
-  async #updateStatus (experimentId, status, error) {
+  async #updateStatus (experimentId, status, error, suppressErrors = true) {
     if (!experimentId) return
     // The experiment-update model has no status field, so this is a direct PATCH.
     const attributes = { status }
     if (error !== null) attributes.error = error
     try {
       await this.#client.updateExperiment(experimentId, attributes)
-    } catch {
+    } catch (err) {
+      if (!suppressErrors) throw err
       // Status update is best-effort; never let it mask the real result/error.
     }
   }
 }
 
-module.exports = { Experiment, normalizeEvaluators, validateEvaluatorName }
+class ExternalExperiment {
+  #experiment
+
+  /**
+   * @param {Pick<Experiment, 'name' | 'experimentId' | 'url' | 'submitSpan' | 'submitEvaluationMetrics' |
+   *   'close'>} experiment
+   */
+  constructor (experiment) {
+    this.#experiment = experiment
+  }
+
+  /**
+   * @returns {string}
+   */
+  name () {
+    return this.#experiment.name()
+  }
+
+  /**
+   * @returns {string | null}
+   */
+  experimentId () {
+    return this.#experiment.experimentId()
+  }
+
+  /**
+   * @returns {string | null}
+   */
+  url () {
+    return this.#experiment.url()
+  }
+
+  /**
+   * @param {object} [input]
+   * @returns {Promise<object>}
+   */
+  submitSpan (input) {
+    return this.#experiment.submitSpan(input)
+  }
+
+  /**
+   * @param {object} span
+   * @param {object[]} metrics
+   * @returns {Promise<void>}
+   */
+  submitEvaluationMetrics (span, metrics) {
+    return this.#experiment.submitEvaluationMetrics(span, metrics)
+  }
+
+  /**
+   * @param {object} [options]
+   * @returns {Promise<void>}
+   */
+  close (options) {
+    return this.#experiment.close(options)
+  }
+}
+
+module.exports = { Experiment, ExternalExperiment, normalizeEvaluators, validateEvaluatorName }

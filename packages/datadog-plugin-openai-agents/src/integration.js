@@ -498,6 +498,7 @@ class OpenAIAgentsIntegration {
 
     this.#tagger.tagTextIO(ddSpan, inputValue, outputValue)
 
+    // eslint-disable-next-line no-restricted-syntax -- agents-core builds metadata before the plugin receives it
     if (info.metadata && Object.keys(info.metadata).length > 0) {
       this.#tagger.tagMetadata(ddSpan, info.metadata)
     }

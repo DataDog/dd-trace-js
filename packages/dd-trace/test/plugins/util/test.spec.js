@@ -46,6 +46,7 @@ const {
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
   getLibraryCapabilitiesTags,
+  finishAllTraceSpans,
   getTestParentSpan,
   setRumTestCorrelation,
   setRumTestTags,
@@ -66,6 +67,32 @@ const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('finishAllTraceSpans', () => {
+  it('does not finish completed spans twice', () => {
+    const tracer = { _config: getConfig() }
+    const processor = { process () {} }
+    const prioritySampler = { sample () {} }
+    const rootSpan = new Span(tracer, processor, prioritySampler, { operationName: 'root' })
+    const completedSpan = new Span(tracer, processor, prioritySampler, {
+      operationName: 'completed',
+      parent: rootSpan.context(),
+    })
+    const activeSpan = new Span(tracer, processor, prioritySampler, {
+      operationName: 'active',
+      parent: rootSpan.context(),
+    })
+    sinon.spy(completedSpan, 'finish')
+    sinon.spy(activeSpan, 'finish')
+    completedSpan.finish()
+    completedSpan.finish.resetHistory()
+
+    finishAllTraceSpans(rootSpan)
+
+    sinon.assert.notCalled(completedSpan.finish)
+    sinon.assert.calledOnceWithExactly(activeSpan.finish)
+  })
+})
 
 describe('library capabilities', () => {
   it('advertises TIA for Vitest unless the execution mode does not support it', () => {
@@ -1792,6 +1819,7 @@ index 1234567..89abcde 100644
     assert.strictEqual(getModifiedFilesFromDiff(''), null)
     assert.strictEqual(getModifiedFilesFromDiff(null), null)
     assert.strictEqual(getModifiedFilesFromDiff(undefined), null)
+    assert.strictEqual(getModifiedFilesFromDiff('not a diff\n@@ -1 +1 @@\n'), null)
   })
 
   it('should handle multiple line changes in a single hunk', () => {
@@ -1937,6 +1965,21 @@ describe('getPullRequestBaseBranch', () => {
       sinon.assert.calledWith(getMergeBaseStub, 'trunk', 'feature-branch')
       sinon.assert.calledWith(getCountsStub, 'master', 'feature-branch')
       sinon.assert.calledWith(getCountsStub, 'trunk', 'feature-branch')
+    })
+
+    it('returns null when no candidate branch has a merge base', () => {
+      const { getPullRequestBaseBranch } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          getGitRemoteName: () => 'origin',
+          getSourceBranch: () => 'feature-branch',
+          getMergeBase: sinon.stub().returns(undefined),
+          checkAndFetchBranch: sinon.stub(),
+          getLocalBranches: sinon.stub().returns(['trunk', 'master', 'feature-branch']),
+          getCounts: sinon.stub().returns({ ahead: 0, behind: 0 }),
+        },
+      })
+
+      assert.strictEqual(getPullRequestBaseBranch(), null)
     })
   })
 })

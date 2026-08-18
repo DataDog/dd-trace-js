@@ -59,8 +59,15 @@ class DatadogTracer extends Tracer {
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
   // They should be moved outside of the tracer in the future.
-  setCheckpoint (edgeTags, span, payloadSize = 0) {
-    return this._dataStreamsManager.setCheckpoint(edgeTags, span, payloadSize)
+  /**
+   * @param {string[]} edgeTags
+   * @param {import('./opentracing/span')|null} span
+   * @param {number} [payloadSize]
+   * @param {number} [pathwayContextSize] See `DataStreamsProcessor#setCheckpoint`.
+   * @returns {object|undefined}
+   */
+  setCheckpoint (edgeTags, span, payloadSize = 0, pathwayContextSize) {
+    return this._dataStreamsManager.setCheckpoint(edgeTags, span, payloadSize, pathwayContextSize)
   }
 
   decodeDataStreamsContext (carrier) {
