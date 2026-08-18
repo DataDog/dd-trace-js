@@ -1,7 +1,5 @@
 'use strict'
 
-const clone = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
-
 /** @typedef {import('../../../../index').aiguard.RedactionReplacement} RedactionReplacement */
 
 const SEGMENT_PATTERN = /^([A-Za-z0-9_]+)(?:\[([0-9]+)\])?$/
@@ -112,14 +110,14 @@ function resolveWritableString (root, path) {
 
 /**
  * Applies redaction replacements to an AI Guard message list.
- * The input is never mutated.
+ * The caller transfers ownership of a private snapshot. Successful replacements mutate that snapshot in place.
  *
  * @param {Array<object>} messages
  * @param {unknown} replacements
  * @returns {{ messages: Array<object>, redacted: boolean, failures: number }}
  */
 function redactMessages (messages, replacements) {
-  if (!Array.isArray(messages) || !replacements) {
+  if (!Array.isArray(messages) || replacements === undefined || replacements === null) {
     return { messages, redacted: false, failures: 0 }
   }
 
@@ -156,9 +154,8 @@ function redactMessages (messages, replacements) {
 
     if (replacementsByPath.size === 0) return { messages, redacted: false, failures }
 
-    const result = clone(messages)
-    const root = { messages: result }
-    let redacted = false
+    const root = { messages }
+    const targets = []
 
     for (const [path, replacement] of replacementsByPath) {
       const resolved = resolveWritableString(root, path)
@@ -167,11 +164,14 @@ function redactMessages (messages, replacements) {
         continue
       }
 
-      resolved.container[resolved.key] = replacement
-      redacted = true
+      targets.push({ ...resolved, replacement })
     }
 
-    return { messages: redacted ? result : messages, redacted, failures }
+    for (const { container, key, replacement } of targets) {
+      container[key] = replacement
+    }
+
+    return { messages, redacted: targets.length > 0, failures }
   } catch {
     return { messages, redacted: false, failures: 1 }
   }

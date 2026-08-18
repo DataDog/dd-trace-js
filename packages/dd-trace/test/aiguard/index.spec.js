@@ -604,6 +604,37 @@ describe('AIGuard SDK', () => {
     )
   })
 
+  it('reports a falsy non-array replacement collection as a redaction error', async () => {
+    const messages = [{ role: 'user', content: '123-45-6789' }]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            redaction_replacements: false,
+          },
+        },
+      },
+    })
+
+    const result = await aiguard.evaluate(messages)
+
+    assert.deepStrictEqual(result.messages, messages)
+    assert.deepStrictEqual(result.redactionReplacements, [])
+    assertTelemetry('error', { type: ERROR_TYPE_REDACTION, ...sdkTags })
+    assertTelemetry('requests', {
+      action: 'ALLOW',
+      error: false,
+      block: false,
+      redacted: false,
+      ...sdkTags,
+    })
+    await assertAIGuardSpan(
+      { 'ai_guard.redacted': 'false' },
+      { messages }
+    )
+  })
+
   it('keeps originals and omits redaction tags when the kill-switch is off', async () => {
     const disabled = new AIGuard(tracer, {
       ...config,

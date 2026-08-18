@@ -67,8 +67,8 @@ describe('AI Guard evaluation response', () => {
     })
   }
 
-  it('creates a blocked, redacted outcome', () => {
-    const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
+  it('returns the redacted private snapshot in a blocked outcome', () => {
+    const privateSnapshot = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
     const evaluation = parseEvaluationResponse({
       data: {
         attributes: {
@@ -86,7 +86,7 @@ describe('AI Guard evaluation response', () => {
     })
 
     assert.ok(evaluation)
-    const outcome = createEvaluationOutcome(messages, evaluation, { block: true, redactionEnabled: true })
+    const outcome = createEvaluationOutcome(privateSnapshot, evaluation, { block: true, redactionEnabled: true })
 
     assert.deepStrictEqual(outcome, {
       result: {
@@ -106,8 +106,8 @@ describe('AI Guard evaluation response', () => {
         failures: 0,
       },
     })
-    assert.notStrictEqual(outcome.result.messages, messages)
-    assert.strictEqual(messages[0].content, 'My SSN is 123-45-6789')
+    assert.strictEqual(outcome.result.messages, privateSnapshot)
+    assert.strictEqual(privateSnapshot[0].content, 'My SSN is <REDACTED>')
   })
 
   it('keeps original messages but reports the backend replacements when redaction is disabled', () => {
@@ -177,18 +177,26 @@ describe('AI Guard evaluation response', () => {
     assert.strictEqual(outcome.redaction.failures, 4)
   })
 
-  it('reports no replacements when the backend sends a non-array value', () => {
-    const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
-    const evaluation = parseEvaluationResponse({
-      data: { attributes: { action: 'ALLOW', redaction_replacements: 'not an array' } },
+  for (const replacements of ['not an array', false]) {
+    it(`reports no replacements when the backend sends non-array ${JSON.stringify(replacements)}`, () => {
+      const privateSnapshot = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
+      const evaluation = parseEvaluationResponse({
+        data: { attributes: { action: 'ALLOW', redaction_replacements: replacements } },
+      })
+
+      assert.ok(evaluation)
+      const outcome = createEvaluationOutcome(privateSnapshot, evaluation, { block: true, redactionEnabled: true })
+
+      assert.deepStrictEqual(outcome.result.redactionReplacements, [])
+      assert.strictEqual(outcome.result.messages, privateSnapshot)
+      assert.deepStrictEqual(privateSnapshot, [{ role: 'user', content: 'My SSN is 123-45-6789' }])
+      assert.deepStrictEqual(outcome.redaction, {
+        enabled: true,
+        applied: false,
+        failures: 1,
+      })
     })
-
-    assert.ok(evaluation)
-    const outcome = createEvaluationOutcome(messages, evaluation, { block: true, redactionEnabled: true })
-
-    assert.deepStrictEqual(outcome.result.redactionReplacements, [])
-    assert.strictEqual(outcome.redaction.failures, 1)
-  })
+  }
 
   for (const testCase of [
     { block: false, action: 'DENY', blockingEnabled: true, expected: false },

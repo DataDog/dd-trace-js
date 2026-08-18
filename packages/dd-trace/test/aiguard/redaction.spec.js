@@ -33,7 +33,7 @@ describe('AI Guard redaction', () => {
     assert.strictEqual(result.failures, 1)
   })
 
-  it('redacts message content, content-part text, and tool arguments in one copy', () => {
+  it('redacts message content, content-part text, and tool arguments in place', () => {
     const messages = [
       { role: 'user', content: [{ type: 'input_text', text: 'card 4111111111111111' }] },
       {
@@ -53,8 +53,8 @@ describe('AI Guard redaction', () => {
 
     const { messages: redacted } = redactMessages(messages, replacements)
 
-    assert.notStrictEqual(redacted, messages)
-    assert.deepStrictEqual(redacted, [
+    assert.strictEqual(redacted, messages)
+    assert.deepStrictEqual(messages, [
       { role: 'user', content: [{ type: 'input_text', text: 'card <REDACTED>' }] },
       {
         role: 'assistant',
@@ -64,17 +64,6 @@ describe('AI Guard redaction', () => {
         }],
       },
       { role: 'tool', tool_call_id: 'call_1', content: 'paid from <REDACTED>' },
-    ])
-    assert.deepStrictEqual(messages, [
-      { role: 'user', content: [{ type: 'input_text', text: 'card 4111111111111111' }] },
-      {
-        role: 'assistant',
-        tool_calls: [{
-          id: 'call_1',
-          function: { name: 'pay', arguments: '{"ssn":"123-45-6789"}' },
-        }],
-      },
-      { role: 'tool', tool_call_id: 'call_1', content: 'paid from 000123456789' },
     ])
   })
 
@@ -103,9 +92,9 @@ describe('AI Guard redaction', () => {
       { path: 'messages[00].content', replacement: '<B>' },
     ])
 
-    assert.notStrictEqual(result.messages, messages)
+    assert.strictEqual(result.messages, messages)
     assert.strictEqual(result.messages[0].content, '<B>')
-    assert.strictEqual(messages[0].content, 'secret')
+    assert.strictEqual(messages[0].content, '<B>')
     assert.strictEqual(result.redacted, true)
     assert.strictEqual(result.failures, 0)
   })
@@ -177,6 +166,32 @@ describe('AI Guard redaction', () => {
     })
   })
 
+  for (const replacements of [false, 0, '']) {
+    it(`treats the falsy non-array replacement collection ${JSON.stringify(replacements)} as malformed`, () => {
+      const messages = [{ role: 'user', content: 'secret' }]
+
+      const result = redactMessages(messages, replacements)
+
+      assert.strictEqual(result.messages, messages)
+      assert.strictEqual(messages[0].content, 'secret')
+      assert.strictEqual(result.redacted, false)
+      assert.strictEqual(result.failures, 1)
+    })
+  }
+
+  for (const replacements of [null, undefined]) {
+    it(`treats ${replacements === null ? 'null' : 'undefined'} replacements as absent`, () => {
+      const messages = [{ role: 'user', content: 'secret' }]
+
+      const result = redactMessages(messages, replacements)
+
+      assert.strictEqual(result.messages, messages)
+      assert.strictEqual(messages[0].content, 'secret')
+      assert.strictEqual(result.redacted, false)
+      assert.strictEqual(result.failures, 0)
+    })
+  }
+
   it('returns the original messages for an empty replacement array', () => {
     const messages = [{ role: 'user', content: 'secret' }]
 
@@ -187,7 +202,7 @@ describe('AI Guard redaction', () => {
     assert.strictEqual(result.failures, 0)
   })
 
-  it('fails safe when cloning messages throws', () => {
+  it('fails safe when reading a replacement target throws', () => {
     const message = { role: 'user' }
     Object.defineProperty(message, 'content', {
       enumerable: true,
@@ -200,6 +215,30 @@ describe('AI Guard redaction', () => {
     assert.deepStrictEqual(redactMessages(messages, [
       { path: 'messages[0].content', replacement: '<REDACTED>' },
     ]), { messages, redacted: false, failures: 1 })
+  })
+
+  it('does not partially redact when a later target property read throws', () => {
+    const unreadableMessage = { role: 'user' }
+    Object.defineProperty(unreadableMessage, 'content', {
+      enumerable: true,
+      get () {
+        throw new Error('unreadable')
+      },
+    })
+    const messages = [
+      { role: 'user', content: 'first secret' },
+      unreadableMessage,
+    ]
+
+    const result = redactMessages(messages, [
+      { path: 'messages[0].content', replacement: '<REDACTED>' },
+      { path: 'messages[1].content', replacement: '<REDACTED>' },
+    ])
+
+    assert.strictEqual(result.messages, messages)
+    assert.strictEqual(messages[0].content, 'first secret')
+    assert.strictEqual(result.redacted, false)
+    assert.strictEqual(result.failures, 1)
   })
 
   it('fails safe when replacement preprocessing throws', () => {
