@@ -217,16 +217,12 @@ describe('third-party dependency locks', () => {
     ])
   })
 
-  it('accepts supported lock versions and fails closed on incomplete locks', () => {
+  it('accepts the current lock version and fails closed on other or incomplete locks', () => {
     const empty = { workspaces: { '': {} }, packages: {} }
-    for (const lockfileVersion of [0, 1, 2]) {
-      const lockPath = writeFixture(`version-${lockfileVersion}.lock`, JSON.stringify({
-        lockfileVersion,
-        ...empty,
-      }))
-      assert.deepStrictEqual(listBunLockDependencies(lockPath), [])
-    }
-    for (const lockfileVersion of [-1, 3, 1.5, '1', undefined]) {
+    const currentLockPath = writeFixture('version-1.lock', JSON.stringify({ lockfileVersion: 1, ...empty }))
+    assert.deepStrictEqual(listBunLockDependencies(currentLockPath), [])
+
+    for (const lockfileVersion of [0, 2, -1, 1.5, '1', undefined]) {
       const lockPath = writeFixture(`version-${lockfileVersion}.lock`, JSON.stringify({
         lockfileVersion,
         ...empty,
