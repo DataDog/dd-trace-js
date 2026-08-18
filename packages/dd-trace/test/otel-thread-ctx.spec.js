@@ -50,8 +50,8 @@ describe('otel-thread-ctx', () => {
   let log
   let activeSpan
   // Test double for the native ThreadContext class. Captures the constructor
-  // arguments and exposes the same surface (appendAttributes, invalidate,
-  // isTruncated, debugBytes).
+  // arguments and exposes the same surface (appendAttributes, isTruncated,
+  // debugBytes).
   let StubThreadContext
   let constructedContexts
   // Tracks every activation of a context (or detach via clearContext).
@@ -103,13 +103,10 @@ describe('otel-thread-ctx', () => {
         // while the methods themselves stay on the prototype where start()'s
         // compatibility check looks for them, as they are on the native class.
         sinon.spy(this, 'appendAttributes')
-        sinon.spy(this, 'invalidate')
         constructedContexts.push(this)
       }
 
       appendAttributes () {}
-
-      invalidate () {}
 
       isTruncated () { return false }
 
@@ -133,7 +130,6 @@ describe('otel-thread-ctx', () => {
 
     storageChannelsStub = {
       enterCh,
-      spanFinishCh,
       tagsUpdateCh,
       beforeCh: dc.channel('dd-trace:storage:before'),
       getActiveSpan: () => activeSpan,
@@ -202,10 +198,8 @@ describe('otel-thread-ctx', () => {
     it('returns false when ThreadContext is missing a method the writer calls', () => {
       // An older or overridden @datadog/pprof can expose the gated namespace
       // without every ThreadContext method. Starting anyway would defer the
-      // failure to a diagnostic-channel subscriber: a missing invalidate() would
-      // throw out of the span-finish path and up through DatadogSpan#finish()
-      // into application code.
-      for (const method of ['appendAttributes', 'enter', 'invalidate']) {
+      // failure to a diagnostic-channel subscriber and into application code.
+      for (const method of ['appendAttributes', 'enter']) {
         const Incomplete = class extends StubThreadContext {}
         Incomplete.prototype[method] = undefined
         const m = loadModule({
@@ -378,7 +372,7 @@ describe('otel-thread-ctx', () => {
       assert.equal(setActive.thirdCall.args[0], context1)
     })
 
-    it('spanFinish invalidates the record and clears the writer when the finishing span is active', () => {
+    it('keeps the active record attached when its span finishes', () => {
       activeSpan = makeSpan()
       enterCh.publish()
       sinon.assert.calledOnce(setActive)
@@ -387,72 +381,9 @@ describe('otel-thread-ctx', () => {
       pprofStub.otelThreadCtx.clearContext.resetHistory()
       setActive.resetHistory()
       spanFinishCh.publish(activeSpan)
-      sinon.assert.calledOnceWithExactly(context.invalidate)
-      sinon.assert.calledOnce(pprofStub.otelThreadCtx.clearContext)
-      sinon.assert.calledOnceWithExactly(setActive)
-    })
-
-    it('spanFinish invalidates the finished span record even when another span holds the writer', () => {
-      // The finishing frame need not be the one holding the finished span's
-      // context: sibling frames and continuations the span scheduled before
-      // finishing inherit the same ThreadContext reference, and in ACF mode no
-      // later storage event fires in them to overwrite the record. Invalidating
-      // it drops the finished span out of scope for all of them at once, while
-      // the current frame's own (span2) record must stay attached.
-      const span1 = makeSpan({ spanId: SPAN_ID_HEX })
-      const span2 = makeSpan({ spanId: '2122232425262728' })
-
-      activeSpan = span1
-      enterCh.publish()
-      activeSpan = span2
-      enterCh.publish()
-      const [context1, context2] = constructedContexts
-
-      pprofStub.otelThreadCtx.clearContext.resetHistory()
-      setActive.resetHistory()
-      spanFinishCh.publish(span1)
-      sinon.assert.calledOnceWithExactly(context1.invalidate)
-      sinon.assert.notCalled(context2.invalidate)
       sinon.assert.notCalled(pprofStub.otelThreadCtx.clearContext)
       sinon.assert.notCalled(setActive)
-      assert.equal(activeContext, context2)
-    })
-
-    it('spanFinish is a no-op for a span that was never the active record', () => {
-      spanFinishCh.publish(makeSpan())
-      sinon.assert.notCalled(pprofStub.otelThreadCtx.clearContext)
-      sinon.assert.notCalled(setActive)
-    })
-
-    it('spanFinish published twice for the same span invalidates the record once', () => {
-      activeSpan = makeSpan()
-      enterCh.publish()
-      const context = constructedContexts[0]
-
-      spanFinishCh.publish(activeSpan)
-      pprofStub.otelThreadCtx.clearContext.resetHistory()
-      spanFinishCh.publish(activeSpan)
-      sinon.assert.calledOnce(context.invalidate)
-      sinon.assert.notCalled(pprofStub.otelThreadCtx.clearContext)
-    })
-
-    it('builds a fresh context when a finished span is entered again', () => {
-      // The per-span cache is dropped on finish, so a late enter can't
-      // re-install the invalidated record — it gets a new, valid one. Deliberate:
-      // an enter is the tracer naming the active span, unlike the inherited
-      // frames invalidate() exists for, and work running under a finished request
-      // span still belongs to that request. See onSpanFinished.
-      activeSpan = makeSpan()
-      enterCh.publish()
-      const context = constructedContexts[0]
-      spanFinishCh.publish(activeSpan)
-
-      enterCh.publish()
-      assert.equal(constructedContexts.length, 2)
-      const reentered = constructedContexts[1]
-      assert.notEqual(reentered, context)
-      sinon.assert.notCalled(reentered.invalidate)
-      assert.equal(activeContext, reentered)
+      assert.equal(activeContext, context)
     })
 
     it('writes the endpoint at build time once its value has settled', () => {
@@ -507,9 +438,7 @@ describe('otel-thread-ctx', () => {
       }
     })
 
-    it('does not append to the record of a descendant that finished before the endpoint settled', () => {
-      // onSpanFinished already invalidated that record; appending to it would
-      // write into a record no reader should be looking at any more.
+    it('appends to the record of a descendant that finished before the endpoint settled', () => {
       const { parent, child, webTags } = makeWebSpanWithChild({ 'span.type': 'web', 'http.method': 'GET' })
       cachedWebTags.set(parent, webTags)
       cachedWebTags.set(child, webTags)
@@ -523,7 +452,7 @@ describe('otel-thread-ctx', () => {
 
       webTags['http.route'] = '/x'
       endpointResolvedCh.publish(parent)
-      sinon.assert.notCalled(childContext.appendAttributes)
+      sinon.assert.calledOnce(childContext.appendAttributes)
       sinon.assert.calledOnce(parentContext.appendAttributes)
     })
 

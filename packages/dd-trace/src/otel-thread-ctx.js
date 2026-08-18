@@ -2,8 +2,8 @@
 
 // OTEP-4947 Thread Local Context Record writer integration.
 //
-// Hooks into the active-span lifecycle (storage:enter, span:finish,
-// span:tags:update channels) and mirrors the active trace ID, span ID
+// Hooks into the active-span lifecycle (storage:enter and span:tags:update
+// channels) and mirrors the active trace ID, span ID
 // and current endpoint into a thread-local record that an
 // out-of-process eBPF reader can discover via the
 // otel_thread_ctx_nodejs_v1 TLS symbol exported by the @datadog/pprof
@@ -29,7 +29,6 @@ const { isACFActive } = require('../../datadog-core/src/storage')
 const log = require('./log')
 const {
   enterCh,
-  spanFinishCh,
   getActiveSpan,
   ensureChannelsActivated,
 } = require('./storage-channels')
@@ -179,41 +178,6 @@ function onEnter () {
   context.enter()
 }
 
-function onSpanFinished (span) {
-  if (!started) return
-  const cached = span[CachedSym]
-  if (cached === undefined) return
-  span[CachedSym] = undefined
-  const context = cached.context
-  if (context === undefined) return
-  // The span is over, so its record must stop presenting itself as an active
-  // thread context to an out-of-process reader. Invalidating the record covers
-  // every async-context frame still holding this same context reference —
-  // sibling frames, and continuations the span scheduled before it finished.
-  // Detaching only the current frame wouldn't: with enterWith-style activation
-  // (sticky storage) no storage:enter fires in those inherited frames to
-  // overwrite the record, and in ACF mode there is no `before` hook either, so
-  // they would keep exposing the finished span's IDs.
-  context.invalidate()
-  // Marks the record dead for any pendingEndpoints waiter still holding this
-  // entry, which must not append to an invalidated record.
-  cached.context = undefined
-  // Also detach from the current frame when it is the holder, so the record
-  // becomes unreachable and collectable instead of lingering as an invalid one
-  // for the rest of the frame's life.
-  if (getContext() === context) clearContext()
-  // Dropping the cache entry means a later storage:enter naming this same
-  // finished span builds a fresh, valid record for it — which is deliberate, and
-  // not the staleness invalidate() above exists to prevent. The two cases differ
-  // in what the tracer told us: an inherited frame is a frame we never heard
-  // about again, while an enter is the tracer affirmatively naming the active
-  // span, finished or not. Work running under a finished request span still
-  // belongs to that request, so a reader should attribute it there; the wall
-  // profiler decides the same way, dropping its per-span context on finish and
-  // rebuilding it on re-entry (profiling/profilers/wall.js). Clearing instead
-  // would strip trace and endpoint attribution off that work entirely.
-}
-
 // The endpoint of a request has settled: fill in every record built while it was
 // still unresolved. `span` is the web-server span, so its tag bag is the key its
 // descendants enlisted under.
@@ -250,9 +214,7 @@ function onWebTagsResolved (span) {
 
 // Every otelThreadCtx member the writer calls, checked before it starts. Anything
 // missing would otherwise surface from inside a diagnostic-channel subscriber on
-// a hot path, where an exception lands in application code: a ThreadContext
-// without invalidate() would throw out of onSpanFinished and up through
-// DatadogSpan#finish() the first time an activated span finished.
+// a hot path, where an exception lands in application code.
 //
 // Returns the name of the first missing member, or undefined when the surface is
 // complete.
@@ -261,7 +223,7 @@ function missingApiMember (ns) {
   for (const name of ['ThreadContext', 'getContext', 'clearContext', 'getProcessContextAttributes']) {
     if (typeof ns[name] !== 'function') return name
   }
-  for (const name of ['appendAttributes', 'enter', 'invalidate']) {
+  for (const name of ['appendAttributes', 'enter']) {
     if (typeof ns.ThreadContext.prototype[name] !== 'function') return `ThreadContext.prototype.${name}`
   }
 }
@@ -328,7 +290,6 @@ function start () {
 
   ensureChannelsActivated(isACFActive)
   enterCh.subscribe(onEnter)
-  spanFinishCh.subscribe(onSpanFinished)
   // Endpoint updates come from the shared web-tags cache's transition channels
   // rather than from `dd-trace:span:tags:update` directly: the cache already
   // subscribes to that channel and derives both transitions we care about, so
