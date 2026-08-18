@@ -32,7 +32,24 @@ describe('DatadogWebpackPlugin', () => {
     it('does not throw when minimize is not enabled', () => {
       const plugin = new DatadogWebpackPlugin()
       const tapped = []
+      let externalizedCompiler
+      class ExternalsPlugin {
+        /**
+         * @param {string} type
+         * @param {string[]} modules
+         */
+        constructor (type, modules) {
+          assert.strictEqual(type, 'node-commonjs')
+          assert.deepStrictEqual(modules, ['@datadog/libdatadog'])
+        }
+
+        /** @param {object} compiler */
+        apply (compiler) {
+          externalizedCompiler = compiler
+        }
+      }
       const compiler = {
+        webpack: { ExternalsPlugin },
         options: {
           optimization: { minimize: false },
         },
@@ -47,6 +64,7 @@ describe('DatadogWebpackPlugin', () => {
 
       plugin.apply(compiler)
       assert.equal(tapped[0], 'DatadogWebpackPlugin')
+      assert.strictEqual(externalizedCompiler, compiler)
     })
   })
 })
