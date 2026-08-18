@@ -417,6 +417,7 @@
 /integration-tests/import-variants.spec.js @DataDog/lang-platform-js
 /integration-tests/init/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
+/integration-tests/helpers/fake-agent.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /integration-tests/memory-leak/ @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files-fixtures/ @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files.spec.js @DataDog/lang-platform-js
