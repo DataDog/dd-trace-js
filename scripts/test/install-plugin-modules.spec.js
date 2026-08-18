@@ -84,12 +84,12 @@ describe('scripts/install_plugin_modules.js', function () {
       .split('\n')
       .map(JSON.parse)
     assert.deepStrictEqual(packageManagerCalls, [
-      ['bun', 'install', '--trust', '--network-concurrency', '8'],
-      ['bun', 'install', '--trust', '--network-concurrency', '8'],
-      ['bun', 'install', '--trust', '--network-concurrency', '8'],
-      ['bun', 'install', '--trust', '--network-concurrency', '8'],
-      ['bun', 'install', '--trust', '--network-concurrency', '8'],
-      ['bun', 'install', '--trust', '--network-concurrency', '8'],
+      ['bun', 'install', '--trust', '--network-concurrency', '1'],
+      ['bun', 'install', '--trust', '--network-concurrency', '1'],
+      ['bun', 'install', '--trust', '--network-concurrency', '1'],
+      ['bun', 'install', '--trust', '--network-concurrency', '1'],
+      ['bun', 'install', '--trust', '--network-concurrency', '1'],
+      ['bun', 'install', '--trust', '--network-concurrency', '1'],
     ])
   })
 
@@ -125,7 +125,7 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.strictEqual(result.status, 1)
     assert.deepStrictEqual(
       fs.readFileSync(traceFile, 'utf8').trim().split('\n').map(JSON.parse),
-      [['bun', 'install', '--trust', '--network-concurrency', '8']]
+      [['bun', 'install', '--trust', '--network-concurrency', '1']]
     )
   })
 
