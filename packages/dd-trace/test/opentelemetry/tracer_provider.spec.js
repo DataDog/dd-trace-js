@@ -12,6 +12,21 @@ const Tracer = require('../../src/opentelemetry/tracer')
 const { MultiSpanProcessor, NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
 require('../../index').init()
 
+/**
+ * @param {object} exporter
+ * @param {() => void} callback
+ */
+function withExporter (exporter, callback) {
+  const ddTracer = require('../../index')._tracer
+  const originalExporter = ddTracer._exporter
+  ddTracer._exporter = exporter
+  try {
+    callback()
+  } finally {
+    ddTracer._exporter = originalExporter
+  }
+}
+
 describe('OTel TracerProvider', () => {
   it('should register with OTel API', () => {
     const provider = new TracerProvider()
@@ -118,8 +133,10 @@ describe('OTel TracerProvider', () => {
     const processor = new NoopSpanProcessor()
     provider.addSpanProcessor(processor)
     processor.forceFlush = sinon.stub()
+    const flush = sinon.stub()
 
-    provider.forceFlush()
+    withExporter({ flush }, () => provider.forceFlush())
+    sinon.assert.calledOnce(flush)
     sinon.assert.calledOnce(processor.forceFlush)
   })
 
@@ -128,20 +145,12 @@ describe('OTel TracerProvider', () => {
     // exporter, which writes synchronously and implements only `export`. An
     // unguarded `exporter.flush()` turned forceFlush() into a TypeError there, so
     // the active span processor never got flushed either.
-    const ddTracer = require('../../index')._tracer
-    const originalExporter = ddTracer._exporter
-    ddTracer._exporter = { export: sinon.stub() }
-
     const provider = new TracerProvider()
     const processor = new NoopSpanProcessor()
     provider.addSpanProcessor(processor)
     processor.forceFlush = sinon.stub()
 
-    try {
-      provider.forceFlush()
-    } finally {
-      ddTracer._exporter = originalExporter
-    }
+    withExporter({ export: sinon.stub() }, () => provider.forceFlush())
 
     sinon.assert.calledOnce(processor.forceFlush)
   })
