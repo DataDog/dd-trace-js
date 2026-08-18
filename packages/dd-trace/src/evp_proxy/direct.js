@@ -28,10 +28,23 @@ function createDirectEVPRoute (config, intake) {
   if (!apiKey || !config.site) return
 
   try {
+    const hostname = `${intake}.${config.site}`.toLowerCase()
     const url = new URL(format({
       protocol: 'https:',
-      hostname: `${intake}.${config.site}`,
+      hostname,
     }))
+    if (
+      url.hostname !== hostname ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash
+    ) {
+      throw new Error('Invalid direct EVP intake URL')
+    }
+
     const proxyUrl = getProxyForUrl(url.href)
     const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined
 
