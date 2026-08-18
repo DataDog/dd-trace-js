@@ -200,11 +200,11 @@ class NoopExperiment {
 // throwing, so intentionally disabled experiments remain graceful.
 class NoopExperiments {
   #reason
-  #startExperiment
+  #operations
 
-  constructor (reason, options = {}) {
+  constructor (reason, operations = {}) {
     this.#reason = reason || 'LLMObs experiments are not available'
-    this.#startExperiment = options.startExperiment
+    this.#operations = operations
   }
 
   #warn () {
@@ -212,16 +212,25 @@ class NoopExperiments {
   }
 
   createDataset (name, options = {}) {
+    if (options?.projectName && this.#operations.createDataset !== undefined) {
+      return this.#operations.createDataset(name, options)
+    }
     this.#warn()
     return new NoopDataset(name, options)
   }
 
   pullDataset (name, options = {}) {
+    if (options?.projectName && this.#operations.pullDataset !== undefined) {
+      return this.#operations.pullDataset(name, options)
+    }
     this.#warn()
     return Promise.resolve(new NoopDataset(name, { filterTags: options.tags }))
   }
 
   experiment (options = {}) {
+    if (options?.projectName && this.#operations.experiment !== undefined) {
+      return this.#operations.experiment(options)
+    }
     this.#warn()
     return new NoopExperiment(options.name)
   }
@@ -231,8 +240,8 @@ class NoopExperiments {
    * @returns {Promise<ExternalExperiment>}
    */
   startExperiment (options = {}) {
-    if (this.#startExperiment !== undefined && options.projectName) {
-      return this.#startExperiment(options)
+    if (this.#operations.startExperiment !== undefined && options.projectName) {
+      return this.#operations.startExperiment(options)
     }
 
     this.#warn()

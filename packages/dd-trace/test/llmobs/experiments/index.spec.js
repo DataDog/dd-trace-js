@@ -140,6 +140,56 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(typeof experiment.run, 'function')
     })
 
+    it('uses the configured project name and supports per-operation overrides', () => {
+      const constructedProjects = []
+      class CapturingExperimentsClient extends ExperimentsClient {
+        constructor (options) {
+          super(options)
+          constructedProjects.push(options.projectName)
+        }
+      }
+      const { createExperiments: createWithProjectCapture } = proxyquire('../../../src/llmobs/experiments', {
+        './client': { ExperimentsClient: CapturingExperimentsClient },
+      })
+
+      const exp = createWithProjectCapture(enabledConfig({
+        llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'ml-app', projectName: 'configured-project' },
+      }))
+      exp.createDataset('default')
+      exp.createDataset('override', { projectName: 'override-project' })
+
+      assert.deepEqual(constructedProjects, ['configured-project', 'override-project'])
+    })
+
+    it('supports project name overrides without a default project', () => {
+      const constructedProjects = []
+      class CapturingExperimentsClient extends ExperimentsClient {
+        constructor (options) {
+          super(options)
+          constructedProjects.push(options.projectName)
+        }
+      }
+      const { createExperiments: createWithProjectCapture } = proxyquire('../../../src/llmobs/experiments', {
+        './client': { ExperimentsClient: CapturingExperimentsClient },
+      })
+
+      const exp = createWithProjectCapture(enabledConfig({
+        service: undefined,
+        llmobs: { DD_LLMOBS_ENABLED: true },
+      }))
+      const dataset = exp.createDataset('override', { projectName: 'override-project' })
+      const experiment = exp.experiment({
+        name: 'override',
+        projectName: 'override-project',
+        dataset,
+        task: input => input,
+      })
+
+      assert.equal(typeof dataset.push, 'function')
+      assert.equal(typeof experiment.run, 'function')
+      assert.deepEqual(constructedProjects, ['override-project', 'override-project'])
+    })
+
     it('returns a working facade when service is used as the project name fallback', () => {
       const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
       const dataset = exp.createDataset('d')

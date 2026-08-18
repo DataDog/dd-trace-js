@@ -3996,6 +3996,8 @@ declare namespace tracer {
     ) => any | Promise<any>
 
     interface CreateDatasetOptions {
+      /** Override the configured project for this dataset. */
+      projectName?: string
       description?: string
       records?: Array<{
         id?: string,
@@ -4010,6 +4012,8 @@ declare namespace tracer {
       name: string
       dataset: Dataset
       task: ExperimentTask
+      /** Override the configured project for this experiment. */
+      projectName?: string
       /** Evaluators keyed by metric label, or named functions. */
       evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
       /** Summary evaluators keyed by metric label, or named functions. */
@@ -4029,6 +4033,8 @@ declare namespace tracer {
     }
 
     interface PullDatasetOptions {
+      /** Override the configured project for this dataset pull. */
+      projectName?: string
       /** Dataset version to pull. Defaults to latest. */
       version?: number
       /** Wait until at least this many records are readable (absorbs write lag). */
@@ -4706,6 +4712,13 @@ declare namespace tracer {
      * Options for enabling LLM Observability tracing.
      */
     interface LLMObsEnableOptions {
+      /**
+       * The name of the LLM Observability project.
+       * @env DD_LLMOBS_PROJECT_NAME
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      projectName?: string,
+
       /**
        * The name of your ML application.
        * @env DD_LLMOBS_ML_APP
