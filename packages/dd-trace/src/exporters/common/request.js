@@ -171,8 +171,10 @@ function request (data, options, callback) {
   /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
     if (activeBufferSize + contentLength > maxActiveBufferSize) {
-      log.debug('Maximum number of active requests reached: payload is discarded.')
-      return callback(null, undefined, undefined, undefined, true)
+      const error = new log.NoTransmitError('Maximum active request buffer size reached: payload is discarded.')
+      error.code = 'ERR_DD_REQUEST_BUFFER_FULL'
+      log.debug(error.message)
+      return callback(error, undefined, undefined, undefined, true)
     }
 
     activeBufferSize += contentLength

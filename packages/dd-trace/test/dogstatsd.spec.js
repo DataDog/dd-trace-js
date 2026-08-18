@@ -511,8 +511,10 @@ describe('dogstatsd', () => {
     it('drops saturated HTTP writes without falling back to UDP or retrying telemetry', () => {
       const now = sinon.stub(performance, 'now').returns(0)
       const sendRequest = sinon.stub()
-      sendRequest.onFirstCall().callsArgWith(2, null, undefined, undefined, undefined, true)
-      sendRequest.onSecondCall().callsArgWith(2, null, undefined, undefined, undefined, true)
+      const capacityError = new Error('request buffer is full')
+      capacityError.code = 'ERR_DD_REQUEST_BUFFER_FULL'
+      sendRequest.onFirstCall().callsArgWith(2, capacityError, undefined, undefined, undefined, true)
+      sendRequest.onSecondCall().callsArgWith(2, capacityError, undefined, undefined, undefined, true)
       sendRequest.onThirdCall().callsArgWith(2, null, '', 200, {})
       const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
         dgram,
@@ -588,7 +590,7 @@ describe('dogstatsd', () => {
       }
     })
 
-    it('switches the telemetry transport tag after HTTP falls back to UDP', async () => {
+    it('switches the telemetry transport tag after a 404 permanently disables HTTP', async () => {
       const now = sinon.stub(performance, 'now').returns(0)
       const udpSent = new Promise(resolve => {
         udp4.send = sinon.stub().callsFake((buffer, offset, length, port, address, callback) => {
@@ -611,6 +613,45 @@ describe('dogstatsd', () => {
 
         const telemetry = getUdpPayload(userPacketCount)
         assert.match(telemetry, /client_transport:udp/)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_sent:13\|c\|/)
+      } finally {
+        now.restore()
+      }
+    })
+
+    it('keeps the HTTP transport tag after a transient UDP fallback', async () => {
+      const now = sinon.stub(performance, 'now').returns(0)
+      let resolveUdp
+      const udpSent = new Promise(resolve => {
+        resolveUdp = resolve
+      })
+      const httpAttempted = new Promise(resolve => {
+        assertData = resolve
+      })
+      udp4.send = sinon.stub().callsFake((buffer, offset, length, port, address, callback) => {
+        callback?.()
+        resolveUdp()
+      })
+      statusCode = 500
+
+      try {
+        client = createTelemetryClient({ metricsProxyUrl: `http://localhost:${httpPort}` })
+        client.gauge('test.avg', 1)
+        client.flush()
+
+        await Promise.all([httpAttempted, udpSent])
+        httpData.length = 0
+
+        const telemetryReceived = new Promise(resolve => {
+          assertData = resolve
+        })
+        now.returns(10_000)
+        client.flush()
+
+        await telemetryReceived
+
+        const telemetry = Buffer.concat(httpData).toString()
+        assert.match(telemetry, /client_transport:http/)
         assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_sent:13\|c\|/)
       } finally {
         now.restore()

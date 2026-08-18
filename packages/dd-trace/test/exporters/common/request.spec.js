@@ -820,15 +820,14 @@ describe('request', function () {
           },
         },
         (error, res, statusCode, headers, dropped) => {
-          if (error) return done(error)
-
-          if (res) {
+          if (error) {
+            assert.strictEqual(error.code, 'ERR_DD_REQUEST_BUFFER_FULL')
+            assert.strictEqual(dropped, true)
+            koCount++
+          } else {
             assert.strictEqual(res, 'OK')
             assert.strictEqual(dropped, undefined)
             okCount++
-          } else {
-            assert.strictEqual(dropped, true)
-            koCount++
           }
 
           if (okCount + koCount === 10) {
