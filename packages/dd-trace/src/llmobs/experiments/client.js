@@ -33,7 +33,8 @@ function datasetRecordFromResource (resource) {
     attrs.input ?? null,
     attrs.expected_output ?? null,
     attrs.metadata ?? {},
-    id
+    id,
+    attrs.tags ?? []
   )
 }
 
@@ -195,7 +196,7 @@ class ExperimentsClient {
     const resources = Array.isArray(response?.records)
       ? response.records
       : (Array.isArray(response?.data) ? response.data : [])
-    return resources.map(datasetRecordFromResource)
+    return datasetMutationResultFromResources(resources)
   }
 
   async batchUpdateDatasetRecords (projectId, datasetId, attributes) {
@@ -226,6 +227,9 @@ class ExperimentsClient {
     const query = new URLSearchParams()
     if (options.cursor) query.set('page[cursor]', options.cursor)
     if (options.version !== undefined && options.version !== null) query.set('filter[version]', String(options.version))
+    if (Array.isArray(options.tags)) {
+      for (const tag of options.tags) query.append('filter[tags]', tag)
+    }
     const response = await this.request(
       'GET',
       `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`
