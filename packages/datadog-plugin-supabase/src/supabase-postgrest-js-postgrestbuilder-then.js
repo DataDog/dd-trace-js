@@ -1,10 +1,13 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const normalizeError = require('./error')
 const getService = require('./service')
+
+const spanFinished = Symbol('spanFinished')
 
 const operationByMethod = {
   DELETE: 'DELETE',
@@ -26,7 +29,7 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
     const operation = path.includes('/rpc/') ? 'CALL' : operationByMethod[method] || method
     const resource = `${operation} ${path.slice(path.lastIndexOf('/') + 1)}`
 
-    const span = this.startSpan('supabase.database.query', {
+    this.startSpan('supabase.database.query', {
       service: getService(this.config.service, this.tracer._service),
       type: 'sql',
       resource,
@@ -40,20 +43,26 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
       },
     }, ctx)
 
+    // PostgrestBuilder.then owns both the request and consumer callbacks. Finish the request span and
+    // restore its parent before invoking a callback so application failures and latency stay outside it.
     const onFulfilled = ctx.arguments?.[0]
     if (typeof onFulfilled === 'function') {
+      const plugin = this
       ctx.arguments[0] = function (result) {
-        const error = normalizeError(result?.error, 'PostgrestError')
-        if (error) span.setTag('error', error)
-        return onFulfilled.apply(this, arguments)
+        ctx.result = result
+        plugin.finish(ctx)
+        return storage('legacy').run(ctx.parentStore, () => onFulfilled.apply(this, arguments))
       }
     }
 
     const onRejected = ctx.arguments?.[1]
     if (typeof onRejected === 'function') {
+      const plugin = this
       ctx.arguments[1] = function (error) {
-        span.setTag('error', error)
-        return onRejected.apply(this, arguments)
+        ctx.error = error
+        plugin.error(ctx)
+        plugin.finish(ctx)
+        return storage('legacy').run(ctx.parentStore, () => onRejected.apply(this, arguments))
       }
     }
 
@@ -64,9 +73,15 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
     this.finish(ctx)
   }
 
+  error (ctx) {
+    if (ctx[spanFinished]) return
+    super.error(ctx)
+  }
+
   // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
   finish (ctx) {
     // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
+    if (ctx[spanFinished]) return
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
 
     const error = normalizeError(ctx.result?.error, 'PostgrestError')
@@ -75,6 +90,7 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
       super.error(ctx)
     }
 
+    ctx[spanFinished] = true
     super.finish(ctx)
   }
 }

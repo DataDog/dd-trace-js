@@ -192,6 +192,14 @@ class SupabaseTestSetup {
     return this.createSupabaseClient().from('items').select('*')
   }
 
+  /**
+   * @param {(result: object) => unknown} onFulfilled Query fulfillment callback.
+   * @returns {Promise<unknown>}
+   */
+  postgrestBuilderThenWithCallback (onFulfilled) {
+    return this.createSupabaseClient().from('items').select('*').then(onFulfilled)
+  }
+
   /** @returns {Promise<object>} */
   postgrestBuilderThenHead () {
     return this.createSupabaseClient().from('items').select('*', { head: true })
