@@ -712,17 +712,14 @@ describe('LLMObs Experiments facade', () => {
       ])
       sinon.assert.calledOnce(ExperimentsClient.prototype.postExperimentEvents)
       const metrics = ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].metrics
-      assert.deepEqual(metrics.map(metric => metric.label), ['valid_metric'])
+      assert.deepEqual(metrics.map(metric => metric.label), ['valid_metric', 'null_metric'])
+      assert.equal(metrics[1].metric_type, 'json')
+      assert.deepEqual(metrics[1].json_value, { value: null })
 
       ExperimentsClient.prototype.postExperimentEvents.resetHistory()
       await recorder.submitEvaluationMetrics(span, [{ label: 'score' }])
       sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
-      sinon.assert.callCount(warn, 4)
-      sinon.assert.calledWith(
-        warn,
-        'LLMObs experiments: skipping external metric %s because it has neither value nor error',
-        'null_metric'
-      )
+      sinon.assert.callCount(warn, 3)
       sinon.assert.calledWith(
         warn,
         'LLMObs experiments: skipping external metric %s because it has neither value nor error',

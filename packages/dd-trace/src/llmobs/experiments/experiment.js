@@ -133,20 +133,38 @@ function errorMessage (error) {
 function createLimiter (concurrency) {
   const waiting = []
   let active = 0
+  let cancelled = false
+  let cancellationError
 
-  return async function limit (fn) {
+  const limit = async function limit (fn, cancelOnError = false) {
+    if (cancelled) throw cancellationError
     if (active >= concurrency) {
-      await new Promise(resolve => waiting.push(resolve))
+      await new Promise((resolve, reject) => waiting.push({ resolve, reject }))
     }
+    if (cancelled) throw cancellationError
     active++
     try {
       return await fn()
+    } catch (error) {
+      if (cancelOnError) limit.cancel(error)
+      throw error
     } finally {
       active--
       const next = waiting.shift()
-      if (next !== undefined) next()
+      if (next !== undefined) next.resolve()
     }
   }
+
+  limit.cancel = (error) => {
+    if (cancelled) return
+    cancelled = true
+    cancellationError = error
+    const queued = [...waiting]
+    waiting.length = 0
+    for (const waiter of queued) waiter.reject(error)
+  }
+
+  return limit
 }
 
 // Builder + run() orchestration: emits one root span per dataset row and
@@ -347,7 +365,7 @@ class Experiment {
     for (const metric of metrics) {
       validateEvaluatorName(metric.label)
       const metricError = errorMessage(metric.error)
-      if (metric.value == null && metricError == null) {
+      if (metric.value === undefined && metricError == null) {
         log.warn('LLMObs experiments: skipping external metric %s because it has neither value nor error', metric.label)
         continue
       }
@@ -511,7 +529,7 @@ class Experiment {
         throwOnErrors,
         limit,
       })
-    })
+    }, limit)
 
     const rows = new Array(results.length)
     const spans = []
@@ -568,7 +586,7 @@ class Experiment {
     }
   }
 
-  async #mapRecords (records, processRecord) {
+  async #mapRecords (records, processRecord, limit) {
     const results = new Array(records.length)
     const pending = new Array(records.length)
     let firstError
@@ -576,7 +594,12 @@ class Experiment {
     for (let i = 0; i < records.length; i++) {
       pending[i] = processRecord(i).then(
         result => { results[i] = result },
-        err => { if (firstError === undefined) firstError = err }
+        err => {
+          if (firstError === undefined) {
+            firstError = err
+            limit.cancel(err)
+          }
+        }
       )
     }
 
@@ -611,7 +634,7 @@ class Experiment {
       maxRetries,
       retryDelay,
       throwOnErrors,
-    }))
+    }), throwOnErrors)
     const timestampMs = Date.now()
     const metrics = []
     const evaluatorValues = {}
@@ -692,7 +715,7 @@ class Experiment {
         () => evaluator(record.input, row.output, record.expectedOutput),
         maxRetries,
         retryDelay
-      ))
+      ), throwOnErrors)
       row.evaluations[label] = value
       return {
         label,
@@ -711,7 +734,7 @@ class Experiment {
         ),
       }
     } catch (err) {
-      if (throwOnErrors) return { label, value: null, metric: null, error: err }
+      if (throwOnErrors) throw err
       const msg = err.message ?? String(err)
       row.evaluationErrors[label] = msg
       return {
@@ -876,7 +899,13 @@ class Experiment {
       })
     }
 
-    const results = await Promise.all(pending)
+    let results
+    try {
+      results = await Promise.all(pending)
+    } catch (err) {
+      options.limit.cancel(err)
+      throw err
+    }
     for (const result of results) {
       if (result.error !== undefined) {
         if (firstError === undefined) firstError = result.error
@@ -906,7 +935,7 @@ class Experiment {
         () => evaluator(inputs, outputs, expectedOutputs, evaluatorResults, metadata),
         options.maxRetries,
         options.retryDelay
-      ))
+      ), options.throwOnErrors)
       return {
         label,
         evaluation: { value, error: null },
@@ -924,7 +953,7 @@ class Experiment {
         ),
       }
     } catch (err) {
-      if (options.throwOnErrors) return { label, error: err }
+      if (options.throwOnErrors) throw err
       const msg = err.message ?? String(err)
       return {
         label,

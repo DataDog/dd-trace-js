@@ -908,6 +908,48 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     )
   })
 
+  it('does not start queued task work after a throw-on-error failure', async () => {
+    const { client: c } = clientWithMockBackend()
+    const inputs = ['bad', 'later-1', 'later-2']
+    let taskCalls = 0
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'exp-demo',
+        dataset: new Dataset(c, 'demo').addRecord(inputs[0]).addRecord(inputs[1]).addRecord(inputs[2]),
+        task: (input) => {
+          taskCalls++
+          if (input === 'bad') throw new Error('task-fail')
+          return input
+        },
+      }).run({ concurrency: 1, throwOnErrors: true }),
+      /task-fail/
+    )
+    assert.equal(taskCalls, 1)
+  })
+
+  it('does not start queued evaluator work after a throw-on-error failure', async () => {
+    const { client: c } = clientWithMockBackend()
+    const evaluatorInputs = []
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'exp-demo',
+        dataset: new Dataset(c, 'demo').addRecord('bad').addRecord('later'),
+        task: input => input,
+        evaluators: {
+          failing: (input) => {
+            evaluatorInputs.push(input)
+            if (input === 'bad') throw new Error('eval-fail')
+            return true
+          },
+        },
+      }).run({ concurrency: 1, throwOnErrors: true }),
+      /eval-fail/
+    )
+    assert.deepEqual(evaluatorInputs, ['bad'])
+  })
+
   it('normalizes fallback JSON evaluator metrics', async () => {
     const { client: c, requests } = clientWithMockBackend()
     const dataset = new Dataset(c, 'demo').addRecord('x')
