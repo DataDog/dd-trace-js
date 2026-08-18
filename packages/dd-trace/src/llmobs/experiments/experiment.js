@@ -430,8 +430,6 @@ class Experiment {
       const recordIds = this.#dataset.recordIds()
       const usesLLMObsTrace = Boolean(this.#llmobs?.enabled)
       const runs = []
-      const spans = []
-      const metrics = []
       let hasRunError = false
 
       for (let runIndex = 0; runIndex < this.#runs; runIndex++) {
@@ -453,13 +451,13 @@ class Experiment {
           usesLLMObsTrace,
         })
         runs.push(result.run)
-        for (const span of result.spans) spans.push(span)
-        for (const metric of result.metrics) metrics.push(metric)
+        // Submit each run before starting the next iteration so results are available incrementally.
+        // eslint-disable-next-line no-await-in-loop
+        await this.#postEvents(experimentId, result.spans, result.metrics)
+        this.#llmobs?.flush?.()
         if (result.hasRowError) hasRunError = true
       }
 
-      await this.#postEvents(experimentId, spans, metrics)
-      this.#llmobs?.flush?.()
       // A row error doesn't abort the run, but the experiment didn't succeed cleanly.
       await this.#updateStatus(
         experimentId,
@@ -563,7 +561,7 @@ class Experiment {
     }
 
     return {
-      run: new ExperimentRun({ runId, runIteration, rows, summaryEvaluations }),
+      run: new ExperimentRun({ runId, runIteration, hasError: hasRowError, rows, summaryEvaluations }),
       spans,
       metrics,
       hasRowError,

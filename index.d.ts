@@ -3866,6 +3866,8 @@ declare namespace tracer {
       runId: string
       /** 1-based run iteration. */
       runIteration: number
+      /** Whether this run had a task, row-evaluator, or summary-evaluator error. */
+      hasError: boolean
       rows: ExperimentResultRow[]
       summaryEvaluations: Record<string, { value: any, error: string | null }>
     }
