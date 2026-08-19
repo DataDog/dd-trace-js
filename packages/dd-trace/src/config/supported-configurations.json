@@ -13,7 +13,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false",
-        "description": "Enable agentless APM traces."
+        "description": "Enable agentless mode for supported features and disable Agent-only features."
       }
     ],
     "DD_AGENTLESS_LOG_SUBMISSION_ENABLED": [
