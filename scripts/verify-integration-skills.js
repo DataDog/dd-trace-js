@@ -27,6 +27,7 @@ const PLUGIN_BASE_TRAITS = new Set([
   'producer',
   'router',
   'server',
+  'storage',
   'tracing',
 ])
 const SOURCE_SUFFIXES = ['.js', '.cjs', '.mjs']
@@ -58,6 +59,7 @@ const TRAITS = new Set([
   'router',
   'server',
   'shimmer',
+  'storage',
   'tracing',
 ])
 const DISCOVERY_METADATA = new Map([
@@ -144,6 +146,12 @@ const failures = []
  * @property {Map<string, string>} plugins
  * @property {string[]} pluginDirectories
  * @property {string[]} publicIds
+ */
+
+/**
+ * @typedef {object} ContractSources
+ * @property {string[]} sources
+ * @property {Map<string, string>} direct
  */
 
 /**
@@ -819,12 +827,13 @@ function findPackages (integration, registrations, packageName) {
 /**
  * @param {string[]} sources
  * @param {string[]} pluginDirectories
- * @returns {string[]}
+ * @returns {ContractSources}
  */
 function findContractSources (sources, pluginDirectories) {
   const queue = [...sources]
   const visited = new Set(sources)
   const contracts = new Set()
+  const direct = new Map()
 
   for (let i = 0; i < queue.length; i++) {
     const source = queue[i]
@@ -843,10 +852,14 @@ function findContractSources (sources, pluginDirectories) {
 
       visited.add(dependency)
       contracts.add(dependency)
+      if (i < sources.length) direct.set(dependency, source)
       queue.push(dependency)
     }
   }
-  return [...contracts].sort()
+  return {
+    sources: [...contracts].sort(),
+    direct,
+  }
 }
 
 /**
@@ -1091,7 +1104,9 @@ function findClosestReference (integration, mode, traits) {
     const moduleName = source.match(/name:\s*['"]([^'"]+)['"]/)?.[1] ?? candidate
     const registrations = findIntegrationRegistrations(candidate)
     const pluginSources = listPluginFiles(registrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
-    const contractSources = findContractSources(pluginSources, registrations.pluginDirectories)
+    const contracts = findContractSources(pluginSources, registrations.pluginDirectories)
+    const contractSources = contracts.sources
+    const requestedPluginSource = requestedSource ? contracts.direct.get(requestedSource) : undefined
     let hasServerlessType = false
     let hasRequestedKind = false
     if (isServerless) {
@@ -1111,7 +1126,11 @@ function findClosestReference (integration, mode, traits) {
     }
 
     let score = isServerless || isShimmer || traits.includes('orchestrion') ? 1 : 0
-    if (requestedSource && contractSources.includes(requestedSource)) score += 8
+    if (requestedPluginSource) {
+      score += 9
+    } else if (requestedSource && contractSources.includes(requestedSource)) {
+      score += 8
+    }
     if (hasRequestedKind) score += 8
     if (traits.includes('cjs-esm') && /(?:cjs|commonjs)/i.test(source) && /esm/i.test(source)) score += 4
     for (const [trait, kind] of TRAIT_KINDS) {
@@ -1133,7 +1152,7 @@ function findClosestReference (integration, mode, traits) {
       files: compactPaths([
         filename,
         resolveLocalSource('packages/datadog-instrumentations/src/helpers/hooks.js', `../${candidate}`),
-        pluginIndex ?? pluginSources[0],
+        requestedPluginSource ?? pluginIndex ?? pluginSources[0],
         integrationTest ?? tests[0],
       ]),
       registrations: compactPaths([
@@ -1168,7 +1187,7 @@ function inspectIntegration (integration, packageName, mode, traits) {
   const plugins = listPluginFiles(packageRegistrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
   const dependents = findPluginDependents(packageRegistrations.pluginDirectories)
   const tests = listPluginFiles(packageRegistrations.pluginDirectories, 'test', TEST_SUFFIXES)
-  const contractSources = findContractSources(plugins, packageRegistrations.pluginDirectories)
+  const { sources: contractSources } = findContractSources(plugins, packageRegistrations.pluginDirectories)
   const { publicIds } = packageRegistrations
   const ledger = findRegistrationLedger(publicIds)
   const channelSources = compactPaths([

@@ -929,11 +929,24 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.deepStrictEqual(cosmosSchemas, [])
   })
 
-  it('uses an ordinary shimmer integration as the closest reference', () => {
+  it('uses an exact-base shimmer integration as the closest reference', () => {
     const reference = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'shimmer,cache']).reference
 
-    assert.strictEqual(reference.integration, 'ioredis')
-    assert.strictEqual(reference.files.includes('packages/datadog-instrumentations/src/ioredis.js'), true)
+    assert.strictEqual(reference.integration, 'memcached')
+    assert.strictEqual(reference.files.includes('packages/datadog-instrumentations/src/memcached.js'), true)
+  })
+
+  it('accepts storage as a plugin base trait', () => {
+    const packet = inspect(runRepositoryTool, 'couchbase', ['--traits', 'storage'])
+
+    assert.strictEqual(packet.references.includes('packages/dd-trace/src/plugins/storage.js'), true)
+  })
+
+  it('prefers a direct plugin base when selecting a shimmer reference', () => {
+    const reference = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'shimmer,client']).reference
+
+    assert.strictEqual(reference.integration, 'amqplib')
+    assert.strictEqual(reference.files.includes('packages/datadog-plugin-amqplib/src/client.js'), true)
   })
 
   it('keeps package linkage narrow when an instrumentation uses a shared plugin', () => {
