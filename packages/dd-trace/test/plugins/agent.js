@@ -309,14 +309,10 @@ function unformatSpanEvents (span) {
 }
 
 /**
- * `DD_TRACE_OTEL_SEMANTICS_ENABLED` switches the tracer onto the OTLP exporter (see
- * `opentracing/tracer.js`), so nothing reaches this mock agent and every span assertion in a
- * flag-on suite times out. Put the Datadog exporter back for tests only. The spans are
- * unaffected: `SpanProcessor` formats them and applies the OTel semantics before handing them to
- * whichever exporter is installed, so a flag-on suite still asserts the converted tags, over the
- * transport this mock agent can actually receive. The OTLP wire format is covered by system-tests.
- *
- * Must run before `setUrl`, which points the installed exporter at the mock agent.
+ * The flag switches the tracer onto the OTLP exporter, so nothing reaches this mock agent and
+ * every flag-on span assertion times out. Put the Datadog exporter back for tests. `SpanProcessor`
+ * applies the OTel semantics before any exporter sees the span, so the converted tags are still
+ * what gets asserted. Must run before `setUrl`.
  *
  * @param {import('../../src/index')} initializedTracer
  */
@@ -324,8 +320,7 @@ function useAgentExporterForOtelSemantics (initializedTracer) {
   const datadogTracer = initializedTracer._tracer
   const { _config: config, _processor: processor } = datadogTracer
 
-  // Mirrors the exporter choice in `opentracing/tracer.js`; every other case already exports to
-  // the mock agent.
+  // Mirrors `opentracing/tracer.js`; any other exporter already posts to the mock agent.
   const usesOtlpExporter = config.OTEL_TRACES_EXPORTER === 'otlp' &&
     !config.isCiVisibility &&
     config.experimental.exporter !== 'electron'

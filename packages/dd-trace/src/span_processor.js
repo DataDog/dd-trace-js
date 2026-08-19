@@ -69,8 +69,7 @@ class SpanProcessor {
           if (this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
             applyHttpOtelSemantics(formattedSpan)
           }
-          // In OTel-semantics mode, trace metrics must aggregate the same span
-          // name and HTTP attributes that the OTLP trace exporter emits.
+          // Trace metrics must aggregate the same names and attributes the OTLP exporter emits.
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
         }

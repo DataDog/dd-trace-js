@@ -653,10 +653,7 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(attrs['http.status_code'], 200)
       })
 
-      // The OTel HTTP semantic conventions type http.response.status_code and
-      // server.port as ints. The Datadog agent protocol carries every attribute as a
-      // string, so the export-time rename writes them into `meta`; OTLP is typed, so
-      // the exporter promotes them back to intValue from its own allowlist.
+      // Typed as ints by the semantic conventions, but carried in `meta` as strings.
       it('promotes int-typed OTel HTTP attributes from meta strings to intValue', () => {
         const transformer = new OtlpTraceTransformer({}, true)
         const span = createMockSpan({
@@ -681,13 +678,20 @@ describe('OpenTelemetry Traces', () => {
       })
 
       it('omits a malformed int-typed OTel attribute', () => {
-        const transformer = new OtlpTraceTransformer({}, true)
-        const span = createMockSpan({ meta: { 'http.response.status_code': 'bogus' }, metrics: {} })
+        // `Number` turns each of these into an integer, '' and ' ' into a plausible 0.
+        for (const status of ['bogus', '', ' ', '0x10', '1e2', '1.5', '-1']) {
+          const transformer = new OtlpTraceTransformer({}, true)
+          const span = createMockSpan({ meta: { 'http.response.status_code': status }, metrics: {} })
 
-        const decoded = decodePayload(transformer.transformSpans([span]))
-        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+          const decoded = decodePayload(transformer.transformSpans([span]))
+          const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
 
-        assert.strictEqual(attributes.find(({ key }) => key === 'http.response.status_code'), undefined)
+          assert.strictEqual(
+            attributes.find(({ key }) => key === 'http.response.status_code'),
+            undefined,
+            `status ${JSON.stringify(status)} must be omitted`
+          )
+        }
       })
 
       it('does not promote the int-typed keys when OTel semantics are disabled', () => {

@@ -67,8 +67,7 @@ class PrioritySampler {
    *
    * @param {string} env - The environment name (e.g., "production", "staging").
    * @param {SamplingConfig} [config] - The configuration object for sampling.
-   * @param {import('./config')} [tracerConfig] - The tracer configuration, read for
-   *   DD_TRACE_OTEL_SEMANTICS_ENABLED.
+   * @param {import('./config')} [tracerConfig] - Read for DD_TRACE_OTEL_SEMANTICS_ENABLED.
    */
   constructor (env, config, tracerConfig) {
     this.configure(env, config, tracerConfig)
@@ -113,21 +112,19 @@ class PrioritySampler {
     if (!span) return
 
     const context = this._getContext(span)
-    // A completed decision must be immutable. In particular, do not rewrite the resource
-    // every time propagation asks the sampler for an already-decided trace.
+    // A completed decision is immutable: propagation re-asking must not rewrite the resource.
     if (context._sampling.priority !== undefined) return
 
     const root = context._trace.started[0]
 
-    // Guarded on the flag first: `root` is not always a full span here (noop spans, and the
-    // standalone sampler's plain roots), so resolving its context unconditionally throws.
+    // `root` is not always a full span here (noop spans, the standalone sampler's plain
+    // roots), so resolving its context outside this guard throws.
     if (this._otelHttpSemanticsEnabled && typeof root?.context === 'function') {
       const rootContext = root.context()
       const tags = rootContext.getTags()
       const method = tags['http.method']
       if (method !== undefined) {
-        // Sampling can run before route resolution, so fall back to the method-only
-        // name. When the framework already published a route, preserve it.
+        // Sampling can run before route resolution; fall back to the method-only name.
         const samplingResource = otelHttpResourceName(method, tags['http.route'])
         const instrumentationResource = tags[INSTRUMENTATION_HTTP_RESOURCE]
         const resourceName = tags['resource.name']
