@@ -31,7 +31,7 @@ include:
   - local: ".gitlab/benchmarks/gitlab-ci.yml"
   # Compare changes to the repository's agent instructions against master.
   - project: "DataDog/llm-validation-platform"
-    ref: v0.1.0
+    ref: 0f48ca35f0b3dfd19d5c0dc9f92aa977c99bebbf
     file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
@@ -61,7 +61,7 @@ variables:
 # llm-validation-platform
 llm validation:
   variables:
-    LLMVAL_PLATFORM_REF: "v0.1.0"
+    LLMVAL_PLATFORM_REF: "0f48ca35f0b3dfd19d5c0dc9f92aa977c99bebbf"
 
 configure_system_tests:
   variables:
