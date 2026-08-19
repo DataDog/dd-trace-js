@@ -42,17 +42,6 @@ function otelHttpResourceName (method, route) {
 }
 
 /**
- * @param {import('../../opentracing/span')} span
- * @param {(span: import('../../opentracing/span'), arg1: unknown, arg2: unknown) => void} hook
- * @param {unknown} arg1
- * @param {unknown} arg2
- * @returns {void}
- */
-function runHttpRequestHook (span, hook, arg1, arg2) {
-  hook(span, arg1, arg2)
-}
-
-/**
  * Set the resource name and record that the instrumentation is the one that set it, so a later
  * pass can tell its own value from an application's.
  *
@@ -355,7 +344,6 @@ module.exports = {
   isCanonicalIntegerAttribute,
   isInstrumentationOwnedResource,
   otelHttpResourceName,
-  runHttpRequestHook,
   setInstrumentationHttpResource,
   applyHttpOtelSemantics,
 }
