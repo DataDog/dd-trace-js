@@ -107,7 +107,10 @@ describe('Plugin', () => {
     })
 
     it('creates a span for embedMany', async function () {
-      if (!semifies(resolvedVersion, '>=7.0.23')) this.skip()
+      if (!semifies(resolvedVersion, '>=7.0.23')) {
+        // embedMany is only available from ai 7.0.23.
+        this.skip()
+      }
 
       const checkTraces = agent.assertSomeTraces(traces => {
         const spans = traces[0]

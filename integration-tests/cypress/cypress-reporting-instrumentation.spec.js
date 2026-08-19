@@ -2080,341 +2080,343 @@ moduleTypes.forEach(({
 
 // These plugin lifecycle and filesystem tests do not depend on a Cypress version. Run them in one existing
 // integration matrix cell instead of repeating them for every supported version and module type.
-if (requestedVersion === 'latest' &&
-  (!process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === 'commonJS')) {
-  describe('Cypress plugin run lifecycle', () => {
-    const cypressPlugin = require('../../packages/datadog-plugin-cypress/src/cypress-plugin')
-    const originalState = {
-      cypressConfig: cypressPlugin.cypressConfig,
-      isInit: cypressPlugin._isInit,
-      libraryConfigurationPromise: cypressPlugin.libraryConfigurationPromise,
-      hasOriginalCypressRetries: cypressPlugin.hasOriginalCypressRetries,
-      originalCypressRetries: cypressPlugin.originalCypressRetries,
-      tracer: cypressPlugin.tracer,
-      finishedTestsByFile: cypressPlugin.finishedTestsByFile,
-      testsToSkip: cypressPlugin.testsToSkip,
-      testSuiteSpan: cypressPlugin.testSuiteSpan,
-      finishedTestSuiteSpans: cypressPlugin.finishedTestSuiteSpans,
-    }
+const matrixSuite = requestedVersion === 'latest' &&
+  (!process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === 'commonJS')
+  ? describe
+  : describe.skip
+matrixSuite('Cypress plugin run lifecycle', () => {
+  const cypressPlugin = require('../../packages/datadog-plugin-cypress/src/cypress-plugin')
+  const originalState = {
+    cypressConfig: cypressPlugin.cypressConfig,
+    isInit: cypressPlugin._isInit,
+    libraryConfigurationPromise: cypressPlugin.libraryConfigurationPromise,
+    hasOriginalCypressRetries: cypressPlugin.hasOriginalCypressRetries,
+    originalCypressRetries: cypressPlugin.originalCypressRetries,
+    tracer: cypressPlugin.tracer,
+    finishedTestsByFile: cypressPlugin.finishedTestsByFile,
+    testsToSkip: cypressPlugin.testsToSkip,
+    testSuiteSpan: cypressPlugin.testSuiteSpan,
+    finishedTestSuiteSpans: cypressPlugin.finishedTestSuiteSpans,
+  }
 
-    afterEach(() => {
-      cypressPlugin.cypressConfig = originalState.cypressConfig
-      cypressPlugin._isInit = originalState.isInit
-      cypressPlugin.libraryConfigurationPromise = originalState.libraryConfigurationPromise
-      cypressPlugin.hasOriginalCypressRetries = originalState.hasOriginalCypressRetries
-      cypressPlugin.originalCypressRetries = originalState.originalCypressRetries
-      cypressPlugin.tracer = originalState.tracer
-      cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
-      cypressPlugin.testsToSkip = originalState.testsToSkip
-      cypressPlugin.testSuiteSpan = originalState.testSuiteSpan
-      cypressPlugin.finishedTestSuiteSpans = originalState.finishedTestSuiteSpans
-      sinon.restore()
-    })
-
-    it('waits for the existing initialization before the first run', async () => {
-      const initializationError = new Error('stop after existing initialization')
-      cypressPlugin._isInit = true
-      cypressPlugin.libraryConfigurationPromise = Promise.reject(initializationError)
-      const init = sinon.stub(cypressPlugin, 'init')
-
-      await assert.rejects(cypressPlugin.beforeRun({}), error => {
-        assert.strictEqual(error, initializationError)
-        return true
-      })
-
-      sinon.assert.notCalled(init)
-    })
-
-    it('reinitializes before a subsequent interactive run', async () => {
-      const initializationError = new Error('stop after reinitialization')
-      const tracer = {}
-      const cypressConfig = {}
-      cypressPlugin._isInit = false
-      cypressPlugin.tracer = tracer
-      cypressPlugin.cypressConfig = cypressConfig
-      const init = sinon.stub(cypressPlugin, 'init').rejects(initializationError)
-
-      await assert.rejects(cypressPlugin.beforeRun({}), error => {
-        assert.strictEqual(error, initializationError)
-        return true
-      })
-
-      sinon.assert.calledOnceWithExactly(init, tracer, cypressConfig)
-    })
-
-    for (const [description, cypressConfig, shouldDefer] of [
-      ['does not retain completed suites without an after:run boundary', {
-        isTextTerminal: false,
-        isInteractive: true,
-        experimentalInteractiveRunEvents: false,
-      }, false],
-      ['retains completed suites in terminal runs', {
-        isTextTerminal: true,
-        // Cypress 12 can leave this true during `cypress run`.
-        isInteractive: true,
-        experimentalInteractiveRunEvents: false,
-      }, true],
-      ['retains completed suites when interactive run events are enabled', {
-        isTextTerminal: false,
-        isInteractive: true,
-        experimentalInteractiveRunEvents: true,
-      }, true],
-    ]) {
-      it(description, () => {
-        const deferTestSuiteSpan = sinon.stub()
-        const testSuiteSpan = {
-          finish: sinon.stub(),
-          setTag: sinon.stub(),
-        }
-        cypressPlugin.cypressConfig = cypressConfig
-        cypressPlugin.finishedTestsByFile = {}
-        cypressPlugin.testsToSkip = []
-        cypressPlugin.testSuiteSpan = testSuiteSpan
-        cypressPlugin.finishedTestSuiteSpans = []
-        cypressPlugin.tracer = { _tracer: { _exporter: { deferTestSuiteSpan } } }
-        sinon.stub(cypressPlugin, 'ciVisEvent')
-
-        cypressPlugin.afterSpec({ relative: 'cypress/e2e/basic-pass.js' }, { stats: { tests: 1 } })
-
-        sinon.assert.calledOnce(testSuiteSpan.finish)
-        assert.strictEqual(deferTestSuiteSpan.calledOnceWithExactly(testSuiteSpan), shouldDefer)
-        assert.strictEqual(cypressPlugin.finishedTestSuiteSpans.length, shouldDefer ? 1 : 0)
-      })
-    }
-
-    it('restores user retries before requesting configuration for a subsequent run', async () => {
-      const cypressConfig = { retries: { openMode: 1, runMode: 2 }, version: '12.0.0' }
-      cypressPlugin.cypressConfig = cypressConfig
-      cypressPlugin.hasOriginalCypressRetries = true
-      cypressPlugin.originalCypressRetries = { openMode: 1, runMode: 2 }
-      cypressConfig.retries.runMode = 5
-
-      const tracer = {
-        _tracer: {
-          _config: { isServiceUserProvided: false },
-        },
-      }
-
-      const result = await cypressPlugin.init(tracer, cypressConfig)
-
-      assert.strictEqual(result.retries.openMode, 1)
-      assert.strictEqual(result.retries.runMode, 2)
-    })
+  afterEach(() => {
+    cypressPlugin.cypressConfig = originalState.cypressConfig
+    cypressPlugin._isInit = originalState.isInit
+    cypressPlugin.libraryConfigurationPromise = originalState.libraryConfigurationPromise
+    cypressPlugin.hasOriginalCypressRetries = originalState.hasOriginalCypressRetries
+    cypressPlugin.originalCypressRetries = originalState.originalCypressRetries
+    cypressPlugin.tracer = originalState.tracer
+    cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
+    cypressPlugin.testsToSkip = originalState.testsToSkip
+    cypressPlugin.testSuiteSpan = originalState.testSuiteSpan
+    cypressPlugin.finishedTestSuiteSpans = originalState.finishedTestSuiteSpans
+    sinon.restore()
   })
 
-  describe('cypress config instrumentation', () => {
-    const temporaryDirectories = []
-    let errors
+  it('waits for the existing initialization before the first run', async () => {
+    const initializationError = new Error('stop after existing initialization')
+    cypressPlugin._isInit = true
+    cypressPlugin.libraryConfigurationPromise = Promise.reject(initializationError)
+    const init = sinon.stub(cypressPlugin, 'init')
 
-    beforeEach(() => {
-      errors = []
-      sinon.stub(console, 'error').callsFake((...args) => errors.push(format(...args)))
+    await assert.rejects(cypressPlugin.beforeRun({}), error => {
+      assert.strictEqual(error, initializationError)
+      return true
     })
 
-    afterEach(() => {
-      sinon.restore()
-      for (const directory of temporaryDirectories.splice(0)) {
-        fs.rmSync(directory, { force: true, recursive: true })
-      }
+    sinon.assert.notCalled(init)
+  })
+
+  it('reinitializes before a subsequent interactive run', async () => {
+    const initializationError = new Error('stop after reinitialization')
+    const tracer = {}
+    const cypressConfig = {}
+    cypressPlugin._isInit = false
+    cypressPlugin.tracer = tracer
+    cypressPlugin.cypressConfig = cypressConfig
+    const init = sinon.stub(cypressPlugin, 'init').rejects(initializationError)
+
+    await assert.rejects(cypressPlugin.beforeRun({}), error => {
+      assert.strictEqual(error, initializationError)
+      return true
     })
 
-    /**
-     * @param {string} code filesystem error code
-     * @param {string} filePath affected path
-     * @param {string} [syscall] failed system call
-     * @returns {Error & { code: string, path: string, syscall: string }} filesystem error
-     */
-    function createFileError (code, filePath, syscall = 'open') {
-      return Object.assign(new Error(`${code}: ${syscall} ${filePath}`), {
-        code,
-        path: filePath,
-        syscall,
-      })
-    }
+    sinon.assert.calledOnceWithExactly(init, tracer, cypressConfig)
+  })
 
-    /**
-     * @returns {string} temporary Cypress project root
-     */
-    function createProjectRoot () {
-      const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cypress-config-'))
-      temporaryDirectories.push(projectRoot)
-      return projectRoot
-    }
-
-    /**
-     * @param {object} [fsStub] filesystem overrides
-     * @param {() => string} [randomUUID] UUID generator
-     * @param {object} [setupNodeEventsChannel] setup-node-events diagnostic channel
-     * @returns {{
-     *   cypressConfig: object,
-     *   errors: string[],
-     *   manualPluginOwner: object,
-     *   warnings: string[]
-     * }} loaded instrumentation and logs
-     */
-    function loadCypressConfig (fsStub, randomUUID, setupNodeEventsChannel) {
-      const warnings = []
-      let uuid = 0
-      const log = {
-        error: (...args) => errors.push(format(...args)),
-        warn: (...args) => warnings.push(format(...args)),
+  for (const [description, cypressConfig, shouldDefer] of [
+    ['does not retain completed suites without an after:run boundary', {
+      isTextTerminal: false,
+      isInteractive: true,
+      experimentalInteractiveRunEvents: false,
+    }, false],
+    ['retains completed suites in terminal runs', {
+      isTextTerminal: true,
+      // Cypress 12 can leave this true during `cypress run`.
+      isInteractive: true,
+      experimentalInteractiveRunEvents: false,
+    }, true],
+    ['retains completed suites when interactive run events are enabled', {
+      isTextTerminal: false,
+      isInteractive: true,
+      experimentalInteractiveRunEvents: true,
+    }, true],
+  ]) {
+    it(description, () => {
+      const deferTestSuiteSpan = sinon.stub()
+      const testSuiteSpan = {
+        finish: sinon.stub(),
+        setTag: sinon.stub(),
       }
-      const finalization = proxyquire('../../packages/datadog-plugin-cypress/src/finalization', {
-        '../../dd-trace/src/log': log,
-      })
-      const stubs = {
-        crypto: {
-          randomUUID: randomUUID || (() => `uuid-${++uuid}`),
+      cypressPlugin.cypressConfig = cypressConfig
+      cypressPlugin.finishedTestsByFile = {}
+      cypressPlugin.testsToSkip = []
+      cypressPlugin.testSuiteSpan = testSuiteSpan
+      cypressPlugin.finishedTestSuiteSpans = []
+      cypressPlugin.tracer = { _tracer: { _exporter: { deferTestSuiteSpan } } }
+      sinon.stub(cypressPlugin, 'ciVisEvent')
+
+      cypressPlugin.afterSpec({ relative: 'cypress/e2e/basic-pass.js' }, { stats: { tests: 1 } })
+
+      sinon.assert.calledOnce(testSuiteSpan.finish)
+      assert.strictEqual(deferTestSuiteSpan.calledOnceWithExactly(testSuiteSpan), shouldDefer)
+      assert.strictEqual(cypressPlugin.finishedTestSuiteSpans.length, shouldDefer ? 1 : 0)
+    })
+  }
+
+  it('restores user retries before requesting configuration for a subsequent run', async () => {
+    const cypressConfig = { retries: { openMode: 1, runMode: 2 }, version: '12.0.0' }
+    cypressPlugin.cypressConfig = cypressConfig
+    cypressPlugin.hasOriginalCypressRetries = true
+    cypressPlugin.originalCypressRetries = { openMode: 1, runMode: 2 }
+    cypressConfig.retries.runMode = 5
+
+    const tracer = {
+      _tracer: {
+        _config: { isServiceUserProvided: false },
+      },
+    }
+
+    const result = await cypressPlugin.init(tracer, cypressConfig)
+
+    assert.strictEqual(result.retries.openMode, 1)
+    assert.strictEqual(result.retries.runMode, 2)
+  })
+})
+
+matrixSuite('cypress config instrumentation', () => {
+  const temporaryDirectories = []
+  let errors
+
+  beforeEach(() => {
+    errors = []
+    sinon.stub(console, 'error').callsFake((...args) => errors.push(format(...args)))
+  })
+
+  afterEach(() => {
+    sinon.restore()
+    for (const directory of temporaryDirectories.splice(0)) {
+      fs.rmSync(directory, { force: true, recursive: true })
+    }
+  })
+
+  /**
+   * @param {string} code filesystem error code
+   * @param {string} filePath affected path
+   * @param {string} [syscall] failed system call
+   * @returns {Error & { code: string, path: string, syscall: string }} filesystem error
+   */
+  function createFileError (code, filePath, syscall = 'open') {
+    return Object.assign(new Error(`${code}: ${syscall} ${filePath}`), {
+      code,
+      path: filePath,
+      syscall,
+    })
+  }
+
+  /**
+   * @returns {string} temporary Cypress project root
+   */
+  function createProjectRoot () {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cypress-config-'))
+    temporaryDirectories.push(projectRoot)
+    return projectRoot
+  }
+
+  /**
+   * @param {object} [fsStub] filesystem overrides
+   * @param {() => string} [randomUUID] UUID generator
+   * @param {object} [setupNodeEventsChannel] setup-node-events diagnostic channel
+   * @returns {{
+   *   cypressConfig: object,
+   *   errors: string[],
+   *   manualPluginOwner: object,
+   *   warnings: string[]
+   * }} loaded instrumentation and logs
+   */
+  function loadCypressConfig (fsStub, randomUUID, setupNodeEventsChannel) {
+    const warnings = []
+    let uuid = 0
+    const log = {
+      error: (...args) => errors.push(format(...args)),
+      warn: (...args) => warnings.push(format(...args)),
+    }
+    const finalization = proxyquire('../../packages/datadog-plugin-cypress/src/finalization', {
+      '../../dd-trace/src/log': log,
+    })
+    const stubs = {
+      crypto: {
+        randomUUID: randomUUID || (() => `uuid-${++uuid}`),
+      },
+      '../../datadog-plugin-cypress/src/finalization': finalization,
+      '../../dd-trace/src/log': log,
+      './helpers/instrument': {
+        channel: () => setupNodeEventsChannel || { hasSubscribers: false, publish: () => {} },
+      },
+    }
+
+    if (fsStub) stubs.fs = fsStub
+
+    return {
+      cypressConfig: proxyquire('../../packages/datadog-instrumentations/src/cypress-config', stubs),
+      errors,
+      manualPluginOwner: finalization.manualPluginOwner,
+      warnings,
+    }
+  }
+
+  /**
+   * @param {object} cypressConfig Cypress config instrumentation
+   * @param {object} resolvedConfig resolved Cypress config
+   * @returns {{ handlers: Record<string, Function>, result: object }} registered handlers and returned config
+   */
+  function injectSupportFile (cypressConfig, resolvedConfig) {
+    const configFile = { e2e: {} }
+    const handlers = {}
+    cypressConfig.wrapConfig(configFile)
+
+    const result = configFile.e2e.setupNodeEvents((event, handler) => {
+      handlers[event] = handler
+    }, resolvedConfig)
+
+    return { handlers, result }
+  }
+
+  /**
+   * @param {string} directory directory to inspect
+   * @returns {string[]} generated Cypress files
+   */
+  function getGeneratedFiles (directory) {
+    return fs.readdirSync(directory)
+      .filter(file => file.startsWith('dd-cypress-support-') || file.startsWith('.dd-cypress-config-'))
+  }
+
+  /**
+   * @param {string} code error code raised after a partial write
+   * @param {(writeNumber: number) => boolean} [shouldFail] selects the write that fails
+   * @returns {object} filesystem stub
+   */
+  function createPartialWriteFailure (code, shouldFail = () => true) {
+    const pathsByDescriptor = new Map()
+    let writeNumber = 0
+
+    return {
+      openSync (filePath, flags) {
+        const descriptor = fs.openSync(filePath, flags)
+        pathsByDescriptor.set(descriptor, filePath)
+        return descriptor
+      },
+      writeFileSync (file, content, ...args) {
+        if (typeof file === 'number' && pathsByDescriptor.has(file)) {
+          writeNumber++
+          if (!shouldFail(writeNumber)) return fs.writeFileSync(file, content, ...args)
+
+          const filePath = pathsByDescriptor.get(file)
+          fs.writeFileSync(file, 'partial')
+          throw createFileError(code, filePath, 'write')
+        }
+        return fs.writeFileSync(file, content, ...args)
+      },
+      closeSync (descriptor) {
+        pathsByDescriptor.delete(descriptor)
+        return fs.closeSync(descriptor)
+      },
+    }
+  }
+
+  describe('support wrapper', () => {
+    it('does not enable interactive run events when Test Optimization does not register', () => {
+      const projectRoot = createProjectRoot()
+      const { cypressConfig, warnings } = loadCypressConfig()
+      const resolvedConfig = {
+        projectRoot,
+        supportFile: false,
+        isInteractive: true,
+        experimentalInteractiveRunEvents: false,
+      }
+
+      injectSupportFile(cypressConfig, resolvedConfig)
+
+      assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, false)
+      assert.deepStrictEqual(warnings, [])
+    })
+
+    it('enables interactive run events after Test Optimization registers', () => {
+      const projectRoot = createProjectRoot()
+      const setupNodeEventsChannel = {
+        hasSubscribers: true,
+        publish (payload) {
+          payload.registered = true
         },
-        '../../datadog-plugin-cypress/src/finalization': finalization,
-        '../../dd-trace/src/log': log,
-        './helpers/instrument': {
-          channel: () => setupNodeEventsChannel || { hasSubscribers: false, publish: () => {} },
-        },
+      }
+      const { cypressConfig, warnings } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
+      const resolvedConfig = {
+        projectRoot,
+        supportFile: false,
+        isInteractive: true,
+        experimentalInteractiveRunEvents: false,
       }
 
-      if (fsStub) stubs.fs = fsStub
+      injectSupportFile(cypressConfig, resolvedConfig)
 
-      return {
-        cypressConfig: proxyquire('../../packages/datadog-instrumentations/src/cypress-config', stubs),
-        errors,
-        manualPluginOwner: finalization.manualPluginOwner,
-        warnings,
-      }
-    }
+      assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, true)
+      assert.deepStrictEqual(warnings, [
+        'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
+      ])
+    })
 
-    /**
-     * @param {object} cypressConfig Cypress config instrumentation
-     * @param {object} resolvedConfig resolved Cypress config
-     * @returns {{ handlers: Record<string, Function>, result: object }} registered handlers and returned config
-     */
-    function injectSupportFile (cypressConfig, resolvedConfig) {
-      const configFile = { e2e: {} }
-      const handlers = {}
-      cypressConfig.wrapConfig(configFile)
+    it('falls back to the project root when the support directory is not writable', async () => {
+      const projectRoot = createProjectRoot()
+      const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+      const supportFile = path.join(supportDirectory, 'e2e.js')
+      fs.mkdirSync(supportDirectory, { recursive: true })
+      fs.writeFileSync(supportFile, '// user support\n')
 
-      const result = configFile.e2e.setupNodeEvents((event, handler) => {
-        handlers[event] = handler
-      }, resolvedConfig)
-
-      return { handlers, result }
-    }
-
-    /**
-     * @param {string} directory directory to inspect
-     * @returns {string[]} generated Cypress files
-     */
-    function getGeneratedFiles (directory) {
-      return fs.readdirSync(directory)
-        .filter(file => file.startsWith('dd-cypress-support-') || file.startsWith('.dd-cypress-config-'))
-    }
-
-    /**
-     * @param {string} code error code raised after a partial write
-     * @param {(writeNumber: number) => boolean} [shouldFail] selects the write that fails
-     * @returns {object} filesystem stub
-     */
-    function createPartialWriteFailure (code, shouldFail = () => true) {
-      const pathsByDescriptor = new Map()
-      let writeNumber = 0
-
-      return {
+      const { cypressConfig, warnings } = loadCypressConfig({
         openSync (filePath, flags) {
-          const descriptor = fs.openSync(filePath, flags)
-          pathsByDescriptor.set(descriptor, filePath)
-          return descriptor
-        },
-        writeFileSync (file, content, ...args) {
-          if (typeof file === 'number' && pathsByDescriptor.has(file)) {
-            writeNumber++
-            if (!shouldFail(writeNumber)) return fs.writeFileSync(file, content, ...args)
-
-            const filePath = pathsByDescriptor.get(file)
-            fs.writeFileSync(file, 'partial')
-            throw createFileError(code, filePath, 'write')
+          if (path.dirname(filePath) === supportDirectory) {
+            throw createFileError('EACCES', filePath)
           }
-          return fs.writeFileSync(file, content, ...args)
+          return fs.openSync(filePath, flags)
         },
-        closeSync (descriptor) {
-          pathsByDescriptor.delete(descriptor)
-          return fs.closeSync(descriptor)
-        },
-      }
-    }
-
-    describe('support wrapper', () => {
-      it('does not enable interactive run events when Test Optimization does not register', () => {
-        const projectRoot = createProjectRoot()
-        const { cypressConfig, warnings } = loadCypressConfig()
-        const resolvedConfig = {
-          projectRoot,
-          supportFile: false,
-          isInteractive: true,
-          experimentalInteractiveRunEvents: false,
-        }
-
-        injectSupportFile(cypressConfig, resolvedConfig)
-
-        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, false)
-        assert.deepStrictEqual(warnings, [])
       })
+      const resolvedConfig = { projectRoot, supportFile }
+      const { handlers } = injectSupportFile(cypressConfig, resolvedConfig)
 
-      it('enables interactive run events after Test Optimization registers', () => {
-        const projectRoot = createProjectRoot()
-        const setupNodeEventsChannel = {
-          hasSubscribers: true,
-          publish (payload) {
-            payload.registered = true
-          },
-        }
-        const { cypressConfig, warnings } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
-        const resolvedConfig = {
-          projectRoot,
-          supportFile: false,
-          isInteractive: true,
-          experimentalInteractiveRunEvents: false,
-        }
+      assert.strictEqual(path.dirname(resolvedConfig.supportFile), projectRoot)
+      assert.deepStrictEqual(warnings, [])
+      assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
 
-        injectSupportFile(cypressConfig, resolvedConfig)
+      await handlers['after:run']({})
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
 
-        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, true)
-        assert.deepStrictEqual(warnings, [
-          'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
-        ])
-      })
-
-      it('falls back to the project root when the support directory is not writable', async () => {
-        const projectRoot = createProjectRoot()
-        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
-        const supportFile = path.join(supportDirectory, 'e2e.js')
-        fs.mkdirSync(supportDirectory, { recursive: true })
-        fs.writeFileSync(supportFile, '// user support\n')
-
-        const { cypressConfig, warnings } = loadCypressConfig({
-          openSync (filePath, flags) {
-            if (path.dirname(filePath) === supportDirectory) {
-              throw createFileError('EACCES', filePath)
-            }
-            return fs.openSync(filePath, flags)
-          },
-        })
-        const resolvedConfig = { projectRoot, supportFile }
-        const { handlers } = injectSupportFile(cypressConfig, resolvedConfig)
-
-        assert.strictEqual(path.dirname(resolvedConfig.supportFile), projectRoot)
-        assert.deepStrictEqual(warnings, [])
-        assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
-
-        await handlers['after:run']({})
-        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
-      })
-
-      it('removes generated support files when the config process exits without after:run', () => {
-        const projectRoot = createProjectRoot()
-        const generatedCountFile = path.join(projectRoot, 'generated-count')
-        const cypressConfigPath = require.resolve('../../packages/datadog-instrumentations/src/cypress-config')
-        const script = [
-          'const fs = require("node:fs")',
+    it('removes generated support files when the config process exits without after:run', () => {
+      const projectRoot = createProjectRoot()
+      const generatedCountFile = path.join(projectRoot, 'generated-count')
+      const cypressConfigPath = require.resolve('../../packages/datadog-instrumentations/src/cypress-config')
+      const script = [
+        'const fs = require("node:fs")',
           `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})`,
           `const projectRoot = ${JSON.stringify(projectRoot)}`,
           'const config = { e2e: {} }',
@@ -2424,505 +2426,406 @@ if (requestedVersion === 'latest' &&
           '  .filter(file => file.startsWith("dd-cypress-support-")).length',
           `fs.writeFileSync(${JSON.stringify(generatedCountFile)}, String(generatedCount))`,
           'process.exit(0)',
-        ].join('\n')
+      ].join('\n')
 
-        execFileSync(process.execPath, ['-e', script], {
-          env: { ...process.env, NODE_OPTIONS: '' },
-        })
-
-        assert.strictEqual(fs.readFileSync(generatedCountFile, 'utf8'), '2')
-        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      execFileSync(process.execPath, ['-e', script], {
+        env: { ...process.env, NODE_OPTIONS: '' },
       })
 
-      it('logs an error with every failed location when no directory is writable', () => {
-        const projectRoot = createProjectRoot()
-        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
-        const supportFile = path.join(supportDirectory, 'e2e.js')
-        fs.mkdirSync(supportDirectory, { recursive: true })
-        fs.writeFileSync(supportFile, '// user support\n')
-
-        const { cypressConfig, errors, warnings } = loadCypressConfig({
-          openSync (filePath) {
-            throw createFileError('EROFS', filePath)
-          },
-        })
-        const resolvedConfig = { projectRoot, supportFile }
-        injectSupportFile(cypressConfig, resolvedConfig)
-
-        assert.strictEqual(resolvedConfig.supportFile, supportFile)
-        assert.strictEqual(errors.length, 1)
-        assert.deepStrictEqual(warnings, [])
-        assert.match(errors[0], /^ERROR: Datadog could not create the Cypress support wrapper/)
-        assert.strictEqual(errors[0].match(/EROFS during open/g).length, 2)
-        assert.match(errors[0], new RegExp(supportDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
-        assert.match(errors[0], new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
-      })
-
-      it('logs an error when the original support file cannot be read', () => {
-        const projectRoot = createProjectRoot()
-        const supportFile = path.join(projectRoot, 'e2e.js')
-        fs.writeFileSync(supportFile, '// user support\n')
-
-        const { cypressConfig, errors } = loadCypressConfig({
-          readFileSync (filePath, ...args) {
-            if (filePath === supportFile) throw createFileError('EACCES', filePath, 'read')
-            return fs.readFileSync(filePath, ...args)
-          },
-        })
-        const resolvedConfig = { projectRoot, supportFile }
-        injectSupportFile(cypressConfig, resolvedConfig)
-
-        assert.strictEqual(resolvedConfig.supportFile, supportFile)
-        assert.strictEqual(errors.length, 1)
-        assert.match(errors[0], /^ERROR: Datadog could not read the Cypress support file/)
-        assert.match(errors[0], /EACCES during read/)
-      })
-
-      it('logs an error when the Datadog browser hooks cannot be read', () => {
-        const projectRoot = createProjectRoot()
-        const browserHooksPath = require.resolve('../../packages/datadog-plugin-cypress/src/support')
-
-        const { cypressConfig, errors } = loadCypressConfig({
-          readFileSync (filePath, ...args) {
-            if (filePath === browserHooksPath) throw createFileError('EACCES', filePath, 'read')
-            return fs.readFileSync(filePath, ...args)
-          },
-        })
-        const resolvedConfig = { projectRoot, supportFile: false }
-        injectSupportFile(cypressConfig, resolvedConfig)
-
-        assert.strictEqual(resolvedConfig.supportFile, false)
-        assert.strictEqual(errors.length, 1)
-        assert.match(errors[0], /^ERROR: Datadog could not read its Cypress browser support hooks/)
-        assert.match(errors[0], /EACCES during read/)
-      })
-
-      it('logs an error when no project directory is available for the support wrapper', () => {
-        const { cypressConfig, errors } = loadCypressConfig()
-        const resolvedConfig = { supportFile: false }
-        injectSupportFile(cypressConfig, resolvedConfig)
-
-        assert.strictEqual(resolvedConfig.supportFile, false)
-        assert.strictEqual(errors.length, 1)
-        assert.match(errors[0], /^ERROR: Datadog could not create the Cypress support wrapper/)
-        assert.match(errors[0], /no project directory was available/)
-      })
-
-      it('removes partial support files when the filesystem runs out of space', () => {
-        const projectRoot = createProjectRoot()
-        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
-        const supportFile = path.join(supportDirectory, 'e2e.js')
-        fs.mkdirSync(supportDirectory, { recursive: true })
-        fs.writeFileSync(supportFile, '// user support\n')
-
-        const { cypressConfig, errors } = loadCypressConfig(createPartialWriteFailure('ENOSPC'))
-        injectSupportFile(cypressConfig, { projectRoot, supportFile })
-
-        assert.strictEqual(errors.length, 1)
-        assert.match(errors[0], /ENOSPC during write/)
-        assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
-        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
-      })
-
-      it('removes the browser hooks when writing the support wrapper fails', () => {
-        const projectRoot = createProjectRoot()
-        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
-        const supportFile = path.join(supportDirectory, 'e2e.js')
-        fs.mkdirSync(supportDirectory, { recursive: true })
-        fs.writeFileSync(supportFile, '// user support\n')
-
-        const failWrapperWrites = writeNumber => writeNumber % 2 === 0
-        const { cypressConfig, errors } = loadCypressConfig(
-          createPartialWriteFailure('ENOSPC', failWrapperWrites)
-        )
-        injectSupportFile(cypressConfig, { projectRoot, supportFile })
-
-        assert.strictEqual(errors.length, 1)
-        assert.strictEqual(errors[0].match(/ENOSPC during write/g).length, 2)
-        assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
-        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
-      })
-
-      it('removes partial support files when closing them fails', () => {
-        const projectRoot = createProjectRoot()
-        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
-        const supportFile = path.join(supportDirectory, 'e2e.js')
-        const pathsByDescriptor = new Map()
-        fs.mkdirSync(supportDirectory, { recursive: true })
-        fs.writeFileSync(supportFile, '// user support\n')
-
-        const { cypressConfig, errors } = loadCypressConfig({
-          openSync (filePath, flags) {
-            const descriptor = fs.openSync(filePath, flags)
-            pathsByDescriptor.set(descriptor, filePath)
-            return descriptor
-          },
-          closeSync (descriptor) {
-            const filePath = pathsByDescriptor.get(descriptor)
-            pathsByDescriptor.delete(descriptor)
-            fs.closeSync(descriptor)
-            throw createFileError('EIO', filePath, 'close')
-          },
-        })
-        injectSupportFile(cypressConfig, { projectRoot, supportFile })
-
-        assert.strictEqual(errors.length, 1)
-        assert.strictEqual(errors[0].match(/EIO during close/g).length, 2)
-        assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
-        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
-      })
-
-      it('warns when generated support files cannot be removed', async () => {
-        const projectRoot = createProjectRoot()
-
-        const { cypressConfig, errors, warnings } = loadCypressConfig({
-          unlinkSync (filePath) {
-            throw createFileError('EACCES', filePath, 'unlink')
-          },
-        })
-        const { handlers } = injectSupportFile(cypressConfig, { projectRoot, supportFile: false })
-
-        await handlers['after:run']({})
-
-        assert.deepStrictEqual(errors, [])
-        assert.strictEqual(warnings.length, 2)
-        assert.ok(warnings.every(warning => warning.includes('could not remove generated Cypress file')))
-        assert.ok(warnings.every(warning => warning.includes('EACCES during unlink')))
-        assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
-      })
+      assert.strictEqual(fs.readFileSync(generatedCountFile, 'utf8'), '2')
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
     })
 
-    describe('manual plugin', () => {
-      it('keeps interactive run events enabled when setupNodeEvents returns a partial config', async () => {
-        const projectRoot = createProjectRoot()
-        const datadogAfterSpecHandler = sinon.stub()
-        datadogAfterSpecHandler[Symbol.for('dd-trace.cypress.after-spec.handler')] = true
-        const datadogAfterRunHandler = sinon.stub()
-        datadogAfterRunHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
-        const setupNodeEventsChannel = {
-          hasSubscribers: true,
-          publish: sinon.stub(),
-        }
-        const { cypressConfig, manualPluginOwner, warnings } = loadCypressConfig(
-          undefined,
-          undefined,
-          setupNodeEventsChannel
-        )
-        const taskHandler = {
-          'dd:testSuiteStart': sinon.stub(),
-          'dd:beforeEach': sinon.stub(),
-          'dd:afterEach': sinon.stub(),
-          'dd:addTags': sinon.stub(),
-          [Symbol.for('dd-trace.cypress.task.handler')]: manualPluginOwner,
-        }
-        const config = {
-          e2e: {
-            setupNodeEvents (on) {
-              on('after:spec', datadogAfterSpecHandler)
-              on('after:run', datadogAfterRunHandler)
-              on('task', taskHandler)
-              return { env: { returned: true } }
-            },
-          },
-        }
-        const handlers = {}
-        const initialConfig = {
-          projectRoot,
-          supportFile: false,
-          isInteractive: true,
-          experimentalInteractiveRunEvents: false,
-        }
-        setupNodeEventsChannel.publish.resetHistory()
+    it('logs an error with every failed location when no directory is writable', () => {
+      const projectRoot = createProjectRoot()
+      const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+      const supportFile = path.join(supportDirectory, 'e2e.js')
+      fs.mkdirSync(supportDirectory, { recursive: true })
+      fs.writeFileSync(supportFile, '// user support\n')
 
-        cypressConfig.wrapConfig(config)
-        const returnedConfig = config.e2e.setupNodeEvents((event, handler) => {
-          handlers[event] = handler
-        }, initialConfig)
-
-        assert.notStrictEqual(returnedConfig, initialConfig)
-        assert.deepStrictEqual(returnedConfig.env, { returned: true })
-        assert.strictEqual(returnedConfig.experimentalInteractiveRunEvents, true)
-        assert.strictEqual(initialConfig.experimentalInteractiveRunEvents, true)
-        assert.deepStrictEqual(warnings, [
-          'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
-        ])
-        sinon.assert.notCalled(setupNodeEventsChannel.publish)
-        await handlers['after:run']({})
+      const { cypressConfig, errors, warnings } = loadCypressConfig({
+        openSync (filePath) {
+          throw createFileError('EROFS', filePath)
+        },
       })
+      const resolvedConfig = { projectRoot, supportFile }
+      injectSupportFile(cypressConfig, resolvedConfig)
 
-      it('removes a pre-screenshot manual before:run handler when current instrumentation takes ownership', () => {
-        const projectRoot = createProjectRoot()
-        const legacyBeforeRunHandler = sinon.stub()
-        const currentBeforeRunHandler = sinon.stub()
-        const registrations = []
-        const setupNodeEventsChannel = {
-          hasSubscribers: true,
-          publish: sinon.stub().callsFake((payload) => {
-            if (!payload.on) return
-            payload.on('before:run', currentBeforeRunHandler)
-            payload.registered = true
-            payload.cleanupWrapper()
-          }),
-        }
-        const taskHandler = {
-          'dd:testSuiteStart': sinon.stub(),
-          'dd:beforeEach': sinon.stub(),
-          'dd:afterEach': sinon.stub(),
-          'dd:addTags': sinon.stub(),
-        }
-        const config = {
-          e2e: {
-            /**
-             * @param {Function} on Cypress event registration function
-             * @returns {void}
-             */
-            setupNodeEvents (on) {
-              on('before:run', legacyBeforeRunHandler)
-              on('after:spec', sinon.stub())
-              on('after:run', sinon.stub())
-              on('task', taskHandler)
-            },
-          },
-        }
-        const { cypressConfig } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
+      assert.strictEqual(resolvedConfig.supportFile, supportFile)
+      assert.strictEqual(errors.length, 1)
+      assert.deepStrictEqual(warnings, [])
+      assert.match(errors[0], /^ERROR: Datadog could not create the Cypress support wrapper/)
+      assert.strictEqual(errors[0].match(/EROFS during open/g).length, 2)
+      assert.match(errors[0], new RegExp(supportDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      assert.match(errors[0], new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    })
 
-        cypressConfig.wrapConfig(config)
-        config.e2e.setupNodeEvents((event, handler) => {
-          registrations.push([event, handler])
-        }, { projectRoot, supportFile: false, isInteractive: false })
+    it('logs an error when the original support file cannot be read', () => {
+      const projectRoot = createProjectRoot()
+      const supportFile = path.join(projectRoot, 'e2e.js')
+      fs.writeFileSync(supportFile, '// user support\n')
 
-        assert.deepStrictEqual(
-          registrations.filter(([event]) => event === 'before:run'),
-          [['before:run', currentBeforeRunHandler]]
-        )
+      const { cypressConfig, errors } = loadCypressConfig({
+        readFileSync (filePath, ...args) {
+          if (filePath === supportFile) throw createFileError('EACCES', filePath, 'read')
+          return fs.readFileSync(filePath, ...args)
+        },
       })
+      const resolvedConfig = { projectRoot, supportFile }
+      injectSupportFile(cypressConfig, resolvedConfig)
 
-      it('retains current manual handlers and tasks when an adapter strips lifecycle markers', async () => {
-        const projectRoot = createProjectRoot()
-        const userError = new Error('user after:spec failed')
-        const userHandler = sinon.stub().rejects(userError)
-        const datadogAfterSpecHandler = sinon.stub()
-        const datadogAfterRunHandler = sinon.stub()
-        const setupNodeEventsChannel = {
-          hasSubscribers: true,
-          publish: sinon.stub(),
-        }
-        const { cypressConfig, manualPluginOwner } = loadCypressConfig(
-          undefined,
-          undefined,
-          setupNodeEventsChannel
-        )
-        const taskHandler = {
-          'dd:testSuiteStart': sinon.stub(),
-          'dd:beforeEach': sinon.stub(),
-          'dd:afterEach': sinon.stub(),
-          'dd:addTags': sinon.stub(),
-          [Symbol.for('dd-trace.cypress.task.handler')]: manualPluginOwner,
-        }
-        const config = {
-          e2e: {
-            /**
-             * @param {Function} on Cypress event registration function
-             * @returns {void}
-             */
-            setupNodeEvents (on) {
-              on('before:run', sinon.stub())
-              on('after:screenshot', sinon.stub())
-              on('after:spec', (...args) => datadogAfterSpecHandler(...args))
-              on('after:run', (...args) => datadogAfterRunHandler(...args))
-              on('task', taskHandler)
-              on('after:spec', userHandler)
-            },
-          },
-        }
-        const handlers = {}
-        const spec = { relative: 'cypress/e2e/basic-pass.js' }
-        const results = { stats: { passes: 1 } }
-        setupNodeEventsChannel.publish.resetHistory()
+      assert.strictEqual(resolvedConfig.supportFile, supportFile)
+      assert.strictEqual(errors.length, 1)
+      assert.match(errors[0], /^ERROR: Datadog could not read the Cypress support file/)
+      assert.match(errors[0], /EACCES during read/)
+    })
 
-        cypressConfig.wrapConfig(config)
-        config.e2e.setupNodeEvents((event, handler) => {
-          handlers[event] = handler
-        }, { projectRoot, supportFile: false, isInteractive: false })
+    it('logs an error when the Datadog browser hooks cannot be read', () => {
+      const projectRoot = createProjectRoot()
+      const browserHooksPath = require.resolve('../../packages/datadog-plugin-cypress/src/support')
 
-        await assert.rejects(handlers['after:spec'](spec, results), error => error === userError)
-        sinon.assert.calledOnceWithExactly(datadogAfterSpecHandler, spec, results, userError)
-        assert.strictEqual(handlers.task, taskHandler)
-        sinon.assert.notCalled(setupNodeEventsChannel.publish)
-        await handlers['after:run']({ totalPassed: 1 })
+      const { cypressConfig, errors } = loadCypressConfig({
+        readFileSync (filePath, ...args) {
+          if (filePath === browserHooksPath) throw createFileError('EACCES', filePath, 'read')
+          return fs.readFileSync(filePath, ...args)
+        },
       })
+      const resolvedConfig = { projectRoot, supportFile: false }
+      injectSupportFile(cypressConfig, resolvedConfig)
 
-      it('preserves user handlers when a no-op manual plugin only registers tasks', async () => {
-        const projectRoot = createProjectRoot()
-        const userBeforeRunHandler = sinon.stub()
-        const userAfterSpecHandler = sinon.stub()
-        const userAfterRunHandler = sinon.stub()
-        const userAfterScreenshotHandler = sinon.stub().returns({ path: 'renamed.png' })
-        const noopTaskHandler = {
-          'dd:testSuiteStart': sinon.stub(),
-          'dd:beforeEach': sinon.stub(),
-          'dd:afterEach': sinon.stub(),
-          'dd:addTags': sinon.stub(),
-          [Symbol.for('dd-trace.cypress.noop-task.handler')]: true,
-        }
-        const setupNodeEventsChannel = {
-          hasSubscribers: true,
-          publish: sinon.stub(),
-        }
-        const config = {
-          e2e: {
-            /**
-             * @param {Function} on Cypress event registration function
-             * @returns {void}
-             */
-            setupNodeEvents (on) {
-              on('after:screenshot', userAfterScreenshotHandler)
-              on('before:run', userBeforeRunHandler)
-              on('after:spec', userAfterSpecHandler)
-              on('after:run', userAfterRunHandler)
-              on('task', noopTaskHandler)
-            },
-          },
-        }
-        const handlers = {}
-        const { cypressConfig, warnings } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
-        const spec = { relative: 'cypress/e2e/basic-pass.js' }
-        const results = { stats: { passes: 1 } }
-        const screenshot = { path: 'original.png' }
-        const resolvedConfig = {
-          projectRoot,
-          supportFile: false,
-          isInteractive: true,
-          experimentalInteractiveRunEvents: false,
-        }
-        setupNodeEventsChannel.publish.resetHistory()
+      assert.strictEqual(resolvedConfig.supportFile, false)
+      assert.strictEqual(errors.length, 1)
+      assert.match(errors[0], /^ERROR: Datadog could not read its Cypress browser support hooks/)
+      assert.match(errors[0], /EACCES during read/)
+    })
 
-        cypressConfig.wrapConfig(config)
-        config.e2e.setupNodeEvents((event, handler) => {
-          handlers[event] = handler
-        }, resolvedConfig)
+    it('logs an error when no project directory is available for the support wrapper', () => {
+      const { cypressConfig, errors } = loadCypressConfig()
+      const resolvedConfig = { supportFile: false }
+      injectSupportFile(cypressConfig, resolvedConfig)
 
-        await handlers['before:run']({})
-        await handlers['after:spec'](spec, results)
-        assert.deepStrictEqual(await handlers['after:screenshot'](screenshot), { path: 'renamed.png' })
-        await handlers['after:run']({ totalPassed: 1 })
+      assert.strictEqual(resolvedConfig.supportFile, false)
+      assert.strictEqual(errors.length, 1)
+      assert.match(errors[0], /^ERROR: Datadog could not create the Cypress support wrapper/)
+      assert.match(errors[0], /no project directory was available/)
+    })
 
-        sinon.assert.calledOnce(userBeforeRunHandler)
-        sinon.assert.calledOnceWithExactly(userAfterSpecHandler, spec, results)
-        sinon.assert.calledOnceWithExactly(userAfterScreenshotHandler, screenshot)
-        sinon.assert.calledOnce(userAfterRunHandler)
-        sinon.assert.notCalled(setupNodeEventsChannel.publish)
-        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, false)
-        assert.deepStrictEqual(warnings, [])
+    it('removes partial support files when the filesystem runs out of space', () => {
+      const projectRoot = createProjectRoot()
+      const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+      const supportFile = path.join(supportDirectory, 'e2e.js')
+      fs.mkdirSync(supportDirectory, { recursive: true })
+      fs.writeFileSync(supportFile, '// user support\n')
+
+      const { cypressConfig, errors } = loadCypressConfig(createPartialWriteFailure('ENOSPC'))
+      injectSupportFile(cypressConfig, { projectRoot, supportFile })
+
+      assert.strictEqual(errors.length, 1)
+      assert.match(errors[0], /ENOSPC during write/)
+      assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
+
+    it('removes the browser hooks when writing the support wrapper fails', () => {
+      const projectRoot = createProjectRoot()
+      const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+      const supportFile = path.join(supportDirectory, 'e2e.js')
+      fs.mkdirSync(supportDirectory, { recursive: true })
+      fs.writeFileSync(supportFile, '// user support\n')
+
+      const failWrapperWrites = writeNumber => writeNumber % 2 === 0
+      const { cypressConfig, errors } = loadCypressConfig(
+        createPartialWriteFailure('ENOSPC', failWrapperWrites)
+      )
+      injectSupportFile(cypressConfig, { projectRoot, supportFile })
+
+      assert.strictEqual(errors.length, 1)
+      assert.strictEqual(errors[0].match(/ENOSPC during write/g).length, 2)
+      assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
+
+    it('removes partial support files when closing them fails', () => {
+      const projectRoot = createProjectRoot()
+      const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+      const supportFile = path.join(supportDirectory, 'e2e.js')
+      const pathsByDescriptor = new Map()
+      fs.mkdirSync(supportDirectory, { recursive: true })
+      fs.writeFileSync(supportFile, '// user support\n')
+
+      const { cypressConfig, errors } = loadCypressConfig({
+        openSync (filePath, flags) {
+          const descriptor = fs.openSync(filePath, flags)
+          pathsByDescriptor.set(descriptor, filePath)
+          return descriptor
+        },
+        closeSync (descriptor) {
+          const filePath = pathsByDescriptor.get(descriptor)
+          pathsByDescriptor.delete(descriptor)
+          fs.closeSync(descriptor)
+          throw createFileError('EIO', filePath, 'close')
+        },
       })
+      injectSupportFile(cypressConfig, { projectRoot, supportFile })
 
-      for (const event of ['after:run', 'after:spec']) {
-        for (const position of ['before', 'after']) {
-          it(`supports an older manual ${event} handler registered ${position} the user handler`, async () => {
-            const projectRoot = createProjectRoot()
-            const userError = new Error(`user ${event} failed`)
-            const userHandler = sinon.stub().rejects(userError)
-            const datadogAfterSpecHandler = sinon.stub()
-            const datadogAfterRunHandler = sinon.stub()
-            const taskHandler = {
-              'dd:testSuiteStart': sinon.stub(),
-              'dd:beforeEach': sinon.stub(),
-              'dd:afterEach': sinon.stub(),
-              'dd:addTags': sinon.stub(),
-            }
-            const config = {
-              e2e: {
-                /**
-                 * @param {Function} on Cypress event registration function
-                 * @returns {void}
-                 */
-                setupNodeEvents (on) {
-                  if (position === 'before') on(event, userHandler)
-                  on('before:run', sinon.stub())
-                  on('after:screenshot', sinon.stub())
-                  on('after:spec', datadogAfterSpecHandler)
-                  on('after:run', datadogAfterRunHandler)
-                  on('task', taskHandler)
-                  if (position === 'after') on(event, userHandler)
-                },
-              },
-            }
-            const handlers = {}
-            const { cypressConfig } = loadCypressConfig()
-            const eventArguments = event === 'after:run'
-              ? [{ totalPassed: 1 }]
-              : [{ relative: 'cypress/e2e/basic-pass.js' }, { stats: { passes: 1 } }]
+      assert.strictEqual(errors.length, 1)
+      assert.strictEqual(errors[0].match(/EIO during close/g).length, 2)
+      assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
 
-            cypressConfig.wrapConfig(config)
-            config.e2e.setupNodeEvents((registeredEvent, handler) => {
-              handlers[registeredEvent] = handler
-            }, { projectRoot, supportFile: false, isInteractive: false })
+    it('warns when generated support files cannot be removed', async () => {
+      const projectRoot = createProjectRoot()
 
-            assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
-            await assert.rejects(handlers[event](...eventArguments), error => error === userError)
-            sinon.assert.callOrder(userHandler, event === 'after:run'
-              ? datadogAfterRunHandler
-              : datadogAfterSpecHandler)
-            const finalizer = event === 'after:run' ? datadogAfterRunHandler : datadogAfterSpecHandler
-            const finalizerError = finalizer.lastCall.args.at(-1)
-            assert.ok(finalizerError instanceof Error)
-            assert.strictEqual(finalizerError.message, userError.message)
-            assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
-          })
-        }
+      const { cypressConfig, errors, warnings } = loadCypressConfig({
+        unlinkSync (filePath) {
+          throw createFileError('EACCES', filePath, 'unlink')
+        },
+      })
+      const { handlers } = injectSupportFile(cypressConfig, { projectRoot, supportFile: false })
+
+      await handlers['after:run']({})
+
+      assert.deepStrictEqual(errors, [])
+      assert.strictEqual(warnings.length, 2)
+      assert.ok(warnings.every(warning => warning.includes('could not remove generated Cypress file')))
+      assert.ok(warnings.every(warning => warning.includes('EACCES during unlink')))
+      assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+    })
+  })
+
+  describe('manual plugin', () => {
+    it('keeps interactive run events enabled when setupNodeEvents returns a partial config', async () => {
+      const projectRoot = createProjectRoot()
+      const datadogAfterSpecHandler = sinon.stub()
+      datadogAfterSpecHandler[Symbol.for('dd-trace.cypress.after-spec.handler')] = true
+      const datadogAfterRunHandler = sinon.stub()
+      datadogAfterRunHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
+      const setupNodeEventsChannel = {
+        hasSubscribers: true,
+        publish: sinon.stub(),
       }
-
-      it('cleans generated support files when an older manual after:spec finalizer rejects', async () => {
-        const projectRoot = createProjectRoot()
-        const finalizationError = new Error('older manual after:spec failed')
-        const datadogAfterSpecHandler = sinon.stub().rejects(finalizationError)
-        const taskHandler = {
-          'dd:testSuiteStart': sinon.stub(),
-          'dd:beforeEach': sinon.stub(),
-          'dd:afterEach': sinon.stub(),
-          'dd:addTags': sinon.stub(),
-        }
-        const config = {
-          e2e: {
-            /**
-             * @param {Function} on Cypress event registration function
-             * @returns {void}
-             */
-            setupNodeEvents (on) {
-              on('before:run', sinon.stub())
-              on('after:screenshot', sinon.stub())
-              on('after:spec', datadogAfterSpecHandler)
-              on('after:run', sinon.stub())
-              on('task', taskHandler)
-            },
+      const { cypressConfig, manualPluginOwner, warnings } = loadCypressConfig(
+        undefined,
+        undefined,
+        setupNodeEventsChannel
+      )
+      const taskHandler = {
+        'dd:testSuiteStart': sinon.stub(),
+        'dd:beforeEach': sinon.stub(),
+        'dd:afterEach': sinon.stub(),
+        'dd:addTags': sinon.stub(),
+        [Symbol.for('dd-trace.cypress.task.handler')]: manualPluginOwner,
+      }
+      const config = {
+        e2e: {
+          setupNodeEvents (on) {
+            on('after:spec', datadogAfterSpecHandler)
+            on('after:run', datadogAfterRunHandler)
+            on('task', taskHandler)
+            return { env: { returned: true } }
           },
-        }
-        const handlers = {}
-        const { cypressConfig } = loadCypressConfig()
+        },
+      }
+      const handlers = {}
+      const initialConfig = {
+        projectRoot,
+        supportFile: false,
+        isInteractive: true,
+        experimentalInteractiveRunEvents: false,
+      }
+      setupNodeEventsChannel.publish.resetHistory()
 
-        cypressConfig.wrapConfig(config)
-        config.e2e.setupNodeEvents((event, handler) => {
-          handlers[event] = handler
-        }, { projectRoot, supportFile: false, isInteractive: false })
+      cypressConfig.wrapConfig(config)
+      const returnedConfig = config.e2e.setupNodeEvents((event, handler) => {
+        handlers[event] = handler
+      }, initialConfig)
 
-        assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
-        await assert.rejects(handlers['after:spec']({}, {}), finalizationError)
-        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
-      })
+      assert.notStrictEqual(returnedConfig, initialConfig)
+      assert.deepStrictEqual(returnedConfig.env, { returned: true })
+      assert.strictEqual(returnedConfig.experimentalInteractiveRunEvents, true)
+      assert.strictEqual(initialConfig.experimentalInteractiveRunEvents, true)
+      assert.deepStrictEqual(warnings, [
+        'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
+      ])
+      sinon.assert.notCalled(setupNodeEventsChannel.publish)
+      await handlers['after:run']({})
+    })
 
-      for (const event of ['after:run', 'after:spec']) {
-        it(`defers a wrapped legacy ${event} helper to the manual plugin finalizer`, async () => {
+    it('removes a pre-screenshot manual before:run handler when current instrumentation takes ownership', () => {
+      const projectRoot = createProjectRoot()
+      const legacyBeforeRunHandler = sinon.stub()
+      const currentBeforeRunHandler = sinon.stub()
+      const registrations = []
+      const setupNodeEventsChannel = {
+        hasSubscribers: true,
+        publish: sinon.stub().callsFake((payload) => {
+          if (!payload.on) return
+          payload.on('before:run', currentBeforeRunHandler)
+          payload.registered = true
+          payload.cleanupWrapper()
+        }),
+      }
+      const taskHandler = {
+        'dd:testSuiteStart': sinon.stub(),
+        'dd:beforeEach': sinon.stub(),
+        'dd:afterEach': sinon.stub(),
+        'dd:addTags': sinon.stub(),
+      }
+      const config = {
+        e2e: {
+          /**
+           * @param {Function} on Cypress event registration function
+           * @returns {void}
+           */
+          setupNodeEvents (on) {
+            on('before:run', legacyBeforeRunHandler)
+            on('after:spec', sinon.stub())
+            on('after:run', sinon.stub())
+            on('task', taskHandler)
+          },
+        },
+      }
+      const { cypressConfig } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
+
+      cypressConfig.wrapConfig(config)
+      config.e2e.setupNodeEvents((event, handler) => {
+        registrations.push([event, handler])
+      }, { projectRoot, supportFile: false, isInteractive: false })
+
+      assert.deepStrictEqual(
+        registrations.filter(([event]) => event === 'before:run'),
+        [['before:run', currentBeforeRunHandler]]
+      )
+    })
+
+    it('retains current manual handlers and tasks when an adapter strips lifecycle markers', async () => {
+      const projectRoot = createProjectRoot()
+      const userError = new Error('user after:spec failed')
+      const userHandler = sinon.stub().rejects(userError)
+      const datadogAfterSpecHandler = sinon.stub()
+      const datadogAfterRunHandler = sinon.stub()
+      const setupNodeEventsChannel = {
+        hasSubscribers: true,
+        publish: sinon.stub(),
+      }
+      const { cypressConfig, manualPluginOwner } = loadCypressConfig(
+        undefined,
+        undefined,
+        setupNodeEventsChannel
+      )
+      const taskHandler = {
+        'dd:testSuiteStart': sinon.stub(),
+        'dd:beforeEach': sinon.stub(),
+        'dd:afterEach': sinon.stub(),
+        'dd:addTags': sinon.stub(),
+        [Symbol.for('dd-trace.cypress.task.handler')]: manualPluginOwner,
+      }
+      const config = {
+        e2e: {
+          /**
+           * @param {Function} on Cypress event registration function
+           * @returns {void}
+           */
+          setupNodeEvents (on) {
+            on('before:run', sinon.stub())
+            on('after:screenshot', sinon.stub())
+            on('after:spec', (...args) => datadogAfterSpecHandler(...args))
+            on('after:run', (...args) => datadogAfterRunHandler(...args))
+            on('task', taskHandler)
+            on('after:spec', userHandler)
+          },
+        },
+      }
+      const handlers = {}
+      const spec = { relative: 'cypress/e2e/basic-pass.js' }
+      const results = { stats: { passes: 1 } }
+      setupNodeEventsChannel.publish.resetHistory()
+
+      cypressConfig.wrapConfig(config)
+      config.e2e.setupNodeEvents((event, handler) => {
+        handlers[event] = handler
+      }, { projectRoot, supportFile: false, isInteractive: false })
+
+      await assert.rejects(handlers['after:spec'](spec, results), error => error === userError)
+      sinon.assert.calledOnceWithExactly(datadogAfterSpecHandler, spec, results, userError)
+      assert.strictEqual(handlers.task, taskHandler)
+      sinon.assert.notCalled(setupNodeEventsChannel.publish)
+      await handlers['after:run']({ totalPassed: 1 })
+    })
+
+    it('preserves user handlers when a no-op manual plugin only registers tasks', async () => {
+      const projectRoot = createProjectRoot()
+      const userBeforeRunHandler = sinon.stub()
+      const userAfterSpecHandler = sinon.stub()
+      const userAfterRunHandler = sinon.stub()
+      const userAfterScreenshotHandler = sinon.stub().returns({ path: 'renamed.png' })
+      const noopTaskHandler = {
+        'dd:testSuiteStart': sinon.stub(),
+        'dd:beforeEach': sinon.stub(),
+        'dd:afterEach': sinon.stub(),
+        'dd:addTags': sinon.stub(),
+        [Symbol.for('dd-trace.cypress.noop-task.handler')]: true,
+      }
+      const setupNodeEventsChannel = {
+        hasSubscribers: true,
+        publish: sinon.stub(),
+      }
+      const config = {
+        e2e: {
+          /**
+           * @param {Function} on Cypress event registration function
+           * @returns {void}
+           */
+          setupNodeEvents (on) {
+            on('after:screenshot', userAfterScreenshotHandler)
+            on('before:run', userBeforeRunHandler)
+            on('after:spec', userAfterSpecHandler)
+            on('after:run', userAfterRunHandler)
+            on('task', noopTaskHandler)
+          },
+        },
+      }
+      const handlers = {}
+      const { cypressConfig, warnings } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
+      const spec = { relative: 'cypress/e2e/basic-pass.js' }
+      const results = { stats: { passes: 1 } }
+      const screenshot = { path: 'original.png' }
+      const resolvedConfig = {
+        projectRoot,
+        supportFile: false,
+        isInteractive: true,
+        experimentalInteractiveRunEvents: false,
+      }
+      setupNodeEventsChannel.publish.resetHistory()
+
+      cypressConfig.wrapConfig(config)
+      config.e2e.setupNodeEvents((event, handler) => {
+        handlers[event] = handler
+      }, resolvedConfig)
+
+      await handlers['before:run']({})
+      await handlers['after:spec'](spec, results)
+      assert.deepStrictEqual(await handlers['after:screenshot'](screenshot), { path: 'renamed.png' })
+      await handlers['after:run']({ totalPassed: 1 })
+
+      sinon.assert.calledOnce(userBeforeRunHandler)
+      sinon.assert.calledOnceWithExactly(userAfterSpecHandler, spec, results)
+      sinon.assert.calledOnceWithExactly(userAfterScreenshotHandler, screenshot)
+      sinon.assert.calledOnce(userAfterRunHandler)
+      sinon.assert.notCalled(setupNodeEventsChannel.publish)
+      assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, false)
+      assert.deepStrictEqual(warnings, [])
+    })
+
+    for (const event of ['after:run', 'after:spec']) {
+      for (const position of ['before', 'after']) {
+        it(`supports an older manual ${event} handler registered ${position} the user handler`, async () => {
           const projectRoot = createProjectRoot()
-          const legacyFinalizer = sinon.stub()
-          const legacyHelper = proxyquire(`../../packages/datadog-plugin-cypress/src/${event.replace(':', '-')}`, {
-            './cypress-plugin': {
-              [event === 'after:run' ? 'afterRun' : 'afterSpec']: legacyFinalizer,
-            },
-          })
-          const datadogHandler = sinon.stub()
-          datadogHandler[Symbol.for(`dd-trace.cypress.${event.replace(':', '-')}.handler`)] = true
-          const rejection = `${event} string rejection`
-          const userHandler = sinon.stub().callsFake(() => Promise.reject(rejection))
+          const userError = new Error(`user ${event} failed`)
+          const userHandler = sinon.stub().rejects(userError)
+          const datadogAfterSpecHandler = sinon.stub()
+          const datadogAfterRunHandler = sinon.stub()
           const taskHandler = {
             'dd:testSuiteStart': sinon.stub(),
             'dd:beforeEach': sinon.stub(),
@@ -2936,10 +2839,13 @@ if (requestedVersion === 'latest' &&
                * @returns {void}
                */
               setupNodeEvents (on) {
-                on(event, (...args) => legacyHelper(...args))
-                on(event, datadogHandler)
-                on(event, userHandler)
+                if (position === 'before') on(event, userHandler)
+                on('before:run', sinon.stub())
+                on('after:screenshot', sinon.stub())
+                on('after:spec', datadogAfterSpecHandler)
+                on('after:run', datadogAfterRunHandler)
                 on('task', taskHandler)
+                if (position === 'after') on(event, userHandler)
               },
             },
           }
@@ -2954,136 +2860,71 @@ if (requestedVersion === 'latest' &&
             handlers[registeredEvent] = handler
           }, { projectRoot, supportFile: false, isInteractive: false })
 
-          await assert.rejects(handlers[event](...eventArguments), error => error === rejection)
-          sinon.assert.notCalled(legacyFinalizer)
-          sinon.assert.calledOnce(userHandler)
-          sinon.assert.calledOnce(datadogHandler)
-          const finalizerError = datadogHandler.lastCall.args.at(-1)
+          assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+          await assert.rejects(handlers[event](...eventArguments), error => error === userError)
+          sinon.assert.callOrder(userHandler, event === 'after:run'
+            ? datadogAfterRunHandler
+            : datadogAfterSpecHandler)
+          const finalizer = event === 'after:run' ? datadogAfterRunHandler : datadogAfterSpecHandler
+          const finalizerError = finalizer.lastCall.args.at(-1)
           assert.ok(finalizerError instanceof Error)
-          assert.strictEqual(finalizerError.message, rejection)
-
-          if (event === 'after:spec') await handlers['after:run']({})
+          assert.strictEqual(finalizerError.message, userError.message)
+          assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
         })
       }
+    }
 
-      for (const { position, finalization } of [
-        { position: 'before', finalization: 'rejects' },
-        { position: 'before', finalization: 'throws' },
-        { position: 'after' },
-      ]) {
-        const finalizationDescription = finalization ? ` when finalization ${finalization}` : ''
-        const testName =
-          `finalizes with the original error from a handler registered ${position} Datadog${finalizationDescription}`
-        it(testName, async () => {
-          const projectRoot = createProjectRoot()
-          const userError = new Error(`user handler ${position} Datadog failed`)
-          const userHandler = sinon.stub().rejects(userError)
-          const finalizationError = new Error('Datadog finalization failed')
-          const datadogHandler = finalization
-            ? sinon.stub()[finalization](finalizationError)
-            : sinon.stub()
-          datadogHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
-          const taskHandler = {
-            'dd:testSuiteStart': sinon.stub(),
-            'dd:beforeEach': sinon.stub(),
-            'dd:afterEach': sinon.stub(),
-            'dd:addTags': sinon.stub(),
-          }
-          const config = {
-            e2e: {
-              /**
-               * @param {Function} on Cypress event registration function
-               * @returns {void}
-               */
-              setupNodeEvents (on) {
-                if (position === 'before') on('after:run', userHandler)
-                on('after:run', datadogHandler)
-                if (position === 'after') on('after:run', userHandler)
-                on('task', taskHandler)
-              },
-            },
-          }
-          const handlers = {}
-          const { cypressConfig, errors } = loadCypressConfig()
-          const results = { totalPassed: 1 }
-
-          cypressConfig.wrapConfig(config)
-          config.e2e.setupNodeEvents((event, handler) => {
-            handlers[event] = handler
-          }, { projectRoot, supportFile: false, isInteractive: false })
-
-          await assert.rejects(handlers['after:run'](results), error => {
-            assert.strictEqual(error, userError)
-            return true
-          })
-          sinon.assert.calledOnceWithExactly(userHandler, results)
-          sinon.assert.calledOnceWithExactly(datadogHandler, results, userError)
-          if (finalization) {
-            assert.strictEqual(errors.length, 1)
-            assert.match(errors[0], /Datadog finalization failed/)
-          } else {
-            assert.deepStrictEqual(errors, [])
-          }
-        })
+    it('cleans generated support files when an older manual after:spec finalizer rejects', async () => {
+      const projectRoot = createProjectRoot()
+      const finalizationError = new Error('older manual after:spec failed')
+      const datadogAfterSpecHandler = sinon.stub().rejects(finalizationError)
+      const taskHandler = {
+        'dd:testSuiteStart': sinon.stub(),
+        'dd:beforeEach': sinon.stub(),
+        'dd:afterEach': sinon.stub(),
+        'dd:addTags': sinon.stub(),
       }
-
-      for (const position of ['before', 'after']) {
-        it(`runs manual Datadog after:spec finalization after a user handler registered ${position}`, async () => {
-          const projectRoot = createProjectRoot()
-          const userError = new Error(`user handler ${position} Datadog failed`)
-          const userHandler = sinon.stub().rejects(userError)
-          const datadogHandler = sinon.stub()
-          datadogHandler[Symbol.for('dd-trace.cypress.after-spec.handler')] = true
-          const taskHandler = {
-            'dd:testSuiteStart': sinon.stub(),
-            'dd:beforeEach': sinon.stub(),
-            'dd:afterEach': sinon.stub(),
-            'dd:addTags': sinon.stub(),
-          }
-          const config = {
-            e2e: {
-              /**
-               * @param {Function} on Cypress event registration function
-               * @returns {void}
-               */
-              setupNodeEvents (on) {
-                if (position === 'before') on('after:spec', userHandler)
-                on('after:spec', datadogHandler)
-                if (position === 'after') on('after:spec', userHandler)
-                on('task', taskHandler)
-              },
-            },
-          }
-          const handlers = {}
-          const { cypressConfig } = loadCypressConfig()
-          const spec = { relative: 'cypress/e2e/basic-pass.js' }
-          const results = { stats: { passes: 1 } }
-
-          cypressConfig.wrapConfig(config)
-          config.e2e.setupNodeEvents((event, handler) => {
-            handlers[event] = handler
-          }, { projectRoot, supportFile: false, isInteractive: false })
-
-          try {
-            await assert.rejects(handlers['after:spec'](spec, results), error => {
-              assert.strictEqual(error, userError)
-              return true
-            })
-            sinon.assert.callOrder(userHandler, datadogHandler)
-            sinon.assert.calledOnceWithExactly(userHandler, spec, results)
-            sinon.assert.calledOnceWithExactly(datadogHandler, spec, results, userError)
-          } finally {
-            await handlers['after:run']({})
-          }
-        })
+      const config = {
+        e2e: {
+          /**
+           * @param {Function} on Cypress event registration function
+           * @returns {void}
+           */
+          setupNodeEvents (on) {
+            on('before:run', sinon.stub())
+            on('after:screenshot', sinon.stub())
+            on('after:spec', datadogAfterSpecHandler)
+            on('after:run', sinon.stub())
+            on('task', taskHandler)
+          },
+        },
       }
+      const handlers = {}
+      const { cypressConfig } = loadCypressConfig()
 
-      it('runs the latest after:screenshot handler after user handlers', async () => {
+      cypressConfig.wrapConfig(config)
+      config.e2e.setupNodeEvents((event, handler) => {
+        handlers[event] = handler
+      }, { projectRoot, supportFile: false, isInteractive: false })
+
+      assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+      await assert.rejects(handlers['after:spec']({}, {}), finalizationError)
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
+
+    for (const event of ['after:run', 'after:spec']) {
+      it(`defers a wrapped legacy ${event} helper to the manual plugin finalizer`, async () => {
         const projectRoot = createProjectRoot()
-        const userHandler = sinon.stub().returns({ path: 'updated.png' })
+        const legacyFinalizer = sinon.stub()
+        const legacyHelper = proxyquire(`../../packages/datadog-plugin-cypress/src/${event.replace(':', '-')}`, {
+          './cypress-plugin': {
+            [event === 'after:run' ? 'afterRun' : 'afterSpec']: legacyFinalizer,
+          },
+        })
         const datadogHandler = sinon.stub()
-        const datadogAfterRunHandler = sinon.stub()
-        datadogAfterRunHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
+        datadogHandler[Symbol.for(`dd-trace.cypress.${event.replace(':', '-')}.handler`)] = true
+        const rejection = `${event} string rejection`
+        const userHandler = sinon.stub().callsFake(() => Promise.reject(rejection))
         const taskHandler = {
           'dd:testSuiteStart': sinon.stub(),
           'dd:beforeEach': sinon.stub(),
@@ -3097,196 +2938,356 @@ if (requestedVersion === 'latest' &&
              * @returns {void}
              */
             setupNodeEvents (on) {
-              on('after:screenshot', userHandler)
-              on('after:screenshot', datadogHandler)
-              on('after:run', datadogAfterRunHandler)
+              on(event, (...args) => legacyHelper(...args))
+              on(event, datadogHandler)
+              on(event, userHandler)
               on('task', taskHandler)
             },
           },
         }
         const handlers = {}
-        const { cypressConfig, warnings } = loadCypressConfig()
-        const resolvedConfig = {
-          projectRoot,
-          supportFile: false,
-          isInteractive: true,
-          experimentalInteractiveRunEvents: false,
-        }
+        const { cypressConfig } = loadCypressConfig()
+        const eventArguments = event === 'after:run'
+          ? [{ totalPassed: 1 }]
+          : [{ relative: 'cypress/e2e/basic-pass.js' }, { stats: { passes: 1 } }]
 
         cypressConfig.wrapConfig(config)
-        config.e2e.setupNodeEvents(
+        config.e2e.setupNodeEvents((registeredEvent, handler) => {
+          handlers[registeredEvent] = handler
+        }, { projectRoot, supportFile: false, isInteractive: false })
+
+        await assert.rejects(handlers[event](...eventArguments), error => error === rejection)
+        sinon.assert.notCalled(legacyFinalizer)
+        sinon.assert.calledOnce(userHandler)
+        sinon.assert.calledOnce(datadogHandler)
+        const finalizerError = datadogHandler.lastCall.args.at(-1)
+        assert.ok(finalizerError instanceof Error)
+        assert.strictEqual(finalizerError.message, rejection)
+
+        if (event === 'after:spec') await handlers['after:run']({})
+      })
+    }
+
+    for (const { position, finalization } of [
+      { position: 'before', finalization: 'rejects' },
+      { position: 'before', finalization: 'throws' },
+      { position: 'after' },
+    ]) {
+      const finalizationDescription = finalization ? ` when finalization ${finalization}` : ''
+      const testName =
+          `finalizes with the original error from a handler registered ${position} Datadog${finalizationDescription}`
+      it(testName, async () => {
+        const projectRoot = createProjectRoot()
+        const userError = new Error(`user handler ${position} Datadog failed`)
+        const userHandler = sinon.stub().rejects(userError)
+        const finalizationError = new Error('Datadog finalization failed')
+        const datadogHandler = finalization
+          ? sinon.stub()[finalization](finalizationError)
+          : sinon.stub()
+        datadogHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             * @returns {void}
+             */
+            setupNodeEvents (on) {
+              if (position === 'before') on('after:run', userHandler)
+              on('after:run', datadogHandler)
+              if (position === 'after') on('after:run', userHandler)
+              on('task', taskHandler)
+            },
+          },
+        }
+        const handlers = {}
+        const { cypressConfig, errors } = loadCypressConfig()
+        const results = { totalPassed: 1 }
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents((event, handler) => {
+          handlers[event] = handler
+        }, { projectRoot, supportFile: false, isInteractive: false })
+
+        await assert.rejects(handlers['after:run'](results), error => {
+          assert.strictEqual(error, userError)
+          return true
+        })
+        sinon.assert.calledOnceWithExactly(userHandler, results)
+        sinon.assert.calledOnceWithExactly(datadogHandler, results, userError)
+        if (finalization) {
+          assert.strictEqual(errors.length, 1)
+          assert.match(errors[0], /Datadog finalization failed/)
+        } else {
+          assert.deepStrictEqual(errors, [])
+        }
+      })
+    }
+
+    for (const position of ['before', 'after']) {
+      it(`runs manual Datadog after:spec finalization after a user handler registered ${position}`, async () => {
+        const projectRoot = createProjectRoot()
+        const userError = new Error(`user handler ${position} Datadog failed`)
+        const userHandler = sinon.stub().rejects(userError)
+        const datadogHandler = sinon.stub()
+        datadogHandler[Symbol.for('dd-trace.cypress.after-spec.handler')] = true
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             * @returns {void}
+             */
+            setupNodeEvents (on) {
+              if (position === 'before') on('after:spec', userHandler)
+              on('after:spec', datadogHandler)
+              if (position === 'after') on('after:spec', userHandler)
+              on('task', taskHandler)
+            },
+          },
+        }
+        const handlers = {}
+        const { cypressConfig } = loadCypressConfig()
+        const spec = { relative: 'cypress/e2e/basic-pass.js' }
+        const results = { stats: { passes: 1 } }
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents((event, handler) => {
+          handlers[event] = handler
+        }, { projectRoot, supportFile: false, isInteractive: false })
+
+        try {
+          await assert.rejects(handlers['after:spec'](spec, results), error => {
+            assert.strictEqual(error, userError)
+            return true
+          })
+          sinon.assert.callOrder(userHandler, datadogHandler)
+          sinon.assert.calledOnceWithExactly(userHandler, spec, results)
+          sinon.assert.calledOnceWithExactly(datadogHandler, spec, results, userError)
+        } finally {
+          await handlers['after:run']({})
+        }
+      })
+    }
+
+    it('runs the latest after:screenshot handler after user handlers', async () => {
+      const projectRoot = createProjectRoot()
+      const userHandler = sinon.stub().returns({ path: 'updated.png' })
+      const datadogHandler = sinon.stub()
+      const datadogAfterRunHandler = sinon.stub()
+      datadogAfterRunHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
+      const taskHandler = {
+        'dd:testSuiteStart': sinon.stub(),
+        'dd:beforeEach': sinon.stub(),
+        'dd:afterEach': sinon.stub(),
+        'dd:addTags': sinon.stub(),
+      }
+      const config = {
+        e2e: {
           /**
-           * @param {string} event Cypress event name
-           * @param {Function} handler Cypress event handler
+           * @param {Function} on Cypress event registration function
            * @returns {void}
            */
-          (event, handler) => {
-            handlers[event] = handler
+          setupNodeEvents (on) {
+            on('after:screenshot', userHandler)
+            on('after:screenshot', datadogHandler)
+            on('after:run', datadogAfterRunHandler)
+            on('task', taskHandler)
           },
-          resolvedConfig
-        )
+        },
+      }
+      const handlers = {}
+      const { cypressConfig, warnings } = loadCypressConfig()
+      const resolvedConfig = {
+        projectRoot,
+        supportFile: false,
+        isInteractive: true,
+        experimentalInteractiveRunEvents: false,
+      }
 
-        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, true)
-        assert.deepStrictEqual(warnings, [
-          'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
-        ])
+      cypressConfig.wrapConfig(config)
+      config.e2e.setupNodeEvents(
+        /**
+         * @param {string} event Cypress event name
+         * @param {Function} handler Cypress event handler
+         * @returns {void}
+         */
+        (event, handler) => {
+          handlers[event] = handler
+        },
+        resolvedConfig
+      )
 
-        const details = { path: 'original.png' }
-        await handlers['after:screenshot'](details)
-        await handlers['after:run']({})
+      assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, true)
+      assert.deepStrictEqual(warnings, [
+        'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
+      ])
 
-        assert.strictEqual(userHandler.calledOnceWithExactly(details), true)
-        assert.strictEqual(datadogHandler.calledOnceWithExactly({ path: 'updated.png' }), true)
-        sinon.assert.calledOnceWithExactly(datadogAfterRunHandler, {})
-      })
-    })
+      const details = { path: 'original.png' }
+      await handlers['after:screenshot'](details)
+      await handlers['after:run']({})
 
-    describe('configuration wrapper', () => {
-      it('falls back to the project root when the config directory is not writable', () => {
-        const projectRoot = createProjectRoot()
-        const configDirectory = path.join(projectRoot, 'config')
-        const configFile = path.join(configDirectory, 'cypress.config.js')
-        fs.mkdirSync(configDirectory)
-        fs.writeFileSync(configFile, 'module.exports = {}\n')
-
-        const { cypressConfig, warnings } = loadCypressConfig({
-          openSync (filePath, flags) {
-            if (path.dirname(filePath) === configDirectory) {
-              throw createFileError('EACCES', filePath)
-            }
-            return fs.openSync(filePath, flags)
-          },
-        })
-        const result = cypressConfig.wrapCliConfigFileOptions({
-          configFile,
-          project: projectRoot,
-        })
-
-        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
-        assert.deepStrictEqual(warnings, [])
-        assert.strictEqual(getGeneratedFiles(projectRoot).length, 1)
-
-        result.cleanup()
-        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
-      })
-
-      it('uses .cts when a CommonJS TypeScript config falls back into an ESM scope', () => {
-        const projectRoot = createProjectRoot()
-        const configDirectory = path.join(projectRoot, 'config')
-        const configFile = path.join(configDirectory, 'cypress.config.ts')
-        fs.mkdirSync(configDirectory)
-        fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "module" }')
-        fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "commonjs" }')
-        fs.writeFileSync(configFile, 'module.exports = {}\n')
-
-        const { cypressConfig, warnings } = loadCypressConfig({
-          openSync (filePath, flags) {
-            if (path.dirname(filePath) === configDirectory) {
-              throw createFileError('EACCES', filePath)
-            }
-            return fs.openSync(filePath, flags)
-          },
-        })
-        const result = cypressConfig.wrapCliConfigFileOptions({
-          configFile,
-          project: projectRoot,
-        })
-
-        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
-        assert.strictEqual(path.extname(result.options.configFile), '.cts')
-        assert.match(fs.readFileSync(result.options.configFile, 'utf8'), /module\.exports/)
-        assert.deepStrictEqual(warnings, [])
-
-        result.cleanup()
-        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
-      })
-
-      it('uses .mts when an ESM TypeScript config falls back into a CommonJS scope', () => {
-        const projectRoot = createProjectRoot()
-        const configDirectory = path.join(projectRoot, 'config')
-        const configFile = path.join(configDirectory, 'cypress.config.ts')
-        fs.mkdirSync(configDirectory)
-        fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "commonjs" }')
-        fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "module" }')
-        fs.writeFileSync(configFile, 'export default {}\n')
-
-        const { cypressConfig, warnings } = loadCypressConfig({
-          openSync (filePath, flags) {
-            if (path.dirname(filePath) === configDirectory) {
-              throw createFileError('EACCES', filePath)
-            }
-            return fs.openSync(filePath, flags)
-          },
-        })
-        const result = cypressConfig.wrapCliConfigFileOptions({
-          configFile,
-          project: projectRoot,
-        })
-
-        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
-        assert.strictEqual(path.extname(result.options.configFile), '.mts')
-        assert.match(fs.readFileSync(result.options.configFile, 'utf8'), /export default/)
-        assert.deepStrictEqual(warnings, [])
-
-        result.cleanup()
-        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
-      })
-
-      it('warns with every failed location when no directory is writable', () => {
-        const projectRoot = createProjectRoot()
-        const configDirectory = path.join(projectRoot, 'config')
-        const configFile = path.join(configDirectory, 'cypress.config.js')
-        fs.mkdirSync(configDirectory)
-        fs.writeFileSync(configFile, 'module.exports = {}\n')
-
-        const { cypressConfig, errors, warnings } = loadCypressConfig({
-          openSync (filePath) {
-            throw createFileError('EROFS', filePath)
-          },
-        })
-        const options = { configFile, project: projectRoot }
-        const result = cypressConfig.wrapCliConfigFileOptions(options)
-
-        assert.strictEqual(result.options, options)
-        assert.deepStrictEqual(errors, [])
-        assert.strictEqual(warnings.length, 1)
-        assert.match(warnings[0], /could not create the Cypress configuration wrapper/)
-        assert.strictEqual(warnings[0].match(/EROFS during open/g).length, 2)
-        assert.match(warnings[0], new RegExp(configDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
-        assert.match(warnings[0], new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
-      })
-
-      it('does not overwrite an existing configuration wrapper', () => {
-        const projectRoot = createProjectRoot()
-        const configFile = path.join(projectRoot, 'cypress.config.js')
-        const existingWrapper = path.join(projectRoot, `.dd-cypress-config-${process.pid}-collision.cjs`)
-        fs.writeFileSync(configFile, 'module.exports = {}\n')
-        fs.writeFileSync(existingWrapper, 'existing content\n')
-
-        const { cypressConfig, warnings } = loadCypressConfig(undefined, () => 'collision')
-        const options = { configFile, project: projectRoot }
-        const result = cypressConfig.wrapCliConfigFileOptions(options)
-
-        assert.strictEqual(result.options, options)
-        assert.strictEqual(fs.readFileSync(existingWrapper, 'utf8'), 'existing content\n')
-        assert.strictEqual(warnings.length, 1)
-        assert.match(warnings[0], /EEXIST during open/)
-      })
-
-      it('removes a partial configuration wrapper when the filesystem runs out of space', () => {
-        const projectRoot = createProjectRoot()
-        const configFile = path.join(projectRoot, 'cypress.config.js')
-        fs.writeFileSync(configFile, 'module.exports = {}\n')
-
-        const { cypressConfig, warnings } = loadCypressConfig(createPartialWriteFailure('ENOSPC'))
-        const options = { configFile, project: projectRoot }
-        const result = cypressConfig.wrapCliConfigFileOptions(options)
-
-        assert.strictEqual(result.options, options)
-        assert.strictEqual(warnings.length, 1)
-        assert.match(warnings[0], /ENOSPC during write/)
-        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
-      })
+      assert.strictEqual(userHandler.calledOnceWithExactly(details), true)
+      assert.strictEqual(datadogHandler.calledOnceWithExactly({ path: 'updated.png' }), true)
+      sinon.assert.calledOnceWithExactly(datadogAfterRunHandler, {})
     })
   })
-}
+
+  describe('configuration wrapper', () => {
+    it('falls back to the project root when the config directory is not writable', () => {
+      const projectRoot = createProjectRoot()
+      const configDirectory = path.join(projectRoot, 'config')
+      const configFile = path.join(configDirectory, 'cypress.config.js')
+      fs.mkdirSync(configDirectory)
+      fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+      const { cypressConfig, warnings } = loadCypressConfig({
+        openSync (filePath, flags) {
+          if (path.dirname(filePath) === configDirectory) {
+            throw createFileError('EACCES', filePath)
+          }
+          return fs.openSync(filePath, flags)
+        },
+      })
+      const result = cypressConfig.wrapCliConfigFileOptions({
+        configFile,
+        project: projectRoot,
+      })
+
+      assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+      assert.deepStrictEqual(warnings, [])
+      assert.strictEqual(getGeneratedFiles(projectRoot).length, 1)
+
+      result.cleanup()
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
+
+    it('uses .cts when a CommonJS TypeScript config falls back into an ESM scope', () => {
+      const projectRoot = createProjectRoot()
+      const configDirectory = path.join(projectRoot, 'config')
+      const configFile = path.join(configDirectory, 'cypress.config.ts')
+      fs.mkdirSync(configDirectory)
+      fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "module" }')
+      fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "commonjs" }')
+      fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+      const { cypressConfig, warnings } = loadCypressConfig({
+        openSync (filePath, flags) {
+          if (path.dirname(filePath) === configDirectory) {
+            throw createFileError('EACCES', filePath)
+          }
+          return fs.openSync(filePath, flags)
+        },
+      })
+      const result = cypressConfig.wrapCliConfigFileOptions({
+        configFile,
+        project: projectRoot,
+      })
+
+      assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+      assert.strictEqual(path.extname(result.options.configFile), '.cts')
+      assert.match(fs.readFileSync(result.options.configFile, 'utf8'), /module\.exports/)
+      assert.deepStrictEqual(warnings, [])
+
+      result.cleanup()
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
+
+    it('uses .mts when an ESM TypeScript config falls back into a CommonJS scope', () => {
+      const projectRoot = createProjectRoot()
+      const configDirectory = path.join(projectRoot, 'config')
+      const configFile = path.join(configDirectory, 'cypress.config.ts')
+      fs.mkdirSync(configDirectory)
+      fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "commonjs" }')
+      fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "module" }')
+      fs.writeFileSync(configFile, 'export default {}\n')
+
+      const { cypressConfig, warnings } = loadCypressConfig({
+        openSync (filePath, flags) {
+          if (path.dirname(filePath) === configDirectory) {
+            throw createFileError('EACCES', filePath)
+          }
+          return fs.openSync(filePath, flags)
+        },
+      })
+      const result = cypressConfig.wrapCliConfigFileOptions({
+        configFile,
+        project: projectRoot,
+      })
+
+      assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+      assert.strictEqual(path.extname(result.options.configFile), '.mts')
+      assert.match(fs.readFileSync(result.options.configFile, 'utf8'), /export default/)
+      assert.deepStrictEqual(warnings, [])
+
+      result.cleanup()
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
+
+    it('warns with every failed location when no directory is writable', () => {
+      const projectRoot = createProjectRoot()
+      const configDirectory = path.join(projectRoot, 'config')
+      const configFile = path.join(configDirectory, 'cypress.config.js')
+      fs.mkdirSync(configDirectory)
+      fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+      const { cypressConfig, errors, warnings } = loadCypressConfig({
+        openSync (filePath) {
+          throw createFileError('EROFS', filePath)
+        },
+      })
+      const options = { configFile, project: projectRoot }
+      const result = cypressConfig.wrapCliConfigFileOptions(options)
+
+      assert.strictEqual(result.options, options)
+      assert.deepStrictEqual(errors, [])
+      assert.strictEqual(warnings.length, 1)
+      assert.match(warnings[0], /could not create the Cypress configuration wrapper/)
+      assert.strictEqual(warnings[0].match(/EROFS during open/g).length, 2)
+      assert.match(warnings[0], new RegExp(configDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      assert.match(warnings[0], new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    })
+
+    it('does not overwrite an existing configuration wrapper', () => {
+      const projectRoot = createProjectRoot()
+      const configFile = path.join(projectRoot, 'cypress.config.js')
+      const existingWrapper = path.join(projectRoot, `.dd-cypress-config-${process.pid}-collision.cjs`)
+      fs.writeFileSync(configFile, 'module.exports = {}\n')
+      fs.writeFileSync(existingWrapper, 'existing content\n')
+
+      const { cypressConfig, warnings } = loadCypressConfig(undefined, () => 'collision')
+      const options = { configFile, project: projectRoot }
+      const result = cypressConfig.wrapCliConfigFileOptions(options)
+
+      assert.strictEqual(result.options, options)
+      assert.strictEqual(fs.readFileSync(existingWrapper, 'utf8'), 'existing content\n')
+      assert.strictEqual(warnings.length, 1)
+      assert.match(warnings[0], /EEXIST during open/)
+    })
+
+    it('removes a partial configuration wrapper when the filesystem runs out of space', () => {
+      const projectRoot = createProjectRoot()
+      const configFile = path.join(projectRoot, 'cypress.config.js')
+      fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+      const { cypressConfig, warnings } = loadCypressConfig(createPartialWriteFailure('ENOSPC'))
+      const options = { configFile, project: projectRoot }
+      const result = cypressConfig.wrapCliConfigFileOptions(options)
+
+      assert.strictEqual(result.options, options)
+      assert.strictEqual(warnings.length, 1)
+      assert.match(warnings[0], /ENOSPC during write/)
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
+  })
+})

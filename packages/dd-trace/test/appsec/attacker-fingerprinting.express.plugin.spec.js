@@ -15,11 +15,8 @@ withVersions('express', 'express', expressVersion => {
   describe('Attacker fingerprinting', () => {
     let port, server
 
-    before(() => {
-      return agent.load(['express', 'http'], { client: false })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['express', 'http'], { client: false })
       const express = require(`../../../../versions/express@${expressVersion}`).get()
       const bodyParser = require('../../../../versions/body-parser').get()
 
@@ -30,9 +27,11 @@ withVersions('express', 'express', expressVersion => {
         res.end('DONE')
       })
 
-      server = app.listen(port, () => {
-        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        done()
+      await new Promise(resolve => {
+        server = app.listen(port, () => {
+          port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+          resolve()
+        })
       })
     })
 

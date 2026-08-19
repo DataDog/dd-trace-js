@@ -634,90 +634,90 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
-  if (!isLegacyBrowserProvider) {
-    it('honors object-form retries before quarantining browser failures', async () => {
-      const testSuite = 'ci-visibility/vitest-browser-tests/browser-object-retry-quarantine.mjs'
-      receiver.setSettings({
-        test_management: {
-          enabled: true,
-        },
-      })
-      receiver.setTestManagementTests({
-        vitest: {
-          suites: {
-            [testSuite]: {
-              tests: {
-                'honors object-form retries before quarantining': {
-                  properties: {
-                    quarantined: true,
-                  },
+  const objectRetryTest = isLegacyBrowserProvider ? it.skip : it
+
+  objectRetryTest('honors object-form retries before quarantining browser failures', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-object-retry-quarantine.mjs'
+    receiver.setSettings({
+      test_management: {
+        enabled: true,
+      },
+    })
+    receiver.setTestManagementTests({
+      vitest: {
+        suites: {
+          [testSuite]: {
+            tests: {
+              'honors object-form retries before quarantining': {
+                properties: {
+                  quarantined: true,
                 },
               },
             },
           },
         },
-      })
-
-      const payloadsPromise = gatherEvents(events => {
-        const tests = getEventContents(events, 'test')
-        assert.strictEqual(tests.length, 2)
-        assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
-        assert.ok(!(TEST_IS_RETRY in tests[0].meta))
-        assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-        assert.strictEqual(tests[1].meta[TEST_STATUS], 'pass')
-        assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
-        assert.strictEqual(tests[1].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-      })
-
-      const [exitCode] = await Promise.all([
-        runVitest('browser-object-retry-quarantine.mjs'),
-        payloadsPromise,
-      ])
-
-      assert.strictEqual(exitCode, 0, testOutput)
+      },
     })
 
-    it('quarantines failures when an object-form retry condition stops retries', async () => {
-      const testSuite = 'ci-visibility/vitest-browser-tests/browser-conditional-retry-quarantine.mjs'
-      receiver.setSettings({
-        test_management: {
-          enabled: true,
-        },
-      })
-      receiver.setTestManagementTests({
-        vitest: {
-          suites: {
-            [testSuite]: {
-              tests: {
-                'stops conditional retries before quarantining': {
-                  properties: {
-                    quarantined: true,
-                  },
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+      assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+      assert.strictEqual(tests[1].meta[TEST_STATUS], 'pass')
+      assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+      assert.strictEqual(tests[1].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-object-retry-quarantine.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  objectRetryTest('quarantines failures when an object-form retry condition stops retries', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-conditional-retry-quarantine.mjs'
+    receiver.setSettings({
+      test_management: {
+        enabled: true,
+      },
+    })
+    receiver.setTestManagementTests({
+      vitest: {
+        suites: {
+          [testSuite]: {
+            tests: {
+              'stops conditional retries before quarantining': {
+                properties: {
+                  quarantined: true,
                 },
               },
             },
           },
         },
-      })
-
-      const payloadsPromise = gatherEvents(events => {
-        const [test] = getEventContents(events, 'test')
-        assert.ok(test)
-        assert.strictEqual(test.meta[TEST_STATUS], 'fail')
-        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
-        assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-        assert.ok(!(TEST_IS_RETRY in test.meta))
-        assert.match(test.meta[ERROR_MESSAGE], /conditional retry attempt 1/)
-      })
-
-      const [exitCode] = await Promise.all([
-        runVitest('browser-conditional-retry-quarantine.mjs'),
-        payloadsPromise,
-      ])
-
-      assert.strictEqual(exitCode, 0, testOutput)
+      },
     })
-  }
+
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      assert.ok(test)
+      assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+      assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+      assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+      assert.ok(!(TEST_IS_RETRY in test.meta))
+      assert.match(test.meta[ERROR_MESSAGE], /conditional retry attempt 1/)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-conditional-retry-quarantine.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
 
   it('applies Early Flake Detection repetitions to new browser tests', async () => {
     receiver.setSettings({

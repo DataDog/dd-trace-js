@@ -74,6 +74,7 @@ describe('allocation profiler', () => {
 
   it('sends heap profiles with the expected sample types on Node.js 26+', async function () {
     if (!isAtLeast26) {
+      // Allocation profiling is only available on Node.js 26 and newer.
       this.skip()
       return
     }
@@ -122,6 +123,7 @@ describe('allocation profiler', () => {
 
   it('does not crash when allocation profiling is requested on unsupported Node.js versions', async function () {
     if (isAtLeast26) {
+      // Node.js 26 supports allocation profiling, so the unsupported-runtime case does not apply.
       this.skip()
       return
     }

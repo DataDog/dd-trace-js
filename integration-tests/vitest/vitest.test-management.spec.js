@@ -191,49 +191,389 @@ versions.forEach((version) => {
       })
     })
 
-    if (version === 'latest') {
-      context('test management', () => {
-        it('supports test.concurrent with test management features', async () => {
-          const attemptToFixTestName = 'concurrent test management can attempt to fix a concurrent test'
-          const disabledTestName = 'concurrent test management can disable a concurrent test'
-          const quarantinedTestName = 'concurrent test management can quarantine a concurrent test'
-          const passingTestName = 'concurrent test management can pass normally in a concurrent management suite'
-          const nonConcurrentAttemptToFixTestName =
+    const testManagementContext = version === 'latest' ? context : context.skip
+
+    testManagementContext('test management', () => {
+      it('supports test.concurrent with test management features', async () => {
+        const attemptToFixTestName = 'concurrent test management can attempt to fix a concurrent test'
+        const disabledTestName = 'concurrent test management can disable a concurrent test'
+        const quarantinedTestName = 'concurrent test management can quarantine a concurrent test'
+        const passingTestName = 'concurrent test management can pass normally in a concurrent management suite'
+        const nonConcurrentAttemptToFixTestName =
             'concurrent test management can attempt to fix a non-concurrent test in a mixed management suite'
-          const nonConcurrentDisabledTestName =
+        const nonConcurrentDisabledTestName =
             'concurrent test management can disable a non-concurrent test in a mixed management suite'
-          const nonConcurrentPassingTestName =
+        const nonConcurrentPassingTestName =
             'concurrent test management can pass normally beside concurrent management tests'
 
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        receiver.setTestManagementTests({
+          vitest: {
+            suites: {
+              'ci-visibility/vitest-tests/test-management-concurrent.mjs': {
+                tests: {
+                  [attemptToFixTestName]: {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                  [disabledTestName]: {
+                    properties: {
+                      disabled: true,
+                    },
+                  },
+                  [quarantinedTestName]: {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                  [nonConcurrentAttemptToFixTestName]: {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                  [nonConcurrentDisabledTestName]: {
+                    properties: {
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+            assertAttemptToFixFailures(tests, attemptToFixTestName)
+            assertAttemptToFixFailures(tests, nonConcurrentAttemptToFixTestName)
+
+            const disabledTest = tests.find(test => test.meta[TEST_NAME] === disabledTestName)
+            assert.ok(disabledTest, 'Expected to find disabled concurrent test')
+            assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
+
+            const nonConcurrentDisabledTest = tests.find(
+              test => test.meta[TEST_NAME] === nonConcurrentDisabledTestName
+            )
+            assert.ok(nonConcurrentDisabledTest, 'Expected to find disabled non-concurrent test')
+            assert.strictEqual(nonConcurrentDisabledTest.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(nonConcurrentDisabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(nonConcurrentDisabledTest.meta[TEST_FINAL_STATUS], 'skip')
+
+            const quarantinedTest = tests.find(test => test.meta[TEST_NAME] === quarantinedTestName)
+            assert.ok(quarantinedTest, 'Expected to find quarantined concurrent test')
+            assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+
+            const passingTest = tests.find(test => test.meta[TEST_NAME] === passingTestName)
+            assert.ok(passingTest, 'Expected to find passing concurrent test')
+            assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
+            assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in passingTest.meta))
+            assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in passingTest.meta))
+            assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in passingTest.meta))
+
+            const nonConcurrentPassingTest = tests.find(test => test.meta[TEST_NAME] === nonConcurrentPassingTestName)
+            assert.ok(nonConcurrentPassingTest, 'Expected to find passing non-concurrent test')
+            assert.strictEqual(nonConcurrentPassingTest.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(nonConcurrentPassingTest.meta[TEST_FINAL_STATUS], 'pass')
+            assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in nonConcurrentPassingTest.meta))
+            assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in nonConcurrentPassingTest.meta))
+            assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in nonConcurrentPassingTest.meta))
+          })
+
+        let stdout = ''
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/test-management-concurrent.mjs',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (data) => {
+          stdout += data
+        })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.match(stdout, /I am running concurrent attempt to fix/)
+        assert.match(stdout, /I am running non-concurrent attempt to fix/)
+        assert.doesNotMatch(stdout, /I am running concurrent disabled/)
+        assert.doesNotMatch(stdout, /I am running non-concurrent disabled/)
+        assert.match(stdout, /I am running concurrent quarantined/)
+        assert.strictEqual(exitCode, 1)
+      })
+
+      context('attempt to fix', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+                  tests: {
+                    'attempt to fix tests can attempt to fix a test': {
+                      properties: {
+                        attempt_to_fix: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+        })
+
+        const getTestAssertions = ({
+          isAttemptingToFix,
+          expectedExecutionCount,
+          shouldAlwaysPass,
+          shouldFailSometimes,
+          shouldFailFirstOnly,
+          isQuarantining,
+          isDisabling,
+        }) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isAttemptingToFix) {
+                assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+              } else {
+                assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
+              }
+
+              const resourceNames = tests.map(span => span.resource)
+
+              assertObjectContains(resourceNames,
+                [
+                  'ci-visibility/vitest-tests/test-attempt-to-fix.mjs.attempt to fix tests can attempt to fix a test',
+                ]
+              )
+
+              const attemptedToFixTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'attempt to fix tests can attempt to fix a test'
+              ).sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              if (expectedExecutionCount !== undefined) {
+                assert.strictEqual(attemptedToFixTests.length, expectedExecutionCount)
+              }
+
+              for (let i = 0; i < attemptedToFixTests.length; i++) {
+                const isFirstAttempt = i === 0
+                const isLastAttempt = i === attemptedToFixTests.length - 1
+                const test = attemptedToFixTests[i]
+                if (isQuarantining) {
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+                } else if (isDisabling) {
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+                }
+
+                if (isAttemptingToFix) {
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+                  if (isFirstAttempt) {
+                    assert.ok(!(TEST_IS_RETRY in test.meta))
+                    assert.ok(!(TEST_RETRY_REASON in test.meta))
+                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                    continue
+                  }
+                  assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+                  if (isLastAttempt) {
+                    if (shouldAlwaysPass) {
+                      assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
+                    } else if (shouldFailSometimes || shouldFailFirstOnly) {
+                      assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+                      assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                    } else {
+                      assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+                      assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+                    }
+                    if (shouldAlwaysPass) {
+                      assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+                    } else {
+                      assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+                    }
+                  } else {
+                    // Intermediate ATF executions must not carry a final status tag
+                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                  }
+                } else {
+                  assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
+                  assert.ok(!(TEST_IS_RETRY in test.meta))
+                  assert.ok(!(TEST_RETRY_REASON in test.meta))
+                }
+              }
+            })
+
+        /**
+         * @param {() => void} done
+         * @param {{
+         *   isAttemptingToFix?: boolean,
+         *   expectedExecutionCount?: number,
+         *   shouldAlwaysPass?: boolean,
+         *   isQuarantining?: boolean,
+         *   shouldFailSometimes?: boolean,
+         *   shouldFailFirstOnly?: boolean,
+         *   isDisabling?: boolean,
+         *   extraEnvVars?: Record<string, string>,
+         *   vitestCommand?: string
+         * }} [options]
+         */
+        const runAttemptToFixTest = (done, {
+          isAttemptingToFix,
+          expectedExecutionCount,
+          shouldAlwaysPass,
+          isQuarantining,
+          shouldFailSometimes,
+          shouldFailFirstOnly,
+          isDisabling,
+          extraEnvVars = {},
+          vitestCommand = './node_modules/.bin/vitest run',
+        } = {}) => {
+          let stdout = ''
+          const testAssertionsPromise = getTestAssertions({
+            isAttemptingToFix,
+            expectedExecutionCount,
+            shouldAlwaysPass,
+            shouldFailSometimes,
+            shouldFailFirstOnly,
+            isQuarantining,
+            isDisabling,
+          })
+          childProcess = exec(
+            vitestCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                ...extraEnvVars,
+                ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+                ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
+                ...(shouldFailFirstOnly ? { SHOULD_FAIL_FIRST_ONLY: '1' } : {}),
+              },
+            }
+          )
+
+          childProcess.stdout?.on('data', (data) => {
+            stdout += data
+          })
+
+          childProcess.stderr?.on('data', (data) => {
+            stdout += data
+          })
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              assert.match(stdout, /I am running/)
+              if (expectedExecutionCount !== undefined) {
+                assert.strictEqual((stdout.match(/I am running/g) || []).length, expectedExecutionCount)
+              }
+              if (isAttemptingToFix) {
+                assert.match(
+                  stdout,
+                  /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/
+                )
+                assert.strictEqual(
+                  (stdout.match(
+                    /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/g
+                  ) || []).length,
+                  1
+                )
+                assert.match(stdout, /Datadog Test Optimization/)
+                if (shouldAlwaysPass) {
+                  assert.match(stdout, /Attempt to fix passed/)
+                } else {
+                  assert.match(stdout, /Attempt to fix failed/)
+                  assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                }
+                if (isQuarantining || isDisabling) {
+                  assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
+                }
+              }
+              if (shouldAlwaysPass) {
+                assert.strictEqual(exitCode, 0)
+              } else {
+                assert.strictEqual(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { isAttemptingToFix: true })
+        })
+
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { isAttemptingToFix: true, shouldAlwaysPass: true })
+        })
+
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailSometimes: true })
+        })
+
+        it('does not suppress exit code for plain ATF tests even when last retry passes', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailFirstOnly: true })
+        })
+
+        it('disables manual Vitest retries when attempting to fix a test', (done) => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+            flaky_test_retries_enabled: false,
+          })
+
+          runAttemptToFixTest(done, {
+            isAttemptingToFix: true,
+            shouldFailFirstOnly: true,
+            expectedExecutionCount: 3,
+            vitestCommand: './node_modules/.bin/vitest run --retry=1',
+          })
+        })
+
+        it('records afterEach failures in attempt to fix summary', async () => {
+          const testName = 'attempt to fix tests with failing afterEach ' +
+              'can attempt to fix a test whose afterEach fails on the last attempt'
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
           receiver.setTestManagementTests({
             vitest: {
               suites: {
-                'ci-visibility/vitest-tests/test-management-concurrent.mjs': {
+                'ci-visibility/vitest-tests/hooks-attempt-to-fix-failing-after-each.mjs': {
                   tests: {
-                    [attemptToFixTestName]: {
+                    [testName]: {
                       properties: {
                         attempt_to_fix: true,
-                      },
-                    },
-                    [disabledTestName]: {
-                      properties: {
-                        disabled: true,
-                      },
-                    },
-                    [quarantinedTestName]: {
-                      properties: {
-                        quarantined: true,
-                      },
-                    },
-                    [nonConcurrentAttemptToFixTestName]: {
-                      properties: {
-                        attempt_to_fix: true,
-                      },
-                    },
-                    [nonConcurrentDisabledTestName]: {
-                      properties: {
-                        disabled: true,
                       },
                     },
                   },
@@ -246,48 +586,27 @@ versions.forEach((version) => {
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const testSession = events.find(event => event.type === 'test_session_end').content
+              const attemptedToFixTests = tests
+                .filter(test => test.meta[TEST_NAME] === testName)
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
 
-              assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+              assert.strictEqual(attemptedToFixTests.length, 4)
 
-              assertAttemptToFixFailures(tests, attemptToFixTestName)
-              assertAttemptToFixFailures(tests, nonConcurrentAttemptToFixTestName)
+              attemptedToFixTests.forEach((test, index) => {
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
 
-              const disabledTest = tests.find(test => test.meta[TEST_NAME] === disabledTestName)
-              assert.ok(disabledTest, 'Expected to find disabled concurrent test')
-              assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
-              assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-              assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
-
-              const nonConcurrentDisabledTest = tests.find(
-                test => test.meta[TEST_NAME] === nonConcurrentDisabledTestName
-              )
-              assert.ok(nonConcurrentDisabledTest, 'Expected to find disabled non-concurrent test')
-              assert.strictEqual(nonConcurrentDisabledTest.meta[TEST_STATUS], 'skip')
-              assert.strictEqual(nonConcurrentDisabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-              assert.strictEqual(nonConcurrentDisabledTest.meta[TEST_FINAL_STATUS], 'skip')
-
-              const quarantinedTest = tests.find(test => test.meta[TEST_NAME] === quarantinedTestName)
-              assert.ok(quarantinedTest, 'Expected to find quarantined concurrent test')
-              assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-              assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
-
-              const passingTest = tests.find(test => test.meta[TEST_NAME] === passingTestName)
-              assert.ok(passingTest, 'Expected to find passing concurrent test')
-              assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
-              assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in passingTest.meta))
-              assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in passingTest.meta))
-              assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in passingTest.meta))
-
-              const nonConcurrentPassingTest = tests.find(test => test.meta[TEST_NAME] === nonConcurrentPassingTestName)
-              assert.ok(nonConcurrentPassingTest, 'Expected to find passing non-concurrent test')
-              assert.strictEqual(nonConcurrentPassingTest.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(nonConcurrentPassingTest.meta[TEST_FINAL_STATUS], 'pass')
-              assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in nonConcurrentPassingTest.meta))
-              assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in nonConcurrentPassingTest.meta))
-              assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in nonConcurrentPassingTest.meta))
+                if (index < attemptedToFixTests.length - 1) {
+                  assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                  assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                } else {
+                  assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                }
+              })
             })
 
           let stdout = ''
@@ -297,7 +616,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/test-management-concurrent.mjs',
+                TEST_DIR: 'ci-visibility/vitest-tests/hooks-attempt-to-fix-failing-after-each.mjs',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
               },
             }
@@ -312,1027 +631,86 @@ versions.forEach((version) => {
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
+            once(childProcess.stdout, 'end'),
+            once(childProcess.stderr, 'end'),
             eventsPromise,
           ])
 
-          assert.match(stdout, /I am running concurrent attempt to fix/)
-          assert.match(stdout, /I am running non-concurrent attempt to fix/)
-          assert.doesNotMatch(stdout, /I am running concurrent disabled/)
-          assert.doesNotMatch(stdout, /I am running non-concurrent disabled/)
-          assert.match(stdout, /I am running concurrent quarantined/)
+          assert.match(stdout, /Attempt to fix failed: 1 of 4 execution\(s\) failed across 1 of 1 test\(s\)\./)
           assert.strictEqual(exitCode, 1)
         })
 
-        context('attempt to fix', () => {
-          beforeEach(() => {
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
-                    tests: {
-                      'attempt to fix tests can attempt to fix a test': {
-                        properties: {
-                          attempt_to_fix: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            })
-          })
-
-          const getTestAssertions = ({
-            isAttemptingToFix,
-            expectedExecutionCount,
-            shouldAlwaysPass,
-            shouldFailSometimes,
-            shouldFailFirstOnly,
-            isQuarantining,
-            isDisabling,
-          }) =>
-            receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                const testSession = events.find(event => event.type === 'test_session_end').content
-
-                if (isAttemptingToFix) {
-                  assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-                } else {
-                  assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
-                }
-
-                const resourceNames = tests.map(span => span.resource)
-
-                assertObjectContains(resourceNames,
-                  [
-                    'ci-visibility/vitest-tests/test-attempt-to-fix.mjs.attempt to fix tests can attempt to fix a test',
-                  ]
-                )
-
-                const attemptedToFixTests = tests.filter(
-                  test => test.meta[TEST_NAME] === 'attempt to fix tests can attempt to fix a test'
-                ).sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-                if (expectedExecutionCount !== undefined) {
-                  assert.strictEqual(attemptedToFixTests.length, expectedExecutionCount)
-                }
-
-                for (let i = 0; i < attemptedToFixTests.length; i++) {
-                  const isFirstAttempt = i === 0
-                  const isLastAttempt = i === attemptedToFixTests.length - 1
-                  const test = attemptedToFixTests[i]
-                  if (isQuarantining) {
-                    assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-                  } else if (isDisabling) {
-                    assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-                  }
-
-                  if (isAttemptingToFix) {
-                    assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
-                    if (isFirstAttempt) {
-                      assert.ok(!(TEST_IS_RETRY in test.meta))
-                      assert.ok(!(TEST_RETRY_REASON in test.meta))
-                      assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                      continue
-                    }
-                    assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
-                    assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
-                    if (isLastAttempt) {
-                      if (shouldAlwaysPass) {
-                        assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
-                      } else if (shouldFailSometimes || shouldFailFirstOnly) {
-                        assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                        assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
-                      } else {
-                        assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-                        assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                      }
-                      if (shouldAlwaysPass) {
-                        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-                      } else {
-                        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
-                      }
-                    } else {
-                      // Intermediate ATF executions must not carry a final status tag
-                      assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                    }
-                  } else {
-                    assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
-                    assert.ok(!(TEST_IS_RETRY in test.meta))
-                    assert.ok(!(TEST_RETRY_REASON in test.meta))
-                  }
-                }
-              })
-
-          /**
-           * @param {() => void} done
-           * @param {{
-           *   isAttemptingToFix?: boolean,
-           *   expectedExecutionCount?: number,
-           *   shouldAlwaysPass?: boolean,
-           *   isQuarantining?: boolean,
-           *   shouldFailSometimes?: boolean,
-           *   shouldFailFirstOnly?: boolean,
-           *   isDisabling?: boolean,
-           *   extraEnvVars?: Record<string, string>,
-           *   vitestCommand?: string
-           * }} [options]
-           */
-          const runAttemptToFixTest = (done, {
-            isAttemptingToFix,
-            expectedExecutionCount,
-            shouldAlwaysPass,
-            isQuarantining,
-            shouldFailSometimes,
-            shouldFailFirstOnly,
-            isDisabling,
-            extraEnvVars = {},
-            vitestCommand = './node_modules/.bin/vitest run',
-          } = {}) => {
-            let stdout = ''
-            const testAssertionsPromise = getTestAssertions({
-              isAttemptingToFix,
-              expectedExecutionCount,
-              shouldAlwaysPass,
-              shouldFailSometimes,
-              shouldFailFirstOnly,
-              isQuarantining,
-              isDisabling,
-            })
-            childProcess = exec(
-              vitestCommand,
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                  ...extraEnvVars,
-                  ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
-                  ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
-                  ...(shouldFailFirstOnly ? { SHOULD_FAIL_FIRST_ONLY: '1' } : {}),
-                },
-              }
-            )
-
-            childProcess.stdout?.on('data', (data) => {
-              stdout += data
-            })
-
-            childProcess.stderr?.on('data', (data) => {
-              stdout += data
-            })
-
-            childProcess.on('exit', (exitCode) => {
-              testAssertionsPromise.then(() => {
-                assert.match(stdout, /I am running/)
-                if (expectedExecutionCount !== undefined) {
-                  assert.strictEqual((stdout.match(/I am running/g) || []).length, expectedExecutionCount)
-                }
-                if (isAttemptingToFix) {
-                  assert.match(
-                    stdout,
-                    /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/
-                  )
-                  assert.strictEqual(
-                    (stdout.match(
-                      /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/g
-                    ) || []).length,
-                    1
-                  )
-                  assert.match(stdout, /Datadog Test Optimization/)
-                  if (shouldAlwaysPass) {
-                    assert.match(stdout, /Attempt to fix passed/)
-                  } else {
-                    assert.match(stdout, /Attempt to fix failed/)
-                    assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
-                  }
-                  if (isQuarantining || isDisabling) {
-                    assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
-                  }
-                }
-                if (shouldAlwaysPass) {
-                  assert.strictEqual(exitCode, 0)
-                } else {
-                  assert.strictEqual(exitCode, 1)
-                }
-                done()
-              }).catch(done)
-            })
-          }
-
-          it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done, { isAttemptingToFix: true })
-          })
-
-          it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done, { isAttemptingToFix: true, shouldAlwaysPass: true })
-          })
-
-          it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailSometimes: true })
-          })
-
-          it('does not suppress exit code for plain ATF tests even when last retry passes', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailFirstOnly: true })
-          })
-
-          it('disables manual Vitest retries when attempting to fix a test', (done) => {
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: 2 },
-              flaky_test_retries_enabled: false,
-            })
-
-            runAttemptToFixTest(done, {
-              isAttemptingToFix: true,
-              shouldFailFirstOnly: true,
-              expectedExecutionCount: 3,
-              vitestCommand: './node_modules/.bin/vitest run --retry=1',
-            })
-          })
-
-          it('records afterEach failures in attempt to fix summary', async () => {
-            const testName = 'attempt to fix tests with failing afterEach ' +
-              'can attempt to fix a test whose afterEach fails on the last attempt'
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/hooks-attempt-to-fix-failing-after-each.mjs': {
-                    tests: {
-                      [testName]: {
-                        properties: {
-                          attempt_to_fix: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            })
-
-            const eventsPromise = receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                const attemptedToFixTests = tests
-                  .filter(test => test.meta[TEST_NAME] === testName)
-                  .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-                assert.strictEqual(attemptedToFixTests.length, 4)
-
-                attemptedToFixTests.forEach((test, index) => {
-                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
-
-                  if (index < attemptedToFixTests.length - 1) {
-                    assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                    assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
-                    assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
-                  } else {
-                    assert.strictEqual(test.meta[TEST_STATUS], 'fail')
-                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
-                    assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                    assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
-                  }
-                })
-              })
-
-            let stdout = ''
-            childProcess = exec(
-              './node_modules/.bin/vitest run',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/hooks-attempt-to-fix-failing-after-each.mjs',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                },
-              }
-            )
-
-            childProcess.stdout?.on('data', (data) => {
-              stdout += data
-            })
-            childProcess.stderr?.on('data', (data) => {
-              stdout += data
-            })
-
-            const [[exitCode]] = await Promise.all([
-              once(childProcess, 'exit'),
-              once(childProcess.stdout, 'end'),
-              once(childProcess.stderr, 'end'),
-              eventsPromise,
-            ])
-
-            assert.match(stdout, /Attempt to fix failed: 1 of 4 execution\(s\) failed across 1 of 1 test\(s\)\./)
-            assert.strictEqual(exitCode, 1)
-          })
-
-          it('preserves raw attempt statuses for quarantined attempt to fix tests', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
-                    tests: {
-                      'attempt to fix tests can attempt to fix a test': {
-                        properties: {
-                          attempt_to_fix: true,
-                          quarantined: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            })
-
-            runAttemptToFixTest(done, {
-              isAttemptingToFix: true,
-              isQuarantining: true,
-              shouldFailFirstOnly: true,
-            })
-          })
-
-          it('does not attempt to fix tests if test management is not enabled', (done) => {
-            receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done)
-          })
-
-          it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
-          })
-
-          it('does not tag known attempt to fix tests as new', async () => {
-            receiver.setKnownTests({
-              vitest: {
-                'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': [
-                  'attempt to fix tests can attempt to fix a test',
-                ],
-              },
-            })
-            receiver.setSettings({
-              test_management: { enabled: true, attempt_to_fix_retries: 2 },
-              early_flake_detection: {
-                enabled: true,
-                slow_test_retries: { '5s': 2 },
-                faulty_session_threshold: 100,
-              },
-              known_tests_enabled: true,
-            })
-
-            const eventsPromise = receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                const atfTests = tests.filter(
-                  t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
-                )
-                assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
-                for (const test of atfTests) {
-                  assert.ok(
-                    !(TEST_IS_NEW in test.meta),
-                    'ATF test that is in known tests should not be tagged as new'
-                  )
-                }
-              })
-
-            childProcess = exec(
-              './node_modules/.bin/vitest run',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                },
-              }
-            )
-
-            await Promise.all([
-              once(childProcess, 'exit'),
-              eventsPromise,
-            ])
-          })
-
-          it('ignores quarantine when attempting to fix a test', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
-                    tests: {
-                      'attempt to fix tests can attempt to fix a test': {
-                        properties: {
-                          attempt_to_fix: true,
-                          quarantined: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            })
-
-            runAttemptToFixTest(done, { isAttemptingToFix: true, isQuarantining: true })
-          })
-
-          it('ignores disabled when attempting to fix a test', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
-                    tests: {
-                      'attempt to fix tests can attempt to fix a test': {
-                        properties: {
-                          attempt_to_fix: true,
-                          disabled: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            })
-
-            runAttemptToFixTest(done, { isAttemptingToFix: true, isDisabling: true })
-          })
-
-          it('reports passing disabled attempt to fix tests as passed', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
-                    tests: {
-                      'attempt to fix tests can attempt to fix a test': {
-                        properties: {
-                          attempt_to_fix: true,
-                          disabled: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            })
-
-            runAttemptToFixTest(done, {
-              isAttemptingToFix: true,
-              isDisabling: true,
-              shouldAlwaysPass: true,
-            })
-          })
-
-          it('preserves attempt to fix for programmatically skipped disabled tests', async () => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs': {
-                    tests: {
-                      'other context can programmatic skip': {
-                        properties: {
-                          attempt_to_fix: true,
-                          disabled: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            })
-
-            const eventsPromise = receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events
-                  .filter(event => event.type === 'test')
-                  .map(event => event.content)
-                  .filter(test => test.meta[TEST_NAME] === 'other context can programmatic skip')
-
-                assert.strictEqual(tests.length, 1)
-                assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
-                assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
-                assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-              })
-
-            let stdout = ''
-            childProcess = exec(
-              './node_modules/.bin/vitest run',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                },
-              }
-            )
-
-            childProcess.stdout?.on('data', data => { stdout += data })
-            childProcess.stderr?.on('data', data => { stdout += data })
-
-            const [[exitCode]] = await Promise.all([
-              once(childProcess, 'exit'),
-              eventsPromise,
-            ])
-
-            assert.strictEqual(exitCode, 0)
-            assert.match(stdout, /Attempt to fix passed/)
-            assert.doesNotMatch(stdout, /Disabled:/)
-          })
-
-          it('preserves quarantine for skipped attempt to fix tests', async () => {
-            const testNames = [
-              'attempt to fix skip tests can statically skip',
-              'attempt to fix skip tests can programmatically skip',
-            ]
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/test-attempt-to-fix-skip.mjs': {
-                    tests: Object.fromEntries(testNames.map(testName => [testName, {
+        it('preserves raw attempt statuses for quarantined attempt to fix tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+                  tests: {
+                    'attempt to fix tests can attempt to fix a test': {
                       properties: {
                         attempt_to_fix: true,
                         quarantined: true,
                       },
-                    }])),
-                  },
-                },
-              },
-            })
-
-            const eventsPromise = receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events
-                  .filter(event => event.type === 'test')
-                  .map(event => event.content)
-
-                assert.deepStrictEqual(tests.map(test => test.meta[TEST_NAME]).sort(), testNames.sort())
-                for (const test of tests) {
-                  assert.strictEqual(test.meta[TEST_STATUS], 'skip')
-                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
-                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-                }
-              })
-
-            let stdout = ''
-            childProcess = exec(
-              './node_modules/.bin/vitest run',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix-skip.mjs',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                },
-              }
-            )
-
-            childProcess.stdout?.on('data', data => { stdout += data })
-            childProcess.stderr?.on('data', data => { stdout += data })
-
-            const [[exitCode]] = await Promise.all([
-              once(childProcess, 'exit'),
-              once(childProcess.stdout, 'end'),
-              once(childProcess.stderr, 'end'),
-              eventsPromise,
-            ])
-
-            assert.strictEqual(exitCode, 0)
-            assert.match(stdout, /Attempt to fix passed: all 2 execution\(s\) passed for 2 test\(s\)\./)
-            assert.strictEqual(
-              (stdout.match(/Test was marked as quarantined but was not quarantined because it is attempt to fix\./g) || [])
-                .length,
-              2
-            )
-          })
-        })
-
-        context('disabled', () => {
-          beforeEach(() => {
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/test-disabled.mjs': {
-                    tests: {
-                      'disable tests can disable a test': {
-                        properties: {
-                          disabled: true,
-                        },
-                      },
                     },
                   },
                 },
               },
-            })
+            },
           })
 
-          const getTestAssertions = (isDisabling) =>
-            receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                assert.strictEqual(tests.length, 1)
-
-                const testSession = events.find(event => event.type === 'test_session_end').content
-
-                if (isDisabling) {
-                  assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-                } else {
-                  assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
-                }
-
-                const resourceNames = tests.map(span => span.resource)
-
-                assertObjectContains(resourceNames,
-                  [
-                    'ci-visibility/vitest-tests/test-disabled.mjs.disable tests can disable a test',
-                  ]
-                )
-
-                const skippedTest = tests.find(
-                  test => test.meta[TEST_NAME] === 'disable tests can disable a test'
-                )
-
-                if (isDisabling) {
-                  assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
-                  assert.strictEqual(skippedTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-                } else {
-                  assert.strictEqual(skippedTest.meta[TEST_STATUS], 'fail')
-                  assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in skippedTest.meta))
-                }
-              })
-
-          const runDisableTest = (done, isDisabling, extraEnvVars = {}) => {
-            let stdout = ''
-            const testAssertionsPromise = getTestAssertions(isDisabling)
-
-            childProcess = exec(
-              './node_modules/.bin/vitest run',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/test-disabled*',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                  ...extraEnvVars,
-                },
-              }
-            )
-
-            childProcess.stdout?.on('data', (data) => {
-              stdout += data
-            })
-            childProcess.stderr?.on('data', (data) => {
-              stdout += data
-            })
-
-            childProcess.on('exit', (exitCode) => {
-              testAssertionsPromise.then(() => {
-                if (isDisabling) {
-                  assert.doesNotMatch(stdout, /I am running/)
-                  assert.match(stdout, /Disabled: \d+ tests? skipped\./)
-                  assert.strictEqual(exitCode, 0)
-                } else {
-                  assert.match(stdout, /I am running/)
-                  assert.strictEqual(exitCode, 1)
-                }
-                done()
-              }).catch(done)
-            })
-          }
-
-          it('can disable tests', (done) => {
-            receiver.setSettings({ test_management: { enabled: true } })
-
-            runDisableTest(done, true)
-          })
-
-          it('fails if disable is not enabled', (done) => {
-            receiver.setSettings({ test_management: { enabled: false } })
-
-            runDisableTest(done, false)
-          })
-
-          it('does not disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-            receiver.setSettings({ test_management: { enabled: true } })
-
-            runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          runAttemptToFixTest(done, {
+            isAttemptingToFix: true,
+            isQuarantining: true,
+            shouldFailFirstOnly: true,
           })
         })
 
-        context('quarantine', () => {
-          beforeEach(() => {
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/test-quarantine.mjs': {
-                    tests: {
-                      'quarantine tests can quarantine a test': {
-                        properties: {
-                          quarantined: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            })
-          })
+        it('does not attempt to fix tests if test management is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
 
-          const getTestAssertions = (isQuarantining) =>
-            receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                assert.strictEqual(tests.length, 3)
-
-                const testSession = events.find(event => event.type === 'test_session_end').content
-
-                if (isQuarantining) {
-                  assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-                } else {
-                  assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
-                }
-
-                const resourceNames = tests.map(span => span.resource)
-
-                assertObjectContains(resourceNames,
-                  [
-                    'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a test',
-                    'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can pass normally',
-                    'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a passing test',
-                  ]
-                )
-
-                const quarantinedTest = tests.find(
-                  test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
-                )
-
-                if (isQuarantining) {
-                  assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-                  assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-                } else {
-                  assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-                  assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTest.meta))
-                }
-              })
-
-          const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}) => {
-            let stdout = ''
-            const testAssertionsPromise = getTestAssertions(isQuarantining)
-
-            childProcess = exec(
-              './node_modules/.bin/vitest run',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine*',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                  ...extraEnvVars,
-                },
-              }
-            )
-
-            childProcess.stdout?.on('data', (data) => {
-              stdout += data
-            })
-            childProcess.stderr?.on('data', (data) => {
-              stdout += data
-            })
-
-            childProcess.on('exit', (exitCode) => {
-              testAssertionsPromise.then(() => {
-                // it runs regardless of the quarantine status
-                assert.match(stdout, /I am running when quarantined/)
-                if (isQuarantining) {
-                  assert.match(
-                    stdout,
-                    /Quarantined: \d+ tests? run; \d+ failures? did not affect the test session\./
-                  )
-                  // exit code 0 even though one of the tests failed
-                  assert.strictEqual(exitCode, 0)
-                } else {
-                  assert.strictEqual(exitCode, 1)
-                }
-                done()
-              }).catch(done)
-            })
-          }
-
-          it('can quarantine tests', (done) => {
-            receiver.setSettings({ test_management: { enabled: true } })
-
-            runQuarantineTest(done, true)
-          })
-
-          it('can quarantine tests retried by Vitest', async () => {
-            receiver.setSettings({
-              test_management: { enabled: true },
-              flaky_test_retries_enabled: false,
-            })
-
-            const testAssertionsPromise = receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                const testSession = events.find(event => event.type === 'test_session_end').content
-
-                assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
-
-                const quarantinedTests = tests
-                  .filter(test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test')
-                  .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-                assert.strictEqual(quarantinedTests.length, 2)
-
-                quarantinedTests.forEach((test, index) => {
-                  assert.strictEqual(test.meta[TEST_STATUS], 'fail')
-                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-
-                  if (index === 0) {
-                    assert.ok(!(TEST_IS_RETRY in test.meta))
-                    assert.ok(!(TEST_RETRY_REASON in test.meta))
-                  } else {
-                    assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
-                    assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
-                  }
-
-                  if (index === quarantinedTests.length - 1) {
-                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
-                  } else {
-                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                  }
-                })
-              })
-
-            let stdout = ''
-            childProcess = exec(
-              './node_modules/.bin/vitest run --retry=1',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine.mjs',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                },
-              }
-            )
-            childProcess.stdout?.on('data', data => {
-              stdout += data
-            })
-
-            const [[exitCode]] = await Promise.all([
-              once(childProcess, 'exit'),
-              testAssertionsPromise,
-            ])
-
-            assert.strictEqual(
-              (stdout.match(/I am running when quarantined/g) || []).length,
-              2
-            )
-            assert.strictEqual(exitCode, 0)
-          })
-
-          it('can quarantine tests retried by Vitest that eventually pass', async () => {
-            receiver.setSettings({
-              test_management: { enabled: true },
-              flaky_test_retries_enabled: false,
-            })
-            receiver.setTestManagementTests({
-              vitest: {
-                suites: {
-                  'ci-visibility/vitest-tests/quarantine-eventually-passes.mjs': {
-                    tests: {
-                      'quarantine tests with retries can quarantine a test that eventually passes': {
-                        properties: {
-                          quarantined: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            })
-
-            const testAssertionsPromise = receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                const testSession = events.find(event => event.type === 'test_session_end').content
-
-                assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
-
-                const quarantinedTests = tests
-                  .filter(test => test.meta[TEST_NAME] ===
-                    'quarantine tests with retries can quarantine a test that eventually passes')
-                  .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-                assert.strictEqual(quarantinedTests.length, 3)
-
-                quarantinedTests.forEach((test, index) => {
-                  assert.strictEqual(test.meta[TEST_STATUS], index === 2 ? 'pass' : 'fail')
-                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-
-                  if (index === 0) {
-                    assert.ok(!(TEST_IS_RETRY in test.meta))
-                    assert.ok(!(TEST_RETRY_REASON in test.meta))
-                  } else {
-                    assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
-                    assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
-                  }
-
-                  if (index === quarantinedTests.length - 1) {
-                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
-                  } else {
-                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                  }
-                })
-              })
-
-            let stdout = ''
-            childProcess = exec(
-              './node_modules/.bin/vitest run --retry=2',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/quarantine-eventually-passes.mjs',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                },
-              }
-            )
-            childProcess.stdout?.on('data', data => {
-              stdout += data
-            })
-
-            const [[exitCode]] = await Promise.all([
-              once(childProcess, 'exit'),
-              testAssertionsPromise,
-            ])
-
-            assert.strictEqual(
-              (stdout.match(/I am running when quarantined and eventually passes/g) || []).length,
-              3
-            )
-            assert.strictEqual(exitCode, 0)
-          })
-
-          it('fails if quarantine is not enabled', (done) => {
-            receiver.setSettings({ test_management: { enabled: false } })
-
-            runQuarantineTest(done, false)
-          })
-
-          it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-            receiver.setSettings({ test_management: { enabled: true } })
-
-            runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
-          })
+          runAttemptToFixTest(done)
         })
 
-        it('does not crash if the request to get test management tests fails', async () => {
-          let testOutput = ''
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+        })
+
+        it('does not tag known attempt to fix tests as new', async () => {
+          receiver.setKnownTests({
+            vitest: {
+              'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': [
+                'attempt to fix tests can attempt to fix a test',
+              ],
+            },
+          })
           receiver.setSettings({
-            test_management: { enabled: true },
-            flaky_test_retries_enabled: false,
+            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 2 },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
           })
-          receiver.setTestManagementTestsResponseCode(500)
 
-          // Request module waits before retrying — need longer gather timeout
           const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              const testSessionEnd = events.find(event => event.type === 'test_session_end')
-              assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
-              const testSession = testSessionEnd.content
-              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              // it is not retried
-              assert.strictEqual(tests.length, 1)
-            }, 60000)
+              const atfTests = tests.filter(
+                t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+              )
+              assert.ok(atfTests.length > 0, `Expected ${atfTests.length} > 0`)
+              for (const test of atfTests) {
+                assert.ok(
+                  !(TEST_IS_NEW in test.meta),
+                  'ATF test that is in known tests should not be tagged as new'
+                )
+              }
+            })
 
           childProcess = exec(
             './node_modules/.bin/vitest run',
@@ -1340,29 +718,651 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix.mjs',
+                TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                DD_TRACE_DEBUG: '1',
               },
             }
           )
 
-          childProcess.stdout?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
-          childProcess.stderr?.on('data', (chunk) => {
-            testOutput += chunk.toString()
+          await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
+        })
+
+        it('ignores quarantine when attempting to fix a test', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+                  tests: {
+                    'attempt to fix tests can attempt to fix a test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
 
-          await Promise.all([
+          runAttemptToFixTest(done, { isAttemptingToFix: true, isQuarantining: true })
+        })
+
+        it('ignores disabled when attempting to fix a test', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+                  tests: {
+                    'attempt to fix tests can attempt to fix a test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          runAttemptToFixTest(done, { isAttemptingToFix: true, isDisabling: true })
+        })
+
+        it('reports passing disabled attempt to fix tests as passed', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+                  tests: {
+                    'attempt to fix tests can attempt to fix a test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          runAttemptToFixTest(done, {
+            isAttemptingToFix: true,
+            isDisabling: true,
+            shouldAlwaysPass: true,
+          })
+        })
+
+        it('preserves attempt to fix for programmatically skipped disabled tests', async () => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs': {
+                  tests: {
+                    'other context can programmatic skip': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] === 'other context can programmatic skip')
+
+              assert.strictEqual(tests.length, 1)
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
+              assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+              assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            })
+
+          let stdout = ''
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+              },
+            }
+          )
+
+          childProcess.stdout?.on('data', data => { stdout += data })
+          childProcess.stderr?.on('data', data => { stdout += data })
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
+
+          assert.strictEqual(exitCode, 0)
+          assert.match(stdout, /Attempt to fix passed/)
+          assert.doesNotMatch(stdout, /Disabled:/)
+        })
+
+        it('preserves quarantine for skipped attempt to fix tests', async () => {
+          const testNames = [
+            'attempt to fix skip tests can statically skip',
+            'attempt to fix skip tests can programmatically skip',
+          ]
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-attempt-to-fix-skip.mjs': {
+                  tests: Object.fromEntries(testNames.map(testName => [testName, {
+                    properties: {
+                      attempt_to_fix: true,
+                      quarantined: true,
+                    },
+                  }])),
+                },
+              },
+            },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+
+              assert.deepStrictEqual(tests.map(test => test.meta[TEST_NAME]).sort(), testNames.sort())
+              for (const test of tests) {
+                assert.strictEqual(test.meta[TEST_STATUS], 'skip')
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              }
+            })
+
+          let stdout = ''
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix-skip.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+              },
+            }
+          )
+
+          childProcess.stdout?.on('data', data => { stdout += data })
+          childProcess.stderr?.on('data', data => { stdout += data })
+
+          const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
             once(childProcess.stdout, 'end'),
             once(childProcess.stderr, 'end'),
             eventsPromise,
           ])
-          assert.match(testOutput, /Test management tests could not be fetched/)
+
+          assert.strictEqual(exitCode, 0)
+          assert.match(stdout, /Attempt to fix passed: all 2 execution\(s\) passed for 2 test\(s\)\./)
+          assert.strictEqual(
+            (stdout.match(/Test was marked as quarantined but was not quarantined because it is attempt to fix\./g) || [])
+              .length,
+            2
+          )
         })
       })
-    }
+
+      context('disabled', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-disabled.mjs': {
+                  tests: {
+                    'disable tests can disable a test': {
+                      properties: {
+                        disabled: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+        })
+
+        const getTestAssertions = (isDisabling) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 1)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isDisabling) {
+                assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+              } else {
+                assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
+              }
+
+              const resourceNames = tests.map(span => span.resource)
+
+              assertObjectContains(resourceNames,
+                [
+                  'ci-visibility/vitest-tests/test-disabled.mjs.disable tests can disable a test',
+                ]
+              )
+
+              const skippedTest = tests.find(
+                test => test.meta[TEST_NAME] === 'disable tests can disable a test'
+              )
+
+              if (isDisabling) {
+                assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
+                assert.strictEqual(skippedTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+              } else {
+                assert.strictEqual(skippedTest.meta[TEST_STATUS], 'fail')
+                assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in skippedTest.meta))
+              }
+            })
+
+        const runDisableTest = (done, isDisabling, extraEnvVars = {}) => {
+          let stdout = ''
+          const testAssertionsPromise = getTestAssertions(isDisabling)
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/test-disabled*',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                ...extraEnvVars,
+              },
+            }
+          )
+
+          childProcess.stdout?.on('data', (data) => {
+            stdout += data
+          })
+          childProcess.stderr?.on('data', (data) => {
+            stdout += data
+          })
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              if (isDisabling) {
+                assert.doesNotMatch(stdout, /I am running/)
+                assert.match(stdout, /Disabled: \d+ tests? skipped\./)
+                assert.strictEqual(exitCode, 0)
+              } else {
+                assert.match(stdout, /I am running/)
+                assert.strictEqual(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can disable tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runDisableTest(done, true)
+        })
+
+        it('fails if disable is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runDisableTest(done, false)
+        })
+
+        it('does not disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
+      })
+
+      context('quarantine', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-quarantine.mjs': {
+                  tests: {
+                    'quarantine tests can quarantine a test': {
+                      properties: {
+                        quarantined: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+        })
+
+        const getTestAssertions = (isQuarantining) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 3)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isQuarantining) {
+                assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+              } else {
+                assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
+              }
+
+              const resourceNames = tests.map(span => span.resource)
+
+              assertObjectContains(resourceNames,
+                [
+                  'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a test',
+                  'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can pass normally',
+                  'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a passing test',
+                ]
+              )
+
+              const quarantinedTest = tests.find(
+                test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+              )
+
+              if (isQuarantining) {
+                assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              } else {
+                assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+                assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTest.meta))
+              }
+            })
+
+        const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}) => {
+          let stdout = ''
+          const testAssertionsPromise = getTestAssertions(isQuarantining)
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine*',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                ...extraEnvVars,
+              },
+            }
+          )
+
+          childProcess.stdout?.on('data', (data) => {
+            stdout += data
+          })
+          childProcess.stderr?.on('data', (data) => {
+            stdout += data
+          })
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              // it runs regardless of the quarantine status
+              assert.match(stdout, /I am running when quarantined/)
+              if (isQuarantining) {
+                assert.match(
+                  stdout,
+                  /Quarantined: \d+ tests? run; \d+ failures? did not affect the test session\./
+                )
+                // exit code 0 even though one of the tests failed
+                assert.strictEqual(exitCode, 0)
+              } else {
+                assert.strictEqual(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can quarantine tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, true)
+        })
+
+        it('can quarantine tests retried by Vitest', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: false,
+          })
+
+          const testAssertionsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+              const quarantinedTests = tests
+                .filter(test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              assert.strictEqual(quarantinedTests.length, 2)
+
+              quarantinedTests.forEach((test, index) => {
+                assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+                if (index === 0) {
+                  assert.ok(!(TEST_IS_RETRY in test.meta))
+                  assert.ok(!(TEST_RETRY_REASON in test.meta))
+                } else {
+                  assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+                }
+
+                if (index === quarantinedTests.length - 1) {
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+                } else {
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                }
+              })
+            })
+
+          let stdout = ''
+          childProcess = exec(
+            './node_modules/.bin/vitest run --retry=1',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+              },
+            }
+          )
+          childProcess.stdout?.on('data', data => {
+            stdout += data
+          })
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise,
+          ])
+
+          assert.strictEqual(
+            (stdout.match(/I am running when quarantined/g) || []).length,
+            2
+          )
+          assert.strictEqual(exitCode, 0)
+        })
+
+        it('can quarantine tests retried by Vitest that eventually pass', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: false,
+          })
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/quarantine-eventually-passes.mjs': {
+                  tests: {
+                    'quarantine tests with retries can quarantine a test that eventually passes': {
+                      properties: {
+                        quarantined: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          const testAssertionsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+              const quarantinedTests = tests
+                .filter(test => test.meta[TEST_NAME] ===
+                    'quarantine tests with retries can quarantine a test that eventually passes')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              assert.strictEqual(quarantinedTests.length, 3)
+
+              quarantinedTests.forEach((test, index) => {
+                assert.strictEqual(test.meta[TEST_STATUS], index === 2 ? 'pass' : 'fail')
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+                if (index === 0) {
+                  assert.ok(!(TEST_IS_RETRY in test.meta))
+                  assert.ok(!(TEST_RETRY_REASON in test.meta))
+                } else {
+                  assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+                }
+
+                if (index === quarantinedTests.length - 1) {
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+                } else {
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                }
+              })
+            })
+
+          let stdout = ''
+          childProcess = exec(
+            './node_modules/.bin/vitest run --retry=2',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/quarantine-eventually-passes.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+              },
+            }
+          )
+          childProcess.stdout?.on('data', data => {
+            stdout += data
+          })
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise,
+          ])
+
+          assert.strictEqual(
+            (stdout.match(/I am running when quarantined and eventually passes/g) || []).length,
+            3
+          )
+          assert.strictEqual(exitCode, 0)
+        })
+
+        it('fails if quarantine is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runQuarantineTest(done, false)
+        })
+
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
+      })
+
+      it('does not crash if the request to get test management tests fails', async () => {
+        let testOutput = ''
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: false,
+        })
+        receiver.setTestManagementTestsResponseCode(500)
+
+        // Request module waits before retrying — need longer gather timeout
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSessionEnd = events.find(event => event.type === 'test_session_end')
+            assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+            const testSession = testSessionEnd.content
+            assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            // it is not retried
+            assert.strictEqual(tests.length, 1)
+          }, 60000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix.mjs',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+              DD_TRACE_DEBUG: '1',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+          eventsPromise,
+        ])
+        assert.match(testOutput, /Test management tests could not be fetched/)
+      })
+    })
   })
 })

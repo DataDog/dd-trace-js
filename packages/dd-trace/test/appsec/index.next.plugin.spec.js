@@ -91,20 +91,20 @@ describe('test suite', () => {
             })
         })
 
-        if (appName === 'app-dir') {
-          it('in request body with .text() function', function (done) {
-            this.timeout(5000)
+        const requestTextTest = appName === 'app-dir' ? it : it.skip
 
-            const findBodyThreat = getFindBodyThreatMethod(done)
-            agent.subscribe(findBodyThreat)
-            axios
-              .post(`http://127.0.0.1:${serverData.port}/api/test-text`, {
-                key: 'testattack',
-              }).catch(e => {
-                done(e)
-              })
-          })
-        }
+        requestTextTest('in request body with .text() function', function (done) {
+          this.timeout(5000)
+
+          const findBodyThreat = getFindBodyThreatMethod(done)
+          agent.subscribe(findBodyThreat)
+          axios
+            .post(`http://127.0.0.1:${serverData.port}/api/test-text`, {
+              key: 'testattack',
+            }).catch(e => {
+              done(e)
+            })
+        })
 
         it('in request query', function (done) {
           this.timeout(5000)

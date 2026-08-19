@@ -162,6 +162,7 @@ describe('Plugin', () => {
 
       it('logs edit instructions', async function () {
         if (semver.satisfies(realVersion, '>=4.0.0')) {
+          // The edits API was removed in OpenAI 4.0.0.
           this.skip()
         }
 
@@ -220,6 +221,7 @@ describe('Plugin', () => {
 
         it('should maintain the context with a streamed call', async function () {
           if (semver.satisfies(realVersion, '<4.1.0')) {
+            // This streaming API is only available from OpenAI 4.1.0.
             this.skip()
           }
 
@@ -341,6 +343,7 @@ describe('Plugin', () => {
         describe('streamed responses', function () {
           beforeEach(function () {
             if (semver.satisfies(realVersion, '<=4.1.0')) {
+              // These streaming response semantics require OpenAI newer than 4.1.0.
               this.skip()
             }
           })
@@ -637,6 +640,7 @@ describe('Plugin', () => {
 
       it('create file', async function () {
         if (!semver.satisfies(realVersion, '>=4.0.0')) {
+          // The files API shape exercised here starts in OpenAI 4.0.0.
           this.skip()
         }
 
@@ -861,6 +865,7 @@ describe('Plugin', () => {
 
       it('retrieve fine-tune', async function () {
         if (semver.satisfies(realVersion, '<4.17.0')) {
+          // This fine-tuning API is only available from OpenAI 4.17.0.
           this.skip()
         }
 
@@ -899,6 +904,7 @@ describe('Plugin', () => {
 
       it('cancel fine-tune', async function () {
         if (semver.satisfies(realVersion, '<4.17.0')) {
+          // This fine-tuning API is only available from OpenAI 4.17.0.
           this.skip()
         }
 
@@ -934,6 +940,7 @@ describe('Plugin', () => {
 
       it('list fine-tune events', async function () {
         if (semver.satisfies(realVersion, '<4.17.0')) {
+          // This fine-tuning API is only available from OpenAI 4.17.0.
           this.skip()
         }
 
@@ -969,6 +976,7 @@ describe('Plugin', () => {
 
       it('list fine-tunes', async function () {
         if (semver.satisfies(realVersion, '<4.17.0')) {
+          // This fine-tuning API is only available from OpenAI 4.17.0.
           this.skip()
         }
 
@@ -1004,6 +1012,7 @@ describe('Plugin', () => {
 
       it('create moderation', async function () {
         if (semver.satisfies(realVersion, '<3.0.1')) {
+          // This moderation API is only available from OpenAI 3.0.1.
           this.skip()
         }
 
@@ -1051,6 +1060,7 @@ describe('Plugin', () => {
       for (const responseFormat of ['url', 'b64_json']) {
         it(`create image ${responseFormat}`, async function () {
           if (semver.satisfies(realVersion, '<3.1.0')) {
+            // This image response format is only available from OpenAI 3.1.0.
             this.skip()
           }
 
@@ -1308,6 +1318,7 @@ describe('Plugin', () => {
       describe('chat completions', function () {
         beforeEach(function () {
           if (semver.satisfies(realVersion, '<3.2.0')) {
+            // Chat completions are only available from OpenAI 3.2.0.
             this.skip()
           }
         })
@@ -1472,6 +1483,7 @@ describe('Plugin', () => {
 
         it('should make a successful call with tools', async function () {
           if (semver.satisfies(realVersion, '<3.2.0')) {
+            // Tool calls are only available from OpenAI 3.2.0.
             this.skip()
           }
 
@@ -1516,6 +1528,7 @@ describe('Plugin', () => {
         describe('streamed responses', function () {
           beforeEach(function () {
             if (semver.satisfies(realVersion, '<=4.1.0')) {
+              // These streaming response semantics require OpenAI newer than 4.1.0.
               this.skip()
             }
           })
@@ -1739,6 +1752,7 @@ describe('Plugin', () => {
 
           it('makes a successful call with tools', async function () {
             if (semver.satisfies(realVersion, '<=4.16.0')) {
+              // This tool-call response shape requires OpenAI newer than 4.16.0.
               this.skip()
             }
 
@@ -1783,6 +1797,7 @@ describe('Plugin', () => {
 
       it('makes a successful call with chat.completions.parse', async function () {
         if (semver.satisfies(realVersion, '<4.59.0')) {
+          // chat.completions.parse is only available from OpenAI 4.59.0.
           this.skip()
         }
 

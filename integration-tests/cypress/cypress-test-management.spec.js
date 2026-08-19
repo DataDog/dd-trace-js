@@ -195,49 +195,48 @@ moduleTypes.forEach(({
     })
 
     // cy.origin is not available in old versions of Cypress
-    if (version === 'latest') {
-      it('does not crash for multi origin tests', async () => {
-        const envVars = getCiVisEvpProxyConfig(receiver.port)
+    const multiOriginTest = version === 'latest' ? it : it.skip
+    multiOriginTest('does not crash for multi origin tests', async () => {
+      const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-        const specToRun = 'cypress/e2e/multi-origin.js'
+      const specToRun = 'cypress/e2e/multi-origin.js'
 
-        childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
-          {
-            cwd,
-            env: {
-              ...envVars,
-              CYPRESS_BASE_URL: webAppBaseUrl,
-              CYPRESS_BASE_URL_SECOND: secondWebAppBaseUrl,
-              SPEC_PATTERN: specToRun,
-              DD_TRACE_DEBUG: 'true',
-            },
-          }
-        )
+      childProcess = exec(
+        version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_BASE_URL_SECOND: secondWebAppBaseUrl,
+            SPEC_PATTERN: specToRun,
+            DD_TRACE_DEBUG: 'true',
+          },
+        }
+      )
 
-        await Promise.all([
-          once(childProcess.stdout, 'end'),
-          once(childProcess.stderr, 'end'),
-          // cypress@latest esm + multi-origin browser context switching adds cold-start overhead
-          // that the suite-level `warmCypressBinary` (commonJS path) doesn't reach, so this one
-          // child run takes measurably longer than the rest of the suite and earns its own backstop.
-          receiver.gatherPayloadsUntilChildExit(
-            childProcess,
-            ({ url }) => url.endsWith('/api/v2/citestcycle'),
-            payloads => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-                .filter(event => event.type !== 'span')
-              assert.strictEqual(events.length, 4)
+      await Promise.all([
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        // cypress@latest esm + multi-origin browser context switching adds cold-start overhead
+        // that the suite-level `warmCypressBinary` (commonJS path) doesn't reach, so this one
+        // child run takes measurably longer than the rest of the suite and earns its own backstop.
+        receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type !== 'span')
+            assert.strictEqual(events.length, 4)
 
-              const test = events.find(event => event.type === 'test').content
-              assert.strictEqual(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
-              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-            },
-            { hardTimeout: 50_000 }
-          ),
-        ])
-      })
-    }
+            const test = events.find(event => event.type === 'test').content
+            assert.strictEqual(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          },
+          { hardTimeout: 50_000 }
+        ),
+      ])
+    })
 
     it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', async () => {
       const envVars = getCiVisEvpProxyConfig(receiver.port)

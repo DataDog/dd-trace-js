@@ -71,11 +71,7 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   // TODO: Remove this once we drop suppport for v5
-  const contextNewVersions = (...args) => {
-    if (satisfies(version, '>=1.38.0') || version === 'latest') {
-      context(...args)
-    }
-  }
+  const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
@@ -347,8 +343,10 @@ versions.forEach((version) => {
       })
     })
 
-    if (satisfies(version, '>=1.60.0') || version === 'latest') {
-      it('does not abort when console.error is immutable during reporter finalization', async (receiver, run) => {
+    const immutableConsoleErrorTest = satisfies(version, '>=1.60.0') || version === 'latest' ? it : global.it.skip
+
+    immutableConsoleErrorTest('does not abort when console.error is immutable during reporter finalization',
+      async (receiver, run) => {
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
@@ -377,28 +375,29 @@ versions.forEach((version) => {
         assert.strictEqual(exitCode, 0)
       })
 
-      context('programmatic reruns', () => {
-        it('restores console.error after every run with the same config', async (receiver, run) => {
-          let testOutput = ''
-          const proc = run(
-            'node ./ci-visibility/playwright-rerun-console.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                NODE_OPTIONS: '',
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
-              },
-            }
-          )
-          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
-          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
-          const [[exitCode]] = await Promise.all([once(proc, 'exit')])
-          assert.strictEqual(exitCode, 0, testOutput)
-        })
+    const programmaticRerunsContext = satisfies(version, '>=1.60.0') || version === 'latest' ? context : context.skip
+
+    programmaticRerunsContext('programmatic reruns', () => {
+      it('restores console.error after every run with the same config', async (receiver, run) => {
+        let testOutput = ''
+        const proc = run(
+          'node ./ci-visibility/playwright-rerun-console.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '',
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+        const [[exitCode]] = await Promise.all([once(proc, 'exit')])
+        assert.strictEqual(exitCode, 0, testOutput)
       })
-    }
+    })
 
     it('does not treat matching user console output as a reporter failure', async (receiver, run) => {
       const proc = run(

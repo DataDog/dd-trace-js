@@ -40,16 +40,14 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
       const NODE_OPTIONS = `--no-warnings --${arg} ${path.join(__dirname, '..', filename)}`
       useEnv({ DD_TEST_TRACER_ROOT: path.join(__dirname, '..'), NODE_OPTIONS })
 
-      if (currentVersionIsSupported) {
-        context('without DD_INJECTION_ENABLED', () => {
-          it('should initialize the tracer', () => testFile(tracerFile, 'true\n', [], 'manual'))
+      context('without DD_INJECTION_ENABLED', () => {
+        it('should initialize the tracer', () => testFile(tracerFile, 'true\n', [], 'manual'))
 
-          it('should initialize instrumentation', () => testFile(instrFile, 'true\n', [], 'manual'))
+        it('should initialize instrumentation', () => testFile(instrFile, 'true\n', [], 'manual'))
 
-          it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-            testFile('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
-        })
-      }
+        it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
+          testFile('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
+      })
 
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
@@ -60,10 +58,9 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
         it('should not initialize ESM instrumentation', () => testFile('init/instrument.mjs', 'false\n', [], ''))
 
-        if (arg === 'import') {
-          it('does not load loader internals after deferring to the app copy', () =>
-            testFile('init/loader-hook-loaded.js', 'false\n', [], ''))
-        }
+        const loaderInternalsTest = arg === 'import' ? it : it.skip
+        loaderInternalsTest('does not load loader internals after deferring to the app copy', () =>
+          testFile('init/loader-hook-loaded.js', 'false\n', [], ''))
       })
     })
 
@@ -211,41 +208,40 @@ true
       })
     })
 
-    if (currentVersionIsSupported) {
-      context('when node version is in range of the engines field', () => {
-        useEnv({ NODE_OPTIONS })
+    const supportedRuntimeContext = currentVersionIsSupported ? context : context.skip
+    supportedRuntimeContext('when node version is in range of the engines field', () => {
+      useEnv({ NODE_OPTIONS })
 
-        before(() => {
-          const pkg = JSON.parse(pkgStr)
-          pkg.engines.node = '>=0'
-          pkg.nodeMaxMajor = 1000
-          fs.writeFileSync(pkgPath, JSON.stringify(pkg))
+      before(() => {
+        const pkg = JSON.parse(pkgStr)
+        pkg.engines.node = '>=0'
+        pkg.nodeMaxMajor = 1000
+        fs.writeFileSync(pkgPath, JSON.stringify(pkg))
+      })
+
+      it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n', [], 'manual'))
+
+      context('with DD_INJECTION_ENABLED', () => {
+        useEnv({ DD_INJECTION_ENABLED })
+
+        context('without debug', () => {
+          it('should initialize the tracer', () => doTest('true\n', telemetryGood, 'ssi'))
+
+          it('should initialize the tracer, if DD_INJECT_FORCE', () =>
+            doTestForced('true\n', telemetryGood, 'ssi'))
         })
 
-        it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n', [], 'manual'))
+        context('with debug', () => {
+          useEnv({ DD_TRACE_DEBUG })
 
-        context('with DD_INJECTION_ENABLED', () => {
-          useEnv({ DD_INJECTION_ENABLED })
+          it('should initialize the tracer', () =>
+            doTest('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
 
-          context('without debug', () => {
-            it('should initialize the tracer', () => doTest('true\n', telemetryGood, 'ssi'))
-
-            it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-              doTestForced('true\n', telemetryGood, 'ssi'))
-          })
-
-          context('with debug', () => {
-            useEnv({ DD_TRACE_DEBUG })
-
-            it('should initialize the tracer', () =>
-              doTest('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
-
-            it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-              doTestForced('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
-          })
+          it('should initialize the tracer, if DD_INJECT_FORCE', () =>
+            doTestForced('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
         })
       })
-    }
+    })
   })
 }
 
@@ -324,85 +320,81 @@ describe('init.js', () => {
 
 // ESM is not supportable prior to Node.js 14.13.1 on the 14.x line,
 // or on 18.0.0 in particular.
-if (semver.satisfies(process.versions.node, '>=14.13.1')) {
-  describe('initialize.mjs', () => {
-    setShouldKill(false)
-    useSandbox()
-    stubTracerIfNeeded()
+const initializeEsmSuite = semver.satisfies(process.versions.node, '>=14.13.1') ? describe : describe.skip
+initializeEsmSuite('initialize.mjs', () => {
+  setShouldKill(false)
+  useSandbox()
+  stubTracerIfNeeded()
 
-    context('globalPreload', () => {
-      useEnv({ DD_TEST_NODE_VERSION: '20.0.0', NODE_OPTIONS: '' })
+  context('globalPreload', () => {
+    useEnv({ DD_TEST_NODE_VERSION: '20.0.0', NODE_OPTIONS: '' })
 
-      /**
-       * @param {string} out
-       */
-      function checkGlobalPreload (out) {
-        assert.match(out,
-          /^if \(getBuiltin\('module'\)\.createRequire\("file:.+\/initialize\.mjs"\)\('\.\/init\.js'\)\) {\n/)
-        assert.match(out,
-          /\n {2}process\.emitWarning\('dd-trace cannot instrument ES modules on Node\.js 20\.0\.0\. Upgrade to Node\.js 20\.1\.0 or newer\.'\)\n}\n$/)
-      }
-
-      it('provides application-realm preload source', () =>
-        testFile('init/loader-worker.mjs', checkGlobalPreload, [], ''))
-    })
-
-    context('as --loader', () => {
-      const esmWorks = process.versions.node !== '18.0.0' && process.versions.node !== '20.0.0'
-
-      testInjectionScenarios('loader', 'initialize.mjs',
-        esmWorks)
-      testRuntimeVersionChecks('loader', 'initialize.mjs')
-
-      // Only off-thread loaders install the matcher; see initialize.mjs.
-      if (esmWorks && semver.satisfies(process.versions.node, '>=18.19.0')) {
-        context('import-in-the-middle include matcher', () => {
-          useEnv({
-            NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs',
-            pm2_env: JSON.stringify({
-              DD_IAST_SECURITY_CONTROLS_CONFIGURATION:
-                'SANITIZER:*:init/security-control-module.mjs:sanitize',
-            }),
-          })
-
-          it('wraps instrumented and PM2 security control modules and nothing else', () =>
-            testFile('init/loader-matcher.mjs', 'true\n', [], ''))
-        })
-      }
-
-      if (process.versions.node === '20.0.0') {
-        context('with the Node.js 20.0.0 loader', () => {
-          const NODE_OPTIONS = '--no-warnings --loader dd-trace/initialize.mjs'
-
-          context('with force', () => {
-            useEnv({ DD_INJECT_FORCE, NODE_OPTIONS })
-
-            it('initializes before a CommonJS entrypoint', () =>
-              testFile('init/trace.js', 'true\n', [], ''))
-
-            // The loader worker cannot instrument ESM here, but globalPreload still
-            // initializes the tracer in the application realm before the entrypoint runs.
-            it('initializes before an ESM entrypoint', () =>
-              testFile('init/trace.mjs', 'true\n', [], ''))
-
-            it('does not initialize ESM instrumentation', () =>
-              testFile('init/instrument.mjs', 'false\n', [], ''))
-
-            it('initializes inside inherited Workers', () =>
-              testFile('init/loader-worker.mjs', 'true\n', [], ''))
-          })
-        })
-      }
-    })
-
-    if (semver.satisfies(process.versions.node, '>=20.6.0')) {
-      context('as --import', () => {
-        // The loader hook is skipped on bailout, so --import children exit on their
-        // own; killing them would mask a regression that keeps the process alive.
-        setShouldKill(false)
-        testInjectionScenarios('import', 'initialize.mjs', true)
-        testRuntimeVersionChecks('import', 'initialize.mjs')
-      })
+    /**
+     * @param {string} out
+     */
+    function checkGlobalPreload (out) {
+      assert.match(out,
+        /^if \(getBuiltin\('module'\)\.createRequire\("file:.+\/initialize\.mjs"\)\('\.\/init\.js'\)\) {\n/)
+      assert.match(out,
+        /\n {2}process\.emitWarning\('dd-trace cannot instrument ES modules on Node\.js 20\.0\.0\. Upgrade to Node\.js 20\.1\.0 or newer\.'\)\n}\n$/)
     }
+
+    it('provides application-realm preload source', () =>
+      testFile('init/loader-worker.mjs', checkGlobalPreload, [], ''))
   })
-}
+
+  context('as --loader', () => {
+    const esmWorks = process.versions.node !== '18.0.0' && process.versions.node !== '20.0.0'
+
+    testInjectionScenarios('loader', 'initialize.mjs',
+      esmWorks)
+    testRuntimeVersionChecks('loader', 'initialize.mjs')
+
+    // Only off-thread loaders install the matcher; see initialize.mjs.
+    const matcherContext = esmWorks && semver.satisfies(process.versions.node, '>=18.19.0') ? context : context.skip
+    matcherContext('import-in-the-middle include matcher', () => {
+      useEnv({
+        NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs',
+        pm2_env: JSON.stringify({
+          DD_IAST_SECURITY_CONTROLS_CONFIGURATION:
+                'SANITIZER:*:init/security-control-module.mjs:sanitize',
+        }),
+      })
+
+      it('wraps instrumented and PM2 security control modules and nothing else', () =>
+        testFile('init/loader-matcher.mjs', 'true\n', [], ''))
+    })
+
+    const node20Context = process.versions.node === '20.0.0' ? context : context.skip
+    node20Context('with the Node.js 20.0.0 loader', () => {
+      const NODE_OPTIONS = '--no-warnings --loader dd-trace/initialize.mjs'
+
+      context('with force', () => {
+        useEnv({ DD_INJECT_FORCE, NODE_OPTIONS })
+
+        it('initializes before a CommonJS entrypoint', () =>
+          testFile('init/trace.js', 'true\n', [], ''))
+
+        // The loader worker cannot instrument ESM here, but globalPreload still
+        // initializes the tracer in the application realm before the entrypoint runs.
+        it('initializes before an ESM entrypoint', () =>
+          testFile('init/trace.mjs', 'true\n', [], ''))
+
+        it('does not initialize ESM instrumentation', () =>
+          testFile('init/instrument.mjs', 'false\n', [], ''))
+
+        it('initializes inside inherited Workers', () =>
+          testFile('init/loader-worker.mjs', 'true\n', [], ''))
+      })
+    })
+  })
+
+  const importContext = semver.satisfies(process.versions.node, '>=20.6.0') ? context : context.skip
+  importContext('as --import', () => {
+    // The loader hook is skipped on bailout, so --import children exit on their
+    // own; killing them would mask a regression that keeps the process alive.
+    setShouldKill(false)
+    testInjectionScenarios('import', 'initialize.mjs', true)
+    testRuntimeVersionChecks('import', 'initialize.mjs')
+  })
+})

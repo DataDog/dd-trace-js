@@ -16,11 +16,8 @@ withVersions('body-parser', 'body-parser', version => {
   describe('Suspicious request blocking - body-parser', () => {
     let port, server, requestBody
 
-    before(() => {
-      return agent.load(['express', 'body-parser', 'http'], { client: false })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['express', 'body-parser', 'http'], { client: false })
       const express = require('../../../../versions/express').get()
       const bodyParser = require(`../../../../versions/body-parser@${version}`).get()
 
@@ -31,9 +28,11 @@ withVersions('body-parser', 'body-parser', version => {
         res.end('DONE')
       })
 
-      server = app.listen(port, () => {
-        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        done()
+      await new Promise(resolve => {
+        server = app.listen(port, () => {
+          port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+          resolve()
+        })
       })
     })
 

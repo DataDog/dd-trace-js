@@ -740,131 +740,131 @@ versions.forEach((version) => {
 
     // Coverage report upload only works for >=2.0.0 (when vitest has proper coverage support)
     // v4 dropped support for Node 18
-    if (version === 'latest' && NODE_MAJOR >= 20) {
-      context('coverage report upload', () => {
-        const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-        const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
+    const coverageReportUploadContext = version === 'latest' && NODE_MAJOR >= 20 ? context : context.skip
 
-        it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
-          receiver.setSettings({
-            coverage_report_upload_enabled: true,
-          })
+    coverageReportUploadContext('coverage report upload', () => {
+      const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+      const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
 
-          const coverageReportPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
-              assert.strictEqual(payloads.length, 1)
+      it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
+        receiver.setSettings({
+          coverage_report_upload_enabled: true,
+        })
 
-              const coverageReport = payloads[0]
+        const coverageReportPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
+            assert.strictEqual(payloads.length, 1)
 
-              assert.ok(
-                coverageReport.headers['content-type'].includes('multipart/form-data'),
+            const coverageReport = payloads[0]
+
+            assert.ok(
+              coverageReport.headers['content-type'].includes('multipart/form-data'),
                 `Got: ${inspect(coverageReport.headers['content-type'])}`
-              )
+            )
 
-              assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
-              assert.ok(
-                coverageReport.coverageFile.content.includes('SF:'),
+            assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
+            assert.ok(
+              coverageReport.coverageFile.content.includes('SF:'),
                 `Got: ${inspect(coverageReport.coverageFile.content)}`
-              ) // LCOV format
+            ) // LCOV format
 
-              assert.strictEqual(coverageReport.eventFile.name, 'event')
-              assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
-              assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
-              assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
-              assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --coverage',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                COVERAGE_PROVIDER: 'v8',
-                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
-                DD_GIT_COMMIT_SHA: gitCommitSha,
-                DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
-              },
-            }
-          )
-
-          await Promise.all([
-            coverageReportPromise,
-            once(childProcess, 'exit'),
-          ])
-        })
-
-        it('sends coverage_upload.request telemetry metric when coverage is uploaded', async () => {
-          receiver.setSettings({
-            coverage_report_upload_enabled: true,
-          })
-          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
-
-          const telemetryPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
-              const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
-
-              const coverageUploadMetric = telemetryMetrics.find(
-                ({ metric }) => metric === TELEMETRY_COVERAGE_UPLOAD
-              )
-
-              assert.ok(coverageUploadMetric, 'coverage_upload.request telemetry metric should be sent')
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --coverage',
-            {
-              cwd,
-              env: {
-                ...getCiVisEvpProxyConfig(receiver.port),
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
-                COVERAGE_PROVIDER: 'v8',
-                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
-                DD_GIT_COMMIT_SHA: gitCommitSha,
-                DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
-              },
-            }
-          )
-
-          await Promise.all([
-            once(childProcess, 'exit'),
-            telemetryPromise,
-          ])
-        })
-
-        it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
-          receiver.setSettings({
-            coverage_report_upload_enabled: false,
+            assert.strictEqual(coverageReport.eventFile.name, 'event')
+            assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
+            assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
+            assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
+            assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
           })
 
-          let coverageReportUploaded = false
-          receiver.assertPayloadReceived(() => {
-            coverageReportUploaded = true
-          }, ({ url }) => url === '/api/v2/cicovreprt')
+        childProcess = exec(
+          './node_modules/.bin/vitest run --coverage',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              COVERAGE_PROVIDER: 'v8',
+              TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+              DD_GIT_COMMIT_SHA: gitCommitSha,
+              DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+            },
+          }
+        )
 
-          childProcess = exec(
-            './node_modules/.bin/vitest run --coverage',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                COVERAGE_PROVIDER: 'v8',
-                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
-                DD_GIT_COMMIT_SHA: gitCommitSha,
-                DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
-              },
-            }
-          )
-
-          await once(childProcess, 'exit')
-
-          assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
-        })
+        await Promise.all([
+          coverageReportPromise,
+          once(childProcess, 'exit'),
+        ])
       })
-    }
+
+      it('sends coverage_upload.request telemetry metric when coverage is uploaded', async () => {
+        receiver.setSettings({
+          coverage_report_upload_enabled: true,
+        })
+        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+        const telemetryPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+            const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+            const coverageUploadMetric = telemetryMetrics.find(
+              ({ metric }) => metric === TELEMETRY_COVERAGE_UPLOAD
+            )
+
+            assert.ok(coverageUploadMetric, 'coverage_upload.request telemetry metric should be sent')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --coverage',
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+              COVERAGE_PROVIDER: 'v8',
+              TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+              DD_GIT_COMMIT_SHA: gitCommitSha,
+              DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          telemetryPromise,
+        ])
+      })
+
+      it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
+        receiver.setSettings({
+          coverage_report_upload_enabled: false,
+        })
+
+        let coverageReportUploaded = false
+        receiver.assertPayloadReceived(() => {
+          coverageReportUploaded = true
+        }, ({ url }) => url === '/api/v2/cicovreprt')
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --coverage',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              COVERAGE_PROVIDER: 'v8',
+              TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+              DD_GIT_COMMIT_SHA: gitCommitSha,
+              DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+            },
+          }
+        )
+
+        await once(childProcess, 'exit')
+
+        assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
+      })
+    })
 
     context('final status tag', () => {
       it('sets final_status tag to test status on regular tests without retry features', async () => {
@@ -1376,182 +1376,182 @@ versions.forEach((version) => {
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })
 
-      if (version === 'latest') {
-        it('sets final_status tag to skip for disabled tests', async () => {
-          receiver.setSettings({ test_management: { enabled: true } })
-          receiver.setTestManagementTests({
-            vitest: {
-              suites: {
-                'ci-visibility/vitest-tests/test-disabled.mjs': {
-                  tests: {
-                    'disable tests can disable a test': {
-                      properties: { disabled: true },
-                    },
+      const latestVersionTest = version === 'latest' ? it : it.skip
+
+      latestVersionTest('sets final_status tag to skip for disabled tests', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setTestManagementTests({
+          vitest: {
+            suites: {
+              'ci-visibility/vitest-tests/test-disabled.mjs': {
+                tests: {
+                  'disable tests can disable a test': {
+                    properties: { disabled: true },
                   },
                 },
-                'ci-visibility/vitest-tests/hooks-test-management.mjs': {
-                  tests: {
-                    'test management with hooks can apply management to a failing test with hooks': {
-                      properties: { disabled: true },
-                    },
+              },
+              'ci-visibility/vitest-tests/hooks-test-management.mjs': {
+                tests: {
+                  'test management with hooks can apply management to a failing test with hooks': {
+                    properties: { disabled: true },
                   },
                 },
               },
             },
-          })
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-              const disabledTest = tests.find(test => test.meta[TEST_NAME] === 'disable tests can disable a test')
-              assert.ok(disabledTest, 'Expected to find the disabled test')
-              assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
-              assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-              assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
-
-              // With hooks: same behavior
-              const disabledTestWithHooks = tests.find(
-                test => test.meta[TEST_NAME] ===
-                  'test management with hooks can apply management to a failing test with hooks'
-              )
-              assert.ok(disabledTestWithHooks, 'Expected to find the disabled test with hooks')
-              assert.strictEqual(disabledTestWithHooks.meta[TEST_STATUS], 'skip')
-              assert.strictEqual(disabledTestWithHooks.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-              assert.strictEqual(disabledTestWithHooks.meta[TEST_FINAL_STATUS], 'skip')
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/{test-disabled,hooks-test-management}.mjs',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-              },
-            }
-          )
-
-          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          },
         })
 
-        it('sets final_status tag to skip for quarantined tests', async () => {
-          receiver.setSettings({ test_management: { enabled: true } })
-          receiver.setTestManagementTests({
-            vitest: {
-              suites: {
-                'ci-visibility/vitest-tests/test-quarantine.mjs': {
-                  tests: {
-                    'quarantine tests can quarantine a test': {
-                      properties: { quarantined: true },
-                    },
-                    'quarantine tests can quarantine a passing test': {
-                      properties: { quarantined: true },
-                    },
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const disabledTest = tests.find(test => test.meta[TEST_NAME] === 'disable tests can disable a test')
+            assert.ok(disabledTest, 'Expected to find the disabled test')
+            assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
+
+            // With hooks: same behavior
+            const disabledTestWithHooks = tests.find(
+              test => test.meta[TEST_NAME] ===
+                  'test management with hooks can apply management to a failing test with hooks'
+            )
+            assert.ok(disabledTestWithHooks, 'Expected to find the disabled test with hooks')
+            assert.strictEqual(disabledTestWithHooks.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledTestWithHooks.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(disabledTestWithHooks.meta[TEST_FINAL_STATUS], 'skip')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/{test-disabled,hooks-test-management}.mjs',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+            },
+          }
+        )
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      })
+
+      latestVersionTest('sets final_status tag to skip for quarantined tests', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setTestManagementTests({
+          vitest: {
+            suites: {
+              'ci-visibility/vitest-tests/test-quarantine.mjs': {
+                tests: {
+                  'quarantine tests can quarantine a test': {
+                    properties: { quarantined: true },
+                  },
+                  'quarantine tests can quarantine a passing test': {
+                    properties: { quarantined: true },
                   },
                 },
-                'ci-visibility/vitest-tests/hooks-test-management.mjs': {
-                  tests: {
-                    'test management with hooks can apply management to a failing test with hooks': {
-                      properties: { quarantined: true },
-                    },
+              },
+              'ci-visibility/vitest-tests/hooks-test-management.mjs': {
+                tests: {
+                  'test management with hooks can apply management to a failing test with hooks': {
+                    properties: { quarantined: true },
                   },
                 },
-                'ci-visibility/vitest-tests/hooks-test-quarantine-failing-after-each.mjs': {
-                  tests: {
-                    'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails': {
-                      properties: { quarantined: true },
-                    },
+              },
+              'ci-visibility/vitest-tests/hooks-test-quarantine-failing-after-each.mjs': {
+                tests: {
+                  'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails': {
+                    properties: { quarantined: true },
                   },
                 },
               },
             },
-          })
+          },
+        })
 
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-              const quarantinedTest = tests.find(
-                test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
-              )
-              assert.ok(quarantinedTest, 'Expected to find the quarantined test')
-              // Quarantined test still runs and reports its actual status,
-              // but the final status must be 'skip' (errors are suppressed)
-              assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-              assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+            const quarantinedTest = tests.find(
+              test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+            )
+            assert.ok(quarantinedTest, 'Expected to find the quarantined test')
+            // Quarantined test still runs and reports its actual status,
+            // but the final status must be 'skip' (errors are suppressed)
+            assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
 
-              const passingTest = tests.find(test => test.meta[TEST_NAME] === 'quarantine tests can pass normally')
-              assert.ok(passingTest, 'Expected to find the passing test')
-              assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
+            const passingTest = tests.find(test => test.meta[TEST_NAME] === 'quarantine tests can pass normally')
+            assert.ok(passingTest, 'Expected to find the passing test')
+            assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
 
-              // Quarantined test that actually passes must still report final_status=skip
-              const quarantinedPassingTest = tests.find(
-                test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a passing test'
-              )
-              assert.ok(quarantinedPassingTest, 'Expected to find the quarantined passing test')
-              assert.strictEqual(quarantinedPassingTest.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(quarantinedPassingTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-              assert.strictEqual(quarantinedPassingTest.meta[TEST_FINAL_STATUS], 'skip')
+            // Quarantined test that actually passes must still report final_status=skip
+            const quarantinedPassingTest = tests.find(
+              test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a passing test'
+            )
+            assert.ok(quarantinedPassingTest, 'Expected to find the quarantined passing test')
+            assert.strictEqual(quarantinedPassingTest.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(quarantinedPassingTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            assert.strictEqual(quarantinedPassingTest.meta[TEST_FINAL_STATUS], 'skip')
 
-              // With hooks: same behavior
-              const quarantinedTestWithHooks = tests.find(
-                test => test.meta[TEST_NAME] ===
+            // With hooks: same behavior
+            const quarantinedTestWithHooks = tests.find(
+              test => test.meta[TEST_NAME] ===
                   'test management with hooks can apply management to a failing test with hooks'
-              )
-              assert.ok(quarantinedTestWithHooks, 'Expected to find the quarantined test with hooks')
-              assert.strictEqual(quarantinedTestWithHooks.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(quarantinedTestWithHooks.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-              assert.strictEqual(quarantinedTestWithHooks.meta[TEST_FINAL_STATUS], 'skip')
+            )
+            assert.ok(quarantinedTestWithHooks, 'Expected to find the quarantined test with hooks')
+            assert.strictEqual(quarantinedTestWithHooks.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(quarantinedTestWithHooks.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            assert.strictEqual(quarantinedTestWithHooks.meta[TEST_FINAL_STATUS], 'skip')
 
-              const passingTestWithHooks = tests.find(
-                test => test.meta[TEST_NAME] === 'test management with hooks can pass normally with hooks'
-              )
-              assert.ok(passingTestWithHooks, 'Expected to find the passing test with hooks')
-              assert.strictEqual(passingTestWithHooks.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(passingTestWithHooks.meta[TEST_FINAL_STATUS], 'pass')
+            const passingTestWithHooks = tests.find(
+              test => test.meta[TEST_NAME] === 'test management with hooks can pass normally with hooks'
+            )
+            assert.ok(passingTestWithHooks, 'Expected to find the passing test with hooks')
+            assert.strictEqual(passingTestWithHooks.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(passingTestWithHooks.meta[TEST_FINAL_STATUS], 'pass')
 
-              // With hooks where afterEach throws: test body passes but hook causes failure — still skip
-              const quarantinedTestFailingAfterEach = tests.find(
-                test => test.meta[TEST_NAME] ===
+            // With hooks where afterEach throws: test body passes but hook causes failure — still skip
+            const quarantinedTestFailingAfterEach = tests.find(
+              test => test.meta[TEST_NAME] ===
                   'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails'
-              )
-              assert.ok(quarantinedTestFailingAfterEach, 'Expected to find the quarantined test with failing afterEach')
-              assert.strictEqual(quarantinedTestFailingAfterEach.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(quarantinedTestFailingAfterEach.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-              assert.strictEqual(quarantinedTestFailingAfterEach.meta[TEST_FINAL_STATUS], 'skip')
-            })
+            )
+            assert.ok(quarantinedTestFailingAfterEach, 'Expected to find the quarantined test with failing afterEach')
+            assert.strictEqual(quarantinedTestFailingAfterEach.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(quarantinedTestFailingAfterEach.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            assert.strictEqual(quarantinedTestFailingAfterEach.meta[TEST_FINAL_STATUS], 'skip')
+          })
 
-          childProcess = exec(
-            './node_modules/.bin/vitest run',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/' +
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/' +
                   '{test-quarantine,hooks-test-management,hooks-test-quarantine-failing-after-each}.mjs',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-              },
-            }
-          )
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+            },
+          }
+        )
 
-          childProcess.stdout?.on('data', data => { testOutput += data.toString() })
-          childProcess.stderr?.on('data', data => { testOutput += data.toString() })
+        childProcess.stdout?.on('data', data => { testOutput += data.toString() })
+        childProcess.stderr?.on('data', data => { testOutput += data.toString() })
 
-          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
 
-          // The main process reconstructs this summary from the worker trace payloads.
-          assert.match(
-            testOutput,
-            /Quarantined: 4 tests run; 3 failures did not affect the test session\./
-          )
-        })
-      }
+        // The main process reconstructs this summary from the worker trace payloads.
+        assert.match(
+          testOutput,
+          /Quarantined: 4 tests run; 3 failures did not affect the test session\./
+        )
+      })
     })
   })
 })

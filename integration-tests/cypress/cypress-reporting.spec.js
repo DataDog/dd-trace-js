@@ -265,21 +265,20 @@ moduleTypes.forEach(({
       await runRumCookieFailureTest({ CYPRESS_MISSING_CY_NOW: 'true' })
     })
 
-    if (type === 'commonJS' && version === 'latest') {
-      it('does not fail tests when reporting a RUM correlation error throws', async () => {
-        await runRumCookieFailureTest({
-          CYPRESS_RUM_COOKIE_FAILURE: 'reject',
-          CYPRESS_RUM_LOG_FAILURE: 'true',
-        })
+    const latestCommonJsTest = type === 'commonJS' && version === 'latest' ? it : it.skip
+    latestCommonJsTest('does not fail tests when reporting a RUM correlation error throws', async () => {
+      await runRumCookieFailureTest({
+        CYPRESS_RUM_COOKIE_FAILURE: 'reject',
+        CYPRESS_RUM_LOG_FAILURE: 'true',
       })
-    }
+    })
 
-    if (type === 'commonJS' && version !== '6.7.0') {
-      it('removes a stale RUM cookie when its replacement rejects', async () => {
-        let testOutput = ''
-        const specToRun = 'cypress/e2e/rum-cookie-stale.cy.js'
+    const rumCookieTest = type === 'commonJS' && version !== '6.7.0' ? it : it.skip
+    rumCookieTest('removes a stale RUM cookie when its replacement rejects', async () => {
+      let testOutput = ''
+      const specToRun = 'cypress/e2e/rum-cookie-stale.cy.js'
 
-        childProcess = exec(
+      childProcess = exec(
           `${testCommand} --config testIsolation=false`,
           {
             cwd,
@@ -290,29 +289,28 @@ moduleTypes.forEach(({
               SPEC_PATTERN: specToRun,
             },
           }
-        )
-        childProcess.stdout?.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.stderr?.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-
-        const [exitCode] = await once(childProcess, 'exit')
-
-        assert.strictEqual(exitCode, 0, testOutput)
+      )
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
       })
-    }
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
 
-    if (DD_MAJOR < 6 && version !== 'latest' && semver.lt(version, '12.0.0')) {
-      it('logs a warning if using a deprecated version of cypress', async () => {
-        let stdout = ''
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+      const [exitCode] = await once(childProcess, 'exit')
 
-        childProcess = exec(
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    const deprecatedVersionTest = DD_MAJOR < 6 && version !== 'latest' && semver.lt(version, '12.0.0') ? it : it.skip
+    deprecatedVersionTest('logs a warning if using a deprecated version of cypress', async () => {
+      let stdout = ''
+      const {
+        NODE_OPTIONS,
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
           `${testCommand} --spec cypress/e2e/spec.cy.js`,
           {
             cwd,
@@ -321,22 +319,21 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: webAppBaseUrl,
             },
           }
-        )
+      )
 
-        childProcess.stdout?.on('data', (chunk) => {
-          stdout += chunk.toString()
-        })
-
-        await Promise.all([
-          once(childProcess, 'exit'),
-          once(childProcess.stdout, 'end'),
-        ])
-        assert.match(
-          stdout,
-          /WARNING: dd-trace support for Cypress<12.0.0 is deprecated/
-        )
+      childProcess.stdout?.on('data', (chunk) => {
+        stdout += chunk.toString()
       })
-    }
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+      ])
+      assert.match(
+        stdout,
+        /WARNING: dd-trace support for Cypress<12.0.0 is deprecated/
+      )
+    })
 
     it('creates cypress.step spans for each command', async () => {
       const envVars = getCiVisEvpProxyConfig(receiver.port)

@@ -218,42 +218,41 @@ describe('Plugin', () => {
             })
           })
 
-          if (semver.intersects(version, '>=5.1')) {
-            // initial promise support
-            it('should do automatic instrumentation when using promises', done => {
-              agent.assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                assert.strictEqual(traces[0][0].resource, 'SELECT $1::text as message')
-                assert.strictEqual(traces[0][0].type, 'sql')
-                assertObjectContains(traces[0][0], {
-                  meta: {
-                    'span.kind': 'client',
-                    'db.name': 'postgres',
-                    'db.user': 'postgres',
-                    'db.type': 'postgres',
-                    component: 'pg',
-                  },
-                  metrics: {
-                    'network.destination.port': 5432,
-                  },
-                })
-
-                if (implementation !== 'pg.native') {
-                  assert.ok(
-                    Object.hasOwn(traces[0][0].metrics, 'db.pid'),
-                    `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
-                  )
-                }
+          // initial promise support
+          const promiseTest = semver.intersects(version, '>=5.1') ? it : it.skip
+          promiseTest('should do automatic instrumentation when using promises', done => {
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'SELECT $1::text as message')
+              assert.strictEqual(traces[0][0].type, 'sql')
+              assertObjectContains(traces[0][0], {
+                meta: {
+                  'span.kind': 'client',
+                  'db.name': 'postgres',
+                  'db.user': 'postgres',
+                  'db.type': 'postgres',
+                  component: 'pg',
+                },
+                metrics: {
+                  'network.destination.port': 5432,
+                },
               })
-                .then(done)
-                .catch(done)
 
-              client.query('SELECT $1::text as message', ['Hello world!'])
-                .then(() => client.end())
-                .catch(done)
+              if (implementation !== 'pg.native') {
+                assert.ok(
+                  Object.hasOwn(traces[0][0].metrics, 'db.pid'),
+                    `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+                )
+              }
             })
-          }
+              .then(done)
+              .catch(done)
+
+            client.query('SELECT $1::text as message', ['Hello world!'])
+              .then(() => client.end())
+              .catch(done)
+          })
 
           it('should handle callback errors', done => {
             let error
@@ -343,128 +342,127 @@ describe('Plugin', () => {
             rawExpectedSchema.outbound
           )
 
-          if (implementation !== 'pg.native') {
-            // pg-cursor is not supported on pg.native, pg-query-stream uses pg-cursor so it is also unsupported
-            describe('streaming capabilities', () => {
-              withVersions('pg', 'pg-cursor', pgCursorVersion => {
-                let Cursor
+          // pg-cursor is not supported on pg.native, pg-query-stream uses pg-cursor so it is also unsupported
+          const streamingSuite = implementation !== 'pg.native' ? describe : describe.skip
+          streamingSuite('streaming capabilities', () => {
+            withVersions('pg', 'pg-cursor', pgCursorVersion => {
+              let Cursor
 
-                beforeEach(() => {
-                  Cursor = require(`../../../versions/pg-cursor@${pgCursorVersion}`).get()
-                })
-
-                it('should instrument cursor-based streaming with pg-cursor', async () => {
-                  const tracingPromise = agent.assertSomeTraces(traces => {
-                    assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                    assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                    assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
-                    assert.strictEqual(traces[0][0].type, 'sql')
-                    assertObjectContains(traces[0][0], {
-                      meta: {
-                        'span.kind': 'client',
-                        'db.name': 'postgres',
-                        'db.type': 'postgres',
-                        component: 'pg',
-                      },
-                      metrics: {
-                        'db.stream': 1,
-                        'network.destination.port': 5432,
-                      },
-                    })
-                  })
-
-                  const cursor = client.query(new Cursor('SELECT * FROM generate_series(0, 1) num'))
-
-                  cursor.read(1, () => {
-                    cursor.close()
-                  })
-                  await tracingPromise
-                })
+              beforeEach(() => {
+                Cursor = require(`../../../versions/pg-cursor@${pgCursorVersion}`).get()
               })
 
-              withVersions('pg', 'pg-query-stream', pgQueryStreamVersion => {
-                let QueryStream
-
-                beforeEach(() => {
-                  QueryStream = require(`../../../versions/pg-query-stream@${pgQueryStreamVersion}`).get()
+              it('should instrument cursor-based streaming with pg-cursor', async () => {
+                const tracingPromise = agent.assertSomeTraces(traces => {
+                  assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                  assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                  assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
+                  assert.strictEqual(traces[0][0].type, 'sql')
+                  assertObjectContains(traces[0][0], {
+                    meta: {
+                      'span.kind': 'client',
+                      'db.name': 'postgres',
+                      'db.type': 'postgres',
+                      component: 'pg',
+                    },
+                    metrics: {
+                      'db.stream': 1,
+                      'network.destination.port': 5432,
+                    },
+                  })
                 })
 
-                it('should instrument stream-based queries with pg-query-stream', async () => {
-                  const agentPromise = agent.assertSomeTraces(traces => {
-                    assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                    assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                    assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
-                    assert.strictEqual(traces[0][0].type, 'sql')
-                    assert.strictEqual(traces[0][0].error, 0)
-                    assertObjectContains(traces[0][0], {
-                      meta: {
-                        'span.kind': 'client',
-                        'db.name': 'postgres',
-                        'db.type': 'postgres',
-                        component: 'pg',
-                      },
-                      metrics: {
-                        'db.stream': 1,
-                        'network.destination.port': 5432,
-                      },
-                    })
-                  })
+                const cursor = client.query(new Cursor('SELECT * FROM generate_series(0, 1) num'))
 
-                  const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
-                  const stream = client.query(query)
-
-                  assert.strictEqual(stream.listenerCount('error'), 0)
-
-                  const readPromise = (async () => {
-                    for await (const row of stream) {
-                      assert.ok(Object.hasOwn(row, 'num'), `Available keys: ${inspect(Object.keys(row))}`)
-                    }
-                  })()
-
-                  await Promise.all([readPromise, agentPromise])
+                cursor.read(1, () => {
+                  cursor.close()
                 })
-
-                it('should instrument stream-based queries with pg-query-stream and catch errors', async () => {
-                  const agentPromise = agent.assertSomeTraces(traces => {
-                    assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                    assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                    assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
-                    assert.strictEqual(traces[0][0].type, 'sql')
-                    assert.strictEqual(traces[0][0].error, 1)
-                    assertObjectContains(traces[0][0], {
-                      meta: {
-                        'span.kind': 'client',
-                        'db.name': 'postgres',
-                        'db.type': 'postgres',
-                        component: 'pg',
-                      },
-                      metrics: {
-                        'db.stream': 1,
-                        'network.destination.port': 5432,
-                      },
-                    })
-                  })
-
-                  const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
-                  const stream = client.query(query)
-
-                  assert.strictEqual(stream.listenerCount('error'), 0)
-
-                  const rejectedRead = assert.rejects(async () => {
-                    // eslint-disable-next-line no-unreachable-loop
-                    for await (const row of stream) {
-                      assert.ok(Object.hasOwn(row, 'num'), `Available keys: ${inspect(Object.keys(row))}`)
-                      throw new Error('Test error')
-                    }
-                  }, {
-                    message: 'Test error',
-                  })
-
-                  await Promise.all([rejectedRead, agentPromise])
-                })
+                await tracingPromise
               })
             })
-          }
+
+            withVersions('pg', 'pg-query-stream', pgQueryStreamVersion => {
+              let QueryStream
+
+              beforeEach(() => {
+                QueryStream = require(`../../../versions/pg-query-stream@${pgQueryStreamVersion}`).get()
+              })
+
+              it('should instrument stream-based queries with pg-query-stream', async () => {
+                const agentPromise = agent.assertSomeTraces(traces => {
+                  assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                  assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                  assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
+                  assert.strictEqual(traces[0][0].type, 'sql')
+                  assert.strictEqual(traces[0][0].error, 0)
+                  assertObjectContains(traces[0][0], {
+                    meta: {
+                      'span.kind': 'client',
+                      'db.name': 'postgres',
+                      'db.type': 'postgres',
+                      component: 'pg',
+                    },
+                    metrics: {
+                      'db.stream': 1,
+                      'network.destination.port': 5432,
+                    },
+                  })
+                })
+
+                const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
+                const stream = client.query(query)
+
+                assert.strictEqual(stream.listenerCount('error'), 0)
+
+                const readPromise = (async () => {
+                  for await (const row of stream) {
+                    assert.ok(Object.hasOwn(row, 'num'), `Available keys: ${inspect(Object.keys(row))}`)
+                  }
+                })()
+
+                await Promise.all([readPromise, agentPromise])
+              })
+
+              it('should instrument stream-based queries with pg-query-stream and catch errors', async () => {
+                const agentPromise = agent.assertSomeTraces(traces => {
+                  assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                  assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                  assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
+                  assert.strictEqual(traces[0][0].type, 'sql')
+                  assert.strictEqual(traces[0][0].error, 1)
+                  assertObjectContains(traces[0][0], {
+                    meta: {
+                      'span.kind': 'client',
+                      'db.name': 'postgres',
+                      'db.type': 'postgres',
+                      component: 'pg',
+                    },
+                    metrics: {
+                      'db.stream': 1,
+                      'network.destination.port': 5432,
+                    },
+                  })
+                })
+
+                const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
+                const stream = client.query(query)
+
+                assert.strictEqual(stream.listenerCount('error'), 0)
+
+                const rejectedRead = assert.rejects(async () => {
+                  // eslint-disable-next-line no-unreachable-loop
+                  for await (const row of stream) {
+                    assert.ok(Object.hasOwn(row, 'num'), `Available keys: ${inspect(Object.keys(row))}`)
+                    throw new Error('Test error')
+                  }
+                }, {
+                  message: 'Test error',
+                })
+
+                await Promise.all([rejectedRead, agentPromise])
+              })
+            })
+          })
         })
       })
 
@@ -1290,27 +1288,30 @@ describe('Plugin', () => {
           clientDBM.connect(err => done(err))
         })
 
-        it('DBM propagation should handle special characters', done => {
+        it('DBM propagation should handle special characters', () => {
           const queryQueueName = Object.hasOwn(clientDBM, '_queryQueue') ? '_queryQueue' : 'queryQueue'
 
-          clientDBM.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
-            if (err) return done(err)
-
-            clientDBM.end((err) => {
-              if (err) return done(err)
+          return new Promise((resolve, reject) => {
+            let assertionError
+            clientDBM.query('SELECT $1::text as message', ['Hello world!'], (error) => {
+              clientDBM.end((endError) => {
+                if (error) return reject(error)
+                if (endError) return reject(endError)
+                if (assertionError) return reject(assertionError)
+                resolve()
+              })
             })
-          })
 
-          if (clientDBM[queryQueueName][0]) {
             try {
-              assert.strictEqual(clientDBM[queryQueueName][0].text,
+              const query = clientDBM[queryQueueName][0]
+              assert.ok(query)
+              assert.strictEqual(query.text,
                 '/*dddb=\'postgres\',dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
                 `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ SELECT $1::text as message`)
-              done()
-            } catch (e) {
-              done(e)
+            } catch (error) {
+              assertionError = error
             }
-          }
+          })
         })
       })
 

@@ -95,40 +95,39 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
       })
 
       // This feature requires libdatadog which is an optional dependency.
-      if (optional) {
-        it('saves tracer configuration on disk', async () => {
-          if (process.platform !== 'linux') {
-            return
-          }
+      const libdatadogTest = optional ? it : it.skip
+      libdatadogTest('saves tracer configuration on disk', async () => {
+        if (process.platform !== 'linux') {
+          return
+        }
 
-          proc = await spawnProc(startupTestFile, {
-            cwd,
-            execArgv,
-            env: {
-              AGENT_PORT: agent.port,
-            },
-          })
-
-          const containsDatadogMemfd = (fds) => {
-            for (const fd of fds) {
-              try {
-                const fdName = fs.readlinkSync(`/proc/${proc.pid}/fd/${fd}`)
-                if (fdName.includes('datadog-tracer-info-')) {
-                  return true
-                }
-              } catch {}
-            }
-            return false
-          }
-
-          const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
-
-          assert(
-            containsDatadogMemfd(fds),
-            `FDs ${inspect(fds)} of PID ${proc.pid} did not contain the datadog tracer configuration in memfd`
-          )
+        proc = await spawnProc(startupTestFile, {
+          cwd,
+          execArgv,
+          env: {
+            AGENT_PORT: agent.port,
+          },
         })
-      }
+
+        const containsDatadogMemfd = (fds) => {
+          for (const fd of fds) {
+            try {
+              const fdName = fs.readlinkSync(`/proc/${proc.pid}/fd/${fd}`)
+              if (fdName.includes('datadog-tracer-info-')) {
+                return true
+              }
+            } catch {}
+          }
+          return false
+        }
+
+        const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
+
+        assert(
+          containsDatadogMemfd(fds),
+            `FDs ${inspect(fds)} of PID ${proc.pid} did not contain the datadog tracer configuration in memfd`
+        )
+      })
 
       it('works for options.url', async () => {
         proc = await spawnProc(startupTestFile, {

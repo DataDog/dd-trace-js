@@ -842,57 +842,56 @@ describe(`cucumber@${version} commonJS`, () => {
         })
       })
 
-      if (reportMethod === 'agentless' && version !== '7.0.0') {
-        it('keeps module tags when worker traces arrive before parallel suite start', async () => {
-          childProcess = exec(
-            parallelModeCommand,
-            {
-              cwd,
-              env: {
-                ...envVars,
-                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-                DD_TEST_DELAY_CUCUMBER_WORKER_MESSAGES_MS: '100',
-                DD_TEST_SESSION_NAME: 'my-test-session',
-                NODE_OPTIONS: '-r ./ci-visibility/cucumber-worker-message-delay.js -r dd-trace/ci/init',
-                DD_SERVICE: undefined,
-              },
-            }
-          )
+      const delayedWorkerTest = reportMethod === 'agentless' && version !== '7.0.0' ? it : it.skip
+      delayedWorkerTest('keeps module tags when worker traces arrive before parallel suite start', async () => {
+        childProcess = exec(
+          parallelModeCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+              DD_TEST_DELAY_CUCUMBER_WORKER_MESSAGES_MS: '100',
+              DD_TEST_SESSION_NAME: 'my-test-session',
+              NODE_OPTIONS: '-r ./ci-visibility/cucumber-worker-message-delay.js -r dd-trace/ci/init',
+              DD_SERVICE: undefined,
+            },
+          }
+        )
 
-          const receiverPromise = receiver.gatherPayloadsUntilChildExit(
-            childProcess,
-            ({ url }) => url.endsWith('/api/v2/citestcycle'),
-            payloads => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const testModuleEvent = events.find(event => event.type === 'test_module_end')
-              const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
-              const testEvents = events.filter(event => event.type === 'test')
+        const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testModuleEvent = events.find(event => event.type === 'test_module_end')
+            const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+            const testEvents = events.filter(event => event.type === 'test')
 
-              assert.ok(testModuleEvent, 'should have test module event')
-              assert.ok(testSuiteEvent, 'should have test suite event')
-              assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(), [
+            assert.ok(testModuleEvent, 'should have test module event')
+            assert.ok(testSuiteEvent, 'should have test suite event')
+            assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(), [
                 `${featuresPath}farewell.feature.Say farewell`,
                 `${featuresPath}farewell.feature.Say whatever`,
                 `${featuresPath}greetings.feature.Say greetings`,
                 `${featuresPath}greetings.feature.Say skip`,
                 `${featuresPath}greetings.feature.Say yeah`,
                 `${featuresPath}greetings.feature.Say yo`,
-              ])
-              testEvents.forEach(({ content: { meta, test_suite_id: testSuiteId } }) => {
-                assert.strictEqual(meta[TEST_MODULE], 'cucumber')
-                assert.ok(testSuiteId)
-                assert.strictEqual(meta[CUCUMBER_IS_PARALLEL], 'true')
-              })
-            },
-            { hardTimeout: 10000 }
-          )
+            ])
+            testEvents.forEach(({ content: { meta, test_suite_id: testSuiteId } }) => {
+              assert.strictEqual(meta[TEST_MODULE], 'cucumber')
+              assert.ok(testSuiteId)
+              assert.strictEqual(meta[CUCUMBER_IS_PARALLEL], 'true')
+            })
+          },
+          { hardTimeout: 10000 }
+        )
 
-          await Promise.all([
-            once(childProcess, 'exit'),
-            receiverPromise,
-          ])
-        })
-      }
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
 
       context('intelligent test runner', () => {
         it('can report git metadata', (done) => {
@@ -1420,53 +1419,52 @@ describe(`cucumber@${version} commonJS`, () => {
           })
         })
 
-        if (!isAgentless) {
-          context('if the agent is not event platform proxy compatible', () => {
-            it('does not do any intelligent test runner request', (done) => {
-              receiver.setInfoResponse({ endpoints: [] })
+        const evpCompatibilityContext = isAgentless ? context.skip : context
+        evpCompatibilityContext('if the agent is not event platform proxy compatible', () => {
+          it('does not do any intelligent test runner request', (done) => {
+            receiver.setInfoResponse({ endpoints: [] })
 
-              receiver.assertPayloadReceived(() => {
-                const error = new Error('should not request search_commits')
-                done(error)
-              }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits')
-              receiver.assertPayloadReceived(() => {
-                const error = new Error('should not request search_commits')
-                done(error)
-              }, ({ url }) => url === '/api/v2/git/repository/search_commits')
-              receiver.assertPayloadReceived(() => {
-                const error = new Error('should not request setting')
-                done(error)
-              }, ({ url }) => url === '/api/v2/libraries/tests/services/setting')
-              receiver.assertPayloadReceived(() => {
-                const error = new Error('should not request setting')
-                done(error)
-              }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting')
+            receiver.assertPayloadReceived(() => {
+              const error = new Error('should not request search_commits')
+              done(error)
+            }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits')
+            receiver.assertPayloadReceived(() => {
+              const error = new Error('should not request search_commits')
+              done(error)
+            }, ({ url }) => url === '/api/v2/git/repository/search_commits')
+            receiver.assertPayloadReceived(() => {
+              const error = new Error('should not request setting')
+              done(error)
+            }, ({ url }) => url === '/api/v2/libraries/tests/services/setting')
+            receiver.assertPayloadReceived(() => {
+              const error = new Error('should not request setting')
+              done(error)
+            }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting')
 
-              receiver.assertPayloadReceived(({ payload }) => {
-                const testSpans = payload.flatMap(trace => trace)
-                const resourceNames = testSpans.map(span => span.resource)
+            receiver.assertPayloadReceived(({ payload }) => {
+              const testSpans = payload.flatMap(trace => trace)
+              const resourceNames = testSpans.map(span => span.resource)
 
-                assertObjectContains(resourceNames,
-                  [
+              assertObjectContains(resourceNames,
+                [
                     `${featuresPath}farewell.feature.Say farewell`,
                     `${featuresPath}greetings.feature.Say greetings`,
                     `${featuresPath}greetings.feature.Say yeah`,
                     `${featuresPath}greetings.feature.Say yo`,
                     `${featuresPath}greetings.feature.Say skip`,
-                  ]
-                )
-              }, ({ url }) => url === '/v0.4/traces').then(() => done()).catch(done)
-
-              childProcess = exec(
-                runTestsWithCoverageCommand,
-                {
-                  cwd,
-                  env: getCiVisEvpProxyConfig(receiver.port),
-                }
+                ]
               )
-            })
+            }, ({ url }) => url === '/v0.4/traces').then(() => done()).catch(done)
+
+            childProcess = exec(
+              runTestsWithCoverageCommand,
+              {
+                cwd,
+                env: getCiVisEvpProxyConfig(receiver.port),
+              }
+            )
           })
-        }
+        })
 
         it('reports itr_correlation_id in test suites', (done) => {
           const itrCorrelationId = '4321'

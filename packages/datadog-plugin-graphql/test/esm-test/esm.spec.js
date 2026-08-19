@@ -70,74 +70,73 @@ describe('Plugin (ESM)', () => {
       // Extract version number from range strings like ">=0.10" or "^15.2.0"
       const cleanVersion = resolvedVersion.replace(/^[>=^~]+/, '')
       const coercedVersion = semver.coerce(cleanVersion)
-      if (coercedVersion && semver.gte(coercedVersion, '15.0.0')) {
-        it('should instrument GraphQL Yoga execution with ESM', async () => {
-          const res = agent.assertMessageReceived(({ headers, payload }) => {
-            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-            assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
-          })
+      const yogaTest = coercedVersion && semver.gte(coercedVersion, '15.0.0') ? it : it.skip
+      yogaTest('should instrument GraphQL Yoga execution with ESM', async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
+          assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
+        })
 
-          proc = await spawnPluginIntegrationTestProc(
-            sandboxCwd(),
-            'esm-graphql-yoga-server.mjs',
-            agent.port,
-            { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
-          )
+        proc = await spawnPluginIntegrationTestProc(
+          sandboxCwd(),
+          'esm-graphql-yoga-server.mjs',
+          agent.port,
+          { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
+        )
 
-          // Make a GraphQL request to Yoga server
-          const query = `
+        // Make a GraphQL request to Yoga server
+        const query = `
             query MyQuery {
               hello(name: "yoga")
             }
           `
 
-          try {
-            await axios.post(`${proc.url}/graphql`, {
-              query,
-            })
-          } catch {
-            // Server might not respond correctly, but we care about tracing
-          }
-
-          await res
-        }).timeout(50000)
-
-        it('should instrument GraphQL Yoga subscriptions with ESM', async () => {
-          const res = agent.assertMessageReceived(({ headers, payload }) => {
-            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-            assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
+        try {
+          await axios.post(`${proc.url}/graphql`, {
+            query,
           })
+        } catch {
+          // Server might not respond correctly, but we care about tracing
+        }
 
-          proc = await spawnPluginIntegrationTestProc(
-            sandboxCwd(),
-            'esm-graphql-yoga-server.mjs',
-            agent.port,
-            { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
-          )
+        await res
+      }).timeout(50000)
 
-          const query = `
+      yogaTest('should instrument GraphQL Yoga subscriptions with ESM', async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
+          assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
+        })
+
+        proc = await spawnPluginIntegrationTestProc(
+          sandboxCwd(),
+          'esm-graphql-yoga-server.mjs',
+          agent.port,
+          { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
+        )
+
+        const query = `
             subscription CountSubscription {
               count
             }
           `
 
-          try {
-            await axios.post(`${proc.url}/graphql`, {
-              query,
-            }, {
-              headers: {
-                accept: 'text/event-stream',
-              },
-            })
-          } catch {
-            // Server might not respond correctly, but we care about tracing
-          }
+        try {
+          await axios.post(`${proc.url}/graphql`, {
+            query,
+          }, {
+            headers: {
+              accept: 'text/event-stream',
+            },
+          })
+        } catch {
+          // Server might not respond correctly, but we care about tracing
+        }
 
-          await res
-        }).timeout(50000)
-      }
+        await res
+      }).timeout(50000)
     })
   })
 })

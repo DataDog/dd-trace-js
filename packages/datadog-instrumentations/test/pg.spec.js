@@ -114,45 +114,57 @@ describe('pg instrumentation', () => {
                   })
                 })
 
-                it('Should abort query', (done) => {
+                it('Should abort query', () => new Promise((resolve, reject) => {
                   queryClientStartChannel.subscribe(abortQuery)
 
                   const query = new Query('SELECT 1')
 
-                  client.query(query)
-
-                  query.on('error', err => {
-                    assert.strictEqual(err.message, 'Test')
-                    done()
+                  query.on('error', error => {
+                    try {
+                      assert.strictEqual(error.message, 'Test')
+                      resolve()
+                    } catch (error) {
+                      reject(error)
+                    }
                   })
 
                   query.on('end', () => {
-                    done(new Error('Query was not aborted'))
+                    reject(new Error('Query was not aborted'))
                   })
-                })
+
+                  client.query(query)
+                }))
               })
 
               describe('with callback in query object', () => {
-                it('Should not fail if it is not aborted', (done) => {
+                it('Should not fail if it is not aborted', () => new Promise((resolve, reject) => {
                   const query = new Query('SELECT 1')
-                  query.callback = (err) => {
-                    done(err)
+                  query.callback = (error) => {
+                    if (error) {
+                      reject(error)
+                    } else {
+                      resolve()
+                    }
                   }
 
                   client.query(query)
-                })
+                }))
 
-                it('Should abort query', (done) => {
+                it('Should abort query', () => new Promise((resolve, reject) => {
                   queryClientStartChannel.subscribe(abortQuery)
 
                   const query = new Query('SELECT 1')
-                  query.callback = err => {
-                    assert.strictEqual(err.message, 'Test')
-                    done()
+                  query.callback = error => {
+                    try {
+                      assert.strictEqual(error.message, 'Test')
+                      resolve()
+                    } catch (error) {
+                      reject(error)
+                    }
                   }
 
                   client.query(query)
-                })
+                }))
               })
 
               describe('with callback in query parameter', () => {

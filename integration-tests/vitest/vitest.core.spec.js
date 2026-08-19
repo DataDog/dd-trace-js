@@ -1703,58 +1703,11 @@ versions.forEach((version) => {
     // v4 dropped support for Node 18. Every test but this once passes, so we'll leave them
     // for now. The breaking change is in https://github.com/vitest-dev/vitest/commit/9a0bf2254
     // shipped in https://github.com/vitest-dev/vitest/releases/tag/v4.0.0-beta.12
-    if (version === 'latest' && NODE_MAJOR >= 20) {
-      const coverageProviders = ['v8', 'istanbul']
+    const coverageTest = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
+    const coverageProviders = ['v8', 'istanbul']
 
-      coverageProviders.forEach((coverageProvider) => {
-        it(`reports code coverage for ${coverageProvider} provider`, async () => {
-          let codeCoverageExtracted
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const testSession = events.find(event => event.type === 'test_session_end').content
-
-              codeCoverageExtracted = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --coverage',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                COVERAGE_PROVIDER: coverageProvider,
-                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
-              },
-            }
-          )
-
-          childProcess.stdout?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
-          childProcess.stderr?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
-
-          await Promise.all([
-            once(childProcess, 'exit'),
-            eventsPromise,
-          ])
-
-          const linePctMatch = testOutput.match(linePctMatchRegex)
-          const linesPctFromNyc = Number(linePctMatch[1])
-
-          assert.strictEqual(
-            linesPctFromNyc,
-            codeCoverageExtracted,
-            'coverage reported by vitest does not match extracted coverage'
-          )
-        })
-      })
-
-      it('reports zero code coverage for instanbul provider', async () => {
+    coverageProviders.forEach((coverageProvider) => {
+      coverageTest(`reports code coverage for ${coverageProvider} provider`, async () => {
         let codeCoverageExtracted
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1772,8 +1725,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              COVERAGE_PROVIDER: 'istanbul',
-              TEST_DIR: 'ci-visibility/vitest-tests/coverage-test-zero.mjs',
+              COVERAGE_PROVIDER: coverageProvider,
+              TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
             },
           }
         )
@@ -1798,13 +1751,59 @@ versions.forEach((version) => {
           codeCoverageExtracted,
           'coverage reported by vitest does not match extracted coverage'
         )
-        assert.strictEqual(
-          linesPctFromNyc,
-          0,
-          'zero coverage should be reported'
-        )
       })
-    }
+    })
+
+    coverageTest('reports zero code coverage for instanbul provider', async () => {
+      let codeCoverageExtracted
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          codeCoverageExtracted = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run --coverage',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            COVERAGE_PROVIDER: 'istanbul',
+            TEST_DIR: 'ci-visibility/vitest-tests/coverage-test-zero.mjs',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      const linePctMatch = testOutput.match(linePctMatchRegex)
+      const linesPctFromNyc = Number(linePctMatch[1])
+
+      assert.strictEqual(
+        linesPctFromNyc,
+        codeCoverageExtracted,
+        'coverage reported by vitest does not match extracted coverage'
+      )
+      assert.strictEqual(
+        linesPctFromNyc,
+        0,
+        'zero coverage should be reported'
+      )
+    })
 
     context('early flake detection', () => {
       it('retries new tests', (done) => {
@@ -2756,401 +2755,401 @@ versions.forEach((version) => {
     })
 
     // dynamic instrumentation only supported from >=2.0.0
-    if (version === 'latest') {
-      context('dynamic instrumentation', () => {
-        it('does not activate it if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
+    const dynamicInstrumentationContext = version === 'latest' ? context : context.skip
 
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 1)
-              const [retriedTest] = retriedTests
-
-              const hasDebugTags = Object.keys(retriedTest.meta)
-                .some(property =>
-                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
-                )
-
-              assert.strictEqual(hasDebugTags, false)
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              if (payloads.length > 0) {
-                throw new Error('Unexpected logs')
-              }
-            }, 5000)
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
-              },
-            }
-          )
-
-          childProcess.on('exit', () => {
-            Promise.all([eventsPromise, logsPromise]).then(() => {
-              done()
-            }).catch(done)
-          })
+    dynamicInstrumentationContext('dynamic instrumentation', () => {
+      it('does not activate it if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          di_enabled: true,
         })
 
-        it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: false,
-          })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
 
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retriedTests.length, 1)
+            const [retriedTest] = retriedTests
 
-              assert.strictEqual(retriedTests.length, 1)
-              const [retriedTest] = retriedTests
-              const hasDebugTags = Object.keys(retriedTest.meta)
-                .some(property =>
-                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
-                )
-
-              assert.strictEqual(hasDebugTags, false)
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              if (payloads.length > 0) {
-                throw new Error('Unexpected logs')
-              }
-            }, 5000)
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              },
-            }
-          )
-
-          childProcess.on('exit', () => {
-            Promise.all([eventsPromise, logsPromise]).then(() => {
-              done()
-            }).catch(done)
-          })
-        })
-
-        it('runs retries with dynamic instrumentation', (done) => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
-
-          let snapshotIdByTest, snapshotIdByLog
-          let spanIdByTest, spanIdByLog, traceIdByTest, traceIdByLog
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 1)
-              const [retriedTest] = retriedTests
-
-              assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
-
-              assert.strictEqual(retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
-                .endsWith('ci-visibility/vitest-tests/bad-sum.mjs'), true)
-              assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
-
-              const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
-              assert.ok(retriedTest.meta[snapshotIdKey])
-
-              snapshotIdByTest = retriedTest.meta[snapshotIdKey]
-              spanIdByTest = retriedTest.span_id.toString()
-              traceIdByTest = retriedTest.trace_id.toString()
-
-              const notRetriedTest = tests.find(test => test.meta[TEST_NAME].includes('is not retried'))
-
-              assert.ok(!('DI_ERROR_DEBUG_INFO_CAPTURED' in notRetriedTest.meta))
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              const [{ logMessage: [diLog] }] = payloads
-              assertObjectContains(diLog, {
-                ddsource: 'dd_debugger',
-                level: 'error',
-              })
-              assert.match(diLog.ddtags, /git.repository_url:/)
-              assert.match(diLog.ddtags, /git.commit.sha:/)
-              assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
-              assertObjectContains(diLog.debugger.snapshot.captures.lines['4'].locals, {
-                a: {
-                  type: 'number',
-                  value: '11',
-                },
-                b: {
-                  type: 'number',
-                  value: '2',
-                },
-                localVar: {
-                  type: 'number',
-                  value: '10',
-                },
-              })
-              spanIdByLog = diLog.dd.span_id
-              traceIdByLog = diLog.dd.trace_id
-              snapshotIdByLog = diLog.debugger.snapshot.id
-            }, 5000)
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              },
-            }
-          )
-
-          childProcess.on('exit', () => {
-            Promise.all([eventsPromise, logsPromise]).then(() => {
-              assert.strictEqual(snapshotIdByTest, snapshotIdByLog)
-              assert.strictEqual(spanIdByTest, spanIdByLog)
-              assert.strictEqual(traceIdByTest, traceIdByLog)
-              done()
-            }).catch(done)
-          })
-        })
-
-        it('runs multiple retries with dynamic instrumentation', async () => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
-
-          const retrySpanIdsWithDebugInfo = new Set()
-          const diLogSpanIds = []
-          let testOutput = ''
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 3)
-              for (const retriedTest of retriedTests) {
-                if (retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true') {
-                  retrySpanIdsWithDebugInfo.add(retriedTest.span_id.toString())
-                }
-              }
-              assert.strictEqual(retrySpanIdsWithDebugInfo.size, 2)
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              const diLogs = payloads.flatMap(({ logMessage }) => logMessage)
-              assert.strictEqual(diLogs.length, 2)
-              for (const diLog of diLogs) {
-                diLogSpanIds.push(diLog.dd.span_id)
-              }
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=3',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/ftr-multiple-retries.mjs',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
-              },
-            }
-          )
-
-          childProcess.stdout?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
-          childProcess.stderr?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
-          const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
-          const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
-
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            eventsPromise,
-            logsPromise,
-            stdoutEndPromise,
-            stderrEndPromise,
-          ])
-          assert.strictEqual(exitCode, 0, testOutput)
-          assert.doesNotMatch(testOutput, /Breakpoint snapshot could not be attached to the active test span/)
-          for (const diLogSpanId of diLogSpanIds) {
-            assert.ok(retrySpanIdsWithDebugInfo.has(diLogSpanId))
-          }
-        })
-
-        it('does not run Failed Test Replay for files with concurrent tests', async () => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 1)
-              const [retriedTest] = retriedTests
-              assert.strictEqual(
-                retriedTest.meta[TEST_NAME],
-                'dynamic instrumentation with concurrent tests serial retry does not use Failed Test Replay'
+            const hasDebugTags = Object.keys(retriedTest.meta)
+              .some(property =>
+                property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
               )
 
-              const hasDebugTags = Object.keys(retriedTest.meta)
-                .some(property =>
-                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
-                )
-              assert.strictEqual(hasDebugTags, false)
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              if (payloads.length > 0) {
-                throw new Error('Unexpected logs')
-              }
-            }, 5000)
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/concurrent-ftr-disabled.mjs',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              },
-            }
-          )
-
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            eventsPromise,
-            logsPromise,
-          ])
-          assert.strictEqual(exitCode, 0)
-        })
-
-        it('does not crash if the retry does not hit the breakpoint', (done) => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
+            assert.strictEqual(hasDebugTags, false)
           })
 
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 1)
-              const [retriedTest] = retriedTests
-
-              const hasDebugTags = Object.keys(retriedTest.meta)
-                .some(property =>
-                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
-                )
-
-              assert.strictEqual(hasDebugTags, false)
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              if (payloads.length > 0) {
-                throw new Error('Unexpected logs')
-              }
-            }, 5000)
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/breakpoint-not-hit*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              },
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+            if (payloads.length > 0) {
+              throw new Error('Unexpected logs')
             }
-          )
+          }, 5000)
 
-          childProcess.on('exit', () => {
-            Promise.all([eventsPromise, logsPromise]).then(() => {
-              done()
-            }).catch(done)
-          })
-        })
+        childProcess = exec(
+          './node_modules/.bin/vitest run --retry=1',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
+            },
+          }
+        )
 
-        it('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              assert.strictEqual(tests.length, 2)
-              const retriedTests = tests.filter(t => t.meta[TEST_IS_RETRY] === 'true')
-              assert.strictEqual(retriedTests.length, 1)
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/fake-timers-di*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              },
-            }
-          )
-
-          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-          assert.strictEqual(exitCode, 1)
+        childProcess.on('exit', () => {
+          Promise.all([eventsPromise, logsPromise]).then(() => {
+            done()
+          }).catch(done)
         })
       })
-    }
+
+      it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          di_enabled: false,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+            assert.strictEqual(retriedTests.length, 1)
+            const [retriedTest] = retriedTests
+            const hasDebugTags = Object.keys(retriedTest.meta)
+              .some(property =>
+                property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+              )
+
+            assert.strictEqual(hasDebugTags, false)
+          })
+
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+            if (payloads.length > 0) {
+              throw new Error('Unexpected logs')
+            }
+          }, 5000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --retry=1',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        childProcess.on('exit', () => {
+          Promise.all([eventsPromise, logsPromise]).then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('runs retries with dynamic instrumentation', (done) => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          di_enabled: true,
+        })
+
+        let snapshotIdByTest, snapshotIdByLog
+        let spanIdByTest, spanIdByLog, traceIdByTest, traceIdByLog
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+            assert.strictEqual(retriedTests.length, 1)
+            const [retriedTest] = retriedTests
+
+            assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
+
+            assert.strictEqual(retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
+              .endsWith('ci-visibility/vitest-tests/bad-sum.mjs'), true)
+            assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+
+            const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+            assert.ok(retriedTest.meta[snapshotIdKey])
+
+            snapshotIdByTest = retriedTest.meta[snapshotIdKey]
+            spanIdByTest = retriedTest.span_id.toString()
+            traceIdByTest = retriedTest.trace_id.toString()
+
+            const notRetriedTest = tests.find(test => test.meta[TEST_NAME].includes('is not retried'))
+
+            assert.ok(!('DI_ERROR_DEBUG_INFO_CAPTURED' in notRetriedTest.meta))
+          })
+
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+            const [{ logMessage: [diLog] }] = payloads
+            assertObjectContains(diLog, {
+              ddsource: 'dd_debugger',
+              level: 'error',
+            })
+            assert.match(diLog.ddtags, /git.repository_url:/)
+            assert.match(diLog.ddtags, /git.commit.sha:/)
+            assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
+            assertObjectContains(diLog.debugger.snapshot.captures.lines['4'].locals, {
+              a: {
+                type: 'number',
+                value: '11',
+              },
+              b: {
+                type: 'number',
+                value: '2',
+              },
+              localVar: {
+                type: 'number',
+                value: '10',
+              },
+            })
+            spanIdByLog = diLog.dd.span_id
+            traceIdByLog = diLog.dd.trace_id
+            snapshotIdByLog = diLog.debugger.snapshot.id
+          }, 5000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --retry=1',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        childProcess.on('exit', () => {
+          Promise.all([eventsPromise, logsPromise]).then(() => {
+            assert.strictEqual(snapshotIdByTest, snapshotIdByLog)
+            assert.strictEqual(spanIdByTest, spanIdByLog)
+            assert.strictEqual(traceIdByTest, traceIdByLog)
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('runs multiple retries with dynamic instrumentation', async () => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          di_enabled: true,
+        })
+
+        const retrySpanIdsWithDebugInfo = new Set()
+        const diLogSpanIds = []
+        let testOutput = ''
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+            assert.strictEqual(retriedTests.length, 3)
+            for (const retriedTest of retriedTests) {
+              if (retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true') {
+                retrySpanIdsWithDebugInfo.add(retriedTest.span_id.toString())
+              }
+            }
+            assert.strictEqual(retrySpanIdsWithDebugInfo.size, 2)
+          })
+
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+            const diLogs = payloads.flatMap(({ logMessage }) => logMessage)
+            assert.strictEqual(diLogs.length, 2)
+            for (const diLog of diLogs) {
+              diLogSpanIds.push(diLog.dd.span_id)
+            }
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --retry=3',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/ftr-multiple-retries.mjs',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+        const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+          logsPromise,
+          stdoutEndPromise,
+          stderrEndPromise,
+        ])
+        assert.strictEqual(exitCode, 0, testOutput)
+        assert.doesNotMatch(testOutput, /Breakpoint snapshot could not be attached to the active test span/)
+        for (const diLogSpanId of diLogSpanIds) {
+          assert.ok(retrySpanIdsWithDebugInfo.has(diLogSpanId))
+        }
+      })
+
+      it('does not run Failed Test Replay for files with concurrent tests', async () => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          di_enabled: true,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+            assert.strictEqual(retriedTests.length, 1)
+            const [retriedTest] = retriedTests
+            assert.strictEqual(
+              retriedTest.meta[TEST_NAME],
+              'dynamic instrumentation with concurrent tests serial retry does not use Failed Test Replay'
+            )
+
+            const hasDebugTags = Object.keys(retriedTest.meta)
+              .some(property =>
+                property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+              )
+            assert.strictEqual(hasDebugTags, false)
+          })
+
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+            if (payloads.length > 0) {
+              throw new Error('Unexpected logs')
+            }
+          }, 5000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --retry=1',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/concurrent-ftr-disabled.mjs',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+          logsPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
+      })
+
+      it('does not crash if the retry does not hit the breakpoint', (done) => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          di_enabled: true,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+            assert.strictEqual(retriedTests.length, 1)
+            const [retriedTest] = retriedTests
+
+            const hasDebugTags = Object.keys(retriedTest.meta)
+              .some(property =>
+                property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+              )
+
+            assert.strictEqual(hasDebugTags, false)
+          })
+
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+            if (payloads.length > 0) {
+              throw new Error('Unexpected logs')
+            }
+          }, 5000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --retry=1',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/breakpoint-not-hit*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        childProcess.on('exit', () => {
+          Promise.all([eventsPromise, logsPromise]).then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          di_enabled: true,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+            const retriedTests = tests.filter(t => t.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retriedTests.length, 1)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --retry=1',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/fake-timers-di*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+    })
   })
 })
 

@@ -15,11 +15,8 @@ withVersions('fastify', 'fastify', fastifyVersion => {
   describe('Attacker fingerprinting', () => {
     let app, server, axios
 
-    before(() => {
-      return agent.load(['fastify', 'http'], { client: false })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['fastify', 'http'], { client: false })
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       app = fastify()
@@ -28,12 +25,14 @@ withVersions('fastify', 'fastify', fastifyVersion => {
         reply.send('DONE')
       })
 
-      app.listen({ host: '127.0.0.1', port: 0 }, () => {
-        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-        done()
+      await new Promise(resolve => {
+        app.listen({ host: '127.0.0.1', port: 0 }, () => {
+          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+          axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
+          resolve()
+        })
+        server = app.server
       })
-      server = app.server
     })
 
     after(async () => {

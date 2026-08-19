@@ -387,8 +387,10 @@ describe('Plugin', () => {
         })
 
         // Merging no longer happens since Node 20
-        if (NODE_MAJOR < 20) {
-          it('should support a string URL and an options object, which merges and takes precedence', done => {
+        const mergedUrlOptionsTest = NODE_MAJOR < 20 ? it : it.skip
+
+        mergedUrlOptionsTest('should support a string URL and an options object, which merges and takes precedence',
+          done => {
             const app = express()
 
             app.get('/user', (req, res) => {
@@ -410,7 +412,6 @@ describe('Plugin', () => {
               req.end()
             })
           })
-        }
 
         it('should support a URL object and an options object, which merges and takes precedence', done => {
           const app = express()
@@ -803,96 +804,96 @@ describe('Plugin', () => {
           })
         })
 
-        if (satisfies(process.version, '>=20')) {
-          it('should not record default HTTP agent timeout as error with Node 20', done => {
-            const app = express()
+        const node20Test = satisfies(process.version, '>=20') ? it : it.skip
 
-            app.get('/user', async (req, res) => {
-              await new Promise(resolve => {
-                setTimeout(resolve, 6 * 1000) // over 5s default
-              })
-              res.status(200).send()
+        node20Test('should not record default HTTP agent timeout as error with Node 20', done => {
+          const app = express()
+
+          app.get('/user', async (req, res) => {
+            await new Promise(resolve => {
+              setTimeout(resolve, 6 * 1000) // over 5s default
+            })
+            res.status(200).send()
+          })
+
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].error, 0)
+            }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => { })
             })
 
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].error, 0)
-              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
-              .then(done)
-              .catch(done)
+            req.on('error', () => {})
 
-            appListener = server(app, port => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
+            req.end()
+          })
+        }).timeout(10000)
 
-              req.on('error', () => {})
+        node20Test('should record error if custom Agent timeout is used with Node 20', done => {
+          const app = express()
 
-              req.end()
+          app.get('/user', async (req, res) => {
+            await new Promise(resolve => {
+              setTimeout(resolve, 6 * 1000)
             })
-          }).timeout(10000)
+            res.status(200).send()
+          })
 
-          it('should record error if custom Agent timeout is used with Node 20', done => {
-            const app = express()
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].error, 1)
+            }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
+            .then(done)
+            .catch(done)
 
-            app.get('/user', async (req, res) => {
-              await new Promise(resolve => {
-                setTimeout(resolve, 6 * 1000)
-              })
-              res.status(200).send()
-            })
+          const options = {
+            agent: new http.Agent({ keepAlive: true, timeout: 5000 }), // custom agent with same default timeout
+          }
 
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].error, 1)
-              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
-              .then(done)
-              .catch(done)
-
-            const options = {
-              agent: new http.Agent({ keepAlive: true, timeout: 5000 }), // custom agent with same default timeout
-            }
-
-            appListener = server(app, port => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, options, res => {
-                res.on('data', () => { })
-              })
-
-              req.on('error', () => {})
-
-              req.end()
-            })
-          }).timeout(10000)
-
-          it('should record error if req.setTimeout is used with Node 20', done => {
-            const app = express()
-
-            app.get('/user', async (req, res) => {
-              await new Promise(resolve => {
-                setTimeout(resolve, 6 * 1000)
-              })
-              res.status(200).send()
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, options, res => {
+              res.on('data', () => { })
             })
 
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].error, 1)
-              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
-              .then(done)
-              .catch(done)
+            req.on('error', () => {})
 
-            appListener = server(app, port => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
+            req.end()
+          })
+        }).timeout(10000)
 
-              req.on('error', () => {})
-              req.setTimeout(5000) // match default timeout
+        node20Test('should record error if req.setTimeout is used with Node 20', done => {
+          const app = express()
 
-              req.end()
+          app.get('/user', async (req, res) => {
+            await new Promise(resolve => {
+              setTimeout(resolve, 6 * 1000)
             })
-          }).timeout(10000)
-        }
+            res.status(200).send()
+          })
+
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].error, 1)
+            }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => { })
+            })
+
+            req.on('error', () => {})
+            req.setTimeout(5000) // match default timeout
+
+            req.end()
+          })
+        }).timeout(10000)
 
         it('should only record a request once', done => {
           // Make sure both plugins are loaded, which could cause double-counting.
@@ -1023,33 +1024,33 @@ describe('Plugin', () => {
           })
         })
 
-        if (protocol === 'http') {
-          it('should skip requests marked as noop', done => {
-            const app = express()
+        const noopRequestTest = protocol === 'http' ? it : it.skip
 
-            app.get('/user', (req, res) => {
-              res.status(200).send()
-            })
+        noopRequestTest('should skip requests marked as noop', done => {
+          const app = express()
 
-            agent
-              .assertNoTraces(() => {
-                throw new Error('Noop request was traced.')
-              }, { timeoutMs: 100 })
-              .then(done, done)
-
-            appListener = server(app, port => {
-              const store = storage('legacy').getStore()
-
-              storage('legacy').enterWith({ noop: true })
-              const req = http.request(tracer._tracer._url.href)
-
-              req.on('error', () => {})
-              req.end()
-
-              storage('legacy').enterWith(store)
-            })
+          app.get('/user', (req, res) => {
+            res.status(200).send()
           })
-        }
+
+          agent
+            .assertNoTraces(() => {
+              throw new Error('Noop request was traced.')
+            }, { timeoutMs: 100 })
+            .then(done, done)
+
+          appListener = server(app, port => {
+            const store = storage('legacy').getStore()
+
+            storage('legacy').enterWith({ noop: true })
+            const req = http.request(tracer._tracer._url.href)
+
+            req.on('error', () => {})
+            req.end()
+
+            storage('legacy').enterWith(store)
+          })
+        })
 
         it('should record unfinished http requests as error spans', done => {
           agent

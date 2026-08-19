@@ -289,6 +289,8 @@ for (const version of versions) {
           )
         }
 
+        const jasmineTest = framework === 'jasmine' ? it : it.skip
+
         it('requests enabled data once and keeps TIA disabled across parallel workers', async () => {
           receiver.setSettings({
             code_coverage: true,
@@ -357,75 +359,71 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('keeps skipped tests and their suite and session successful with EFD', async () => {
-            receiver.setSettings({
-              early_flake_detection: {
-                enabled: true,
-                faulty_session_threshold: 100,
-                slow_test_retries: { '5s': 2 },
-              },
-              known_tests_enabled: true,
-            })
-            receiver.setKnownTests({ webdriverio: {} })
-
-            await runScenario('jasmineEfdSkipped', 1, payloads => {
-              const events = getEvents(payloads)
-              const session = events.find(event => event.type === 'test_session_end').content
-              const suite = events.find(event => event.type === 'test_suite_end').content
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const passingTests = tests.filter(test => test.meta[TEST_NAME].endsWith('passes'))
-              const skippedTests = tests.filter(test => test.meta[TEST_NAME].endsWith('stays skipped'))
-
-              assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(passingTests.length, 3)
-              assert.ok(passingTests.every(test => test.meta[TEST_STATUS] === 'pass'))
-              assert.strictEqual(
-                passingTests.filter(test => test.meta[TEST_FINAL_STATUS] === 'pass').length,
-                1
-              )
-              assert.strictEqual(skippedTests.length, 1)
-              assert.strictEqual(skippedTests[0].meta[TEST_STATUS], 'skip')
-              assert.strictEqual(skippedTests[0].meta[TEST_FINAL_STATUS], 'skip')
-              assert.strictEqual(skippedTests[0].meta[TEST_IS_NEW], 'true')
-              assert.strictEqual(skippedTests[0].meta[TEST_IS_RETRY], undefined)
-              assert.strictEqual(skippedTests[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
-            })
+        jasmineTest('keeps skipped tests and their suite and session successful with EFD', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              faulty_session_threshold: 100,
+              slow_test_retries: { '5s': 2 },
+            },
+            known_tests_enabled: true,
           })
-        }
+          receiver.setKnownTests({ webdriverio: {} })
 
-        if (framework === 'jasmine') {
-          it('keeps tests filtered by jasmineOpts.grep skipped with EFD', async () => {
-            receiver.setSettings({
-              early_flake_detection: {
-                enabled: true,
-                faulty_session_threshold: 100,
-                slow_test_retries: { '5s': 2 },
-              },
-              known_tests_enabled: true,
-            })
-            receiver.setKnownTests({ webdriverio: {} })
+          await runScenario('jasmineEfdSkipped', 1, payloads => {
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suite = events.find(event => event.type === 'test_suite_end').content
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const passingTests = tests.filter(test => test.meta[TEST_NAME].endsWith('passes'))
+            const skippedTests = tests.filter(test => test.meta[TEST_NAME].endsWith('stays skipped'))
 
-            await runScenario('jasmineFiltered', 1, payloads => {
-              const events = getEvents(payloads)
-              const session = events.find(event => event.type === 'test_session_end').content
-              const suite = events.find(event => event.type === 'test_suite_end').content
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const selectedTests = tests.filter(test => test.meta[TEST_NAME].endsWith('runs selected test'))
-              const filteredTests = tests.filter(test => test.meta[TEST_NAME].endsWith('stays filtered'))
-
-              assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(selectedTests.length, 3)
-              assert.ok(selectedTests.every(test => test.meta[TEST_STATUS] === 'pass'))
-              assert.strictEqual(filteredTests.length, 1)
-              assert.strictEqual(filteredTests[0].meta[TEST_STATUS], 'skip')
-              assert.strictEqual(filteredTests[0].meta[TEST_FINAL_STATUS], 'skip')
-              assert.strictEqual(filteredTests[0].meta[TEST_IS_RETRY], undefined)
-            })
+            assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(passingTests.length, 3)
+            assert.ok(passingTests.every(test => test.meta[TEST_STATUS] === 'pass'))
+            assert.strictEqual(
+              passingTests.filter(test => test.meta[TEST_FINAL_STATUS] === 'pass').length,
+              1
+            )
+            assert.strictEqual(skippedTests.length, 1)
+            assert.strictEqual(skippedTests[0].meta[TEST_STATUS], 'skip')
+            assert.strictEqual(skippedTests[0].meta[TEST_FINAL_STATUS], 'skip')
+            assert.strictEqual(skippedTests[0].meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(skippedTests[0].meta[TEST_IS_RETRY], undefined)
+            assert.strictEqual(skippedTests[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
           })
-        }
+        })
+
+        jasmineTest('keeps tests filtered by jasmineOpts.grep skipped with EFD', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              faulty_session_threshold: 100,
+              slow_test_retries: { '5s': 2 },
+            },
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({ webdriverio: {} })
+
+          await runScenario('jasmineFiltered', 1, payloads => {
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suite = events.find(event => event.type === 'test_suite_end').content
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const selectedTests = tests.filter(test => test.meta[TEST_NAME].endsWith('runs selected test'))
+            const filteredTests = tests.filter(test => test.meta[TEST_NAME].endsWith('stays filtered'))
+
+            assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(selectedTests.length, 3)
+            assert.ok(selectedTests.every(test => test.meta[TEST_STATUS] === 'pass'))
+            assert.strictEqual(filteredTests.length, 1)
+            assert.strictEqual(filteredTests[0].meta[TEST_STATUS], 'skip')
+            assert.strictEqual(filteredTests[0].meta[TEST_FINAL_STATUS], 'skip')
+            assert.strictEqual(filteredTests[0].meta[TEST_IS_RETRY], undefined)
+          })
+        })
 
         it('uses the first attempt duration to select the EFD retry count', async () => {
           receiver.setSettings({
@@ -643,111 +641,103 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('falls back to ATR when the EFD retry policy has no retries', async () => {
-            receiver.setSettings({
-              early_flake_detection: {
-                enabled: true,
-                faulty_session_threshold: 100,
-                slow_test_retries: { '5s': 0 },
-              },
-              flaky_test_retries_count: 1,
-              flaky_test_retries_enabled: true,
-              known_tests_enabled: true,
-            })
-            receiver.setKnownTests({ webdriverio: {} })
-
-            await runScenario('atr', 1, payloads => {
-              const tests = getEvents(payloads)
-                .filter(event => event.type === 'test')
-                .map(event => event.content)
-
-              assert.strictEqual(tests.length, 2)
-              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
-              assert.ok(tests.every(test => test.meta[TEST_IS_NEW] === 'true'))
-              assert.ok(tests.every(test => test.meta[TEST_EARLY_FLAKE_ABORT_REASON] === undefined))
-              const retry = tests.find(test => test.meta[TEST_IS_RETRY] === 'true')
-              assert.ok(retry)
-              assert.strictEqual(retry.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
-            })
+        jasmineTest('falls back to ATR when the EFD retry policy has no retries', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              faulty_session_threshold: 100,
+              slow_test_retries: { '5s': 0 },
+            },
+            flaky_test_retries_count: 1,
+            flaky_test_retries_enabled: true,
+            known_tests_enabled: true,
           })
-        }
+          receiver.setKnownTests({ webdriverio: {} })
 
-        if (framework === 'jasmine') {
-          it('does not retry tests with ATR when their hooks fail', async () => {
-            receiver.setSettings({
-              flaky_test_retries_count: 1,
-              flaky_test_retries_enabled: true,
-            })
+          await runScenario('atr', 1, payloads => {
+            const tests = getEvents(payloads)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
 
-            await runScenario('atrHookFailures', 1, payloads => {
-              const events = getEvents(payloads)
-              const session = events.find(event => event.type === 'test_session_end').content
-              const suite = events.find(event => event.type === 'test_suite_end').content
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-              assert.strictEqual(session.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(tests.length, 2)
-              assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
-              assert.ok(tests.every(test => test.meta[TEST_IS_RETRY] === undefined))
-              assert.ok(tests.every(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === undefined))
-            }, {}, 1)
+            assert.strictEqual(tests.length, 2)
+            assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
+            assert.ok(tests.every(test => test.meta[TEST_IS_NEW] === 'true'))
+            assert.ok(tests.every(test => test.meta[TEST_EARLY_FLAKE_ABORT_REASON] === undefined))
+            const retry = tests.find(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.ok(retry)
+            assert.strictEqual(retry.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
           })
-        }
+        })
 
-        if (framework === 'jasmine') {
-          it('applies ATR before WebdriverIO retries the spec file', async () => {
-            receiver.setSettings({
-              flaky_test_retries_count: 1,
-              flaky_test_retries_enabled: true,
-            })
-
-            await runScenario('specFileRetries', 1, payloads => {
-              const events = getEvents(payloads)
-              const session = events.find(event => event.type === 'test_session_end').content
-              const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-              assert.strictEqual(countRequests(payloads, SETTINGS_PATH), 1)
-              assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(suites.length, 1)
-              assert.strictEqual(suites[0].meta[TEST_STATUS], 'pass')
-              assert.strictEqual(tests.length, 2)
-              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
-              assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
-              assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
-            }, {
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-            })
+        jasmineTest('does not retry tests with ATR when their hooks fail', async () => {
+          receiver.setSettings({
+            flaky_test_retries_count: 1,
+            flaky_test_retries_enabled: true,
           })
-        }
 
-        if (framework === 'jasmine') {
-          it('applies ATR to failures caused by jasmineOpts.failSpecWithNoExpectations', async () => {
-            receiver.setSettings({
-              flaky_test_retries_count: 1,
-              flaky_test_retries_enabled: true,
-            })
+          await runScenario('atrHookFailures', 1, payloads => {
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suite = events.find(event => event.type === 'test_suite_end').content
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-            await runScenario('jasmineNoExpectations', 1, payloads => {
-              const events = getEvents(payloads)
-              const session = events.find(event => event.type === 'test_session_end').content
-              const suite = events.find(event => event.type === 'test_suite_end').content
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(tests.length, 2)
+            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+            assert.ok(tests.every(test => test.meta[TEST_IS_RETRY] === undefined))
+            assert.ok(tests.every(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === undefined))
+          }, {}, 1)
+        })
 
-              assert.strictEqual(session.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(tests.length, 2)
-              assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
-              assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
-              assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
-              assert.strictEqual(tests[1].meta[TEST_FINAL_STATUS], 'fail')
-            }, {
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-            }, 1)
+        jasmineTest('applies ATR before WebdriverIO retries the spec file', async () => {
+          receiver.setSettings({
+            flaky_test_retries_count: 1,
+            flaky_test_retries_enabled: true,
           })
-        }
+
+          await runScenario('specFileRetries', 1, payloads => {
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(countRequests(payloads, SETTINGS_PATH), 1)
+            assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(suites.length, 1)
+            assert.strictEqual(suites[0].meta[TEST_STATUS], 'pass')
+            assert.strictEqual(tests.length, 2)
+            assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
+            assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+            assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          }, {
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          })
+        })
+
+        jasmineTest('applies ATR to failures caused by jasmineOpts.failSpecWithNoExpectations', async () => {
+          receiver.setSettings({
+            flaky_test_retries_count: 1,
+            flaky_test_retries_enabled: true,
+          })
+
+          await runScenario('jasmineNoExpectations', 1, payloads => {
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suite = events.find(event => event.type === 'test_suite_end').content
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(tests.length, 2)
+            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+            assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+            assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            assert.strictEqual(tests[1].meta[TEST_FINAL_STATUS], 'fail')
+          }, {
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          }, 1)
+        })
 
         it('reports exhausted ATR retries', async () => {
           receiver.setSettings({
@@ -798,21 +788,19 @@ for (const version of versions) {
           }, 1)
         })
 
-        if (framework === 'jasmine') {
-          it('reports user-configured Jasmine retries as external retries', async () => {
-            await runScenario('jasmineRetry', 1, payloads => {
-              const tests = getEvents(payloads)
-                .filter(event => event.type === 'test')
-                .map(event => event.content)
+        jasmineTest('reports user-configured Jasmine retries as external retries', async () => {
+          await runScenario('jasmineRetry', 1, payloads => {
+            const tests = getEvents(payloads)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
 
-              assert.strictEqual(tests.length, 2)
-              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
-              assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
-              assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
-              assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
-            })
+            assert.strictEqual(tests.length, 2)
+            assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
+            assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
+            assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+            assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
           })
-        }
+        })
 
         it('applies disabled, quarantined, and attempt-to-fix policies', async () => {
           receiver.setSettings({
@@ -891,81 +879,79 @@ for (const version of versions) {
           }, {}, 1)
         })
 
-        if (framework === 'jasmine') {
-          it('keeps skipped attempt-to-fix tests skipped', async () => {
-            receiver.setSettings({
-              test_management: {
-                attempt_to_fix_retries: 2,
-                enabled: true,
-              },
-            })
-            receiver.setTestManagementTests({
-              webdriverio: {
-                suites: {
-                  'jasmine-attempt-to-fix-skipped.e2e.js': {
-                    tests: {
-                      'WebdriverIO Jasmine skipped attempt to fix stays skipped': {
-                        properties: { attempt_to_fix: true },
-                      },
+        jasmineTest('keeps skipped attempt-to-fix tests skipped', async () => {
+          receiver.setSettings({
+            test_management: {
+              attempt_to_fix_retries: 2,
+              enabled: true,
+            },
+          })
+          receiver.setTestManagementTests({
+            webdriverio: {
+              suites: {
+                'jasmine-attempt-to-fix-skipped.e2e.js': {
+                  tests: {
+                    'WebdriverIO Jasmine skipped attempt to fix stays skipped': {
+                      properties: { attempt_to_fix: true },
                     },
                   },
                 },
               },
-            })
-
-            await runScenario('jasmineAttemptToFixSkipped', 1, payloads => {
-              const events = getEvents(payloads)
-              const session = events.find(event => event.type === 'test_session_end').content
-              const suite = events.find(event => event.type === 'test_suite_end').content
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-              assert.strictEqual(session.meta[TEST_STATUS], 'skip')
-              assert.strictEqual(suite.meta[TEST_STATUS], 'skip')
-              assert.strictEqual(tests.length, 1)
-              assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
-              assert.strictEqual(tests[0].meta[TEST_FINAL_STATUS], 'skip')
-              assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
-              assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined)
-              assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
-              assert.strictEqual(tests[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
-            })
+            },
           })
 
-          it('does not run hooks for disabled tests', async () => {
-            receiver.setSettings({
-              test_management: { enabled: true },
-            })
-            receiver.setTestManagementTests({
-              webdriverio: {
-                suites: {
-                  'test-management-disabled-hook.e2e.js': {
-                    tests: {
-                      'WebdriverIO disabled hook is disabled': {
-                        properties: { disabled: true },
-                      },
+          await runScenario('jasmineAttemptToFixSkipped', 1, payloads => {
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suite = events.find(event => event.type === 'test_suite_end').content
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(session.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(suite.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(tests.length, 1)
+            assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
+            assert.strictEqual(tests[0].meta[TEST_FINAL_STATUS], 'skip')
+            assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+            assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined)
+            assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
+            assert.strictEqual(tests[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
+          })
+        })
+
+        jasmineTest('does not run hooks for disabled tests', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true },
+          })
+          receiver.setTestManagementTests({
+            webdriverio: {
+              suites: {
+                'test-management-disabled-hook.e2e.js': {
+                  tests: {
+                    'WebdriverIO disabled hook is disabled': {
+                      properties: { disabled: true },
                     },
                   },
                 },
               },
-            })
-
-            await runScenario('testManagementDisabledHook', 1, payloads => {
-              const events = getEvents(payloads)
-              const session = events.find(event => event.type === 'test_session_end').content
-              const suite = events.find(event => event.type === 'test_suite_end').content
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const disabled = tests.find(test => test.meta[TEST_NAME].endsWith('is disabled'))
-              const passing = tests.find(test => test.meta[TEST_NAME].endsWith('passes'))
-
-              assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(disabled.meta[TEST_STATUS], 'skip')
-              assert.strictEqual(disabled.meta[TEST_FINAL_STATUS], 'skip')
-              assert.strictEqual(disabled.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-              assert.strictEqual(passing.meta[TEST_STATUS], 'pass')
-            }, {}, 0)
+            },
           })
-        }
+
+          await runScenario('testManagementDisabledHook', 1, payloads => {
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suite = events.find(event => event.type === 'test_suite_end').content
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const disabled = tests.find(test => test.meta[TEST_NAME].endsWith('is disabled'))
+            const passing = tests.find(test => test.meta[TEST_NAME].endsWith('passes'))
+
+            assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(disabled.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabled.meta[TEST_FINAL_STATUS], 'skip')
+            assert.strictEqual(disabled.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(passing.meta[TEST_STATUS], 'pass')
+          }, {}, 0)
+        })
 
         it('does not apply Test Management policies when locally disabled', async () => {
           receiver.setSettings({
@@ -1089,44 +1075,42 @@ for (const version of versions) {
           }, {}, 1)
         })
 
-        if (framework === 'jasmine') {
-          it('does not retry or suppress expectation-based hook failures', async () => {
-            receiver.setSettings({
-              early_flake_detection: {
-                enabled: true,
-                faulty_session_threshold: 100,
-                slow_test_retries: { '5s': 2 },
-              },
-              flaky_test_retries_count: 1,
-              flaky_test_retries_enabled: true,
-              known_tests_enabled: true,
-            })
-            receiver.setKnownTests({
-              webdriverio: {
-                'jasmine-expectation-hook-fail.e2e.js': [
-                  'WebdriverIO Jasmine expectation hook failures beforeEach does not retry with ATR',
-                ],
-              },
-            })
-
-            await runScenario('jasmineExpectationHookFailures', 1, payloads => {
-              const events = getEvents(payloads)
-              const session = events.find(event => event.type === 'test_session_end').content
-              const suite = events.find(event => event.type === 'test_suite_end').content
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const beforeEachTests = tests.filter(test => test.meta[TEST_NAME].endsWith('does not retry with ATR'))
-              const afterEachTests = tests.filter(test => test.meta[TEST_NAME].endsWith('keeps the final EFD failure'))
-
-              assert.strictEqual(session.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(beforeEachTests.length, 1)
-              assert.strictEqual(beforeEachTests[0].meta[TEST_STATUS], 'fail')
-              assert.strictEqual(beforeEachTests[0].meta[TEST_IS_RETRY], undefined)
-              assert.deepStrictEqual(afterEachTests.map(test => test.meta[TEST_STATUS]), ['pass', 'pass', 'fail'])
-              assert.strictEqual(afterEachTests[2].meta[TEST_FINAL_STATUS], 'fail')
-            }, {}, 1)
+        jasmineTest('does not retry or suppress expectation-based hook failures', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              faulty_session_threshold: 100,
+              slow_test_retries: { '5s': 2 },
+            },
+            flaky_test_retries_count: 1,
+            flaky_test_retries_enabled: true,
+            known_tests_enabled: true,
           })
-        }
+          receiver.setKnownTests({
+            webdriverio: {
+              'jasmine-expectation-hook-fail.e2e.js': [
+                'WebdriverIO Jasmine expectation hook failures beforeEach does not retry with ATR',
+              ],
+            },
+          })
+
+          await runScenario('jasmineExpectationHookFailures', 1, payloads => {
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suite = events.find(event => event.type === 'test_suite_end').content
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const beforeEachTests = tests.filter(test => test.meta[TEST_NAME].endsWith('does not retry with ATR'))
+            const afterEachTests = tests.filter(test => test.meta[TEST_NAME].endsWith('keeps the final EFD failure'))
+
+            assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(beforeEachTests.length, 1)
+            assert.strictEqual(beforeEachTests[0].meta[TEST_STATUS], 'fail')
+            assert.strictEqual(beforeEachTests[0].meta[TEST_IS_RETRY], undefined)
+            assert.deepStrictEqual(afterEachTests.map(test => test.meta[TEST_STATUS]), ['pass', 'pass', 'fail'])
+            assert.strictEqual(afterEachTests[2].meta[TEST_FINAL_STATUS], 'fail')
+          }, {}, 1)
+        })
 
         for (const hookType of ['beforeAll', 'afterAll']) {
           it(`does not suppress a quarantined test's ${hookType} failure`, async () => {
@@ -1199,24 +1183,22 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('marks tests as impacted when WebdriverIO runs below the repository root', async () => {
-            receiver.setSettings({ impacted_tests_enabled: true })
+        jasmineTest('marks tests as impacted when WebdriverIO runs below the repository root', async () => {
+          receiver.setSettings({ impacted_tests_enabled: true })
 
-            await runScenario('impacted', 1, payloads => {
-              const tests = getEvents(payloads)
-                .filter(event => event.type === 'test')
-                .map(event => event.content)
-              const impacted = tests.find(test => test.meta[TEST_SUITE] === 'nested-impacted.e2e.js')
-              const unmodified = tests.find(test => test.meta[TEST_SUITE] === 'nested-first.e2e.js')
+          await runScenario('impacted', 1, payloads => {
+            const tests = getEvents(payloads)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+            const impacted = tests.find(test => test.meta[TEST_SUITE] === 'nested-impacted.e2e.js')
+            const unmodified = tests.find(test => test.meta[TEST_SUITE] === 'nested-first.e2e.js')
 
-              assert.strictEqual(tests.length, 2)
-              assert.strictEqual(impacted.meta[TEST_SOURCE_FILE], 'subdirectory/nested-impacted.e2e.js')
-              assert.strictEqual(impacted.meta[TEST_IS_MODIFIED], 'true')
-              assert.strictEqual(unmodified.meta[TEST_IS_MODIFIED], undefined)
-            }, {}, 0, path.join(cwd, 'subdirectory'))
-          })
-        }
+            assert.strictEqual(tests.length, 2)
+            assert.strictEqual(impacted.meta[TEST_SOURCE_FILE], 'subdirectory/nested-impacted.e2e.js')
+            assert.strictEqual(impacted.meta[TEST_IS_MODIFIED], 'true')
+            assert.strictEqual(unmodified.meta[TEST_IS_MODIFIED], undefined)
+          }, {}, 0, path.join(cwd, 'subdirectory'))
+        })
 
         it('does not mark impacted tests when locally disabled', async () => {
           receiver.setSettings({ impacted_tests_enabled: true })
@@ -1259,43 +1241,41 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('captures Failed Test Replay when the first EFD attempt passes', async () => {
-            receiver.setSettings({
-              di_enabled: true,
-              early_flake_detection: {
-                enabled: true,
-                faulty_session_threshold: 100,
-                slow_test_retries: { '5s': 2 },
-              },
-              flaky_test_retries_count: 1,
-              flaky_test_retries_enabled: true,
-              known_tests_enabled: true,
-            })
-            receiver.setKnownTests({ webdriverio: {} })
-
-            await runScenario('efdFailedTestReplay', 1, payloads => {
-              const tests = getEvents(payloads)
-                .filter(event => event.type === 'test')
-                .map(event => event.content)
-              const finalRetry = tests[2]
-              const logPayload = payloads.find(({ url }) => url.endsWith('/api/v2/logs'))
-
-              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'fail', 'pass'])
-              assert.strictEqual(finalRetry.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
-              assert.strictEqual(
-                finalRetry.meta[DI_ERROR_DEBUG_INFO_CAPTURED],
-                'true',
-                JSON.stringify(tests.map(test => test.meta))
-              )
-              assert.ok(Object.keys(finalRetry.meta).some(tag => tag.startsWith(DI_DEBUG_ERROR_PREFIX)))
-              assert.ok(logPayload)
-              assert.strictEqual(logPayload.logMessage[0].ddsource, 'dd_debugger')
-            }, {
-              _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
-            })
+        jasmineTest('captures Failed Test Replay when the first EFD attempt passes', async () => {
+          receiver.setSettings({
+            di_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              faulty_session_threshold: 100,
+              slow_test_retries: { '5s': 2 },
+            },
+            flaky_test_retries_count: 1,
+            flaky_test_retries_enabled: true,
+            known_tests_enabled: true,
           })
-        }
+          receiver.setKnownTests({ webdriverio: {} })
+
+          await runScenario('efdFailedTestReplay', 1, payloads => {
+            const tests = getEvents(payloads)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+            const finalRetry = tests[2]
+            const logPayload = payloads.find(({ url }) => url.endsWith('/api/v2/logs'))
+
+            assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'fail', 'pass'])
+            assert.strictEqual(finalRetry.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+            assert.strictEqual(
+              finalRetry.meta[DI_ERROR_DEBUG_INFO_CAPTURED],
+              'true',
+              JSON.stringify(tests.map(test => test.meta))
+            )
+            assert.ok(Object.keys(finalRetry.meta).some(tag => tag.startsWith(DI_DEBUG_ERROR_PREFIX)))
+            assert.ok(logPayload)
+            assert.strictEqual(logPayload.logMessage[0].ddsource, 'dd_debugger')
+          }, {
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          })
+        })
 
         it('does not capture Failed Test Replay snapshots when locally disabled', async () => {
           receiver.setSettings({
