@@ -633,12 +633,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'dsmEnabled', false)
       setAndTrack(this, 'dynamicInstrumentation.enabled', true)
       setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
-
-      const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
-      setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
-      if (profilingExporters.length === 0) {
-        setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
-      }
     }
 
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||

@@ -5,6 +5,7 @@ const { format } = require('node:util')
 const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
+const { PassThrough } = require('node:stream')
 
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -448,6 +449,96 @@ describe('exporters/agent', function () {
         assert.strictEqual(err.message, 'HTTP Error 400')
       }
       assert.strictEqual(tries, 1)
+    })
+  })
+
+  describe('using the agentless intake', () => {
+    let AgentlessExporter
+    let https
+    let requestOptions
+
+    beforeEach(() => {
+      https = {
+        request: sinon.stub().callsFake((options, callback) => {
+          requestOptions = options
+          const req = new PassThrough()
+
+          process.nextTick(() => {
+            const response = new PassThrough()
+            response.statusCode = 200
+            callback(response)
+            response.end()
+          })
+
+          return req
+        }),
+      }
+      AgentlessExporter = proxyquire('../../../src/profiling/exporters/agent', {
+        '../../exporters/common/docker': docker,
+        https,
+      }).AgentExporter
+    })
+
+    function newAgentlessExporter ({ apiKey = 'test-api-key', site = 'us3.datadoghq.com' } = {}) {
+      return new AgentlessExporter({
+        url: new URL('http://127.0.0.1:8126'),
+        DD_AGENTLESS_ENABLED: true,
+        DD_API_KEY: apiKey,
+        site,
+        DD_PROFILING_UPLOAD_TIMEOUT: 100,
+        env: ENV,
+        service: SERVICE,
+        version: APP_VERSION,
+        hostname: HOST,
+        reportHostname: true,
+      })
+    }
+
+    it('should send profiles directly to the site intake with the API key', async () => {
+      const exporter = newAgentlessExporter()
+
+      await exporter.export({
+        profiles: {},
+        start: new Date(),
+        end: new Date(),
+        tags: { 'runtime-id': RUNTIME_ID },
+      })
+
+      assert.strictEqual(exporter.getExportUrl().href, 'https://intake.profile.us3.datadoghq.com/')
+      assert.strictEqual(https.request.callCount, 1)
+      assertObjectContains(requestOptions, {
+        method: 'POST',
+        path: '/api/v2/profile',
+        protocol: 'https:',
+        hostname: 'intake.profile.us3.datadoghq.com',
+        headers: {
+          'dd-api-key': 'test-api-key',
+          'DD-EVP-ORIGIN': 'dd-trace-js',
+          'DD-EVP-ORIGIN-VERSION': version,
+          test: 'injected',
+        },
+      })
+    })
+
+    it('should not send profiles without an API key', async () => {
+      const exporter = newAgentlessExporter({ apiKey: null })
+
+      await assert.rejects(
+        exporter.export({ profiles: {}, start: new Date(), end: new Date() }),
+        { message: 'DD_API_KEY is required for agentless profiling' }
+      )
+      assert.strictEqual(https.request.callCount, 0)
+    })
+
+    it('should reject a site that could redirect the API key', async () => {
+      const exporter = newAgentlessExporter({ site: 'datadoghq.com@evil.example' })
+
+      assert.strictEqual(exporter.getExportUrl(), undefined)
+      await assert.rejects(
+        exporter.export({ profiles: {}, start: new Date(), end: new Date() }),
+        { message: 'Invalid DD_SITE for agentless profiling: datadoghq.com@evil.example' }
+      )
+      assert.strictEqual(https.request.callCount, 0)
     })
   })
 
