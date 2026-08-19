@@ -1,6 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { writeTraceparent, writeTracestate } = require('../../dd-trace/src/carrier')
 const { AUTO_KEEP } = require('../../../ext/priority')
 const TraceState = require('../../dd-trace/src/opentracing/propagation/tracestate')
 
@@ -20,10 +21,10 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
       // extract() returns null when the carrier can't be parsed. Normalize to
       // undefined so startSpan still falls back to any active in-process parent
       // rather than being forced to start a brand new root span.
-      childOf = this.tracer.extract('text_map', {
-        traceparent: ctx.traceparent,
-        tracestate: ctx.tracestate,
-      }) ?? undefined
+      const carrier = {}
+      writeTraceparent(carrier, ctx.traceparent)
+      if (ctx.tracestate) writeTracestate(carrier, ctx.tracestate)
+      childOf = this.tracer.extract('text_map', carrier) ?? undefined
     }
 
     const span = this.startSpan(this.operationName(), {
@@ -46,12 +47,17 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
       )
     }
 
-    // The host clears the W3C sampled flag in traceparent while datadog tracestate
-    // still says keep, so extraction would drop this chunk. Re-apply the propagated
-    // `s` priority when it indicates keep; upstream drop decisions are left untouched.
-    const propagatedPriority = propagatedSamplingPriority(ctx.tracestate)
-    if (childOf && sampledFlagCleared(ctx.traceparent) && propagatedPriority >= AUTO_KEEP) {
-      span._prioritySampler?.setPriority(span, propagatedPriority)
+    // Host clears traceparent sampled flag while tracestate still says keep.
+    // Re-apply propagated `s` on the shared context; skip when extraction is ignored.
+    if (
+      childOf &&
+      this.tracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'continue' &&
+      sampledFlagCleared(ctx.traceparent)
+    ) {
+      const propagatedPriority = propagatedSamplingPriority(ctx.tracestate)
+      if (propagatedPriority >= AUTO_KEEP) {
+        span.context()._sampling.priority = propagatedPriority
+      }
     }
 
     ctx.span = span
