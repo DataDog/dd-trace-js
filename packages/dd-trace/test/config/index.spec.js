@@ -5114,6 +5114,12 @@ rules:
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
     })
 
+    it('should enable agentless exporter when DD_AGENTLESS_ENABLED is true', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.experimental.exporter, 'agentless')
+    })
+
     it('should enable agentless exporter when _DD_APM_TRACING_AGENTLESS_ENABLED is true', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()

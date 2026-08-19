@@ -641,9 +641,7 @@ class Config extends ConfigBase {
 
     // Experimental agentless APM span intake
     // When enabled, sends spans directly to Datadog intake without an agent
-    // TODO: Replace this with a proper configuration
-    const agentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessEnabled) {
+    if (this.DD_AGENTLESS_ENABLED || isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
