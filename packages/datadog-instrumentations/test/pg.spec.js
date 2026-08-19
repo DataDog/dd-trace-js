@@ -114,7 +114,6 @@ describe('pg instrumentation', () => {
                   })
                 })
 
-                // Query event cardinality is part of this test; Mocha must see a second terminal event.
                 it('Should abort query', (done) => {
                   queryClientStartChannel.subscribe(abortQuery)
 
@@ -138,7 +137,6 @@ describe('pg instrumentation', () => {
               })
 
               describe('with callback in query object', () => {
-                // The callback form is the API contract under test.
                 it('Should not fail if it is not aborted', (done) => {
                   const query = new Query('SELECT 1')
                   query.callback = (error) => {
@@ -148,7 +146,6 @@ describe('pg instrumentation', () => {
                   client.query(query)
                 })
 
-                // The callback form is the API contract under test.
                 it('Should abort query', (done) => {
                   queryClientStartChannel.subscribe(abortQuery)
 
