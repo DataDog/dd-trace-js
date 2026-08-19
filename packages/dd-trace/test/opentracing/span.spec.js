@@ -261,8 +261,14 @@ describe('Span', () => {
         parent: parent.context(),
       })
 
+      assert.strictEqual(child.context()._baggageItems, parent.context()._baggageItems)
+      assert.strictEqual(sibling.context()._baggageItems, parent.context()._baggageItems)
+
       child.setBaggageItem('child', 'value')
       parent.setBaggageItem('parent', 'value')
+
+      assert.notStrictEqual(child.context()._baggageItems, parent.context()._baggageItems)
+      assert.notStrictEqual(sibling.context()._baggageItems, parent.context()._baggageItems)
 
       assert.strictEqual(child.getBaggageItem('shared'), 'parent')
       assert.strictEqual(child.getBaggageItem('child'), 'value')
@@ -549,6 +555,21 @@ describe('Span', () => {
       span.removeAllBaggageItems()
       assert.deepStrictEqual(span._spanContext._baggageItems, {})
     })
+
+    it('should isolate inherited baggage removal from the parent span', () => {
+      const parent = new Span(tracer, processor, prioritySampler, { operationName: 'parent' })
+      parent.setBaggageItem('foo', 'bar')
+
+      span = new Span(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+        parent: parent.context(),
+      })
+
+      span.removeAllBaggageItems()
+
+      assert.deepStrictEqual(span._spanContext._baggageItems, {})
+      assert.deepStrictEqual(parent._spanContext._baggageItems, { foo: 'bar' })
+    })
   })
 
   describe('setTag', () => {
@@ -716,6 +737,18 @@ describe('Span', () => {
         tracer = { _config: { ...getConfig(), DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart' } }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
         assert.deepStrictEqual(span._spanContext._baggageItems, { foo: 'bar' })
+      })
+
+      it('should isolate restarted baggage mutations from the remote parent', () => {
+        tracer = { _config: { ...getConfig(), DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart' } }
+        span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
+
+        assert.strictEqual(span._spanContext._baggageItems, parent._baggageItems)
+
+        span.setBaggageItem('child', 'value')
+
+        assert.deepStrictEqual(span._spanContext._baggageItems, { foo: 'bar', child: 'value' })
+        assert.deepStrictEqual(parent._baggageItems, { foo: 'bar' })
       })
 
       it('should start with empty baggage on restart when there is no parent to inherit from', () => {
