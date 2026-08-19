@@ -45,6 +45,7 @@ Do not use that observation to waive focused lint or CI on subsequent changes.
 | --- | --- |
 | [`integration-pipeline.js`](./integration-pipeline.js) | Authoritative implementation, JSDoc types, validation, lifecycle, stores, and exported helpers. |
 | [`integration-pipeline.spec.js`](../../test/plugins/integration-pipeline.spec.js) | Executable contract for ordering, correlation, spanless operations, errors, no-op scopes, and validation. |
+| [`stages/code-origin.js`](./stages/code-origin.js) | Shared exit code-origin capability. |
 | [`stages/messaging.js`](./stages/messaging.js) | Shared propagation and Data Streams capability. Read before hand-writing either in a plugin. |
 | [`stages/messaging.spec.js`](../../test/plugins/stages/messaging.spec.js) | Executable contract for edge tags, carrier sharing, batching, gating, and inbound decode ordering. |
 | [`INTEGRATION_PIPELINE_NOTES.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_NOTES.md) | Mechanical walkthrough using BullMQ and Azure Cosmos. |
@@ -410,7 +411,7 @@ Do not hand-write a stage for behavior another integration already needs. Two sh
 
 | Stage | Import | Shape |
 | --- | --- | --- |
-| `exitCodeOrigin` | `plugins/integration-pipeline` | Nullary. Declared by naming it; takes no parameters. |
+| `exitCodeOrigin` | `plugins/stages/code-origin` | Nullary. Declared by naming it; takes no parameters. |
 | `createMessagingStage(descriptor)` | `plugins/stages/messaging` | Parameterized by where the library keeps its messages. |
 
 `exitCodeOrigin` is the model for a reusable stage: it binds to nothing library-specific, so all three BullMQ producer

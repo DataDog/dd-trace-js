@@ -1,7 +1,8 @@
 'use strict'
 
 const log = require('../../dd-trace/src/log')
-const { argument, exitCodeOrigin, field } = require('../../dd-trace/src/plugins/integration-pipeline')
+const { argument, field } = require('../../dd-trace/src/plugins/integration-pipeline')
+const { exitCodeOrigin } = require('../../dd-trace/src/plugins/stages/code-origin')
 const { createMessagingStage } = require('../../dd-trace/src/plugins/stages/messaging')
 
 const producerTags = {

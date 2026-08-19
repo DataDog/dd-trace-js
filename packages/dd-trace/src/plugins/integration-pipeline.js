@@ -1,15 +1,14 @@
 'use strict'
 
-const { exitTags } = require('../../../datadog-code-origin')
 const { storage } = require('../../../datadog-core')
 const log = require('../log')
+const { addExitCodeOrigin } = require('./stages/code-origin')
 const TracingPlugin = require('./tracing')
 
 const contextStorage = storage('context')
 const spanStorage = storage('span')
 const legacyStorage = storage('legacy')
 const spanContextKey = Symbol('integration.pipeline.span_context')
-const addExitCodeOrigin = Symbol('integration.pipeline.add_exit_code_origin')
 
 /**
  * @typedef {object} InvocationContext
@@ -380,23 +379,16 @@ class IntegrationFrame {
   /**
    * Add exit code-origin tags when the tracer feature is enabled.
    *
+   * @param {(topOfStackFunc: Function) => Record<string, unknown>} createTags
    * @param {Function} topOfStackFunc
    * @returns {void}
    */
-  [addExitCodeOrigin] (topOfStackFunc) {
+  [addExitCodeOrigin] (createTags, topOfStackFunc) {
     const config = this.#plugin._tracerConfig.codeOriginForSpans
     if (!config?.enabled || !config.experimental?.exit_spans?.enabled) return
 
-    this.#state.span.addTags(exitTags(topOfStackFunc))
+    this.#state.span.addTags(createTags(topOfStackFunc))
   }
-}
-
-const exitCodeOrigin = {
-  name: 'exit-code-origin',
-  requires: ['tracing'],
-  start (frame) {
-    frame[addExitCodeOrigin](exitCodeOrigin.start)
-  },
 }
 
 function compileRecord (record) {
@@ -775,7 +767,6 @@ function createIntegrationPlugin (definition) {
 module.exports = {
   argument,
   createIntegrationPlugin,
-  exitCodeOrigin,
   field,
   result,
   self,

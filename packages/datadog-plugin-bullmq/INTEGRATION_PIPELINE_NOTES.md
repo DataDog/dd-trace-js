@@ -33,6 +33,7 @@ and the products that act on that event.
 | --- | --- |
 | `packages/dd-trace/src/plugins/integration-pipeline.js` | Definition compiler, lifecycle engine, stores, correlation facade, and default Orchestrion source adapter. |
 | `packages/dd-trace/src/plugins/integration-pipeline-agent-guide.md` | Agent handoff, declaration reference, migration workflow, invariants, verification, and open work. |
+| `packages/dd-trace/src/plugins/stages/code-origin.js` | Shared exit code-origin capability. |
 | `packages/dd-trace/src/plugins/stages/messaging.js` | Shared propagation and Data Streams capability, parameterized by a per-operation message descriptor. |
 | `packages/dd-trace/src/opentracing/span_context_factory.js` | Creates a real `DatadogSpanContext` without creating a span and lets a later span adopt it once. |
 | `packages/dd-trace/src/opentracing/tracer.js` | Exposes internal context reservation and accepts an already reserved context when starting a span. |
