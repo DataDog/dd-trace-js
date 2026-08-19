@@ -18,6 +18,7 @@ const { getStatusValidator } = require('./http-error-statuses')
 const {
   HTTP_STATUS_ERROR,
   INSTRUMENTATION_HTTP_RESOURCE,
+  isInstrumentationOwnedResource,
   NETWORK_PEER_ADDRESS,
   runHttpRequestHook,
   setInstrumentationHttpResource,
@@ -466,7 +467,7 @@ function addRequestTags (context, spanType) {
     // Establish ownership before propagation can sample; the sampler replaces this method-only
     // value once a route resolves. Serverless callers reach this from `web.finishSpan`, after
     // the handler ran, so a resource already present belongs to the application.
-    if (isInstrumentationOwnedResource(spanContext)) {
+    if (ownsResource(spanContext)) {
       setInstrumentationHttpResource(span, req.method)
     }
     const peerAddress = req.socket?.remoteAddress
@@ -542,18 +543,14 @@ function applyRouteOrEndpointTag (context) {
 }
 
 /**
- * `INSTRUMENTATION_HTTP_RESOURCE` holds the value the instrumentation last wrote, so a resource
- * differing from it came from application code and must survive.
- *
  * @param {import('../../opentracing/span_context')} spanContext
  * @returns {boolean}
  */
-function isInstrumentationOwnedResource (spanContext) {
-  const currentResource = spanContext.getTag(RESOURCE_NAME)
-  if (!currentResource) return true
-
-  const instrumentationResource = spanContext.getTag(INSTRUMENTATION_HTTP_RESOURCE)
-  return instrumentationResource !== undefined && currentResource === instrumentationResource
+function ownsResource (spanContext) {
+  return isInstrumentationOwnedResource(
+    spanContext.getTag(RESOURCE_NAME),
+    spanContext.getTag(INSTRUMENTATION_HTTP_RESOURCE)
+  )
 }
 
 function addResourceTag (context) {
@@ -563,7 +560,7 @@ function addResourceTag (context) {
 
   if (currentResource) {
     if (!config.DD_TRACE_OTEL_SEMANTICS_ENABLED) return
-    if (!isInstrumentationOwnedResource(spanContext)) return
+    if (!ownsResource(spanContext)) return
   }
 
   const resource = [req.method, spanContext.getTag(HTTP_ROUTE)]

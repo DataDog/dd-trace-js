@@ -60,8 +60,24 @@ const UNSIGNED_INTEGER = /^\d+$/
 const INT_VALUED_OTEL_ATTRIBUTES = new Set([HTTP_RESPONSE_STATUS_CODE, SERVER_PORT])
 
 function isCanonicalIntegerAttribute (value) {
-  if (typeof value === 'number') return Number.isInteger(value) && value >= 0
-  return typeof value === 'string' && UNSIGNED_INTEGER.test(value)
+  // `Number.isSafeInteger` rather than `isInteger`: a longer digit string becomes Infinity, which
+  // `JSON.stringify` writes as `intValue: null`, and anything past 2^53 is silently rounded.
+  if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0
+  return typeof value === 'string' && UNSIGNED_INTEGER.test(value) && Number.isSafeInteger(Number(value))
+}
+
+/**
+ * Whether the instrumentation still owns a resource, and so may overwrite it.
+ * `INSTRUMENTATION_HTTP_RESOURCE` holds the value the instrumentation last wrote, so anything
+ * different came from application code and has to survive. An unset resource is unowned.
+ *
+ * @param {string | undefined} currentResource
+ * @param {string | undefined} instrumentationResource
+ * @returns {boolean}
+ */
+function isInstrumentationOwnedResource (currentResource, instrumentationResource) {
+  if (!currentResource) return true
+  return currentResource === instrumentationResource
 }
 
 function stripIpv6Brackets (host) {
@@ -194,10 +210,10 @@ function applyHttpOtelSemantics (formattedSpan) {
   const metrics = formattedSpan.metrics
   const method = meta['http.method']
   const url = meta['http.url']
-  if (method === undefined && url === undefined) {
-    // A hook can strip the last HTTP attribute after provenance was recorded, and these
-    // internal tags still must not reach an exporter.
-    delete meta[INSTRUMENTATION_HTTP_RESOURCE]
+  if (method === undefined && url === undefined && meta[INSTRUMENTATION_HTTP_RESOURCE] === undefined) {
+    // Not a span this layer touched. A hook that strips the method and URL from one it did touch
+    // leaves the marker behind, and the status and user agent it captured at finish still have to
+    // be renamed, so that case falls through instead.
     delete meta[HTTP_STATUS_ERROR]
     return
   }
@@ -232,7 +248,7 @@ function applyHttpOtelSemantics (formattedSpan) {
       newMeta[HTTP_REQUEST_METHOD_ORIGINAL] = method
     }
     // Comparing against the recorded value keeps a manual resource shaped like "GET /custom".
-    if (meta[INSTRUMENTATION_HTTP_RESOURCE] === formattedSpan.resource) {
+    if (isInstrumentationOwnedResource(formattedSpan.resource, meta[INSTRUMENTATION_HTTP_RESOURCE])) {
       formattedSpan.resource = otelHttpResourceName(method, meta['http.route'])
     }
   }
@@ -303,6 +319,7 @@ module.exports = {
   decomposeServerUrl, // exercised directly by the helper spec
   INT_VALUED_OTEL_ATTRIBUTES,
   isCanonicalIntegerAttribute,
+  isInstrumentationOwnedResource,
   otelHttpResourceName,
   runHttpRequestHook,
   setInstrumentationHttpResource,
