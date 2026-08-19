@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('assert')
-
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -10,7 +9,6 @@ describe('Dynamic Instrumentation', function () {
   describe('condition', function () {
     beforeEach(() => { t.triggerBreakpoint() })
 
-    // Input is a stream; callback completion makes duplicate payloads observable to Mocha.
     it('should trigger when condition is met', function (done) {
       t.agent.on('debugger-input', () => {
         done()
@@ -21,7 +19,6 @@ describe('Dynamic Instrumentation', function () {
       }))
     })
 
-    // The absence check has no independent terminal signal and must stay callback-based.
     it('should not trigger when condition is not met', function (done) {
       t.agent.on('debugger-diagnostics', ({ payload }) => {
         payload.forEach((event) => {
@@ -41,7 +38,6 @@ describe('Dynamic Instrumentation', function () {
       }))
     })
 
-    // Diagnostics are multi-shot; retaining callback completion exposes an unexpected later install.
     it('should report error if condition cannot be compiled', function (done) {
       const rcConfig = t.generateRemoteConfig({
         when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } },

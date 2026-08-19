@@ -123,7 +123,6 @@ describe('Dynamic Instrumentation', function () {
         )
       })
 
-      // Diagnostics are multi-shot; retaining callback completion exposes duplicate terminal payloads.
       it('should report error when capture expression cannot be compiled', function (done) {
         const rcConfig = t.generateRemoteConfig({
           captureExpressions: [
