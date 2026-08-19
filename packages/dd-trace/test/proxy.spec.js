@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const dc = require('dc-polyfill')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const RemoteConfigCapabilities = require('../src/remote_config/capabilities')
@@ -183,7 +184,11 @@ describe('TracerProxy', () => {
     }
 
     profiler = {
-      start: sinon.spy(),
+      started: true,
+      start: sinon.stub().returns(true),
+      stop: sinon.spy(),
+      setCustomLabelKeys: sinon.spy(),
+      runWithLabels: sinon.stub().callsFake((labels, fn) => fn()),
     }
 
     appsec = {
@@ -653,31 +658,37 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(iast.enable)
       })
 
-      it('should not load the profiler when not configured', () => {
-        config.profiling = { DD_PROFILING_ENABLED: false }
+      it('should publish the config on the config-update channel during init', () => {
+        const configUpdateChannel = dc.channel('config:update')
+        const subscriber = sinon.spy()
+        configUpdateChannel.subscribe(subscriber)
+
+        try {
+          proxy.init()
+
+          sinon.assert.calledOnce(subscriber)
+          assert.strictEqual(subscriber.firstCall.args[0], config)
+        } finally {
+          configUpdateChannel.unsubscribe(subscriber)
+        }
+      })
+
+      it('should resolve profilerStarted() from the profiler module', async () => {
+        profiler.started = true
 
         proxy.init()
 
-        sinon.assert.notCalled(profiler.start)
+        assert.strictEqual(await proxy.profilerStarted(), true)
       })
 
-      it('should not load the profiler when profiling config does not exist', () => {
-        config.pro_fil_ing = 'invalidConfig'
-
-        proxy.init()
-
-        sinon.assert.notCalled(profiler.start)
+      it('should throw when profilerStarted() is called before init()', () => {
+        assert.throws(
+          () => proxy.profilerStarted(),
+          { message: 'profilerStarted() must be called after init()' }
+        )
       })
 
-      it('should load profiler when configured', () => {
-        config.profiling = { DD_PROFILING_ENABLED: 'true' }
-
-        proxy.init()
-
-        sinon.assert.called(profiler.start)
-      })
-
-      it('should throw an error since profiler fails to be imported', () => {
+      it('should not stop tracer initialization if the profiler fails to be imported', () => {
         config.profiling = { DD_PROFILING_ENABLED: 'true' }
 
         const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
@@ -698,6 +709,8 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnce(log.error)
         const expectedErr = sinon.match.instanceOf(Error).and(sinon.match.has('code', 'MODULE_NOT_FOUND'))
         sinon.assert.match(log.error.firstCall.lastArg, sinon.match(expectedErr))
+
+        return assert.doesNotReject(() => profilerImportFailureProxy.profilerStarted())
       })
 
       it('should start telemetry', () => {
