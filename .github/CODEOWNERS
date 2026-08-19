@@ -376,6 +376,7 @@
 /packages/dd-trace/src/web-tags-cache.js @DataDog/profiling-js
 /packages/dd-trace/test/exporters/common/form-data.spec.js @DataDog/profiling-js
 /packages/dd-trace/test/otel-thread-ctx.spec.js @DataDog/profiling-js
+/packages/dd-trace/test/profiler.spec.js @DataDog/profiling-js
 /packages/dd-trace/test/web-tags-cache.spec.js @DataDog/profiling-js
 
 # Language Platform
