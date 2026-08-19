@@ -694,6 +694,20 @@ describe('OpenTelemetry Traces', () => {
         }
       })
 
+      it('omits a numeric int-typed attribute that is not an unsigned integer', () => {
+        // `Number.isInteger(-1)` is true, but a negative port or status is malformed, and `meta`
+        // and trace metrics both reject it.
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({ meta: {}, metrics: { 'server.port': -1, 'http.response.status_code': -1 } })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+        for (const key of ['server.port', 'http.response.status_code']) {
+          assert.strictEqual(attributes.find((attribute) => attribute.key === key), undefined, `${key} must be omitted`)
+        }
+      })
+
       it('does not promote the int-typed keys when OTel semantics are disabled', () => {
         const transformer = new OtlpTraceTransformer({})
         const span = createMockSpan({ meta: { 'server.port': '8080' }, metrics: {} })
