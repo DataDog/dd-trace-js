@@ -57,6 +57,7 @@ const NETWORK_DESTINATION_PORT = 'network.destination.port'
 // plausible one: '', whitespace, '0x10', '1e2', ' 200 '. Trace metrics and the OTLP exporter
 // both validate through here so they cannot disagree about what a status is.
 const UNSIGNED_INTEGER = /^\d+$/
+const INT_VALUED_OTEL_ATTRIBUTES = new Set([HTTP_RESPONSE_STATUS_CODE, SERVER_PORT])
 
 function isCanonicalIntegerAttribute (value) {
   if (typeof value === 'number') return Number.isInteger(value) && value >= 0
@@ -211,7 +212,11 @@ function applyHttpOtelSemantics (formattedSpan) {
   }
   const newMetrics = {}
   for (const key of Object.keys(metrics)) {
-    if (key !== NETWORK_DESTINATION_PORT) newMetrics[key] = metrics[key]
+    // The int-typed OTel attributes are derived below and promoted from `meta` at export, so a
+    // numeric copy a hook left here would be exported a second time, with its own value.
+    if (key !== NETWORK_DESTINATION_PORT && !INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
+      newMetrics[key] = metrics[key]
+    }
   }
 
   const kind = meta['span.kind']
@@ -296,6 +301,7 @@ module.exports = {
   INSTRUMENTATION_HTTP_RESOURCE,
   NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
   decomposeServerUrl, // exercised directly by the helper spec
+  INT_VALUED_OTEL_ATTRIBUTES,
   isCanonicalIntegerAttribute,
   otelHttpResourceName,
   runHttpRequestHook,

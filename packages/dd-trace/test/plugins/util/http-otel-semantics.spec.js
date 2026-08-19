@@ -398,6 +398,25 @@ describe('http-otel-semantics', () => {
       }
     })
 
+    it('drops a numeric copy of a derived attribute so OTLP cannot carry it twice', () => {
+      // A hook setting a numeric value lands in `metrics`, while the attribute is derived into
+      // `meta` from the legacy key. Exporting both would emit the attribute twice.
+      const span = run(
+        {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.url': 'http://h:8080/p',
+          'http.status_code': '500',
+        },
+        { 'http.response.status_code': 200, 'server.port': 9999 }
+      )
+
+      assert.strictEqual(span.meta['http.response.status_code'], '500')
+      assert.strictEqual(span.meta['server.port'], '8080')
+      assert.ok(!Object.hasOwn(span.metrics, 'http.response.status_code'))
+      assert.ok(!Object.hasOwn(span.metrics, 'server.port'))
+    })
+
     it('does not blame the status for an error the application recorded itself', () => {
       // A request hook can mark a span as an error while the response status stays inside the
       // validator's accepted range. Capture time leaves the status-error marker off in that

@@ -6,7 +6,10 @@ const { VERSION } = require('../../../../../version')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
 const { SAMPLING_PRIORITY_KEY } = require('../../constants')
-const { isCanonicalIntegerAttribute } = require('../../plugins/util/http-otel-semantics')
+const {
+  INT_VALUED_OTEL_ATTRIBUTES,
+  isCanonicalIntegerAttribute,
+} = require('../../plugins/util/http-otel-semantics')
 
 const { protoSpanKind } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
@@ -82,11 +85,6 @@ const DD_ERROR_META_KEYS = new Set(['error.message'])
 // Typed as ints by the semantic conventions but carried in `meta`, since the agent protocol is
 // all strings. Promoted back here rather than duplicated into `metrics`, which would emit the
 // attribute twice with two types. Same approach as DataDog/dd-trace-go#4888.
-const INT_VALUED_OTEL_ATTRIBUTES = new Set([
-  'http.response.status_code',
-  'server.port',
-])
-
 /**
  * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
  *
@@ -256,7 +254,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         if (
           this.#otelTraceSemanticsEnabled &&
           INT_VALUED_OTEL_ATTRIBUTES.has(key) &&
-          !Number.isInteger(value)
+          !isCanonicalIntegerAttribute(value)
         ) {
           continue
         }
