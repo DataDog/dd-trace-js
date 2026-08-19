@@ -25,9 +25,11 @@ function extractContext (traceContext) {
 
 function getInstanceId (invocationContext) {
   const attributes = invocationContext?.traceContext?.attributes
-  if (!attributes) return
+  const fromAttributes = attributes &&
+    (attributes['durabletask.task.instance_id'] || attributes.DurableFunctionsInstanceId)
+  if (fromAttributes) return fromAttributes
 
-  return attributes['durabletask.task.instance_id'] || attributes.DurableFunctionsInstanceId
+  return invocationContext?.df?.instanceId
 }
 
 function parentContextFromOrchestrationMeta (meta) {
@@ -45,8 +47,14 @@ function resolveActivityParentContext (invocationContext) {
     return api.trace.setSpan(extractContext(traceContext), orchestrationSpan)
   }
 
-  const { readOrchestrationSpanMetaSync } = require('./otel-orchestration-store')
-  const meta = readOrchestrationSpanMetaSync(instanceId, traceContext)
+  const {
+    readOrchestrationSpanMetaFromSharedStoreSync,
+    readOrchestrationSpanMetaSync,
+  } = require('./otel-orchestration-store')
+  let meta = readOrchestrationSpanMetaSync(instanceId, traceContext)
+  if (!meta) {
+    meta = readOrchestrationSpanMetaFromSharedStoreSync(instanceId, traceContext)
+  }
   if (meta) {
     return parentContextFromOrchestrationMeta(meta)
   }

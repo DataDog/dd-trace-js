@@ -50,18 +50,18 @@ function traceGenericOrchestrationHandler (handler, functionName) {
     const { runWithInvocationContext, getInstanceId } = require('./helpers/azure-trace-context')
     const {
       completeOrchestrationSpan,
-      ensureOrchestrationMeta,
+      ensureOrchestrationMetaAsync,
     } = require('./helpers/otel-orchestration-store')
 
     return runWithInvocationContext(args, 'orchestration-generic', () => {
       const invocationContext = args[1]
       const instanceId = getInstanceId(invocationContext)
 
-      if (instanceId) {
-        ensureOrchestrationMeta(instanceId, invocationContext, functionName)
-      }
-
       return (async () => {
+        if (instanceId) {
+          await ensureOrchestrationMetaAsync(instanceId, invocationContext, functionName)
+        }
+
         try {
           const result = await handler.apply(this, args)
           const runtimeStatus = invocationContext?.traceContext?.attributes?.DurableFunctionsRuntimeStatus

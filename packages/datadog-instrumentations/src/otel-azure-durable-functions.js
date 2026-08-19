@@ -41,10 +41,13 @@ function entityWrapper (method) {
 
 function activityWrapper (method) {
   return function (activityName, activityOptions) {
-    if (activityOptions && typeof activityOptions.handler === 'function') {
-      // Always wrap activities with the async tracer so parent resolution can read
-      // the shared orchestration store (Azure Table) when the activity runs on a
-      // different worker than the HTTP trigger or orchestrator.
+    if (typeof activityOptions === 'function') {
+      arguments[1] = shimmer.wrapFunction(
+        activityOptions,
+        handler => wrapAsyncWithTraceContext(TRACER_NAME, 'durable-activity', handler, activityName),
+      )
+    } else if (activityOptions && typeof activityOptions.handler === 'function') {
+      // Async wrap so parent resolution can read the shared store cross-worker.
       shimmer.wrap(activityOptions, 'handler', handler =>
         wrapAsyncWithTraceContext(TRACER_NAME, 'durable-activity', handler, activityName),
       )
@@ -71,8 +74,9 @@ function wrapOrchestrationHandler (handler, functionName) {
     const { unregisterOrchestrationSpan } = require('./helpers/otel-orchestration-registry')
 
     const instanceId = getInstanceId(invocationContext)
+    const isReplaying = invocationContext?.df?.isReplaying !== false
 
-    if (instanceId) {
+    if (instanceId && !isReplaying) {
       ensureOrchestrationMeta(instanceId, invocationContext, functionName)
     }
 
@@ -87,13 +91,13 @@ function wrapOrchestrationHandler (handler, functionName) {
         step = gen.next(input)
       }
 
-      if (instanceId) {
+      if (instanceId && !isReplaying) {
         completeOrchestrationSpan(TRACER_NAME, instanceId, invocationContext, functionName)
       }
 
       return step.value
     } catch (error) {
-      if (instanceId) {
+      if (instanceId && !isReplaying) {
         completeOrchestrationSpan(TRACER_NAME, instanceId, invocationContext, functionName, error)
       }
       throw error
