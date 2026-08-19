@@ -13,7 +13,6 @@ const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-err
 const {
   HTTP_STATUS_ERROR,
   INSTRUMENTATION_HTTP_RESOURCE,
-  runHttpRequestHook,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
@@ -118,7 +117,7 @@ class HttpClientPlugin extends ClientPlugin {
       addRequestHeaders(req, span, this.config)
     }
 
-    runHttpRequestHook(span, this.config.hooks.request, req, res)
+    this.config.hooks.request(span, req, res)
 
     super.finish(ctx)
   }

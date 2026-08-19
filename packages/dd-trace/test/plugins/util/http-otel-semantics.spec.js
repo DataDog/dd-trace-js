@@ -7,27 +7,9 @@ const {
   INSTRUMENTATION_HTTP_RESOURCE,
   applyHttpOtelSemantics,
   decomposeServerUrl,
-  runHttpRequestHook,
 } = require('../../../src/plugins/util/http-otel-semantics')
 
 describe('http-otel-semantics', () => {
-  describe('runHttpRequestHook', () => {
-    it('does not read span tags when OTel semantics are disabled', () => {
-      const span = {
-        context: () => {
-          throw new Error('context must not be read')
-        },
-      }
-      let received
-
-      runHttpRequestHook(span, (hookSpan, arg1, arg2) => {
-        received = [hookSpan, arg1, arg2]
-      }, 'request', 'response')
-
-      assert.deepStrictEqual(received, [span, 'request', 'response'])
-    })
-  })
-
   describe('decomposeServerUrl', () => {
     it('splits scheme, address, port, path, and query', () => {
       assert.deepStrictEqual(

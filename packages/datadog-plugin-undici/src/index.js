@@ -13,7 +13,6 @@ const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-err
 const {
   HTTP_STATUS_ERROR,
   INSTRUMENTATION_HTTP_RESOURCE,
-  runHttpRequestHook,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 
 const {
@@ -134,7 +133,7 @@ class UndiciPlugin extends HttpClientPlugin {
 
     const { span, store } = ctx
 
-    runHttpRequestHook(span, this.config.hooks.request, null, null)
+    this.config.hooks.request(span, null, null)
 
     span.finish()
 
@@ -176,7 +175,7 @@ class UndiciPlugin extends HttpClientPlugin {
     const { span, store } = ctx
 
     // Call the request hook if configured
-    runHttpRequestHook(span, this.config.hooks.request, null, null)
+    this.config.hooks.request(span, null, null)
 
     // Finish the span
     span.finish()
@@ -202,7 +201,7 @@ class UndiciPlugin extends HttpClientPlugin {
     }
 
     // Call the request hook if configured
-    runHttpRequestHook(span, this.config.hooks.request, null, null)
+    this.config.hooks.request(span, null, null)
 
     // Finish the span
     span.finish()

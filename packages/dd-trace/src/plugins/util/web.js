@@ -20,7 +20,6 @@ const {
   INSTRUMENTATION_HTTP_RESOURCE,
   isInstrumentationOwnedResource,
   NETWORK_PEER_ADDRESS,
-  runHttpRequestHook,
   setInstrumentationHttpResource,
 } = require('./http-otel-semantics')
 
@@ -325,12 +324,7 @@ const web = {
     addRequestHeaders(context)
     addResponseTags(context)
 
-    runHttpRequestHook(
-      context.span,
-      context.config.hooks.request,
-      req,
-      res
-    )
+    context.config.hooks.request(context.span, req, res)
     addResourceTag(context)
 
     context.span.finish()

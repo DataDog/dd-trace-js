@@ -7,7 +7,6 @@ const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const {
   HTTP_STATUS_ERROR,
   INSTRUMENTATION_HTTP_RESOURCE,
-  runHttpRequestHook,
   setInstrumentationHttpResource,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const web = require('../../dd-trace/src/plugins/util/web')
@@ -114,7 +113,7 @@ class NextPlugin extends ServerPlugin {
       'http.status_code': res.statusCode,
     })
 
-    runHttpRequestHook(span, this.config.hooks.request, req, res)
+    this.config.hooks.request(span, req, res)
 
     span.finish()
   }
