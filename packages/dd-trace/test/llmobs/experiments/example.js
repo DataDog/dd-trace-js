@@ -40,11 +40,11 @@ async function runExperiment (experiments) {
   console.log('\n=== Experiment: topic relevance ===')
   const dataset = experiments.createDataset('node-tracer-topic-relevance', 'demo dataset')
     .addRecord({ prompt: 'I love hiking in the mountains on weekends.', topics: 'outdoor, travel' }, 'true',
-      { source: 'synthetic', difficulty: 'easy' })
+      { source: 'synthetic', difficulty: 'easy' }, ['split:train'])
     .addRecord({ prompt: 'Explain quantum entanglement in two sentences.', topics: 'outdoor, travel' }, 'false',
-      { source: 'synthetic', difficulty: 'easy' })
+      { source: 'synthetic', difficulty: 'easy' }, ['split:eval'])
     .addRecord({ prompt: 'Best Italian restaurants in Brooklyn?', topics: 'food, nyc' }, 'true',
-      { source: 'user-report', difficulty: 'medium' })
+      { source: 'user-report', difficulty: 'medium' }, ['split:eval', 'domain:food'])
 
   const result = await experiments.experiment({
     name: 'topic-relevance-demo',
@@ -75,14 +75,18 @@ async function runDatasetOps (experiments) {
   console.log('\n=== Dataset operations: create / push / pull ===')
   const name = `node-tracer-capitals-${Date.now()}`
   const dataset = experiments.createDataset(name, 'country -> capital')
-    .addRecord({ country: 'France' }, 'Paris', { continent: 'Europe' })
-    .addRecord({ country: 'Japan' }, 'Tokyo', { continent: 'Asia' })
+    .addRecord({ country: 'France' }, 'Paris', { continent: 'Europe' }, ['continent:europe'])
+    .addRecord({ country: 'Japan' }, 'Tokyo', { continent: 'Asia' }, ['continent:asia'])
   await dataset.push()
   console.log(`Created dataset id : ${dataset.id()}`)
   console.log(`Dataset URL        : ${dataset.url()}`)
   console.log(`Pushed records     : ${dataset.records().length}`)
 
-  const pulled = await experiments.pullDataset(name, { expectedRecordCount: dataset.records().length })
+  dataset.addTags(0, ['split:eval'])
+  dataset.replaceTags(1, ['continent:asia', 'split:train'])
+  await dataset.push()
+
+  const pulled = await experiments.pullDataset(name, { expectedRecordCount: 1, tags: ['split:eval'] })
   console.log(`Pulled dataset id  : ${pulled.id()}`)
   console.log(`Pulled records     : ${pulled.records().length}`)
   for (const [i, record] of pulled.records().entries()) {

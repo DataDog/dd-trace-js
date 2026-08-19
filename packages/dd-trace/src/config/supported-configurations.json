@@ -2452,6 +2452,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_BROWSER_BUNYAN_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_BSON_ENABLED": [
       {
         "implementation": "A",
@@ -3512,6 +3519,13 @@
       }
     ],
     "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_TRACE_OTEL_CTX_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
