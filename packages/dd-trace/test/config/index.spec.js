@@ -5264,7 +5264,7 @@ rules:
       assert.strictEqual(config.runtimeMetrics.enabled, false)
       assert.strictEqual(config.dsmEnabled, false)
       assert.strictEqual(config.dynamicInstrumentation.enabled, true)
-      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
+      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
       assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
       assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
@@ -5395,8 +5395,9 @@ rules:
     })
 
     for (const exporter of ['datadog', 'jest_worker']) {
-      it(`should preserve the Test Optimization ${exporter} exporter`, () => {
+      it(`should preserve the Test Optimization ${exporter} exporter and the OTLP traces exporter`, () => {
         process.env.DD_AGENTLESS_ENABLED = 'true'
+        process.env.OTEL_TRACES_EXPORTER = 'otlp'
         const config = getConfig({
           isCiVisibility: true,
           experimental: { exporter },
@@ -5404,6 +5405,7 @@ rules:
 
         assert.strictEqual(config.experimental.exporter, exporter)
         assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
+        assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       })
     }
 
