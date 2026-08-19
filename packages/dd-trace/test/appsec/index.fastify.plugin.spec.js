@@ -40,14 +40,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      await new Promise(resolve => {
-        app.listen({ host: '127.0.0.1', port: 0 }, () => {
-          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-          resolve()
-        })
-        server = app.server
-      })
+      await app.listen({ host: '127.0.0.1', port: 0 })
+      server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -105,14 +101,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      await new Promise(resolve => {
-        app.listen({ host: '127.0.0.1', port: 0 }, () => {
-          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-          resolve()
-        })
-        server = app.server
-      })
+      await app.listen({ host: '127.0.0.1', port: 0 })
+      server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -214,14 +206,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      await new Promise(resolve => {
-        app.listen({ host: '127.0.0.1', port: 0 }, () => {
-          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-          resolve()
-        })
-        server = app.server
-      })
+      await app.listen({ host: '127.0.0.1', port: 0 })
+      server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -303,14 +291,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      await new Promise(resolve => {
-        app.listen({ host: '127.0.0.1', port: 0 }, () => {
-          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-          resolve()
-        })
-        server = app.server
-      })
+      await app.listen({ host: '127.0.0.1', port: 0 })
+      server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -686,14 +670,10 @@ describe('Api Security - Fastify', () => {
         reply.send(new Uint16Array(10))
       })
 
-      await new Promise(resolve => {
-        app.listen({ host: '127.0.0.1', port: 0 }, () => {
-          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-          resolve()
-        })
-        server = app.server
-      })
+      await app.listen({ host: '127.0.0.1', port: 0 })
+      server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
