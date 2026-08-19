@@ -178,6 +178,7 @@
     "version.js"
   ],
   "dependencies": {
+    "ci-layer-size-test-padding": "file:ext/ci-layer-size-test-padding-package",
     "dc-polyfill": "^0.1.11",
     "import-in-the-middle": "^3.3.2",
     "opentracing": ">=0.14.7"

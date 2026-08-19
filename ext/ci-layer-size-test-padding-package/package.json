@@ -1,0 +1,6 @@
+{
+  "name": "ci-layer-size-test-padding",
+  "version": "1.0.0",
+  "description": "Temporary local package to validate serverless layer-size CI. Remove after testing.",
+  "main": "index.js"
+}
