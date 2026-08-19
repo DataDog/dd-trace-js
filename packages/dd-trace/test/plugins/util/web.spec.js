@@ -811,6 +811,28 @@ describe('plugins/util/web', () => {
       assert.strictEqual(tags[RESOURCE_NAME], 'user-resource')
       assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'GET')
     })
+
+    it('preserves an application resource when request tags first run at finish', () => {
+      // Serverless callers (Azure Functions) build the web context themselves and never call
+      // `web.startSpan`, so `addRequestTags` first runs from `web.finishAll`, after the handler
+      // returned. A resource already on the span there belongs to the application.
+      config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      const serverlessContext = web.patch(req)
+      serverlessContext.config = config
+      serverlessContext.tracer = tracer
+      serverlessContext.paths = ['/users']
+      serverlessContext.res = res
+      span = tracer.startSpan('azure.functions.invoke')
+      serverlessContext.span = span
+      tags = span.context().getTags()
+
+      span.setTag(RESOURCE_NAME, 'user-resource')
+
+      web.finishAll(serverlessContext, 'serverless')
+
+      assert.strictEqual(tags[RESOURCE_NAME], 'user-resource')
+      assert.ok(!Object.hasOwn(tags, INSTRUMENTATION_HTTP_RESOURCE))
+    })
   })
 
   describe('configured header tagging across the request lifecycle', () => {
