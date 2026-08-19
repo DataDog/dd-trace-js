@@ -5,10 +5,14 @@ const hooks = require('./hooks')
 /**
  * Loads an instrumentation module for an explicitly enabled integration.
  * @param {string} name
+ * @returns {void}
  */
 module.exports = function registerInstrumentation (name) {
   const hook = hooks[name]
-  const register = hook?.fn ?? hook
+  const load = hook?.fn ?? hook
 
-  if (typeof register === 'function') register()
+  if (typeof load !== 'function') return
+
+  const instrumentation = load()
+  instrumentation?.register?.()
 }
