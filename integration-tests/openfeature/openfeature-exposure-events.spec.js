@@ -72,7 +72,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         await agent.stop()
       })
 
-      it('should generate exposure events with manual flush', () => new Promise((resolve, reject) => {
+      // The writer exposes no delivery acknowledgment, so callback completion keeps later batches observable.
+      it('should generate exposure events with manual flush', (done) => {
         const configId = 'org-42-env-test'
         const exposureEvents = []
         let receivedAckUpdate = false
@@ -113,7 +114,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
 
               endIfDone()
             } catch (error) {
-              reject(error)
+              done(error)
             }
           }
         })
@@ -135,7 +136,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
             // Trigger manual flush to send exposure events
             await fetch(`${proc.url}/flush`)
           } catch (error) {
-            reject(error)
+            done(error)
           }
         })
 
@@ -147,9 +148,9 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         })
 
         function endIfDone () {
-          if (receivedAckUpdate && exposureEvents.length === 2) resolve()
+          if (receivedAckUpdate && exposureEvents.length === 2) done()
         }
-      }))
+      })
     })
 
     describe('with automatic flush', () => {
@@ -173,7 +174,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         await agent.stop()
       })
 
-      it('should handle multiple flag evaluations with automatic flush', () => new Promise((resolve, reject) => {
+      // Callback completion lets a later unexpected exposure batch fail after the expected batch.
+      it('should handle multiple flag evaluations with automatic flush', (done) => {
         const configId = 'org-42-env-test'
         const exposureEvents = []
 
@@ -203,9 +205,9 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
               const userIds = new Set(exposureEvents.map(e => e.subject.id))
               assert.deepStrictEqual(userIds, new Set(['user-1', 'user-2', 'user-3']))
 
-              resolve()
+              done()
             } catch (error) {
-              reject(error)
+              done(error)
             }
           }
         })
@@ -223,7 +225,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
 
             // No manual flush - let automatic flush handle it (default 1s interval)
           } catch (error) {
-            reject(error)
+            done(error)
           }
         })
 
@@ -232,7 +234,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           id: configId,
           config: ufcPayloads.testBooleanAndStringFlags,
         })
-      }))
+      })
     })
   })
 

@@ -16,10 +16,16 @@ describe('describe', function () {
     console.log('afterEach')
   })
 
-  it('is not nested', function () {
+  it('is not nested', function (done) {
     // eslint-disable-next-line no-console
     console.log('is not nested')
-    assert.strictEqual(process.env.SHOULD_FAIL ? globalAttempts++ : 1, 1)
+    let error
+    try {
+      assert.strictEqual(process.env.SHOULD_FAIL ? globalAttempts++ : 1, 1)
+    } catch (caughtError) {
+      error = caughtError
+    }
+    done(error)
   })
 
   context('context', () => {
