@@ -26,7 +26,6 @@ presets:
     cases:
       - dd-trace-js-package-manager-001
       - dd-trace-js-new-cache-integration-005
-      - dd-trace-js-hot-path-review-006
       - dd-trace-js-real-path-tests-007
       - dd-trace-js-channel-cardinality-008
     runs: 3 # 6 pairwise comparisons per selected case.
