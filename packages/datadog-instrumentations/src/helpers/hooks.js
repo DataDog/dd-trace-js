@@ -2,6 +2,12 @@
 
 module.exports = {
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
+  '@supabase/auth-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@supabase/functions-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@supabase/postgrest-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@supabase/realtime-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@supabase/storage-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@supabase/supabase-js': { esmFirst: true, fn: () => require('../supabase') },
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
   dns: () => require('../dns'),

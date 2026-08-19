@@ -418,6 +418,7 @@ tracer.use('router', { middleware: false });
 tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
+tracer.use('supabase');
 tracer.use('tedious');
 tracer.use('undici');
 tracer.use('vitest');
