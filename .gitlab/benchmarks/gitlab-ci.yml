@@ -146,7 +146,6 @@ benchmark-serverless:
     - interruptible: true
       allow_failure: false
   variables:
-    DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"
     UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
     UPSTREAM_PROJECT_URL: $CI_PROJECT_URL
     UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
@@ -158,3 +157,4 @@ benchmark-serverless:
     UPSTREAM_GITLAB_USER_EMAIL: $GITLAB_USER_EMAIL
     # only available on Merge Requests
     UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+    DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"
