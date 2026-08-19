@@ -6,6 +6,7 @@ const { VERSION } = require('../../../../../version')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
 const { SAMPLING_PRIORITY_KEY } = require('../../constants')
+const { isCanonicalIntegerAttribute } = require('../../plugins/util/http-otel-semantics')
 
 const { protoSpanKind } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
@@ -85,9 +86,6 @@ const INT_VALUED_OTEL_ATTRIBUTES = new Set([
   'http.response.status_code',
   'server.port',
 ])
-// Both keys are unsigned integers. Matching them exactly keeps `Number` away from the values it
-// coerces to a plausible 0: '', whitespace, '0x10', '1e2'.
-const UNSIGNED_INTEGER = /^\d+$/
 
 /**
  * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
@@ -243,7 +241,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         if (EXCLUDED_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
-          if (UNSIGNED_INTEGER.test(value)) {
+          if (isCanonicalIntegerAttribute(value)) {
             attributes.push({ key, value: { intValue: Number(value) } })
           }
           continue

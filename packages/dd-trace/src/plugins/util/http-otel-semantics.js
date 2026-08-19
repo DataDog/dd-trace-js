@@ -52,6 +52,17 @@ const NETWORK_DESTINATION_PORT = 'network.destination.port'
 
 // IPv6 literals arrive bracketed (URL.hostname / out.host = `[::1]`); OTel
 // `server.address` is the bare address.
+// The int-typed OTel attributes (`server.port`, `http.response.status_code`) are unsigned
+// integers. Matching them exactly keeps `Number` away from the values it coerces into a
+// plausible one: '', whitespace, '0x10', '1e2', ' 200 '. Trace metrics and the OTLP exporter
+// both validate through here so they cannot disagree about what a status is.
+const UNSIGNED_INTEGER = /^\d+$/
+
+function isCanonicalIntegerAttribute (value) {
+  if (typeof value === 'number') return Number.isInteger(value) && value >= 0
+  return typeof value === 'string' && UNSIGNED_INTEGER.test(value)
+}
+
 function stripIpv6Brackets (host) {
   return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host
 }
@@ -285,6 +296,7 @@ module.exports = {
   INSTRUMENTATION_HTTP_RESOURCE,
   NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
   decomposeServerUrl, // exercised directly by the helper spec
+  isCanonicalIntegerAttribute,
   otelHttpResourceName,
   runHttpRequestHook,
   setInstrumentationHttpResource,
