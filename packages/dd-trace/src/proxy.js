@@ -45,16 +45,7 @@ const OPENFEATURE_STATE_ACTIVE = 2
 
 const configUpdateChannel = dc.channel('config:update')
 
-// do not stop tracer initialization if the profiler fails to be imported
-let profiler
-try {
-  profiler = require('./profiler')
-} catch (error) {
-  log.error(
-    'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
-    error
-  )
-}
+const profiler = require('./profiler')
 
 class LazyModule {
   constructor (provider) {
@@ -417,10 +408,10 @@ class Tracer extends NoopProxy {
     // If profiling is not enabled, runWithLabels still works as a passthrough (just calls fn()).
     const profiling = {
       setCustomLabelKeys (keys) {
-        profiler?.setCustomLabelKeys(keys)
+        profiler.setCustomLabelKeys(keys)
       },
       runWithLabels (labels, fn) {
-        return profiler ? profiler.runWithLabels(labels, fn) : fn()
+        return profiler.runWithLabels(labels, fn)
       },
     }
     Reflect.defineProperty(this, 'profiling', { value: profiling, configurable: true, enumerable: true })
@@ -435,7 +426,7 @@ class Tracer extends NoopProxy {
       // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
-    return Promise.resolve(profiler?.started ?? false)
+    return Promise.resolve(profiler.started ?? false)
   }
 
   /**

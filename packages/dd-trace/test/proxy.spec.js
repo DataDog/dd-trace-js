@@ -688,31 +688,6 @@ describe('TracerProxy', () => {
         )
       })
 
-      it('should not stop tracer initialization if the profiler fails to be imported', () => {
-        config.profiling = { DD_PROFILING_ENABLED: 'true' }
-
-        const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
-          './tracer': DatadogTracer,
-          './noop/tracer': NoopTracer,
-          './config': Config,
-          './runtime_metrics': runtimeMetrics,
-          './log': log,
-          './profiler': null, // this will cause the import failure error
-          './appsec': appsec,
-          './telemetry': telemetry,
-          './remote_config': RemoteConfig,
-        })
-
-        const profilerImportFailureProxy = new ProfilerImportFailureProxy()
-        profilerImportFailureProxy.init()
-
-        sinon.assert.calledOnce(log.error)
-        const expectedErr = sinon.match.instanceOf(Error).and(sinon.match.has('code', 'MODULE_NOT_FOUND'))
-        sinon.assert.match(log.error.firstCall.lastArg, sinon.match(expectedErr))
-
-        return assert.doesNotReject(() => profilerImportFailureProxy.profilerStarted())
-      })
-
       it('should start telemetry', () => {
         proxy.init()
 
