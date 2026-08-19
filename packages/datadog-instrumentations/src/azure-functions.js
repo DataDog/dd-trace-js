@@ -8,6 +8,11 @@ const {
 
 const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke')
 
+// Orchestrators register via app.generic; activities/entities use the durable-functions hook.
+const azureDurableFunctionsChannel = dc.tracingChannel('datadog:azure:durable-functions:invoke')
+
+const ORCHESTRATION_TRIGGER_TYPE = 'orchestrationTrigger'
+
 addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (azureFunction) => {
   const { app } = azureFunction
 
@@ -29,8 +34,42 @@ addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (a
   // CosmosDB triggers
   shimmer.wrap(app, 'cosmosDB', wrapHandler)
 
+  // Durable Functions orchestration triggers
+  shimmer.wrap(app, 'generic', wrapGeneric)
+
   return azureFunction
 })
+
+function wrapGeneric (method) {
+  return function (name, options) {
+    if (options?.trigger?.type === ORCHESTRATION_TRIGGER_TYPE && typeof options.handler === 'function') {
+      shimmer.wrap(options, 'handler', handler => traceOrchestrationHandler(handler, name))
+    }
+    return method.apply(this, arguments)
+  }
+}
+
+// Span the registered handler (not the generator body), and skip replays.
+function traceOrchestrationHandler (handler, functionName) {
+  return function (...args) {
+    if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, args)
+
+    const orchestrationBinding = args[0]
+    if (orchestrationBinding?.isReplaying !== false) return handler.apply(this, args)
+
+    const traceContext = args[1]?.traceContext
+    return azureDurableFunctionsChannel.tracePromise(
+      handler,
+      {
+        trigger: 'Orchestration',
+        functionName,
+        instanceId: orchestrationBinding.instanceId,
+        traceparent: traceContext?.traceParent,
+        tracestate: traceContext?.traceState,
+      },
+      this, ...args)
+  }
+}
 
 // The http methods are overloaded so we need to check which type of argument was passed in order to wrap the handler
 // The arguments are either an object with a handler property or the handler function itself
