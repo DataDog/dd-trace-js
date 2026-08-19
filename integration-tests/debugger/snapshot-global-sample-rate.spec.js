@@ -13,7 +13,6 @@ describe('Dynamic Instrumentation', function () {
     describe('with snapshot', function () {
       beforeEach(() => { t.triggerBreakpoint() })
 
-      // The existing guard prevents teardown errors from completing the test after sampling has finished.
       it('should respect global max snapshot sampling rate', function (_done) {
         const MAX_SNAPSHOTS_PER_SECOND_GLOBALLY = 25
         const snapshotsPerSecond = MAX_SNAPSHOTS_PER_SECOND_GLOBALLY * 2

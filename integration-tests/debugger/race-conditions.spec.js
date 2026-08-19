@@ -6,7 +6,6 @@ describe('Dynamic Instrumentation', function () {
   const t = setup({ testApp: 'target-app/basic.js', dependencies: ['fastify'] })
 
   describe('race conditions', function () {
-    // The timeout and input event are competing terminals; a late second terminal must fail the test.
     it('should remove the last breakpoint completely before trying to add a new one', function (done) {
       const rcConfig2 = t.generateRemoteConfig()
 
