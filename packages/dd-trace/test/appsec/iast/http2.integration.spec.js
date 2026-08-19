@@ -27,6 +27,22 @@ function sourceTypeOf (value) {
   return ranges?.[0]?.iinfo.type
 }
 
+/**
+ * @param {number} [requestSampling]
+ */
+function enableIast (requestSampling = 100) {
+  const config = getConfigFresh({
+    iast: {
+      enabled: true,
+      requestSampling,
+      maxConcurrentRequests: 100,
+      maxContextOperations: 100,
+    },
+  })
+  iast.enable(config)
+  rewriter.enable(config)
+}
+
 describe('IAST HTTP/2 server', () => {
   let http2
   let server
@@ -43,16 +59,7 @@ describe('IAST HTTP/2 server', () => {
   beforeEach(() => {
     overheadController.clearGlobalRouteMap()
     vulnerabilityReporter.clearCache()
-    const config = getConfigFresh({
-      iast: {
-        enabled: true,
-        requestSampling: 100,
-        maxConcurrentRequests: 100,
-        maxContextOperations: 100,
-      },
-    })
-    iast.enable(config)
-    rewriter.enable(config)
+    enableIast()
   })
 
   afterEach(() => {
@@ -107,6 +114,25 @@ describe('IAST HTTP/2 server', () => {
     )
   }
 
+  /**
+   * @param {string} path
+   * @param {(req: { headers: import('node:http2').IncomingHttpHeaders, url?: string }) => unknown} readValue
+   * @param {string | undefined} expectedType
+   * @param {(error?: Error) => void} done
+   * @param {import('node:http2').OutgoingHttpHeaders} [headers]
+   * @param {number} [expectedEnabled]
+   */
+  function assertSource (path, readValue, expectedType, done, headers = {}, expectedEnabled = 1) {
+    let actualType
+    handler = req => { actualType = sourceTypeOf(readValue(req)) }
+    agent.assertSomeTraces(traces => {
+      const span = getWebSpan(traces)
+      assert.strictEqual(span.metrics['_dd.iast.enabled'], expectedEnabled)
+      assert.strictEqual(actualType, expectedType)
+    }).then(done, done)
+    request(path, headers).catch(done)
+  }
+
   describe('compatibility API (createServer(handler))', () => {
     beforeEach(() => listen(() => http2.createServer((req, res) => {
       handler(req, res)
@@ -115,23 +141,13 @@ describe('IAST HTTP/2 server', () => {
     })))
 
     it('taints the request header values', done => {
-      let headerType
-      handler = (req) => { headerType = sourceTypeOf(req.headers['x-custom']) }
-      agent.assertSomeTraces(traces => {
-        getWebSpanFrom(traces)
-        assert.strictEqual(headerType, HTTP_REQUEST_HEADER_VALUE)
-      }).then(done, done)
-      request('/', { 'x-custom': 'aCustomValue' }).catch(done)
+      assertSource('/', req => req.headers['x-custom'], HTTP_REQUEST_HEADER_VALUE, done, {
+        'x-custom': 'aCustomValue',
+      })
     })
 
     it('taints the request url', done => {
-      let urlType
-      handler = (req) => { urlType = sourceTypeOf(req.url) }
-      agent.assertSomeTraces(traces => {
-        getWebSpanFrom(traces)
-        assert.strictEqual(urlType, HTTP_REQUEST_URI)
-      }).then(done, done)
-      request('/a-path').catch(done)
+      assertSource('/a-path', req => req.url, HTTP_REQUEST_URI, done)
     })
 
     it('reports a response-side vulnerability (cookie without HttpOnly)', done => {
@@ -176,13 +192,15 @@ describe('IAST HTTP/2 server', () => {
     }))
 
     it('taints the compatibility request url as a URI', done => {
-      let urlType
-      handler = (req) => { urlType = sourceTypeOf(req.url) }
-      agent.assertSomeTraces(traces => {
-        getWebSpanFrom(traces)
-        assert.strictEqual(urlType, HTTP_REQUEST_URI)
-      }).then(done, done)
-      request('/a-path').catch(done)
+      assertSource('/a-path', req => req.url, HTTP_REQUEST_URI, done)
+    })
+
+    it('leaves the compatibility request untainted when IAST sampling skips it', done => {
+      iast.disable()
+      rewriter.disable()
+      enableIast(0)
+
+      assertSource('/an-unsampled-path', req => req.url, undefined, done, {}, 0)
     })
   })
 
@@ -200,13 +218,9 @@ describe('IAST HTTP/2 server', () => {
     }))
 
     it('taints the request header values', done => {
-      let headerType
-      handler = (req) => { headerType = sourceTypeOf(req.headers['x-custom']) }
-      agent.assertSomeTraces(traces => {
-        getWebSpanFrom(traces)
-        assert.strictEqual(headerType, HTTP_REQUEST_HEADER_VALUE)
-      }).then(done, done)
-      request('/', { 'x-custom': 'aCustomValue' }).catch(done)
+      assertSource('/', req => req.headers['x-custom'], HTTP_REQUEST_HEADER_VALUE, done, {
+        'x-custom': 'aCustomValue',
+      })
     })
 
     // On the core API user code reads the `:path` pseudo-header directly; it is
@@ -214,13 +228,7 @@ describe('IAST HTTP/2 server', () => {
     // HTTP_REQUEST_URI taint applies to the adapter's `req.url`, which only the
     // tracer's own URL sinks observe, never user code.
     it('taints the :path pseudo-header', done => {
-      let pathType
-      handler = (req) => { pathType = sourceTypeOf(req.headers[':path']) }
-      agent.assertSomeTraces(traces => {
-        getWebSpanFrom(traces)
-        assert.strictEqual(pathType, HTTP_REQUEST_HEADER_VALUE)
-      }).then(done, done)
-      request('/a-path').catch(done)
+      assertSource('/a-path', req => req.headers[':path'], HTTP_REQUEST_HEADER_VALUE, done)
     })
 
     it('reports a response-side vulnerability (cookie without HttpOnly)', done => {

@@ -12,10 +12,8 @@ const startServerCh = channel('apm:http2:server:request:start')
 const errorServerCh = channel('apm:http2:server:request:error')
 const adoptServerCh = channel('apm:http2:server:request:adopt')
 const emitCh = channel('apm:http2:server:response:emit')
-// Reuse the `http` response-sink channels so the existing AppSec/IAST analyzers
-// fire for HTTP/2 too. `Http2ServerResponse` and `Http2Stream` do not share the
-// `http.ServerResponse` prototype the `http` instrumentation wraps, so without
-// these republications every response-side sink is dead for both HTTP/2 APIs.
+// HTTP/2 response types bypass the HTTP prototypes that publish these shared
+// AppSec/IAST response-sink channels.
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 const startSetHeaderCh = channel('datadog:http:server:response:set-header:start')
 const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
@@ -28,9 +26,8 @@ const PRESERVES_DUPLICATE_HEADERS = NODE_MAJOR >= 22 ||
   (NODE_MAJOR === 21 && NODE_MINOR >= 7) ||
   (NODE_MAJOR === 20 && NODE_MINOR >= 12)
 
-// Streams whose server span was already created from the 'stream' event. The
-// compatibility layer synthesizes 'request' from that same stream, so the
-// 'request' branch consults this set to avoid creating a second span.
+// The compatibility layer emits 'request' from the same stream, so remember
+// streams already traced by the mixed-server branch.
 const tracedStreams = new WeakSet()
 const responseContexts = new WeakMap()
 const wrappedStreamPrototypes = new WeakSet()
@@ -259,7 +256,6 @@ function wrapEnd (end) {
 /**
  * @param {import('node:http2').ServerHttp2Stream} stream
  * @param {StreamRequestContext} ctx
- * @returns {void}
  */
 function instrumentStreamResponse (stream, ctx) {
   const prototype = Object.getPrototypeOf(stream)
@@ -276,7 +272,6 @@ function instrumentStreamResponse (stream, ctx) {
 
 /**
  * @param {Function} respond
- * @returns {Function}
  */
 function wrapStreamRespond (respond) {
   return function (...args) {
@@ -301,7 +296,6 @@ function wrapStreamRespond (respond) {
 
 /**
  * @param {Function} respond
- * @returns {Function}
  */
 function wrapStreamRespondWithFD (respond) {
   return function (...args) {
@@ -339,7 +333,6 @@ function wrapStreamRespondWithFD (respond) {
 
 /**
  * @param {Function} respond
- * @returns {Function}
  */
 function wrapStreamRespondWithFile (respond) {
   return function (...args) {
@@ -367,7 +360,6 @@ function wrapStreamRespondWithFile (respond) {
  * @param {Function | undefined} statCheck
  * @param {StreamRequestContext} ctx
  * @param {import('node:http2').ServerHttp2Stream} stream
- * @returns {Function}
  */
 function wrapStreamStatCheck (statCheck, ctx, stream) {
   return function (...args) {
@@ -390,7 +382,6 @@ function wrapStreamStatCheck (statCheck, ctx, stream) {
 
 /**
  * @param {Function} write
- * @returns {Function}
  */
 function wrapStreamWrite (write) {
   return function (...args) {
@@ -407,7 +398,6 @@ function wrapStreamWrite (write) {
 
 /**
  * @param {Function} end
- * @returns {Function}
  */
 function wrapStreamEnd (end) {
   return function (...args) {
@@ -445,7 +435,6 @@ function publishStreamResponseStart (ctx, headers) {
 /**
  * @param {StreamRequestContext} ctx
  * @param {Record<string, unknown>} responseHeaders
- * @returns {void}
  */
 function publishStreamResponseFinish (ctx, responseHeaders) {
   if (!finishSetHeaderCh.hasSubscribers) return
@@ -478,7 +467,6 @@ function publishImplicitStreamResponse (ctx, stream) {
 
 /**
  * @param {import('node:http2').Http2ServerResponse} res
- * @returns {object}
  */
 function getResponseRequest (res) {
   return responseContexts.get(res)?.req ?? res.req
@@ -488,7 +476,6 @@ function getResponseRequest (res) {
  * @param {Record<string, unknown>} responseHeaders
  * @param {object | unknown[]} [headers]
  * @param {boolean} [preserveDuplicates]
- * @returns {Record<string, unknown>}
  */
 function addResponseHeaders (responseHeaders, headers, preserveDuplicates = false) {
   if (Array.isArray(headers)) {
@@ -521,7 +508,6 @@ function addResponseHeaders (responseHeaders, headers, preserveDuplicates = fals
  * @param {string} name
  * @param {unknown} value
  * @param {Set<string> | undefined} addedNames
- * @returns {void}
  */
 function addResponseHeader (responseHeaders, name, value, addedNames) {
   if (!addedNames?.has(name)) {
