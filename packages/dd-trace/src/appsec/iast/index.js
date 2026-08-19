@@ -124,7 +124,6 @@ function onIncomingHttpRequestEnd (data) {
 
 /**
  * @param {{ req: object }} data
- * @returns {void}
  */
 function onHttp2ServerRequestAdopt ({ req }) {
   const store = storage('legacy').getStore()

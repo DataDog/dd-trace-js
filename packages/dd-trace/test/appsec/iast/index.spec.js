@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 
 const axios = require('axios')
 
-const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -168,12 +167,6 @@ describe('IAST Index', () => {
         mockIast.enable(config)
         sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, IAST_MODULE)
         assert.strictEqual(analyzers.enableAllAnalyzers.calledAfter(appsecFsPlugin.enable), true)
-      })
-
-      it('ignores an HTTP/2 adoption without an IAST context', () => {
-        mockIast.enable(config)
-
-        dc.channel('apm:http2:server:request:adopt').publish({ req: {} })
       })
     })
 

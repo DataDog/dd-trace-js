@@ -179,6 +179,19 @@
               "mixed-context-param"
             ]
           }
+        },
+        {
+          "operator": "phrase_match",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.body"
+              }
+            ],
+            "list": [
+              "mixed-context-response"
+            ]
+          }
         }
       ],
       "transformers": [

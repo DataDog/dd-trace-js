@@ -14,6 +14,7 @@ const {
   cookieParser,
   expressProcessParams,
   queryParser,
+  responseBody,
 } = require('../../src/appsec/channels')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
@@ -39,7 +40,7 @@ describe('AppSec HTTP/2 response blocking', () => {
           enabled: false,
         },
         apiSecurity: {
-          enabled: false,
+          enabled: true,
         },
       },
     }))
@@ -69,6 +70,18 @@ describe('AppSec HTTP/2 response blocking', () => {
         port = server.address().port
         resolve()
       })
+    })
+  }
+
+  /**
+   * @param {(stream: import('node:http2').ServerHttp2Stream,
+   *   headers: import('node:http2').IncomingHttpHeaders) => void} handler
+   */
+  function listenCore (handler) {
+    return listen(() => {
+      const coreServer = http2.createServer()
+      coreServer.on('stream', handler)
+      return coreServer
     })
   }
 
@@ -124,6 +137,7 @@ describe('AppSec HTTP/2 response blocking', () => {
         cookieParser.publish({ req, res, cookies: { value: 'mixed-context-cookie' } })
         queryParser.publish({ req, res, query: { value: 'mixed-context-query' } })
         expressProcessParams.publish({ req, res, params: { value: 'mixed-context-param' } })
+        responseBody.publish({ req, res, body: { value: 'mixed-context-response' } })
         res.end()
       })
       mixedServer.on('stream', () => {})
@@ -139,19 +153,15 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('blocks core stream responses and suppresses subsequent writes', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        const fileDescriptor = openSync(__filename, 'r')
-        stream.once('close', () => closeSync(fileDescriptor))
-        stream.respond({ ':status': 404, k: '404' })
-        stream.respond({ ':status': 200 })
-        stream.respondWithFD(fileDescriptor, { ':status': 200 })
-        stream.respondWithFile(__filename, { ':status': 200 })
-        stream.write('ignored')
-        stream.end('ignored')
-      })
-      return coreServer
+    await listenCore(stream => {
+      const fileDescriptor = openSync(__filename, 'r')
+      stream.once('close', () => closeSync(fileDescriptor))
+      stream.respond({ ':status': 404, k: '404' })
+      stream.respond({ ':status': 200 })
+      stream.respondWithFD(fileDescriptor, { ':status': 200 })
+      stream.respondWithFile(__filename, { ':status': 200 })
+      stream.write('ignored')
+      stream.end('ignored')
     })
 
     const { body, headers } = await request()
@@ -161,13 +171,9 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('allows core stream writes before respond', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        stream.write('body')
-        stream.end()
-      })
-      return coreServer
+    await listenCore(stream => {
+      stream.write('body')
+      stream.end()
     })
 
     const { body, headers } = await request()
@@ -177,11 +183,7 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('allows core stream ends before respond', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => stream.end('body'))
-      return coreServer
-    })
+    await listenCore(stream => stream.end('body'))
 
     const { body, headers } = await request()
 
@@ -190,27 +192,23 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('preserves headers-sent errors for tracked core response methods', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        const fileDescriptor = openSync(__filename, 'r')
-        stream.respond({ ':status': 200 })
+    await listenCore(stream => {
+      const fileDescriptor = openSync(__filename, 'r')
+      stream.respond({ ':status': 200 })
 
-        assert.throws(() => stream.respond({ ':status': 200 }), { code: 'ERR_HTTP2_HEADERS_SENT' })
-        assert.throws(
-          () => stream.respondWithFD(fileDescriptor, { ':status': 200 }),
-          { code: 'ERR_HTTP2_HEADERS_SENT' }
-        )
-        assert.throws(
-          () => stream.respondWithFile(__filename, { ':status': 200 }),
-          { code: 'ERR_HTTP2_HEADERS_SENT' }
-        )
+      assert.throws(() => stream.respond({ ':status': 200 }), { code: 'ERR_HTTP2_HEADERS_SENT' })
+      assert.throws(
+        () => stream.respondWithFD(fileDescriptor, { ':status': 200 }),
+        { code: 'ERR_HTTP2_HEADERS_SENT' }
+      )
+      assert.throws(
+        () => stream.respondWithFile(__filename, { ':status': 200 }),
+        { code: 'ERR_HTTP2_HEADERS_SENT' }
+      )
 
-        closeSync(fileDescriptor)
-        stream.write('body')
-        stream.end()
-      })
-      return coreServer
+      closeSync(fileDescriptor)
+      stream.write('body')
+      stream.end()
     })
 
     const { body, headers } = await request()
@@ -220,19 +218,15 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('preserves invalid options errors for tracked file response methods', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        const fileDescriptor = openSync(__filename, 'r')
+    await listenCore(stream => {
+      const fileDescriptor = openSync(__filename, 'r')
 
-        assert.throws(() => stream.respondWithFD(fileDescriptor, {}, null), TypeError)
-        assert.throws(() => stream.respondWithFile(__filename, {}, null), TypeError)
+      assert.throws(() => stream.respondWithFD(fileDescriptor, {}, null), TypeError)
+      assert.throws(() => stream.respondWithFile(__filename, {}, null), TypeError)
 
-        closeSync(fileDescriptor)
-        stream.respond({ ':status': 200 })
-        stream.end('body')
-      })
-      return coreServer
+      closeSync(fileDescriptor)
+      stream.respond({ ':status': 200 })
+      stream.end('body')
     })
 
     const { body, headers } = await request()
@@ -275,21 +269,17 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('does not inspect respondWithFile headers when opening the file fails', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        stream.respondWithFile(
-          path.join(__dirname, 'missing-http2-response'),
-          { ':status': 404, k: '404' },
-          {
-            onError () {
-              stream.respond({ ':status': 200 })
-              stream.end('fallback')
-            },
-          }
-        )
-      })
-      return coreServer
+    await listenCore(stream => {
+      stream.respondWithFile(
+        path.join(__dirname, 'missing-http2-response'),
+        { ':status': 404, k: '404' },
+        {
+          onError () {
+            stream.respond({ ':status': 200 })
+            stream.end('fallback')
+          },
+        }
+      )
     })
 
     const { body, headers } = await request()
@@ -299,21 +289,17 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('inspects fallback headers after respondWithFile fails', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        stream.respondWithFile(
-          path.join(__dirname, 'missing-http2-response'),
-          { ':status': 200 },
-          {
-            onError () {
-              stream.respond({ ':status': 404, k: '404' })
-              stream.end('fallback')
-            },
-          }
-        )
-      })
-      return coreServer
+    await listenCore(stream => {
+      stream.respondWithFile(
+        path.join(__dirname, 'missing-http2-response'),
+        { ':status': 200 },
+        {
+          onError () {
+            stream.respond({ ':status': 404, k: '404' })
+            stream.end('fallback')
+          },
+        }
+      )
     })
 
     const { body, headers } = await request()
@@ -323,18 +309,14 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('inspects respondWithFile headers after statCheck mutates them', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        stream.respondWithFile(__filename, { ':status': 200 }, {
-          statCheck (stat, headers) {
-            headers[':status'] = 404
-            headers.k = '404'
-            return true
-          },
-        })
+    await listenCore(stream => {
+      stream.respondWithFile(__filename, { ':status': 200 }, {
+        statCheck (stat, headers) {
+          headers[':status'] = 404
+          headers.k = '404'
+          return true
+        },
       })
-      return coreServer
     })
 
     const { body, headers } = await request()
@@ -344,18 +326,14 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('does not inspect replaced respondWithFile headers before statCheck returns', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        stream.respondWithFile(__filename, { ':status': 404, k: '404' }, {
-          statCheck (stat, headers) {
-            headers[':status'] = 200
-            delete headers.k
-            return true
-          },
-        })
+    await listenCore(stream => {
+      stream.respondWithFile(__filename, { ':status': 404, k: '404' }, {
+        statCheck (stat, headers) {
+          headers[':status'] = 200
+          delete headers.k
+          return true
+        },
       })
-      return coreServer
     })
 
     const { body, headers } = await request()
@@ -365,18 +343,14 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('does not inspect respondWithFile headers when statCheck sends a fallback', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        stream.respondWithFile(__filename, { ':status': 404, k: '404' }, {
-          statCheck () {
-            stream.respond({ ':status': 200 })
-            stream.end('fallback')
-            return false
-          },
-        })
+    await listenCore(stream => {
+      stream.respondWithFile(__filename, { ':status': 404, k: '404' }, {
+        statCheck () {
+          stream.respond({ ':status': 200 })
+          stream.end('fallback')
+          return false
+        },
       })
-      return coreServer
     })
 
     const { body, headers } = await request()
@@ -386,14 +360,10 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('blocks respondWithFD headers without statCheck', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        const fileDescriptor = openSync(__filename, 'r')
-        stream.once('close', () => closeSync(fileDescriptor))
-        stream.respondWithFD(fileDescriptor, { ':status': 404, k: '404' })
-      })
-      return coreServer
+    await listenCore(stream => {
+      const fileDescriptor = openSync(__filename, 'r')
+      stream.once('close', () => closeSync(fileDescriptor))
+      stream.respondWithFD(fileDescriptor, { ':status': 404, k: '404' })
     })
 
     const { body, headers } = await request()
@@ -403,20 +373,16 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('inspects respondWithFD headers after statCheck mutates them', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        const fileDescriptor = openSync(__filename, 'r')
-        stream.once('close', () => closeSync(fileDescriptor))
-        stream.respondWithFD(fileDescriptor, { ':status': 200 }, {
-          statCheck (stat, headers) {
-            headers[':status'] = 404
-            headers.k = '404'
-            return true
-          },
-        })
+    await listenCore(stream => {
+      const fileDescriptor = openSync(__filename, 'r')
+      stream.once('close', () => closeSync(fileDescriptor))
+      stream.respondWithFD(fileDescriptor, { ':status': 200 }, {
+        statCheck (stat, headers) {
+          headers[':status'] = 404
+          headers.k = '404'
+          return true
+        },
       })
-      return coreServer
     })
 
     const { body, headers } = await request()
@@ -438,13 +404,9 @@ describe('AppSec HTTP/2 response blocking', () => {
   })
 
   it('preserves core stream duplicate header values across casing', async () => {
-    await listen(() => {
-      const coreServer = http2.createServer()
-      coreServer.on('stream', stream => {
-        stream.respond({ ':status': 200, K: 'bad1', k: ['bad2', 'bad3'] })
-        stream.end()
-      })
-      return coreServer
+    await listenCore(stream => {
+      stream.respond({ ':status': 200, K: 'bad1', k: ['bad2', 'bad3'] })
+      stream.end()
     })
 
     const { body, headers } = await request()
