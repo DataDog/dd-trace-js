@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const { inspect } = require('node:util')
 
 const axios = require('axios')
@@ -28,13 +29,10 @@ describe('Attacker fingerprinting', () => {
       }))
       tracer = await agent.load('http')
       http = require('http')
-      await new Promise(resolve => {
-        const server = new http.Server(listener)
-        appListener = server.listen(port, 'localhost', () => {
-          port = appListener.address().port
-          resolve()
-        })
-      })
+      const server = new http.Server(listener)
+      appListener = server.listen(port, 'localhost')
+      await once(appListener, 'listening')
+      port = appListener.address().port
     })
 
     after(() => {

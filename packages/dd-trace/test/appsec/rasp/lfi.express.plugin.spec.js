@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const os = require('node:os')
 const fs = require('node:fs')
@@ -68,14 +69,11 @@ describe('RASP - lfi', () => {
           },
         }))
 
-        await new Promise(resolve => {
-          server = expressApp.listen(0, () => {
-            const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-            axios = Axios.create({
-              baseURL: `http://localhost:${port}`,
-            })
-            resolve()
-          })
+        server = expressApp.listen(0)
+        await once(server, 'listening')
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+        axios = Axios.create({
+          baseURL: `http://localhost:${port}`,
         })
       })
 
@@ -479,14 +477,11 @@ describe('RASP - lfi', () => {
         },
       }))
 
-      await new Promise(resolve => {
-        server.listen(0, () => {
-          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({
-            baseURL: `http://localhost:${port}`,
-          })
-          resolve()
-        })
+      server.listen(0)
+      await once(server, 'listening')
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({
+        baseURL: `http://localhost:${port}`,
       })
     })
 

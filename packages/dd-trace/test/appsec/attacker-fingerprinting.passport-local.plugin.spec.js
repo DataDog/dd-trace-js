@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const { inspect } = require('node:util')
 
 const Axios = require('axios')
@@ -60,17 +61,14 @@ withVersions('passport-local', 'passport-local', version => {
         res.end()
       })
 
-      await new Promise(resolve => {
-        server = app.listen(port, () => {
-          port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({
-            baseURL: `http://localhost:${port}`,
-            headers: {
-              'User-Agent': 'test-user-agent',
-            },
-          })
-          resolve()
-        })
+      server = app.listen(port)
+      await once(server, 'listening')
+      port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({
+        baseURL: `http://localhost:${port}`,
+        headers: {
+          'User-Agent': 'test-user-agent',
+        },
       })
     })
 

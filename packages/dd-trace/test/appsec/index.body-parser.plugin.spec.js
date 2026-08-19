@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const path = require('node:path')
 
 const axios = require('axios')
@@ -28,12 +29,9 @@ withVersions('body-parser', 'body-parser', version => {
         res.end('DONE')
       })
 
-      await new Promise(resolve => {
-        server = app.listen(port, () => {
-          port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          resolve()
-        })
-      })
+      server = app.listen(port)
+      await once(server, 'listening')
+      port = (/** @type {import('net').AddressInfo} */ (server.address())).port
     })
 
     beforeEach(async () => {

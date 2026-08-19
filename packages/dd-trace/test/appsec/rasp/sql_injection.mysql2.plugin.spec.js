@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const path = require('path')
 const Axios = require('axios')
@@ -39,14 +40,11 @@ describe('RASP - sql_injection', () => {
             },
           }))
 
-          await new Promise(resolve => {
-            server = expressApp.listen(0, () => {
-              const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-              axios = Axios.create({
-                baseURL: `http://localhost:${port}`,
-              })
-              resolve()
-            })
+          server = expressApp.listen(0)
+          await once(server, 'listening')
+          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+          axios = Axios.create({
+            baseURL: `http://localhost:${port}`,
           })
         })
 
