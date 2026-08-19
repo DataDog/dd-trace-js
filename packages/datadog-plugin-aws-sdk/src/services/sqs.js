@@ -3,7 +3,7 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
-const { extractQueueMetadata, isEmpty } = require('../util')
+const { extractQueueMetadata } = require('../util')
 
 /**
  * @typedef {{
@@ -275,11 +275,7 @@ class Sqs extends BaseAwsSdkPlugin {
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i]
       const carrier = carriers === undefined ? this.parseMessageCarrier(message) : carriers[i]
-      if (carrier) {
-        // Inert for EventBridge until its producer emits a pathway (separate
-        // change) — no `dd-pathway-ctx-base64` to decode yet; SQS/SNS decode now.
-        this.tracer.decodeDataStreamsContext(carrier)
-      }
+      this.tracer.decodeDataStreamsContext(carrier)
       const payloadSize = getHeadersSize({
         Body: message.Body,
         MessageAttributes: message.MessageAttributes,
@@ -322,6 +318,12 @@ class Sqs extends BaseAwsSdkPlugin {
     }
   }
 
+  /**
+   * @param {import('../../../dd-trace/src/opentracing/span') | null} span
+   * @param {{ MessageBody?: string, MessageAttributes?: Record<string, object> } | undefined} params
+   * @param {string} queueUrl
+   * @param {boolean} injectTraceContext
+   */
   injectToMessage (span, params, queueUrl, injectTraceContext) {
     if (!params) {
       params = {}
@@ -333,10 +335,10 @@ class Sqs extends BaseAwsSdkPlugin {
       return
     }
 
-    const ddInfo = {}
+    let ddInfo
     // For now we only inject to the first message; batches may change later.
     if (injectTraceContext) {
-      this.tracer.inject(span, 'text_map', ddInfo)
+      ddInfo = this.tracer.inject(span, 'text_map')
     }
 
     if (this.config.dsmEnabled) {
@@ -344,19 +346,19 @@ class Sqs extends BaseAwsSdkPlugin {
       // matches the on-wire payload, then update with the encoded context.
       params.MessageAttributes._datadog = {
         DataType: 'String',
-        StringValue: JSON.stringify(ddInfo),
+        StringValue: JSON.stringify(ddInfo ?? {}),
       }
       const dataStreamsContext = this.setDSMCheckpoint(span, params, queueUrl)
-      if (dataStreamsContext) {
-        DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+      ddInfo = DsmPathwayCodec.encode(dataStreamsContext, ddInfo) ?? ddInfo
+      if (ddInfo) {
         params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
-      } else if (isEmpty(ddInfo)) {
+      } else {
         delete params.MessageAttributes._datadog
       }
       return
     }
 
-    if (isEmpty(ddInfo)) return
+    if (!ddInfo) return
 
     params.MessageAttributes._datadog = {
       DataType: 'String',

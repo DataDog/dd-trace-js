@@ -433,6 +433,23 @@ describe('opentelemetry', function () {
       assert.ok(trace)
     })
   })
+
+  it('should deliver spans to a user span processor configured on @opentelemetry/sdk-node', async () => {
+    // Regression guard: sdk-node 0.220+ passes span processors through the
+    // provider constructor. The fixture exits non-zero if its own processor
+    // never saw the span, so the tracer producing the DD span while dropping
+    // the user's processor fails here rather than passing silently.
+    proc = fork(join(cwd, 'opentelemetry/sdk-node-span-processor.js'), {
+      cwd,
+      env: {
+        DD_TRACE_AGENT_PORT: agent?.port,
+      },
+    })
+    await check(agent, proc, timeout, ({ payload }) => {
+      const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
+      assert.ok(trace)
+    })
+  })
 })
 
 function isChildOf (childSpan, parentSpan) {

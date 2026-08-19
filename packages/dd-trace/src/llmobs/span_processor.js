@@ -27,6 +27,8 @@ const {
   ML_APP,
   TAGS,
   PARENT_ID_KEY,
+  PARENT_AGENT_NAME,
+  PARENT_AGENT_SPAN_ID,
   SESSION_ID,
   NAME,
   INPUT_PROMPT,
@@ -35,6 +37,7 @@ const {
   LLMOBS_SUBMITTED_TAG_KEY,
   SAMPLE_RATE,
   SAMPLING_DECISION,
+  TRACE_ID,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -156,6 +159,20 @@ class LLMObsSpanProcessor {
       this.#addObject(mlObsTags[TOOL_DEFINITIONS], meta.tool_definitions)
     }
 
+    // Surface the agent attribution resolved at registration, but only on spans that actually
+    // have an agent ancestor. The id is always present in that case; the name may be missing when
+    // it arrived id-only over distributed propagation (older/unsafe upstream). Emit the name as
+    // explicit `null` then, matching the cross-language wire shape (dd-trace-py sends null, not an
+    // absent key) so the shared backend and system-tests see the same payload.
+    const parentAgentName = mlObsTags[PARENT_AGENT_NAME]
+    const parentAgentSpanId = mlObsTags[PARENT_AGENT_SPAN_ID]
+    if (parentAgentName != null || parentAgentSpanId != null) {
+      meta.agent_attribution = {
+        pagent_name: parentAgentName ?? null,
+        pagent_span_id: parentAgentSpanId,
+      }
+    }
+
     const llmObsSpan = new LLMObservabilitySpan(spanKind)
 
     if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
@@ -236,8 +253,19 @@ class LLMObsSpanProcessor {
       meta.input.prompt = prompt
     }
 
+    const apmTraceId = span.context().toTraceId(true)
+    const llmobsTraceId = mlObsTags[TRACE_ID] ?? apmTraceId
+    const dd = {
+      span_id: span.context().toSpanId(),
+      trace_id: apmTraceId,
+      sample_rate: mlObsTags[SAMPLE_RATE],
+      sampling_decision: mlObsTags[SAMPLING_DECISION],
+      apm_trace_id: apmTraceId,
+    }
+    if (tags.experiment_id) dd.scope = 'experiments'
+
     const llmObsSpanEvent = {
-      trace_id: span.context().toTraceId(true),
+      trace_id: llmobsTraceId,
       span_id: span.context().toSpanId(),
       parent_id: parentId,
       name,
@@ -247,12 +275,7 @@ class LLMObsSpanProcessor {
       status: error ? 'error' : 'ok',
       meta,
       metrics,
-      _dd: {
-        span_id: span.context().toSpanId(),
-        trace_id: span.context().toTraceId(true),
-        sample_rate: mlObsTags[SAMPLE_RATE],
-        sampling_decision: mlObsTags[SAMPLING_DECISION],
-      },
+      _dd: dd,
     }
 
     if (sessionId) llmObsSpanEvent.session_id = sessionId

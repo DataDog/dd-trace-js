@@ -78,7 +78,7 @@ describe('Plugin', () => {
 
       after(async () => {
         await app?.close()
-        await agent.close({ ritmReset: false })
+        await agent.close()
       })
 
       withNamingSchema(
@@ -112,6 +112,51 @@ describe('Plugin', () => {
         }, { spanResourceMatch: /MyQuery/ })
 
         return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
+      })
+
+      it('skips only the exact Apollo health-check on cold and JIT paths', async () => {
+        const healthCheck = 'query __ApolloServiceHealthCheck__ { __typename }'
+        const sentinel = 'query __ApolloServiceHealthCheck__ { hello }'
+        const graphqlSpans = new Map()
+        /**
+         * @param {Array<Array<{ name: string }>>} traces
+         */
+        const collect = traces => {
+          for (const trace of traces) {
+            for (const span of trace) {
+              if (span.name.startsWith('graphql.')) {
+                graphqlSpans.set(span.name, (graphqlSpans.get(span.name) ?? 0) + 1)
+              }
+            }
+          }
+        }
+        agent.subscribe(collect)
+
+        try {
+          const assertion = agent.assertSomeTraces(() => {
+            assert.strictEqual(graphqlSpans.get(expectedSchema.server.opName), 1,
+              'only the sentinel may emit a graphql.request span')
+            assert.strictEqual(graphqlSpans.get('graphql.parse'), 1,
+              'only the sentinel may emit a graphql.parse span')
+            assert.strictEqual(graphqlSpans.get('graphql.validate'), 1,
+              'only the sentinel may emit a graphql.validate span')
+            assert.strictEqual(graphqlSpans.get('graphql.execute'), 1,
+              'only the sentinel may emit a graphql.execute span')
+            assert.strictEqual(graphqlSpans.get('graphql.resolve'), 1,
+              'only the sentinel may emit a graphql.resolve span')
+          }, { spanResourceMatch: /__ApolloServiceHealthCheck__/ })
+
+          await Promise.all([
+            assertion,
+            (async () => {
+              await axios.post(`http://localhost:${port}/graphql`, { query: healthCheck })
+              await axios.post(`http://localhost:${port}/graphql`, { query: healthCheck })
+              await axios.post(`http://localhost:${port}/graphql`, { query: sentinel })
+            })(),
+          ])
+        } finally {
+          agent.unsubscribe(collect)
+        }
       })
 
       it('parents graphql.execute under graphql.request and shares its resource', () => {
@@ -362,7 +407,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await plainApp?.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         it('omits graphql.source unless source is enabled', () => {
@@ -402,7 +447,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await extApp?.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         it('copies the configured error extension onto the request span error event', () => {
@@ -455,7 +500,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await batchApp?.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         it('opens one graphql.request span per operation in the batch', () => {

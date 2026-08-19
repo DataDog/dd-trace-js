@@ -22,18 +22,32 @@ function parseJsonResponse (rawJson) {
 
 function parseSkippableSuitesResponse (
   rawJson,
-  { testLevel = 'suite', isCoverageReportUploadEnabled = false, validateRequiredFields = false } = {}
+  {
+    testLevel = 'suite',
+    isCoverageReportUploadEnabled = false,
+    isLineCoverageSupported = true,
+    validateRequiredFields = false,
+    validationMode = false,
+  } = {}
 ) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (validateRequiredFields) {
-    validateSkippableTestsResponse(parsedResponse)
+    validateSkippableTestsResponse(parsedResponse, { validationMode })
   }
-  const coverage = parsedResponse.meta?.coverage || {}
+  let coverage
+  const coverageByFilename = parsedResponse.meta?.coverage
+  if (coverageByFilename) {
+    for (const [filename, bitmap] of Object.entries(coverageByFilename)) {
+      coverage ??= {}
+      coverage[filename.replaceAll('\\', '/')] = bitmap
+    }
+  }
 
   const skippableItems = parsedResponse
     .data
     .filter(({ type }) => type === testLevel)
   const skippableSuites = []
+  let numExcludedByMissingLineCoverage = 0
   for (const {
     attributes: {
       suite,
@@ -42,13 +56,59 @@ function parseSkippableSuitesResponse (
     },
   } of skippableItems) {
     // Only reject candidates without backend line coverage when we need that coverage to backfill reports.
-    if (isCoverageReportUploadEnabled && isMissingLineCodeCoverage) continue
+    if (isCoverageReportUploadEnabled && isLineCoverageSupported && isMissingLineCodeCoverage) {
+      numExcludedByMissingLineCoverage++
+      continue
+    }
 
     skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })
   }
   const correlationId = parsedResponse.meta?.correlation_id
 
-  return { skippableSuites, correlationId, coverage }
+  return {
+    skippableSuites,
+    correlationId,
+    coverage,
+    numReceivedSkippableItems: skippableItems.length,
+    numExcludedByMissingLineCoverage,
+  }
+}
+
+/**
+ * Logs how missing line coverage affected the skippable candidates without logging their contents.
+ *
+ * @param {{
+ *   skippableSuites: Array<string|{suite: string, name: string}>,
+ *   numReceivedSkippableItems?: number,
+ *   numExcludedByMissingLineCoverage?: number
+ * }} result - Parsed skippable response.
+ * @param {'suite'|'test'} testLevel - Test optimization skipping level.
+ * @param {boolean} shouldConsiderLineCoverage - Whether line coverage can affect suite skipping.
+ * @returns {void}
+ */
+function logSkippableSuitesResponse (result, testLevel, shouldConsiderLineCoverage) {
+  if (!shouldConsiderLineCoverage || result.numReceivedSkippableItems === undefined) {
+    log.debug('Number of received skippable %ss: %d', testLevel, result.skippableSuites.length)
+    return
+  }
+
+  log.debug(
+    'Received %d skippable %s candidates; excluded %d because line coverage is missing; %d remain.',
+    result.numReceivedSkippableItems,
+    testLevel,
+    result.numExcludedByMissingLineCoverage,
+    result.skippableSuites.length
+  )
+  if (
+    result.numReceivedSkippableItems > 0 &&
+    result.numExcludedByMissingLineCoverage === result.numReceivedSkippableItems
+  ) {
+    log.warn(
+      'All %d skippable %s candidates were excluded: coverage upload is enabled but line coverage is missing.',
+      result.numReceivedSkippableItems,
+      testLevel
+    )
+  }
 }
 
 function getSkippableSuites ({
@@ -68,10 +128,12 @@ function getSkippableSuites ({
   custom,
   testLevel = 'suite',
   isCoverageReportUploadEnabled = false,
+  isLineCoverageSupported = true,
 }, done) {
+  const shouldConsiderLineCoverage = isCoverageReportUploadEnabled && isLineCoverageSupported
   const cacheKey = buildCacheKey('skippable', [
     sha, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
-    runtimeName, runtimeVersion, testLevel, custom, isCoverageReportUploadEnabled,
+    runtimeName, runtimeVersion, testLevel, custom, shouldConsiderLineCoverage,
   ])
 
   withCache(cacheKey, (activeCacheKey, cb) => {
@@ -92,10 +154,16 @@ function getSkippableSuites ({
       custom,
       testLevel,
       isCoverageReportUploadEnabled,
+      isLineCoverageSupported,
       cacheKey: activeCacheKey,
     }, cb)
   }, (err, data) => {
     if (err) return done(err)
+    logSkippableSuitesResponse(
+      data,
+      testLevel,
+      shouldConsiderLineCoverage
+    )
     done(null, data.skippableSuites, data.correlationId, data.coverage)
   })
 }
@@ -120,6 +188,7 @@ function getSkippableSuites ({
  * @param {object} [params.custom]
  * @param {string} [params.testLevel]
  * @param {boolean} [params.isCoverageReportUploadEnabled]
+ * @param {boolean} [params.isLineCoverageSupported]
  * @param {string | null} params.cacheKey
  * @param {Function} done
  */
@@ -140,6 +209,7 @@ function fetchFromApi ({
   custom,
   testLevel,
   isCoverageReportUploadEnabled,
+  isLineCoverageSupported,
   cacheKey,
 }, done) {
   const options = {
@@ -203,6 +273,8 @@ function fetchFromApi ({
         const result = parseSkippableSuitesResponse(parsedResponse, {
           testLevel,
           isCoverageReportUploadEnabled,
+          isLineCoverageSupported,
+          validateRequiredFields: true,
         })
         const skippableItems = parsedResponse.data.filter(({ type }) => type === testLevel)
         incrementCountMetric(
@@ -213,7 +285,6 @@ function fetchFromApi ({
           skippableItems.length
         )
         distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES, {}, res.length)
-        log.debug('Number of received skippable %ss:', testLevel, result.skippableSuites.length)
 
         writeToCache(cacheKey, result)
 
@@ -225,4 +296,4 @@ function fetchFromApi ({
   })
 }
 
-module.exports = { getSkippableSuites, parseSkippableSuitesResponse }
+module.exports = { getSkippableSuites, logSkippableSuitesResponse, parseSkippableSuitesResponse }

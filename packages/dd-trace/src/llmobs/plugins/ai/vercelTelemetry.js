@@ -13,6 +13,7 @@ const {
 const SPAN_NAME_TO_KIND_MAPPING = {
   // embeddings
   embed: 'embedding',
+  embedMany: 'embedding',
   // text generation
   generateText: 'workflow',
   streamText: 'workflow',
@@ -237,6 +238,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
 
     switch (operation) {
       case 'embed':
+      case 'embedMany':
         this.setEmbeddingTags(span, ctx)
         break
       case 'generateText':
@@ -260,14 +262,29 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
   setEmbeddingTags (span, ctx) {
     const { event, result } = ctx
 
+    // works for both embed and embedMany, either single string or array of strings
     const input = event.value
-    const embedding = result?.embedding
-    const embeddingTextResult = embedding ? `[1 embedding(s) returned with size ${embedding.length}]` : ''
+
+    if (!result) {
+      this._tagger.tagEmbeddingIO(span, input)
+      return
+    }
+
+    // embed returns single embedding, embedMany returns an array of embeddings
+    const singleEmbedding = result.embedding
+    const multiEmbedding = result.embeddings
+
+    let embeddingTextResult = ''
+    if (singleEmbedding) {
+      embeddingTextResult = `[1 embedding(s) returned with size ${singleEmbedding.length}]`
+    } else if (Array.isArray(multiEmbedding)) {
+      embeddingTextResult = `[${multiEmbedding.length} embedding(s) returned with size ${multiEmbedding[0]?.length}]`
+    }
 
     this._tagger.tagEmbeddingIO(span, input, embeddingTextResult)
 
     this._tagger.tagMetrics(span, {
-      inputTokens: result?.usage?.tokens,
+      inputTokens: result.usage?.tokens,
     })
   }
 

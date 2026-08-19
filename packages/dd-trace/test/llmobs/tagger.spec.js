@@ -6,7 +6,8 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
-const { writeBridgeTags, findGenAIAncestorSpanId } = require('../../src/llmobs/util')
+const { writeBridgeTags, findGenAIAncestorSpanId, normalizeLlmObsTraceId } = require('../../src/llmobs/util')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 function unserializableObject () {
   const obj = {}
@@ -43,9 +44,10 @@ describe('tagger', () => {
     // existing tests get the "no gen_ai ancestor" branch; individual tests
     // can call `.returns(id)` on the stub to exercise suppression.
     util = {
-      generateTraceId: sinon.stub().returns('0123'),
+      generateLlmObsTraceId: sinon.stub().returns('0123456789abcdef0123456789abcdef'),
       writeBridgeTags,
       findGenAIAncestorSpanId: sinon.stub().returns(null),
+      normalizeLlmObsTraceId,
     }
 
     logger = {
@@ -74,7 +76,7 @@ describe('tagger', () => {
       it('tags an llm obs span with basic and default properties', () => {
         tagger.registerLLMObsSpan(span, { kind: 'workflow' })
 
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined', // no parent id provided
@@ -92,7 +94,7 @@ describe('tagger', () => {
           mlApp: 'my-app',
         })
 
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.model_name': 'my-model',
           '_ml_obs.meta.model_provider': 'my-provider',
@@ -104,10 +106,52 @@ describe('tagger', () => {
         })
       })
 
+      it('establishes the trace-level default session when a session is set', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm', sessionId: 'my-session' })
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.session_id'], 'my-session')
+        assert.strictEqual(spanContext._trace.tags['_ml_obs.trace_session_id'], 'my-session')
+      })
+
+      it('inherits the trace-level default session when the span sets none', () => {
+        spanContext._trace.tags['_ml_obs.trace_session_id'] = 'trace-session'
+
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.session_id'], 'trace-session')
+      })
+
+      it('inherits the session propagated from an upstream service', () => {
+        spanContext._trace.tags['_dd.p.llmobs_sid'] = 'propagated-session'
+
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.session_id'], 'propagated-session')
+      })
+
+      it('lets an explicit session override without changing the established trace default', () => {
+        spanContext._trace.tags['_ml_obs.trace_session_id'] = 'trace-session'
+
+        tagger.registerLLMObsSpan(span, { kind: 'llm', sessionId: 'other-session' })
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.session_id'], 'other-session')
+        assert.strictEqual(spanContext._trace.tags['_ml_obs.trace_session_id'], 'trace-session')
+      })
+
+      it('establishes the trace-level default when a session is post-populated via _setTag', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' }) // no session at registration
+        assert.strictEqual(spanContext._trace.tags['_ml_obs.trace_session_id'], undefined)
+
+        tagger._setTag(span, '_ml_obs.session_id', 'late-session') // integration sets it after start
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.session_id'], 'late-session')
+        assert.strictEqual(spanContext._trace.tags['_ml_obs.trace_session_id'], 'late-session')
+      })
+
       it('uses the name if provided', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm', name: 'my-span-name' })
 
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -120,7 +164,7 @@ describe('tagger', () => {
       it('defaults parent id to undefined', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -147,7 +191,7 @@ describe('tagger', () => {
 
         // The parent carries no sampling decision, so the child inherits none
         // (it does not start a fresh decision mid-trace).
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-ml-app',
           '_ml_obs.session_id': 'my-session',
@@ -156,15 +200,14 @@ describe('tagger', () => {
       })
 
       it('uses the propagated trace id if provided', () => {
+        spanContext._trace.tags['_dd.p.llmobs_trace_id'] = '141393847380800662846519802803680448779'
+
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
-          '_ml_obs.meta.span.kind': 'llm',
-          '_ml_obs.meta.ml_app': 'my-default-ml-app',
-          '_ml_obs.llmobs_parent_id': 'undefined',
-          '_ml_obs.sample_rate': '1',
-          '_ml_obs.sampling_decision': '1',
-        })
+        assert.strictEqual(
+          Tagger.tagMap.get(span)['_ml_obs.trace_id'],
+          '6a5f76e7000000001973227978d8110b'
+        )
       })
 
       it('uses the propagated parent id if provided', () => {
@@ -173,7 +216,7 @@ describe('tagger', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
         // Propagated parent with no propagated sampling info: inherit none.
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': '-567',
@@ -184,6 +227,13 @@ describe('tagger', () => {
         tagger.registerLLMObsSpan(span, { kind: false })
 
         assert.strictEqual(Tagger.tagMap.get(span), undefined)
+      })
+
+      it('creates a custom trace id', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'workflow' })
+        const llmobsTraceId = Tagger.tagMap.get(span)['_ml_obs.trace_id']
+        assert.strictEqual(llmobsTraceId, '0123456789abcdef0123456789abcdef')
+        assert.notEqual(llmobsTraceId, span.context().toTraceId(true))
       })
 
       describe('sampling', () => {
@@ -322,7 +372,7 @@ describe('tagger', () => {
         it('writes llmobs_trace_id and llmobs_parent_id to _trace.tags after a successful register', () => {
           tagger.registerLLMObsSpan(span, { kind: 'workflow' })
 
-          assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, '00000000000000001111111111111111')
+          assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, Tagger.tagMap.get(span)['_ml_obs.trace_id'])
           assert.strictEqual(spanContext._trace.tags.llmobs_parent_id, '2222222222222222')
         })
 
@@ -339,7 +389,7 @@ describe('tagger', () => {
 
           tagger.registerLLMObsSpan(secondSpan, { kind: 'task' })
 
-          assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, '00000000000000001111111111111111')
+          assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, Tagger.tagMap.get(span)['_ml_obs.trace_id'])
           assert.strictEqual(spanContext._trace.tags.llmobs_parent_id, '2222222222222222')
         })
 
@@ -375,7 +425,7 @@ describe('tagger', () => {
           it('writes llmobs_trace_id but omits llmobs_parent_id', () => {
             tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
-            assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, '00000000000000001111111111111111')
+            assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, Tagger.tagMap.get(span)['_ml_obs.trace_id'])
             assert.strictEqual(spanContext._trace.tags.llmobs_parent_id, undefined)
           })
 
@@ -408,9 +458,10 @@ describe('tagger', () => {
             RealTagger = proxyquire('../../src/llmobs/tagger', {
               '../log': { warn () {} },
               './util': {
-                generateTraceId: sinon.stub().returns('0123'),
+                generateLlmObsTraceId: sinon.stub().returns('0123456789abcdef0123456789abcdef'),
                 writeBridgeTags,
                 findGenAIAncestorSpanId,
+                normalizeLlmObsTraceId,
               },
             })
             realTagger = new RealTagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'test-app' } })
@@ -448,7 +499,7 @@ describe('tagger', () => {
 
             realTagger.registerLLMObsSpan(leafSpan, { kind: 'llm' })
 
-            assert.strictEqual(traceTags.llmobs_trace_id, '00000000000000009999999999999999')
+            assert.strictEqual(traceTags.llmobs_trace_id, RealTagger.tagMap.get(leafSpan)['_ml_obs.trace_id'])
             assert.strictEqual(traceTags.llmobs_parent_id, undefined)
             assert.strictEqual(RealTagger.tagMap.get(leafSpan)['_ml_obs.llmobs_parent_id'], genAISpanId)
           })
@@ -460,7 +511,7 @@ describe('tagger', () => {
       it('tags a span with metadata', () => {
         tagger._register(span)
         tagger.tagMetadata(span, { a: 'foo', b: 'bar' })
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' },
         })
       })
@@ -468,7 +519,7 @@ describe('tagger', () => {
       it('updates instead of overriding', () => {
         Tagger.tagMap.set(span, { '_ml_obs.meta.metadata': { a: 'foo' } })
         tagger.tagMetadata(span, { b: 'bar' })
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' },
         })
       })
@@ -478,7 +529,7 @@ describe('tagger', () => {
       it('tags a span with metrics', () => {
         tagger._register(span)
         tagger.tagMetrics(span, { a: 1, b: 2 })
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.metrics': { a: 1, b: 2 },
         })
       })
@@ -491,7 +542,7 @@ describe('tagger', () => {
           totalTokens: 3,
           foo: 10,
         })
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.metrics': { input_tokens: 1, output_tokens: 2, total_tokens: 3, foo: 10 },
         })
       })
@@ -510,7 +561,7 @@ describe('tagger', () => {
       it('updates instead of overriding', () => {
         Tagger.tagMap.set(span, { '_ml_obs.metrics': { a: 1 } })
         tagger.tagMetrics(span, { b: 2 })
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.metrics': { a: 1, b: 2 },
         })
       })
@@ -528,7 +579,7 @@ describe('tagger', () => {
         ]
         tagger._register(span)
         tagger.tagToolDefinitions(span, toolDefinitions)
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.tool_definitions': toolDefinitions,
         })
       })
@@ -536,7 +587,7 @@ describe('tagger', () => {
       it('tags a span with only a name', () => {
         tagger._register(span)
         tagger.tagToolDefinitions(span, [{ name: 'get_time' }])
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.tool_definitions': [{ name: 'get_time' }],
         })
       })
@@ -546,7 +597,7 @@ describe('tagger', () => {
         tagger.tagToolDefinitions(span, [
           { name: 'get_weather', description: 123, schema: 'not-an-object', version: 456 },
         ])
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.tool_definitions': [{ name: 'get_weather' }],
         })
       })
@@ -557,7 +608,7 @@ describe('tagger', () => {
           { description: 'no name' },
           { name: 'valid_tool' },
         ])
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.tool_definitions': [{ name: 'valid_tool' }],
         })
       })
@@ -583,7 +634,7 @@ describe('tagger', () => {
         const tags = { foo: 'bar' }
         tagger._register(span)
         tagger.tagSpanTags(span, tags)
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.tags': { foo: 'bar' },
         })
       })
@@ -592,9 +643,17 @@ describe('tagger', () => {
         Tagger.tagMap.set(span, { '_ml_obs.tags': { a: 1 } })
         const tags = { a: 2, b: 1 }
         tagger.tagSpanTags(span, tags)
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.tags': { a: 2, b: 1 },
         })
+      })
+    })
+
+    describe('setName', () => {
+      it('sets the _ml_obs.name tag on the span', () => {
+        tagger._register(span)
+        tagger.setName(span, 'my-span-name')
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.name'], 'my-span-name')
       })
     })
 
@@ -667,7 +726,7 @@ describe('tagger', () => {
 
         tagger._register(span)
         tagger.tagLLMIO(span, inputData, outputData)
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.input.messages': [
             { content: 'you are an amazing assistant', role: '' },
             { content: 'hello! my name is foobar', role: '' },
@@ -715,7 +774,7 @@ describe('tagger', () => {
 
           tagger._register(span)
           tagger.tagLLMIO(span, inputData, outputData)
-          assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          assertObjectContains(Tagger.tagMap.get(span), {
             '_ml_obs.meta.input.messages': [
               {
                 content: 'hello',
@@ -787,7 +846,7 @@ describe('tagger', () => {
 
           tagger._register(span)
           tagger.tagLLMIO(span, inputData)
-          assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          assertObjectContains(Tagger.tagMap.get(span), {
             '_ml_obs.meta.input.messages': [
               {
                 content: 'hello',
@@ -859,7 +918,7 @@ describe('tagger', () => {
 
           tagger._register(span)
           tagger.tagLLMIO(span, messages, undefined)
-          assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          assertObjectContains(Tagger.tagMap.get(span), {
             '_ml_obs.meta.input.messages': [
               { role: 'tool', content: 'The weather in San Francisco is sunny', tool_id: '123' },
             ],
@@ -891,6 +950,234 @@ describe('tagger', () => {
           sinon.assert.calledOnce(logger.warn)
         })
       })
+
+      describe('tagging audio parts appropriately', () => {
+        it('tags a span with inline base64 and attachment_key audio parts', () => {
+          const inputData = [
+            {
+              role: 'user',
+              content: 'transcribe this',
+              audioParts: [{ mimeType: 'audio/wav', content: 'aGVsbG8=' }],
+            },
+          ]
+          const outputData = [
+            {
+              role: 'assistant',
+              content: 'sure',
+              audioParts: [{ mimeType: 'audio/mpeg', attachmentKey: 'key-123' }],
+            },
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, inputData, outputData)
+          assert.deepStrictEqual(Tagger.tagMap.get(span), {
+            '_ml_obs.meta.input.messages': [
+              {
+                role: 'user',
+                content: 'transcribe this',
+                audio_parts: [{ mime_type: 'audio/wav', content: 'aGVsbG8=' }],
+              },
+            ],
+            '_ml_obs.meta.output.messages': [
+              {
+                role: 'assistant',
+                content: 'sure',
+                audio_parts: [{ mime_type: 'audio/mpeg', attachment_key: 'key-123' }],
+              },
+            ],
+          })
+        })
+
+        it('throws for a non-object audio part', () => {
+          const messages = [
+            { content: 'a', audioParts: [5] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: 'Audio part must be an object.' }
+          )
+        })
+
+        it('throws for a missing mimeType', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ content: 'aGVsbG8=' }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: 'Audio part mimeType must be a non-empty string.' }
+          )
+        })
+
+        it('throws when neither content nor attachmentKey is present', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ mimeType: 'audio/wav' }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: "Audio part must have either 'content' or 'attachmentKey'." }
+          )
+        })
+
+        it('throws when both content and attachmentKey are present', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ mimeType: 'audio/wav', content: 'aGVsbG8=', attachmentKey: 'key-1' }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: "Audio part must have only one of 'content' or 'attachmentKey', not both." }
+          )
+        })
+
+        it('throws with an invalid_io_messages tag for a non-string content', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ mimeType: 'audio/wav', content: 5 }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            err =>
+              err.message === 'Audio part content must be a base64-encoded string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
+          )
+        })
+
+        it('throws with an invalid_io_messages tag for a non-string attachmentKey', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ mimeType: 'audio/wav', attachmentKey: 5 }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            err =>
+              err.message === 'Audio part attachmentKey must be a string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
+          )
+        })
+      })
+
+      describe('tagging image parts appropriately', () => {
+        it('tags a span with inline base64 and attachment_key image parts', () => {
+          const inputData = [
+            {
+              role: 'user',
+              content: 'what is in this image',
+              imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=' }],
+            },
+          ]
+          const outputData = [
+            {
+              role: 'assistant',
+              content: 'a pixel',
+              imageParts: [{ mimeType: 'image/jpeg', attachmentKey: 'key-123' }],
+            },
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, inputData, outputData)
+          assert.deepStrictEqual(Tagger.tagMap.get(span), {
+            '_ml_obs.meta.input.messages': [
+              {
+                role: 'user',
+                content: 'what is in this image',
+                image_parts: [{ mime_type: 'image/png', content: 'iVBORw0KGgo=' }],
+              },
+            ],
+            '_ml_obs.meta.output.messages': [
+              {
+                role: 'assistant',
+                content: 'a pixel',
+                image_parts: [{ mime_type: 'image/jpeg', attachment_key: 'key-123' }],
+              },
+            ],
+          })
+        })
+
+        it('tags audio and image parts on the same message independently', () => {
+          const inputData = [
+            {
+              role: 'user',
+              content: 'both',
+              audioParts: [{ mimeType: 'audio/wav', content: 'aGVsbG8=' }],
+              imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=' }],
+            },
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, inputData, undefined)
+          assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.input.messages'], [
+            {
+              role: 'user',
+              content: 'both',
+              audio_parts: [{ mime_type: 'audio/wav', content: 'aGVsbG8=' }],
+              image_parts: [{ mime_type: 'image/png', content: 'iVBORw0KGgo=' }],
+            },
+          ])
+        })
+
+        it('throws for a non-object image part', () => {
+          const messages = [{ content: 'a', imageParts: [5] }]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: 'Image part must be an object.' }
+          )
+        })
+
+        it('throws for a missing mimeType', () => {
+          const messages = [{ content: 'a', imageParts: [{ content: 'iVBORw0KGgo=' }] }]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: 'Image part mimeType must be a non-empty string.' }
+          )
+        })
+
+        it('throws when neither content nor attachmentKey is present', () => {
+          const messages = [{ content: 'a', imageParts: [{ mimeType: 'image/png' }] }]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: "Image part must have either 'content' or 'attachmentKey'." }
+          )
+        })
+
+        it('throws when both content and attachmentKey are present', () => {
+          const messages = [
+            { content: 'a', imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=', attachmentKey: 'k' }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: "Image part must have only one of 'content' or 'attachmentKey', not both." }
+          )
+        })
+
+        it('throws with an invalid_io_messages tag for a non-string content', () => {
+          const messages = [{ content: 'a', imageParts: [{ mimeType: 'image/png', content: 5 }] }]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            err =>
+              err.message === 'Image part content must be a base64-encoded string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
+          )
+        })
+
+        it('throws with an invalid_io_messages tag for a non-string attachmentKey', () => {
+          const messages = [{ content: 'a', imageParts: [{ mimeType: 'image/png', attachmentKey: 5 }] }]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            err =>
+              err.message === 'Image part attachmentKey must be a string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
+          )
+        })
+      })
     })
 
     describe('tagEmbeddingIO', () => {
@@ -906,7 +1193,7 @@ describe('tagger', () => {
         const outputData = 'embedded documents'
         tagger._register(span)
         tagger.tagEmbeddingIO(span, inputData, outputData)
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.input.documents': [
             { text: 'my string document' },
             { text: 'my object document' },
@@ -973,7 +1260,7 @@ describe('tagger', () => {
 
         tagger._register(span)
         tagger.tagRetrievalIO(span, inputData, outputData)
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.input.value': 'some query',
           '_ml_obs.meta.output.documents': [
             { text: 'result 1' },
@@ -1007,7 +1294,7 @@ describe('tagger', () => {
         const outputData = 'some text'
         tagger._register(span)
         tagger.tagTextIO(span, inputData, outputData)
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.input.value': '{"some":"object"}',
           '_ml_obs.meta.output.value': 'some text',
         })
@@ -1023,20 +1310,20 @@ describe('tagger', () => {
       it('changes the span kind', () => {
         tagger._register(span)
         tagger._setTag(span, '_ml_obs.meta.span.kind', 'old-kind')
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'old-kind',
         })
         tagger.changeKind(span, 'new-kind')
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'new-kind',
         })
       })
 
       it('sets the kind if it is not already set', () => {
         tagger._register(span)
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {})
+        assertObjectContains(Tagger.tagMap.get(span), {})
         tagger.changeKind(span, 'new-kind')
-        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+        assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'new-kind',
         })
       })

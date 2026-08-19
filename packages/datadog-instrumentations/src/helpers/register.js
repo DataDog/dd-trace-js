@@ -57,18 +57,22 @@ const alreadyLoggedIncompatibleIntegrations = new Set()
 // Always disable prefixed and unprefixed node modules if one is disabled.
 if (disabledInstrumentations.size) {
   const builtinsSet = new Set(builtinModules)
+  const disabledBuiltinCounterparts = []
   for (const name of disabledInstrumentations) {
     const hasPrefix = name.startsWith('node:')
     if (hasPrefix || builtinsSet.has(name)) {
       if (hasPrefix) {
         const unprefixedName = name.slice(5)
         if (!disabledInstrumentations.has(unprefixedName)) {
-          disabledInstrumentations.add(unprefixedName)
+          disabledBuiltinCounterparts.push(unprefixedName)
         }
       } else if (!disabledInstrumentations.has(`node:${name}`)) {
-        disabledInstrumentations.add(`node:${name}`)
+        disabledBuiltinCounterparts.push(`node:${name}`)
       }
     }
+  }
+  for (const name of disabledBuiltinCounterparts) {
+    disabledInstrumentations.add(name)
   }
   builtinsSet.clear()
 }
@@ -108,14 +112,6 @@ for (const name of names) {
     }
 
     for (const { file, versions, hook, filePattern, patchDefault } of instrumentations[name]) {
-      if (isIitm && patchDefault === !!moduleExports.default) {
-        if (patchDefault) {
-          moduleExports = moduleExports.default
-        } else {
-          return moduleExports
-        }
-      }
-
       const fullFilename = filename(name, file)
 
       let matchesFile = moduleName === fullFilename
@@ -130,6 +126,16 @@ for (const name of names) {
       }
 
       if (matchesFile && matchVersion(moduleVersion, versions)) {
+        // IITM invokes this callback for every module in the package. Only unwrap the namespace after its file and
+        // version match, otherwise a default export from an unrelated internal module can replace that module.
+        if (isIitm && patchDefault === !!moduleExports.default) {
+          if (patchDefault) {
+            moduleExports = moduleExports.default
+          } else {
+            return moduleExports
+          }
+        }
+
         // Do not log in case of an error to prevent duplicate telemetry for the same integration version.
         instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, true)
         try {
@@ -163,7 +169,9 @@ function logAbortedIntegrations () {
   for (const [nameVersion, success] of instrumentedIntegrationsSuccess) {
     // Only ever log a single version of an integration, even if it is loaded later.
     if (!success && !alreadyLoggedIncompatibleIntegrations.has(nameVersion)) {
-      const [name, version] = nameVersion.split('@')
+      const lastAtPosition = nameVersion.lastIndexOf('@')
+      const name = nameVersion.slice(0, lastAtPosition)
+      const version = nameVersion.slice(lastAtPosition + 1)
       telemetry('abort.integration', [
         `integration:${name}`,
         `integration_version:${version}`,

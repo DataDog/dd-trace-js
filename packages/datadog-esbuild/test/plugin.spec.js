@@ -5,37 +5,34 @@ const { describe, it } = require('mocha')
 
 const ddPlugin = require('../index')
 
-function captureOptionalPeerOnLoad () {
-  let onLoad
+function captureOnResolve () {
+  let onResolve
   ddPlugin.setup({
     initialOptions: {},
-    onResolve () {},
-    onLoad (options, callback) {
-      if (options.filter.source.includes('flagging_provider')) onLoad = callback
+    /**
+     * @param {object} options
+     * @param {Function} callback
+     */
+    onResolve (options, callback) {
+      onResolve = callback
     },
+    onLoad () {},
   })
-  return onLoad
+  return onResolve
 }
 
 describe('datadog-esbuild plugin', () => {
-  describe('optional peer bundling', () => {
-    it('rewrites the installed peer load in flagging_provider into a literal require', () => {
-      const onLoad = captureOptionalPeerOnLoad()
-      const providerPath = require.resolve('../../dd-trace/src/openfeature/flagging_provider')
+  it('ignores builtins without a package path', () => {
+    const onResolve = captureOnResolve()
 
-      const result = onLoad({ path: providerPath })
-
-      assert.ok(result.contents.includes("require('@datadog/openfeature-node-server')"), 'should inline the peer')
-      assert.ok(
-        !result.contents.includes("requireOptionalPeer('@datadog/openfeature-node-server')"),
-        'should drop the opaque load'
-      )
+    const result = onResolve({
+      path: 'fs',
+      resolveDir: process.cwd(),
+      kind: 'require-call',
+      namespace: 'file',
+      importer: '/app/index.js',
     })
 
-    it('ignores files that match the filter but are not an optional-peer file', () => {
-      const onLoad = captureOptionalPeerOnLoad()
-
-      assert.strictEqual(onLoad({ path: '/somewhere/else/flagging_provider.js' }), undefined)
-    })
+    assert.strictEqual(result, undefined)
   })
 })

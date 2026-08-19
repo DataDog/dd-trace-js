@@ -182,6 +182,14 @@ function withNamingSchema (
   })
 }
 
+/**
+ * @param {() => import('../../src/proxy')} tracer
+ * @param {string} pluginName
+ * @param {((callback: (error?: Error) => void) => unknown) | (() => Promise<unknown>)} spanGenerationFn
+ * @param {string | (() => string)} service
+ * @param {string} serviceSource
+ * @param {{ component?: string, desc?: string, resource?: string | (() => string) }} [opts]
+ */
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), function () {
     this.timeout(10000)
@@ -199,32 +207,72 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     })
 
     it('should compute peer service', async () => {
-      const useCallback = spanGenerationFn.length === 1
-      const spanGenerationPromise = useCallback
-        ? new Promise(/** @type {() => void} */ (resolve, reject) => {
-          const result = spanGenerationFn((err) => err ? reject(err) : resolve())
-          // Some callback based methods are a mixture of callback and promise,
-          // depending on the module version. Await the promises as well.
-          if (util.types.isPromise(result)) {
-            result.then?.(resolve, reject)
+      const currentTracer = global._ddtrace
+      const parentSpan = currentTracer.startSpan('peer-service.test')
+      const traceId = BigInt(parentSpan.context().toTraceId())
+      const component = opts.component ?? pluginName
+      let traceAssertion
+
+      /**
+       * @param {Array<Array<{ trace_id: bigint, resource: string, meta: Record<string, string> }>>} traces
+       */
+      function assertPeerServiceSpan (traces) {
+        const expectedService = typeof service === 'function' ? service() : service
+        const expectedResource = typeof opts.resource === 'function' ? opts.resource() : opts.resource
+
+        for (const trace of traces) {
+          for (const span of trace) {
+            if (
+              span.trace_id === traceId &&
+              span.meta.component === component &&
+              (expectedResource === undefined || span.resource === expectedResource) &&
+              span.meta['peer.service'] === expectedService &&
+              span.meta['_dd.peer.service.source'] === serviceSource
+            ) {
+              return
+            }
           }
+        }
+
+        assert.fail(
+          `No ${component} span in trace ${traceId} had peer.service=${expectedService} and ` +
+          `_dd.peer.service.source=${serviceSource}.\n\nCandidate Traces:\n${util.inspect(traces, { depth: null })}`
+        )
+      }
+
+      try {
+        traceAssertion = getAgent().assertSomeTraces(assertPeerServiceSpan, { timeoutMs: 9000 })
+        const useCallback = spanGenerationFn.length === 1
+        const spanGenerationPromise = currentTracer.scope().activate(parentSpan, () => {
+          return useCallback
+            ? new Promise(/** @type {() => void} */ (resolve, reject) => {
+              const result = spanGenerationFn((error) => error ? reject(error) : resolve())
+              // Some callback based methods are a mixture of callback and promise,
+              // depending on the module version. Await the promises as well.
+              if (util.types.isPromise(result)) {
+                result.then?.(resolve, reject)
+              }
+            })
+            : spanGenerationFn()
         })
-        : spanGenerationFn()
 
-      assert.strictEqual(
-        typeof spanGenerationPromise?.then, 'function',
-        'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
-          util.inspect(spanGenerationPromise, { depth: 1 }),
-      )
+        assert.strictEqual(
+          typeof spanGenerationPromise?.then, 'function',
+          'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
+            util.inspect(spanGenerationPromise, { depth: 1 }),
+        )
 
-      await Promise.all([
-        getAgent().assertSomeTraces(traces => {
-          const span = traces[0][0]
-          assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
-          assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
-        }),
-        spanGenerationPromise,
-      ])
+        await Promise.all([
+          traceAssertion,
+          (async () => {
+            await spanGenerationPromise
+            parentSpan.finish()
+          })(),
+        ])
+      } finally {
+        parentSpan.finish()
+        traceAssertion?.cancel()
+      }
     })
   })
 }
@@ -291,32 +339,27 @@ function withVersions (plugin, modules, range, cb) {
     /** @type {Map<string, {versionRange: string, versionKey: string, resolvedVersion: string}>} */
     const testVersions = new Map()
 
-    let moduleMatched = false
+    const declarations = []
     for (const instrumentation of instrumentations) {
-      if (instrumentation.name !== moduleName) continue
-      moduleMatched = true
-
-      // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
-      // Treat those as "not a test target" instead of crashing.
-      // Share the install script's resolution so the tested folders exactly match the installed ones (lowest supported
-      // version, the latest of every major in between, and the newest supported version), de-duplicated by version.
-      const { versionList } = resolvePluginVersions({
-        name: moduleName,
-        declaredVersions: normalizeVersions(instrumentation.versions),
-        nodeRange: instrumentation.node,
-      })
-
-      for (const { versionKey, range: declaredRange } of versionList) {
-        // Exact keys resolve to themselves; range keys (`*`, `>=2`, `>=3.0.0 <4.0.0`) resolve to what was installed.
-        const resolvedVersion = semver.valid(versionKey) ?? require(getModulePath(moduleName, versionKey)).version()
-        testVersions.set(resolvedVersion, { versionRange: declaredRange, versionKey, resolvedVersion })
-      }
+      if (instrumentation.name === moduleName) declarations.push(instrumentation)
     }
 
     // A module no instrumentation declares would silently run zero tests instead of failing.
-    if (!moduleMatched) {
+    if (declarations.length === 0) {
       throw new Error(`withVersions: no instrumentation declares the module "${moduleName}". Pass the integration ` +
         `name as the first argument (e.g. 'express'), or register "${moduleName}" in test/plugins/externals.js.`)
+    }
+
+    // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
+    // Treat those as "not a test target" instead of crashing.
+    // Share the install script's resolution so the tested folders exactly match the installed ones (lowest supported
+    // version, the latest of every major in between, and the newest supported version), de-duplicated by version.
+    const { versionList } = resolvePluginVersions({ name: moduleName, declarations })
+
+    for (const { versionKey, range: declaredRange } of versionList) {
+      // Exact keys resolve to themselves; range keys (`*`, `>=2`, `>=3.0.0 <4.0.0`) resolve to what was installed.
+      const resolvedVersion = semver.valid(versionKey) ?? require(getModulePath(moduleName, versionKey)).version()
+      testVersions.set(resolvedVersion, { versionRange: declaredRange, versionKey, resolvedVersion })
     }
 
     const testCases = Array.from(testVersions.values())
@@ -368,11 +411,6 @@ function withVersions (plugin, modules, range, cb) {
       })
     }
   }
-}
-
-function normalizeVersions (versions) {
-  if (!versions) return []
-  return Array.isArray(versions) ? versions : [versions]
 }
 
 /**
@@ -474,10 +512,12 @@ exports.mochaHooks = {
     watchdog.unref()
   },
   afterEach () {
-    if (_agent) _agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
     extraServices.clear()
+    // Runs last: on a leaked expectation it throws to fail the just-finished test, and this
+    // ordering keeps that throw from skipping the unconditional cleanup above.
+    if (_agent) _agent.reset()
   },
 }

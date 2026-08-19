@@ -6,6 +6,7 @@ const semifies = require('semifies')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
 const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
+const { getToolCallResultContent } = require('../../../../src/llmobs/plugins/ai/util')
 
 const { NODE_MAJOR } = require('../../../../../../version')
 
@@ -19,48 +20,66 @@ const {
   MOCK_OBJECT,
 } = require('../../util')
 
+const UNPARSABLE_TOOL_RESULT = '[Unparsable Tool Result]'
+const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
+
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
 const range = NODE_MAJOR < 22 ? '>=4.0.2 <7.0.0' : '>=4.0.0 <7.0.0'
 
-function getAiSdkOpenAiPackage (vercelAiVersion) {
+/**
+ * @param {string} vercelAiVersion
+ */
+function getAiSdkOpenAiRange (vercelAiVersion) {
   if (semifies(vercelAiVersion, '>=6.0.0')) {
-    return '@ai-sdk/openai'
+    return '^3.0.0'
   } else if (semifies(vercelAiVersion, '>=5.0.0')) {
-    return '@ai-sdk/openai@2.0.0'
+    return '^2.0.0'
   } else {
-    return '@ai-sdk/openai@1.3.23'
+    return '^1.3.23'
   }
 }
 
-function getAiSdkBedrockPackage (vercelAiVersion) {
+/**
+ * @param {string} vercelAiVersion
+ */
+function getAiSdkBedrockRange (vercelAiVersion) {
   if (semifies(vercelAiVersion, '>=6.0.0')) {
-    return '@ai-sdk/amazon-bedrock'
+    return '^4.0.0'
   } else if (semifies(vercelAiVersion, '>=5.0.0')) {
-    return '@ai-sdk/amazon-bedrock@3.0.0'
+    return '^3.0.0'
   }
   return null
 }
 
-function getAiSdkAnthropicPackage (vercelAiVersion) {
+/**
+ * @param {string} vercelAiVersion
+ */
+function getAiSdkAnthropicOrGoogleRange (vercelAiVersion) {
   if (semifies(vercelAiVersion, '>=6.0.0')) {
-    return '@ai-sdk/anthropic'
+    return '^3.0.0'
   } else if (semifies(vercelAiVersion, '>=5.0.0')) {
-    return '@ai-sdk/anthropic@2.0.0'
+    return '^2.0.0'
   } else if (semifies(vercelAiVersion, '>=4.0.0')) {
-    return '@ai-sdk/anthropic@1.0.0'
+    return '^1.0.0'
   }
   return null
 }
 
-function getAiSdkGooglePackage (vercelAiVersion) {
-  if (semifies(vercelAiVersion, '>=6.0.0')) {
-    return '@ai-sdk/google'
-  } else if (semifies(vercelAiVersion, '>=5.0.0')) {
-    return '@ai-sdk/google@2.0.0'
-  } else if (semifies(vercelAiVersion, '>=4.0.0')) {
-    return '@ai-sdk/google@1.0.0'
-  }
-  return null
+/**
+ * @param {string} versionRange
+ * @param {(
+ *   version: string,
+ *   realVersion: string,
+ *   openaiVersionKey: string,
+ *   openaiVersion: string
+ * ) => void} callback
+ */
+function withAiSdkOpenAiVersions (versionRange, callback) {
+  withVersions('ai', 'ai', versionRange, (version, _, realVersion) => {
+    withVersions('ai', '@ai-sdk/openai', getAiSdkOpenAiRange(realVersion), (openaiVersionKey, _, openaiVersion) => {
+      callback(version, realVersion, openaiVersionKey, openaiVersion)
+    })
+  })
 }
 
 const MOCK_TELEMETRY_METADATA = {
@@ -68,6 +87,109 @@ const MOCK_TELEMETRY_METADATA = {
   organizationId: 'orgAbc123',
   conversationId: 'convAbc123',
 }
+
+const TOOL_RESULT_SCENARIOS = [
+  {
+    name: 'multipart content',
+    execute: () => 'result',
+    createModelOutput: () => ({
+      type: 'content',
+      value: [
+        { type: 'text', text: 'before' },
+        { type: 'media', mediaType: 'image/png', data: 'private-image-data' },
+        { type: 'media', mediaType: 'application/pdf', data: 'private-file-data' },
+        { type: 'file-data', mediaType: 'application/pdf', data: 'private-file-data' },
+        { type: 'file-id', fileId: 'private-file-id' },
+        { type: 'image-data', mediaType: 'image/png', data: 'private-image-data' },
+        { type: 'image-file-id', fileId: 'private-image-id' },
+        { type: 'custom', providerOptions: { secret: 'provider-data' } },
+        { type: 'text', text: 'after' },
+      ],
+    }),
+    expectedContent: 'before[Image][File][File][File][Image][Image][Custom Content]after',
+  },
+  {
+    name: 'text',
+    execute: () => 'result',
+    expectedContent: 'result',
+  },
+  {
+    name: 'JSON',
+    execute: () => ({ answer: 42 }),
+    expectedContent: '{"answer":42}',
+  },
+  {
+    name: 'error text',
+    execute: () => {
+      throw new Error('tool failure')
+    },
+    expectedContent: 'tool failure',
+  },
+  {
+    name: 'error JSON',
+    execute: () => 'result',
+    createModelOutput: () => ({
+      type: 'error-json',
+      value: { message: 'tool failure' },
+    }),
+    expectedContent: '{"message":"tool failure"}',
+  },
+  {
+    name: 'empty multipart content',
+    execute: () => 'result',
+    createModelOutput: () => ({ type: 'content', value: [] }),
+    expectedContent: '',
+  },
+  {
+    name: 'denied execution',
+    openaiRange: '>=3.0.0',
+    execute: () => 'result',
+    createModelOutput: () => ({
+      type: 'execution-denied',
+      reason: 'Approval rejected',
+    }),
+    expectedContent: 'Approval rejected',
+  },
+  {
+    name: 'denied execution without a reason',
+    openaiRange: '>=3.0.0',
+    execute: () => 'result',
+    createModelOutput: () => ({ type: 'execution-denied' }),
+    expectedContent: '[Tool Execution Denied]',
+  },
+  {
+    name: 'malformed multipart content',
+    execute: () => 'result',
+    createModelOutput: () => ({
+      type: 'content',
+      value: [{ type: 'unknown' }],
+    }),
+    expectedContent: UNPARSABLE_TOOL_RESULT,
+  },
+]
+
+const LEGACY_TOOL_RESULT_SCENARIOS = [
+  {
+    name: 'empty legacy result',
+    execute: () => '',
+    expectedContent: '',
+  },
+  {
+    name: 'zero legacy result',
+    execute: () => 0,
+    expectedContent: '0',
+  },
+  {
+    name: 'false legacy result',
+    execute: () => false,
+    expectedContent: 'false',
+  },
+  {
+    name: 'null legacy result',
+    execute: () => null,
+    expectedContent: 'null',
+  },
+]
 
 describe('Plugin', () => {
   useEnv({
@@ -89,7 +211,7 @@ describe('Plugin', () => {
     iastFilter.isDdTrace = isDdTrace
   })
 
-  withVersions('ai', 'ai', range, (version, _, realVersion) => {
+  withAiSdkOpenAiVersions(range, (version, realVersion, openaiVersionKey) => {
     let ai
     let openai
     let openaiVersion
@@ -97,7 +219,7 @@ describe('Plugin', () => {
     beforeEach(function () {
       ai = require(`../../../../../../versions/ai@${version}`).get()
 
-      const OpenAIModule = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`)
+      const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       openaiVersion = OpenAIModule.version()
       const OpenAI = OpenAIModule.get()
       openai = OpenAI.createOpenAI({
@@ -708,13 +830,16 @@ describe('Plugin', () => {
         span: apmSpans[2],
         parentId: llmobsSpans[0].span_id,
         /**
-         * Before ai@4.0.2, the stream implementation did not finish the initial llm spans
-         * first to associate the tool call id with the tool itself (by matching descriptions).
+         * Before `ai@4.0.2` with `@ai-sdk/openai@1.3.23`, the stream implementation did not finish the initial llm
+         * spans first to associate the tool call id with the tool itself (by matching descriptions).
          *
          * Usually, this would mean the tool call name is 'toolCall'. This is a limitation with the older library
-         * versions. In v5+, this is resolved as the tool name is not its index in the tools array, but its actual name.
+         * versions. Later AI or provider versions use the actual tool name instead of its index in the tools array.
          */
-        name: semifies(realVersion, NODE_MAJOR < 22 ? '<=4.0.2' : '<4.0.2') ? 'toolCall' : 'weather',
+        name: semifies(realVersion, NODE_MAJOR < 22 ? '<=4.0.2' : '<4.0.2') &&
+            semifies(openaiVersion, '<1.3.24')
+          ? 'toolCall'
+          : 'weather',
         spanKind: 'tool',
         inputValue: JSON.stringify({ location: 'Tokyo' }),
         outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
@@ -811,6 +936,89 @@ describe('Plugin', () => {
           temperature: 0.5,
         },
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
+    it('extracts last user message content from messages in generateText', async function () {
+      if (semifies(realVersion, '<5.0.0')) this.skip()
+
+      const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
+      const { createOpenAI } = OpenAIModule.get()
+      const mockOpenai = createOpenAI({
+        apiKey: 'test-api-key',
+        fetch: () => new Response(JSON.stringify({
+          id: 'chatcmpl-mock',
+          object: 'chat.completion',
+          created: 1234567890,
+          model: 'gpt-4o-mini',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'Hi!' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        compatibility: 'strict',
+      })
+
+      await ai.generateText({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        messages: [
+          { role: 'user', content: 'First user message.' },
+          { role: 'assistant', content: 'First response.' },
+          { role: 'user', content: 'Last user message.' },
+        ],
+        experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(2)
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
+        span: apmSpans[0],
+        name: 'generateText',
+        spanKind: 'workflow',
+        inputValue: 'Last user message.',
+        outputValue: MOCK_STRING,
+        metadata: MOCK_OBJECT,
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
+    it('extracts last user message content from messages in generateObject', async function () {
+      if (semifies(realVersion, '<5.0.0')) this.skip()
+
+      const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
+      const { createOpenAI } = OpenAIModule.get()
+      const mockOpenai = createOpenAI({
+        apiKey: 'test-api-key',
+        fetch: () => new Response(JSON.stringify({
+          id: 'chatcmpl-mock',
+          object: 'chat.completion',
+          created: 1234567890,
+          model: 'gpt-4o-mini',
+          choices: [{ index: 0, message: { role: 'assistant', content: '{"result":"test"}' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        compatibility: 'strict',
+      })
+
+      await ai.generateObject({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        output: 'no-schema',
+        messages: [
+          { role: 'user', content: 'First user message.' },
+          { role: 'assistant', content: 'First response.' },
+          { role: 'user', content: 'Last user message.' },
+        ],
+        experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(2)
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
+        span: apmSpans[0],
+        name: 'generateObject',
+        spanKind: 'workflow',
+        inputValue: 'Last user message.',
+        outputValue: MOCK_STRING,
+        metadata: MOCK_OBJECT,
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
@@ -1063,6 +1271,192 @@ describe('Plugin', () => {
     })
   })
 
+  describe('tool result formatting', () => {
+    withAiSdkOpenAiVersions(range, (version, realVersion, openaiVersionKey, openaiVersion) => {
+      let ai
+      let openai
+
+      beforeEach(() => {
+        ai = require(`../../../../../../versions/ai@${version}`).get()
+
+        const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
+        const OpenAI = OpenAIModule.get()
+        openai = OpenAI.createOpenAI({
+          baseURL: 'http://127.0.0.1:9126/vcr/openai',
+          compatibility: 'strict',
+        })
+      })
+
+      /**
+       * @param {{
+       *   execute: () => unknown,
+       *   createModelOutput?: () => unknown,
+       *   expectedContent: string,
+       *   openaiRange?: string
+       * }} scenario
+       */
+      async function assertToolResult (scenario) {
+        const isLegacy = semifies(realVersion, '<5.0.0')
+        const schema = ai.jsonSchema({
+          type: 'object',
+          properties: {},
+        })
+        let tool
+        if (isLegacy) {
+          tool = ai.tool({
+            id: 'testTool',
+            description: 'Run the test tool and return its result',
+            parameters: schema,
+            execute: scenario.execute,
+          })
+        } else {
+          tool = ai.tool({
+            description: 'Run the test tool and return its result',
+            inputSchema: schema,
+            execute: scenario.execute,
+            toModelOutput: scenario.createModelOutput,
+          })
+        }
+
+        const options = {
+          // Chat Completions serializes every tool result as text. The Responses API rejects some valid AI SDK
+          // result variants before the instrumented request can capture their formatted value.
+          model: openai.chat('gpt-4o-mini'),
+          prompt: 'Run the test tool',
+          tools: isLegacy ? [tool] : { testTool: tool },
+        }
+        if (isLegacy) {
+          options.maxSteps = 2
+        } else {
+          options.stopWhen = ai.stepCountIs(2)
+        }
+        if (semifies(openaiVersion, '>=2.0.50')) {
+          options.providerOptions = {
+            openai: {
+              store: false,
+            },
+          }
+        }
+
+        const result = await ai.generateText(options)
+        const toolCallId = result.steps[0].toolCalls[0].toolCallId
+
+        const { apmSpans, llmobsSpans } = await getEvents(4)
+        let finalModelSpan
+        let finalModelApmSpan
+        let workflowSpan
+        for (const span of llmobsSpans) {
+          if (span.name === 'doGenerate') {
+            finalModelSpan = span
+          } else if (span.name === 'generateText') {
+            workflowSpan = span
+          }
+        }
+        for (const span of apmSpans) {
+          if (span.name === 'ai.generateText.doGenerate') finalModelApmSpan = span
+        }
+
+        assertLlmObsSpanEvent(finalModelSpan, {
+          span: finalModelApmSpan,
+          parentId: workflowSpan.span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'doGenerate',
+          inputMessages: [
+            { content: 'Run the test tool', role: 'user' },
+            {
+              content: '',
+              role: 'assistant',
+              tool_calls: [{
+                tool_id: toolCallId,
+                name: 'testTool',
+                arguments: {},
+                type: 'function',
+              }],
+            },
+            {
+              content: scenario.expectedContent,
+              role: 'tool',
+              tool_id: toolCallId,
+            },
+          ],
+          outputMessages: [MOCK_OBJECT],
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+      }
+
+      const scenarios = semifies(realVersion, '<5.0.0')
+        ? LEGACY_TOOL_RESULT_SCENARIOS
+        : TOOL_RESULT_SCENARIOS.filter(({ openaiRange }) => !openaiRange || semifies(openaiVersion, openaiRange))
+      for (const scenario of scenarios) {
+        it(`formats ${scenario.name} produced by the AI SDK`, async () => {
+          await assertToolResult(scenario)
+        })
+      }
+    })
+
+    it('falls back for values rejected before model invocation', () => {
+      const circular = {}
+      circular.self = circular
+
+      const malformedOutputs = [
+        null,
+        'text',
+        { type: 'text' },
+        { type: 'text', value: 42 },
+        { type: 'json', value: undefined },
+        { type: 'json', value: Symbol('result') },
+        { type: 'json', value: 1n },
+        { type: 'json', value: circular },
+        { type: 'content', value: {} },
+        { type: 'content', value: [null] },
+        { type: 'content', value: [{ type: 'text' }] },
+        { type: 'content', value: [{ type: 'media' }] },
+        { type: 'execution-denied', reason: {} },
+        { type: 'unknown', value: 'result' },
+      ]
+
+      for (const output of malformedOutputs) {
+        assert.strictEqual(
+          getToolCallResultContent({ output }),
+          UNPARSABLE_TOOL_RESULT
+        )
+      }
+
+      assert.strictEqual(getToolCallResultContent(), UNPARSABLE_TOOL_RESULT)
+      assert.strictEqual(getToolCallResultContent(null), UNPARSABLE_TOOL_RESULT)
+      assert.strictEqual(getToolCallResultContent('result'), UNPARSABLE_TOOL_RESULT)
+      assert.strictEqual(getToolCallResultContent({}), UNSUPPORTED_TOOL_RESULT)
+    })
+
+    it('does not throw for external objects rejected before model invocation', () => {
+      const throwingContent = new Proxy({}, {
+        get () {
+          throw new Error('unexpected content access')
+        },
+      })
+      const throwingOutput = new Proxy({}, {
+        get () {
+          throw new Error('unexpected output access')
+        },
+      })
+      const throwingParts = new Proxy([], {
+        get () {
+          throw new Error('unexpected content part access')
+        },
+      })
+
+      assert.strictEqual(getToolCallResultContent(throwingContent), UNPARSABLE_TOOL_RESULT)
+      assert.strictEqual(getToolCallResultContent({ output: throwingOutput }), UNPARSABLE_TOOL_RESULT)
+      assert.strictEqual(
+        getToolCallResultContent({ output: { type: 'content', value: throwingParts } }),
+        UNPARSABLE_TOOL_RESULT
+      )
+    })
+  })
+
   describe('prompt cache token capture', () => {
     // Both @ai-sdk/amazon-bedrock and @ai-sdk/anthropic use globalThis.fetch
     // (not node:http), so nock cannot intercept them. Each provider's
@@ -1118,15 +1512,32 @@ describe('Plugin', () => {
     }
 
     /**
+     * @param {{scenario: string, isV6: boolean, cacheReadOnDoGenerate: boolean, packageVersion: string}} options
+     */
+    function getBedrockExpectedMetrics (options) {
+      if (
+        options.scenario === 'cache-read' &&
+        options.isV6 &&
+        !options.cacheReadOnDoGenerate &&
+        semifies(options.packageVersion, '<4.0.13')
+      ) {
+        return {
+          ...defaultExpectedMetrics(options),
+          input_tokens: 23,
+        }
+      }
+      return defaultExpectedMetrics(options)
+    }
+
+    /**
      * Generic helper that runs prompt-cache capture tests for a given AI SDK
      * provider. New providers can be added by passing a single config object —
      * no test-orchestration code duplication required.
      *
      * @param {object} config
      * @param {string} config.providerName - Display name (e.g., 'Bedrock', 'Anthropic')
-     * @param {(realVersion: string) => string | null} config.getPackage -
-     *   Returns the versioned package path for the given ai version, or null
-     *   to skip that ai version (no compatible provider package)
+     * @param {string} config.packageName
+     * @param {(realVersion: string) => string | null} config.getPackageRange
      * @param {(PackageModule: object, scenario: string) => object} config.buildModel -
      *   Constructs the provider's language model with mock fetch wired in
      * @param {object} [config.env] - Env vars required during tests (e.g. AWS creds)
@@ -1141,7 +1552,8 @@ describe('Plugin', () => {
      */
     function describeProviderCacheTests ({
       providerName,
-      getPackage,
+      packageName,
+      getPackageRange,
       buildModel,
       env,
       scenarios = ['cache-read', 'cache-write'],
@@ -1151,64 +1563,77 @@ describe('Plugin', () => {
         if (env) useEnv(env)
 
         withVersions('ai', 'ai', '>=5.0.0 <7.0.0', (version, _, realVersion) => {
-          const pkg = getPackage(realVersion)
-          if (!pkg) return
+          const packageRange = getPackageRange(realVersion)
+          if (!packageRange) return
 
-          let ai
-          let PackageModule
+          withVersions('ai', packageName, packageRange, packageVersion => {
+            let ai
+            let PackageModule
 
-          beforeEach(() => {
-            ai = require(`../../../../../../versions/ai@${version}`).get()
-            PackageModule = require(`../../../../../../versions/${pkg}`)
+            beforeEach(() => {
+              ai = require(`../../../../../../versions/ai@${version}`).get()
+              PackageModule = require(`../../../../../../versions/${packageName}@${packageVersion}`)
+            })
+
+            // AI SDK v6+ aggregates inputTokens + cacheReadInputTokens + cacheWriteInputTokens
+            // into `ai.usage.inputTokens` (the total processed). v5 passes the raw fresh
+            // count through unchanged. Fixtures use the raw provider shape (inputTokens = fresh only).
+            const isV6 = semifies(realVersion, '>=6.0.0')
+
+            // `ai.usage.cachedInputTokens` is only set on the `doGenerate` span starting
+            // in ai@6.0.184 (older v6 and all v5 versions set it on the parent span only).
+            // For those older versions our fix correctly no-ops at the doGenerate scope
+            // because the SDK never exposes the attribute there.
+            const cacheReadOnDoGenerate = semifies(realVersion, '>=6.0.184')
+
+            if (scenarios.includes('cache-read')) {
+              it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
+                const model = buildModel(PackageModule, 'cache-read')
+                await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+                const { llmobsSpans } = await getEvents()
+                const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
+
+                const expected = getExpectedMetrics({
+                  scenario: 'cache-read',
+                  isV6,
+                  cacheReadOnDoGenerate,
+                  packageVersion: PackageModule.version(),
+                })
+                assert.equal(doGenerateSpan.metrics.input_tokens, expected.input_tokens)
+                assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
+                assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
+              })
+            }
+
+            if (scenarios.includes('cache-write')) {
+              it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
+                const model = buildModel(PackageModule, 'cache-write')
+                await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+                const { llmobsSpans } = await getEvents()
+                const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
+
+                const expected = getExpectedMetrics({
+                  scenario: 'cache-write',
+                  isV6,
+                  cacheReadOnDoGenerate,
+                  packageVersion: PackageModule.version(),
+                })
+                assert.equal(doGenerateSpan.metrics.input_tokens, expected.input_tokens)
+                assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
+                assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
+              })
+            }
           })
-
-          // AI SDK v6+ aggregates inputTokens + cacheReadInputTokens + cacheWriteInputTokens
-          // into `ai.usage.inputTokens` (the total processed). v5 passes the raw fresh
-          // count through unchanged. Fixtures use the raw provider shape (inputTokens = fresh only).
-          const isV6 = semifies(realVersion, '>=6.0.0')
-
-          // `ai.usage.cachedInputTokens` is only set on the `doGenerate` span starting
-          // in ai@6.0.184 (older v6 and all v5 versions set it on the parent span only).
-          // For those older versions our fix correctly no-ops at the doGenerate scope
-          // because the SDK never exposes the attribute there.
-          const cacheReadOnDoGenerate = semifies(realVersion, '>=6.0.184')
-
-          if (scenarios.includes('cache-read')) {
-            it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
-              const model = buildModel(PackageModule, 'cache-read')
-              await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
-
-              const { llmobsSpans } = await getEvents()
-              const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
-
-              const expected = getExpectedMetrics({ scenario: 'cache-read', isV6, cacheReadOnDoGenerate })
-              assert.equal(doGenerateSpan.metrics.input_tokens, expected.input_tokens)
-              assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
-              assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
-            })
-          }
-
-          if (scenarios.includes('cache-write')) {
-            it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
-              const model = buildModel(PackageModule, 'cache-write')
-              await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
-
-              const { llmobsSpans } = await getEvents()
-              const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
-
-              const expected = getExpectedMetrics({ scenario: 'cache-write', isV6, cacheReadOnDoGenerate })
-              assert.equal(doGenerateSpan.metrics.input_tokens, expected.input_tokens)
-              assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
-              assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
-            })
-          }
         })
       })
     }
 
     describeProviderCacheTests({
       providerName: 'Bedrock',
-      getPackage: getAiSdkBedrockPackage,
+      packageName: '@ai-sdk/amazon-bedrock',
+      getPackageRange: getAiSdkBedrockRange,
       buildModel: (BedrockModule, scenario) => {
         const { createAmazonBedrock } = BedrockModule.get()
         return createAmazonBedrock({
@@ -1221,11 +1646,13 @@ describe('Plugin', () => {
         AWS_SECRET_ACCESS_KEY: 'test-secret-key',
         AWS_REGION: 'us-east-1',
       },
+      getExpectedMetrics: getBedrockExpectedMetrics,
     })
 
     describeProviderCacheTests({
       providerName: 'Anthropic',
-      getPackage: getAiSdkAnthropicPackage,
+      packageName: '@ai-sdk/anthropic',
+      getPackageRange: getAiSdkAnthropicOrGoogleRange,
       buildModel: (AnthropicModule, scenario) => {
         const { createAnthropic } = AnthropicModule.get()
         return createAnthropic({
@@ -1253,7 +1680,8 @@ describe('Plugin', () => {
 
     describeProviderCacheTests({
       providerName: 'OpenAI (Chat Completions)',
-      getPackage: getAiSdkOpenAiPackage,
+      packageName: '@ai-sdk/openai',
+      getPackageRange: getAiSdkOpenAiRange,
       buildModel: (OpenAiModule, scenario) => {
         const { createOpenAI } = OpenAiModule.get()
         // Use `.chat()` to force the Chat Completions endpoint. Cache field path
@@ -1270,7 +1698,8 @@ describe('Plugin', () => {
 
     describeProviderCacheTests({
       providerName: 'OpenAI (Responses API)',
-      getPackage: getAiSdkOpenAiPackage,
+      packageName: '@ai-sdk/openai',
+      getPackageRange: getAiSdkOpenAiRange,
       buildModel: (OpenAiModule, scenario) => {
         const { createOpenAI } = OpenAiModule.get()
         // Default `openai(modelId)` routes to the Responses API on
@@ -1289,7 +1718,8 @@ describe('Plugin', () => {
 
     describeProviderCacheTests({
       providerName: 'Google Gemini',
-      getPackage: getAiSdkGooglePackage,
+      packageName: '@ai-sdk/google',
+      getPackageRange: getAiSdkAnthropicOrGoogleRange,
       buildModel: (GoogleModule, scenario) => {
         const { createGoogleGenerativeAI } = GoogleModule.get()
         // Google's response has a genuinely different shape from OpenAI:

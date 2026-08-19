@@ -27,8 +27,8 @@ const { PLAYWRIGHT_VERSION } = process.env
 const NUM_RETRIES_EFD = 3
 const RETRY_FINAL_STATUS_TIMEOUT = 60000
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -449,8 +449,22 @@ versions.forEach((version) => {
           early_flake_detection: { enabled: false },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        // Only run the serial suite. The other test in this fixture intentionally exhausts its retries,
+        // delaying the serial retry until this test's payload collection timeout on slower runners.
+        const proc = run(
+          './node_modules/.bin/playwright test --retries=1 --grep "playwright serial" -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
+            },
+          }
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -464,23 +478,10 @@ versions.forEach((version) => {
             const passExecution = seriallySkippedTests.find(t => t.meta[TEST_STATUS] === 'pass')
             assert.ok(passExecution, 'Expected a passing execution on the retry cycle')
             assert.strictEqual(passExecution.meta[TEST_FINAL_STATUS], 'pass')
-          }, 30000)
+          })
 
-        // --retries=1 is Playwright's native retry — no dd-trace retry features needed.
-        // dd-trace won't override it since its guard is `if (project.retries === 0)`.
-        const proc = run(
-          './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
-            },
-          }
-        )
-
-        await Promise.all([once(proc, 'exit'), receiverPromise])
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0)
       })
 
       it(
@@ -493,26 +494,6 @@ versions.forEach((version) => {
             flaky_test_retries_enabled: false,
             early_flake_detection: { enabled: false },
           })
-
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-              // These serial tests never ran — abandoned when maxFailures cut the run after the
-              // non-serial test exhausted its retries. Each must appear exactly once: the fallback
-              // loop at the end of the run must not re-emit them as duplicates.
-              const abandonedTests = tests.filter(t =>
-                t.meta[TEST_NAME] === 'playwright serial should fail on first attempt' ||
-                t.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
-              )
-              assert.strictEqual(abandonedTests.length, 2)
-              abandonedTests.forEach(t => assert.strictEqual(t.meta[TEST_STATUS], 'skip'))
-
-              // Suite finalization must not be blocked by the abandoned tests staying in remainingTestsByFile
-              const suiteEvents = events.filter(event => event.type === 'test_suite_end')
-              assert.ok(suiteEvents.length > 0, 'Expected test_suite_end — suite must be finalized')
-            }, 30000)
 
           // --retries=1: `should eventually pass after retrying` needs retry>=2 to pass, so it exhausts
           // both attempts and fails. MAX_FAILURES=1 then cuts the run, abandoning the serial suite.
@@ -531,7 +512,29 @@ versions.forEach((version) => {
             }
           )
 
-          await Promise.all([once(proc, 'exit'), receiverPromise])
+          await receiver.gatherPayloadsUntilChildExit(
+            proc,
+            ({ url }) => url === '/api/v2/citestcycle',
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // These serial tests never ran — abandoned when maxFailures cut the run after the
+              // non-serial test exhausted its retries. Each must appear exactly once: the fallback
+              // loop at the end of the run must not re-emit them as duplicates.
+              const abandonedTests = tests.filter(t =>
+                t.meta[TEST_NAME] === 'playwright serial should fail on first attempt' ||
+                t.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
+              )
+              assert.strictEqual(abandonedTests.length, 2)
+              abandonedTests.forEach(t => assert.strictEqual(t.meta[TEST_STATUS], 'skip'))
+
+              // Suite finalization must not be blocked by the abandoned tests staying in remainingTestsByFile
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end')
+              assert.ok(suiteEvents.length > 0, 'Expected test_suite_end — suite must be finalized')
+            },
+            { hardTimeout: 30_000 }
+          )
         })
     })
   })

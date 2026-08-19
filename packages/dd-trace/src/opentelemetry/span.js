@@ -15,6 +15,7 @@ const kinds = require('../../../../ext/kinds')
 const id = require('../id')
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
+const spanEndingHook = require('./span-ending-hook')
 const { setOtelOperationName, setOtelResource } = require('./span-helpers')
 
 const spanKindNames = {
@@ -37,6 +38,10 @@ function hrTimeToMilliseconds (hrTime) {
 /**
  * Several of these attributes are not yet supported by the Node.js OTel API.
  * We check for old equivalents where we can, but not all had equivalents.
+ *
+ * @param {string | undefined} spanName
+ * @param {import('@opentelemetry/api').SpanKind} kind
+ * @param {import('@opentelemetry/api').Attributes} attributes
  */
 function spanNameMapper (spanName, kind, attributes) {
   if (spanName) return spanName
@@ -255,6 +260,10 @@ class Span extends BridgeSpanBase {
     const hrEndTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const endTime = hrTimeToMilliseconds(hrEndTime)
 
+    // Must run before `finish()`, while the DD span is still unfinished. See span-ending-hook.js.
+    if (spanEndingHook.hook !== undefined) {
+      spanEndingHook.hook(this._ddSpan)
+    }
     this._ddSpan.finish(endTime)
     this._spanProcessor.onEnd(this)
   }

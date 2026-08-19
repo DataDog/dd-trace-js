@@ -59,16 +59,14 @@ class NativeSpaceProfiler {
   }
 
   profile (restart) {
-    const profile = this.#pprof.heap.profile(undefined, this.#mapper, getThreadLabels)
+    const profile = this.#pprof.heap.profile(undefined, this.#mapper, getThreadLabels, 'pack')
     if (!restart) {
       this.stop()
     }
     return profile
   }
 
-  getInfo () {
-    return {}
-  }
+  getInfo () {}
 
   encode (profile) {
     return encodeProfileAsync(profile)

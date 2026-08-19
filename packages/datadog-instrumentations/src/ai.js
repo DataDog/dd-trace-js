@@ -116,6 +116,66 @@ function wrapModelWithLifecycle (model) {
   }
 }
 
+/**
+ * Wraps an OTel span without changing its method receivers.
+ *
+ * OTel spans may use private fields, so methods must run against the original
+ * span. A per-invocation wrapper also preserves `ctx` without mutating the AI
+ * SDK's shared no-op span.
+ *
+ * @param {import('@opentelemetry/api').Span} span
+ * @param {object} ctx
+ * @returns {import('@opentelemetry/api').Span}
+ */
+function createDelegatingSpan (span, ctx) {
+  return {
+    spanContext () {
+      return span.spanContext.apply(span, arguments)
+    },
+    setAttribute () {
+      span.setAttribute.apply(span, arguments)
+      return this
+    },
+    setAttributes (attributes) {
+      vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
+      span.setAttributes.apply(span, arguments)
+      return this
+    },
+    addEvent () {
+      span.addEvent.apply(span, arguments)
+      return this
+    },
+    addLink () {
+      span.addLink.apply(span, arguments)
+      return this
+    },
+    addLinks () {
+      span.addLinks.apply(span, arguments)
+      return this
+    },
+    setStatus () {
+      span.setStatus.apply(span, arguments)
+      return this
+    },
+    updateName () {
+      span.updateName.apply(span, arguments)
+      return this
+    },
+    isRecording () {
+      return span.isRecording.apply(span, arguments)
+    },
+    recordException (exception) {
+      ctx.error = exception
+      vercelAiTracingChannel.error.publish(ctx)
+      return span.recordException.apply(span, arguments)
+    },
+    end () {
+      vercelAiTracingChannel.asyncEnd.publish(ctx)
+      return span.end.apply(span, arguments)
+    },
+  }
+}
+
 function wrapTracer (tracer) {
   if (tracers.has(tracer)) {
     return
@@ -127,7 +187,7 @@ function wrapTracer (tracer) {
     return function (...args) {
       const name = args[0]
       const options = args.length > 2 ? (args[1] ?? {}) : {} // startActiveSpan(name, fn)
-      const cb = args[args.length - 1]
+      const cb = args.at(-1)
 
       const ctx = {
         name,
@@ -136,35 +196,7 @@ function wrapTracer (tracer) {
 
       args[args.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
         return function (span) {
-          // the below is necessary in the case that the span is vercel ai's noopSpan.
-          // while we don't want to patch the noopSpan more than once, we do want to treat each as a
-          // fresh instance. However, this is really not necessary for non-noop spans, but not sure
-          // how to differentiate.
-          const freshSpan = Object.create(span) // TODO: does this cause memory leaks?
-
-          shimmer.wrap(freshSpan, 'end', function (spanEnd) {
-            return function (...args) {
-              vercelAiTracingChannel.asyncEnd.publish(ctx)
-              return spanEnd.apply(this, args)
-            }
-          })
-
-          shimmer.wrap(freshSpan, 'setAttributes', function (setAttributes) {
-            return function (attributes) {
-              vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
-              return setAttributes.apply(this, arguments)
-            }
-          })
-
-          shimmer.wrap(freshSpan, 'recordException', function (recordException) {
-            return function (exception) {
-              ctx.error = exception
-              vercelAiTracingChannel.error.publish(ctx)
-              return recordException.apply(this, arguments)
-            }
-          })
-
-          return originalCb.call(this, freshSpan)
+          return originalCb.call(this, createDelegatingSpan(span, ctx))
         }
       })
 
@@ -225,7 +257,13 @@ for (const hook of getHooks('ai')) {
     // generateObject, streamObject)
     tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
       end (ctx) {
-        wrapModelWithLifecycle(ctx.result)
+        const model = ctx.arguments[0]
+        if (typeof model !== 'string' && model !== ctx.result) {
+          wrapModelWithLifecycle(model)
+          wrappedModels.add(ctx.result)
+        } else {
+          wrapModelWithLifecycle(ctx.result)
+        }
       },
     })
 

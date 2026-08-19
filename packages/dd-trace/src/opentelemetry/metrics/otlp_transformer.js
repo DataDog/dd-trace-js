@@ -198,7 +198,7 @@ class OtlpTransformer extends OtlpTransformerBase {
     if (isJson) {
       dataPoint.startTimeUnixNano = String(dataPoint.startTimeUnixNano)
       dataPoint.timeUnixNano = String(dataPoint.timeUnixNano)
-      dataPoint.count = dataPoint.count || 0
+      dataPoint.count ||= 0
     }
 
     return dataPoint

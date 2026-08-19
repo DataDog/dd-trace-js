@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const semifies = require('semifies')
 
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
@@ -10,7 +11,19 @@ const {
   MOCK_STRING,
   useLlmObs,
   MOCK_NUMBER,
+  MOCK_OBJECT,
 } = require('../../util')
+
+/**
+ * @param {(version: string, openaiVersion: string) => void} callback
+ */
+function withAiSdkOpenAiVersions (callback) {
+  withVersions('ai', 'ai', '>=7.0.0', (version, _, resolvedVersion) => {
+    withVersions('ai', '@ai-sdk/openai', '^4.0.0', openaiVersion => {
+      callback(version, resolvedVersion, openaiVersion)
+    })
+  })
+}
 
 const MOCK_TELEMETRY_METADATA = {
   userId: '12345',
@@ -25,14 +38,14 @@ describe('Plugin', () => {
 
   const { getEvents } = useLlmObs({ plugin: 'ai' })
 
-  withVersions('ai', 'ai', '>=7.0.0', (version) => {
+  withAiSdkOpenAiVersions((version, resolvedVersion, openaiVersion) => {
     let ai
     let openai
 
     beforeEach(function () {
       ai = require(`../../../../../../versions/ai@${version}`).get()
 
-      const OpenAI = require('../../../../../../versions/@ai-sdk/openai').get()
+      const OpenAI = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict',
@@ -137,8 +150,9 @@ describe('Plugin', () => {
       })
     })
 
-    // eslint-disable-next-line mocha/no-pending-tests
-    it.skip('creates a span for embedMany', async () => {
+    it('creates a span for embedMany', async function () {
+      if (!semifies(resolvedVersion, '>=7.0.23')) this.skip()
+
       await ai.embedMany({
         model: openai.embedding('text-embedding-ada-002'),
         values: ['hello world', 'goodbye world'],
@@ -154,7 +168,17 @@ describe('Plugin', () => {
       assertLlmObsSpanEvent(embedManySpan, {
         span: embedManyApmSpan,
         name: 'embedMany',
-        spanKind: 'workflow',
+        spanKind: 'embedding',
+        modelName: 'text-embedding-ada-002',
+        modelProvider: 'openai',
+        inputDocuments: [
+          { text: 'hello world' },
+          { text: 'goodbye world' },
+        ],
+        outputValue: '[2 embedding(s) returned with size 1536]',
+        metrics: {
+          input_tokens: 5,
+        },
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
@@ -923,6 +947,137 @@ describe('Plugin', () => {
     })
   })
 
+  describe('tool result formatting', () => {
+    withAiSdkOpenAiVersions((version, _, openaiVersion) => {
+      let ai
+      let openai
+
+      beforeEach(() => {
+        ai = require(`../../../../../../versions/ai@${version}`).get()
+
+        const OpenAI = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
+        openai = OpenAI.createOpenAI({
+          baseURL: 'http://127.0.0.1:9126/vcr/openai',
+          compatibility: 'strict',
+        })
+      })
+
+      it('formats file result parts produced by the AI SDK', async () => {
+        const result = await ai.generateText({
+          // Chat Completions serializes every tool result as text. The Responses API validates file contents before
+          // the instrumented request can capture their formatted value.
+          model: openai.chat('gpt-4o-mini'),
+          prompt: 'Run the test tool',
+          tools: {
+            testTool: ai.tool({
+              description: 'Run the test tool and return its result',
+              inputSchema: ai.jsonSchema({
+                type: 'object',
+                properties: {},
+              }),
+              execute: () => 'result',
+              toModelOutput: () => ({
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'before' },
+                  {
+                    type: 'file',
+                    mediaType: 'image/png',
+                    data: { type: 'data', data: 'cHJpdmF0ZS1pbWFnZS1kYXRh' },
+                  },
+                  {
+                    type: 'file',
+                    mediaType: 'application/pdf',
+                    data: { type: 'data', data: 'cHJpdmF0ZS1maWxlLWRhdGE=' },
+                  },
+                  {
+                    type: 'file',
+                    mediaType: 'application/pdf',
+                    data: { type: 'reference', reference: { test: 'private-file-id' } },
+                  },
+                  {
+                    type: 'file',
+                    mediaType: 'image/png',
+                    data: { type: 'reference', reference: { test: 'private-image-id' } },
+                  },
+                  { type: 'custom', providerOptions: { secret: 'provider-data' } },
+                  { type: 'text', text: 'after' },
+                ],
+              }),
+            }),
+          },
+          stopWhen: ai.stepCountIs(2),
+          providerOptions: {
+            openai: {
+              store: false,
+            },
+          },
+        })
+        const toolCallId = result.steps[0].toolCalls[0].toolCallId
+
+        const { apmSpans, llmobsSpans } = await getEvents(6)
+        let finalModelSpan
+        let finalModelApmSpan
+        let finalStepSpan
+        for (const span of llmobsSpans) {
+          if (span.name === 'languageModelCall') {
+            finalModelSpan = span
+          } else if (span.name === 'step') {
+            finalStepSpan = span
+          }
+        }
+        for (const span of apmSpans) {
+          if (span.name === 'languageModelCall') finalModelApmSpan = span
+        }
+
+        assertLlmObsSpanEvent(finalModelSpan, {
+          span: finalModelApmSpan,
+          parentId: finalStepSpan.span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'languageModelCall',
+          inputMessages: [
+            { content: 'Run the test tool', role: 'user' },
+            {
+              role: 'assistant',
+              tool_calls: [{
+                tool_id: toolCallId,
+                name: 'testTool',
+                arguments: {},
+                type: 'function',
+              }],
+            },
+            {
+              content: 'before[Image][File][File][Image][Custom Content]after',
+              role: 'tool',
+              tool_id: toolCallId,
+            },
+          ],
+          outputMessages: [MOCK_OBJECT],
+          toolDefinitions: [{
+            name: 'testTool',
+            description: 'Run the test tool and return its result',
+            schema: {
+              type: 'object',
+              properties: {},
+              required: [],
+            },
+          }],
+          metadata: {},
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
+          },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+      })
+    })
+  })
+
   describe('prompt cache token capture', () => {
     function makeMockFetch (scenario) {
       const fixture = require(`../../../../../datadog-plugin-ai/test/resources/${scenario}.json`)
@@ -959,9 +1114,20 @@ describe('Plugin', () => {
       throw new Error(`Unknown scenario: ${scenario}`)
     }
 
+    /**
+     * @param {object} config
+     * @param {string} config.providerName
+     * @param {string} config.packageName
+     * @param {string} config.packageRange
+     * @param {(PackageModule: object, scenario: string) => object} config.buildModel
+     * @param {object} [config.env]
+     * @param {string[]} [config.scenarios]
+     * @param {(options: object) => object} [config.getExpectedMetrics]
+     */
     function describeProviderCacheTests ({
       providerName,
       packageName,
+      packageRange,
       buildModel,
       env,
       scenarios = ['cache-read', 'cache-write'],
@@ -971,43 +1137,45 @@ describe('Plugin', () => {
         if (env) useEnv(env)
 
         withVersions('ai', 'ai', '>=7.0.0', (version) => {
-          let ai
-          let PackageModule
+          withVersions('ai', packageName, packageRange, packageVersion => {
+            let ai
+            let PackageModule
 
-          beforeEach(() => {
-            ai = require(`../../../../../../versions/ai@${version}`).get()
-            PackageModule = require(`../../../../../../versions/${packageName}`)
+            beforeEach(() => {
+              ai = require(`../../../../../../versions/ai@${version}`).get()
+              PackageModule = require(`../../../../../../versions/${packageName}@${packageVersion}`)
+            })
+
+            if (scenarios.includes('cache-read')) {
+              it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
+                const model = buildModel(PackageModule, 'cache-read')
+                await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+                const { llmobsSpans } = await getEvents()
+                const languageModelCallSpan = llmobsSpans.find(s => s.name === 'languageModelCall')
+
+                const expected = getExpectedMetrics({ scenario: 'cache-read' })
+                assert.equal(languageModelCallSpan.metrics.input_tokens, expected.input_tokens)
+                assert.equal(languageModelCallSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
+                assert.equal(languageModelCallSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
+              })
+            }
+
+            if (scenarios.includes('cache-write')) {
+              it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
+                const model = buildModel(PackageModule, 'cache-write')
+                await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+                const { llmobsSpans } = await getEvents()
+                const languageModelCallSpan = llmobsSpans.find(s => s.name === 'languageModelCall')
+
+                const expected = getExpectedMetrics({ scenario: 'cache-write' })
+                assert.equal(languageModelCallSpan.metrics.input_tokens, expected.input_tokens)
+                assert.equal(languageModelCallSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
+                assert.equal(languageModelCallSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
+              })
+            }
           })
-
-          if (scenarios.includes('cache-read')) {
-            it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
-              const model = buildModel(PackageModule, 'cache-read')
-              await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
-
-              const { llmobsSpans } = await getEvents()
-              const languageModelCallSpan = llmobsSpans.find(s => s.name === 'languageModelCall')
-
-              const expected = getExpectedMetrics({ scenario: 'cache-read' })
-              assert.equal(languageModelCallSpan.metrics.input_tokens, expected.input_tokens)
-              assert.equal(languageModelCallSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
-              assert.equal(languageModelCallSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
-            })
-          }
-
-          if (scenarios.includes('cache-write')) {
-            it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
-              const model = buildModel(PackageModule, 'cache-write')
-              await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
-
-              const { llmobsSpans } = await getEvents()
-              const languageModelCallSpan = llmobsSpans.find(s => s.name === 'languageModelCall')
-
-              const expected = getExpectedMetrics({ scenario: 'cache-write' })
-              assert.equal(languageModelCallSpan.metrics.input_tokens, expected.input_tokens)
-              assert.equal(languageModelCallSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
-              assert.equal(languageModelCallSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
-            })
-          }
         })
       })
     }
@@ -1015,6 +1183,7 @@ describe('Plugin', () => {
     describeProviderCacheTests({
       providerName: 'Bedrock',
       packageName: '@ai-sdk/amazon-bedrock',
+      packageRange: '^5.0.0',
       buildModel: (BedrockModule, scenario) => {
         const { createAmazonBedrock } = BedrockModule.get()
         return createAmazonBedrock({
@@ -1032,6 +1201,7 @@ describe('Plugin', () => {
     describeProviderCacheTests({
       providerName: 'Anthropic',
       packageName: '@ai-sdk/anthropic',
+      packageRange: '^4.0.0',
       buildModel: (AnthropicModule, scenario) => {
         const { createAnthropic } = AnthropicModule.get()
         return createAnthropic({
@@ -1055,6 +1225,7 @@ describe('Plugin', () => {
     describeProviderCacheTests({
       providerName: 'OpenAI (Chat Completions)',
       packageName: '@ai-sdk/openai',
+      packageRange: '^4.0.0',
       buildModel: (OpenAiModule, scenario) => {
         const { createOpenAI } = OpenAiModule.get()
         return createOpenAI({
@@ -1070,6 +1241,7 @@ describe('Plugin', () => {
     describeProviderCacheTests({
       providerName: 'OpenAI (Responses API)',
       packageName: '@ai-sdk/openai',
+      packageRange: '^4.0.0',
       buildModel: (OpenAiModule, scenario) => {
         const { createOpenAI } = OpenAiModule.get()
         return createOpenAI({
@@ -1084,6 +1256,7 @@ describe('Plugin', () => {
     describeProviderCacheTests({
       providerName: 'Google Gemini',
       packageName: '@ai-sdk/google',
+      packageRange: '^4.0.0',
       buildModel: (GoogleModule, scenario) => {
         const { createGoogleGenerativeAI } = GoogleModule.get()
         return createGoogleGenerativeAI({

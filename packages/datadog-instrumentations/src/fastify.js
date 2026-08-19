@@ -25,6 +25,8 @@ const bodyPublished = new WeakSet()
 let lastPublishedError
 let lastPublishedReq
 
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
+
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
 
@@ -58,17 +60,11 @@ function wrapAddHook (addHook) {
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
     arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function wrappedHook () {
-      // Fast path: every fastify request invokes each addHook'd handler, so the wrap
-      // runs in the user's hot path. The only side effects this wrapper carries are
-      // the three channels below; when none of them have a subscriber (the default
-      // plugin config, and the steady state once appsec / cookie subscribers detach),
-      // the wrap has nothing to do, and a `fn.apply(this, arguments)` forward keeps
-      // V8's CallApplyArguments fast path intact.
-      //
-      // The previous shape mutated `arguments[arguments.length - 1]` to swap `done`.
-      // That mutation materialises the magical arguments object and disables V8
-      // inlining of the enclosing function. The slow path below builds a fresh args
-      // array instead so the hot fast path keeps a clean forward.
+      // Every fastify request invokes each addHook'd handler, so this wrapper runs in the
+      // user's hot path. When none of the three channels below has a subscriber (the default
+      // plugin config, and the steady state once appsec / cookie subscribers detach), forward
+      // `arguments` untouched: no args array is materialised and V8's CallApplyArguments fast
+      // path stays intact. The slow path copies/indexes the args only when it has work to do.
       if (errorChannel.hasSubscribers || cookieParserReadCh.hasSubscribers || callbackFinishCh.hasSubscribers) {
         return invokeHookWithContext(name, fn, this, arguments)
       }
@@ -87,7 +83,7 @@ function wrapAddHook (addHook) {
  * @param {string} name Lifecycle phase the hook was registered against.
  * @param {Function} fn User-supplied hook.
  * @param {unknown} thisArg `this` Fastify passes to the hook.
- * @param {ArrayLike<unknown>} args Fastify's positional args; the dispatcher always
+ * @param {ArgumentsLike} args Fastify's positional args; the dispatcher always
  *   places `done` as the trailing positional (see fastify/lib/hooks.js hookIterator,
  *   onSendHookRunner, preParsingHookRunner, onRequestAbortHookRunner).
  */
@@ -98,6 +94,8 @@ function invokeHookWithContext (name, fn, thisArg, args) {
   const ctx = { req }
 
   try {
+    // `args` is the wrapper's `arguments` object, which has no `Array#at`.
+    // eslint-disable-next-line unicorn/prefer-at
     const lastArg = args[args.length - 1]
 
     if (typeof lastArg === 'function') {
@@ -148,6 +146,7 @@ function wrapHookDone (ctx, request, reply, req, name, doneCallback) {
     ctx.error = error
     publishError(ctx)
 
+    // eslint-disable-next-line no-restricted-syntax -- arbitrary cookie names; publishing {} sets a WAF address
     const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
 
     if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
@@ -195,6 +194,7 @@ function preHandler (request, reply, done) {
   const res = getRes(reply)
   const ctx = { req, res }
 
+  // eslint-disable-next-line no-restricted-syntax -- arbitrary body keys; publishing {} sets a WAF address
   const hasBody = request.body && Object.keys(request.body).length > 0
 
   // For multipart/form-data, the body is not available until after preValidation hook

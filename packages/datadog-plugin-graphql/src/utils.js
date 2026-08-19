@@ -228,6 +228,46 @@ function extractErrorIntoSpanEvent (config, span, exc) {
   span.addEvent('dd.graphql.query.error', attributes, Date.now())
 }
 
+// Apollo Gateway's fixed subgraph health-check query, sent verbatim on every
+// poll interval. See https://github.com/apollographql/federation
+// `HEALTH_CHECK_QUERY`.
+const HEALTH_CHECK_QUERY = 'query __ApolloServiceHealthCheck__ { __typename }'
+
+/**
+ * Matches the raw query string before it is parsed (the only input parse has).
+ *
+ * @param {unknown} source Raw query string or a graphql `Source` body.
+ * @returns {boolean}
+ */
+function isApolloHealthCheckSource (source) {
+  return source === HEALTH_CHECK_QUERY
+}
+
+/**
+ * Matches Apollo's parsed health-check operation exactly for cached documents.
+ *
+ * @param {import('graphql').OperationDefinitionNode | undefined} operation
+ * @returns {boolean}
+ */
+function isApolloHealthCheck (operation) {
+  const selections = operation?.selectionSet?.selections
+  if (operation?.operation !== 'query' ||
+      operation.name?.value !== '__ApolloServiceHealthCheck__' ||
+      operation.variableDefinitions?.length ||
+      operation.directives?.length ||
+      selections?.length !== 1) {
+    return false
+  }
+
+  const selection = selections[0]
+  return selection.kind === 'Field' &&
+    selection.name?.value === '__typename' &&
+    selection.alias === undefined &&
+    selection.selectionSet === undefined &&
+    selection.arguments?.length === 0 &&
+    selection.directives?.length === 0
+}
+
 let tools
 
 function getSignature (document, operationName, operationType, calculate) {
@@ -261,5 +301,7 @@ module.exports = {
   getCachedRequestOperation,
   getOperation,
   getSignature,
+  isApolloHealthCheck,
+  isApolloHealthCheckSource,
   refineRequestSpan,
 }

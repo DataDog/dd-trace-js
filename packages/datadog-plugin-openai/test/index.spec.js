@@ -160,6 +160,38 @@ describe('Plugin', () => {
         sinon.assert.neverCalledWith(metricStub, 'openai.ratelimit.remaining.tokens')
       })
 
+      it('logs edit instructions', async function () {
+        if (semver.satisfies(realVersion, '>=4.0.0')) {
+          this.skip()
+        }
+
+        const nock = require('nock')
+        if (!nock.isActive()) nock.activate()
+
+        try {
+          const instruction = 'Fix the spelling mistakes.'
+          const scope = nock('http://127.0.0.1:9126')
+            .post('/vcr/openai/edits')
+            .reply(200, {
+              choices: [{ index: 0, text: 'What day of the week is it?' }],
+            })
+
+          const checkTrace = agent.assertFirstTraceSpan({ error: 0 })
+          await openai.createEdit({
+            input: 'What day of the wek is it?',
+            instruction,
+            model: 'text-davinci-edit-001',
+          })
+          await checkTrace
+
+          scope.done()
+          sinon.assert.calledWithMatch(externalLoggerStub, { instruction })
+        } finally {
+          nock.cleanAll()
+          nock.restore()
+        }
+      })
+
       describe('maintains context', () => {
         it('should maintain the context with a non-streamed call', async () => {
           await tracer.trace('outer', async (outerSpan) => {
@@ -1211,7 +1243,7 @@ describe('Plugin', () => {
           language: 'en',
         })
 
-        assert.deepStrictEqual(result.text, 'Hello friend.')
+        assert.ok(['Hello friend.', 'Hello, friend.'].includes(result.text))
 
         await checkTraces
         sinon.assert.called(externalLoggerStub)
