@@ -58,9 +58,8 @@ class NextPlugin extends ServerPlugin {
       integrationName: this.constructor.id,
     })
 
-    // Next.js does not populate these request tags through web.addRequestTags.
-    // Capture them under the flag so the shared OTel conversion can derive the
-    // canonical url.*, server.*, and network.peer.address attributes.
+    // Next.js does not publish these through `web.addRequestTags`, so the shared conversion
+    // has nothing to derive `url.*`, `server.*` and `network.peer.address` from.
     addOtelRequestTags(span, this.config, req)
 
     this.stampIntegrationService(span, serviceName)

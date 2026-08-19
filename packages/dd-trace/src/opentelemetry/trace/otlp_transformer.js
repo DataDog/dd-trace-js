@@ -78,16 +78,16 @@ const EXCLUDED_META_KEYS = new Set([
 // DD-only error tags that should not appear as attributes when OTel trace semantics are enabled.
 const DD_ERROR_META_KEYS = new Set(['error.message'])
 
-// OTel attributes the semantic conventions type as an int, which the transform
-// still writes into `meta` because the Datadog agent protocol carries every
-// attribute as a string. OTLP is typed, so they are promoted back to `intValue`
-// here. Keeping the list in the exporter rather than duplicating the value into
-// `metrics` is what dd-trace-go does (DataDog/dd-trace-go#4888), and it avoids
-// emitting the same attribute twice with two different types.
+// Typed as ints by the semantic conventions but carried in `meta`, since the agent protocol is
+// all strings. Promoted back here rather than duplicated into `metrics`, which would emit the
+// attribute twice with two types. Same approach as DataDog/dd-trace-go#4888.
 const INT_VALUED_OTEL_ATTRIBUTES = new Set([
   'http.response.status_code',
   'server.port',
 ])
+// Both keys are unsigned integers. Matching them exactly keeps `Number` away from the values it
+// coerces to a plausible 0: '', whitespace, '0x10', '1e2'.
+const UNSIGNED_INTEGER = /^\d+$/
 
 /**
  * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
@@ -243,9 +243,8 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         if (EXCLUDED_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
-          const intValue = Number(value)
-          if (Number.isInteger(intValue)) {
-            attributes.push({ key, value: { intValue } })
+          if (UNSIGNED_INTEGER.test(value)) {
+            attributes.push({ key, value: { intValue: Number(value) } })
           }
           continue
         }

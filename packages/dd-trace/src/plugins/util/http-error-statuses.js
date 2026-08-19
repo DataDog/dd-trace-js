@@ -3,15 +3,10 @@
 const log = require('../../log')
 const kinds = require('../../../../../ext/kinds')
 
-// A validator returns true when the status code is *not* an error, matching the
-// `validateStatus` contract plugins have always used.
-//
-// Server spans error on 5xx regardless of the flag. Client spans error on 4xx by
-// default, and on 4xx-5xx when OTel semantics are enabled, since OTel treats a
-// client 5xx as an error and Datadog historically did not.
-//
-// The server bound is open above 599 on purpose: a synthetic status some proxies
-// report (600, 999) counted as an error before and still does.
+// True means the status is *not* an error, matching the long-standing `validateStatus`
+// contract. Clients error on 4xx by default and on 4xx-5xx under OTel semantics, which unlike
+// Datadog treats a client 5xx as an error. The server bound stays open above 599 so synthetic
+// proxy statuses (600, 999) keep counting as errors.
 const validateServerStatus = code => code < 500
 const validateClientStatus = code => code < 400 || code >= 500
 const validateClientStatusOtelSemantics = code => code < 400

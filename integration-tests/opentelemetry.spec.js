@@ -414,9 +414,7 @@ describe('opentelemetry', function () {
 
   it('should work with otel express & http auto instrumentation', async () => {
     const SERVER_PORT = 6666
-    // `DD_TRACE_OTEL_SEMANTICS_ENABLED` moves trace export onto OTLP, so these spans never reach
-    // the Datadog trace endpoint. Point the exporter at the fake agent's OTLP receiver and assert
-    // there instead.
+    // The flag moves trace export onto OTLP, so these spans never reach the Datadog endpoint.
     const spansPromise = waitForOtlpSpans(agent, 9, 10_000)
 
     proc = fork(join(cwd, 'opentelemetry/auto-instrumentation.js'), {
@@ -436,8 +434,7 @@ describe('opentelemetry', function () {
 
     assert.strictEqual(spans.length, 9)
 
-    // Should have expected span names and ordering. The OTLP span name carries what this test
-    // read from the Datadog `resource` before the flag moved export onto OTLP.
+    // The OTLP span name carries what this test read from the Datadog `resource`.
     assert.ok(eachEqual(spans, [
       'GET /second-endpoint',
       'middleware - query',

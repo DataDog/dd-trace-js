@@ -158,10 +158,9 @@ const web = {
     const currentRoute = spanContext.getTag(HTTP_ROUTE)
     const publishedRoute = context.paths.length > 1 ? context.paths.join('') : context.paths[0]
     context.paths = [path]
-    // Only under the flag: publishing here mutates the live span, which the default path
-    // must not do. A downstream request can trigger sampling from inside the route handler,
-    // so the low-cardinality route has to be readable before the span finishes. Overwrite
-    // only what this context published itself, so an upstream route still wins.
+    // Flag-only: this mutates the live span, which the default path must not do. A downstream
+    // request can sample from inside the route handler, so the route has to be readable before
+    // finish. Overwrite only what this context published, so an upstream route still wins.
     if (
       path &&
       context.config?.DD_TRACE_OTEL_SEMANTICS_ENABLED &&
@@ -464,10 +463,9 @@ function addRequestTags (context, spanType) {
   // other HTTP attributes, which are renamed centrally in span_format) it is set
   // here directly when OTel semantics are enabled.
   if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-    // Establish automatic ownership before propagation can trigger sampling.
-    // The sampler may replace this method-only value once a route resolves.
-    // Serverless callers skip `web.startSpan` and reach this from `web.finishSpan`, after the
-    // handler has run, so a resource already present here belongs to the application.
+    // Establish ownership before propagation can sample; the sampler replaces this method-only
+    // value once a route resolves. Serverless callers reach this from `web.finishSpan`, after
+    // the handler ran, so a resource already present belongs to the application.
     if (isInstrumentationOwnedResource(spanContext)) {
       setInstrumentationHttpResource(span, req.method)
     }
@@ -544,11 +542,8 @@ function applyRouteOrEndpointTag (context) {
 }
 
 /**
- * Whether the instrumentation may still write the resource name.
- *
- * `INSTRUMENTATION_HTTP_RESOURCE` records the exact value the instrumentation last wrote, so a
- * resource that differs from it was set by application code and has to survive. An absent
- * resource is unowned.
+ * `INSTRUMENTATION_HTTP_RESOURCE` holds the value the instrumentation last wrote, so a resource
+ * differing from it came from application code and must survive.
  *
  * @param {import('../../opentracing/span_context')} spanContext
  * @returns {boolean}
