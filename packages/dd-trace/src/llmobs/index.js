@@ -3,6 +3,7 @@
 const { channel } = require('dc-polyfill')
 
 const { readDatadogTags, writeDatadogTags } = require('../carrier')
+const { registerTelemetryFlusher } = require('../flush')
 const log = require('../log')
 const { DD_MAJOR } = require('../../../../version')
 const startupLogs = require('../startup-log')
@@ -57,6 +58,8 @@ let spanWriter
 /** @type {LLMObsEvalMetricsWriter | null} */
 let evalWriter
 
+let unregisterTelemetryFlusher
+
 /** @type {import('../config/config-base')} */
 let globalTracerConfig
 
@@ -71,6 +74,9 @@ function enable (config) {
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
   spanWriter = new LLMObsSpanWriter(config)
+  // Replace the prior callback when LLMObs writers are reinitialized.
+  unregisterTelemetryFlusher?.()
+  unregisterTelemetryFlusher = registerTelemetryFlusher(flushWriters)
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -112,6 +118,9 @@ function disable () {
   spanWriter?.destroy()
   evalWriter?.destroy()
   spanProcessor?.setWriter(null)
+  // Do not retain disabled writers in serverless lifecycle flushing.
+  unregisterTelemetryFlusher?.()
+  unregisterTelemetryFlusher = undefined
 
   spanWriter = null
   evalWriter = null
@@ -192,15 +201,30 @@ function handleLLMObsInjection ({ carrier }) {
   if (tags !== existing) writeDatadogTags(carrier, tags)
 }
 
-function handleFlush () {
-  let err = ''
-  try {
-    spanWriter.flush()
-    evalWriter.flush()
-  } catch (e) {
-    err = 'writer_flush_error'
-    log.warn('Failed to flush LLMObs spans and evaluation metrics:', e.message)
+function flushWriters (done) {
+  let pending = 2
+  let failed = false
+  const complete = () => {
+    if (--pending === 0) done?.()
   }
+  const flush = writer => {
+    try {
+      if (writer) writer.flush(complete)
+      else complete()
+    } catch (error) {
+      failed = true
+      log.warn('Failed to flush LLMObs writer:', error.message)
+      complete()
+    }
+  }
+
+  flush(spanWriter)
+  flush(evalWriter)
+  return failed
+}
+
+function handleFlush () {
+  const err = flushWriters() ? 'writer_flush_error' : ''
   telemetry.recordUserFlush(err)
 }
 

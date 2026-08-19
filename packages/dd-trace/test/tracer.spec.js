@@ -100,6 +100,27 @@ describe('Tracer', () => {
       unregister()
     })
 
+    it('waits for callback flushers that return a synchronous status', () => {
+      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      let flushDone
+      const telemetryFlusher = sinon.stub().callsFake(done => {
+        flushDone = done
+        return false
+      })
+      const unregister = registerTelemetryFlusher(telemetryFlusher)
+      const done = sinon.spy()
+
+      try {
+        flushAll(undefined, done)
+
+        sinon.assert.notCalled(done)
+        flushDone()
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregister()
+      }
+    })
+
     it('bounds configured telemetry flushing', () => {
       const { flushAll, registerTelemetryFlusher } = require('../src/flush')
       const timeout = sinon.stub(global, 'setTimeout')

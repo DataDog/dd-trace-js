@@ -73,7 +73,7 @@ function flushAll (tracer, done, options) {
     }
     try {
       const result = flusher(onFlushed)
-      result?.then(onFlushed, error => onFlushed(error))
+      if (typeof result?.then === 'function') result.then(onFlushed, error => onFlushed(error))
     } catch (error) {
       onFlushed(error)
     }

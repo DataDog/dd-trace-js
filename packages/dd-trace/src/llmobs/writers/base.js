@@ -33,6 +33,7 @@ class LLMObsBuffer {
 
 class BaseLLMObsWriter {
   #destroyer
+  #activeRequests = new Set()
   /** @type {Map<string, LLMObsBuffer>} */
   #multiTenantBuffers = new Map()
 
@@ -111,35 +112,37 @@ class BaseLLMObsWriter {
     return true
   }
 
-  flush () {
-    if (this._agentless == null) {
-      return
+  /**
+   * Drains buffered events and joins requests active at this flush boundary.
+   * @param {Function} [done]
+   */
+  flush (done) {
+    if (this._agentless == null) return done?.()
+
+    const activeRequests = [...this.#activeRequests]
+    const requests = this.#drainBuffers()
+    let pending = activeRequests.length + requests.length
+    const complete = () => {
+      if (--pending === 0) done?.()
     }
 
-    // Flush default buffer
+    if (pending === 0) return done?.()
+    for (const activeRequest of activeRequests) activeRequest.callbacks.push(complete)
+    for (const request of requests) this.#send(request, complete)
+  }
+
+  #drainBuffers () {
+    const requests = []
     if (this._buffer.events.length > 0) {
       const events = this._buffer.events
       this._buffer.clear()
-
-      const payload = this._encode(this.makePayload(events))
-
-      log.debug('Encoded LLMObs payload: %s', payload)
-
-      const options = this._getOptions()
-
-      request(payload, options, (err, resp, code) => {
-        parseResponseAndLog(err, code, events.length, this.url, this._eventType)
-      })
+      requests.push({ events, options: this._getOptions(), url: this.url })
     }
 
-    // Flush multi-tenant buffers
     for (const [apiKey, buffer] of this.#multiTenantBuffers) {
       if (buffer.events.length === 0) continue
-
       const events = buffer.events
       buffer.clear()
-
-      const payload = this._encode(this.makePayload(events))
       const site = buffer.routing.site || this._config.site
       const options = {
         headers: {
@@ -156,16 +159,24 @@ class BaseLLMObsWriter {
       }
       const url = this.#buildUrl(options.url.href, options.path)
       const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
-
       log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
-      log.debug('Encoded LLMObs payload: %s', payload)
-
-      request(payload, options, (err, resp, code) => {
-        parseResponseAndLog(err, code, events.length, url, this._eventType)
-      })
+      requests.push({ events, options, url })
     }
 
     this.#cleanupEmptyBuffers()
+    return requests
+  }
+
+  #send ({ events, options, url }, done) {
+    const payload = this._encode(this.makePayload(events))
+    const activeRequest = { callbacks: done ? [done] : [] }
+    this.#activeRequests.add(activeRequest)
+    log.debug('Encoded LLMObs payload: %s', payload)
+    request(payload, options, (err, resp, code) => {
+      parseResponseAndLog(err, code, events.length, url, this._eventType)
+      this.#activeRequests.delete(activeRequest)
+      for (const callback of activeRequest.callbacks) callback()
+    })
   }
 
   #cleanupEmptyBuffers () {

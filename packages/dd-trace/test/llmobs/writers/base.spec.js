@@ -238,6 +238,42 @@ describe('BaseLLMObsWriter', () => {
 
       sinon.assert.calledOnce(request)
     })
+
+    it('waits for an export already in flight', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'bar' })
+      let requestDone
+      const done = sinon.spy()
+      request.callsFake((payload, requestOptions, callback) => { requestDone = callback })
+
+      writer.flush()
+      writer.flush(done)
+
+      sinon.assert.notCalled(done)
+      requestDone()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('waits for every request drained at the flush boundary', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'default' })
+      writer.append({ foo: 'tenant' }, { apiKey: 'key-a', site: 'site-a.com' })
+      const callbacks = []
+      const done = sinon.spy()
+      request.callsFake((payload, requestOptions, callback) => { callbacks.push(callback) })
+
+      writer.flush(done)
+
+      assert.strictEqual(callbacks.length, 2)
+      callbacks[0]()
+      sinon.assert.notCalled(done)
+      callbacks[1]()
+      sinon.assert.calledOnce(done)
+    })
   })
 
   it('does not flush an empty buffer', () => {
