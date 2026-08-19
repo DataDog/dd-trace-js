@@ -12,6 +12,20 @@ module.started = undefined
 /** @type {import('./profiling/ssi-heuristics').SSIHeuristics | undefined} */
 let armedSSIHeuristics
 
+/** @type {import('./profiling') | undefined} */
+let profilingModule
+
+function getProfilingModule () {
+  return profilingModule ??= require('./profiling')
+}
+
+/** @type {typeof import('./profiling/ssi-heuristics') | undefined} */
+let ssiHeuristicsModule
+
+function getSSIHeuristicsModule () {
+  return ssiHeuristicsModule ??= require('./profiling/ssi-heuristics')
+}
+
 /**
  * @param {import('./config/config-base')} config - Tracer configuration
  * @returns {boolean} whether the profiler is running after this call
@@ -20,7 +34,7 @@ module.start = function (config) {
   try {
     // Forward the full tracer config to the profiling layer.
     // Profiling code is responsible for deriving the specific options it needs.
-    return require('./profiling').profiler.start(config)
+    return getProfilingModule().profiler.start(config)
   } catch (error) {
     log.error(
       'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
@@ -31,7 +45,7 @@ module.start = function (config) {
 }
 
 module.stop = function () {
-  require('./profiling').profiler.stop()
+  getProfilingModule().profiler.stop()
 }
 
 /**
@@ -41,7 +55,7 @@ module.stop = function () {
  * @param {Iterable<string>} keys - Custom label key names
  */
 module.setCustomLabelKeys = function (keys) {
-  require('./profiling').profiler.setCustomLabelKeys(keys)
+  getProfilingModule().profiler.setCustomLabelKeys(keys)
 }
 
 /**
@@ -53,7 +67,7 @@ module.setCustomLabelKeys = function (keys) {
  * @template T
  */
 module.runWithLabels = function (labels, fn) {
-  return require('./profiling').profiler.runWithLabels(labels, fn)
+  return getProfilingModule().profiler.runWithLabels(labels, fn)
 }
 
 configUpdateChannel.subscribe((config) => {
@@ -68,7 +82,7 @@ configUpdateChannel.subscribe((config) => {
     // Guard against re-arming on every unrelated remote-config publish while still 'auto'; each
     // SSIHeuristics instance registers its own listeners/timer that are only torn down on trigger.
     if (config.profiling.DD_PROFILING_ENABLED === 'auto' && !armedSSIHeuristics) {
-      const { SSIHeuristics } = require('./profiling/ssi-heuristics')
+      const { SSIHeuristics } = getSSIHeuristicsModule()
       armedSSIHeuristics = new SSIHeuristics(config)
       armedSSIHeuristics.start()
       armedSSIHeuristics.onTriggered(() => {
