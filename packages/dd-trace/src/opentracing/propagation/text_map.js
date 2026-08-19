@@ -645,9 +645,11 @@ class TextMapPropagator {
             case 's': {
               const priority = Number.parseInt(value, 10)
               if (!Number.isInteger(priority)) continue
+              const fromFlags = spanContext._sampling.priority
               if (
-                (spanContext._sampling.priority === 1 && priority > 0) ||
-                (spanContext._sampling.priority === 0 && priority < 0)
+                (fromFlags === 1 && priority > 0) ||
+                (fromFlags === 0 && priority < 0) ||
+                (fromFlags === 0 && priority >= AUTO_KEEP)
               ) {
                 spanContext._sampling.priority = priority
               }

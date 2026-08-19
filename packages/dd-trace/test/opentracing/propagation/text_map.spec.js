@@ -1934,6 +1934,42 @@ describe('TextMapPropagator', () => {
         }
       })
 
+      it('should prefer datadog tracestate keep when traceparent sampled flag is cleared', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-00'
+        textMap.tracestate = 'dd=s:1'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._sampling.priority, 1)
+      })
+
+      it('should preserve stronger datadog tracestate keep when traceparent sampled flag is cleared', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-00'
+        textMap.tracestate = 'dd=s:2'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._sampling.priority, 2)
+      })
+
+      it('should still drop when traceparent and tracestate both indicate drop', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-00'
+        textMap.tracestate = 'dd=s:-1'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._sampling.priority, -1)
+      })
+
+      it('should not upgrade sampling when tracestate has no datadog decision', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-00'
+        textMap.tracestate = 'other=vendor'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        assert.strictEqual(spanContext._sampling.priority, 0)
+      })
+
       it('should round-trip origin = through tracestate ~ encoding', () => {
         textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap.tracestate = 'dd=o:foo~bar'
