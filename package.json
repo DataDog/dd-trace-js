@@ -256,6 +256,7 @@
     "v8-to-istanbul": "^9.0.0",
     "workerpool": "^10.0.3",
     "yaml": "^2.9.0",
+    "yarn": "1.22.22",
     "yarn-deduplicate": "^6.0.2"
   }
 }
