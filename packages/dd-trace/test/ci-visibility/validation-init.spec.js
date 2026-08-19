@@ -102,6 +102,33 @@ describe('Test Optimization validation initialization', () => {
     })
   })
 
+  it('selects the agentless exporter when global agentless mode is enabled', () => {
+    const tracer = {
+      init: sinon.stub(),
+      use: sinon.stub(),
+    }
+    const values = {
+      DD_AGENTLESS_ENABLED: true,
+      DD_API_KEY: 'api-key',
+    }
+
+    proxyquire('../../../../ci/init', {
+      '../packages/dd-trace': tracer,
+      '../packages/dd-trace/src/config/helper': {
+        getEnvironmentVariable: name => values[name],
+        getValueFromEnvSources: (name, skipDefault) => values[name] ?? skipDefault,
+      },
+      '../packages/dd-trace/src/log': { debug: sinon.stub() },
+    })
+
+    sinon.assert.calledOnceWithExactly(tracer.init, {
+      startupLogs: false,
+      isCiVisibility: true,
+      flushInterval: 5000,
+      experimental: { exporter: 'datadog' },
+    })
+  })
+
   for (const missingEnvironmentVariable of [VALIDATION_MANIFEST_ENV, VALIDATION_OUTPUT_ENV]) {
     it(`does not initialize validation mode without ${missingEnvironmentVariable}`, () => {
       const tracer = {

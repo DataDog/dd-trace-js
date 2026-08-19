@@ -35,6 +35,8 @@ function _handleFlush () {
  * @returns {void}
  */
 function enable (config) {
+  if (config.DD_AGENTLESS_ENABLED) return
+
   if (exposuresWriter) {
     log.warn('%s already enabled', exposuresWriter.constructor.name)
     return
