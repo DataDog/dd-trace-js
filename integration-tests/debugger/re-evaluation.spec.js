@@ -62,9 +62,11 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
           'even if it is not loaded when the probe is received ' +
           `(attempt ${attempt})`
 
-        it(testName, async function () {
+        // Diagnostics are multi-shot; Promise settlement would swallow later assertion failures.
+        it(testName, function (done) {
           this.timeout(5000)
 
+          let doneCalled = false
           const probeId = rcConfig.config.id
           const expectedPayloads = [{
             ddsource: 'dd_debugger',
@@ -80,56 +82,48 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
             debugger: { diagnostics: { probeId, probeVersion: 0, status: 'EMITTING' } },
           }]
 
-          const diagnosticsPromise = new Promise((resolve, reject) => {
-            agent.on('debugger-diagnostics', ({ payload }) => {
-              handleDiagnostics(payload).catch(reject)
-            })
-
-            async function handleDiagnostics (payload) {
-              await Promise.all(payload.map(async (event) => {
-                if (event.debugger.diagnostics.status === 'ERROR') {
+          agent.on('debugger-diagnostics', async ({ payload }) => {
+            await Promise.all(payload.map(async (event) => {
+              if (event.debugger.diagnostics.status === 'ERROR') {
                 // shortcut to fail with a more relevant error message in case the target script could not be found,
                 // instead of asserting the entire expected event.
-                  assert.fail(event.debugger.diagnostics.exception.message)
-                }
+                assert.fail(event.debugger.diagnostics.exception.message)
+              }
 
-                const expected = expectedPayloads.shift()
-                assertObjectContains(event, expected)
+              const expected = expectedPayloads.shift()
+              assertObjectContains(event, expected)
 
-                if (event.debugger.diagnostics.status === 'INSTALLED') {
-                  const response = await axios.get('/')
-                  assert.strictEqual(response.status, 200)
-                }
-              }))
+              if (event.debugger.diagnostics.status === 'INSTALLED') {
+                const response = await axios.get('/')
+                assert.strictEqual(response.status, 200)
+              }
+            }))
 
-              if (expectedPayloads.length === 0) resolve()
+            if (expectedPayloads.length === 0 && doneCalled === false) {
+              doneCalled = true
+              done()
             }
           })
 
           agent.addRemoteConfig(rcConfig)
 
-          const processPromise = startProcess()
-
-          async function startProcess () {
-            const childProcess = await spawnProc(sourceFile, {
-              cwd: sandboxCwd(),
-              env: {
-                NODE_OPTIONS: '--import dd-trace/initialize.mjs',
-                DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
-                DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: '0',
-                DD_TRACE_AGENT_PORT: agent.port,
-                DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
-                DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
-              },
-            })
-            assert(childProcess, 'proc must be spawned successfully')
-            proc = childProcess
+          spawnProc(sourceFile, {
+            cwd: sandboxCwd(),
+            env: {
+              NODE_OPTIONS: '--import dd-trace/initialize.mjs',
+              DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+              DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: '0',
+              DD_TRACE_AGENT_PORT: agent.port,
+              DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
+              DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
+            },
+          }).then(_proc => {
+            assert(_proc, 'proc must be spawned successfully')
+            proc = _proc
             // Possible race condition, in case axios.get() is called in the test before it's created here. But we have
             // to start the test quickly in order to test the re-evaluation of the probe.
             axios = Axios.create({ baseURL: proc.url })
-          }
-
-          await Promise.all([processPromise, diagnosticsPromise])
+          })
         })
       }
     }

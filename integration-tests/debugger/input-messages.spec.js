@@ -9,7 +9,8 @@ describe('Dynamic Instrumentation', function () {
   describe('input messages', function () {
     it('should capture and send expected payload when a log line probe is triggered', testBasicInput.bind(null, t))
 
-    it('should respond with updated message if probe message is updated', () => new Promise((resolve, reject) => {
+    // Input messages are multi-shot, so duplicate completion must remain observable to Mocha.
+    it('should respond with updated message if probe message is updated', function (done) {
       const expectedMessages = ['Hello World!', 'Hello Updated World!']
       const triggers = [
         async () => {
@@ -28,20 +29,21 @@ describe('Dynamic Instrumentation', function () {
           if (event.debugger.diagnostics.status === 'INSTALLED') {
             const trigger = triggers.shift()
             assert.ok(trigger, 'expecting a trigger function to be defined')
-            trigger().catch(reject)
+            trigger().catch(done)
           }
         })
       })
 
       t.agent.on('debugger-input', ({ payload: [payload] }) => {
         assert.strictEqual(payload.message, expectedMessages.shift())
-        if (expectedMessages.length === 0) resolve()
+        if (expectedMessages.length === 0) done()
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
-    }))
+    })
 
-    it('should not trigger if probe is deleted', () => new Promise((resolve, reject) => {
+    // The absence check has no independent terminal signal and must stay callback-based.
+    it('should not trigger if probe is deleted', function (done) {
       t.agent.on('debugger-diagnostics', ({ payload }) => {
         payload.forEach((event) => {
           if (event.debugger.diagnostics.status === 'INSTALLED') {
@@ -55,9 +57,9 @@ describe('Dynamic Instrumentation', function () {
                 // We want to wait enough time to see if the client triggers on the breakpoint so that the test can
                 // fail if it does, but not so long that the test times out.
                 // TODO: Is there some signal we can use instead of a timer?
-                setTimeout(resolve, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
+                setTimeout(done, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
               } catch (error) {
-                reject(error)
+                done(error)
               }
             }
 
@@ -71,6 +73,6 @@ describe('Dynamic Instrumentation', function () {
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
-    }))
+    })
   })
 })

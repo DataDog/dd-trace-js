@@ -13,7 +13,8 @@ describe('Dynamic Instrumentation', function () {
     describe('with snapshot', function () {
       beforeEach(() => { t.triggerBreakpoint() })
 
-      it('should respect global max snapshot sampling rate', () => new Promise((resolve, reject) => {
+      // The existing guard prevents teardown errors from completing the test after sampling has finished.
+      it('should respect global max snapshot sampling rate', function (_done) {
         const MAX_SNAPSHOTS_PER_SECOND_GLOBALLY = 25
         const snapshotsPerSecond = MAX_SNAPSHOTS_PER_SECOND_GLOBALLY * 2
         const probeConf = { captureSnapshot: true, sampling: { snapshotsPerSecond } }
@@ -29,13 +30,13 @@ describe('Dynamic Instrumentation', function () {
         const state = {
           [rcConfig1.config.id]: {
             triggerBreakpointContinuously () {
-              t.axios.get(t.breakpoints[0].url).catch(finish)
+              t.axios.get(t.breakpoints[0].url).catch(done)
               this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
             },
           },
           [rcConfig2.config.id]: {
             triggerBreakpointContinuously () {
-              t.axios.get(t.breakpoints[1].url).catch(finish)
+              t.axios.get(t.breakpoints[1].url).catch(done)
               this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
             },
           },
@@ -73,7 +74,7 @@ describe('Dynamic Instrumentation', function () {
               clearTimeout(state[rcConfig1.config.id].timer)
               clearTimeout(state[rcConfig2.config.id].timer)
 
-              finish()
+              done()
             }
           })
         })
@@ -81,16 +82,12 @@ describe('Dynamic Instrumentation', function () {
         t.agent.addRemoteConfig(rcConfig1)
         t.agent.addRemoteConfig(rcConfig2)
 
-        function finish (error) {
+        function done (error) {
           if (isDone) return
           isDone = true
-          if (error) {
-            reject(error)
-          } else {
-            resolve()
-          }
+          _done(error)
         }
-      }))
+      })
     })
   })
 })

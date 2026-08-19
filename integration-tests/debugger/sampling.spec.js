@@ -7,12 +7,13 @@ describe('Dynamic Instrumentation', function () {
   const t = setup({ testApp: 'target-app/basic.js', dependencies: ['fastify'] })
 
   describe('sampling', function () {
-    it('should respect sampling rate for single probe', () => new Promise((resolve, reject) => {
+    // Snapshot input is multi-shot; callback completion exposes an unexpected later sample.
+    it('should respect sampling rate for single probe', function (done) {
       let prev, timer
       const rcConfig = t.generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
 
       function triggerBreakpointContinuously () {
-        t.axios.get(t.breakpoint.url).catch(reject)
+        t.axios.get(t.breakpoint.url).catch(done)
         timer = setTimeout(triggerBreakpointContinuously, 10)
       }
 
@@ -24,33 +25,33 @@ describe('Dynamic Instrumentation', function () {
 
       t.agent.on('debugger-input', ({ payload }) => {
         payload.forEach(({ debugger: { snapshot: { timestamp } } }) => {
-          if (prev === undefined) {
-            prev = timestamp
-            return
+          const previousTimestamp = prev
+          prev = timestamp
+          if (previousTimestamp !== undefined) {
+            const duration = timestamp - previousTimestamp
+            clearTimeout(timer)
+
+            // The sampling check uses `process.hrtime.bigint()` (monotonic), but the snapshot `timestamp` is captured
+            // via `Date.now()` (wall clock). NTP slewing on CI runners can cause the wall clock to drift slightly
+            // relative to the monotonic clock during the >=1s sampling window, so we allow a 75ms tolerance on both
+            // sides of the expected 1000ms gap.
+            assert.ok(duration >= 925, `duration (${duration}) should be >= 925`)
+            assert.ok(duration < 1075, `duration (${duration}) should be < 1075`)
+
+            // Wait at least a full sampling period, to see if we get any more payloads
+            timer = setTimeout(() => done(), 1250)
           }
-
-          const duration = timestamp - prev
-          clearTimeout(timer)
-
-          // The sampling check uses `process.hrtime.bigint()` (monotonic), but the snapshot `timestamp` is captured
-          // via `Date.now()` (wall clock). NTP slewing on CI runners can cause the wall clock to drift slightly
-          // relative to the monotonic clock during the >=1s sampling window, so we allow a 75ms tolerance on both
-          // sides of the expected 1000ms gap.
-          assert.ok(duration >= 925, `duration (${duration}) should be >= 925`)
-          assert.ok(duration < 1075, `duration (${duration}) should be < 1075`)
-
-          // Wait at least a full sampling period, to see if we get any more payloads
-          timer = setTimeout(resolve, 1250)
         })
       })
 
       t.agent.addRemoteConfig(rcConfig)
-    }))
+    })
 
-    it('should adhere to individual probes sample rate', () => new Promise((resolve, reject) => {
+    // Both probe streams must complete, and any later completion must remain visible to Mocha.
+    it('should adhere to individual probes sample rate', function (done) {
       /** @type {(() => void) & { calledOnce?: boolean }} */
       const doneWhenCalledTwice = () => {
-        if (doneWhenCalledTwice.calledOnce) return resolve()
+        if (doneWhenCalledTwice.calledOnce) return done()
         doneWhenCalledTwice.calledOnce = true
       }
 
@@ -59,13 +60,13 @@ describe('Dynamic Instrumentation', function () {
       const state = {
         [rcConfig1.config.id]: {
           triggerBreakpointContinuously () {
-            t.axios.get(t.breakpoints[0].url).catch(reject)
+            t.axios.get(t.breakpoints[0].url).catch(done)
             this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
           },
         },
         [rcConfig2.config.id]: {
           triggerBreakpointContinuously () {
-            t.axios.get(t.breakpoints[1].url).catch(reject)
+            t.axios.get(t.breakpoints[1].url).catch(done)
             this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
           },
         },
@@ -102,6 +103,6 @@ describe('Dynamic Instrumentation', function () {
 
       t.agent.addRemoteConfig(rcConfig1)
       t.agent.addRemoteConfig(rcConfig2)
-    }))
+    })
   })
 })
