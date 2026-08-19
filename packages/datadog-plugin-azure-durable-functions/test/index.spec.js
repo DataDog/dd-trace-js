@@ -7,15 +7,18 @@ const sinon = require('sinon')
 
 require('../../dd-trace/test/setup/core')
 
+const formats = require('../../../ext/formats')
 const AzureDurableFunctionsPlugin = require('../src')
 
 describe('azure-durable-functions plugin', () => {
   let plugin
   let extract
   let startSpan
+  let applyTracestateKeepOverClearedFlag
   let span
 
   beforeEach(() => {
+    applyTracestateKeepOverClearedFlag = sinon.stub()
     span = {
       setTag: sinon.stub(),
     }
@@ -26,6 +29,10 @@ describe('azure-durable-functions plugin', () => {
     plugin = new AzureDurableFunctionsPlugin({
       extract,
       startSpan,
+      _propagators: {
+        [formats.TEXT_MAP]: { applyTracestateKeepOverClearedFlag },
+      },
+      _config: { DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue' },
       _service: 'test-service',
       _nomenclature: {
         opName: () => 'azure.functions.invoke',
@@ -71,6 +78,46 @@ describe('azure-durable-functions plugin', () => {
     )
   })
 
+  it('restores tracestate keep through the text_map propagator', () => {
+    const parent = { _traceId: 'parent' }
+    extract.returns(parent)
+
+    bindStart({
+      traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00',
+      tracestate: 'dd=s:1',
+    })
+
+    sinon.assert.calledOnceWithExactly(
+      applyTracestateKeepOverClearedFlag,
+      parent,
+      'dd=s:1'
+    )
+  })
+
+  it('does not restore sampling when propagation behavior is restart', () => {
+    plugin._tracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
+    extract.returns({ _traceId: 'parent' })
+
+    bindStart({
+      traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00',
+      tracestate: 'dd=s:1',
+    })
+
+    sinon.assert.notCalled(applyTracestateKeepOverClearedFlag)
+  })
+
+  it('does not restore sampling when propagation behavior is ignore', () => {
+    plugin._tracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+    extract.returns({ _traceId: 'parent' })
+
+    bindStart({
+      traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00',
+      tracestate: 'dd=s:1',
+    })
+
+    sinon.assert.notCalled(applyTracestateKeepOverClearedFlag)
+  })
+
   it('normalizes a failed extract to undefined childOf', () => {
     extract.returns(null)
 
@@ -78,6 +125,7 @@ describe('azure-durable-functions plugin', () => {
       traceparent: 'not-a-valid-traceparent',
     })
 
+    sinon.assert.notCalled(applyTracestateKeepOverClearedFlag)
     sinon.assert.calledWith(
       startSpan,
       'azure.functions.invoke',
@@ -89,6 +137,7 @@ describe('azure-durable-functions plugin', () => {
     bindStart()
 
     sinon.assert.notCalled(extract)
+    sinon.assert.notCalled(applyTracestateKeepOverClearedFlag)
     sinon.assert.calledWith(
       startSpan,
       'azure.functions.invoke',

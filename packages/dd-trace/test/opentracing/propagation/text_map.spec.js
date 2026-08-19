@@ -1934,40 +1934,43 @@ describe('TextMapPropagator', () => {
         }
       })
 
-      it('should prefer datadog tracestate keep when traceparent sampled flag is cleared', () => {
+      it('should keep a drop decision when traceparent is cleared and tracestate says keep', () => {
         textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-00'
         textMap.tracestate = 'dd=s:1'
         config.tracePropagationStyle.extract = ['tracecontext']
 
         const spanContext = propagator.extract(textMap)
-        assert.strictEqual(spanContext._sampling.priority, 1)
+        assert.strictEqual(spanContext._sampling.priority, 0)
       })
 
-      it('should preserve stronger datadog tracestate keep when traceparent sampled flag is cleared', () => {
+      it('should restore tracestate keep over a cleared traceparent sampled flag', () => {
         textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-00'
         textMap.tracestate = 'dd=s:2'
         config.tracePropagationStyle.extract = ['tracecontext']
 
         const spanContext = propagator.extract(textMap)
+        propagator.applyTracestateKeepOverClearedFlag(spanContext, textMap.tracestate)
         assert.strictEqual(spanContext._sampling.priority, 2)
       })
 
-      it('should still drop when traceparent and tracestate both indicate drop', () => {
+      it('should not restore keep when tracestate indicates drop', () => {
         textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-00'
         textMap.tracestate = 'dd=s:-1'
         config.tracePropagationStyle.extract = ['tracecontext']
 
         const spanContext = propagator.extract(textMap)
+        propagator.applyTracestateKeepOverClearedFlag(spanContext, textMap.tracestate)
         assert.strictEqual(spanContext._sampling.priority, -1)
       })
 
-      it('should not upgrade sampling when tracestate has no datadog decision', () => {
-        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-00'
-        textMap.tracestate = 'other=vendor'
+      it('should not restore keep when the extracted context is already kept', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap.tracestate = 'dd=s:1'
         config.tracePropagationStyle.extract = ['tracecontext']
 
         const spanContext = propagator.extract(textMap)
-        assert.strictEqual(spanContext._sampling.priority, 0)
+        propagator.applyTracestateKeepOverClearedFlag(spanContext, 'dd=s:2')
+        assert.strictEqual(spanContext._sampling.priority, 1)
       })
 
       it('should round-trip origin = through tracestate ~ encoding', () => {

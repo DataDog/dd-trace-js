@@ -2,6 +2,7 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { writeTraceparent, writeTracestate } = require('../../dd-trace/src/carrier')
+const formats = require('../../../ext/formats')
 
 class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get id () { return 'azure-durable-functions' }
@@ -21,6 +22,15 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
       writeTraceparent(carrier, ctx.traceparent)
       if (ctx.tracestate) writeTracestate(carrier, ctx.tracestate)
       childOf = this.tracer.extract('text_map', carrier) ?? undefined
+    }
+
+    // The host clears traceparent's sampled flag while tracestate still says keep.
+    if (
+      childOf &&
+      this.tracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'continue'
+    ) {
+      this.tracer._propagators?.[formats.TEXT_MAP]
+        ?.applyTracestateKeepOverClearedFlag(childOf, ctx.tracestate)
     }
 
     const span = this.startSpan(this.operationName(), {
