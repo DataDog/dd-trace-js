@@ -157,6 +157,9 @@ updates:
       - dependency-name: "jest-docblock"
         # 30.0.0 onwards only supports Node.js 18.14.x and above
         update-types: ["version-update:semver-major"]
+      - dependency-name: "https-proxy-agent"
+        # Keep the vendored CommonJS build compatible with older Node.js versions
+        versions: [">=8.0.0"]
       - dependency-name: "lru-cache"
         # 11.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
@@ -213,9 +216,6 @@ updates:
       - dependency-name: "office-addin-mock"
         # Pinned to 2.x due to compatibility issues with newer major versions
         update-types: ["version-update:semver-major"]
-      - dependency-name: "undici"
-        # 8.0.0 onwards only supports Node.js 22.19.0 and above
-        versions: [">=8.0.0"]
     # Cohort-based groups so a single breaking bump only blocks its own PR. A dependency lands
     # in the first cohort it matches; `test-versions` is the catch-all for the long tail
     # (OpenTelemetry, OpenFeature, logging, templating, serialization, runtimes, misc).
