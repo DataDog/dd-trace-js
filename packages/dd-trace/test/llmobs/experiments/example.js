@@ -38,6 +38,15 @@ function keywordOverlap (prompt, topics) {
 
 async function runExperiment (experiments) {
   console.log('\n=== Experiment: topic relevance ===')
+  class ExactMatchEvaluator extends tracer.llmobs.BaseEvaluator {
+    constructor () {
+      super('exact_match')
+    }
+
+    evaluate (context) {
+      return context.outputData.response === context.expectedOutput
+    }
+  }
   const dataset = experiments.createDataset('node-tracer-topic-relevance', 'demo dataset')
     .addRecord({ prompt: 'I love hiking in the mountains on weekends.', topics: 'outdoor, travel' }, 'true',
       { source: 'synthetic', difficulty: 'easy' }, ['split:train'])
@@ -54,7 +63,7 @@ async function runExperiment (experiments) {
       return { response: String(overlap), confidence: overlap ? 0.85 : 0.65 }
     },
     evaluators: {
-      exact_match: (_input, output, expected) => output.response === expected, // boolean
+      exact_match: new ExactMatchEvaluator(), // class-based boolean evaluator
       confidence_score: (_input, output) => Number(output.confidence), // score
       verdict_category: (_input, output) => (output.response === 'true' ? 'in-topic' : 'off-topic'), // categorical
     },
@@ -100,7 +109,10 @@ async function main () {
   requireEnv('DD_APP_KEY')
 
   tracer.init({
-    llmobs: { mlApp: 'node-tracer-experiments-demo' },
+    llmobs: {
+      mlApp: 'node-tracer-experiments-demo',
+      projectName: 'node-tracer-experiments-demo',
+    },
   })
 
   const { experiments } = tracer.llmobs

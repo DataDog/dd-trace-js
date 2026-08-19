@@ -6,6 +6,12 @@ const { describe, it } = require('mocha')
 
 const { API_BASE_PATH, ExperimentsClient } = require('../../../src/llmobs/experiments/client')
 const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
+const {
+  BaseEvaluator,
+  BaseSummaryEvaluator,
+  EvaluatorResult,
+  MultiEvaluatorResult,
+} = require('../../../src/llmobs/experiments/evaluator')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
 
 function client () {
@@ -91,6 +97,102 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(requests.find(request => request.method === 'createExperiment').attributes.config, {
       temperature: 0,
     })
+  })
+
+  it('runs class evaluators with contexts and serializes rich results', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('input', 'expected', { source: 'test' })
+    let recordContext
+    let summaryContext
+
+    class ExactMatchEvaluator extends BaseEvaluator {
+      constructor () {
+        super('exact_match')
+      }
+
+      evaluate (context) {
+        recordContext = context
+        return new EvaluatorResult({
+          value: context.outputData === context.expectedOutput,
+          reasoning: 'The output matches the expected value.',
+          assessment: 'pass',
+          metadata: { source: 'class' },
+          tags: { evaluator: 'exact' },
+        })
+      }
+    }
+
+    class CountEvaluator extends BaseSummaryEvaluator {
+      constructor () {
+        super('match_count')
+      }
+
+      evaluate (context) {
+        summaryContext = context
+        return context.evaluationResults.exact_match.filter(Boolean).length
+      }
+    }
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      projectName: 'demo-project',
+      dataset,
+      task: input => input,
+      evaluators: [new ExactMatchEvaluator()],
+      summaryEvaluators: [new CountEvaluator()],
+    }).run()
+
+    assert.deepEqual({
+      inputData: recordContext.inputData,
+      outputData: recordContext.outputData,
+      expectedOutput: recordContext.expectedOutput,
+      metadata: recordContext.metadata,
+      spanId: recordContext.spanId,
+      traceId: recordContext.traceId,
+    }, {
+      inputData: 'input',
+      outputData: 'input',
+      expectedOutput: 'expected',
+      metadata: { source: 'test', experiment_config: {} },
+      spanId: result.rows[0].spanId,
+      traceId: result.rows[0].traceId,
+    })
+    assert.deepEqual(summaryContext.evaluationResults, { exact_match: [false] })
+    assert.equal(result.rows[0].evaluations.exact_match, false)
+    assert.equal(result.summaryEvaluations.match_count.value, 0)
+
+    const events = requests.find(request => request.method === 'postExperimentEvents').attributes
+    const metric = events.metrics.find(item => item.label === 'exact_match')
+    assert.equal(metric.assessment, 'pass')
+    assert.equal(metric.reasoning, 'The output matches the expected value.')
+    assert.deepEqual(metric.metadata, { source: 'class' })
+    assert.deepEqual(metric.tags.filter(tag => tag === 'evaluator:exact'), ['evaluator:exact'])
+    assert.equal(metric.tags.includes('project_name:demo-project'), true)
+    assert.equal(events.spans[0].tags.includes('project_name:demo-project'), true)
+  })
+
+  it('supports multiple metrics from a class evaluator', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+
+    class DetailsEvaluator extends BaseEvaluator {
+      evaluate () {
+        return new MultiEvaluatorResult({
+          length: 5,
+          valid: new EvaluatorResult(true),
+        })
+      }
+    }
+
+    await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: input => input,
+      evaluators: [new DetailsEvaluator()],
+    }).run()
+
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    assert.deepEqual(metrics.map(metric => metric.label), ['DetailsEvaluator-length', 'DetailsEvaluator-valid'])
   })
 
   it('preserves repeated record tags in fallback experiment spans', async () => {

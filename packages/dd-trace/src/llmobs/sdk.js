@@ -98,6 +98,7 @@ class LLMObs extends NoopLLMObs {
     // TODO: These configs should be passed through directly at construction time instead.
     this._config.llmobs.DD_LLMOBS_ENABLED = true
     this._config.llmobs.mlApp = options.mlApp
+    if (options.projectName !== undefined) this._config.llmobs.projectName = options.projectName
     this._config.llmobs.agentlessEnabled = options.agentlessEnabled
 
     // configure writers and channel subscribers

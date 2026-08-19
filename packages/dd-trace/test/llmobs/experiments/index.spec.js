@@ -140,6 +140,27 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(typeof experiment.run, 'function')
     })
 
+    it('uses the configured project name and supports per-operation overrides', () => {
+      const constructedProjects = []
+      class CapturingExperimentsClient extends ExperimentsClient {
+        constructor (options) {
+          super(options)
+          constructedProjects.push(options.projectName)
+        }
+      }
+      const { createExperiments: createWithProjectCapture } = proxyquire('../../../src/llmobs/experiments', {
+        './client': { ExperimentsClient: CapturingExperimentsClient },
+      })
+
+      const exp = createWithProjectCapture(enabledConfig({
+        llmobs: { DD_LLMOBS_ENABLED: true, projectName: 'configured-project' },
+      }))
+      exp.createDataset('default')
+      exp.createDataset('override', { projectName: 'override-project' })
+
+      assert.deepEqual(constructedProjects, ['configured-project', 'override-project'])
+    })
+
     it('returns a working facade when service is used as the project name fallback', () => {
       const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
       const dataset = exp.createDataset('d')
