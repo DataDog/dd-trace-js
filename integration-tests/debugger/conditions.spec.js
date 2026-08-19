@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('assert')
-const { once } = require('node:events')
 
 const { setup } = require('./utils')
 
@@ -11,63 +10,58 @@ describe('Dynamic Instrumentation', function () {
   describe('condition', function () {
     beforeEach(() => { t.triggerBreakpoint() })
 
-    /**
-     * @param {string} expectedStatus
-     * @returns {Promise<object[]>}
-     */
-    function waitForDiagnosticsStatus (expectedStatus) {
-      return new Promise(resolve => {
-        t.agent.on('debugger-diagnostics', function onDiagnostics ({ payload }) {
-          if (payload.some(event => event.debugger.diagnostics.status === expectedStatus)) {
-            t.agent.removeListener('debugger-diagnostics', onDiagnostics)
-            resolve(payload)
-          }
-        })
+    // Input is a stream; callback completion makes duplicate payloads observable to Mocha.
+    it('should trigger when condition is met', function (done) {
+      t.agent.on('debugger-input', () => {
+        done()
       })
-    }
 
-    it('should trigger when condition is met', async function () {
-      const inputPromise = once(t.agent, 'debugger-input')
       t.agent.addRemoteConfig(t.generateRemoteConfig({
         when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
       }))
-
-      await inputPromise
     })
 
-    it('should not trigger when condition is not met', async function () {
+    // The absence check has no independent terminal signal and must stay callback-based.
+    it('should not trigger when condition is not met', function (done) {
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
+        payload.forEach((event) => {
+          if (event.debugger.diagnostics.status === 'INSTALLED') {
+            // Can't know if the probe didn't trigger, so just wait a bit and see if the test fails in the mean time
+            setTimeout(done, 2000)
+          }
+        })
+      })
+
       t.agent.on('debugger-input', () => {
         assert.fail('Should not trigger when condition is not met')
       })
 
-      const installedPromise = waitForDiagnosticsStatus('INSTALLED')
       t.agent.addRemoteConfig(t.generateRemoteConfig({
         when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
       }))
-
-      await installedPromise
-
-      // Can't know if the probe did not trigger, so wait briefly and fail if input arrives in the meantime.
-      await new Promise(resolve => setTimeout(resolve, 2000))
     })
 
-    it('should report error if condition cannot be compiled', async function () {
+    // Diagnostics are multi-shot; retaining callback completion exposes an unexpected later install.
+    it('should report error if condition cannot be compiled', function (done) {
       const rcConfig = t.generateRemoteConfig({
         when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } },
       })
 
-      const errorPromise = waitForDiagnosticsStatus('ERROR')
-      t.agent.addRemoteConfig(rcConfig)
-
-      const payload = await errorPromise
-      const diagnostics = payload.map(event => event.debugger.diagnostics)
-      const error = diagnostics.find(({ status }) => status === 'ERROR')
-      assert.ok(error)
-      assert.strictEqual(
-        error.exception.message,
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
+        payload.forEach(({ debugger: { diagnostics } }) => {
+          if (diagnostics.status === 'ERROR') {
+            assert.strictEqual(
+              diagnostics.exception.message,
               `Cannot compile expression: original dsl (probe: ${rcConfig.config.id}, version: 0)`
-      )
-      assert.ok(!diagnostics.some(({ status }) => status === 'INSTALLED'))
+            )
+            done()
+          } else if (diagnostics.status === 'INSTALLED') {
+            assert.fail('Should not install when condition cannot be compiled')
+          }
+        })
+      })
+
+      t.agent.addRemoteConfig(rcConfig)
     })
   })
 })
