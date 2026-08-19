@@ -47,6 +47,7 @@ describe('TracerProxy', () => {
   let handlers
   let rc
   let dogStatsD
+  let DynamicInstrumentation
   let noopDogStatsDClient
   let NoopDogStatsDClient
   let OpenFeatureProvider
@@ -221,6 +222,13 @@ describe('TracerProxy', () => {
       start: sinon.spy(),
     }
 
+    DynamicInstrumentation = {
+      configure: sinon.spy(),
+      isStarted: sinon.stub().returns(false),
+      start: sinon.spy(),
+      stop: sinon.spy(),
+    }
+
     iast = {
       enable: sinon.spy(),
       disable: sinon.spy(),
@@ -293,6 +301,7 @@ describe('TracerProxy', () => {
       './aiguard/sdk': AIGuardSdk,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
+      './debugger': DynamicInstrumentation,
       './noop/dogstatsd': NoopDogStatsDClient,
       './flare': flare,
       './openfeature': openfeature,
@@ -459,6 +468,28 @@ describe('TracerProxy', () => {
 
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.notCalled(RemoteConfig)
+      })
+
+      it('should start Dynamic Instrumentation from a probe file in agentless mode', () => {
+        config.DD_AGENTLESS_ENABLED = true
+        config.dynamicInstrumentation.enabled = true
+        config.dynamicInstrumentation.probeFile = 'probes.json'
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(RemoteConfig)
+        sinon.assert.calledOnceWithExactly(DynamicInstrumentation.start, config, undefined)
+      })
+
+      it('should not start Dynamic Instrumentation without a probe source', () => {
+        config.DD_AGENTLESS_ENABLED = true
+        config.dynamicInstrumentation.enabled = true
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(DynamicInstrumentation.start)
       })
 
       it('should not initialize when disabled', () => {

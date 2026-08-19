@@ -5106,7 +5106,7 @@ rules:
       assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
       assert.strictEqual(config.runtimeMetrics.enabled, false)
       assert.strictEqual(config.dsmEnabled, false)
-      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
       assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, [])
       assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
