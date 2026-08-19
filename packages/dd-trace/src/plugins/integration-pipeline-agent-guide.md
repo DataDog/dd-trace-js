@@ -45,6 +45,8 @@ Do not use that observation to waive focused lint or CI on subsequent changes.
 | --- | --- |
 | [`integration-pipeline.js`](./integration-pipeline.js) | Authoritative implementation, JSDoc types, validation, lifecycle, stores, and exported helpers. |
 | [`integration-pipeline.spec.js`](../../test/plugins/integration-pipeline.spec.js) | Executable contract for ordering, correlation, spanless operations, errors, no-op scopes, and validation. |
+| [`stages/messaging.js`](./stages/messaging.js) | Shared propagation and Data Streams capability. Read before hand-writing either in a plugin. |
+| [`stages/messaging.spec.js`](../../test/plugins/stages/messaging.spec.js) | Executable contract for edge tags, carrier sharing, batching, gating, and inbound decode ordering. |
 | [`INTEGRATION_PIPELINE_NOTES.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_NOTES.md) | Mechanical walkthrough using BullMQ and Azure Cosmos. |
 | [`INTEGRATION_PIPELINE_RATIONALE.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_RATIONALE.md) | Adoption argument, architecture score, risks, and rollout criteria. |
 | [BullMQ plugin](../../../datadog-plugin-bullmq/src/index.js) | Messaging integration using multiple operations and product stages. |
@@ -170,7 +172,7 @@ Each operation describes one observed source function:
   when: frame => true,
   skip: 'parent',
   context: {
-    parent: frame => undefined,
+    parent: frame => null,
   },
   span: {},
   stages: [],
@@ -317,9 +319,8 @@ Overrides parent selection. Parent precedence is:
 2. correlation from the active `storage('context')` store;
 3. span from the active `storage('legacy')` store.
 
-Use this for extracted remote parents, as BullMQ consumer propagation does. Returning `null` explicitly requests a
-root context. Returning `undefined` also creates a root context because an explicitly declared resolver suppresses the
-normal active-context fallback; prefer `null` when that root intent should be obvious to a reviewer.
+Use this for extracted remote parents, as BullMQ consumer propagation does. Returning `undefined` falls back to the
+active context. Returning `null` explicitly requests a root context.
 
 ### `span`
 
@@ -403,6 +404,53 @@ other stages and span cleanup from running.
 
 Only the `tracing` requirement exists today. Unknown capabilities fail definition validation.
 
+### Shared capability stages
+
+Do not hand-write a stage for behavior another integration already needs. Two shared stages exist:
+
+| Stage | Import | Shape |
+| --- | --- | --- |
+| `exitCodeOrigin` | `plugins/integration-pipeline` | Nullary. Declared by naming it; takes no parameters. |
+| `createMessagingStage(descriptor)` | `plugins/stages/messaging` | Parameterized by where the library keeps its messages. |
+
+`exitCodeOrigin` is the model for a reusable stage: it binds to nothing library-specific, so all three BullMQ producer
+operations share the same object. A stage that needs to bind to library data cannot be shared that way, which is what
+`createMessagingStage` exists to solve.
+
+```js
+createMessagingStage({
+  direction: 'out',              // 'out' injects and encodes; 'in' decodes
+  system: 'bullmq',              // Data Streams `type` tag
+  topic: field('queueName'),     // (frame) => string
+  messages: frame => [...],      // (frame) => unknown[] | undefined
+  carrier: newCarrier,           // (message, frame) => object | undefined
+  commit: commitCarrier,         // optional (message, carrier, frame) => void
+  payload: job => job.data,      // optional (message, frame) => unknown, for DSM sizing
+})
+```
+
+The descriptor answers only the library-specific questions: which messages does this invocation handle, where does each
+one carry its Datadog fields, and what sizes its payload. The stage owns everything neither the library nor the
+integration should decide — the edge-tag format, the pathway encoding, the `dsmEnabled` gate, the ordering of injection
+against encoding, and the fact that both write one shared carrier per message.
+
+`carrier` may return a live reference the stage mutates in place (a header map, no `commit` needed) or a detached object
+the integration merges back in `commit` (a serialized envelope). Either way the carrier is read or written exactly once
+per message, so a fused stage costs one JSON round trip where two separate stages cost two.
+
+### When a capability earns a shared stage
+
+A shared, parameterized stage is justified when two or more of these hold. Otherwise write a plain stage local to the
+integration and wait for a second consumer.
+
+- Two capabilities consume the same per-operation input, so that input has to be hoisted above both.
+- It encodes a Datadog-owned format or spec rather than library semantics.
+- It has an ordering constraint against another capability that no per-author array can enforce.
+- Its gate is tracer configuration rather than library state.
+
+Propagation and Data Streams hit all four, which is why they are one stage instead of six. `exitCodeOrigin` hits none,
+which is why it stays a bare object.
+
 ## The frame
 
 One `PipelineFrame` is created for each accepted or rejected invocation prepared by the pipeline:
@@ -462,7 +510,8 @@ BullMQ demonstrates:
 - producer and consumer span shapes;
 - configuration transformation for producer filters;
 - extracted remote-parent selection;
-- tracing-dependent propagation and DSM stages;
+- four operations sharing one `createMessagingStage` capability through per-operation descriptors;
+- single, batched, and flow-node message sets expressed as `messages` accessors rather than separate stages;
 - argument mutation through `frame.invocation.arguments`;
 - correlation and span IDs remaining identical.
 
@@ -525,10 +574,11 @@ matched statically, do not replace it with shimmer. When shimmer is unavoidable,
 Put argument/result interpretation in extractors and ordinary helper functions. Put product work in stages. Keep
 subscription, state, stores, errors, completion, and span finishing in the pipeline.
 
-### 5. Preserve the semantic base
+### 5. Preserve semantic behavior
 
-Select a compatibility base when the legacy plugin depends on its `configure`, `startSpan`, or `finish` behavior.
-Test the observable behavior supplied by that base; inheritance alone is not proof of compatibility.
+Represent operation-specific behavior as reusable stages when it does not require a different lifecycle. For example,
+producer operations use the standard `exitCodeOrigin` stage instead of inheriting the outbound plugin hierarchy.
+Test the observable behavior supplied by the stage; its presence in a declaration is not proof of compatibility.
 
 ### 6. Test the real boundary
 
@@ -544,7 +594,7 @@ At minimum cover:
 - the last accepted and first rejected boundary of every gate;
 - every sibling path sharing the gate;
 - parent versus no-op rejected behavior;
-- selected base-class behavior such as service naming or peer service;
+- selected standard-stage behavior such as code-origin tagging;
 - context and store restoration;
 - oldest and newest supported package versions;
 - CJS and ESM builds;
@@ -641,7 +691,10 @@ a fake test path that cannot occur through instrumentation and the plugin manage
   explicit rejections are 9-10% slower (20-25 ns) and inherited no-op is at parity. Real SDK/emulator trials cannot
   resolve that delta against roughly millisecond requests. See `benchmark/sirun/plugin-azure-cosmos-pipeline` and
   keep measuring before adopting the engine in much hotter integrations.
-- BullMQ and Azure Cosmos do not yet prove a shared product stage across integration types.
+- `createMessagingStage` is shared across BullMQ's four operations but has only one integration as a consumer. Its
+  descriptor shape is not frozen; confirm or correct it against a header-map carrier (kafkajs or amqplib) before
+  promoting propagation and Data Streams to declarative operation keywords alongside `span`.
+- Azure Cosmos shares no product stage with BullMQ, so no capability is yet proven across integration types.
 - Compatibility removal criteria for the legacy store and base-class bridge are not defined.
 
 The Azure benchmark covers accepted, rejected, and inherited no-op paths plus a one-off real emulator comparison. Add

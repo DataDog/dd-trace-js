@@ -3,6 +3,7 @@
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../constants')
+const reservedSpanContext = require('../opentracing/reserved-span-context')
 const { INTEGRATION_SERVICE } = require('../service-naming/source-resolver')
 const Plugin = require('./plugin')
 
@@ -248,7 +249,7 @@ class TracingPlugin extends Plugin {
     const span = tracer.startSpan(name, {
       startTime,
       childOf,
-      context: spanContext,
+      ...(spanContext ? { [reservedSpanContext]: spanContext } : undefined),
       tags: {
         [COMPONENT]: component,
         'service.name': serviceName || tracer._service,

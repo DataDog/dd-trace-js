@@ -1,8 +1,8 @@
 'use strict'
 
-const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const log = require('../../dd-trace/src/log')
 const { argument, field } = require('../../dd-trace/src/plugins/integration-pipeline')
+const { createMessagingStage } = require('../../dd-trace/src/plugins/stages/messaging')
 
 /**
  * Remove and return Datadog propagation fields from BullMQ telemetry metadata.
@@ -37,22 +37,16 @@ function consumerService (frame) {
   return frame.config.service || frame.serviceName({ type: 'messaging', kind: 'consumer' })
 }
 
-const consumerDsmStage = {
-  name: 'data-streams',
-  requires: ['tracing'],
-  start (frame) {
-    if (!frame.config.dsmEnabled) return
-
-    const job = frame.data.job
-    if (!job) return
-    const carrier = frame.data.carrier
-    frame.dataStreams.decode(carrier)
-    frame.dataStreams.setCheckpoint(
-      ['direction:in', `topic:${frame.data.queueName}`, 'type:bullmq'],
-      job.data ? getMessageSize(job.data) : 0
-    )
-  },
-}
+// The carrier was already lifted out of telemetry metadata during extraction so that the remote
+// parent could be selected before the span exists.
+const consumerMessagingStage = createMessagingStage({
+  direction: 'in',
+  system: 'bullmq',
+  topic: field('queueName'),
+  messages: frame => [frame.data.job],
+  carrier: (job, frame) => frame.data.carrier,
+  payload: job => job.data,
+})
 
 const operation = {
   target: { module: 'bullmq', name: 'Worker_callProcessJob' },
@@ -81,7 +75,7 @@ const operation = {
       'messaging.operation': 'process',
     },
   },
-  stages: [consumerDsmStage],
+  stages: [consumerMessagingStage],
 }
 
 module.exports = operation

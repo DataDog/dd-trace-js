@@ -1,8 +1,8 @@
 'use strict'
 
-const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
 const log = require('../../dd-trace/src/log')
-const { argument, field } = require('../../dd-trace/src/plugins/integration-pipeline')
+const { argument, exitCodeOrigin, field } = require('../../dd-trace/src/plugins/integration-pipeline')
+const { createMessagingStage } = require('../../dd-trace/src/plugins/stages/messaging')
 
 const producerTags = {
   component: 'bullmq',
@@ -29,19 +29,37 @@ function parseTelemetryMetadata (raw) {
 }
 
 /**
- * Add trace propagation to BullMQ telemetry metadata.
+ * Create the detached carrier the pipeline injects correlation and the DSM pathway into.
  *
- * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
- * @param {object} opts
  * @returns {Record<string, unknown>}
  */
-function injectIntoOpts (frame, opts) {
-  const carrier = {}
-  frame.correlation.inject('text_map', carrier)
+function newCarrier () {
+  return {}
+}
+
+/**
+ * Persist a completed carrier into BullMQ telemetry metadata, preserving customer fields.
+ *
+ * @param {object} opts
+ * @param {Record<string, unknown>} carrier
+ * @returns {void}
+ */
+function commitCarrier (opts, carrier) {
   const metadata = parseTelemetryMetadata(opts.telemetry?.metadata)
   metadata._datadog = carrier
   opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
-  return metadata
+}
+
+/**
+ * Persist a carrier into a job descriptor or flow node, which may carry no options yet.
+ *
+ * @param {{opts?: object}} node
+ * @param {Record<string, unknown>} carrier
+ * @returns {void}
+ */
+function commitNodeCarrier (node, carrier) {
+  node.opts ||= {}
+  commitCarrier(node.opts, carrier)
 }
 
 /**
@@ -122,105 +140,35 @@ function producerService (frame) {
   return frame.config.service || frame.serviceName({ type: 'messaging', kind: 'producer' })
 }
 
-const queuePropagationStage = {
-  name: 'trace-propagation',
-  requires: ['tracing'],
-  start (frame) {
-    frame.data.metadata = injectIntoOpts(frame, ensureQueueOpts(frame.invocation))
-  },
+// Every producer target propagates and checkpoints identically. Only the message set, where its
+// carrier is persisted, and which field holds the payload differ.
+const outboundMessaging = {
+  direction: 'out',
+  system: 'bullmq',
+  topic: field('queueName'),
+  carrier: newCarrier,
 }
 
-const bulkPropagationStage = {
-  name: 'trace-propagation',
-  requires: ['tracing'],
-  start (frame) {
-    const jobs = frame.data.jobs
-    if (!jobs) return
+const queueMessagingStage = createMessagingStage({
+  ...outboundMessaging,
+  messages: frame => [ensureQueueOpts(frame.invocation)],
+  commit: commitCarrier,
+  payload: (opts, frame) => frame.data.data,
+})
 
-    const metadata = new Array(jobs.length)
-    for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i]
-      if (!job) continue
-      job.opts ||= {}
-      metadata[i] = injectIntoOpts(frame, job.opts)
-    }
-    frame.data.metadata = metadata
-  },
-}
+const bulkMessagingStage = createMessagingStage({
+  ...outboundMessaging,
+  messages: frame => frame.data.jobs,
+  commit: commitNodeCarrier,
+  payload: job => job.data,
+})
 
-const flowPropagationStage = {
-  name: 'trace-propagation',
-  requires: ['tracing'],
-  start (frame) {
-    const flow = frame.data.flow
-    if (!flow) return
-    flow.opts ||= {}
-    frame.data.metadata = injectIntoOpts(frame, flow.opts)
-  },
-}
-
-const queueDsmStage = {
-  name: 'data-streams',
-  requires: ['tracing'],
-  start (frame) {
-    if (!frame.config.dsmEnabled) return
-
-    const queueName = frame.data.queueName
-    const payloadSize = frame.data.data ? getMessageSize(frame.data.data) : 0
-    const pathway = frame.dataStreams.setCheckpoint(
-      ['direction:out', `topic:${queueName}`, 'type:bullmq'],
-      payloadSize
-    )
-    const opts = ensureQueueOpts(frame.invocation)
-    const metadata = frame.data.metadata || parseTelemetryMetadata(opts.telemetry?.metadata)
-    DsmPathwayCodec.encode(pathway, metadata._datadog || metadata)
-    if (!metadata._datadog) metadata._datadog = {}
-    opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
-  },
-}
-
-const bulkDsmStage = {
-  name: 'data-streams',
-  requires: ['tracing'],
-  start (frame) {
-    if (!frame.config.dsmEnabled) return
-
-    const jobs = frame.data.jobs || []
-    const edgeTags = ['direction:out', `topic:${frame.data.queueName}`, 'type:bullmq']
-    const cache = frame.data.metadata
-    for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i]
-      if (!job) continue
-      const payloadSize = job.data ? getMessageSize(job.data) : 0
-      const pathway = frame.dataStreams.setCheckpoint(edgeTags, payloadSize)
-      const metadata = cache?.[i] || parseTelemetryMetadata(job.opts.telemetry?.metadata)
-      DsmPathwayCodec.encode(pathway, metadata._datadog || metadata)
-      if (!metadata._datadog) metadata._datadog = {}
-      job.opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
-    }
-  },
-}
-
-const flowDsmStage = {
-  name: 'data-streams',
-  requires: ['tracing'],
-  start (frame) {
-    if (!frame.config.dsmEnabled) return
-
-    const flow = frame.data.flow
-    if (!flow) return
-    flow.opts ||= {}
-    const queueName = flow.queueName || 'bullmq'
-    const pathway = frame.dataStreams.setCheckpoint(
-      ['direction:out', `topic:${queueName}`, 'type:bullmq'],
-      flow.data ? getMessageSize(flow.data) : 0
-    )
-    const metadata = frame.data.metadata || parseTelemetryMetadata(flow.opts.telemetry?.metadata)
-    DsmPathwayCodec.encode(pathway, metadata._datadog || metadata)
-    if (!metadata._datadog) metadata._datadog = {}
-    flow.opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
-  },
-}
+const flowMessagingStage = createMessagingStage({
+  ...outboundMessaging,
+  messages: frame => [frame.data.flow],
+  commit: commitNodeCarrier,
+  payload: flow => flow.data,
+})
 
 const operations = [
   {
@@ -252,7 +200,7 @@ const operations = [
         'messaging.destination.name': field('queueName'),
       },
     },
-    stages: [queuePropagationStage, queueDsmStage],
+    stages: [exitCodeOrigin, queueMessagingStage],
   },
   {
     target: { module: 'bullmq', name: 'Queue_addBulk' },
@@ -278,7 +226,7 @@ const operations = [
         'messaging.batch.message_count': frame => frame.data.rawJobs?.length,
       },
     },
-    stages: [bulkPropagationStage, bulkDsmStage],
+    stages: [exitCodeOrigin, bulkMessagingStage],
   },
   {
     target: { module: 'bullmq', name: 'FlowProducer_add' },
@@ -307,7 +255,7 @@ const operations = [
         'messaging.destination.name': frame => frame.data.flow?.queueName,
       },
     },
-    stages: [flowPropagationStage, flowDsmStage],
+    stages: [exitCodeOrigin, flowMessagingStage],
   },
 ]
 

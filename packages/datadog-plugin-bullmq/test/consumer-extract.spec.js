@@ -9,14 +9,12 @@ const sinon = require('sinon')
 describe('bullmq consumer propagation extraction', () => {
   let log
   let extractDatadog
-  let operation
 
   beforeEach(() => {
     log = { warn: sinon.stub(), error: sinon.stub() }
-    operation = proxyquire('../src/consumer', {
+    ;({ extractDatadog } = proxyquire('../src/consumer', {
       '../../dd-trace/src/log': log,
-    })
-    ;({ extractDatadog } = operation)
+    }))
   })
 
   it('returns the carrier when metadata is well-formed JSON with _datadog', () => {
@@ -50,25 +48,5 @@ describe('bullmq consumer propagation extraction', () => {
 
     assert.strictEqual(result, undefined)
     sinon.assert.notCalled(log.warn)
-  })
-
-  it('clears inherited DSM context when a job has no carrier', () => {
-    const dataStreams = {
-      decode: sinon.stub(),
-      setCheckpoint: sinon.stub(),
-    }
-
-    operation.stages[0].start({
-      config: { dsmEnabled: true },
-      data: { job: {}, queueName: 'jobs', carrier: undefined },
-      dataStreams,
-    })
-
-    sinon.assert.calledOnceWithExactly(dataStreams.decode, undefined)
-    sinon.assert.calledOnceWithExactly(dataStreams.setCheckpoint, [
-      'direction:in',
-      'topic:jobs',
-      'type:bullmq',
-    ], 0)
   })
 })

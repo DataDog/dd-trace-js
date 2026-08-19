@@ -24,6 +24,11 @@ const contextStorage = storage('context')
 const spanStorage = storage('span')
 const legacyStorage = storage('legacy')
 
+function extractOptionalTrace (invocation) {
+  if (invocation.arguments[0].failExtractor) throw new Error('author extractor failed')
+  return invocation.arguments[0].trace
+}
+
 const correlationStage = {
   name: 'correlation',
   start (frame) {
@@ -155,12 +160,18 @@ const PipelinePlugin = createIntegrationPlugin({
     {
       target: { module: '@example/client', name: 'Client_optional' },
       lifecycle: 'sync',
-      extract: { start: { trace: argument(0, 'trace') } },
+      extract: { start: { trace: extractOptionalTrace } },
       span: {
         enabled: field('trace'),
         name: 'example.optional',
       },
       stages: [optionalContextStage, telemetryStage],
+    },
+    {
+      target: { module: '@example/client', name: 'Client_child' },
+      lifecycle: 'sync',
+      context: { parent: () => undefined },
+      span: { name: 'example.child' },
     },
   ],
 })
@@ -170,9 +181,11 @@ describe('IntegrationPipeline', () => {
   const pingChannel = dc.tracingChannel('orchestrion:@example/client:Client_ping')
   const idsChannel = dc.tracingChannel('orchestrion:@example/client:Client_ids')
   const optionalChannel = dc.tracingChannel('orchestrion:@example/client:Client_optional')
+  const childChannel = dc.tracingChannel('orchestrion:@example/client:Client_child')
+  let tracer
 
   before(async () => {
-    await agent.load()
+    tracer = await agent.load()
     plugins['@example/client'] = PipelinePlugin
     dc.channel('dd-trace:instrumentation:load').publish({ name: '@example/client' })
     agent.reload(integrationName, { service: 'example-service' })
@@ -374,6 +387,43 @@ describe('IntegrationPipeline', () => {
     assert.strictEqual(contextStorage.getStore(), undefined)
     assert.strictEqual(spanStorage.getStore(), undefined)
     await noTraces
+  })
+
+  it('does not let a throwing extractor escape into the instrumented application', async () => {
+    const noTraces = agent.assertNoTraces(() => {
+      throw new Error('extractor-failure operation unexpectedly produced a trace')
+    }, { timeoutMs: 100 })
+
+    const result = optionalChannel.traceSync(() => 'library-result', {
+      arguments: [{ failExtractor: true }],
+    })
+
+    assert.strictEqual(result, 'library-result')
+    assert.deepStrictEqual(stageEvents, [])
+    await new Promise(resolve => setImmediate(resolve))
+    await noTraces
+  })
+
+  it('inherits the active parent when an explicit parent resolver returns undefined', async () => {
+    const parent = tracer.startSpan('example.parent')
+    const assertion = agent.assertSomeTraces(traces => {
+      const spans = traces[0]
+      const parentSpan = spans.find(span => span.name === 'example.parent')
+      const childSpan = spans.find(span => span.name === 'example.child')
+
+      assert.ok(parentSpan)
+      assert.ok(childSpan)
+      assert.strictEqual(childSpan.trace_id.toString(), parentSpan.trace_id.toString())
+      assert.strictEqual(childSpan.parent_id.toString(), parentSpan.span_id.toString())
+    })
+
+    const result = legacyStorage.run({ span: parent }, () => childChannel.traceSync(() => 'child-result', {
+      arguments: [],
+    }))
+    parent.finish()
+
+    assert.strictEqual(result, 'child-result')
+    await assertion
   })
 
   it('applies a gate before allocating context, tracing, or stages', async () => {

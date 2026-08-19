@@ -1,5 +1,6 @@
 'use strict'
 
+const { exitTags } = require('../../../datadog-code-origin')
 const { storage } = require('../../../datadog-core')
 const log = require('../log')
 const TracingPlugin = require('./tracing')
@@ -8,6 +9,7 @@ const contextStorage = storage('context')
 const spanStorage = storage('span')
 const legacyStorage = storage('legacy')
 const spanContextKey = Symbol('integration.pipeline.span_context')
+const addExitCodeOrigin = Symbol('integration.pipeline.add_exit_code_origin')
 
 /**
  * @typedef {object} InvocationContext
@@ -157,6 +159,7 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
  * @property {PipelineStage[] | undefined} startedStages
  * @property {Record<string, unknown>} [pendingTags]
  * @property {boolean} skipped
+ * @property {boolean} failed
  */
 
 const orchestrionSource = {
@@ -373,6 +376,27 @@ class IntegrationFrame {
   serviceName (options) {
     return this.#plugin.serviceName(options)
   }
+
+  /**
+   * Add exit code-origin tags when the tracer feature is enabled.
+   *
+   * @param {Function} topOfStackFunc
+   * @returns {void}
+   */
+  [addExitCodeOrigin] (topOfStackFunc) {
+    const config = this.#plugin._tracerConfig.codeOriginForSpans
+    if (!config?.enabled || !config.experimental?.exit_spans?.enabled) return
+
+    this.#state.span.addTags(exitTags(topOfStackFunc))
+  }
+}
+
+const exitCodeOrigin = {
+  name: 'exit-code-origin',
+  requires: ['tracing'],
+  start (frame) {
+    frame[addExitCodeOrigin](exitCodeOrigin.start)
+  },
 }
 
 function compileRecord (record) {
@@ -454,7 +478,8 @@ function unwindStages (state, phase) {
 
 function getParentContext (operation, frame) {
   if (operation.context && Object.hasOwn(operation.context, 'parent')) {
-    return resolveValue(operation.context.parent, frame)
+    const parent = resolveValue(operation.context.parent, frame)
+    if (parent !== undefined) return parent
   }
 
   const activeCorrelation = contextStorage.getStore()?.correlation
@@ -484,6 +509,7 @@ function prepareOperation (plugin, operation, invocation, states) {
     span: undefined,
     startedStages: operation.stages.length > 0 ? [] : undefined,
     skipped: false,
+    failed: false,
   }
   const frame = new IntegrationFrame(plugin, invocation, state)
   state.frame = frame
@@ -505,7 +531,7 @@ function bindContext (plugin, operation, invocation, states) {
   const state = prepareOperation(plugin, operation, invocation, states)
   const parentStore = contextStorage.getStore()
   invocation.parentContextStore = parentStore
-  if (state.skipped) return parentStore
+  if (state.skipped || state.failed) return parentStore
 
   invocation.currentContextStore = { ...parentStore, correlation: state.frame.correlation }
   return invocation.currentContextStore
@@ -514,6 +540,7 @@ function bindContext (plugin, operation, invocation, states) {
 function bindLegacySpan (plugin, operation, invocation, states) {
   const state = prepareOperation(plugin, operation, invocation, states)
   const parentStore = legacyStorage.getStore()
+  if (state.failed) return parentStore
   if (state.skipped) {
     return resolveValue(operation.skip, state.frame) === 'noop' ? { noop: true } : parentStore
   }
@@ -542,13 +569,13 @@ function bindLegacySpan (plugin, operation, invocation, states) {
 function bindSpan (plugin, operation, invocation, states) {
   if (operation.contextStages.length === 0 && legacyStorage.getStore()?.noop) return spanStorage.getStore()
   const state = prepareOperation(plugin, operation, invocation, states)
-  if (state.skipped || !state.span) return spanStorage.getStore()
+  if (state.skipped || state.failed || !state.span) return spanStorage.getStore()
   return { ...spanStorage.getStore(), span: state.span }
 }
 
 function beginOperation (operation, invocation, states) {
   const state = states.get(invocation)
-  if (!state || state.skipped || !state.span) return
+  if (!state || state.skipped || state.failed || !state.span) return
   startStages(state, operation.tracingStages)
 }
 
@@ -565,10 +592,12 @@ function completeOperation (plugin, operation, invocation, states) {
 
   try {
     if (state.skipped) return
-    extractComplete(operation.completeExtractors, invocation, state.frame)
-    if (state.span) {
-      const resultTags = resolveRecord(operation.resultTagResolvers, state.frame)
-      if (resultTags) state.span.addTags(resultTags)
+    if (!state.failed) {
+      extractComplete(operation.completeExtractors, invocation, state.frame)
+      if (state.span) {
+        const resultTags = resolveRecord(operation.resultTagResolvers, state.frame)
+        if (resultTags) state.span.addTags(resultTags)
+      }
     }
     unwindStages(state, 'complete')
   } finally {
@@ -577,10 +606,29 @@ function completeOperation (plugin, operation, invocation, states) {
   }
 }
 
+function bindSafely (plugin, operation, message, source, states, store, bind) {
+  let invocation
+  try {
+    invocation = source.invocation(message)
+    return bind(plugin, operation, invocation, states)
+  } catch (error) {
+    const state = invocation && states.get(invocation)
+    if (state) state.failed = true
+    log.error(
+      'Integration pipeline "%s" operation "%s" failed during start: %s',
+      plugin.constructor.id,
+      operation.target.name,
+      error?.message || error
+    )
+    return store.getStore()
+  }
+}
+
 function validateDefinition (definition) {
   if (!definition || typeof definition.id !== 'string' || definition.id.length === 0) {
     throw new TypeError('Integration pipeline requires a non-empty id')
   }
+
   if (!Array.isArray(definition.operations) || definition.operations.length === 0) {
     throw new TypeError(`Integration pipeline "${definition.id}" requires at least one operation`)
   }
@@ -679,14 +727,14 @@ function createIntegrationPlugin (definition) {
         // legacy storage remains the common span lifecycle block and sits between context and tracing when present.
         if (operation.tracingStages.length > 0) {
           this.addStoreBind(channels.start, spanStorage,
-            message => bindSpan(this, operation, invocation(message), states))
+            message => bindSafely(this, operation, message, source, states, spanStorage, bindSpan))
         }
         this.addBind(channels.start,
-          message => bindLegacySpan(this, operation, invocation(message), states),
+          message => bindSafely(this, operation, message, source, states, legacyStorage, bindLegacySpan),
           operation.contextStages.length > 0 ? { allowNoop: true } : undefined)
         if (operation.contextStages.length > 0) {
           this.addStoreBind(channels.start, contextStorage,
-            message => bindContext(this, operation, invocation(message), states))
+            message => bindSafely(this, operation, message, source, states, contextStorage, bindContext))
         }
 
         const contextSubscriptionOptions = operation.contextStages.length > 0 ? { allowNoop: true } : undefined
@@ -727,6 +775,7 @@ function createIntegrationPlugin (definition) {
 module.exports = {
   argument,
   createIntegrationPlugin,
+  exitCodeOrigin,
   field,
   result,
   self,

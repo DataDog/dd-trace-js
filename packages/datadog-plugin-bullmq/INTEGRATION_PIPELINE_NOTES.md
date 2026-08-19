@@ -33,12 +33,13 @@ and the products that act on that event.
 | --- | --- |
 | `packages/dd-trace/src/plugins/integration-pipeline.js` | Definition compiler, lifecycle engine, stores, correlation facade, and default Orchestrion source adapter. |
 | `packages/dd-trace/src/plugins/integration-pipeline-agent-guide.md` | Agent handoff, declaration reference, migration workflow, invariants, verification, and open work. |
+| `packages/dd-trace/src/plugins/stages/messaging.js` | Shared propagation and Data Streams capability, parameterized by a per-operation message descriptor. |
 | `packages/dd-trace/src/opentracing/span_context_factory.js` | Creates a real `DatadogSpanContext` without creating a span and lets a later span adopt it once. |
 | `packages/dd-trace/src/opentracing/tracer.js` | Exposes internal context reservation and accepts an already reserved context when starting a span. |
 | `packages/dd-trace/src/plugins/plugin.js` | Supports binding named stores and subscribing inside a legacy no-op scope when requested. |
 | `packages/datadog-plugin-bullmq/src/index.js` | Compiles the BullMQ integration definition into the plugin-manager class. |
-| `packages/datadog-plugin-bullmq/src/producer.js` | Producer operation declarations and propagation/DSM stages. |
-| `packages/datadog-plugin-bullmq/src/consumer.js` | Consumer declaration, carrier extraction, parent selection, and DSM stage. |
+| `packages/datadog-plugin-bullmq/src/producer.js` | Producer operation declarations, telemetry-metadata carrier codec, and outbound message descriptors. |
+| `packages/datadog-plugin-bullmq/src/consumer.js` | Consumer declaration, carrier extraction, parent selection, and inbound message descriptor. |
 | `packages/datadog-plugin-azure-cosmos/src/index.js` | Declares an async database operation and selects `DatabasePlugin` as its compatibility base. |
 | `benchmark/sirun/plugin-azure-cosmos-pipeline` | Baseline/candidate hot-path benchmark for accepted, rejected, and inherited no-op calls. |
 
@@ -54,9 +55,10 @@ module.exports = createIntegrationPlugin({
 })
 ```
 
-The result is a class named `IntegrationPipeline` that extends `TracingPlugin` by default. A definition can select a
-`TracingPlugin` subclass with `base`; Azure Cosmos uses `DatabasePlugin` so existing storage service naming,
-peer-service finalization, and code-origin behavior remain in force. The generated class has the static `id` and
+The result is a class named `IntegrationPipeline` that extends `TracingPlugin` by default. Reusable stages preserve
+operation-specific behavior such as producer code-origin tagging without recreating the inbound/outbound plugin
+hierarchy. A definition can still select a `TracingPlugin` subclass with `base` when behavior cannot be expressed by
+the pipeline lifecycle; Azure Cosmos currently uses `DatabasePlugin`. The generated class has the static `id` and
 `operation` fields expected by the current plugin manager, so loading and configuration do not need a separate path.
 
 The definition is validated before subscriptions are registered. It rejects missing IDs, empty operation lists,
@@ -273,15 +275,26 @@ For `Queue.add`, the flow is:
 2. Apply the configured producer filter.
 3. Reserve and bind correlation.
 4. Create the producer span.
-5. Run `trace-propagation`, injecting correlation into BullMQ telemetry metadata.
-6. When DSM is enabled, create the outgoing checkpoint and encode its pathway in the same metadata.
-7. Execute `Queue.add` and unwind both stages when its promise settles.
+5. Run `messaging`: create a carrier, inject correlation into it, and when DSM is enabled create the outgoing
+   checkpoint and encode its pathway into the same carrier.
+6. Commit the finished carrier into `opts.telemetry.metadata` under `_datadog`, preserving customer fields.
+7. Execute `Queue.add` and unwind the stage when its promise settles.
 
-Bulk and flow operations use the same lifecycle with extractors and stages adapted to their payload shapes.
+All three producer targets declare the same capability and differ only in three accessors:
 
-The propagation stages currently require tracing. They use `frame.correlation`, not the span, but current priority
-sampling may need span metadata before injection. Keeping them after materialization preserves existing propagation
-headers until sampling is independently planned at the context layer.
+| Target | `messages` | `commit` target | `payload` |
+| --- | --- | --- | --- |
+| `Queue.add` | the ensured options argument | those options | `frame.data.data` |
+| `Queue.addBulk` | the filter-accepted job list | each job's options | each job's `data` |
+| `FlowProducer.add` | the single flow node | the flow node's options | the flow node's `data` |
+
+Injection and encoding share one carrier, so the metadata is parsed and serialized once per message instead of once per
+capability. An isolated microbenchmark of the carrier work alone measured roughly 1180 ns per message before and 590 ns
+after, reproduced across fresh shells.
+
+The messaging stage currently requires tracing. It uses `frame.correlation`, not the span, but current priority sampling
+may need span metadata before injection. Keeping it after materialization preserves existing propagation headers until
+sampling is independently planned at the context layer.
 
 ## 12. BullMQ consumer flow
 
@@ -292,10 +305,15 @@ headers until sampling is independently planned at the context layer.
 3. Extract the remote parent through `frame.propagation.extract`.
 4. Reserve a local correlation context as a child of that parent.
 5. Materialize the consumer span with those reserved IDs.
-6. Decode the incoming DSM pathway and create the incoming checkpoint.
+6. Run `messaging` with `direction: 'in'`, decoding the incoming DSM pathway and creating the incoming checkpoint.
 7. Execute the job processor and unwind when its promise settles.
 
-Producer and consumer differences are declarations and stages; subscription and tracing lifecycle code is shared.
+The consumer declares the same capability as the producers with the direction reversed. Its carrier accessor returns the
+carrier already lifted out of telemetry metadata in step 1, because the remote parent has to be selected before a span
+exists. The carrier is decoded even when absent, which is what starts a new pathway instead of extending the previous
+job's.
+
+Producer and consumer differences are declarations; subscription, capability, and tracing lifecycle code is shared.
 
 ## 13. Azure Cosmos database flow
 
@@ -319,6 +337,9 @@ the skip mode can resolve from the extracted frame. The lifecycle engine still o
 - BullMQ propagation cannot safely move before tracing until sampling decisions can be made from context alone.
 - `DD_TRACE_ENABLED=false` still selects a global no-op tracer that cannot reserve real unique correlation contexts.
 - Only the `tracing` stage requirement exists today. Other product capabilities still need formal contracts.
+- The messaging capability is shared across BullMQ's four operations, but BullMQ is its only consumer. Its descriptor is
+  provisional until a header-map carrier (kafkajs or amqplib) confirms the shape. Until then propagation and Data
+  Streams stay stages rather than declarative operation keywords beside `span`.
 
 Within those limits, the important property is already real: correlation context and default stages have their own
 lifecycle, and the existence of that lifecycle no longer implies that a span must be created.

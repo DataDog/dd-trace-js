@@ -16,6 +16,7 @@ const LogPropagator = require('./propagation/log')
 
 const SpanContext = require('./span_context')
 const createSpanContext = require('./span_context_factory')
+const reservedSpanContext = require('./reserved-span-context')
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
@@ -71,7 +72,8 @@ class DatadogTracer {
   }
 
   startSpan (name, options = {}) {
-    const parent = options.context
+    const context = options[reservedSpanContext]
+    const parent = context
       ? null
       : options.childOf
         ? getContext(options.childOf)
@@ -85,7 +87,7 @@ class DatadogTracer {
       traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled,
       integrationName: options.integrationName,
       links: options.links,
-      ...(options.context ? { context: options.context } : undefined),
+      ...(context ? { context } : undefined),
     }, this._debug)
 
     // As per unified service tagging spec if a span is created with a service name different from the global

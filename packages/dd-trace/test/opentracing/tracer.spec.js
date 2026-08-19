@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 
 const opentracing = require('opentracing')
 require('../setup/core')
+const reservedSpanContext = require('../../src/opentracing/reserved-span-context')
 const SpanContext = require('../../src/opentracing/span_context')
 const formats = require('../../../../ext/formats')
 
@@ -158,7 +159,7 @@ describe('Tracer', () => {
 
     it('should materialize a previously reserved context', () => {
       const reserved = new SpanContext()
-      fields.context = reserved
+      fields[reservedSpanContext] = reserved
 
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
@@ -168,6 +169,19 @@ describe('Tracer', () => {
         parent: null,
         context: reserved,
       })
+    })
+
+    it('should ignore an unknown public context option', () => {
+      fields.context = { library: 'value' }
+
+      tracer = new Tracer(config)
+      tracer.startSpan('name', fields)
+
+      sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
+        operationName: 'name',
+        parent: null,
+      })
+      assert.strictEqual(Span.firstCall.args[3].context, undefined)
     })
 
     it('should start a span that is the child of a span', () => {
