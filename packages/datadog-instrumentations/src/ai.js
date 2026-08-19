@@ -1,7 +1,4 @@
 'use strict'
-
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
-const { TransformStream } = require('node:stream/web')
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, getHooks } = require('./helpers/instrument')
@@ -278,29 +275,47 @@ const aiSdkTelemetryStreamedChunkChannel = channel('dd-trace:vercel-ai:chunk')
 
 // as of the v7 release, the ai sdk does not automatically aggregate streamed responses
 // we will handle emitting the chunks directly for products to handle
-aiSdkTelemetryChannel.subscribe({
-  asyncEnd (ctx) {
-    // guard against this event being re-emitted.
-    if (!ctx.isStream || !ctx.result?.stream || ctx.streamConsumed) return
+let subscribed = false
 
-    const transform = new TransformStream({
-      transform (chunk, controller) {
-        const done = chunk.type === 'finish'
+/**
+ * Registers the AI SDK v7 diagnostics-channel subscriber once.
+ * @returns {void}
+ */
+function register () {
+  if (subscribed) return
+  subscribed = true
 
-        aiSdkTelemetryStreamedChunkChannel.publish({ ctx, chunk, done })
+  // ai sdk v7 only supported on node.js 22+
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const { TransformStream } = require('node:stream/web')
 
-        if (done) {
-          aiSdkTelemetryChannel.asyncEnd.publish(ctx)
-        }
+  aiSdkTelemetryChannel.subscribe({
+    asyncEnd (ctx) {
+      // guard against this event being re-emitted.
+      if (!ctx.isStream || !ctx.result?.stream || ctx.streamConsumed) return
 
-        controller.enqueue(chunk) // pass through value
-      },
-    })
+      const transform = new TransformStream({
+        transform (chunk, controller) {
+          const done = chunk.type === 'finish'
 
-    ctx.result.stream = ctx.result.stream.pipeThrough(transform)
-  },
+          aiSdkTelemetryStreamedChunkChannel.publish({ ctx, chunk, done })
+
+          if (done) {
+            aiSdkTelemetryChannel.asyncEnd.publish(ctx)
+          }
+
+          controller.enqueue(chunk) // pass through value
+        },
+      })
+
+      ctx.result.stream = ctx.result.stream.pipeThrough(transform)
+    },
+  })
+}
+
+addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
+  register()
+  return exports
 })
 
-addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => exports)
-
-module.exports = { wrapModelWithLifecycle }
+module.exports = { register, wrapModelWithLifecycle }
