@@ -7,7 +7,10 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 const tagsExt = require('../../../../../ext/tags')
-const { HTTP_STATUS_ERROR } = require('../../../src/plugins/util/http-otel-semantics')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+} = require('../../../src/plugins/util/http-otel-semantics')
 
 const ERROR = tagsExt.ERROR
 const HTTP_CLIENT_IP = tagsExt.HTTP_CLIENT_IP
@@ -299,7 +302,7 @@ describe('plugins/util/web', () => {
     })
   })
 
-  describe('OTel semantics network.peer.address', () => {
+  describe('OTel semantics request-start tags', () => {
     // The HTTP tag renames happen centrally in span_format; only network.peer.address
     // is set here (the socket isn't available at serialization).
     it('sets network.peer.address from the socket when OTel semantics are enabled', () => {
@@ -309,6 +312,8 @@ describe('plugins/util/web', () => {
       const span = web.startSpan(tracer, otelConfig, req, res, 'test.request')
 
       assert.strictEqual(span.context().getTag('network.peer.address'), '10.0.0.1')
+      assert.strictEqual(span.context().getTag('resource.name'), req.method)
+      assert.strictEqual(span.context().getTag(INSTRUMENTATION_HTTP_RESOURCE), req.method)
     })
 
     it('does not set network.peer.address when OTel semantics are disabled', () => {
@@ -338,6 +343,18 @@ describe('plugins/util/web', () => {
 
       web.setRoute(req, '/users/:id')
       assert.deepStrictEqual(context.paths, [])
+    })
+
+    it('should preserve an upstream-established route', () => {
+      const context = web.patch(req)
+      span = tracer.startSpan('test.request')
+      context.span = span
+      span.setTag(HTTP_ROUTE, '/upstream/:id')
+
+      web.setRoute(req, '/users/:id')
+
+      assert.strictEqual(span.context().getTag(HTTP_ROUTE), '/upstream/:id')
+      assert.deepStrictEqual(context.paths, ['/users/:id'])
     })
   })
 
@@ -762,6 +779,37 @@ describe('plugins/util/web', () => {
       assert.strictEqual(tags[HTTP_ENDPOINT], endpoint)
       assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
       assert.strictEqual(tags[RESOURCE_NAME], 'GET')
+    })
+
+    it('updates the OTel instrumentation resource when the route resolves', () => {
+      config = web.normalizeConfig({
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+        resourceRenamingEnabled: true,
+      })
+      span = web.startSpan(tracer, config, req, res, 'test.request')
+      tags = span.context().getTags()
+      context = web.getContext(req)
+
+      web.setRoute(req, '/users/:id')
+      web.finishAll(context)
+
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET /users/:id')
+      assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'GET /users/:id')
+    })
+
+    it('preserves a user resource when the route resolves under OTel semantics', () => {
+      config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      span = web.startSpan(tracer, config, req, res, 'test.request')
+      tags = span.context().getTags()
+      context = web.getContext(req)
+      span.setTag(INSTRUMENTATION_HTTP_RESOURCE, 'GET')
+      span.setTag(RESOURCE_NAME, 'user-resource')
+
+      web.setRoute(req, '/users/:id')
+      web.finishAll(context)
+
+      assert.strictEqual(tags[RESOURCE_NAME], 'user-resource')
+      assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'GET')
     })
   })
 

@@ -437,6 +437,16 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
+  it('should keep the real proxy when OTel semantics overrides OTEL_TRACES_EXPORTER=none', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const proxy = require('../../src/proxy')
+    assert.strictEqual(indexFile, proxy)
+  })
+
   it('should keep the real proxy when dynamic instrumentation is enabled with DD_APM_TRACING_ENABLED=false', () => {
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
