@@ -23,6 +23,7 @@ const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
+const { isCanonicalIntegerAttribute } = require('./plugins/util/http-otel-semantics')
 
 const {
   DEFAULT_SPAN_NAME,
@@ -100,20 +101,15 @@ class SpanAggStats {
   }
 }
 
-function validHttpStatus (value) {
-  if (typeof value === 'number') return Number.isFinite(value) && Number.isInteger(value)
-  return typeof value === 'string' && value.trim() !== '' && Number.isInteger(Number(value))
-}
-
 function httpStatusCode (span) {
   const legacyStatus = span.meta[HTTP_STATUS_CODE]
-  if (validHttpStatus(legacyStatus)) return legacyStatus
+  if (isCanonicalIntegerAttribute(legacyStatus)) return legacyStatus
 
   const otelMetaStatus = span.meta['http.response.status_code']
-  if (validHttpStatus(otelMetaStatus)) return otelMetaStatus
+  if (isCanonicalIntegerAttribute(otelMetaStatus)) return otelMetaStatus
 
   const otelMetricStatus = span.metrics?.['http.response.status_code']
-  return validHttpStatus(otelMetricStatus) ? otelMetricStatus : 0
+  return isCanonicalIntegerAttribute(otelMetricStatus) ? otelMetricStatus : 0
 }
 
 class SpanAggKey {

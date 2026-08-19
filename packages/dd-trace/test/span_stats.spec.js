@@ -178,6 +178,15 @@ describe('SpanAggKey', () => {
     assert.strictEqual(key.statusCode, '500')
   })
 
+  it('should skip statuses only a coercion would accept, as the OTLP exporter does', () => {
+    // Trace metrics and the exported span have to agree on what a status is.
+    for (const status of ['1e2', '0x10', ' 200 ', '1.5', '-1']) {
+      const key = new SpanAggKey({ ...basicSpan, meta: { [HTTP_STATUS_CODE]: status }, metrics: {} })
+
+      assert.strictEqual(key.statusCode, 0, `status ${JSON.stringify(status)} must not be aggregated`)
+    }
+  })
+
   it('should preserve legacy-first HTTP status precedence', () => {
     const span = {
       ...basicSpan,
