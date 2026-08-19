@@ -16,14 +16,16 @@ let armedSSIHeuristics
 let profilingModule
 
 function getProfilingModule () {
-  return profilingModule ??= require('./profiling')
+  profilingModule ??= require('./profiling')
+  return profilingModule
 }
 
 /** @type {typeof import('./profiling/ssi-heuristics') | undefined} */
 let ssiHeuristicsModule
 
 function getSSIHeuristicsModule () {
-  return ssiHeuristicsModule ??= require('./profiling/ssi-heuristics')
+  ssiHeuristicsModule ??= require('./profiling/ssi-heuristics')
+  return ssiHeuristicsModule
 }
 
 /**
