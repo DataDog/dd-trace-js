@@ -79,6 +79,7 @@
 "oxc-parser","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "pprof-format","https://github.com/DataDog/pprof-format","['MIT']","['Datadog Inc.']"
 "protobufjs","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
+"proxy-agent-negotiate","https://github.com/TooTallNate/proxy-agents","['MIT']","['Nathan Rajlich']"
 "proxy-from-env","https://github.com/Rob--W/proxy-from-env","['MIT']","['Rob Wu']"
 "queue-tick","https://github.com/mafintosh/queue-tick","['MIT']","['Mathias Buus']"
 "retry","https://github.com/tim-kos/node-retry","['MIT']","['Tim Koschützki']"
