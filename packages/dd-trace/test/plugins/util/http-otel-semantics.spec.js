@@ -121,7 +121,7 @@ describe('http-otel-semantics', () => {
           'http.useragent': 'ua',
           'http.client_ip': '1.2.3.4',
           'http.endpoint': '/u',
-          [HTTP_STATUS_ERROR]: 'true',
+          [HTTP_STATUS_ERROR]: '500',
         },
         {},
         1
@@ -360,7 +360,7 @@ describe('http-otel-semantics', () => {
           'http.method': 'GET',
           'http.status_code': '503',
           'http.url': 'http://h/p',
-          [HTTP_STATUS_ERROR]: 'true',
+          [HTTP_STATUS_ERROR]: '503',
         },
         {},
         1
@@ -389,7 +389,7 @@ describe('http-otel-semantics', () => {
             'http.method': 'GET',
             'http.status_code': status,
             'http.url': 'http://h/p',
-            [HTTP_STATUS_ERROR]: 'true',
+            [HTTP_STATUS_ERROR]: status,
           },
           {},
           1
@@ -453,6 +453,25 @@ describe('http-otel-semantics', () => {
       assert.ok(!Object.hasOwn(span.metrics, 'server.port'))
     })
 
+    it('does not blame a status a hook replaced after validation', () => {
+      // Capture time rejected 500 and recorded it; the hook then answered 200. The marker no
+      // longer matches the reported status, so 200 is not the cause.
+      const span = run(
+        {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.url': 'http://h/p',
+          'http.status_code': '200',
+          [HTTP_STATUS_ERROR]: '500',
+        },
+        {},
+        1
+      )
+
+      assert.strictEqual(span.error, 1)
+      assert.ok(!Object.hasOwn(span.meta, 'error.type'))
+    })
+
     it('does not blame the status for an error the application recorded itself', () => {
       // A request hook can mark a span as an error while the response status stays inside the
       // validator's accepted range. Capture time leaves the status-error marker off in that
@@ -480,7 +499,7 @@ describe('http-otel-semantics', () => {
           'http.method': 'GET',
           'http.status_code': '200',
           'http.url': 'http://h/p',
-          [HTTP_STATUS_ERROR]: 'true',
+          [HTTP_STATUS_ERROR]: '200',
         },
         {},
         1

@@ -101,6 +101,13 @@ class SpanAggStats {
   }
 }
 
+/**
+ * The status code to aggregate on, preferring the Datadog tag, then the OTel attribute in `meta`,
+ * then the numeric one in `metrics`. Zero when none of them is usable.
+ *
+ * @param {import('./span_format').FormattedSpan} span
+ * @returns {string | number}
+ */
 function httpStatusCode (span) {
   const legacyStatus = span.meta[HTTP_STATUS_CODE]
   if (isCanonicalIntegerAttribute(legacyStatus)) return legacyStatus

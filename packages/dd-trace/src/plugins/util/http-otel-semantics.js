@@ -27,16 +27,39 @@ const KNOWN_METHODS = new Set([
   'CONNECT', 'DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT', 'QUERY', 'TRACE',
 ])
 
+/**
+ * The OTel HTTP span name: `{method} {target}`, or the bare method with no target. An unknown
+ * verb uses the literal `HTTP`, never the URL path.
+ *
+ * @param {string} method
+ * @param {string} [route]
+ * @returns {string}
+ */
 function otelHttpResourceName (method, route) {
   const normalizedMethod = KNOWN_METHODS.has(method) ? method : 'HTTP'
   if (typeof route === 'string' && route.length > 0) return `${normalizedMethod} ${route}`
   return normalizedMethod
 }
 
+/**
+ * @param {import('../../opentracing/span')} span
+ * @param {(span: import('../../opentracing/span'), arg1: unknown, arg2: unknown) => void} hook
+ * @param {unknown} arg1
+ * @param {unknown} arg2
+ * @returns {void}
+ */
 function runHttpRequestHook (span, hook, arg1, arg2) {
   hook(span, arg1, arg2)
 }
 
+/**
+ * Set the resource name and record that the instrumentation is the one that set it, so a later
+ * pass can tell its own value from an application's.
+ *
+ * @param {import('../../opentracing/span')} span
+ * @param {string} resource
+ * @returns {void}
+ */
 function setInstrumentationHttpResource (span, resource) {
   span.setTag('resource.name', resource)
   span.setTag(INSTRUMENTATION_HTTP_RESOURCE, resource)
@@ -59,6 +82,12 @@ const NETWORK_DESTINATION_PORT = 'network.destination.port'
 const UNSIGNED_INTEGER = /^\d+$/
 const INT_VALUED_OTEL_ATTRIBUTES = new Set([HTTP_RESPONSE_STATUS_CODE, SERVER_PORT])
 
+/**
+ * Whether a value is usable as one of the int-typed OTel attributes, which are unsigned integers.
+ *
+ * @param {unknown} value
+ * @returns {boolean}
+ */
 function isCanonicalIntegerAttribute (value) {
   // `Number.isSafeInteger` rather than `isInteger`: a longer digit string becomes Infinity, which
   // `JSON.stringify` writes as `intValue: null`, and anything past 2^53 is silently rounded.
@@ -290,7 +319,9 @@ function applyHttpOtelSemantics (formattedSpan) {
   // whether the span is an error. Only capture time knows whether the status was that cause
   // (`web.addStatusError`, the client plugins' `validateStatus`), so nothing is inferred from
   // the status range here. No-clobber on an exception-derived type.
-  const statusCausedError = meta[HTTP_STATUS_ERROR] === 'true'
+  // The marker holds the status that failed validation. Comparing it to the current status means
+  // a hook that rewrites the status afterwards no longer has it reported as the cause.
+  const statusCausedError = status !== undefined && meta[HTTP_STATUS_ERROR] === status
   if (
     status !== undefined &&
     formattedSpan.error &&
