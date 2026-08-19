@@ -114,7 +114,8 @@ describe('pg instrumentation', () => {
                   })
                 })
 
-                it('Should abort query', () => new Promise((resolve, reject) => {
+                // Query event cardinality is part of this test; Mocha must see a second terminal event.
+                it('Should abort query', (done) => {
                   queryClientStartChannel.subscribe(abortQuery)
 
                   const query = new Query('SELECT 1')
@@ -122,49 +123,47 @@ describe('pg instrumentation', () => {
                   query.on('error', error => {
                     try {
                       assert.strictEqual(error.message, 'Test')
-                      resolve()
+                      done()
                     } catch (error) {
-                      reject(error)
+                      done(error)
                     }
                   })
 
                   query.on('end', () => {
-                    reject(new Error('Query was not aborted'))
+                    done(new Error('Query was not aborted'))
                   })
 
                   client.query(query)
-                }))
+                })
               })
 
               describe('with callback in query object', () => {
-                it('Should not fail if it is not aborted', () => new Promise((resolve, reject) => {
+                // The callback form is the API contract under test.
+                it('Should not fail if it is not aborted', (done) => {
                   const query = new Query('SELECT 1')
                   query.callback = (error) => {
-                    if (error) {
-                      reject(error)
-                    } else {
-                      resolve()
-                    }
+                    done(error)
                   }
 
                   client.query(query)
-                }))
+                })
 
-                it('Should abort query', () => new Promise((resolve, reject) => {
+                // The callback form is the API contract under test.
+                it('Should abort query', (done) => {
                   queryClientStartChannel.subscribe(abortQuery)
 
                   const query = new Query('SELECT 1')
                   query.callback = error => {
                     try {
                       assert.strictEqual(error.message, 'Test')
-                      resolve()
+                      done()
                     } catch (error) {
-                      reject(error)
+                      done(error)
                     }
                   }
 
                   client.query(query)
-                }))
+                })
               })
 
               describe('with callback in query parameter', () => {
