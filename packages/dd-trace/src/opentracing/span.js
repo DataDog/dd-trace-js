@@ -400,9 +400,12 @@ class DatadogSpan {
     let startTime
 
     let baggage
+    let baggageShared
     const propagationBehavior = this.#parentTracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
     if (parent && parent._isRemote && propagationBehavior !== 'continue') {
       baggage = parent._baggageItems
+      baggageShared = propagationBehavior === 'restart' && baggage !== undefined && baggage !== null
+      if (baggageShared) parent._baggageItemsShared = true
       parent = null
     }
 
@@ -444,6 +447,7 @@ class DatadogSpan {
 
       if (propagationBehavior === 'restart') {
         spanContext._baggageItems = baggage ?? {}
+        spanContext._baggageItemsShared = baggageShared ?? false
       }
     }
 
