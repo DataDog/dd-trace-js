@@ -466,7 +466,11 @@ function addRequestTags (context, spanType) {
   if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
     // Establish automatic ownership before propagation can trigger sampling.
     // The sampler may replace this method-only value once a route resolves.
-    setInstrumentationHttpResource(span, req.method)
+    // Serverless callers skip `web.startSpan` and reach this from `web.finishSpan`, after the
+    // handler has run, so a resource already present here belongs to the application.
+    if (isInstrumentationOwnedResource(spanContext)) {
+      setInstrumentationHttpResource(span, req.method)
+    }
     const peerAddress = req.socket?.remoteAddress
     if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
   }
@@ -539,6 +543,24 @@ function applyRouteOrEndpointTag (context) {
   span.setTag(HTTP_ENDPOINT, endpoint)
 }
 
+/**
+ * Whether the instrumentation may still write the resource name.
+ *
+ * `INSTRUMENTATION_HTTP_RESOURCE` records the exact value the instrumentation last wrote, so a
+ * resource that differs from it was set by application code and has to survive. An absent
+ * resource is unowned.
+ *
+ * @param {import('../../opentracing/span_context')} spanContext
+ * @returns {boolean}
+ */
+function isInstrumentationOwnedResource (spanContext) {
+  const currentResource = spanContext.getTag(RESOURCE_NAME)
+  if (!currentResource) return true
+
+  const instrumentationResource = spanContext.getTag(INSTRUMENTATION_HTTP_RESOURCE)
+  return instrumentationResource !== undefined && currentResource === instrumentationResource
+}
+
 function addResourceTag (context) {
   const { req, span, config } = context
   const spanContext = span.context()
@@ -546,8 +568,7 @@ function addResourceTag (context) {
 
   if (currentResource) {
     if (!config.DD_TRACE_OTEL_SEMANTICS_ENABLED) return
-    const instrumentationResource = spanContext.getTag(INSTRUMENTATION_HTTP_RESOURCE)
-    if (instrumentationResource === undefined || currentResource !== instrumentationResource) return
+    if (!isInstrumentationOwnedResource(spanContext)) return
   }
 
   const resource = [req.method, spanContext.getTag(HTTP_ROUTE)]
