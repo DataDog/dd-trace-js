@@ -632,7 +632,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
       setAndTrack(this, 'dsmEnabled', false)
       setAndTrack(this, 'dynamicInstrumentation.enabled', true)
-      setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
     }
 
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||

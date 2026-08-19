@@ -5107,7 +5107,7 @@ rules:
       assert.strictEqual(config.runtimeMetrics.enabled, false)
       assert.strictEqual(config.dsmEnabled, false)
       assert.strictEqual(config.dynamicInstrumentation.enabled, true)
-      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
+      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
       assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, ['agent'])
       assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
     })
