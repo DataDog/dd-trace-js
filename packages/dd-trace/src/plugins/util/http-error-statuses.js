@@ -15,11 +15,15 @@ const kinds = require('../../../../../ext/kinds')
 const validateServerStatus = code => code < 500
 const validateClientStatus = code => code < 400 || code >= 500
 const validateClientStatusOtelSemantics = code => code < 400
+const statusCodeRangesPattern = /^[1-5]\d{2}(?:-[1-5]\d{2})?(?:,[1-5]\d{2}(?:-[1-5]\d{2})?)*$/
+const whitespacePattern = /\s/g
+const MAX_HTTP_STATUS_CODE = 599
 
 /**
  * @typedef {object} StatusValidatorConfig
  * @property {(code: number) => boolean} [validateStatus] plugin-level override
  * @property {boolean} [DD_TRACE_OTEL_SEMANTICS_ENABLED]
+ * @property {unknown} [DD_TRACE_HTTP_SERVER_ERROR_STATUSES]
  */
 
 /**
@@ -39,10 +43,42 @@ function getStatusValidator (config, kind) {
   }
 
   if (kind === kinds.SERVER) {
-    return validateServerStatus
+    return getServerStatusValidator(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES)
   }
 
   return config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? validateClientStatusOtelSemantics : validateClientStatus
+}
+
+function getServerStatusValidator (configuredStatuses) {
+  if (configuredStatuses === undefined || configuredStatuses === '500-599') return validateServerStatus
+  if (typeof configuredStatuses !== 'string') {
+    log.error('Expected `DD_TRACE_HTTP_SERVER_ERROR_STATUSES` to be a string.')
+    return validateServerStatus
+  }
+
+  const normalized = configuredStatuses.replaceAll(whitespacePattern, '')
+  if (normalized === '500-599') return validateServerStatus
+  if (!statusCodeRangesPattern.test(normalized)) {
+    log.error(
+      '`DD_TRACE_HTTP_SERVER_ERROR_STATUSES` must contain comma-separated status codes or ranges from 100 to 599.'
+    )
+    return validateServerStatus
+  }
+
+  const errorStatusCodes = new Uint8Array(MAX_HTTP_STATUS_CODE + 1)
+  for (const range of normalized.split(',')) {
+    const separator = range.indexOf('-')
+    if (separator === -1) {
+      errorStatusCodes[Number(range)] = 1
+      continue
+    }
+
+    const first = Number(range.slice(0, separator))
+    const second = Number(range.slice(separator + 1))
+    errorStatusCodes.fill(1, Math.min(first, second), Math.max(first, second) + 1)
+  }
+
+  return code => errorStatusCodes[code] !== 1
 }
 
 module.exports = {

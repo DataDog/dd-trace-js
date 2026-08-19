@@ -17,6 +17,7 @@ const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = requ
 const { getStatusValidator } = require('./http-error-statuses')
 const {
   HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
   NETWORK_PEER_ADDRESS,
   runHttpRequestHook,
   setInstrumentationHttpResource,
@@ -153,10 +154,19 @@ const web = {
 
     if (!context?.span) return
 
+    const spanContext = context.span.context()
+    const currentRoute = spanContext.getTag(HTTP_ROUTE)
+    const publishedRoute = context.paths.length > 1 ? context.paths.join('') : context.paths[0]
     context.paths = [path]
-    if (path) {
-      // A downstream request can trigger sampling from inside the route handler.
-      // Publish the low-cardinality route as soon as the framework resolves it.
+    // Only under the flag: publishing here mutates the live span, which the default path
+    // must not do. A downstream request can trigger sampling from inside the route handler,
+    // so the low-cardinality route has to be readable before the span finishes. Overwrite
+    // only what this context published itself, so an upstream route still wins.
+    if (
+      path &&
+      context.config?.DD_TRACE_OTEL_SEMANTICS_ENABLED &&
+      (currentRoute === undefined || currentRoute === publishedRoute)
+    ) {
       context.span.setTag(HTTP_ROUTE, path)
     }
   },
@@ -454,6 +464,9 @@ function addRequestTags (context, spanType) {
   // other HTTP attributes, which are renamed centrally in span_format) it is set
   // here directly when OTel semantics are enabled.
   if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    // Establish automatic ownership before propagation can trigger sampling.
+    // The sampler may replace this method-only value once a route resolves.
+    setInstrumentationHttpResource(span, req.method)
     const peerAddress = req.socket?.remoteAddress
     if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
   }
@@ -529,8 +542,13 @@ function applyRouteOrEndpointTag (context) {
 function addResourceTag (context) {
   const { req, span, config } = context
   const spanContext = span.context()
+  const currentResource = spanContext.getTag(RESOURCE_NAME)
 
-  if (spanContext.getTag(RESOURCE_NAME)) return
+  if (currentResource) {
+    if (!config.DD_TRACE_OTEL_SEMANTICS_ENABLED) return
+    const instrumentationResource = spanContext.getTag(INSTRUMENTATION_HTTP_RESOURCE)
+    if (instrumentationResource === undefined || currentResource !== instrumentationResource) return
+  }
 
   const resource = [req.method, spanContext.getTag(HTTP_ROUTE)]
     .filter(Boolean)

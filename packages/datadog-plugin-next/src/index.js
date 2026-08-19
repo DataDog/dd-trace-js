@@ -11,8 +11,8 @@ const {
   setInstrumentationHttpResource,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const web = require('../../dd-trace/src/plugins/util/web')
-const addOtelRequestTags = require('./request-tags')
 const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
+const addOtelRequestTags = require('./request-tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 const reusedNextRequestStores = new WeakSet()
