@@ -121,6 +121,7 @@ describe('http-otel-semantics', () => {
           'http.useragent': 'ua',
           'http.client_ip': '1.2.3.4',
           'http.endpoint': '/u',
+          [HTTP_STATUS_ERROR]: 'true',
         },
         {},
         1
@@ -383,11 +384,37 @@ describe('http-otel-semantics', () => {
     it('sets error.type on an errored client span', () => {
       for (const status of ['404', '503']) {
         const span = run(
-          { 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': status, 'http.url': 'http://h/p' },
+          {
+            'span.kind': 'client',
+            'http.method': 'GET',
+            'http.status_code': status,
+            'http.url': 'http://h/p',
+            [HTTP_STATUS_ERROR]: 'true',
+          },
           {},
           1
         )
         assert.strictEqual(span.meta['error.type'], status)
+      }
+    })
+
+    it('does not blame the status for an error the application recorded itself', () => {
+      // A request hook can mark a span as an error while the response status stays inside the
+      // validator's accepted range. Capture time leaves the status-error marker off in that
+      // case, so the status must not be reported as the cause.
+      for (const kind of ['server', 'client']) {
+        for (const status of ['404', '500']) {
+          const span = run(
+            { 'span.kind': kind, 'http.method': 'GET', 'http.status_code': status, 'http.url': 'http://h/p' },
+            {},
+            1
+          )
+          assert.strictEqual(span.error, 1)
+          assert.ok(
+            !Object.hasOwn(span.meta, 'error.type'),
+            `${kind} span with an accepted status ${status} must not set error.type`
+          )
+        }
       }
     })
 
