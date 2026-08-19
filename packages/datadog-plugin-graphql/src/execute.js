@@ -62,6 +62,9 @@ let depthDisabled = false
 // operation's variableValues is undefined.
 const NO_VARIABLES_CACHED = Symbol('noVariablesCached')
 
+const PENDING_FIELD_END_TIME = 0
+const REUSED_FIELD_END_TIME = -1
+
 let asyncDisposeSymbol = Symbol.asyncDispose
 // @graphql-tools/executor uses this fallback before Node.js exposes Symbol.asyncDispose.
 /* istanbul ignore if */
@@ -389,11 +392,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
    * @param {object} rootCtx
    * @param {DatadogSpan} executeSpan
    * @param {number} startTime
+   * @param {Record<string, unknown> | undefined} variableValues
    * @param {object | null} [parentField]
    * @returns {DatadogSpan}
    */
-  startResolveSpan (field, rootCtx, executeSpan, startTime, parentField) {
-    const { fieldNode, fieldName, returnType, baseTypeName, variableValues, collapsedKey } = field
+  startResolveSpan (field, rootCtx, executeSpan, startTime, variableValues, parentField) {
+    const { fieldNode, fieldName, returnType, baseTypeName, collapsedKey } = field
 
     const parent = parentField === undefined ? getParentField(rootCtx, field) : parentField
     const childOf = parent?.span || executeSpan
@@ -469,6 +473,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
    */
   completeResolveSpan (rootCtx, field, error, result) {
     if (rootCtx.resolveFields !== undefined) {
+      if (field.endTime !== REUSED_FIELD_END_TIME) {
+        field.endTime = rootCtx.executeSpan._getTime()
+      }
       this.#completeResolveSpan(field, error, result)
       return
     }
@@ -614,8 +621,7 @@ function wrapResolve (resolve, isJit = false) {
         parentTypeName,
         returnType: info.returnType,
         baseTypeName: getBaseTypeName(info.returnType),
-        variableValues: info.variableValues,
-        args,
+        endTime: PENDING_FIELD_END_TIME,
         infoPath,
         jitPathKey: isJit,
         pathString,
@@ -645,6 +651,7 @@ function wrapResolve (resolve, isJit = false) {
         rootCtx.fields.set(fieldKey, field)
       }
     } else {
+      field.endTime = REUSED_FIELD_END_TIME
       return callInCollapsedScope(
         resolve,
         this,
@@ -656,7 +663,7 @@ function wrapResolve (resolve, isJit = false) {
 
     const executeSpan = rootCtx.executeSpan
     const startTime = executeSpan._getTime()
-    rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime)
+    rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, info.variableValues)
 
     return callInAsyncScope(resolve, this, arguments, field.currentStore, (error, res) => {
       rootCtx.plugin?.completeResolveSpan(rootCtx, field, error, res)
@@ -720,6 +727,7 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
     field = rootCtx.jitFieldsByPath.get(fieldKey)
   }
   if (field) {
+    field.endTime = REUSED_FIELD_END_TIME
     return callInCollapsedScope(resolve, self, callArguments, field, true)
   }
 
@@ -729,7 +737,6 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
     pathString,
     path ?? descriptor.collapsedPathSegments,
     info.variableValues,
-    args,
     info.path
   )
 
@@ -756,19 +763,17 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
  * @param {string} pathString
  * @param {(string | number)[]} path
  * @param {Record<string, unknown> | undefined} variableValues
- * @param {Record<string, unknown> | undefined} [args]
  * @param {object | undefined} [infoPath]
  * @returns {object}
  */
-function startJitField (rootCtx, descriptor, pathString, path, variableValues, args, infoPath) {
+function startJitField (rootCtx, descriptor, pathString, path, variableValues, infoPath) {
   const field = {
     fieldNode: descriptor.fieldNode,
     fieldName: descriptor.fieldName,
     parentTypeName: descriptor.parentTypeName,
     returnType: descriptor.returnType,
     baseTypeName: descriptor.baseTypeName,
-    variableValues,
-    args,
+    endTime: PENDING_FIELD_END_TIME,
     infoPath,
     pathString,
     collapsedKey: pathString,
@@ -795,7 +800,7 @@ function startJitField (rootCtx, descriptor, pathString, path, variableValues, a
     }
   }
   const executeSpan = rootCtx.executeSpan
-  rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, executeSpan._getTime(), parentField)
+  rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, executeSpan._getTime(), variableValues, parentField)
   return field
 }
 
@@ -816,6 +821,9 @@ function resolveJitDefault (rootCtx, descriptorId, source, path) {
     path ?? descriptor.collapsedPathSegments,
     rootCtx.variableValues
   )
+  if (rootCtx.config.collapse && descriptor.pathDepth !== descriptor.selectionDepth) {
+    field.endTime = REUSED_FIELD_END_TIME
+  }
 
   let result
   try {
@@ -1341,7 +1349,7 @@ function releaseRootContext (rootCtx, finishPendingFields) {
   const endTime = rootCtx.executeSpan._getTime()
   if (rootCtx.resolveFields !== undefined) {
     for (let field = rootCtx.resolveFields; field; field = field.nextResolveField) {
-      field.span.finish(endTime)
+      field.span.finish(field.endTime > PENDING_FIELD_END_TIME ? field.endTime : endTime)
     }
   } else if (finishPendingFields && rootCtx.fields !== undefined) {
     for (const field of rootCtx.fields.values()) {

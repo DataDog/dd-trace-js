@@ -983,8 +983,13 @@ describe('Plugin', () => {
           fields: {
             value: {
               type: graphql.GraphQLString,
-              async resolve (source) {
-                await Promise.resolve()
+              /**
+               * @param {{ async?: boolean, value: string }} source
+               */
+              resolve (source) {
+                if (source.async) {
+                  return Promise.resolve().then(() => tracer.trace('user.work', () => source.value))
+                }
                 return tracer.trace('user.work', () => source.value)
               },
             },
@@ -998,8 +1003,8 @@ describe('Plugin', () => {
                 type: new graphql.GraphQLList(Item),
                 resolve: () => [
                   { value: 'one' },
-                  { value: 'two' },
-                  { value: 'three' },
+                  { async: true, value: 'two' },
+                  { async: true, value: 'three' },
                 ],
               },
             },
@@ -1361,6 +1366,44 @@ describe('Plugin', () => {
           assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
         })
         assert.deepStrictEqual(result.data, { setHello: 'changed' })
+      })
+
+      it('finishes independent mutation resolver spans separately', async () => {
+        const localSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'IndependentDurationsQuery',
+            fields: { noop: { type: graphql.GraphQLString } },
+          }),
+          mutation: new graphql.GraphQLObjectType({
+            name: 'IndependentDurationsMutation',
+            fields: {
+              first: { type: graphql.GraphQLString, resolve: () => 'first' },
+              second: {
+                type: graphql.GraphQLString,
+                async resolve () {
+                  await setImmediatePromise()
+                  return 'second'
+                },
+              },
+            },
+          }),
+        })
+        const document = graphql.parse('mutation IndependentDurations { first second }')
+        const { query } = compileQuery(localSchema, document)
+
+        const result = await executeWithTrace(() => query({}, {}, {}), /IndependentDurations/, traces => {
+          const spans = traces[0].filter(span => span.name === 'graphql.resolve')
+          const first = spans.find(span => span.meta['graphql.field.path'] === 'first')
+          const second = spans.find(span => span.meta['graphql.field.path'] === 'second')
+
+          assert.ok(first)
+          assert.ok(second)
+          const firstEnd = BigInt(first.start) + BigInt(first.duration)
+          const secondEnd = BigInt(second.start) + BigInt(second.duration)
+          assert.ok(firstEnd < secondEnd, `Expected ${firstEnd} < ${secondEnd}`)
+        })
+
+        assert.deepStrictEqual(result.data, { first: 'first', second: 'second' })
       })
 
       it('traces every subscription payload execution', async () => {

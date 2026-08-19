@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const http = require('node:http')
-const { performance } = require('perf_hooks')
 const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
@@ -40,10 +39,6 @@ describe('Plugin', () => {
   let graphql
   let schema
   let sort
-
-  let markFast
-  let markSlow
-  let markSync
 
   // Mock Mongoose Query that throws if .then() or .exec() is called more than once.
   class Query {
@@ -131,31 +126,6 @@ describe('Plugin', () => {
           }))),
           resolve (obj, args) {
             return [{}, {}, {}]
-          },
-        },
-        fastAsyncField: {
-          type: graphql.GraphQLString,
-          resolve (obj, args) {
-            return new Promise((resolve) => {
-              markFast = performance.now()
-              resolve('fast field')
-            })
-          },
-        },
-        slowAsyncField: {
-          type: graphql.GraphQLString,
-          resolve (obj, args) {
-            return new Promise((resolve) => {
-              markSlow = performance.now()
-              resolve('slow field')
-            })
-          },
-        },
-        syncField: {
-          type: graphql.GraphQLString,
-          resolve (obj, args) {
-            markSync = performance.now()
-            return 'sync field'
           },
         },
         oneTime: {
@@ -738,71 +708,45 @@ describe('Plugin', () => {
           assert.strictEqual(result.data.__proto__, 'alias')
         })
 
-        it('should instrument each field resolver duration independently', done => {
-          const source = `
-            {
-              human {
-                fastAsyncField
-                slowAsyncField
-                syncField
-              }
-            }
-          `
+        it('should instrument each field resolver duration independently', async () => {
+          const localSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'IndependentDurationsQuery',
+              fields: { noop: { type: graphql.GraphQLString } },
+            }),
+            mutation: new graphql.GraphQLObjectType({
+              name: 'IndependentDurationsMutation',
+              fields: {
+                first: { type: graphql.GraphQLString, resolve: () => 'first' },
+                second: {
+                  type: graphql.GraphQLString,
+                  async resolve () {
+                    await setImmediatePromise()
+                    return 'second'
+                  },
+                },
+              },
+            }),
+          })
+          const source = 'mutation IndependentDurations { first second }'
 
-          let foundFastFieldSpan = false
-          let foundSlowFieldSpan = false
-          let foundSyncFieldSpan = false
+          const [, result] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = traces[0].filter(span => span.name === 'graphql.resolve')
+              const first = spans.find(span => span.meta['graphql.field.path'] === 'first')
+              const second = spans.find(span => span.meta['graphql.field.path'] === 'second')
 
-          let fastAsyncTime
-          let slowAsyncTime
-          let syncTime
+              assert.ok(first)
+              assert.ok(second)
+              const firstEnd = BigInt(first.start) + BigInt(first.duration)
+              const secondEnd = BigInt(second.start) + BigInt(second.duration)
+              assert.ok(firstEnd < secondEnd, `Expected ${firstEnd} < ${secondEnd}`)
+            }, { spanResourceMatch: /IndependentDurations/ }),
+            graphql.graphql({ schema: localSchema, source }),
+          ])
 
-          const processTraces = (traces) => {
-            try {
-              for (const trace of traces) {
-                for (const span of trace) {
-                  if (span.name !== 'graphql.resolve') {
-                    continue
-                  }
-
-                  if (span.resource === 'fastAsyncField:String') {
-                    assert.ok(fastAsyncTime < slowAsyncTime, `Expected ${fastAsyncTime} < ${slowAsyncTime}`)
-                    foundFastFieldSpan = true
-                  } else if (span.resource === 'slowAsyncField:String') {
-                    assert.ok(slowAsyncTime < syncTime, `Expected ${slowAsyncTime} < ${syncTime}`)
-                    foundSlowFieldSpan = true
-                  } else if (span.resource === 'syncField:String') {
-                    assert.ok(syncTime > slowAsyncTime, `Expected ${syncTime} > ${slowAsyncTime}`)
-                    foundSyncFieldSpan = true
-                  }
-
-                  if (foundFastFieldSpan && foundSlowFieldSpan && foundSyncFieldSpan) {
-                    agent.unsubscribe(processTraces)
-                    done()
-                    return
-                  }
-                }
-              }
-            } catch (e) {
-              agent.unsubscribe(processTraces)
-              done(e)
-            }
-          }
-
-          agent.subscribe(processTraces)
-
-          const markStart = performance.now()
-
-          graphql.graphql({ schema, source })
-            .then((result) => {
-              fastAsyncTime = markFast - markStart
-              slowAsyncTime = markSlow - markStart
-              syncTime = markSync - markStart
-            })
-            .catch((e) => {
-              agent.unsubscribe(processTraces)
-              done(e)
-            })
+          assert.strictEqual(result.data.first, 'first')
+          assert.strictEqual(result.data.second, 'second')
         })
 
         it('should instrument nested field resolvers', () => {
@@ -934,8 +878,16 @@ describe('Plugin', () => {
             fields: {
               name: {
                 type: graphql.GraphQLString,
-                async resolve () {
-                  await Promise.resolve()
+                /**
+                 * @param {{ async?: boolean }} source
+                 */
+                resolve (source) {
+                  if (source.async) {
+                    return Promise.resolve().then(() => {
+                      tracer.trace('user.work', () => {})
+                      return 'value'
+                    })
+                  }
                   tracer.trace('user.work', () => {})
                   return 'value'
                 },
@@ -948,7 +900,7 @@ describe('Plugin', () => {
               fields: {
                 items: {
                   type: new graphql.GraphQLList(Item),
-                  resolve: () => [{}, {}, {}],
+                  resolve: () => [{}, { async: true }, { async: true }],
                 },
               },
             }),
