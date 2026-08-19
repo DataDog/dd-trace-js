@@ -23,6 +23,89 @@ function extractContext (traceContext) {
   return api.propagation.extract(ROOT_CONTEXT, carrier, api.defaultTextMapGetter)
 }
 
+function getInstanceId (invocationContext) {
+  const attributes = invocationContext?.traceContext?.attributes
+  const fromAttributes = attributes &&
+    (attributes['durabletask.task.instance_id'] || attributes.DurableFunctionsInstanceId)
+  if (fromAttributes) return fromAttributes
+
+  return invocationContext?.df?.instanceId
+}
+
+function parentContextFromOrchestrationMeta (meta) {
+  const { traceContextFromMeta } = require('./otel-orchestration-meta')
+  return extractContext(traceContextFromMeta(meta))
+}
+
+function resolveActivityParentContext (invocationContext) {
+  const instanceId = getInstanceId(invocationContext)
+  const traceContext = invocationContext?.traceContext
+
+  const { getOrchestrationSpan } = require('./otel-orchestration-registry')
+  const orchestrationSpan = getOrchestrationSpan(instanceId)
+  if (orchestrationSpan) {
+    return api.trace.setSpan(extractContext(traceContext), orchestrationSpan)
+  }
+
+  const {
+    readOrchestrationSpanMetaFromSharedStoreSync,
+    readOrchestrationSpanMetaSync,
+  } = require('./otel-orchestration-store')
+  let meta = readOrchestrationSpanMetaSync(instanceId, traceContext)
+  if (!meta) {
+    meta = readOrchestrationSpanMetaFromSharedStoreSync(instanceId, traceContext)
+  }
+  if (meta) {
+    return parentContextFromOrchestrationMeta(meta)
+  }
+
+  return extractContext(traceContext)
+}
+
+async function resolveActivityParentContextAsync (invocationContext) {
+  const instanceId = getInstanceId(invocationContext)
+  const traceContext = invocationContext?.traceContext
+
+  const { getOrchestrationSpan } = require('./otel-orchestration-registry')
+  const orchestrationSpan = getOrchestrationSpan(instanceId)
+  if (orchestrationSpan) {
+    return api.trace.setSpan(extractContext(traceContext), orchestrationSpan)
+  }
+
+  const {
+    readOrchestrationSpanMetaAsync,
+    readOrchestrationSpanMetaSync,
+  } = require('./otel-orchestration-store')
+
+  let meta = readOrchestrationSpanMetaSync(instanceId, traceContext)
+  if (!meta) {
+    meta = await readOrchestrationSpanMetaAsync(instanceId, traceContext)
+  }
+  if (meta) {
+    return parentContextFromOrchestrationMeta(meta)
+  }
+
+  return extractContext(traceContext)
+}
+
+function buildSpanParentContext (args, trigger) {
+  const invocationContext = getInvocationContext(args, trigger)
+  if (trigger === 'durable-activity') {
+    return resolveActivityParentContext(invocationContext)
+  }
+
+  return extractContext(invocationContext?.traceContext)
+}
+
+function buildSpanParentContextAsync (args, trigger) {
+  const invocationContext = getInvocationContext(args, trigger)
+  if (trigger === 'durable-activity') {
+    return resolveActivityParentContextAsync(invocationContext)
+  }
+
+  return Promise.resolve(extractContext(invocationContext?.traceContext))
+}
+
 function runWithTraceContext (traceContext, fn) {
   return api.context.with(extractContext(traceContext), fn)
 }
@@ -52,9 +135,14 @@ function runWithInvocationContext (args, trigger, fn) {
 }
 
 module.exports = {
+  buildSpanParentContext,
+  buildSpanParentContextAsync,
   carrierFromTraceContext,
   extractContext,
+  getInstanceId,
   getInvocationContext,
+  parentContextFromOrchestrationMeta,
+  resolveActivityParentContext,
   runWithInvocationContext,
   runWithTraceContext,
 }

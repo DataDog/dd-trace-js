@@ -70,6 +70,9 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'LAMBDA_TASK_ROOT',
   // serverless service-name fallbacks (Config singleton)
   'WEBSITE_SITE_NAME',
+  // azure durable orchestration shared store
+  'AzureWebJobsStorage',
+  'TASKHUB_NAME',
   // azure metadata payload (cached at first build)
   'COMPUTERNAME',
   'FUNCTIONS_WORKER_RUNTIME_VERSION',

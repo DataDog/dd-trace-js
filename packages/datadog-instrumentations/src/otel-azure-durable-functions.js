@@ -1,11 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { extractContext } = require('./helpers/azure-trace-context')
 const {
-  endSpan,
-  getTracer,
-  spanAttributes,
   wrapAsyncWithTraceContext,
   wrapSyncWithTraceContext,
 } = require('./helpers/otel-azure-span')
@@ -45,13 +41,16 @@ function entityWrapper (method) {
 
 function activityWrapper (method) {
   return function (activityName, activityOptions) {
-    if (activityOptions && typeof activityOptions.handler === 'function') {
-      shimmer.wrap(activityOptions, 'handler', handler => {
-        const isAsync = handler?.constructor?.name === 'AsyncFunction'
-        return isAsync
-          ? wrapAsyncWithTraceContext(TRACER_NAME, 'durable-activity', handler, activityName)
-          : wrapSyncWithTraceContext(TRACER_NAME, 'durable-activity', handler, activityName)
-      })
+    if (typeof activityOptions === 'function') {
+      arguments[1] = shimmer.wrapFunction(
+        activityOptions,
+        handler => wrapAsyncWithTraceContext(TRACER_NAME, 'durable-activity', handler, activityName),
+      )
+    } else if (activityOptions && typeof activityOptions.handler === 'function') {
+      // Async wrap so parent resolution can read the shared store cross-worker.
+      shimmer.wrap(activityOptions, 'handler', handler =>
+        wrapAsyncWithTraceContext(TRACER_NAME, 'durable-activity', handler, activityName),
+      )
     }
     return method.apply(this, arguments)
   }
@@ -67,30 +66,45 @@ function orchestrationWrapper (method) {
 function wrapOrchestrationHandler (handler, functionName) {
   return function * (...args) {
     const invocationContext = args[0]
-    if (invocationContext?.df?.isReplaying) {
-      yield * handler.apply(this, args)
-      return
-    }
+    const { getInstanceId } = require('./helpers/azure-trace-context')
+    const {
+      completeOrchestrationSpan,
+      ensureOrchestrationMeta,
+    } = require('./helpers/otel-orchestration-store')
+    const { unregisterOrchestrationSpan } = require('./helpers/otel-orchestration-registry')
 
-    const parentContext = extractContext(invocationContext?.traceContext)
-    const span = getTracer(TRACER_NAME).startSpan(
-      `orchestration ${functionName}`,
-      { attributes: spanAttributes(functionName, 'durable-orchestration') },
-      parentContext,
-    )
+    const instanceId = getInstanceId(invocationContext)
+    const isReplaying = invocationContext?.df?.isReplaying !== false
+
+    if (instanceId && !isReplaying) {
+      ensureOrchestrationMeta(instanceId, invocationContext, functionName)
+    }
 
     try {
       const gen = handler.apply(this, args)
       let step = gen.next()
       while (!step.done) {
+        if (instanceId) {
+          unregisterOrchestrationSpan(instanceId)
+        }
         const input = yield step.value
         step = gen.next(input)
       }
-      endSpan(span)
+
+      if (instanceId && !isReplaying) {
+        completeOrchestrationSpan(TRACER_NAME, instanceId, invocationContext, functionName)
+      }
+
       return step.value
     } catch (error) {
-      endSpan(span, error)
+      if (instanceId && !isReplaying) {
+        completeOrchestrationSpan(TRACER_NAME, instanceId, invocationContext, functionName, error)
+      }
       throw error
+    } finally {
+      if (instanceId) {
+        unregisterOrchestrationSpan(instanceId)
+      }
     }
   }
 }
