@@ -428,9 +428,13 @@ describe('opentelemetry', function () {
         OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
       },
     })
+    // Attached before the request: the child can exit while `getWithRetry` is still resolving, and
+    // `ChildProcess` does not replay an `exit` that already fired.
+    const exitPromise = waitForExit(proc, 10_000)
+
     await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
 
-    const [spans] = await Promise.all([spansPromise, waitForExit(proc, 10_000)])
+    const [spans] = await Promise.all([spansPromise, exitPromise])
 
     assert.strictEqual(spans.length, 9)
 

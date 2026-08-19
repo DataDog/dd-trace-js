@@ -65,7 +65,7 @@ describe('Plugin', function () {
     const tags = {}
     const span = { setTag: (key, value) => { tags[key] = value } }
     const req = {
-      headers: { host: 'example.com:8080' },
+      headers: { host: 'example.com:8080', 'user-agent': 'test-agent/1.0' },
       method: 'GET',
       socket: { encrypted: false, remoteAddress: '192.0.2.1' },
       url: '/products/42?token=secret',
@@ -79,6 +79,9 @@ describe('Plugin', function () {
 
     assert.strictEqual(tags['http.url'], 'http://example.com:8080/products/42?token=secret')
     assert.strictEqual(tags['network.peer.address'], '192.0.2.1')
+    // The shared `web.addRequestTags` path records this, so the Next path has to as well or the
+    // conversion emits no `user_agent.original`.
+    assert.strictEqual(tags['http.useragent'], 'test-agent/1.0')
   })
 
   let server
