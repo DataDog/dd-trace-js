@@ -162,6 +162,17 @@ describe('config', () => {
     )
   })
 
+  it('should route the agent exporter to the profiling intake in agentless mode', () => {
+    process.env.DD_AGENTLESS_ENABLED = 'true'
+    process.env.DD_API_KEY = 'test-api-key'
+    process.env.DD_SITE = 'us3.datadoghq.com'
+
+    const { config } = getProfilerConfig()
+
+    assert.deepStrictEqual(config.exporters.map(exporter => exporter.constructor), [AgentExporter])
+    assert.strictEqual(config.exporters[0].getExportUrl().href, 'https://intake.profile.us3.datadoghq.com/')
+  })
+
   it('should not include host tag when reportHostname is false', () => {
     const { config } = getProfilerConfig({ reportHostname: false })
 
