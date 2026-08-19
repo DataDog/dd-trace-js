@@ -5,97 +5,77 @@ description: |
   in dd-trace-js. Triggers: "add LLMObs support", "instrument chat
   completions / streaming / embeddings / agent runs / orchestration / tool
   calls / retrieval", "LLMObsPlugin", "getLLMObsSpanRegisterOptions",
-  "setLLMObsTags", "LlmObsCategory", "LlmObsSpanKind", any provider tag
+  "setLLMObsTags", "SPAN_KINDS", "span kind", any provider tag
   ("openai" / "anthropic" / "genai" / "google" / "langchain" / "langgraph" /
-  "ai-sdk" llmobs), "VCR cassettes".
+  "ai" llmobs), "VCR cassettes".
 ---
 
 # LLM Observability Integration Skill
 
-This skill covers creating LLMObs plugins that instrument LLM library operations and emit span events. Supported operations: chat completions (streaming and non-streaming), embeddings, agent runs, orchestration (workflows / graphs), tool calls, retrieval (RAG / vector DB).
+This skill covers creating LLMObs plugins that instrument LLM library operations and emit span events. Supported
+operations: chat completions (streaming and non-streaming), embeddings, agent runs, orchestration (workflows /
+graphs), tool calls, retrieval (RAG / vector DB).
 
 ## Read Upstream Source First
 
-LLM libraries iterate fast — six-month-old assumptions about an SDK's response shape, streaming contract, or tool-call format are usually wrong. Before category detection or any plugin work, read the upstream library's source for the installed version (`versions/<lib>@<range>/node_modules/<lib>`). The category decision tree below depends on facts the source carries (does this package make HTTP calls? does it orchestrate? does it support multiple providers?). See [apm-integrations § Read Upstream Source First](../apm-integrations/SKILL.md#read-upstream-source-first) for the shallow-clone / `npm pack` shapes.
+LLM libraries iterate fast — six-month-old assumptions about an SDK's response shape, streaming contract, or tool-call
+format are usually wrong. Before category detection or any plugin work, read the upstream library's source for the
+installed version (`versions/<lib>@<range>/node_modules/<lib>`). The shape checklist below depends on facts the
+source carries (does this package make HTTP calls? does it orchestrate? does it support multiple providers?). See
+[apm-integrations § Read Upstream Source First](../apm-integrations/SKILL.md#read-upstream-source-first) for the
+shallow-clone / `npm pack` shapes.
 
 ## Core Concepts
 
 ### 1. LLMObsPlugin Base Class
 
-All LLMObs plugins extend `LLMObsPlugin`. Two methods must be implemented:
+Leaf plugins extend `LLMObsPlugin` and implement two methods:
 
-- `getLLMObsSpanRegisterOptions(ctx)` — returns `{ modelProvider, modelName, kind, name }`.
-- `setLLMObsTags(ctx)` — extracts and tags input / output messages, token metrics, and model metadata.
+- `getLLMObsSpanRegisterOptions(ctx)` — returns a required `kind` plus any available name, model and session fields.
+- `setLLMObsTags(ctx)` — tags the operation's input, output, metrics, and metadata.
 
-Lifecycle: `start(ctx)` registers the span and captures context; the wrapped operation runs; `asyncEnd(ctx)` calls `setLLMObsTags()`; `end(ctx)` restores the parent.
+A composite root such as `ai/index.js` extends `CompositePlugin` and selects leaf plugins.
+
+On the usual promise-backed channel, `start(ctx)` registers the span and captures context, `end(ctx)` restores the
+parent after the wrapped call returns, and `asyncEnd(ctx)` calls `setLLMObsTags()` after the operation settles.
 
 See [references/plugin-architecture.md](references/plugin-architecture.md) for the full implementation surface.
 
-### 2. Package Category System
+### 2. Package Shape
 
-**CRITICAL:** Every integration must be classified into one category using the `LlmObsCategory` enum. This determines test strategy and implementation approach.
+**Settle each instrumented surface's shape before writing anything** — it decides which methods to hook and how the
+operation gets its response. These are working categories for reasoning, not constants in the codebase, so classify
+by reading the source rather than looking for an enum.
 
-#### LlmObsCategory Enum Values
+- **LLM client** — owns the provider endpoint, transport and authentication (openai, anthropic, genai). Hook the
+  chat / completion methods.
+- **Multi-provider** — accepts provider implementations behind one surface (ai, langchain). The providers may live
+  in separate packages. Hook the provider abstraction layer.
+- **Orchestration** — runs a graph or workflow and holds state, with no provider HTTP of its own (langgraph). Hook the
+  workflow lifecycle (invoke, stream, run).
+- **Infrastructure** — implements a protocol across a client / server split (modelcontextprotocol-sdk). Hook the
+  protocol handlers.
 
-- **`LlmObsCategory.LLM_CLIENT`** - Direct API wrappers (openai, anthropic, genai)
-  - Signs: Makes HTTP calls to LLM provider endpoints, requires API keys
-  - Test strategy: VCR with real API calls via proxy
-  - Instrumentation: Hook chat/completion methods
+The shape decides the response source and test harness. The instrumented operation decides its span kind and fields.
+Hybrid packages such as `ai` and LangChain must be classified per operation. Test strategy per shape lives in
+[llmobs-testing](../llmobs-testing/SKILL.md).
 
-- **`LlmObsCategory.MULTI_PROVIDER`** - Multi-provider frameworks (ai-sdk, langchain)
-  - Signs: Supports multiple LLM providers via configuration, wraps LLM_CLIENT libraries
-  - Test strategy: VCR with real API calls via proxy
-  - Instrumentation: Hook provider abstraction layer
-
-- **`LlmObsCategory.ORCHESTRATION`** - Workflow managers (langgraph)
-  - Signs: Graph/workflow execution, state management, NO direct HTTP to LLM providers
-  - Test strategy: Pure function tests, NO VCR, NO real API calls
-  - Instrumentation: Hook workflow lifecycle (invoke, stream, run)
-  - **Special:** Tests should use actual LLM as orchestration node (not mock responses)
-
-- **`LlmObsCategory.INFRASTRUCTURE`** - Protocols/servers (MCP)
-  - Signs: Protocol implementation, server/client architecture, transport layers
-  - Test strategy: Mock server tests
-  - Instrumentation: Hook protocol handlers
-
-#### Decision Tree
-
-Answer these questions by reading the code:
-
-1. **Does the package make direct HTTP calls to LLM provider endpoints?**
-  - YES → Go to question 2
-  - NO → Go to question 3
-
-2. **Does it support multiple LLM providers via configuration?**
-  - YES → **`LlmObsCategory.MULTI_PROVIDER`**
-  - NO → **`LlmObsCategory.LLM_CLIENT`**
-
-3. **Does it implement workflow/graph orchestration with state management?**
-  - YES → **`LlmObsCategory.ORCHESTRATION`**
-  - NO → **`LlmObsCategory.INFRASTRUCTURE`**
-
-See [references/category-detection.md](references/category-detection.md) for detailed heuristics and examples.
+See [references/category-detection.md](references/category-detection.md) for heuristics and worked examples.
 
 ### 3. LLM Span Kinds
 
-Use the `LlmObsSpanKind` enum:
-
-- **`LlmObsSpanKind.LLM`** - Chat completions, text generation
-- **`LlmObsSpanKind.WORKFLOW`** - Graph/chain execution
-- **`LlmObsSpanKind.AGENT`** - Agent runs
-- **`LlmObsSpanKind.TOOL`** - Tool/function calls
-- **`LlmObsSpanKind.EMBEDDING`** - Embedding generation
-- **`LlmObsSpanKind.RETRIEVAL`** - Vector DB/RAG retrieval
-
-**Most common:** Use `'llm'` for chat completions/text generation in LLM_CLIENT and MULTI_PROVIDER categories.
+`SPAN_KINDS` in `packages/dd-trace/src/llmobs/constants/tags.js` lists `llm`, `agent`, `workflow`, `task`, `tool`,
+`embedding`, `retrieval`. Chat completions and text generation are `llm`; graph or chain execution is `workflow`;
+agent runs are `agent`; vector-DB and RAG lookups are `retrieval`. Only the public SDK validates against that list,
+so a plugin may register a kind outside it — `ai` v7 and claude-agent-sdk both use `step`.
 
 ### 4. Message Extraction
 
-All plugins must convert provider-specific message formats to the standard format:
+`llm` operations convert provider-specific messages to the tagger's message shape:
 
-**Standard format:** `[{content: string, role: string}]`
+**Common shape:** `[{ content?: string, role: string, toolCalls?: object[], toolResults?: object[] }]`
 
-**Common roles:** `'user'`, `'assistant'`, `'system'`, `'tool'`
+`role` defaults to an empty string. Tool-call or tool-result-only messages may omit `content`.
 
 **Provider-specific handling:**
 - OpenAI: Direct format match, handle `function_call` and `tool_calls`
@@ -107,49 +87,14 @@ See [references/message-extraction.md](references/message-extraction.md) for pro
 
 ## Implementation Steps
 
-1. **Detect package category** (REQUIRED FIRST STEP)
-  - Follow decision tree above
-  - Output: category, confidence, reasoning
+1. **Map each surface's response source and operation kind**, from the upstream source rather than the package name.
+2. **Create leaf plugins under `packages/dd-trace/src/llmobs/plugins/{integration}/`** extending `LLMObsPlugin`.
+3. **Implement `getLLMObsSpanRegisterOptions(ctx)`** — span kind plus any available name, model and session fields.
+4. **Implement `setLLMObsTags(ctx)`** — input, output, metrics and metadata from the fields the instrumentation
+  publishes on `ctx`, tagged through `this._tagger`.
+5. **Cover the edges**: streaming, kind-specific error output, non-standard formats, absent metadata.
 
-2. **Create plugin file**
-  - Location: `packages/dd-trace/src/llmobs/plugins/{integration}/index.js`
-  - Extend: `LLMObsPlugin` base class
-  - Implement: Required methods per plugin architecture
-
-3. **Implement `getLLMObsSpanRegisterOptions(ctx)`**
-  - Extract model provider and name from context
-  - Determine span kind (usually `'llm'`)
-  - Return registration options object
-
-4. **Implement `setLLMObsTags(ctx)`**
-  - Extract input messages from `ctx.arguments`
-  - Extract output messages from `ctx.result`
-  - Extract token metrics (input_tokens, output_tokens, total_tokens)
-  - Extract metadata (temperature, max_tokens, etc.)
-  - Tag span using `this._tagger` methods
-
-5. **Handle edge cases**
-  - Streaming responses (if applicable)
-  - Error cases (empty output messages)
-  - Non-standard message formats
-  - Missing metadata
-
-See [references/plugin-architecture.md](references/plugin-architecture.md) for step-by-step implementation guide.
-
-## Plugin Registration
-
-All plugins must export an array:
-
-**Static properties required:**
-- `integration` - Integration name (e.g., 'openai')
-- `id` - Unique plugin ID (e.g., 'llmobs_openai')
-- `prefix` - Channel prefix (e.g., 'tracing:apm:openai:chat')
-
-## References
-
-For detailed information, see:
-
-- [references/plugin-architecture.md](references/plugin-architecture.md) - Complete plugin structure, implementation steps, helper methods
-- [references/category-detection.md](references/category-detection.md) - Package classification heuristics and detection process
-- [references/message-extraction.md](references/message-extraction.md) - Provider-specific message format patterns
-- [references/reference-implementations.md](references/reference-implementations.md) - Working plugin examples (Anthropic, Google GenAI)
+Export the class itself when the package needs one plugin (openai, anthropic, genai), or an array when several
+operations each need their own (langchain, langgraph, modelcontextprotocol-sdk, claude-agent-sdk). Use a
+`CompositePlugin` root when one integration selects between child implementations, as `ai` does. The required static
+fields and the rest of the surface are in [references/plugin-architecture.md](references/plugin-architecture.md).

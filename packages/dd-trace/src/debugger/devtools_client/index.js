@@ -23,7 +23,6 @@ require('./remote_config')
 
 /** @typedef {import('node:inspector').Debugger.EvaluateOnCallFrameReturnType} EvaluateOnCallFrameResult */
 
-// Expression to run on a call frame of the paused thread to get its active trace and span id.
 const templateExpressionSetupCode = `
   const $dd_inspect = global.require('node:util').inspect;
   const $dd_segmentInspectOptions = {
@@ -34,8 +33,10 @@ const templateExpressionSetupCode = `
     breakLength: Infinity
   };
 `
+
+// Expression to run on a call frame of the paused thread to get its active trace and span id.
 const getDDTagsExpression = `(() => {
-  const context = global.require('dd-trace').scope().active()?.context();
+  const context = globalThis._ddtrace.scope().active()?.context();
   return { trace_id: context?.toTraceId(), span_id: context?.toSpanId() }
 })()`
 

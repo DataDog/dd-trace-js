@@ -15,6 +15,7 @@ const queryParsedChannel = channel('apm:next:query-parsed')
 
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
+const requestErrors = new WeakMap()
 
 // Next.js <= 14.2.6
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
@@ -213,10 +214,8 @@ function wrapServeStatic (serveStatic) {
 }
 
 function finish (ctx, result, err) {
-  if (err) {
-    ctx.error = err
-    errorChannel.publish(ctx)
-  }
+  publishError(ctx.req, ctx, err)
+  requestErrors.delete(ctx.req)
 
   const maybeNextRequest = nodeNextRequestsToNextRequests.get(ctx.req)
   if (maybeNextRequest) {
@@ -224,6 +223,27 @@ function finish (ctx, result, err) {
   }
 
   finishChannel.publish(ctx)
+}
+
+function publishError (req, ctx, error) {
+  if (!error) return
+
+  req = req.originalRequest || req
+  let errors = requestErrors.get(req)
+  if (errors?.has(error)) return
+
+  if (!errors) {
+    errors = new Set()
+    requestErrors.set(req, errors)
+  }
+  errors.add(error)
+
+  if (ctx) {
+    ctx.error = error
+    errorChannel.publish(ctx)
+  } else {
+    errorChannel.publish({ error })
+  }
 }
 
 // also wrapped in dist/server/future/route-handlers/app-route-route-handler.js
@@ -244,15 +264,11 @@ addHook({
   return NextRequestAdapter
 })
 
-// From next 15.4.1 each app-route build inlines its own copy of `fromNodeNextRequest`, so the hook
-// above no longer maps the node request to the app-route NextRequest and a thrown handler error
-// cannot reach `finish`. The app-route runtime reports real errors (redirect/notFound and other
-// control-flow signals excluded by next) through `RouteModule.onRequestError`, which next loads from
-// a precompiled `app-route*.runtime.{dev,prod}.js` bundle regardless of how the route chunk is
-// bundled. The bundler/experimental part of the name is matched with a pattern rather than
-// enumerated, so a variant next adds later is picked up without a code change.
-const patchedAppRouteModules = new WeakSet()
-
+// From Next 15.4.1, route modules execute through precompiled runtime bundles that bypass the
+// classic server hooks above. Match bundler and experimental filename variants without enumerating
+// them so App Routes, Pages APIs, and App Pages reuse the existing Next request lifecycle.
+const patchedRouteModules = new WeakSet()
+const COMPILED_RUNTIME_PATH = 'dist/compiled/next-server/'
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
     if (error) {
@@ -262,21 +278,137 @@ function wrapOnRequestError (onRequestError) {
   }
 }
 
-function instrumentAppRouteRuntime (runtime) {
-  const AppRouteRouteModule = runtime.AppRouteRouteModule
-  const proto = AppRouteRouteModule?.prototype
-  if (proto && typeof proto.onRequestError === 'function' && !patchedAppRouteModules.has(AppRouteRouteModule)) {
-    patchedAppRouteModules.add(AppRouteRouteModule)
+function getRoutePage (routeModule, fallbackPage) {
+  const definition = routeModule?.definition
+  if (typeof definition?.pathname === 'string') {
+    return { page: definition.pathname, isFilesystemPath: false }
+  }
+
+  if (typeof definition?.page === 'string') {
+    return { page: definition.page, isFilesystemPath: true }
+  }
+
+  return { page: fallbackPage, isFilesystemPath: false }
+}
+
+function publishRoutePage (ctx, routeModule, fallbackPage, isAppPath) {
+  if (!ctx || !pageLoadChannel.hasSubscribers) return
+
+  const pageData = getRoutePage(routeModule, fallbackPage)
+  if (pageData.page) {
+    pageLoadChannel.publish(isAppPath ? { ...pageData, isAppPath: true } : pageData)
+  }
+}
+
+function wrapAppRouteHandle (handle) {
+  return function (req, context) {
+    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
+      return handle.apply(this, arguments)
+    }
+
+    const res = { statusCode: 500 }
+    nodeNextRequestsToNextRequests.set(req, req)
+
+    return instrument(req, res, ctx => {
+      publishRoutePage(ctx, this, undefined, true)
+
+      return handle.apply(this, arguments).then(response => {
+        if (ctx) ctx.res.statusCode = response?.status || 200
+        return response
+      })
+    })
+  }
+}
+
+function instrumentRouteModule (RouteModule, method, wrapper, handleErrors) {
+  const proto = RouteModule?.prototype
+  if (!proto || patchedRouteModules.has(RouteModule)) return
+
+  patchedRouteModules.add(RouteModule)
+  if (typeof proto[method] === 'function') {
+    shimmer.wrap(proto, method, wrapper)
+  }
+  if (handleErrors && typeof proto.onRequestError === 'function') {
     shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
   }
+}
+
+function instrumentAppRouteRuntime (runtime) {
+  instrumentRouteModule(runtime.AppRouteRouteModule, 'handle', wrapAppRouteHandle, true)
   return runtime
 }
 
-addHook({
-  name: 'next',
-  versions: ['>=15.4.1'],
-  filePattern: String.raw`dist/compiled/next-server/app-route[\w-]*\.runtime\.(?:dev|prod)\.js$`,
-}, instrumentAppRouteRuntime)
+function wrapPagesApiRender (render) {
+  return function (req, res, context = {}) {
+    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
+      return render.apply(this, arguments)
+    }
+
+    return instrument(req, res, ctx => {
+      publishRoutePage(ctx, this, context.page, false)
+
+      const { onError } = context
+      return render.call(this, req, res, {
+        ...context,
+        onError: function (error) {
+          publishError(req, ctx, error)
+          return onError?.apply(this, arguments)
+        },
+      })
+    })
+  }
+}
+
+function instrumentPagesApiRuntime (runtime) {
+  const PagesAPIRouteModule = runtime.PagesAPIRouteModule || runtime.default
+  instrumentRouteModule(PagesAPIRouteModule, 'render', wrapPagesApiRender, false)
+  return runtime
+}
+
+function wrapAppPageRender (render) {
+  return function (req, res, context = {}) {
+    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
+      return render.apply(this, arguments)
+    }
+
+    return instrument(req, res, ctx => {
+      publishRoutePage(ctx, this, context.page, true)
+
+      return render.apply(this, arguments).then(result => {
+        const statusCode = result?.metadata?.statusCode
+        if (ctx && typeof statusCode === 'number') {
+          ctx.res.statusCode = statusCode
+        }
+
+        return result
+      }, error => {
+        if (ctx && (typeof ctx.res.statusCode !== 'number' || ctx.res.statusCode < 400)) {
+          ctx.res.statusCode = 500
+        }
+
+        throw error
+      })
+    })
+  }
+}
+
+function instrumentAppPageRuntime (runtime) {
+  const AppPageRouteModule = runtime.AppPageRouteModule || runtime.default
+  instrumentRouteModule(AppPageRouteModule, 'render', wrapAppPageRender, true)
+  return runtime
+}
+
+for (const [runtime, instrumentRuntime] of [
+  ['app-route', instrumentAppRouteRuntime],
+  ['pages-api', instrumentPagesApiRuntime],
+  ['app-page', instrumentAppPageRuntime],
+]) {
+  addHook({
+    name: 'next',
+    versions: ['>=15.4.1'],
+    filePattern: String.raw`${COMPILED_RUNTIME_PATH}${runtime}[\w-]*\.runtime\.(?:dev|prod)\.js$`,
+  }, instrumentRuntime)
+}
 
 addHook({
   name: 'next',

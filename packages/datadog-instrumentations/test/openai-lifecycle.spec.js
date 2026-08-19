@@ -101,8 +101,8 @@ function loadOpenAIInstrumentation () {
 
   const stub = {
     ...realInstrument,
-    addHook (spec, cb) {
-      hookCallbacks.push({ spec, cb })
+    addHook (spec, hook) {
+      hookCallbacks.push({ spec, hook })
     },
   }
 
@@ -121,9 +121,9 @@ function loadOpenAIInstrumentation () {
 }
 
 function applyShim (hookCallbacks, filePath, targetClass, TargetClass) {
-  for (const { spec, cb } of hookCallbacks) {
+  for (const { spec, hook } of hookCallbacks) {
     if (spec.file === `${filePath}.js`) {
-      cb({ [targetClass]: TargetClass })
+      hook({ [targetClass]: TargetClass })
       return
     }
   }

@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/d19a67cc-ea11-4472-ac84-269366306a3e/datasets/fadfa0a8-1f2c-4042-88fd-f60ef32b7e71/records?filter[version]=1",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate"
+    },
+    "body": ""
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-security-policy": "frame-ancestors 'self'; report-uri https://logs.browser-intake-datadoghq.com/api/v2/logs?dd-api-key=pube4f163c23bbf91c16b8f57f56af9fc58&dd-evp-origin=content-security-policy&ddsource=csp-report&ddtags=site%3Adatadoghq.com",
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "900",
+      "date": "Thu, 13 Aug 2026 19:41:45 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": "{\"data\":[{\"id\":\"custom-b\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"canonical_id\":\"2bef93ab-d9d1-4672-bd73-6eedaad166a9\",\"created_at\":\"2026-08-13T19:41:39.982022Z\",\"dataset_id\":\"fadfa0a8-1f2c-4042-88fd-f60ef32b7e71\",\"expected_output\":{\"value\":3},\"input\":{\"value\":2},\"metadata\":{\"source\":\"client-custom-records-test\"},\"ttl\":\"2029-08-12T19:41:40.014494Z\",\"updated_at\":\"2026-08-13T19:41:39.982022Z\"}},{\"id\":\"custom-a\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"canonical_id\":\"8a3e345b-46a4-4625-bd23-e4c3b030c150\",\"created_at\":\"2026-08-13T19:41:39.982022Z\",\"dataset_id\":\"fadfa0a8-1f2c-4042-88fd-f60ef32b7e71\",\"expected_output\":{\"value\":2},\"input\":{\"value\":1},\"metadata\":{\"source\":\"client-custom-records-test\"},\"ttl\":\"2029-08-12T19:41:40.014486Z\",\"updated_at\":\"2026-08-13T19:41:39.982022Z\"}}],\"meta\":{\"after\":\"\"}}"
+  }
+}
