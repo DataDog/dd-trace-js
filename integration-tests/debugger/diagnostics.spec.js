@@ -14,7 +14,8 @@ describe('Dynamic Instrumentation', function () {
   })
 
   describe('diagnostics messages', function () {
-    it('should send expected diagnostics messages if probe is received and triggered', function (done) {
+    const receivedAndTriggeredTitle = 'should send expected diagnostics messages if probe is received and triggered'
+    it(receivedAndTriggeredTitle, () => new Promise((resolve, reject) => {
       let receivedAckUpdate = false
       const probeId = t.rcConfig.config.id
       const expectedPayloads = [{
@@ -57,7 +58,7 @@ describe('Dynamic Instrumentation', function () {
                 assert.strictEqual(response.status, 200)
                 assert.deepStrictEqual(response.data, { hello: 'bar' })
               })
-              .catch(done)
+              .catch(reject)
           } else {
             endIfDone()
           }
@@ -67,11 +68,13 @@ describe('Dynamic Instrumentation', function () {
       t.agent.addRemoteConfig(t.rcConfig)
 
       function endIfDone () {
-        if (receivedAckUpdate && expectedPayloads.length === 0) done()
+        if (receivedAckUpdate && expectedPayloads.length === 0) resolve()
       }
-    })
+    }))
 
-    it('should send expected diagnostics messages if probe is first received and then updated', function (done) {
+    const receivedAndUpdatedTitle = 'should send expected diagnostics messages if probe is first received ' +
+      'and then updated'
+    it(receivedAndUpdatedTitle, () => new Promise(resolve => {
       let receivedAckUpdates = 0
       const probeId = t.rcConfig.config.id
       const expectedPayloads = [{
@@ -129,11 +132,13 @@ describe('Dynamic Instrumentation', function () {
       t.agent.addRemoteConfig(t.rcConfig)
 
       function endIfDone () {
-        if (receivedAckUpdates === 2 && expectedPayloads.length === 0) done()
+        if (receivedAckUpdates === 2 && expectedPayloads.length === 0) resolve()
       }
-    })
+    }))
 
-    it('should send expected diagnostics messages if probe is first received and then deleted', function (done) {
+    const receivedAndDeletedTitle = 'should send expected diagnostics messages if probe is first received ' +
+      'and then deleted'
+    it(receivedAndDeletedTitle, () => new Promise(resolve => {
       let receivedAckUpdate = false
       let payloadsProcessed = false
       const probeId = t.rcConfig.config.id
@@ -181,9 +186,9 @@ describe('Dynamic Instrumentation', function () {
       t.agent.addRemoteConfig(t.rcConfig)
 
       function endIfDone () {
-        if (receivedAckUpdate && payloadsProcessed) done()
+        if (receivedAckUpdate && payloadsProcessed) resolve()
       }
-    })
+    }))
 
     it(
       'should send expected error diagnostics messages if probe doesn\'t conform to expected schema',
@@ -263,7 +268,7 @@ describe('Dynamic Instrumentation', function () {
     }
 
     describe('multiple probes at the same location', function () {
-      it('should support adding multiple probes at the same location', function (done) {
+      it('should support adding multiple probes at the same location', () => new Promise((resolve) => {
         const rcConfig1 = t.generateRemoteConfig()
         const rcConfig2 = t.generateRemoteConfig()
         const expectedPayloads = [{
@@ -296,11 +301,12 @@ describe('Dynamic Instrumentation', function () {
         t.agent.addRemoteConfig(rcConfig2)
 
         function endIfDone () {
-          if (expectedPayloads.length === 0) done()
+          if (expectedPayloads.length === 0) resolve()
         }
-      })
+      }))
 
-      it('should support triggering multiple probes added at the same location', function (done) {
+      const triggerMultipleTitle = 'should support triggering multiple probes added at the same location'
+      it(triggerMultipleTitle, () => new Promise((resolve, reject) => {
         let installed = 0
         const rcConfig1 = t.generateRemoteConfig()
         const rcConfig2 = t.generateRemoteConfig()
@@ -322,7 +328,7 @@ describe('Dynamic Instrumentation', function () {
             const { diagnostics } = event.debugger
             if (diagnostics.status === 'INSTALLED') {
               if (++installed === 2) {
-                t.axios.get(t.breakpoint.url).catch(done)
+                t.axios.get(t.breakpoint.url).catch(reject)
               }
             } else if (diagnostics.status === 'EMITTING') {
               const expected = expectedPayloads.get(diagnostics.probeId)
@@ -338,11 +344,12 @@ describe('Dynamic Instrumentation', function () {
         t.agent.addRemoteConfig(rcConfig2)
 
         function endIfDone () {
-          if (expectedPayloads.size === 0) done()
+          if (expectedPayloads.size === 0) resolve()
         }
-      })
+      }))
 
-      it('should support not triggering any probes when all conditions are not met', function (done) {
+      const noConditionsMetTitle = 'should support not triggering any probes when all conditions are not met'
+      it(noConditionsMetTitle, () => new Promise((resolve, reject) => {
         let installed = 0
         const rcConfig1 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } })
         const rcConfig2 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'baz'] } } })
@@ -352,8 +359,8 @@ describe('Dynamic Instrumentation', function () {
             const { diagnostics } = event.debugger
             if (diagnostics.status === 'INSTALLED') {
               if (++installed === 2) {
-                t.axios.get(t.breakpoint.url).catch(done)
-                setTimeout(done, 2000)
+                t.axios.get(t.breakpoint.url).catch(reject)
+                setTimeout(resolve, 2000)
               }
             } else if (diagnostics.status === 'EMITTING') {
               assert.fail('should not trigger any probes when all conditions are not met')
@@ -363,9 +370,10 @@ describe('Dynamic Instrumentation', function () {
 
         t.agent.addRemoteConfig(rcConfig1)
         t.agent.addRemoteConfig(rcConfig2)
-      })
+      }))
 
-      it('should only trigger the probes whose conditions are met (all have conditions)', function (done) {
+      const allConditionsTitle = 'should only trigger the probes whose conditions are met (all have conditions)'
+      it(allConditionsTitle, () => new Promise((resolve, reject) => {
         let installed = 0
         const rcConfig1 = t.generateRemoteConfig({
           when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
@@ -386,7 +394,7 @@ describe('Dynamic Instrumentation', function () {
             const { diagnostics } = event.debugger
             if (diagnostics.status === 'INSTALLED') {
               if (++installed === 2) {
-                t.axios.get(t.breakpoint.url).catch(done)
+                t.axios.get(t.breakpoint.url).catch(reject)
               }
             } else if (diagnostics.status === 'EMITTING') {
               const expected = expectedPayloads.get(diagnostics.probeId)
@@ -402,11 +410,12 @@ describe('Dynamic Instrumentation', function () {
         t.agent.addRemoteConfig(rcConfig2)
 
         function endIfDone () {
-          if (expectedPayloads.size === 0) done()
+          if (expectedPayloads.size === 0) resolve()
         }
-      })
+      }))
 
-      it('trigger on met condition, even if other condition throws (all have conditions)', function (done) {
+      const throwingConditionTitle = 'trigger on met condition, even if other condition throws (all have conditions)'
+      it(throwingConditionTitle, () => new Promise((resolve, reject) => {
         let installed = 0
         // this condition will throw because `foo` is not defined
         const rcConfig1 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } })
@@ -426,7 +435,7 @@ describe('Dynamic Instrumentation', function () {
             const { diagnostics } = event.debugger
             if (diagnostics.status === 'INSTALLED') {
               if (++installed === 2) {
-                t.axios.get(t.breakpoint.url).catch(done)
+                t.axios.get(t.breakpoint.url).catch(reject)
               }
             } else if (diagnostics.status === 'EMITTING') {
               const expected = expectedPayloads.get(diagnostics.probeId)
@@ -442,11 +451,12 @@ describe('Dynamic Instrumentation', function () {
         t.agent.addRemoteConfig(rcConfig2)
 
         function endIfDone () {
-          if (expectedPayloads.size === 0) done()
+          if (expectedPayloads.size === 0) resolve()
         }
-      })
+      }))
 
-      it('should only trigger the probes whose conditions are met (not all have conditions)', function (done) {
+      const partialConditionsTitle = 'should only trigger the probes whose conditions are met (not all have conditions)'
+      it(partialConditionsTitle, () => new Promise((resolve, reject) => {
         let installed = 0
         const rcConfig1 = t.generateRemoteConfig({
           when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
@@ -473,7 +483,7 @@ describe('Dynamic Instrumentation', function () {
             const { diagnostics } = event.debugger
             if (diagnostics.status === 'INSTALLED') {
               if (++installed === 3) {
-                t.axios.get(t.breakpoint.url).catch(done)
+                t.axios.get(t.breakpoint.url).catch(reject)
               }
             } else if (diagnostics.status === 'EMITTING') {
               const expected = expectedPayloads.get(diagnostics.probeId)
@@ -490,9 +500,9 @@ describe('Dynamic Instrumentation', function () {
         t.agent.addRemoteConfig(rcConfig3)
 
         function endIfDone () {
-          if (expectedPayloads.size === 0) done()
+          if (expectedPayloads.size === 0) resolve()
         }
-      })
+      }))
     })
   })
 })
