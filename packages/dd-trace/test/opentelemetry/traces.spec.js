@@ -679,7 +679,9 @@ describe('OpenTelemetry Traces', () => {
 
       it('omits a malformed int-typed OTel attribute', () => {
         // `Number` turns each of these into an integer, '' and ' ' into a plausible 0.
-        for (const status of ['bogus', '', ' ', '0x10', '1e2', '1.5', '-1']) {
+        // 9007199254740991 is Number.MAX_SAFE_INTEGER; one past it rounds, and a longer digit
+        // string becomes Infinity, which JSON.stringify writes as `intValue: null`.
+        for (const status of ['bogus', '', ' ', '0x10', '1e2', '1.5', '-1', '9007199254740992', '9'.repeat(400)]) {
           const transformer = new OtlpTraceTransformer({}, true)
           const span = createMockSpan({ meta: { 'http.response.status_code': status }, metrics: {} })
 
@@ -692,6 +694,17 @@ describe('OpenTelemetry Traces', () => {
             `status ${JSON.stringify(status)} must be omitted`
           )
         }
+      })
+
+      it('promotes the largest safe integer, the last accepted value', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({ meta: { 'server.port': '9007199254740991' }, metrics: {} })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+        const port = attributes.find(({ key }) => key === 'server.port')
+
+        assert.deepStrictEqual(port, { key: 'server.port', value: { intValue: 9007199254740991 } })
       })
 
       it('omits a numeric int-typed attribute that is not an unsigned integer', () => {

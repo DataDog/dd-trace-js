@@ -398,6 +398,33 @@ describe('http-otel-semantics', () => {
       }
     })
 
+    it('still renames what a hook left behind after stripping the method and URL', () => {
+      // The marker proves instrumentation touched this span, so the status and user agent
+      // captured at finish must not keep their Datadog names.
+      const span = run(
+        {
+          'span.kind': 'server',
+          'http.status_code': '503',
+          'http.useragent': 'ua',
+          [INSTRUMENTATION_HTTP_RESOURCE]: 'GET',
+        },
+        {},
+        1
+      )
+
+      assert.strictEqual(span.meta['http.response.status_code'], '503')
+      assert.strictEqual(span.meta['user_agent.original'], 'ua')
+      assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+      assert.ok(!Object.hasOwn(span.meta, 'http.useragent'))
+      assert.ok(!Object.hasOwn(span.meta, INSTRUMENTATION_HTTP_RESOURCE))
+    })
+
+    it('leaves a span the semantics layer never touched alone', () => {
+      const span = run({ 'span.kind': 'client', 'db.name': 'orders' }, {}, 0)
+
+      assert.deepStrictEqual(span.meta, { 'span.kind': 'client', 'db.name': 'orders' })
+    })
+
     it('drops a numeric copy of a derived attribute so OTLP cannot carry it twice', () => {
       // A hook setting a numeric value lands in `metrics`, while the attribute is derived into
       // `meta` from the legacy key. Exporting both would emit the attribute twice.

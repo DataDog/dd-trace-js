@@ -22,6 +22,7 @@ const SamplingRule = require('./sampling_rule')
 const { formatKnuthRate } = require('./util')
 const {
   INSTRUMENTATION_HTTP_RESOURCE,
+  isInstrumentationOwnedResource,
   otelHttpResourceName,
 } = require('./plugins/util/http-otel-semantics')
 
@@ -129,10 +130,13 @@ class PrioritySampler {
         const instrumentationResource = tags[INSTRUMENTATION_HTTP_RESOURCE]
         const resourceName = tags['resource.name']
         const resource = tags.resource
+        // Both spellings have to still be the instrumentation's. The extra marker check is this
+        // site's own rule, not part of ownership: the sampler never establishes a resource on a
+        // span the instrumentation has not named.
         const resourceIsOwnedByInstrumentation =
           instrumentationResource !== undefined &&
-          (resourceName === undefined || resourceName === instrumentationResource) &&
-          (resource === undefined || resource === instrumentationResource)
+          isInstrumentationOwnedResource(resourceName, instrumentationResource) &&
+          isInstrumentationOwnedResource(resource, instrumentationResource)
         const resourceIsUnset = resourceName === undefined && resource === undefined
         if (resourceIsOwnedByInstrumentation && resourceIsUnset) {
           tags['resource.name'] = samplingResource
