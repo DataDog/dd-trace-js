@@ -27,6 +27,7 @@ const {
   TEST_CODE_COVERAGE_ENABLED,
   ITR_CORRELATION_ID,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const {
   TELEMETRY_CODE_COVERAGE_STARTED,
@@ -370,6 +371,29 @@ versions.forEach((version) => {
         })
 
         assert.strictEqual(childProcess.exitCode, 0, testOutput)
+        assert.strictEqual(testOutput.includes(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE), false, testOutput)
+      })
+
+      it('skips suites with missing line coverage when coverage report upload is enabled', async () => {
+        receiver.setSettings(getTiaSettings({ coverage_report_upload_enabled: true }))
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: secondSuite,
+            _is_missing_line_code_coverage: true,
+          },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents } = getTiaPayloads(payloads)
+          const skippedSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === secondSuite).content
+
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 1)
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+        }, { requestFilter: tiaRequestFilter })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
       })
 
       it('reports a skipped session and exits successfully when every suite is skipped', async () => {
@@ -396,6 +420,11 @@ versions.forEach((version) => {
         })
 
         assert.strictEqual(childProcess.exitCode, 0, testOutput)
+        assert.strictEqual(
+          testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+          1,
+          testOutput
+        )
       })
 
       it('does not request skippable suites or report coverage when TIA is disabled', async () => {

@@ -148,6 +148,22 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnce(onDone)
   })
 
+  it('does not consider line coverage for Vitest skippable suites', () => {
+    const getSkippableSuites = sinon.stub().callsArgWith(1, null, [])
+    const onDone = sinon.stub()
+    const plugin = createPlugin('vitest_worker', true)
+    plugin.tracer._exporter.getSkippableSuites = getSkippableSuites
+    plugin.libraryConfig = { isCoverageReportUploadEnabled: true }
+
+    dc.channel('ci:vitest:test-suite:skippable').publish({ onDone })
+    plugin.configure(false)
+
+    sinon.assert.calledOnce(getSkippableSuites)
+    assert.strictEqual(getSkippableSuites.firstCall.args[0].isCoverageReportUploadEnabled, true)
+    assert.strictEqual(getSkippableSuites.firstCall.args[0].isLineCoverageSupported, false)
+    sinon.assert.calledOnce(onDone)
+  })
+
   it('replaces frozen policy snapshots when dependent requests fail', () => {
     const plugin = createPlugin('vitest_worker', true)
     plugin.libraryConfig = Object.freeze({
@@ -322,6 +338,30 @@ describe('CiPlugin', () => {
     })
     sinon.assert.calledWith(incrementCountMetric, 'itr_unskippable', { testLevel: 'suite' }, 2)
     sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
+  })
+
+  it('defers worker suite events when the exporter supports late test suite updates', () => {
+    const plugin = createPlugin('vitest_worker')
+    const exportTraceWithDeferredTestSuite = sinon.spy()
+    const exportTrace = sinon.spy()
+    const trace = [{ type: 'test_suite_end', meta: {} }]
+    plugin.tracer._exporter = { export: exportTrace, exportTraceWithDeferredTestSuite }
+
+    plugin._exportWorkerTraceOrBuffer(trace)
+
+    sinon.assert.calledOnceWithExactly(exportTraceWithDeferredTestSuite, trace)
+    sinon.assert.notCalled(exportTrace)
+  })
+
+  it('exports worker traces normally when late test suite updates are unsupported', () => {
+    const plugin = createPlugin('vitest_worker')
+    const exportTrace = sinon.spy()
+    const trace = [{ type: 'test', meta: {} }]
+    plugin.tracer._exporter = { export: exportTrace }
+
+    plugin._exportWorkerTraceOrBuffer(trace)
+
+    sinon.assert.calledOnceWithExactly(exportTrace, trace)
   })
 
   it('uploads regular coverage reports from canonical paths', () => {

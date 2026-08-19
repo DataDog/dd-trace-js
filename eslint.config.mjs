@@ -15,10 +15,13 @@ import eslintPluginSonar from 'eslint-plugin-sonarjs'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
+import { carrierFieldsConfig } from './eslint-rules/carrier-fields-policy.mjs'
+import eslintCarrierFields from './eslint-rules/eslint-carrier-fields.mjs'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
+import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
 import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
 import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
@@ -43,6 +46,30 @@ const SRC_FILES = [
   'packages/*/*.mjs',
   'packages/*/src/**/*.js',
   'packages/*/src/**/*.mjs',
+]
+
+const PROCESS_ENV_DISABLE_ALLOW_FILES = [
+  '.mochamultireporterrc.js',
+  'ci/diagnose.js',
+  'ci/init.js',
+  'ci/test-optimization-validation/command-runner.js',
+  'ci/vitest-no-worker-init-setup.mjs',
+  'nyc.config.js',
+  'packages/datadog-esbuild/index.js',
+  'packages/datadog-esbuild/src/log.js',
+  'packages/datadog-instrumentations/src/cypress-config.js',
+  'packages/datadog-instrumentations/src/mocha/main.js',
+  'packages/datadog-instrumentations/src/vitest.js',
+  'packages/datadog-webpack/src/log.js',
+  'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',
+  'packages/dd-trace/src/ci-visibility/test-optimization-cache.js',
+  'packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js',
+  'packages/dd-trace/src/config/helper.js',
+  'packages/dd-trace/src/config/index.js',
+  'packages/dd-trace/src/config/stable.js',
+  'packages/dd-trace/src/debugger/index.js',
+  'packages/dd-trace/src/log/index.js',
+  'packages/dd-trace/src/telemetry/session-propagation.js',
 ]
 
 const TEST_FILES = [
@@ -79,6 +106,37 @@ const GLOBAL_RESTRICTED_REQUIRES = [
     message: 'Please use `mocha` instead.',
   },
 ]
+
+const SRC_RESTRICTED_SYNTAX = [
+  {
+    // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
+    // `toString()` and run in chromium — coverage counters inside would ReferenceError.
+    selector:
+      "CallExpression[callee.property.name='evaluate']" +
+      ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
+    message:
+      'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
+      '(NYC-excluded in nyc.config.js) and import it here.',
+  },
+  {
+    // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
+    // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
+    selector: "CallExpression[callee.name='require'][arguments.0.type='ConditionalExpression']",
+    message: 'Use `cond ? require(\'a\') : require(\'b\')` instead of `require(cond ? \'a\' : \'b\')`.',
+  },
+]
+
+// Matches only probe positions; a genuine count (`writeMapPrefix(Object.keys(x).length)`) must stay allowed.
+const OBJECT_KEYS_LENGTH_PROBE = {
+  selector:
+    ':matches(BinaryExpression[right.value=0], BinaryExpression[left.value=0], UnaryExpression[operator="!"],' +
+    ' IfStatement, ConditionalExpression, LogicalExpression, WhileStatement, DoWhileStatement)' +
+    " > MemberExpression[property.name='length']" +
+    " > CallExpression[callee.object.name='Object'][callee.property.name='keys']",
+  message: 'Do not probe emptiness with `Object.keys(obj).length`; the keys array is allocated on every call. ' +
+    'Track presence with a boolean at the assignment site, probe a known key (`obj.field !== undefined`), or ' +
+    'return `undefined` when there is nothing to report instead of an empty object.',
+}
 
 export default [
   {
@@ -293,11 +351,11 @@ export default [
       'jsdoc/no-blank-blocks': 'error',
       // TODO: Enable the rules that we want to use.
       'jsdoc/no-defaults': 'error',
-      'jsdoc/no-undefined-types': 'off',
+      'jsdoc/no-undefined-types': 'error',
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param-description': 'off', // Having a description is not crucial for now.
-      'jsdoc/require-param': 'off',
+      'jsdoc/require-param': 'error',
       'jsdoc/require-property-description': 'off',
       'jsdoc/require-returns-check': 'error',
       'jsdoc/require-returns-description': 'off',
@@ -405,10 +463,12 @@ export default [
       '@stylistic': eslintPluginStylistic,
       'eslint-rules': {
         rules: {
+          'eslint-carrier-fields': eslintCarrierFields,
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
+          'eslint-no-process-env-disable': eslintNoProcessEnvDisable,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
@@ -604,6 +664,9 @@ export default [
       unicorn: eslintPluginUnicorn,
     },
     rules: {
+      'eslint-rules/eslint-no-process-env-disable': ['error', {
+        allowFiles: PROCESS_ENV_DISABLE_ALLOW_FILES,
+      }],
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
@@ -611,21 +674,7 @@ export default [
       'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 
-      'no-restricted-syntax': ['error', {
-        // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
-        // `toString()` and run in chromium — coverage counters inside would ReferenceError.
-        selector:
-          "CallExpression[callee.property.name='evaluate']" +
-          ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
-        message:
-          'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
-          '(NYC-excluded in nyc.config.js) and import it here.',
-      }, {
-        // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
-        // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
-        selector: "CallExpression[callee.name='require'][arguments.0.type='ConditionalExpression']",
-        message: 'Use `cond ? require(\'a\') : require(\'b\')` instead of `require(cond ? \'a\' : \'b\')`.',
-      }],
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX],
 
       'n/no-restricted-require': ['error', [
         ...GLOBAL_RESTRICTED_REQUIRES,
@@ -645,6 +694,7 @@ export default [
       ...eslintPluginUnicorn.configs.recommended.rules,
 
       // Not in `recommended`: the innerHTML sink class and unread object properties.
+      'unicorn/iteration-fallback-style': 'error',
       'unicorn/no-unsafe-dom-html': 'error',
       'unicorn/no-unused-properties': 'error',
 
@@ -699,6 +749,7 @@ export default [
       'unicorn/prefer-simple-condition-first': 'off', // lots | needs a short-circuit behavior audit
       'unicorn/prefer-then-catch': 'off', // many | broadens rejection boundaries
       'unicorn/require-array-sort-compare': 'off', // many | many intentional lexicographic sorts
+      'unicorn/single-line-block-comment-style': 'off', // lots | preserve compact JSDoc typedefs
 
       // The following rules should not be activated!
       'unicorn/consistent-boolean-name': 'off', // Would rename public API and config booleans
@@ -757,6 +808,16 @@ export default [
     rules: {
       'unicorn/consistent-date-clone': 'error',
       'unicorn/prefer-optional-catch-binding': 'error',
+    },
+  },
+  {
+    name: 'dd-trace/packages/src',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX, OBJECT_KEYS_LENGTH_PROBE],
     },
   },
   {
@@ -1061,6 +1122,7 @@ export default [
       'promise/valid-params': 'off',
     },
   },
+  ...carrierFieldsConfig,
   {
     // The Next.js fixture apps import dd-trace the way a customer does
     // (`require('dd-trace')`). The package is supplied to the app at runtime via a

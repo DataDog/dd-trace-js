@@ -17,8 +17,10 @@ module.exports = {
  * Fetches agent information from the /info endpoint
  * @param {URL} url - The agent URL
  * @param {Function} callback - Callback function with signature (err, agentInfo)
+ * @param {{ deadline?: number, signal?: AbortSignal }} [options] - Request finalization options
+ * @param {Function} [makeRequest] - Request implementation
  */
-function fetchAgentInfo (url, callback) {
+function fetchAgentInfo (url, callback, options = {}, makeRequest = request) {
   const urlKey = url.href
 
   if (cachedUrl !== null && cachedUrl !== urlKey) {
@@ -29,10 +31,9 @@ function fetchAgentInfo (url, callback) {
     return process.nextTick(callback, null, cachedData)
   }
 
-  request('', {
-    path: '/info',
-    url,
-  }, (err, res) => {
+  options.path = '/info'
+  options.url = url
+  makeRequest('', options, (err, res) => {
     if (err) {
       return callback(err)
     }

@@ -2,6 +2,7 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const { writeDatadogParentId, writeDatadogTraceId } = require('../../dd-trace/src/carrier')
 
 const {
   TEST_STATUS,
@@ -13,7 +14,6 @@ const {
   getTestSuiteCommonTags,
   getTestLevelsMetadataTags,
   getTestSessionName,
-  getIsFaultyEarlyFlakeDetection,
   TEST_SOURCE_FILE,
   TEST_IS_RETRY,
   TEST_CODE_OWNERS,
@@ -105,19 +105,6 @@ class VitestPlugin extends CiPlugin {
         repositoryRoot: this.repositoryRoot,
         codeOwnersEntries: this.codeOwnersEntries,
       })
-    })
-
-    this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
-      knownTests,
-      testFilepaths,
-      onDone,
-    }) => {
-      const isFaulty = getIsFaultyEarlyFlakeDetection(
-        testFilepaths.map(testFilepath => getTestSuitePath(testFilepath, this.repositoryRoot)),
-        knownTests,
-        this.libraryConfig.earlyFlakeDetectionFaultyThreshold
-      )
-      onDone(isFaulty)
     })
 
     this.addBind('ci:vitest:test:start', (ctx) => {
@@ -424,12 +411,13 @@ class VitestPlugin extends CiPlugin {
       this._setRepositoryRoot(repositoryRoot, codeOwnersEntries)
       this.command = testCommand
       this.frameworkVersion = frameworkVersion
-      const testSessionSpanContext = testSessionId && testModuleId
-        ? this.tracer.extract('text_map', {
-          'x-datadog-trace-id': testSessionId,
-          'x-datadog-parent-id': testModuleId,
-        })
-        : undefined
+      let testSessionSpanContext
+      if (testSessionId && testModuleId) {
+        const carrier = /** @type {Record<string, unknown>} */ ({})
+        writeDatadogTraceId(carrier, testSessionId)
+        writeDatadogParentId(carrier, testModuleId)
+        testSessionSpanContext = this.tracer.extract('text_map', carrier)
+      }
 
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
       // test suites run in a different process, so they also need to init the metadata dictionary
@@ -535,6 +523,7 @@ class VitestPlugin extends CiPlugin {
           this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: coverageLibrary })
           this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeFiles.length)
         }
+        this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
         testSuiteSpan.finish()
         finishAllTraceSpans(testSuiteSpan)
       }
@@ -578,6 +567,7 @@ class VitestPlugin extends CiPlugin {
     this.addSub('ci:vitest:session:finish', ({
       status,
       error,
+      isTestSessionFinalizationError,
       testCodeCoverageLinesTotal,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
@@ -593,13 +583,16 @@ class VitestPlugin extends CiPlugin {
       isVitestNoWorkerInitActive,
       onDone,
     }) => {
-      for (const [tag, value] of Object.entries(requestErrorTags || {})) {
+      for (const [tag, value] of Object.entries(requestErrorTags)) {
         this.testSessionSpan.setTag(tag, value)
         this.testModuleSpan.setTag(tag, value)
       }
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
       if (error) {
+        if (isTestSessionFinalizationError) {
+          this.tracer._exporter.setDeferredTestSuiteError?.(error)
+        }
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
       }
@@ -629,6 +622,7 @@ class VitestPlugin extends CiPlugin {
       if (vitestPool) {
         this.testSessionSpan.setTag(VITEST_POOL, vitestPool)
       }
+      this.tracer._exporter.exportDeferredTestSuiteSpans?.()
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()

@@ -16,7 +16,6 @@ const getConfig = require('../../../src/config')
 const Span = require('../../../src/opentracing/span')
 
 const {
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestParametersString,
   getTestLevelsMetadataTags,
   getTestSuitePath,
@@ -33,8 +32,6 @@ const {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
   getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
@@ -49,6 +46,7 @@ const {
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
   getLibraryCapabilitiesTags,
+  finishAllTraceSpans,
   getTestParentSpan,
   setRumTestCorrelation,
   setRumTestTags,
@@ -69,6 +67,32 @@ const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('finishAllTraceSpans', () => {
+  it('does not finish completed spans twice', () => {
+    const tracer = { _config: getConfig() }
+    const processor = { process () {} }
+    const prioritySampler = { sample () {} }
+    const rootSpan = new Span(tracer, processor, prioritySampler, { operationName: 'root' })
+    const completedSpan = new Span(tracer, processor, prioritySampler, {
+      operationName: 'completed',
+      parent: rootSpan.context(),
+    })
+    const activeSpan = new Span(tracer, processor, prioritySampler, {
+      operationName: 'active',
+      parent: rootSpan.context(),
+    })
+    sinon.spy(completedSpan, 'finish')
+    sinon.spy(activeSpan, 'finish')
+    completedSpan.finish()
+    completedSpan.finish.resetHistory()
+
+    finishAllTraceSpans(rootSpan)
+
+    sinon.assert.notCalled(completedSpan.finish)
+    sinon.assert.calledOnceWithExactly(activeSpan.finish)
+  })
+})
 
 describe('library capabilities', () => {
   it('advertises TIA for Vitest unless the execution mode does not support it', () => {
@@ -176,6 +200,16 @@ describe('RUM test correlation', () => {
       'x-datadog-trace-id': '123456789',
       'x-datadog-parent-id': '0000000000000000',
     })
+  })
+
+  it('generates a test execution ID when none is preallocated', () => {
+    const parentSpan = {}
+    const extract = sinon.stub().returns(parentSpan)
+
+    assert.strictEqual(getTestParentSpan({ extract }), parentSpan)
+    sinon.assert.calledOnce(extract)
+    assert.match(extract.firstCall.args[1]['x-datadog-trace-id'], /^\d+$/)
+    assert.strictEqual(extract.firstCall.args[1]['x-datadog-parent-id'], '0000000000000000')
   })
 })
 
@@ -1726,51 +1760,6 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
   })
 })
 
-describe('getEfdRetryCount', () => {
-  const slowTestRetries = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
-
-  it('exports the retry thresholds used to select slow test retry buckets', () => {
-    assert.deepStrictEqual(EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS, [
-      { limitMs: 5_000, key: '5s' },
-      { limitMs: 10_000, key: '10s' },
-      { limitMs: 30_000, key: '30s' },
-      { limitMs: 300_000, key: '5m' },
-    ])
-  })
-
-  it('returns retries for the matching duration bucket', () => {
-    assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)
-    assert.strictEqual(getEfdRetryCount(4_999, slowTestRetries), 10)
-    assert.strictEqual(getEfdRetryCount(5_000, slowTestRetries), 5)
-    assert.strictEqual(getEfdRetryCount(9_999, slowTestRetries), 5)
-    assert.strictEqual(getEfdRetryCount(10_000, slowTestRetries), 3)
-    assert.strictEqual(getEfdRetryCount(30_000, slowTestRetries), 2)
-  })
-
-  it('returns 0 when the matching bucket is 0, no buckets are configured, or the test is too slow', () => {
-    assert.strictEqual(getEfdRetryCount(5_000, { '5s': 3, '10s': 0 }), 0)
-    assert.strictEqual(getEfdRetryCount(0, {}), 0)
-    assert.strictEqual(getEfdRetryCount(300_000, slowTestRetries), 0)
-    assert.strictEqual(getEfdRetryCount(300_001, slowTestRetries), 0)
-  })
-})
-
-describe('getMaxEfdRetryCount', () => {
-  it('returns the largest retry count from slow test retry buckets', () => {
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
-  })
-
-  it('preserves an explicit all-zero configuration and selects a nonzero sibling', () => {
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 3 }), 3)
-  })
-
-  it('returns undefined when no slow test retry buckets are configured', () => {
-    assert.strictEqual(getMaxEfdRetryCount({}), undefined)
-    assert.strictEqual(getMaxEfdRetryCount(undefined), undefined)
-  })
-})
-
 describe('getNumFromKnownTests', () => {
   it('calculates the number of tests from the known tests', () => {
     const knownTests = {
@@ -1830,6 +1819,7 @@ index 1234567..89abcde 100644
     assert.strictEqual(getModifiedFilesFromDiff(''), null)
     assert.strictEqual(getModifiedFilesFromDiff(null), null)
     assert.strictEqual(getModifiedFilesFromDiff(undefined), null)
+    assert.strictEqual(getModifiedFilesFromDiff('not a diff\n@@ -1 +1 @@\n'), null)
   })
 
   it('should handle multiple line changes in a single hunk', () => {
@@ -1975,6 +1965,21 @@ describe('getPullRequestBaseBranch', () => {
       sinon.assert.calledWith(getMergeBaseStub, 'trunk', 'feature-branch')
       sinon.assert.calledWith(getCountsStub, 'master', 'feature-branch')
       sinon.assert.calledWith(getCountsStub, 'trunk', 'feature-branch')
+    })
+
+    it('returns null when no candidate branch has a merge base', () => {
+      const { getPullRequestBaseBranch } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          getGitRemoteName: () => 'origin',
+          getSourceBranch: () => 'feature-branch',
+          getMergeBase: sinon.stub().returns(undefined),
+          checkAndFetchBranch: sinon.stub(),
+          getLocalBranches: sinon.stub().returns(['trunk', 'master', 'feature-branch']),
+          getCounts: sinon.stub().returns({ ahead: 0, behind: 0 }),
+        },
+      })
+
+      assert.strictEqual(getPullRequestBaseBranch(), null)
     })
   })
 })

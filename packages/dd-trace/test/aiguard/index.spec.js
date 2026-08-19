@@ -8,9 +8,11 @@ const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { storage } = require('../../../datadog-core')
 const aiguardAutoInstrumentation = require('../../src/aiguard')
 const NoopAIGuard = require('../../src/aiguard/noop')
 const AIGuard = require('../../src/aiguard/sdk')
+const { withRequest } = require('../../src/appsec/store')
 const agent = require('../plugins/agent')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
@@ -18,6 +20,7 @@ const tracerVersion = require('../../../../package.json').version
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const aiguardMetrics = telemetryMetrics.manager.namespace('ai_guard')
 const { USER_KEEP } = require('../../../../ext/priority')
+const { HTTP_CLIENT_IP, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
 const { SAMPLING_MECHANISM_AI_GUARD, DECISION_MAKER_KEY } = require('../../src/constants')
 const {
   EVENT_TAG_KEY,
@@ -498,6 +501,28 @@ describe('AIGuard SDK', () => {
           assert.ok(!Object.hasOwn(span.meta, EVENT_TAG_KEY), `Available keys: ${inspect(Object.keys(span.meta))}`)
         }
       }
+    })
+  })
+
+  it('copies the client ip of the active request onto the root span', async () => {
+    mockFetch({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
+    })
+
+    const req = { headers: { 'x-forwarded-for': '8.8.8.8' }, socket: { remoteAddress: '10.0.0.1' } }
+    await tracer.trace('root', async () => {
+      const legacyStorage = storage('legacy')
+      await legacyStorage.run(withRequest(legacyStorage.getStore(), req), () =>
+        aiguard.evaluate(prompt, { block: false })
+      )
+    })
+
+    await agent.assertSomeTraces(traces => {
+      const rootSpan = traces[0].find(span => span.name === 'root')
+      assertObjectContains(rootSpan.meta, {
+        [HTTP_CLIENT_IP]: '8.8.8.8',
+        [NETWORK_CLIENT_IP]: '10.0.0.1',
+      })
     })
   })
 

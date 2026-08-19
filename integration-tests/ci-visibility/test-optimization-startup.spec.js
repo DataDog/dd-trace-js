@@ -147,4 +147,34 @@ describe('test optimization startup', () => {
     assert.match(processOutput, /hello!/)
     assert.doesNotMatch(processOutput, /dd-trace will not be initialized/)
   })
+
+  it('does not log an unknown telemetry option in a Vitest worker', async () => {
+    childProcess = exec('node -e "console.log(\'hello!\')"',
+      {
+        cwd,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: '-r dd-trace/ci/init',
+          DD_TRACE_DEBUG: '1',
+          TINYPOOL_WORKER_ID: '1',
+        },
+      }
+    )
+
+    childProcess.stdout?.on('data', (chunk) => {
+      processOutput += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      processOutput += chunk.toString()
+    })
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      once(childProcess.stdout, 'end'),
+      once(childProcess.stderr, 'end'),
+    ])
+
+    assert.match(processOutput, /hello!/)
+    assert.doesNotMatch(processOutput, /Unknown option telemetry/)
+  })
 })

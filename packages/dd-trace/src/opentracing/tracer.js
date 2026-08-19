@@ -36,8 +36,11 @@ class DatadogTracer {
     // (test_session/test_module/ test_suite/test) belong on the citestcycle
     // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
     // vars set in their environment (e.g. for a separate telemetry integration)
-    // silently lose all test spans.
-    if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility) {
+    // silently lose all test spans. The same applies to the Electron exporter:
+    // spans must reach the Electron SDK's IPC bridge, not an OTLP endpoint,
+    // even when OTEL_* vars are set for unrelated telemetry.
+    if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility &&
+      config.experimental.exporter !== 'electron') {
       const { createOtlpTraceExporter } = require('../opentelemetry/trace')
       this._exporter = createOtlpTraceExporter(config)
     } else {

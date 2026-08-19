@@ -240,21 +240,25 @@ function getApprovalCommand (id, command) {
  */
 function getGeneratedFileMaterial (manifest, requestedScenario) {
   const files = []
-  for (const framework of manifest.frameworks || []) {
-    const strategy = framework.generatedTestStrategy
-    const selectedPaths = getSelectedGeneratedPaths(strategy, requestedScenario)
-    for (const file of strategy?.files || []) {
-      if (!selectedPaths.has(path.resolve(file.path))) continue
-      const content = `${file.contentLines.join('\n')}\n`
-      files.push(sanitizeForReport({
-        frameworkId: framework.id,
-        path: path.resolve(file.path),
-        sha256: crypto.createHash('sha256').update(content).digest('hex'),
-        content,
-        removeAfterValidation: (strategy.cleanupPaths || []).some(cleanupPath => {
-          return path.resolve(cleanupPath) === path.resolve(file.path)
-        }),
-      }))
+  if (manifest.frameworks) {
+    for (const framework of manifest.frameworks) {
+      const strategy = framework.generatedTestStrategy
+      const selectedPaths = getSelectedGeneratedPaths(strategy, requestedScenario)
+      if (strategy?.files) {
+        for (const file of strategy.files) {
+          if (!selectedPaths.has(path.resolve(file.path))) continue
+          const content = `${file.contentLines.join('\n')}\n`
+          files.push(sanitizeForReport({
+            frameworkId: framework.id,
+            path: path.resolve(file.path),
+            sha256: crypto.createHash('sha256').update(content).digest('hex'),
+            content,
+            removeAfterValidation: (strategy.cleanupPaths || []).some(cleanupPath => {
+              return path.resolve(cleanupPath) === path.resolve(file.path)
+            }),
+          }))
+        }
+      }
     }
   }
   return files
@@ -278,9 +282,11 @@ function getSelectedGeneratedPaths (strategy, requestedScenario) {
     return path.resolve(scenario.testIdentities[0].file)
   }))
   const selectedPaths = new Set()
-  for (const file of strategy.files || []) {
-    const filename = path.resolve(file.path)
-    if (!requestedScenario || !scenarioPaths.has(filename)) selectedPaths.add(filename)
+  if (strategy.files) {
+    for (const file of strategy.files) {
+      const filename = path.resolve(file.path)
+      if (!requestedScenario || !scenarioPaths.has(filename)) selectedPaths.add(filename)
+    }
   }
   if (generatedId) {
     const scenario = strategy.scenarios?.find(candidate => candidate.id === generatedId)

@@ -4,19 +4,19 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
-const { SERVER } = require('../../../ext/kinds')
-const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
 const {
   HTTP_STATUS_ERROR,
   INSTRUMENTATION_HTTP_RESOURCE,
   runHttpRequestHook,
   setInstrumentationHttpResource,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
-const { getQsObfuscator } = require('../../dd-trace/src/plugins/util/url')
 const web = require('../../dd-trace/src/plugins/util/web')
 const addOtelRequestTags = require('./request-tags')
+const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
+const reusedNextRequestStores = new WeakSet()
+const nextParentRoutes = new WeakMap()
 
 class NextPlugin extends ServerPlugin {
   static id = 'next'
@@ -28,7 +28,14 @@ class NextPlugin extends ServerPlugin {
 
   bindStart ({ req, res }) {
     const store = storage('legacy').getStore()
-    const childOf = store ? store.span : store
+    const parentSpan = store?.span
+    if (parentSpan?._integrationName === this.constructor.id) {
+      const reusedStore = { ...store, span: parentSpan, req }
+      reusedNextRequestStores.add(reusedStore)
+      return reusedStore
+    }
+
+    const childOf = parentSpan || web.extractIncomingServerContext(this.tracer, req.headers)
     const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
     const serviceName = this.config.service || schemaServiceName
     let serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
@@ -60,7 +67,10 @@ class NextPlugin extends ServerPlugin {
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    return { ...store, span, req }
+    const isHttpParent = parentSpan?._integrationName === 'http'
+    const httpParentSpan = isHttpParent ? parentSpan : undefined
+    const httpParentReq = isHttpParent ? web.getRequest(parentSpan) : undefined
+    return { ...store, span, req, httpParentSpan, httpParentReq }
   }
 
   error ({ span, error }) {
@@ -78,6 +88,7 @@ class NextPlugin extends ServerPlugin {
     const store = storage('legacy').getStore()
 
     if (!store) return
+    if (reusedNextRequestStores.has(store)) return
 
     const span = store.span
     const error = span.context().getTag('error')
@@ -109,12 +120,12 @@ class NextPlugin extends ServerPlugin {
     span.finish()
   }
 
-  pageLoad ({ page, isAppPath = false, isStatic = false }) {
+  pageLoad ({ page, isAppPath = false, isStatic = false, isFilesystemPath = isAppPath }) {
     const store = storage('legacy').getStore()
 
     if (!store) return
 
-    const { span, req } = store
+    const { span, req, httpParentReq, httpParentSpan } = store
 
     // safeguard against missing req in complicated timeout scenarios
     if (!req) return
@@ -127,10 +138,11 @@ class NextPlugin extends ServerPlugin {
       return
     }
 
-    // remove ending /route or /page for appDir projects
-    // need to check if not an error page too, as those are marked as app directory
-    // in newer versions
-    if (isAppPath && !isErrorPage) page = page.slice(0, Math.max(0, page.lastIndexOf('/')))
+    // Compiled runtimes may publish a normalized pathname rather than a filesystem path.
+    if (isFilesystemPath && !isErrorPage) {
+      if (isAppPath) page = normalizeAppPath(page)
+      page = normalizeIndexPage(page)
+    }
 
     // handle static resource
     if (isStatic) {
@@ -143,33 +155,60 @@ class NextPlugin extends ServerPlugin {
     span.setTag(COMPONENT, this.constructor.id)
     span.setTag('next.page', page)
     if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-      span.setTag('http.route', page)
+      span.setTag(HTTP_ROUTE, page)
       setInstrumentationHttpResource(span, resource)
     } else {
-      span.setTag('resource.name', resource)
+      span.setTag(RESOURCE_NAME, resource)
     }
-    web.setRoute(req, page)
+    const routeRequest = httpParentReq || req
+    web.setRouteOrEndpointTag(routeRequest)
+    setHttpParentRoute(
+      httpParentSpan,
+      req.method,
+      page,
+      isStatic,
+      this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    )
+    web.setRoute(routeRequest, page)
   }
 
   configure (config) {
-    return super.configure(normalizeConfig(config))
+    return super.configure(web.normalizeConfig(config))
   }
 }
 
-function normalizeConfig (config) {
-  const hooks = getHooks(config)
-  const validateStatus = getStatusValidator(config, SERVER)
-  const queryStringObfuscation = getQsObfuscator(config)
-
-  return { ...config, hooks, validateStatus, queryStringObfuscation }
+function normalizeIndexPage (page) {
+  if (typeof page !== 'string') return page
+  if (page === '/index') return '/'
+  if (page.endsWith('/index')) return page.slice(0, -'/index'.length) || '/'
+  return page
 }
 
-const noop = () => {}
+function normalizeAppPath (page) {
+  if (typeof page !== 'string') return page
 
-function getHooks (config) {
-  const request = config.hooks?.request ?? noop
+  for (const suffix of ['/page', '/route']) {
+    if (page === suffix) return '/'
+    if (page.endsWith(suffix)) return page.slice(0, -suffix.length) || '/'
+  }
 
-  return { request }
+  return page
 }
 
+function setHttpParentRoute (span, method, page, isStatic, otelSemanticsEnabled) {
+  if (!span) return
+  const currentRoute = span.context().getTag(HTTP_ROUTE)
+
+  // Only refine a route that Next itself set; static resources are fallbacks.
+  if (currentRoute && (nextParentRoutes.get(span) !== currentRoute || isStatic)) return
+
+  span.setTag(HTTP_ROUTE, page)
+  const resource = `${method} ${page}`.trim()
+  if (otelSemanticsEnabled) {
+    setInstrumentationHttpResource(span, resource)
+  } else {
+    span.setTag(RESOURCE_NAME, resource)
+  }
+  nextParentRoutes.set(span, page)
+}
 module.exports = NextPlugin
