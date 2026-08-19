@@ -6,7 +6,8 @@ describe('Dynamic Instrumentation', function () {
   const t = setup({ testApp: 'target-app/basic.js', dependencies: ['fastify'] })
 
   describe('race conditions', function () {
-    it('should remove the last breakpoint completely before trying to add a new one', function (done) {
+    const raceTitle = 'should remove the last breakpoint completely before trying to add a new one'
+    it(raceTitle, () => new Promise((resolve, reject) => {
       const rcConfig2 = t.generateRemoteConfig()
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {
@@ -25,7 +26,7 @@ describe('Dynamic Instrumentation', function () {
             // If the race condition occurred, the debugger will have been detached from the main thread and the new
             // probe will never trigger. If that's the case, the following timer will fire:
             const timer = setTimeout(() => {
-              done(new Error('Race condition occurred!'))
+              reject(new Error('Race condition occurred!'))
             }, 2000)
 
             // If we successfully handled the race condition, the probe will trigger, we'll get a probe result and the
@@ -33,21 +34,21 @@ describe('Dynamic Instrumentation', function () {
             t.agent.once('debugger-input', () => {
               clearTimeout(timer)
               finished = true
-              done()
+              resolve()
             })
 
             // Perform HTTP request to try and trigger the probe
-            t.axios.get(t.breakpoint.url).catch((err) => {
+            t.axios.get(t.breakpoint.url).catch((error) => {
               // If the request hasn't fully completed by the time the tests ends and the target app is destroyed,
               // Axios will complain with a "socket hang up" error. Hence this sanity check before calling
-              // `done(err)`. If we later add more tests below this one, this shouldn't be an issue.
-              if (!finished) done(err)
+              // `reject(error)`. If we later add more tests below this one, this shouldn't be an issue.
+              if (!finished) reject(error)
             })
           }
         })
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
-    })
+    }))
   })
 })
