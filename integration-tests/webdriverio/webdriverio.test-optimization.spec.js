@@ -357,8 +357,9 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('keeps skipped tests and their suite and session successful with EFD', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('keeps skipped tests and their suite and session successful with EFD', async () => {
             receiver.setSettings({
               early_flake_detection: {
                 enabled: true,
@@ -395,8 +396,9 @@ for (const version of versions) {
           })
         }
 
-        if (framework === 'jasmine') {
-          it('keeps tests filtered by jasmineOpts.grep skipped with EFD', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('keeps tests filtered by jasmineOpts.grep skipped with EFD', async () => {
             receiver.setSettings({
               early_flake_detection: {
                 enabled: true,
@@ -643,8 +645,9 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('falls back to ATR when the EFD retry policy has no retries', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('falls back to ATR when the EFD retry policy has no retries', async () => {
             receiver.setSettings({
               early_flake_detection: {
                 enabled: true,
@@ -673,8 +676,9 @@ for (const version of versions) {
           })
         }
 
-        if (framework === 'jasmine') {
-          it('does not retry tests with ATR when their hooks fail', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('does not retry tests with ATR when their hooks fail', async () => {
             receiver.setSettings({
               flaky_test_retries_count: 1,
               flaky_test_retries_enabled: true,
@@ -696,8 +700,9 @@ for (const version of versions) {
           })
         }
 
-        if (framework === 'jasmine') {
-          it('applies ATR before WebdriverIO retries the spec file', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('applies ATR before WebdriverIO retries the spec file', async () => {
             receiver.setSettings({
               flaky_test_retries_count: 1,
               flaky_test_retries_enabled: true,
@@ -723,8 +728,9 @@ for (const version of versions) {
           })
         }
 
-        if (framework === 'jasmine') {
-          it('applies ATR to failures caused by jasmineOpts.failSpecWithNoExpectations', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('applies ATR to failures caused by jasmineOpts.failSpecWithNoExpectations', async () => {
             receiver.setSettings({
               flaky_test_retries_count: 1,
               flaky_test_retries_enabled: true,
@@ -798,8 +804,9 @@ for (const version of versions) {
           }, 1)
         })
 
-        if (framework === 'jasmine') {
-          it('reports user-configured Jasmine retries as external retries', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('reports user-configured Jasmine retries as external retries', async () => {
             await runScenario('jasmineRetry', 1, payloads => {
               const tests = getEvents(payloads)
                 .filter(event => event.type === 'test')
@@ -891,8 +898,9 @@ for (const version of versions) {
           }, {}, 1)
         })
 
-        if (framework === 'jasmine') {
-          it('keeps skipped attempt-to-fix tests skipped', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('keeps skipped attempt-to-fix tests skipped', async () => {
             receiver.setSettings({
               test_management: {
                 attempt_to_fix_retries: 2,
@@ -931,7 +939,7 @@ for (const version of versions) {
             })
           })
 
-          it('does not run hooks for disabled tests', async () => {
+          jasmineTest('does not run hooks for disabled tests', async () => {
             receiver.setSettings({
               test_management: { enabled: true },
             })
@@ -1089,8 +1097,9 @@ for (const version of versions) {
           }, {}, 1)
         })
 
-        if (framework === 'jasmine') {
-          it('does not retry or suppress expectation-based hook failures', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('does not retry or suppress expectation-based hook failures', async () => {
             receiver.setSettings({
               early_flake_detection: {
                 enabled: true,
@@ -1199,8 +1208,9 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('marks tests as impacted when WebdriverIO runs below the repository root', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('marks tests as impacted when WebdriverIO runs below the repository root', async () => {
             receiver.setSettings({ impacted_tests_enabled: true })
 
             await runScenario('impacted', 1, payloads => {
@@ -1259,8 +1269,9 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('captures Failed Test Replay when the first EFD attempt passes', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('captures Failed Test Replay when the first EFD attempt passes', async () => {
             receiver.setSettings({
               di_enabled: true,
               early_flake_detection: {
