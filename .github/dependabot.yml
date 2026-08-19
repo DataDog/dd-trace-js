@@ -158,8 +158,8 @@ updates:
         # 30.0.0 onwards only supports Node.js 18.14.x and above
         update-types: ["version-update:semver-major"]
       - dependency-name: "https-proxy-agent"
-        # Keep the vendored CommonJS build compatible with older Node.js versions
-        versions: [">=8.0.0"]
+        # 8.0.0 onwards only supports Node.js 22 and above
+        update-types: ["version-update:semver-major"]
       - dependency-name: "lru-cache"
         # 11.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
