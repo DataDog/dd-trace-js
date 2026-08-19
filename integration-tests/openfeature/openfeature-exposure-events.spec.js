@@ -72,7 +72,6 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         await agent.stop()
       })
 
-      // The writer exposes no delivery acknowledgment, so callback completion keeps later batches observable.
       it('should generate exposure events with manual flush', (done) => {
         const configId = 'org-42-env-test'
         const exposureEvents = []
@@ -174,7 +173,6 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         await agent.stop()
       })
 
-      // Callback completion lets a later unexpected exposure batch fail after the expected batch.
       it('should handle multiple flag evaluations with automatic flush', (done) => {
         const configId = 'org-42-env-test'
         const exposureEvents = []
