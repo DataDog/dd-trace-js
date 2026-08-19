@@ -226,14 +226,6 @@ function applyHttpOtelSemantics (formattedSpan) {
   for (const key of Object.keys(meta)) {
     if (!DD_HTTP_META_KEYS.has(key)) newMeta[key] = meta[key]
   }
-  const newMetrics = {}
-  for (const key of Object.keys(metrics)) {
-    // The int-typed OTel attributes are derived below and promoted from `meta` at export, so a
-    // numeric copy a hook left here would be exported a second time, with its own value.
-    if (key !== NETWORK_DESTINATION_PORT && !INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
-      newMetrics[key] = metrics[key]
-    }
-  }
 
   const kind = meta['span.kind']
 
@@ -306,6 +298,17 @@ function applyHttpOtelSemantics (formattedSpan) {
     statusCausedError
   ) {
     newMeta[ERROR_TYPE] = status
+  }
+
+  // Built once `newMeta` is final. An int-typed OTel attribute is promoted from `meta` at export,
+  // so a numeric copy a hook left in `metrics` would be exported a second time with its own
+  // value. It is dropped only where a derived replacement actually exists, otherwise a hook that
+  // supplies the canonical attribute without its legacy counterpart would lose it entirely.
+  const newMetrics = {}
+  for (const key of Object.keys(metrics)) {
+    if (key === NETWORK_DESTINATION_PORT) continue
+    if (INT_VALUED_OTEL_ATTRIBUTES.has(key) && newMeta[key] !== undefined) continue
+    newMetrics[key] = metrics[key]
   }
 
   formattedSpan.meta = newMeta

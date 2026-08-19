@@ -425,6 +425,15 @@ describe('http-otel-semantics', () => {
       assert.deepStrictEqual(span.meta, { 'span.kind': 'client', 'db.name': 'orders' })
     })
 
+    it('keeps a canonical numeric attribute when no derived replacement exists', () => {
+      // A hook can drop the legacy tag and supply the OTel one directly. Nothing is derived then,
+      // so dropping the metric would lose the attribute altogether.
+      const span = run({ 'span.kind': 'server', 'http.method': 'GET' }, { 'http.response.status_code': 204 })
+
+      assert.strictEqual(span.metrics['http.response.status_code'], 204)
+      assert.ok(!Object.hasOwn(span.meta, 'http.response.status_code'))
+    })
+
     it('drops a numeric copy of a derived attribute so OTLP cannot carry it twice', () => {
       // A hook setting a numeric value lands in `metrics`, while the attribute is derived into
       // `meta` from the legacy key. Exporting both would emit the attribute twice.
