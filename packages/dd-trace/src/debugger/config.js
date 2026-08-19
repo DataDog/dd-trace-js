@@ -4,7 +4,11 @@ const getGitMetadata = require('../git_metadata')
 
 module.exports = function getDebuggerConfig (config, inputPath) {
   const { commitSHA, repositoryUrl } = getGitMetadata(config)
+  const agentless = config.DD_AGENTLESS_ENABLED === true
+
   return {
+    agentless,
+    apiKey: agentless ? config.DD_API_KEY : undefined,
     commitSHA,
     debug: config.debug,
     dynamicInstrumentation: config.dynamicInstrumentation,
@@ -16,7 +20,7 @@ module.exports = function getDebuggerConfig (config, inputPath) {
     repositoryUrl,
     runtimeId: config.tags['runtime-id'],
     service: config.service,
-    url: config.url.toString(),
+    url: agentless ? `https://debugger-intake.${config.site}` : config.url.toString(),
     version: config.version,
     inputPath,
   }

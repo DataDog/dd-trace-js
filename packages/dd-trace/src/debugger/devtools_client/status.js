@@ -1,5 +1,9 @@
 'use strict'
 
+const { hostname: getHostname } = require('node:os')
+const { stringify } = require('node:querystring')
+
+const { version } = require('../../../../../package.json')
 const TTLSet = require('../../../../../vendor/dist/ttl-set')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
@@ -7,6 +11,8 @@ const { DEBUGGER_DIAGNOSTICS_V1 } = require('../constants')
 const config = require('./config')
 const JSONBuffer = require('./json-buffer')
 const log = require('./log')
+const getRequestOptions = require('./request-options')
+const buildTags = require('./tags')
 
 module.exports = {
   ackReceived,
@@ -18,6 +24,7 @@ module.exports = {
 const ddsource = 'dd_debugger'
 const service = config.service
 const runtimeId = config.runtimeId
+const ddtags = buildTags(config, getHostname(), version, log)
 
 const cache = new TTLSet(60 * 60 * 1000) // 1 hour
 
@@ -93,12 +100,10 @@ function onFlush (payload) {
     { filename: 'event.json', contentType: 'application/json; charset=utf-8' }
   )
 
-  const options = {
-    method: 'POST',
-    url: config.url,
-    path: DEBUGGER_DIAGNOSTICS_V1,
-    headers: form.getHeaders(),
-  }
+  const path = config.agentless
+    ? `${config.inputPath}?${stringify({ ddtags })}`
+    : DEBUGGER_DIAGNOSTICS_V1
+  const options = getRequestOptions(config, path, form.getHeaders())
 
   request(form, options, (err) => {
     if (err) log.error('[debugger:devtools_client] Error sending diagnostics payload', err)
