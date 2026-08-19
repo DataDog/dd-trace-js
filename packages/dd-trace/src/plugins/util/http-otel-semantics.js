@@ -278,14 +278,17 @@ function applyHttpOtelSemantics (formattedSpan) {
   // (`web.addStatusError` for servers, the client plugins' `validateStatus`).
   // Trace stats run after this conversion and therefore observe the same error
   // decision and normalized HTTP attributes as the OTLP exporter.
-  // No-clobber: an exception already put its class name here. For successful
-  // statuses, only a validator-created error may use the status as its type.
+  // No-clobber: an exception already put its class name here. The status is the type only
+  // when the status is what made the span an error, which capture time records explicitly:
+  // inferring it from the status range instead would mislabel a span the application marked
+  // as an error while returning a status its validator accepts, such as a hook-flagged 404
+  // under the default server range.
   const statusCausedError = meta[HTTP_STATUS_ERROR] === 'true'
   if (
     status !== undefined &&
     formattedSpan.error &&
     newMeta[ERROR_TYPE] === undefined &&
-    (Number(status) >= 400 || statusCausedError)
+    statusCausedError
   ) {
     newMeta[ERROR_TYPE] = status
   }
