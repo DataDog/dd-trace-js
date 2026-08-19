@@ -21,11 +21,8 @@ describe('RASP - sql_injection', () => {
         }
         let server, axios, app, mysql2
 
-        before(() => {
-          return agent.load(['express', 'http', 'mysql2'], { client: false })
-        })
-
-        before(done => {
+        before(async () => {
+          await agent.load(['express', 'http', 'mysql2'], { client: false })
           const express = require(`../../../../../versions/express@${expressVersion}`).get()
           mysql2 = require(`../../../../../versions/mysql2@${mysql2Version}`).get()
           const expressApp = express()
@@ -42,12 +39,14 @@ describe('RASP - sql_injection', () => {
             },
           }))
 
-          server = expressApp.listen(0, () => {
-            const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-            axios = Axios.create({
-              baseURL: `http://localhost:${port}`,
+          await new Promise(resolve => {
+            server = expressApp.listen(0, () => {
+              const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+              axios = Axios.create({
+                baseURL: `http://localhost:${port}`,
+              })
+              resolve()
             })
-            done()
           })
         })
 

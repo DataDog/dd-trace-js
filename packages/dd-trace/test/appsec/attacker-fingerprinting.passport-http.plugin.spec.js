@@ -29,17 +29,11 @@ withVersions('passport-http', 'passport-http', version => {
   describe('Attacker fingerprinting', () => {
     let port, server, axios
 
-    before(() => {
-      return agent.load(['express', 'http'], { client: false })
-    })
-
-    before(() => {
+    before(async () => {
+      await agent.load(['express', 'http'], { client: false })
       appsec.enable(getConfigFresh({
         appsec: true,
       }))
-    })
-
-    before((done) => {
       const express = require('../../../../versions/express').get()
       const bodyParser = require('../../../../versions/body-parser').get()
       const passport = require('../../../../versions/passport').get()
@@ -66,25 +60,27 @@ withVersions('passport-http', 'passport-http', version => {
         res.end()
       })
 
-      server = app.listen(port, () => {
-        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
-          baseURL: `http://localhost:${port}`,
-          headers: {
-            'User-Agent': 'test-user-agent',
-          },
+      await new Promise(resolve => {
+        server = app.listen(port, () => {
+          port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+          axios = Axios.create({
+            baseURL: `http://localhost:${port}`,
+            headers: {
+              'User-Agent': 'test-user-agent',
+            },
+          })
+          resolve()
         })
-        done()
       })
     })
 
-    after(() => {
+    after(async () => {
       server.close()
-      return agent.close()
-    })
-
-    after(() => {
-      appsec.disable()
+      try {
+        await agent.close()
+      } finally {
+        appsec.disable()
+      }
     })
 
     it('should report http fingerprints on login fail', async () => {

@@ -22,24 +22,19 @@ describe('Attacker fingerprinting', () => {
       }
     }
 
-    before(() => {
+    before(async () => {
       appsec.enable(getConfigFresh({
         enabled: true,
       }))
-    })
-
-    before(async () => {
       tracer = await agent.load('http')
       http = require('http')
-    })
-
-    before(done => {
-      const server = new http.Server(listener)
-      appListener = server
-        .listen(port, 'localhost', () => {
+      await new Promise(resolve => {
+        const server = new http.Server(listener)
+        appListener = server.listen(port, 'localhost', () => {
           port = appListener.address().port
-          done()
+          resolve()
         })
+      })
     })
 
     after(() => {
