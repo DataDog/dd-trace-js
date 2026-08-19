@@ -55,6 +55,14 @@ describe('OpenFeature Module', () => {
       sinon.assert.calledOnce(setAgentStrategyStub)
     })
 
+    it('should not setup the Agent-only writer in agentless mode', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      openfeatureModule.enable(config)
+
+      sinon.assert.notCalled(ExposuresWriterStub)
+      sinon.assert.notCalled(setAgentStrategyStub)
+    })
+
     it('should handle multiple enable calls gracefully', () => {
       openfeatureModule.enable(config)
       openfeatureModule.enable(config)
