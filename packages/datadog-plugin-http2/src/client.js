@@ -114,7 +114,7 @@ class Http2ClientPlugin extends ClientPlugin {
     if (!this.config.validateStatus(status)) {
       storage('legacy').run(store, () => this.addError())
       if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-        store.span.setTag(HTTP_STATUS_ERROR, 'true')
+        store.span.setTag(HTTP_STATUS_ERROR, String(status))
       }
     }
 

@@ -44,6 +44,13 @@ function getStatusValidator (config, kind) {
   return config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? validateClientStatusOtelSemantics : validateClientStatus
 }
 
+/**
+ * Build the server validator from DD_TRACE_HTTP_SERVER_ERROR_STATUSES, falling back to the
+ * default range for a value that is absent, not a string, or not parseable.
+ *
+ * @param {unknown} configuredStatuses
+ * @returns {(code: number) => boolean}
+ */
 function getServerStatusValidator (configuredStatuses) {
   if (configuredStatuses === undefined || configuredStatuses === '500-599') return validateServerStatus
   if (typeof configuredStatuses !== 'string') {

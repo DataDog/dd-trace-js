@@ -31,12 +31,21 @@ module.exports = function getExporter (name) {
       return require('./ci-visibility/exporters/test-worker')
   }
 
-  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-  const usingAgent = inAWSLambda && (
-    fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) ||
-    fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
-  )
-  return inAWSLambda && !usingAgent ? require('./exporters/log') : require('./exporters/agent')
+  return usesLambdaLogExporter() ? require('./exporters/log') : require('./exporters/agent')
+}
+
+/**
+ * Whether spans have to be written to the Lambda log for the Forwarder to pick up, which is the
+ * case in a Lambda with neither the Datadog extension nor the mini agent. Nothing else can reach
+ * the backend from there, so this transport must not be replaced.
+ *
+ * @returns {boolean}
+ */
+function usesLambdaLogExporter () {
+  if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') === undefined) return false
+
+  return !fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) &&
+    !fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
 }
 
 function hasCiValidationEnvironment () {
@@ -44,3 +53,5 @@ function hasCiValidationEnvironment () {
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE') &&
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR')
 }
+
+module.exports.usesLambdaLogExporter = usesLambdaLogExporter

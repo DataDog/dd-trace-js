@@ -275,14 +275,14 @@ const web = {
     if (!spanHasExistingError && !isValidStatusCode) {
       span.setTag(ERROR, error || true)
       if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-        span.setTag(HTTP_STATUS_ERROR, 'true')
+        span.setTag(HTTP_STATUS_ERROR, String(statusCode))
       }
     }
 
     if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
       inferredProxySpan.setTag(ERROR, error || true)
       if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-        inferredProxySpan.setTag(HTTP_STATUS_ERROR, 'true')
+        inferredProxySpan.setTag(HTTP_STATUS_ERROR, String(statusCode))
       }
     }
   },

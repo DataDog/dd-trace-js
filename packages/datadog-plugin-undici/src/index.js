@@ -158,7 +158,7 @@ class UndiciPlugin extends HttpClientPlugin {
       if (!this.config.validateStatus(statusCode)) {
         span.setTag('error', 1)
         if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-          span.setTag(HTTP_STATUS_ERROR, 'true')
+          span.setTag(HTTP_STATUS_ERROR, String(statusCode))
         }
       }
     }

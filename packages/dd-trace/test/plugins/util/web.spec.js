@@ -425,7 +425,8 @@ describe('plugins/util/web', () => {
       web.addStatusError(req, 200)
 
       assert.strictEqual(tags[ERROR], true)
-      assert.strictEqual(tags[HTTP_STATUS_ERROR], 'true')
+      // The marker carries the rejected status, so a later rewrite cannot be blamed for it.
+      assert.strictEqual(tags[HTTP_STATUS_ERROR], '200')
     })
 
     it('should not assign status provenance to an existing manual error', () => {

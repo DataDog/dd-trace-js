@@ -105,7 +105,7 @@ class NextPlugin extends ServerPlugin {
       // where there's no error, we still need to validate status
       span.setTag('error', true)
       if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-        span.setTag(HTTP_STATUS_ERROR, 'true')
+        span.setTag(HTTP_STATUS_ERROR, String(res.statusCode))
       }
       web.addError(req, true)
     }
