@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const path = require('path')
 const { inspect } = require('node:util')
 const Axios = require('axios')
+const { DDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../integration-tests/helpers')
 describe('WAF Metrics', () => {
   let axios, cwd, appFile
@@ -179,14 +180,14 @@ describe('WAF Metrics', () => {
 
             const wafDuration = series.find(s => s.metric === 'waf.duration')
             assert.ok(wafDuration, `Got: ${inspect(series)}`)
-            assert.strictEqual(wafDuration.points.length, 1)
+            assert.strictEqual(DDSketch.fromProto(Buffer.from(wafDuration.sketch_b64, 'base64')).count, 1)
 
             const wafDurationExt = series.find(s => s.metric === 'waf.duration_ext')
             assert.ok(wafDurationExt, `Got: ${inspect(series)}`)
-            assert.strictEqual(wafDurationExt.points.length, 1)
+            assert.strictEqual(DDSketch.fromProto(Buffer.from(wafDurationExt.sketch_b64, 'base64')).count, 1)
           }
         },
-        requestType: 'distributions',
+        requestType: 'sketches',
         expectedMessageCount: 1,
       })
 
