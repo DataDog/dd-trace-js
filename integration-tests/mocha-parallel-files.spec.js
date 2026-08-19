@@ -87,6 +87,7 @@ describe('mocha-parallel-files script', function () {
 
   it('preserves the SIGINT exit code on user interrupt', async function () {
     if (process.platform === 'win32') {
+      // Windows does not support the SIGINT process semantics exercised here.
       this.skip()
       return
     }

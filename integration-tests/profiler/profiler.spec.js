@@ -426,6 +426,7 @@ describe('profiler', () => {
   describe('on non-Windows platforms', () => {
     before(function () {
       if (process.platform === 'win32') {
+        // The profiler is not supported on Windows.
         this.skip()
       }
     })
@@ -664,6 +665,7 @@ describe('profiler', () => {
       // NODE_PERFORMANCE_GC_* constant and used to crash the profiler.
       // It is stable since Node 22. See issue #8839.
       if (!satisfies(process.versions.node, '>=22.0.0')) {
+        // This regression test requires the stable Node.js 22 inspector implementation.
         this.skip()
       }
       const gcTypes = await gatherGcTypes(cwd, 'profiler/gctest.js', agent.port, ['--minor-ms'])
@@ -711,6 +713,7 @@ describe('profiler', () => {
     describe('on non-Windows platform', () => {
       before(function () {
         if (process.platform === 'win32') {
+          // The profiler is not supported on Windows.
           this.skip()
         }
       })
@@ -885,10 +888,12 @@ describe('profiler', () => {
 
     it('sends wall profiler sample context telemetry', async function () {
       if (satisfies(process.versions.node, '<24.0.0')) {
-        this.skip() // Wall profiler context count telemetry is not supported in Node < 24
+        // Wall profiler context count telemetry is not supported before Node.js 24.
+        this.skip()
       }
       if (process.platform === 'win32') {
-        this.skip() // Wall profiler context count telemetry is not supported on Windows
+        // Wall profiler context count telemetry is not supported on Windows.
+        this.skip()
       }
       proc = fork(profilerTestFile, {
         cwd,
