@@ -14,7 +14,7 @@
     "crypto-randomuuid": "^1.0.0",
     "escape-string-regexp": "^5.0.0",
     "esquery": "^1.7.0",
-    "https-proxy-agent": "^7.0.6",
+    "https-proxy-agent": "^9.1.0",
     "istanbul-lib-coverage": "^3.2.2",
     "jest-docblock": "^29.7.0",
     "jsonpath-plus": "^10.4.0",
