@@ -1,6 +1,7 @@
 'use strict'
 
 const tracer = require('dd-trace').init({ startupLogs: false })
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const { tracingChannel } = require('node:diagnostics_channel')
 
 tracer.use('ai')
