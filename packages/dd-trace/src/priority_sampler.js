@@ -67,6 +67,8 @@ class PrioritySampler {
    *
    * @param {string} env - The environment name (e.g., "production", "staging").
    * @param {SamplingConfig} [config] - The configuration object for sampling.
+   * @param {import('./config')} [tracerConfig] - The tracer configuration, read for
+   *   DD_TRACE_OTEL_SEMANTICS_ENABLED.
    */
   constructor (env, config, tracerConfig) {
     this.configure(env, config, tracerConfig)
@@ -77,6 +79,7 @@ class PrioritySampler {
    *
    * @param {string} env
    * @param {SamplingConfig} config
+   * @param {import('./config')} [tracerConfig]
    */
   configure (env, config = {}, tracerConfig = {}) {
     const { sampleRate, provenance, rateLimit = 100, rules } = config
@@ -116,8 +119,10 @@ class PrioritySampler {
 
     const root = context._trace.started[0]
 
-    const rootContext = root?.context()
-    if (this._otelHttpSemanticsEnabled && rootContext) {
+    // Guarded on the flag first: `root` is not always a full span here (noop spans, and the
+    // standalone sampler's plain roots), so resolving its context unconditionally throws.
+    if (this._otelHttpSemanticsEnabled && typeof root?.context === 'function') {
+      const rootContext = root.context()
       const tags = rootContext.getTags()
       const method = tags['http.method']
       if (method !== undefined) {
