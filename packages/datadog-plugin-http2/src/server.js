@@ -121,7 +121,6 @@ class Http2ServerPlugin extends ServerPlugin {
 /**
  * @param {object} target
  * @param {object} source
- * @returns {void}
  */
 function copyRequestData (target, source) {
   if (source.body !== undefined) target.body = source.body
