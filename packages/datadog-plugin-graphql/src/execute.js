@@ -62,6 +62,8 @@ let depthDisabled = false
 // operation's variableValues is undefined.
 const NO_VARIABLES_CACHED = Symbol('noVariablesCached')
 
+// `field.endTime` stays numeric: 0 is pending, -1 means a collapsed span was reused,
+// and positive values are exact completion times. Pending and reused spans finish at the execution boundary.
 const PENDING_FIELD_END_TIME = 0
 const REUSED_FIELD_END_TIME = -1
 
