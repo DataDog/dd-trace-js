@@ -3,15 +3,30 @@
 const { inspect, types } = require('node:util')
 
 /** @typedef {NonNullable<ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>>} PropertyDescriptor */
+/** @typedef {Map<unknown, unknown> | Set<unknown>} Collection */
 
+const mapEntries = Map.prototype.entries
+const mapSet = Map.prototype.set
+const mapSizeGetter = Object.getOwnPropertyDescriptor(Map.prototype, 'size').get
+const setAdd = Set.prototype.add
+const setSizeGetter = Object.getOwnPropertyDescriptor(Set.prototype, 'size').get
+const setValues = Set.prototype.values
+const mapIteratorNext = Object.getPrototypeOf(mapEntries.call(new Map())).next
+const setIteratorNext = Object.getPrototypeOf(setValues.call(new Set())).next
+
+const maxCollectionEntries = 3
 const maxProperties = 5
 const segmentInspectOptions = {
   depth: 0,
   customInspect: false,
-  maxArrayLength: 3,
+  maxArrayLength: maxCollectionEntries,
   maxStringLength: 8 * 1024,
   breakLength: Infinity,
 }
+const collectionLimitSupported = inspect(
+  new Set([1, 2, 3, 4]),
+  segmentInspectOptions
+).includes('... 1 more item')
 
 module.exports = inspectSegment
 
@@ -28,13 +43,13 @@ function inspectSegment (value) {
     return inspect(value, segmentInspectOptions)
   }
   if (types.isProxy(value)) return '[Proxy]'
+  if (types.isMap(value)) return inspectCollection(value, true)
+  if (types.isSet(value)) return inspectCollection(value, false)
   if (
     Array.isArray(value) ||
     types.isTypedArray(value) ||
     types.isAnyArrayBuffer(value) ||
     types.isDataView(value) ||
-    types.isMap(value) ||
-    types.isSet(value) ||
     types.isWeakMap(value) ||
     types.isWeakSet(value) ||
     types.isMapIterator(value) ||
@@ -79,6 +94,45 @@ function inspectSegment (value) {
   const omitted = propertyCount - maxProperties
   const inspected = inspect(truncated, segmentInspectOptions)
   return `${inspected.slice(0, -2)}, ... ${omitted} more ${omitted === 1 ? 'property' : 'properties'} }`
+}
+
+/**
+ * Inspect a Map or Set while bounding the number of entries on runtimes where `util.inspect` does not.
+ *
+ * @param {Collection} value
+ * @param {boolean} isMap
+ * @returns {string}
+ */
+function inspectCollection (value, isMap) {
+  if (collectionLimitSupported) return inspect(value, segmentInspectOptions)
+
+  const size = (isMap ? mapSizeGetter : setSizeGetter).call(value)
+  if (size <= maxCollectionEntries) return inspect(value, segmentInspectOptions)
+
+  const truncated = isMap ? new Map() : new Set()
+  const iterator = (isMap ? mapEntries : setValues).call(value)
+  const iteratorNext = isMap ? mapIteratorNext : setIteratorNext
+
+  for (let i = 0; i < maxCollectionEntries; i++) {
+    const result = iteratorNext.call(iterator)
+    if (result.done) break
+
+    if (isMap) {
+      const entry = result.value
+      const key = entry[0] === value ? truncated : entry[0]
+      const entryValue = entry[1] === value ? truncated : entry[1]
+      mapSet.call(truncated, key, entryValue)
+    } else {
+      const entryValue = result.value === value ? truncated : result.value
+      setAdd.call(truncated, entryValue)
+    }
+  }
+
+  const type = isMap ? 'Map' : 'Set'
+  const inspected = inspect(truncated, segmentInspectOptions)
+  const normalized = inspected.replace(`${type}(${maxCollectionEntries})`, `${type}(${size})`)
+  const remaining = size - maxCollectionEntries
+  return `${normalized.slice(0, -2)}, ... ${remaining} more item${remaining === 1 ? '' : 's'} }`
 }
 
 /**
