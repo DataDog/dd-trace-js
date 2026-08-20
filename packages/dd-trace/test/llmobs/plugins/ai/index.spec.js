@@ -66,20 +66,6 @@ function getAiSdkAnthropicOrGoogleRange (vercelAiVersion) {
 }
 
 /**
- * Starting with ai@5.0.241 and ai@6.0.260, tool execution is activated under the model span instead of the workflow
- * span.
- *
- * @param {string} vercelAiVersion
- * @param {Array<{span_id: string}>} llmobsSpans
- * @returns {string}
- */
-function getToolSpanParentId (vercelAiVersion, llmobsSpans) {
-  const toolRunsUnderModel = semifies(vercelAiVersion, '>=5.0.241 <6.0.0') ||
-    semifies(vercelAiVersion, '>=6.0.260 <7.0.0')
-  return (toolRunsUnderModel ? llmobsSpans[1] : llmobsSpans[0]).span_id
-}
-
-/**
  * @param {string} versionRange
  * @param {(
  *   version: string,
@@ -842,7 +828,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[2], {
         span: apmSpans[2],
-        parentId: getToolSpanParentId(realVersion, llmobsSpans),
+        parentId: llmobsSpans[0].span_id,
         /**
          * Before `ai@4.0.2` with `@ai-sdk/openai@1.3.23`, the stream implementation did not finish the initial llm
          * spans first to associate the tool call id with the tool itself (by matching descriptions).
@@ -1241,7 +1227,7 @@ describe('Plugin', () => {
 
         assertLlmObsSpanEvent(llmobsSpans[2], {
           span: apmSpans[2],
-          parentId: getToolSpanParentId(realVersion, llmobsSpans),
+          parentId: llmobsSpans[0].span_id,
           name: 'weather',
           spanKind: 'tool',
           inputValue: JSON.stringify({ location: 'Tokyo' }),
