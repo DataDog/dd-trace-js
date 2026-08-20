@@ -325,6 +325,8 @@
 /packages/dd-trace/test/custom-metrics-app.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/fixtures/config/span-sampling-rules.json @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/helpers/config.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/agentless-metrics.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/agentless-metrics.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/runtime_metrics/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/runtime_metrics.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/startup-log.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
