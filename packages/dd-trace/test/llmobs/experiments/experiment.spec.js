@@ -535,6 +535,47 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     }])
   })
 
+  it('matches request JSON serialization when preserving in-flight mutations', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let blockPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (blockPush) {
+        blockPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const input = {
+      value: 'before',
+      toJSON () {
+        return this.value
+      },
+    }
+    const dataset = new Dataset(c, 'demo').addRecord(input)
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    input.value = 'during'
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.insert_records, [{
+      id: dataset.recordIds()[0],
+      input: 'before',
+      expected_output: null,
+      metadata: {},
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: dataset.recordIds()[0],
+      input: 'during',
+    }])
+  })
+
   it('keeps deletes made while an insert is in flight', async () => {
     const { client: c, requests } = clientWithMockBackend()
     let resolvePush

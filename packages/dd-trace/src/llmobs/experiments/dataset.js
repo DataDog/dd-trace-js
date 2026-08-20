@@ -108,8 +108,9 @@ function valuesAreEqual (left, right) {
 }
 
 function snapshotPayload (payload) {
-  // Keep pending values independent from live records while a request is in flight.
-  return structuredClone(payload)
+  // Match the request body's JSON serialization, including custom toJSON methods.
+  // eslint-disable-next-line unicorn/prefer-structured-clone
+  return JSON.parse(JSON.stringify(payload))
 }
 
 function updateFromInsertedRecord (recordId, record, payload) {
