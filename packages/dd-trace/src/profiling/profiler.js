@@ -63,6 +63,7 @@ class Profiler extends EventEmitter {
   #profileSeq = 0
   #profilers
   #spanFinishListener
+  #stopping
   #systemInfoReport
   #tags
   #timer
@@ -170,6 +171,15 @@ class Profiler extends EventEmitter {
    */
   start (config) {
     if (this.enabled) return true
+
+    // A prior stop()'s shutdown collection may still be encoding/exporting via #tags,
+    // #exporters and #endpointCounts. Wait for it to finish before this start() overwrites
+    // that shared state out from under it.
+    if (this.#stopping) {
+      this.#stopping.then(() => this.start(config))
+      return true
+    }
+
     this.#enabled = true
 
     const { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
@@ -253,7 +263,8 @@ class Profiler extends EventEmitter {
 
     // collect and export current profiles
     // once collect returns, profilers can be safely stopped
-    this._collect(snapshotKinds.ON_SHUTDOWN, false)
+    this.#stopping = this._collect(snapshotKinds.ON_SHUTDOWN, false)
+      .finally(() => { this.#stopping = undefined })
     this.#stop()
   }
 

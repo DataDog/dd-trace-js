@@ -295,6 +295,34 @@ describe('profiler', function () {
       sinon.assert.calledOnce(exporter.export)
     })
 
+    it('should defer a restart until a pending shutdown collection has finished', async () => {
+      await profiler.start(makeStartOptions())
+
+      let resolveEncode
+      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
+      wallProfiler.encode.returns(wallProfilePromise)
+
+      profiler.stop()
+      wallProfiler.start.resetHistory()
+      spaceProfiler.start.resetHistory()
+
+      const restarted = profiler.start(makeStartOptions())
+      assert.strictEqual(restarted, true)
+      await Promise.resolve()
+
+      sinon.assert.notCalled(wallProfiler.start)
+      sinon.assert.notCalled(spaceProfiler.start)
+
+      resolveEncode(wallProfile)
+      await waitForExport()
+      // The chained restart resolves a few more microtask ticks after the shutdown export
+      // (submit -> _collect's returned promise settling -> .finally() -> .then()).
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      sinon.assert.calledOnce(wallProfiler.start)
+      sinon.assert.calledOnce(spaceProfiler.start)
+    })
+
     async function shouldExportProfiles (compression, magicBytes) {
       wallProfile = Buffer.from('uncompressed profile - wall')
       wallProfilePromise = Promise.resolve(wallProfile)
