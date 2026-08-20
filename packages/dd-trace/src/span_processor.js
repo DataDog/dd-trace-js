@@ -97,7 +97,7 @@ class SpanProcessor {
     this._killAll = true
   }
 
-  _erase (trace, active) {
+  _erase (trace, active = []) {
     if (this._config.DD_TRACE_EXPERIMENTAL_STATE_TRACKING) {
       const started = new Set()
       const startedIds = new Set()
