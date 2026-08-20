@@ -896,6 +896,25 @@ describe('Config', () => {
     })
   })
 
+  describe('HTTP client error statuses', () => {
+    it('should default to 400-499', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '400-499')
+    })
+
+    it('should initialize from DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', () => {
+      process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '500-599'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '500-599')
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', value: '500-599', origin: 'env_var' },
+      ])
+    })
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = getConfig()
 
