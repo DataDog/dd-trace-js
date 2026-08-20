@@ -12,7 +12,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
-const logSubmissionCh = channel('ci:log-submission:bunyan:log')
+const logSubmissionCh = channel('ci:log-submission:log')
 
 describe('Plugin', () => {
   let logger
@@ -65,6 +65,33 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with disabled plugin', () => {
+        beforeEach(() => {
+          return agent.load('bunyan', { enabled: false })
+        })
+
+        beforeEach(() => {
+          setupTest(version)
+        })
+
+        it('should publish records for automatic submission', () => {
+          let submission
+          const onLog = payload => {
+            submission = payload
+          }
+          logSubmissionCh.subscribe(onLog)
+
+          try {
+            logger.info('message')
+          } finally {
+            logSubmissionCh.unsubscribe(onLog)
+          }
+
+          assert.strictEqual(submission.source, 'bunyan')
+          assert.strictEqual(JSON.parse(submission.message).msg, 'message')
+        })
+      })
+
       describe('with configuration', () => {
         beforeEach(() => {
           return agent.load('bunyan', { logInjection: true })
@@ -105,6 +132,7 @@ describe('Plugin', () => {
           }
 
           const record = JSON.parse(submission.message)
+          assert.strictEqual(submission.source, 'bunyan')
           assert.strictEqual(record.dd.trace_id, span.context().toTraceId(true))
           assert.strictEqual(record.dd.span_id, span.context().toSpanId())
         })
@@ -130,6 +158,7 @@ describe('Plugin', () => {
             logSubmissionCh.unsubscribe(onLog)
           }
 
+          assert.strictEqual(submission.source, 'bunyan')
           assert.strictEqual(submission.message.dd.trace_id, span.context().toTraceId(true))
           assert.strictEqual(submission.message.dd.span_id, span.context().toSpanId())
         })

@@ -43,7 +43,7 @@ function getWinstonLogSubmissionParameters (config) {
  * @param {import('../../config/config-base')} config
  * @returns {URL | undefined}
  */
-function getBunyanLogSubmissionUrl (config) {
+function getLogSubmissionUrl (config) {
   if (config.DD_AGENTLESS_LOG_SUBMISSION_URL) {
     try {
       const url = new URL(config.DD_AGENTLESS_LOG_SUBMISSION_URL)
@@ -56,32 +56,34 @@ function getBunyanLogSubmissionUrl (config) {
     return
   }
 
-  const hostname = `http-intake.logs.${config.site}`
+  const hostname = `http-intake.logs.${config.site}`.toLowerCase()
   try {
     const url = new URL(`https://${hostname}`)
-    if (url.hostname === hostname.toLowerCase()) return url
+    if (url.hostname === hostname) return url
   } catch {}
 
   log.error('Could not parse automatic log submission site: %s', config.site)
 }
 
 /**
- * @param {string} service
+ * @param {import('../../config/config-base')} config
+ * @param {string} source
  * @returns {string}
  */
-function getBunyanLogSubmissionPath (service) {
-  return `/api/v2/logs?${new URLSearchParams({ ddsource: 'bunyan', service })}`
+function getLogSubmissionPath (config, source) {
+  return `/api/v2/logs?${new URLSearchParams({ ddsource: source, service: config.service })}`
 }
 
 class LogSubmissionPlugin extends Plugin {
   static id = 'log-submission'
 
   /** @type {string[]} */
-  #bunyanBatch = []
-  #bunyanBatchBytes = 2
-  #bunyanLogSubmissionUrl
-  #bunyanTimer
-  #beforeExitHandler = () => this.#flushBunyanLogs()
+  #batch = []
+  #batchBytes = 2
+  #batchSource
+  #logSubmissionUrl
+  #timer
+  #beforeExitHandler = () => this.#flushLogs()
 
   constructor (...args) {
     super(...args)
@@ -94,8 +96,8 @@ class LogSubmissionPlugin extends Plugin {
       logger.add(new this.HttpClass(getWinstonLogSubmissionParameters(this.config)))
     })
 
-    this.addSub('ci:log-submission:bunyan:log', ({ message }) => {
-      this.#enqueueBunyanLog(message)
+    this.addSub('ci:log-submission:log', (payload) => {
+      this.#enqueueLog(payload)
     })
   }
 
@@ -104,11 +106,11 @@ class LogSubmissionPlugin extends Plugin {
    * @returns {void}
    */
   configure (config) {
-    if (this._enabled) this.#flushBunyanLogs()
+    if (this._enabled) this.#flushLogs()
 
     const isEnabled = typeof config === 'boolean' ? config : config.enabled
-    this.#bunyanLogSubmissionUrl = isEnabled && typeof config !== 'boolean'
-      ? getBunyanLogSubmissionUrl(config)
+    this.#logSubmissionUrl = isEnabled && typeof config !== 'boolean'
+      ? getLogSubmissionUrl(config)
       : undefined
     super.configure(config)
 
@@ -121,71 +123,76 @@ class LogSubmissionPlugin extends Plugin {
   }
 
   /**
-   * @param {string | Record<string, unknown>} message
+   * @param {{ source: string, message: string | Record<string, unknown> }} payload
    * @returns {void}
    */
-  #enqueueBunyanLog (message) {
-    if (!this.#bunyanLogSubmissionUrl) return
+  #enqueueLog ({ source, message }) {
+    if (!this.#logSubmissionUrl) return
 
     let serializedMessage
     try {
       serializedMessage = typeof message === 'string' ? message : JSON.stringify(message)
     } catch (error) {
-      log.error('Could not serialize Bunyan log for automatic submission', error)
+      log.error('Could not serialize %s log for automatic submission', source, error)
       return
     }
     if (serializedMessage === undefined) return
 
     const messageBytes = Buffer.byteLength(serializedMessage)
     if (messageBytes + 2 > MAX_BATCH_BYTES) {
-      log.error('Could not submit Bunyan log because it exceeds the %d byte payload limit', MAX_BATCH_BYTES)
+      log.error('Could not submit %s log because it exceeds the %d byte payload limit', source, MAX_BATCH_BYTES)
       return
     }
 
-    if (this.#bunyanBatch.length > 0 && this.#bunyanBatchBytes + messageBytes + 1 > MAX_BATCH_BYTES) {
-      this.#flushBunyanLogs()
+    if (this.#batch.length > 0 &&
+        (this.#batchSource !== source || this.#batchBytes + messageBytes + 1 > MAX_BATCH_BYTES)) {
+      this.#flushLogs()
     }
 
-    if (this.#bunyanBatch.length > 0) this.#bunyanBatchBytes++
-    this.#bunyanBatch.push(serializedMessage)
-    this.#bunyanBatchBytes += messageBytes
+    this.#batchSource = source
+    if (this.#batch.length > 0) this.#batchBytes++
+    this.#batch.push(serializedMessage)
+    this.#batchBytes += messageBytes
 
-    if (this.#bunyanBatch.length === MAX_BATCH_LOGS || this.#bunyanBatchBytes === MAX_BATCH_BYTES) {
-      this.#flushBunyanLogs()
-    } else if (this.#bunyanTimer === undefined) {
-      this.#bunyanTimer = setTimeout(() => this.#flushBunyanLogs(), BATCH_FLUSH_INTERVAL)
-      this.#bunyanTimer.unref?.()
+    if (this.#batch.length === MAX_BATCH_LOGS || this.#batchBytes === MAX_BATCH_BYTES) {
+      this.#flushLogs()
+    } else if (this.#timer === undefined) {
+      this.#timer = setTimeout(() => this.#flushLogs(), BATCH_FLUSH_INTERVAL)
+      this.#timer.unref?.()
     }
   }
 
   /**
    * @returns {void}
    */
-  #flushBunyanLogs () {
-    clearTimeout(this.#bunyanTimer)
-    this.#bunyanTimer = undefined
+  #flushLogs () {
+    clearTimeout(this.#timer)
+    this.#timer = undefined
 
-    if (this.#bunyanBatch.length === 0 || !this.#bunyanLogSubmissionUrl) return
+    if (this.#batch.length === 0 || !this.#logSubmissionUrl) return
 
-    const data = `[${this.#bunyanBatch.join(',')}]`
-    this.#bunyanBatch = []
-    this.#bunyanBatchBytes = 2
+    const source = this.#batchSource
+    const data = `[${this.#batch.join(',')}]`
+    this.#batch = []
+    this.#batchBytes = 2
+    this.#batchSource = undefined
     const options = {
-      path: getBunyanLogSubmissionPath(this.config.service),
+      path: getLogSubmissionPath(this.config, source),
       method: 'POST',
       headers: {
         'DD-API-KEY': this.config.DD_API_KEY,
         'Content-Type': 'application/json',
       },
-      url: this.#bunyanLogSubmissionUrl,
+      url: this.#logSubmissionUrl,
     }
 
     try {
       request(data, options, error => {
-        if (error) log.error('Error submitting Bunyan logs', error)
+        if (error) log.error('Error submitting %s logs', source, error)
       })
     } catch (error) {
-      log.error('Error submitting Bunyan logs', error)
+      this.#logSubmissionUrl = undefined
+      log.error('Error submitting %s logs', source, error)
     }
   }
 }
