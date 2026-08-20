@@ -160,12 +160,10 @@ describe('Plugin', () => {
         sinon.assert.neverCalledWith(metricStub, 'openai.ratelimit.remaining.tokens')
       })
 
-      it('logs edit instructions', async function () {
-        if (semver.satisfies(realVersion, '>=4.0.0')) {
-          // The edits API was removed in OpenAI 4.0.0.
-          this.skip()
-        }
+      const editInstructionsTest = semver.satisfies(realVersion, '>=4.0.0') ? it.skip : it
 
+      // The edits API was removed in OpenAI 4.0.0.
+      editInstructionsTest('logs edit instructions', async function () {
         const nock = require('nock')
         if (!nock.isActive()) nock.activate()
 
@@ -219,12 +217,10 @@ describe('Plugin', () => {
           })
         })
 
-        it('should maintain the context with a streamed call', async function () {
-          if (semver.satisfies(realVersion, '<4.1.0')) {
-            // This streaming API is only available from OpenAI 4.1.0.
-            this.skip()
-          }
+        const streamedContextTest = semver.satisfies(realVersion, '>=4.1.0') ? it : it.skip
 
+        // This streaming API is only available from OpenAI 4.1.0.
+        streamedContextTest('should maintain the context with a streamed call', async function () {
           await tracer.trace('outer', async (outerSpan) => {
             const stream = await openai.chat.completions.create({
               model: 'gpt-3.5-turbo',
@@ -340,15 +336,11 @@ describe('Plugin', () => {
           await checkTraces
         })
 
+        // These streaming response semantics require OpenAI newer than 4.1.0.
         describe('streamed responses', function () {
-          beforeEach(function () {
-            if (semver.satisfies(realVersion, '<=4.1.0')) {
-              // These streaming response semantics require OpenAI newer than 4.1.0.
-              this.skip()
-            }
-          })
+          const streamingResponseTest = semver.satisfies(realVersion, '>4.1.0') ? it : it.skip
 
-          it('makes a successful call', async () => {
+          streamingResponseTest('makes a successful call', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 assert.ok(
@@ -379,7 +371,7 @@ describe('Plugin', () => {
             await checkTraces
           })
 
-          it('makes a successful call with usage included', async () => {
+          streamingResponseTest('makes a successful call with usage included', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 assert.ok(
@@ -415,7 +407,7 @@ describe('Plugin', () => {
             await checkTraces
           })
 
-          it('tags multiple responses', async () => {
+          streamingResponseTest('tags multiple responses', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 // Multiple response choice tags removed - basic span validation
@@ -638,12 +630,10 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it('create file', async function () {
-        if (!semver.satisfies(realVersion, '>=4.0.0')) {
-          // The files API shape exercised here starts in OpenAI 4.0.0.
-          this.skip()
-        }
+      const createFileTest = semver.satisfies(realVersion, '>=4.0.0') ? it : it.skip
 
+      // The files API shape exercised here starts in OpenAI 4.0.0.
+      createFileTest('create file', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -820,12 +810,10 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it('create fine-tune', async function () {
-        if (semver.satisfies(realVersion, '<4.17.0')) {
-          // fine tuning endpoints used in lower versions of the OpenAI SDK have been deprecated
-          this.skip()
-        }
+      const createFineTuneTest = semver.satisfies(realVersion, '>=4.17.0') ? it : it.skip
 
+      // fine tuning endpoints used in lower versions of the OpenAI SDK have been deprecated
+      createFineTuneTest('create fine-tune', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -863,12 +851,10 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it('retrieve fine-tune', async function () {
-        if (semver.satisfies(realVersion, '<4.17.0')) {
-          // This fine-tuning API is only available from OpenAI 4.17.0.
-          this.skip()
-        }
+      const retrieveFineTuneTest = semver.satisfies(realVersion, '>=4.17.0') ? it : it.skip
 
+      // This fine-tuning API is only available from OpenAI 4.17.0.
+      retrieveFineTuneTest('retrieve fine-tune', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -902,12 +888,10 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it('cancel fine-tune', async function () {
-        if (semver.satisfies(realVersion, '<4.17.0')) {
-          // This fine-tuning API is only available from OpenAI 4.17.0.
-          this.skip()
-        }
+      const cancelFineTuneTest = semver.satisfies(realVersion, '>=4.17.0') ? it : it.skip
 
+      // This fine-tuning API is only available from OpenAI 4.17.0.
+      cancelFineTuneTest('cancel fine-tune', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -938,12 +922,10 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it('list fine-tune events', async function () {
-        if (semver.satisfies(realVersion, '<4.17.0')) {
-          // This fine-tuning API is only available from OpenAI 4.17.0.
-          this.skip()
-        }
+      const listFineTuneEventsTest = semver.satisfies(realVersion, '>=4.17.0') ? it : it.skip
 
+      // This fine-tuning API is only available from OpenAI 4.17.0.
+      listFineTuneEventsTest('list fine-tune events', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -974,12 +956,10 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it('list fine-tunes', async function () {
-        if (semver.satisfies(realVersion, '<4.17.0')) {
-          // This fine-tuning API is only available from OpenAI 4.17.0.
-          this.skip()
-        }
+      const listFineTunesTest = semver.satisfies(realVersion, '>=4.17.0') ? it : it.skip
 
+      // This fine-tuning API is only available from OpenAI 4.17.0.
+      listFineTunesTest('list fine-tunes', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1010,12 +990,10 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it('create moderation', async function () {
-        if (semver.satisfies(realVersion, '<3.0.1')) {
-          // This moderation API is only available from OpenAI 3.0.1.
-          this.skip()
-        }
+      const createModerationTest = semver.satisfies(realVersion, '>=3.0.1') ? it : it.skip
 
+      // This moderation API is only available from OpenAI 3.0.1.
+      createModerationTest('create moderation', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1058,12 +1036,10 @@ describe('Plugin', () => {
       })
 
       for (const responseFormat of ['url', 'b64_json']) {
-        it(`create image ${responseFormat}`, async function () {
-          if (semver.satisfies(realVersion, '<3.1.0')) {
-            // This image response format is only available from OpenAI 3.1.0.
-            this.skip()
-          }
+        const createImageTest = semver.satisfies(realVersion, '>=3.1.0') ? it : it.skip
 
+        // This image response format is only available from OpenAI 3.1.0.
+        createImageTest(`create image ${responseFormat}`, async function () {
           const checkTraces = agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1118,17 +1094,15 @@ describe('Plugin', () => {
         })
       }
 
-      it('create image edit', async function () {
-        if (semver.satisfies(realVersion, '<4.33.1')) {
-          /**
-           * lower versions will fail with
-           *
-           * Error: 400 Invalid file 'image': unsupported mimetype ('application/octet-stream').
-           * Supported file formats are 'image/png'.
-           */
-          this.skip()
-        }
+      const createImageEditTest = semver.satisfies(realVersion, '>=4.33.1') ? it : it.skip
 
+      /**
+       * lower versions will fail with
+       *
+       * Error: 400 Invalid file 'image': unsupported mimetype ('application/octet-stream').
+       * Supported file formats are 'image/png'.
+       */
+      createImageEditTest('create image edit', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1166,16 +1140,14 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it('create image variation', async function () {
-        if (semver.satisfies(realVersion, '<4.0.0')) {
-          /**
-           * lower versions fail with
-           *
-           * Error: Request failed with status code 400
-           */
-          this.skip()
-        }
+      const createImageVariationTest = semver.satisfies(realVersion, '>=4.0.0') ? it : it.skip
 
+      /**
+       * lower versions fail with
+       *
+       * Error: Request failed with status code 400
+       */
+      createImageVariationTest('create image variation', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1214,16 +1186,14 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it('create transcription', async function () {
-        if (semver.satisfies(realVersion, '<4.0.0')) {
-          /**
-           * lower versions fail with
-           *
-           * Error: Request failed with status code 400
-           */
-          this.skip()
-        }
+      const createTranscriptionTest = semver.satisfies(realVersion, '>=4.0.0') ? it : it.skip
 
+      /**
+       * Lower versions fail with
+       *
+       * Error: Request failed with status code 400
+       */
+      createTranscriptionTest('create transcription', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1259,16 +1229,14 @@ describe('Plugin', () => {
         sinon.assert.called(externalLoggerStub)
       })
 
-      it('create translation', async function () {
-        if (semver.satisfies(realVersion, '<4.0.0')) {
-          /**
-           * lower versions fail with
-           *
-           * Error: Request failed with status code 400
-           */
-          this.skip()
-        }
+      const createTranslationTest = semver.satisfies(realVersion, '>=4.0.0') ? it : it.skip
 
+      /**
+       * Lower versions fail with
+       *
+       * Error: Request failed with status code 400
+       */
+      createTranslationTest('create translation', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1315,14 +1283,10 @@ describe('Plugin', () => {
         sinon.assert.called(externalLoggerStub)
       })
 
-      describe('chat completions', function () {
-        beforeEach(function () {
-          if (semver.satisfies(realVersion, '<3.2.0')) {
-            // Chat completions are only available from OpenAI 3.2.0.
-            this.skip()
-          }
-        })
+      const chatCompletionsDescribe = semver.satisfies(realVersion, '>=3.2.0') ? describe : describe.skip
 
+      // Chat completions are only available from OpenAI 3.2.0.
+      chatCompletionsDescribe('chat completions', function () {
         it('makes a successful call', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
@@ -1481,12 +1445,10 @@ describe('Plugin', () => {
           await checkTraces
         })
 
-        it('should make a successful call with tools', async function () {
-          if (semver.satisfies(realVersion, '<3.2.0')) {
-            // Tool calls are only available from OpenAI 3.2.0.
-            this.skip()
-          }
+        const chatCompletionsToolsTest = semver.satisfies(realVersion, '>=3.2.0') ? it : it.skip
 
+        // Tool calls are only available from OpenAI 3.2.0.
+        chatCompletionsToolsTest('should make a successful call with tools', async function () {
           const checkTraces = agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1525,15 +1487,11 @@ describe('Plugin', () => {
           sinon.assert.called(externalLoggerStub)
         })
 
+        // These streaming response semantics require OpenAI newer than 4.1.0.
         describe('streamed responses', function () {
-          beforeEach(function () {
-            if (semver.satisfies(realVersion, '<=4.1.0')) {
-              // These streaming response semantics require OpenAI newer than 4.1.0.
-              this.skip()
-            }
-          })
+          const chatStreamingResponseTest = semver.satisfies(realVersion, '>4.1.0') ? it : it.skip
 
-          it('makes a successful call', async () => {
+          chatStreamingResponseTest('makes a successful call', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1576,7 +1534,7 @@ describe('Plugin', () => {
             await checkTraces
           })
 
-          it('tags multiple responses', async () => {
+          chatStreamingResponseTest('tags multiple responses', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1750,12 +1708,10 @@ describe('Plugin', () => {
             await checkTraces
           })
 
-          it('makes a successful call with tools', async function () {
-            if (semver.satisfies(realVersion, '<=4.16.0')) {
-              // This tool-call response shape requires OpenAI newer than 4.16.0.
-              this.skip()
-            }
+          const streamedToolsTest = semver.satisfies(realVersion, '>4.16.0') ? it : it.skip
 
+          // This tool-call response shape requires OpenAI newer than 4.16.0.
+          streamedToolsTest('makes a successful call with tools', async function () {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1795,12 +1751,10 @@ describe('Plugin', () => {
         })
       })
 
-      it('makes a successful call with chat.completions.parse', async function () {
-        if (semver.satisfies(realVersion, '<4.59.0')) {
-          // chat.completions.parse is only available from OpenAI 4.59.0.
-          this.skip()
-        }
+      const chatCompletionsParseTest = semver.satisfies(realVersion, '>=4.59.0') ? it : it.skip
 
+      // chat.completions.parse is only available from OpenAI 4.59.0.
+      chatCompletionsParseTest('makes a successful call with chat.completions.parse', async function () {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             const span = traces[0][0]

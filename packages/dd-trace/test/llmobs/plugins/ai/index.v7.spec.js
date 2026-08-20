@@ -150,12 +150,10 @@ describe('Plugin', () => {
       })
     })
 
-    it('creates a span for embedMany', async function () {
-      if (!semifies(resolvedVersion, '>=7.0.23')) {
-        // embedMany is only available from ai 7.0.23.
-        this.skip()
-      }
+    const embedManyTest = semifies(resolvedVersion, '>=7.0.23') ? it : it.skip
 
+    // embedMany is only available from ai 7.0.23.
+    embedManyTest('creates a span for embedMany', async function () {
       await ai.embedMany({
         model: openai.embedding('text-embedding-ada-002'),
         values: ['hello world', 'goodbye world'],

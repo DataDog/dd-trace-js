@@ -940,12 +940,10 @@ describe('Plugin', () => {
       })
     })
 
-    it('extracts last user message content from messages in generateText', async function () {
-      if (semifies(realVersion, '<5.0.0')) {
-        // Structured message content is only available from ai 5.0.0.
-        this.skip()
-      }
+    const generateTextMessageTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
 
+    // Structured message content is only available from ai 5.0.0.
+    generateTextMessageTest('extracts last user message content from messages in generateText', async function () {
       const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       const { createOpenAI } = OpenAIModule.get()
       const mockOpenai = createOpenAI({
@@ -984,12 +982,10 @@ describe('Plugin', () => {
       })
     })
 
-    it('extracts last user message content from messages in generateObject', async function () {
-      if (semifies(realVersion, '<5.0.0')) {
-        // Structured message content is only available from ai 5.0.0.
-        this.skip()
-      }
+    const generateObjectMessageTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
 
+    // Structured message content is only available from ai 5.0.0.
+    generateObjectMessageTest('extracts last user message content from messages in generateObject', async function () {
       const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       const { createOpenAI } = OpenAIModule.get()
       const mockOpenai = createOpenAI({
@@ -1029,14 +1025,10 @@ describe('Plugin', () => {
       })
     })
 
-    describe('ToolLoopAgent', function () {
-      beforeEach(function () {
-        if (semifies(realVersion, '<6.0.0')) {
-          // The cache-token metrics exercised here are only available from ai 6.0.0.
-          this.skip()
-        }
-      })
+    const toolLoopAgentDescribe = semifies(realVersion, '>=6.0.0') ? describe : describe.skip
 
+    // The cache-token metrics exercised here are only available from ai 6.0.0.
+    toolLoopAgentDescribe('ToolLoopAgent', function () {
       it('creates a text generation root span for ToolLoopAgent.generate', async () => {
         const agent = new ai.ToolLoopAgent({
           model: openai('gpt-4o-mini'),
