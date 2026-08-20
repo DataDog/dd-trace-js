@@ -792,6 +792,31 @@ describe('Plugin', function () {
               ])
             })
 
+            it('should trace a cached app page through the compiled runtime', async () => {
+              const firstResponse = await axios.get(`http://127.0.0.1:${port}/cached`)
+              assert.strictEqual(firstResponse.status, 200)
+              assert.match(firstResponse.data, /<h1>Cached App Page<\/h1>/)
+
+              const tracePromise = agent.assertSomeTraces(traces => {
+                const spans = traces[0]
+                const nextRequestSpans = spans.filter(span => span.name === 'next.request')
+
+                assert.strictEqual(nextRequestSpans.length, 1)
+                assertObjectContains(nextRequestSpans[0], {
+                  resource: 'GET /cached',
+                  meta: {
+                    'http.status_code': '200',
+                  },
+                })
+              })
+
+              const [secondResponse] = await Promise.all([
+                axios.get(`http://127.0.0.1:${port}/cached`),
+                tracePromise,
+              ])
+              assert.strictEqual(secondResponse.headers['x-nextjs-cache'], 'HIT')
+            })
+
             it('should attach a thrown app page error to the request span', done => {
               agent
                 .assertSomeTraces(traces => {
