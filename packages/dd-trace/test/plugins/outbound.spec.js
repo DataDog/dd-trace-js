@@ -13,6 +13,16 @@ const parseTags = require('../../../datadog-core/src/utils/src/parse-tags')
 const { getNextLineNumber } = require('./helpers')
 
 describe('OuboundPlugin', () => {
+  it('can suppress the connect subscription for exact lifecycle processors', () => {
+    class ExactLifecyclePlugin extends OutboundPlugin {
+      static traceConnect = false
+
+      addTraceSubs () {}
+    }
+
+    assert.strictEqual(new ExactLifecyclePlugin()._subscriptions.length, 0)
+  })
+
   describe('peer service decision', () => {
     let instance = null
     let computePeerServiceStub = null
