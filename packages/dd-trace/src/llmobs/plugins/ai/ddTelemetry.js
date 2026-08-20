@@ -136,7 +136,11 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
 
-    return { kind, name: getLlmObsSpanName(operation, ctx.attributes['ai.telemetry.functionId']) }
+    return {
+      kind,
+      name: getLlmObsSpanName(operation, ctx.attributes['ai.telemetry.functionId']),
+      parent: kind === 'tool' ? ctx.parentStore?.span : undefined,
+    }
   }
 
   /**
