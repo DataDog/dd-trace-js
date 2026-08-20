@@ -265,8 +265,9 @@ moduleTypes.forEach(({
       await runRumCookieFailureTest({ CYPRESS_MISSING_CY_NOW: 'true' })
     })
 
-    if (type === 'commonJS' && version === 'latest') {
-      it('does not fail tests when reporting a RUM correlation error throws', async () => {
+    {
+      const latestCommonJsTest = type === 'commonJS' && version === 'latest' ? it : it.skip
+      latestCommonJsTest('does not fail tests when reporting a RUM correlation error throws', async () => {
         await runRumCookieFailureTest({
           CYPRESS_RUM_COOKIE_FAILURE: 'reject',
           CYPRESS_RUM_LOG_FAILURE: 'true',
@@ -274,8 +275,9 @@ moduleTypes.forEach(({
       })
     }
 
-    if (type === 'commonJS' && version !== '6.7.0') {
-      it('removes a stale RUM cookie when its replacement rejects', async () => {
+    {
+      const rumCookieTest = type === 'commonJS' && version !== '6.7.0' ? it : it.skip
+      rumCookieTest('removes a stale RUM cookie when its replacement rejects', async () => {
         let testOutput = ''
         const specToRun = 'cypress/e2e/rum-cookie-stale.cy.js'
 
@@ -304,8 +306,9 @@ moduleTypes.forEach(({
       })
     }
 
-    if (DD_MAJOR < 6 && version !== 'latest' && semver.lt(version, '12.0.0')) {
-      it('logs a warning if using a deprecated version of cypress', async () => {
+    {
+      const deprecatedVersionTest = DD_MAJOR < 6 && version !== 'latest' && semver.lt(version, '12.0.0') ? it : it.skip
+      deprecatedVersionTest('logs a warning if using a deprecated version of cypress', async () => {
         let stdout = ''
         const {
           NODE_OPTIONS,
