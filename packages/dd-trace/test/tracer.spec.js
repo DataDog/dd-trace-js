@@ -64,17 +64,13 @@ describe('Tracer', () => {
     })
 
     it('flushes registered telemetry pipelines with the configured trace exporter', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
-      const tracer = {
-        _exporter: {
-          flush: sinon.stub().callsFake(done => done()),
-        },
-      }
+      const { registerTelemetryFlusher } = require('../src/flush')
+      tracer._exporter.flush = sinon.stub().callsFake(done => done())
       const telemetryFlusher = sinon.stub().callsFake(done => done())
       const unregister = registerTelemetryFlusher(telemetryFlusher)
       let completed = false
 
-      flushAll(tracer, () => { completed = true })
+      tracer.flushAll(() => { completed = true })
 
       sinon.assert.calledOnce(tracer._exporter.flush)
       sinon.assert.calledOnce(telemetryFlusher)
@@ -83,14 +79,14 @@ describe('Tracer', () => {
     })
 
     it('flushes post-trace telemetry after the trace exporter completes', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const { registerTelemetryFlusher } = require('../src/flush')
       let traceDone
-      const tracer = { _exporter: { flush: sinon.stub().callsFake(done => { traceDone = done }) } }
+      tracer._exporter.flush = sinon.stub().callsFake(done => { traceDone = done })
       const runtimeMetricsFlusher = sinon.stub().callsFake(done => done())
       const unregister = registerTelemetryFlusher(runtimeMetricsFlusher, { afterTrace: true })
       const done = sinon.spy()
 
-      flushAll(tracer, done)
+      tracer.flushAll(done)
 
       sinon.assert.notCalled(runtimeMetricsFlusher)
       traceDone()
@@ -100,12 +96,12 @@ describe('Tracer', () => {
     })
 
     it('flushes registered telemetry pipelines without a trace exporter', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
       const telemetryFlusher = sinon.stub().callsFake(done => done())
       const unregister = registerTelemetryFlusher(telemetryFlusher)
       const done = sinon.spy()
 
-      flushAll(undefined, done)
+      flushServerlessTelemetry(done)
 
       sinon.assert.calledOnce(telemetryFlusher)
       sinon.assert.calledOnce(done)
@@ -113,7 +109,7 @@ describe('Tracer', () => {
     })
 
     it('waits for callback flushers that return a synchronous status', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
       let flushDone
       const telemetryFlusher = sinon.stub().callsFake(done => {
         flushDone = done
@@ -123,7 +119,7 @@ describe('Tracer', () => {
       const done = sinon.spy()
 
       try {
-        flushAll(undefined, done)
+        flushServerlessTelemetry(done)
 
         sinon.assert.notCalled(done)
         flushDone()
@@ -134,14 +130,14 @@ describe('Tracer', () => {
     })
 
     it('bounds configured telemetry flushing', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
       const timeout = sinon.stub(global, 'setTimeout')
       const clearTimeout = sinon.stub(global, 'clearTimeout')
       const done = sinon.spy()
       const unregister = registerTelemetryFlusher(() => {})
 
       try {
-        flushAll({}, done, { timeout: 2_000 })
+        flushServerlessTelemetry(done, { timeout: 2_000 })
 
         sinon.assert.calledWith(timeout, sinon.match.func, 2_000)
         timeout.firstCall.args[0]()
@@ -155,12 +151,12 @@ describe('Tracer', () => {
     })
 
     it('does not retain telemetry flushers outside a supported platform', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
       delete process.env.VERCEL
       const telemetryFlusher = sinon.stub()
       const unregister = registerTelemetryFlusher(telemetryFlusher)
 
-      flushAll(undefined, sinon.spy())
+      flushServerlessTelemetry(sinon.spy())
 
       sinon.assert.notCalled(telemetryFlusher)
       unregister()

@@ -19,7 +19,7 @@ const {
   initializeServerlessTelemetry,
 } = require('../src/serverless')
 const { registerVercelTelemetryRetention } = require('../src/serverless/vercel')
-const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
 const Tracer = require('../src/tracer')
 const { initializeOpenTelemetryLogs } = require('../src/opentelemetry/logs')
 const { initializeOpenTelemetryMetrics } = require('../src/opentelemetry/metrics')
@@ -344,7 +344,7 @@ describe('Vercel telemetry retention', () => {
     }
     const unregisterTelemetry = registerTelemetryFlusher(telemetryFlusher)
     const unregister = registerVercelTelemetryRetention({
-      flushAll: (done, options) => flushAll(undefined, done, options),
+      flushAll: (done, options) => flushServerlessTelemetry(done, options),
     })
     try {
       channel('apm:http:server:request:finish').publish({})

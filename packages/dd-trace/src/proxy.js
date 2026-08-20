@@ -13,7 +13,7 @@ const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS, initializeServerlessTelemetry, supportsServerlessTelemetryRetention } = require('./serverless')
-const { flushAll, registerTelemetryFlusher } = require('./flush')
+const { flushServerlessTelemetry, registerTelemetryFlusher } = require('./flush')
 const processTags = require('./process-tags')
 const { isTrue } = require('./util')
 const {
@@ -106,7 +106,10 @@ class Tracer extends NoopProxy {
     // Logs and metrics can need retention even when tracing is disabled.
     if (supportsServerlessTelemetryRetention()) {
       this._serverlessTelemetry = {
-        flushAll: (done, options) => flushAll(this._tracer, done, options),
+        flushAll: (done, options) => {
+          if (typeof this._tracer?.flushAll === 'function') this._tracer.flushAll(done, options)
+          else flushServerlessTelemetry(done, options)
+        },
       }
     }
     this._flare = new LazyModule(() => require('./flare'))

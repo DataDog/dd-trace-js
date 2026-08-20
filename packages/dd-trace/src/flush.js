@@ -12,6 +12,13 @@ const telemetryFlushers = new Set()
 const postTraceTelemetryFlushers = new Set()
 
 /**
+ * @typedef {{
+ *   trace?: TelemetryFlusher,
+ *   spanStats?: TelemetryFlusher
+ * }} TraceFlushers
+ */
+
+/**
  * Registers a configured telemetry pipeline so serverless lifecycle retention
  * waits for its final export alongside trace delivery.
  * @param {TelemetryFlusher} flusher
@@ -28,18 +35,16 @@ function registerTelemetryFlusher (flusher, options) {
 }
 
 /**
- * Flushes the trace exporter and every registered telemetry pipeline.
- * @param {{
- *   _exporter?: { flush?: TelemetryFlusher },
- *   _processor?: { _stats?: { forceFlush?: TelemetryFlusher } }
- * }|undefined} tracer
+ * Coordinates the configured telemetry flushers for a serverless lifecycle.
+ *
+ * Trace-owned flushers are supplied by DatadogTracer so this module does not
+ * depend on its private implementation details.
  * @param {() => void} [done]
  * @param {{ timeout?: number }} [options]
+ * @param {TraceFlushers} [traceFlushers]
  */
-function flushAll (tracer, done, options) {
-  const traceExporter = tracer?._exporter
-  const traceFlusher = traceExporter?.flush
-  const spanStatsFlusher = tracer?._processor?._stats?.forceFlush
+function flushServerlessTelemetry (done, options, traceFlushers = {}) {
+  const { trace: traceFlusher, spanStats: spanStatsFlusher } = traceFlushers
   // TODO: Include DSM after DataStreamsProcessor exposes a completion-aware flush API.
   let pending = telemetryFlushers.size + postTraceTelemetryFlushers.size +
     (typeof traceFlusher === 'function' ? 1 : 0) +
@@ -83,16 +88,16 @@ function flushAll (tracer, done, options) {
   }
 
   if (typeof traceFlusher === 'function') {
-    flush(done => traceFlusher.call(traceExporter, done), () => {
+    flush(traceFlusher, () => {
       for (const flusher of postTraceTelemetryFlushers) flush(flusher)
     })
   } else {
     for (const flusher of postTraceTelemetryFlushers) flush(flusher)
   }
   if (typeof spanStatsFlusher === 'function') {
-    flush(done => spanStatsFlusher.call(tracer._processor._stats, done))
+    flush(spanStatsFlusher)
   }
   for (const flusher of telemetryFlushers) flush(flusher)
 }
 
-module.exports = { flushAll, registerTelemetryFlusher }
+module.exports = { flushServerlessTelemetry, registerTelemetryFlusher }

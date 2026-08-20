@@ -13,7 +13,7 @@ const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
-const { flushAll } = require('./flush')
+const { flushServerlessTelemetry } = require('./flush')
 const log = require('./log')
 // Always-on writer (console.warn), not the channel-gated `log`: these surface regardless of
 // DD_TRACE_DEBUG.
@@ -157,7 +157,19 @@ class DatadogTracer extends Tracer {
    * @param {{ timeout?: number }} [options] Bounds this flush operation.
    */
   flushAll (done, options) {
-    flushAll(this, done, options)
+    const traceExporter = this._exporter
+    const spanStats = this._processor?._stats
+    const traceFlusher = typeof traceExporter?.flush === 'function'
+      ? callback => traceExporter.flush(callback)
+      : undefined
+    const spanStatsFlusher = typeof spanStats?.forceFlush === 'function'
+      ? callback => spanStats.forceFlush(callback)
+      : undefined
+
+    flushServerlessTelemetry(done, options, {
+      trace: traceFlusher,
+      spanStats: spanStatsFlusher,
+    })
   }
 
   scope () {

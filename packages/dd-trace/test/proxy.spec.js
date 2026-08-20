@@ -50,7 +50,7 @@ describe('TracerProxy', () => {
   let registerTelemetryFlusher
   let initializeServerlessTelemetry
   let supportsServerlessTelemetryRetention
-  let flushAll
+  let flushServerlessTelemetry
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -190,7 +190,7 @@ describe('TracerProxy', () => {
     registerTelemetryFlusher = sinon.stub().returns(() => {})
     initializeServerlessTelemetry = sinon.spy()
     supportsServerlessTelemetryRetention = sinon.stub().returns(true)
-    flushAll = sinon.spy()
+    flushServerlessTelemetry = sinon.spy()
 
     profiler = {
       start: sinon.spy(),
@@ -284,7 +284,7 @@ describe('TracerProxy', () => {
         initializeServerlessTelemetry,
         supportsServerlessTelemetryRetention,
       },
-      './flush': { flushAll, registerTelemetryFlusher },
+      './flush': { flushServerlessTelemetry, registerTelemetryFlusher },
     })
 
     proxy = new ProxyClass()
@@ -622,7 +622,7 @@ describe('TracerProxy', () => {
         assert.strictEqual(typeof telemetry.flushAll, 'function')
         const done = sinon.spy()
         telemetry.flushAll(done)
-        sinon.assert.calledOnceWithExactly(flushAll, proxy._tracer, done, undefined)
+        sinon.assert.calledOnceWithExactly(flushServerlessTelemetry, done, undefined)
       })
 
       it('does not create a lifecycle owner outside a retention platform', () => {
