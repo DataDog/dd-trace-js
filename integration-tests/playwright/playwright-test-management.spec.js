@@ -1057,6 +1057,7 @@ versions.forEach((version) => {
 
         const runEfdQuarantineTest = async (receiver, {
           shouldFailBeforeAll = false,
+          shouldFailGlobalTeardown = false,
           shouldPassRetries = false,
         } = {}) => {
           const numRetries = 3
@@ -1087,6 +1088,7 @@ versions.forEach((version) => {
                 cwd,
                 env: {
                   ...getCiVisAgentlessConfig(receiver.port),
+                  ...(shouldFailGlobalTeardown ? { FAIL_GLOBAL_TEARDOWN: '1' } : {}),
                   PW_BASE_URL: `http://localhost:${webAppPort}`,
                   TEST_DIR: './ci-visibility/playwright-tests-test-management',
                   ...(shouldPassRetries ? { SHOULD_PASS_EFD_RETRIES: '1' } : {}),
@@ -1104,7 +1106,10 @@ versions.forEach((version) => {
                   .map(event => event.content)
                   .filter(test => test.meta[TEST_NAME] === 'quarantine should quarantine failed test')
 
-                assert.strictEqual(testSession.meta[TEST_STATUS], shouldFailBeforeAll ? 'fail' : 'pass')
+                assert.strictEqual(
+                  testSession.meta[TEST_STATUS],
+                  shouldFailBeforeAll || shouldFailGlobalTeardown ? 'fail' : 'pass'
+                )
                 assert.strictEqual(tests.length, numRetries + 1)
                 assert.strictEqual(
                   tests.filter(test => test.meta[TEST_STATUS] === 'fail').length,
@@ -1130,7 +1135,7 @@ versions.forEach((version) => {
 
             const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
             assert.match(testOutput, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
-            assert.strictEqual(exitCode, shouldFailBeforeAll ? 1 : 0, testOutput)
+            assert.strictEqual(exitCode, shouldFailBeforeAll || shouldFailGlobalTeardown ? 1 : 0, testOutput)
           } finally {
             proc?.kill()
           }
@@ -1146,6 +1151,46 @@ versions.forEach((version) => {
 
         it('does not quarantine an independent hook failure when an EFD retry passes', async (receiver) => {
           await runEfdQuarantineTest(receiver, { shouldFailBeforeAll: true, shouldPassRetries: true })
+        })
+
+        it('does not quarantine a global teardown failure when an EFD retry passes', async (receiver) => {
+          await runEfdQuarantineTest(receiver, { shouldFailGlobalTeardown: true, shouldPassRetries: true })
+        })
+
+        it('quarantines failures when a hook passes on a native retry', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          let testOutput = ''
+          let proc
+          try {
+            proc = exec(
+              './node_modules/.bin/playwright test -c playwright.config.js ' +
+                'quarantine-test.js flaky-before-all-test.js --retries=1',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  PW_BASE_URL: `http://localhost:${webAppPort}`,
+                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                },
+              }
+            )
+            proc.stdout?.on('data', data => { testOutput += data.toString() })
+            proc.stderr?.on('data', data => { testOutput += data.toString() })
+            const eventsPromise = receiver
+              .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+              }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
+
+            const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0, testOutput)
+          } finally {
+            proc?.kill()
+          }
         })
 
         it('does not quarantine an independent hook failure when a native retry passes', async (receiver) => {

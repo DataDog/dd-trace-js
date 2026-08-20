@@ -7,10 +7,9 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe('quarantine', () => {
-  test('should quarantine failed test', async ({ page }) => {
-    const { repeatEachIndex, retry } = test.info()
-    const shouldPassEfdRetry = process.env.SHOULD_PASS_EFD_RETRIES && repeatEachIndex > 0
-    const shouldPassNativeRetry = process.env.SHOULD_PASS_NATIVE_RETRIES && retry > 0
+  test('should quarantine failed test', async ({ page }, testInfo) => {
+    const shouldPassEfdRetry = process.env.SHOULD_PASS_EFD_RETRIES && testInfo.repeatEachIndex > 0
+    const shouldPassNativeRetry = process.env.SHOULD_PASS_NATIVE_RETRIES && testInfo.retry > 0
 
     await expect(page.locator('.hello-world')).toHaveText([
       shouldPassEfdRetry || shouldPassNativeRetry ? 'Hello World' : 'Hello Warld',

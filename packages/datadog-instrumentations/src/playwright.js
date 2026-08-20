@@ -111,7 +111,7 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
-let hasTestSuiteHookError = false
+let playwrightFailureCount
 let quarantinedButNotAttemptToFixTestKeys = new Set()
 let recordedTestOptimizationExecutions = new Set()
 let testsReportedInGenerateSummary = new Set()
@@ -831,10 +831,7 @@ function testEndHandler ({
   if (_type === 'beforeAll' || _type === 'afterAll') {
     const hookError = formatTestHookError(error, _type, isTimeout)
 
-    if (hookError) {
-      hasTestSuiteHookError = true
-      addErrorToTestSuite(testSuiteAbsolutePath, hookError)
-    }
+    if (hookError) addErrorToTestSuite(testSuiteAbsolutePath, hookError)
     return
   }
 
@@ -1264,6 +1261,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
   return async function (config) {
     reporterError = undefined
     hasReporterError = false
+    playwrightFailureCount = undefined
     let restoreReporterConsoleError
     if (satisfies(playwrightVersion, '>=1.60.0') && config?.config) {
       const DatadogPlaywrightReporter = require('./playwright-reporter')
@@ -1438,27 +1436,24 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
     if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
-      let totalFailedTestCount = 0
-      let totalPureQuarantinedFailedTestCount = 0
+      let totalIgnorableFailureCount = 0
 
       for (const [testKey, testStatuses] of testsToTestStatuses) {
-        const lastStatus = testStatuses.at(-1)
-        const hasPureQuarantinedFailure = quarantinedButNotAttemptToFixTestKeys.has(testKey) &&
-          (lastStatus === 'fail' || (efdManagedTestKeys.has(testKey) && testStatuses.includes('fail')))
+        if (!quarantinedButNotAttemptToFixTestKeys.has(testKey)) continue
 
-        // EFD retries are separate Playwright tests, so an earlier quarantined failure still makes the run fail.
-        if (lastStatus === 'fail' || hasPureQuarantinedFailure) {
-          totalFailedTestCount += 1
-          if (hasPureQuarantinedFailure) {
-            totalPureQuarantinedFailedTestCount += 1
-          }
+        const lastStatus = testStatuses.at(-1)
+        if (!efdManagedTestKeys.has(testKey)) {
+          if (lastStatus === 'fail') totalIgnorableFailureCount += 1
+          continue
+        }
+
+        // EFD retries are separate Playwright tests, so each failed clone contributes one runner failure.
+        for (const testStatus of testStatuses) {
+          if (testStatus === 'fail') totalIgnorableFailureCount += 1
         }
       }
 
-      const totalIgnorableFailures = totalPureQuarantinedFailedTestCount
-
-      if (!hasTestSuiteHookError &&
-        totalFailedTestCount > 0 && totalFailedTestCount === totalIgnorableFailures) {
+      if (totalIgnorableFailureCount > 0 && totalIgnorableFailureCount === playwrightFailureCount) {
         runAllTestsReturn = 'passed'
         preventedToFail = true
       }
@@ -1485,7 +1480,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     startedSuites = []
     remainingTestsByFile = {}
-    hasTestSuiteHookError = false
+    playwrightFailureCount = undefined
     quarantinedButNotAttemptToFixTestKeys = new Set()
     recordedTestOptimizationExecutions = new Set()
     testsReportedInGenerateSummary = new Set()
@@ -2482,7 +2477,9 @@ function generateSummaryWrapper (generateSummary) {
         })
       }
     }
-    return generateSummary.apply(this, args)
+    const summary = generateSummary.apply(this, args)
+    playwrightFailureCount = (summary.unexpected?.length || 0) + (summary.fatalErrors?.length || 0)
+    return summary
   }
 }
 
