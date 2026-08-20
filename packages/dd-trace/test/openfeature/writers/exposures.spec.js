@@ -35,6 +35,8 @@ describe('OpenFeature Exposures Writer', () => {
     request = sinon.stub().yieldsAsync(null, 'OK', 200)
 
     config = {
+      DD_AGENTLESS_ENABLED: false,
+      DD_API_KEY: 'test-api-key',
       site: 'datadoghq.com',
       hostname: 'localhost',
       port: 8126,
@@ -362,6 +364,56 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(parsedPayload.exposures?.length, 1)
       assert.ok(parsedPayload.exposures[0].timestamp)
       assert.strictEqual(parsedPayload.context.service, 'test-service')
+    })
+
+    it('should flush events directly to the site intake in agentless mode', () => {
+      writer.destroy()
+      writer = new ExposuresWriter({
+        ...config,
+        DD_AGENTLESS_ENABLED: true,
+        site: 'US3.DatadogHQ.com',
+      })
+      writer.setEnabled(true)
+      writer.append(exposureEvent)
+
+      writer.flush()
+
+      const [, options] = request.getCall(0).args
+      assert.strictEqual(options.url.href, 'https://event-platform-intake.us3.datadoghq.com/')
+      assert.strictEqual(options.path, '/api/v2/exposures')
+      assert.strictEqual(options.headers['Content-Type'], 'application/json')
+      assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
+      assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], undefined)
+    })
+
+    it('should reject agentless exposure delivery without an API key', () => {
+      writer.destroy()
+      writer = undefined
+
+      assert.throws(
+        () => new ExposuresWriter({
+          ...config,
+          DD_AGENTLESS_ENABLED: true,
+          DD_API_KEY: undefined,
+        }),
+        { message: 'DD_API_KEY is required for agentless OpenFeature exposures' }
+      )
+      sinon.assert.notCalled(request)
+    })
+
+    it('should reject an agentless site that could redirect the API key', () => {
+      writer.destroy()
+      writer = undefined
+
+      assert.throws(
+        () => new ExposuresWriter({
+          ...config,
+          DD_AGENTLESS_ENABLED: true,
+          site: 'datadoghq.com@evil.example',
+        }),
+        { message: 'Invalid DD_SITE for agentless OpenFeature exposures: datadoghq.com@evil.example' }
+      )
+      sinon.assert.notCalled(request)
     })
 
     it('should empty buffer after flushing', () => {
