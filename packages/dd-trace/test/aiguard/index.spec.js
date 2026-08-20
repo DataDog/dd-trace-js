@@ -660,7 +660,8 @@ describe('AIGuard SDK', () => {
 
     const result = await disabled.evaluate(messages)
 
-    assert.notStrictEqual(result.messages, messages)
+    assert.strictEqual(result.messages, messages)
+    assert.strictEqual(result.messages[0], messages[0])
     assert.deepStrictEqual(result.messages, messages)
     assert.deepStrictEqual(result.redactionReplacements, redactionReplacements)
     const requestMetricCall = count.getCalls().find(call => call.args[0] === 'requests')

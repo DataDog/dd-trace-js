@@ -150,6 +150,7 @@ class EvaluationReporter {
   #config
   #maxMessagesLength
   #maxContentSize
+  #redactionEnabled
 
   /**
    * @param {import('../config/config-base')} config
@@ -158,6 +159,7 @@ class EvaluationReporter {
     this.#config = config
     this.#maxMessagesLength = config.experimental.aiguard.maxMessagesLength
     this.#maxContentSize = config.experimental.aiguard.maxContentSize
+    this.#redactionEnabled = config.experimental.aiguard.redactionEnabled
   }
 
   /**
@@ -170,12 +172,12 @@ class EvaluationReporter {
    */
   start (span, messages, options) {
     const telemetryTags = { source: options.source, integration: options.integration }
-    const snapshot = clone(messages)
-    const last = snapshot.at(-1)
+    const evaluatedMessages = this.#redactionEnabled ? clone(messages) : messages
+    const last = evaluatedMessages.at(-1)
     const target = this.#isToolCall(last) ? 'tool' : 'prompt'
     span.setTag(TAGS.TARGET_TAG_KEY, target)
     if (target === 'tool') {
-      const name = this.#getToolName(last, snapshot)
+      const name = this.#getToolName(last, evaluatedMessages)
       if (name) {
         span.setTag(TAGS.TOOL_NAME_TAG_KEY, name)
       }
@@ -197,7 +199,7 @@ class EvaluationReporter {
 
     return {
       span,
-      messages: snapshot,
+      messages: evaluatedMessages,
       metaStruct,
       telemetryTags,
     }
