@@ -634,8 +634,10 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
-  if (!isLegacyBrowserProvider) {
-    it('honors object-form retries before quarantining browser failures', async () => {
+  {
+    const objectRetryTest = isLegacyBrowserProvider ? it.skip : it
+
+    objectRetryTest('honors object-form retries before quarantining browser failures', async () => {
       const testSuite = 'ci-visibility/vitest-browser-tests/browser-object-retry-quarantine.mjs'
       receiver.setSettings({
         test_management: {
@@ -677,7 +679,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
-    it('quarantines failures when an object-form retry condition stops retries', async () => {
+    objectRetryTest('quarantines failures when an object-form retry condition stops retries', async () => {
       const testSuite = 'ci-visibility/vitest-browser-tests/browser-conditional-retry-quarantine.mjs'
       receiver.setSettings({
         test_management: {
