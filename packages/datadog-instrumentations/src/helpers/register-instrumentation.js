@@ -13,6 +13,5 @@ module.exports = function registerInstrumentation (name) {
 
   if (typeof load !== 'function') return
 
-  const instrumentation = load()
-  instrumentation?.register?.()
+  load()
 }
