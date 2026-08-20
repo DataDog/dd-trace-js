@@ -10,11 +10,13 @@ const sinon = require('sinon')
 const { DD_MAJOR } = require('../../../../version')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
 const LLMObsTagger = require('../../src/llmobs/tagger')
+const eventWriter = require('../../src/opentracing/event-writer')
 const {
   PROPAGATED_TRACE_ID_KEY,
   SAMPLE_RATE,
   SAMPLING_DECISION,
   SESSION_ID,
+  SESSION_ID_TRACE_DEFAULT_KEY,
   TRACE_ID,
 } = require('../../src/llmobs/constants/tags')
 const { getConfigFresh } = require('../helpers/config')
@@ -24,6 +26,18 @@ const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
+
+function makeProjectedSpan (traceTags) {
+  const context = {
+    toSpanId () {
+      return 'parent-id'
+    },
+  }
+  const span = { context: () => context }
+  eventWriter.initializeContext(context)
+  if (traceTags) eventWriter.setTraceTags(span, traceTags)
+  return span
+}
 
 describe('module', () => {
   let llmobsModule
@@ -173,16 +187,8 @@ describe('module', () => {
 
     it('injects the session_id from the trace-level default when the active span carries none', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
-      store.span = {
-        context () {
-          return {
-            toSpanId () {
-              return 'parent-id'
-            },
-            _trace: { tags: { '_ml_obs.trace_session_id': 'trace-session' } },
-          }
-        },
-      }
+      store.span = makeProjectedSpan()
+      eventWriter.setTraceTag(store.span, SESSION_ID_TRACE_DEFAULT_KEY, 'trace-session')
 
       const carrier = {
         'x-datadog-tags': '',
@@ -197,14 +203,7 @@ describe('module', () => {
 
     it('converts the local LLMObs trace id to decimal for propagation', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
-      store.span = {
-        context () {
-          return {
-            _trace: { tags: {} },
-            toSpanId () { return 'parent-id' },
-          }
-        },
-      }
+      store.span = makeProjectedSpan()
       LLMObsTagger.tagMap.set(store.span, {
         [TRACE_ID]: '6a5f76e7000000001973227978d8110b',
       })
@@ -222,14 +221,7 @@ describe('module', () => {
     it('forwards an extracted LLMObs trace id without reinterpreting it', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
       const wireTraceId = '12345678901234567890123456789012'
-      store.span = {
-        context () {
-          return {
-            _trace: { tags: { [PROPAGATED_TRACE_ID_KEY]: wireTraceId } },
-            toSpanId () { return 'parent-id' },
-          }
-        },
-      }
+      store.span = makeProjectedSpan({ [PROPAGATED_TRACE_ID_KEY]: wireTraceId })
 
       const carrier = { 'x-datadog-tags': '' }
       injectCh.publish({ carrier })

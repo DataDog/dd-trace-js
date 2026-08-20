@@ -12,6 +12,7 @@ const tagsClearedCh = channel('dd-trace:span:event-writer:tags-cleared')
 const tagDeletedCh = channel('dd-trace:span:event-writer:tag-deleted')
 const tagSetCh = channel('dd-trace:span:event-writer:tag-set')
 const tagsSetCh = channel('dd-trace:span:event-writer:tags-set')
+const traceSpansReplacedCh = channel('dd-trace:span:event-writer:trace-spans-replaced')
 const traceTagSetCh = channel('dd-trace:span:event-writer:trace-tag-set')
 const traceTagsSetCh = channel('dd-trace:span:event-writer:trace-tags-set')
 
@@ -143,7 +144,9 @@ class EventWriter {
   setTag (target, key, value) {
     const context = getContext(target)
     context._tags[key] = value
-    if (tagSetCh.hasSubscribers) tagSetCh.publish({ context, key, value })
+    if (typeof key === 'string' && tagSetCh.hasSubscribers) {
+      tagSetCh.publish({ context, key, value })
+    }
   }
 
   /**
@@ -270,7 +273,9 @@ class EventWriter {
     const tags = context._tags
     if (Object.hasOwn(tags, key)) return false
     tags[key] = value
-    if (tagSetCh.hasSubscribers) tagSetCh.publish({ context, key, value })
+    if (typeof key === 'string' && tagSetCh.hasSubscribers) {
+      tagSetCh.publish({ context, key, value })
+    }
     return true
   }
 
@@ -366,7 +371,9 @@ class EventWriter {
   deleteTag (target, key) {
     const context = getContext(target)
     delete context._tags[key]
-    if (tagDeletedCh.hasSubscribers) tagDeletedCh.publish({ context, key })
+    if (typeof key === 'string' && tagDeletedCh.hasSubscribers) {
+      tagDeletedCh.publish({ context, key })
+    }
   }
 
   /**
@@ -631,6 +638,18 @@ class EventWriter {
     span._spanContext._isFinished = true
     markSpanFinished(span, duration)
     return true
+  }
+
+  /**
+   * Replace the spans retained by a processed trace chunk.
+   *
+   * @param {object} traceIdentity
+   * @param {Array<import('./span')>} activeSpans
+   */
+  replaceTraceSpans (traceIdentity, activeSpans) {
+    if (traceSpansReplacedCh.hasSubscribers) {
+      traceSpansReplacedCh.publish({ traceIdentity, activeSpans })
+    }
   }
 
   /**

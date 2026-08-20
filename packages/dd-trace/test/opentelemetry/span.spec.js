@@ -301,6 +301,17 @@ describe('OTel Span', () => {
     assert.strictEqual(getDatadogContext(spanContext), getDatadogSpan(span).context())
   })
 
+  it('should expose immutable identifier-only legacy context compatibility', () => {
+    const span = makeSpan('name')
+    const spanContext = span.spanContext()
+    const legacyContext = span._ddSpan.context()
+
+    assert.strictEqual(legacyContext._traceId.toString(16), spanContext.traceId)
+    assert.strictEqual(legacyContext._spanId.toString(16), spanContext.spanId)
+    assert.ok(Object.isFrozen(legacyContext))
+    assert.notStrictEqual(span._ddSpan, getDatadogSpan(span))
+  })
+
   it('should expose duration', () => {
     const span = makeSpan('name')
     span.end()

@@ -11,8 +11,10 @@ const {
   getHttpEndpoint,
   getLocalRootSpan,
   getParentSpan,
+  hasError,
   hasUserId,
   hasUserSessionId,
+  isOutermostWebSpan,
   shouldCollectAppSecEventHeaders,
 } = require('../../src/opentracing/span-projections')
 
@@ -167,6 +169,9 @@ describe('EventWriter', () => {
       'usr.id': '123',
       'usr.session_id': 'session',
     })
+    writer.setTag(span, undefined, 'ignored by typed projections')
+    writer.setTagIfAbsent(span, null, 'ignored by typed projections')
+    writer.deleteTag(span, null)
 
     assert.strictEqual(getParentSpan(child), span)
     assert.strictEqual(getLocalRootSpan(child), span)
@@ -182,8 +187,50 @@ describe('EventWriter', () => {
     assert.strictEqual(hasUserSessionId(span), true)
     assert.strictEqual(shouldCollectAppSecEventHeaders(span), true)
 
+    writer.setTag(span, 'error', true)
+    writer.setTag(span, 'error.type', 'Error')
+    assert.strictEqual(hasError(span), true)
+    writer.deleteTag(span, 'error')
+    assert.strictEqual(hasError(span), true)
+    writer.deleteTag(span, 'error.type')
+    assert.strictEqual(hasError(span), false)
+    writer.setTag(span, 'error', true)
+    writer.clearTags(span)
+    assert.strictEqual(hasError(span), false)
+
     writer.setTag(span, '_inferred_span', true)
     assert.strictEqual(getAppSecRootSpan(child), child)
+  })
+
+  it('rebuilds projected topology after a trace chunk is processed', () => {
+    writer.setTag(span, 'span.type', 'web')
+    assert.strictEqual(isOutermostWebSpan(span), true)
+
+    writer.replaceTraceSpans(context._trace, [])
+
+    const nextContext = {}
+    writer.initializeContext(nextContext, {
+      traceId: 'trace-id',
+      spanId: 'next-id',
+      parentId: 'span-id',
+      trace: context._trace,
+    })
+    const next = { context: () => nextContext }
+    writer.startSpan(next, {
+      context: nextContext,
+      processor: {},
+      prioritySampler: {},
+      debug: false,
+      operationName: 'next',
+      integrationName: 'integration',
+      startTime: 20,
+      links: [],
+    })
+    writer.setTag(next, 'span.type', 'web')
+
+    assert.strictEqual(getParentSpan(next), undefined)
+    assert.strictEqual(getLocalRootSpan(next), next)
+    assert.strictEqual(isOutermostWebSpan(next), true)
   })
 
   it('performs AppSec sampling and event updates atomically', () => {

@@ -1,7 +1,5 @@
 'use strict'
 
-const { performance } = require('node:perf_hooks')
-
 const dc = require('dc-polyfill')
 
 const { storage } = require('../../datadog-core')
@@ -296,7 +294,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
   // Public — called from wrapResolve (free function, crosses class boundary).
   // Resolve-span creation is inline at first-encounter; deferring to a batch
   // produces a bursty encoder stall when many spans finish together.
-  startResolveSpan (field, rootCtx, executeSpan, startTime) {
+  startResolveSpan (field, rootCtx, executeSpan) {
     const { fieldNode, fieldName, returnType, baseTypeName, variableValues, collapsedKey } = field
 
     const parent = getParentField(rootCtx, field)
@@ -314,7 +312,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
       resource: `${fieldName}:${returnType}`,
       childOf,
       type: 'graphql',
-      startTime,
       meta: {
         'graphql.field.coordinates': `${field.parentTypeName}.${fieldName}`,
         'graphql.field.name': fieldName,
@@ -360,9 +357,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
     return filtered
   }
 
-  // Public — called from wrapResolve. endTime reflects when the resolver
-  // actually completed, not when the field record was created.
-  finishResolveSpan (span, field, error, result, endTime) {
+  // Public — called from wrapResolve. Span owns the trace clock used for both
+  // resolver start and finish, so child spans remain inside their parent.
+  finishResolveSpan (span, field, error, result) {
     if (error) span.setTag('error', error)
 
     if (this.config.hooks.resolve) {
@@ -376,7 +373,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       })
     }
 
-    span.finish(endTime)
+    span.finish()
   }
 }
 
@@ -507,12 +504,10 @@ function wrapResolve (resolve) {
     }
 
     const executeSpan = rootCtx.executeSpan
-    const startTime = performance.timeOrigin + performance.now()
-    const span = rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime)
+    const span = rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan)
 
     return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.currentStore, (err, res) => {
-      const endTime = performance.timeOrigin + performance.now()
-      rootCtx.plugin.finishResolveSpan(span, field, err, res, endTime || startTime)
+      rootCtx.plugin.finishResolveSpan(span, field, err, res)
       if (updateFieldCh.hasSubscribers) {
         updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
       }

@@ -20,6 +20,7 @@ const tagsClearedCh = channel('dd-trace:span:event-writer:tags-cleared')
 const tagDeletedCh = channel('dd-trace:span:event-writer:tag-deleted')
 const tagSetCh = channel('dd-trace:span:event-writer:tag-set')
 const tagsSetCh = channel('dd-trace:span:event-writer:tags-set')
+const traceSpansReplacedCh = channel('dd-trace:span:event-writer:trace-spans-replaced')
 
 function getTraceProjection (trace) {
   let projection = traces.get(trace)
@@ -42,8 +43,10 @@ function startSpan (span, context, fields = {}) {
   const trace = getTraceProjection(fields.traceIdentity ?? context._trace)
   const parent = trace.get(fields.parentId ?? context._parentId)
   const projection = {
+    errorState: 0,
     span,
     parent,
+    parentId: fields.parentId ?? context._parentId,
     localRoot: parent?.localRoot ?? span,
     spanId: fields.spanId ?? context._spanId,
     tags: Object.create(null),
@@ -66,7 +69,7 @@ function getProjection (target) {
  */
 function setTag (target, key, value) {
   const projection = getProjection(target)
-  if (projection === undefined) return
+  if (projection === undefined || typeof key !== 'string') return
 
   if (key === 'appsec.event') {
     if (value === 'true') {
@@ -78,6 +81,12 @@ function setTag (target, key, value) {
   } else if (key.startsWith('appsec.events.')) {
     projection.appSecEventTags ??= new Set()
     projection.appSecEventTags.add(key)
+  }
+
+  if (key === 'error') {
+    projection.errorState = value ? projection.errorState | 1 : projection.errorState & ~1
+  } else if (key === 'error.type') {
+    projection.errorState = value ? projection.errorState | 2 : projection.errorState & ~2
   }
 
   switch (key) {
@@ -115,6 +124,11 @@ function deleteTag (target, key) {
   const projection = getProjection(target)
   if (projection === undefined) return
   projection.appSecEventTags?.delete(key)
+  if (key === 'error') {
+    projection.errorState &= ~1
+  } else if (key === 'error.type') {
+    projection.errorState &= ~2
+  }
   if (key === INFERRED_SPAN) {
     projection.inferred = false
   } else {
@@ -129,6 +143,7 @@ function clearTags (target) {
   const projection = getProjection(target)
   if (projection === undefined) return
   projection.tags = Object.create(null)
+  projection.errorState = 0
   projection.inferred = false
   projection.appSecEventTags?.clear()
 }
@@ -151,6 +166,21 @@ function onTagDeleted ({ context, key }) {
 
 function onTagsCleared ({ context }) {
   clearTags(context)
+}
+
+function onTraceSpansReplaced ({ traceIdentity, activeSpans }) {
+  const active = new Map()
+
+  for (const span of activeSpans) {
+    const projection = spans.get(span)
+    if (projection === undefined) continue
+
+    projection.parent = active.get(projection.parentId)
+    projection.localRoot = projection.parent?.localRoot ?? span
+    active.set(projection.spanId, projection)
+  }
+
+  traces.set(traceIdentity, active)
 }
 
 /**
@@ -256,6 +286,16 @@ function hasUserSessionId (span) {
 }
 
 /**
+ * Return whether the span has an error without exposing its tag state.
+ *
+ * @param {import('./span')} span
+ * @returns {boolean}
+ */
+function hasError (span) {
+  return (spans.get(span)?.errorState ?? 0) !== 0
+}
+
+/**
  * @param {import('./span')} span
  * @returns {boolean}
  */
@@ -284,6 +324,7 @@ tagsClearedCh.subscribe(onTagsCleared)
 tagDeletedCh.subscribe(onTagDeleted)
 tagSetCh.subscribe(onTagSet)
 tagsSetCh.subscribe(onTagsSet)
+traceSpansReplacedCh.subscribe(onTraceSpansReplaced)
 
 module.exports = {
   clearTags,
@@ -296,6 +337,7 @@ module.exports = {
   getLocalRootSpan,
   getOwnWebTags,
   getParentSpan,
+  hasError,
   hasUserId,
   hasUserSessionId,
   isOutermostWebSpan,

@@ -1,6 +1,7 @@
 'use strict'
 
 const { isSpanFinished } = require('../opentracing/span-lifecycle')
+const id = require('../id')
 const {
   addOtelEvent,
   addOtelLink,
@@ -14,6 +15,29 @@ const {
 } = require('./span-helpers')
 const { registerDatadogSpan } = require('./span-registry')
 
+class LegacyDatadogSpanFacade {
+  #context
+
+  /**
+   * @param {import('./span_context')} spanContext
+   */
+  constructor (spanContext) {
+    this.#context = Object.freeze({
+      _traceId: id(spanContext.traceId),
+      _spanId: id(spanContext.spanId),
+    })
+  }
+
+  /**
+   * Return the immutable identifier envelope used by legacy system tests.
+   *
+   * @returns {{ _traceId: import('../id'), _spanId: import('../id') }}
+   */
+  context () {
+    return this.#context
+  }
+}
+
 /**
  * Shared base for the OTel-bridge span classes (`Span` and `ActiveSpanProxy`). Subclasses
  * pass the underlying Datadog span to `super(ddSpan)` and provide `spanContext()`, `end()`,
@@ -25,6 +49,7 @@ const { registerDatadogSpan } = require('./span-registry')
  */
 class BridgeSpanBase {
   #datadogSpan
+  #legacyDatadogSpan
   // OTel SpanStatusCode: 0 = UNSET, 1 = OK, 2 = ERROR. Tracked for OK-is-final precedence.
   #statusCode = 0
 
@@ -43,6 +68,18 @@ class BridgeSpanBase {
 
   isRecording () {
     return !this.ended
+  }
+
+  /**
+   * Compatibility facade for callers that only used `_ddSpan.context()` to
+   * obtain identifiers. The mutable Datadog span remains private.
+   *
+   * @returns {LegacyDatadogSpanFacade}
+   * @deprecated Use spanContext().
+   */
+  get _ddSpan () {
+    this.#legacyDatadogSpan ??= new LegacyDatadogSpanFacade(this.spanContext())
+    return this.#legacyDatadogSpan
   }
 
   /**

@@ -79,7 +79,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
 
     const provider = ctx.modelProvider
     const integrationName = this.getIntegrationName(type, provider)
-    this.setMetadata(span, ctx.instance)
+    this.setMetadata(span, ctx.instance, provider)
 
     const inputs = ctx.args?.[0]
     const options = ctx.args?.[1]
@@ -95,7 +95,9 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     })
   }
 
-  setMetadata (span, instance) {
+  setMetadata (span, instance, provider) {
+    if (!provider) return
+
     const metadata = {}
 
     // these fields won't be set for non model-based operations
