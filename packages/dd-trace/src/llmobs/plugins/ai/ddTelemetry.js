@@ -17,6 +17,7 @@ const {
   getGenerationMetadata,
   getToolNameFromTags,
   getToolCallResultContent,
+  extractUserContentParts,
   getLlmObsSpanName,
   getTelemetryMetadata,
 } = require('./util')
@@ -43,7 +44,7 @@ const {
  *   content: string
  * } | {
  *   role: 'user',
- *   content: TextPart[]
+ *   content: import('./util').UserContentPart[]
  * } | {
  *   role: 'assistant',
  *   content: Array<TextPart | ToolCallPart>
@@ -330,6 +331,7 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
    * @param {AiSdkMessage} message
    * @param {ToolForModel[] | null | undefined} toolsForModel
    * @returns {Array<{role: string, content: string, toolId?: string,
+   *   imageParts?: Array<{mimeType: string, content: string}>,
    *   toolCalls?: Array<{arguments: string, name: string, toolId: string, type: string}>}>}
    */
   formatMessage (message, toolsForModel) {
@@ -338,15 +340,11 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
     if (role === 'system') {
       return [{ role, content }]
     } else if (role === 'user') {
-      let finalContent = ''
-      for (const part of content) {
-        const { type } = part
-        if (type === 'text') {
-          finalContent += part.text
-        }
-      }
+      const { content: finalContent, imageParts } = extractUserContentParts(content)
+      const finalMessage = { role, content: finalContent }
+      if (imageParts.length) finalMessage.imageParts = imageParts
 
-      return [{ role, content: finalContent }]
+      return [finalMessage]
     } else if (role === 'assistant') {
       const toolCalls = []
       let finalContent = ''

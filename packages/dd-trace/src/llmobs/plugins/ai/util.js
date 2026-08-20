@@ -59,6 +59,32 @@ const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
  */
 
 /**
+ * A user-message content part, across every AI SDK version we instrument. `image` parts only exist
+ * on v4; v5+ rewrites them to `file` before the model call. The `data` payload is only tagged on
+ * v7, and only reaches us as bytes on v7 too, since v4-v6 arrive through the stringified
+ * `ai.prompt.messages` attribute.
+ *
+ * @typedef {{
+ *   type: 'text',
+ *   text?: string
+ * } | {
+ *   type: 'image',
+ *   image?: Uint8Array | ArrayBuffer | string | URL,
+ *   mimeType?: string
+ * } | {
+ *   type: 'file',
+ *   data?: Uint8Array | ArrayBuffer | string | URL | {
+ *     type: 'data' | 'url' | 'reference' | 'text',
+ *     data?: Uint8Array | string
+ *   },
+ *   mediaType?: string,
+ *   mimeType?: string
+ * }} UserContentPart
+ *
+ * @typedef {{ mimeType: string, content: string }} LlmObsImagePart
+ */
+
+/**
  * Get the span tags from the context (either the attributes or the span tags).
  *
  * @param {AiPluginContext} ctx
@@ -423,6 +449,98 @@ function getToolCallResultContent (content) {
 }
 
 /**
+ * @param {unknown} mediaType
+ * @returns {boolean}
+ */
+function isImageMediaType (mediaType) {
+  return typeof mediaType === 'string' && (mediaType === 'image' || mediaType.startsWith('image/'))
+}
+
+/**
+ * Base64-encodes an image payload, or returns undefined when there are no inline bytes to encode.
+ *
+ * @param {UserContentPart['data'] | UserContentPart['image']} data
+ * @returns {string | undefined}
+ */
+function base64FromImageData (data) {
+  // Only v7's `data` variant carries bytes; `url`, `reference` and `text` have nothing to inline.
+  if (typeof data === 'object' && data !== null && 'type' in data) {
+    if (data.type !== 'data') return
+    data = data.data
+  }
+
+  if (Buffer.isBuffer(data) || ArrayBuffer.isView(data) || data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString('base64')
+  }
+  if (typeof data !== 'string') return
+
+  // v4-v6 arrive as JSON, where a URL has already been stringified into this same field. Every
+  // absolute URL carries a scheme and base64 has no ':' in its alphabet, so this separates them.
+  if (!data.includes(':')) return data
+}
+
+/**
+ * Builds a wire image part, or returns undefined when the image cannot be carried inline.
+ *
+ * @param {UserContentPart['data'] | UserContentPart['image']} data
+ * @param {unknown} mediaType
+ * @returns {LlmObsImagePart | undefined}
+ */
+function formatImagePart (data, mediaType) {
+  // The UI renders from a concrete subtype, so a bare `image` or an `image/*` wildcard (what the AI
+  // SDK falls back to when its own byte sniffing fails) cannot be represented.
+  if (typeof mediaType !== 'string') return
+  const [topLevel, subtype] = mediaType.split('/')
+  if (topLevel !== 'image' || !subtype || subtype === '*') return
+
+  const content = base64FromImageData(data)
+  if (content) return { mimeType: mediaType, content }
+}
+
+/**
+ * Splits AI SDK user-message content parts into readable text plus structured image parts.
+ *
+ * An image the wire format can carry becomes an `imageParts` entry and contributes no text, matching
+ * how audio is captured elsewhere. Remote URLs, provider references and images without a renderable
+ * media type collapse to an `[Image]` marker so they stay visible instead of vanishing. Non-image
+ * files keep their existing behaviour of not being represented in the text at all.
+ *
+ * @param {UserContentPart[] | string} parts
+ * @returns {{ content: string, imageParts: LlmObsImagePart[] }}
+ */
+function extractUserContentParts (parts) {
+  if (!Array.isArray(parts)) {
+    return { content: typeof parts === 'string' ? parts : '', imageParts: [] }
+  }
+
+  let content = ''
+  const imageParts = []
+
+  for (const part of parts) {
+    const type = part?.type
+    if (type === 'text') {
+      content += part.text ?? ''
+      continue
+    }
+
+    const isImage = type === 'image'
+    if (!isImage && type !== 'file') continue
+
+    const mediaType = part.mediaType ?? part.mimeType
+    if (!isImage && !isImageMediaType(mediaType)) continue
+
+    const imagePart = formatImagePart(isImage ? part.image : part.data, mediaType)
+    if (imagePart) {
+      imageParts.push(imagePart)
+    } else {
+      content += '[Image]'
+    }
+  }
+
+  return { content, imageParts }
+}
+
+/**
  * Computes the LLM Observability `ai` span name
  * @param {string} operation
  * @param {string} functionId
@@ -463,6 +581,7 @@ module.exports = {
   getGenerationMetadata,
   getToolNameFromTags,
   getToolCallResultContent,
+  extractUserContentParts,
   getLlmObsSpanName,
   getTelemetryMetadata,
   getGenerationMetadataFromEvent,

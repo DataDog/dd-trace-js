@@ -31,6 +31,21 @@ const MOCK_TELEMETRY_METADATA = {
   conversationId: 'convAbc123',
 }
 
+// A PNG magic-byte prefix is all the AI SDK needs to resolve the media type by sniffing.
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+const PNG_BASE64 = 'iVBORw0KGgo='
+
+function mockChatResponse () {
+  return () => new Response(JSON.stringify({
+    id: 'chatcmpl-mock',
+    object: 'chat.completion',
+    created: 1234567890,
+    model: 'gpt-4o-mini',
+    choices: [{ index: 0, message: { role: 'assistant', content: 'A logo.' }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+}
+
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
@@ -122,6 +137,66 @@ describe('Plugin', () => {
         },
         tags: { ml_app: 'test', integration: 'ai' },
       })
+    })
+
+    it('captures an inline image from a multimodal user message', async () => {
+      const OpenAI = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
+      const mockOpenai = OpenAI.createOpenAI({
+        apiKey: 'test-api-key',
+        fetch: mockChatResponse(),
+        compatibility: 'strict',
+      })
+
+      await ai.generateText({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'file', mediaType: 'image/png', data: PNG_BYTES },
+          ],
+        }],
+        runtimeContext: MOCK_TELEMETRY_METADATA,
+      })
+
+      const { llmobsSpans } = await getEvents(3)
+
+      const languageModelCallSpan = llmobsSpans.find(s => s.name === 'languageModelCall')
+
+      assert.deepStrictEqual(languageModelCallSpan.meta.input.messages, [{
+        role: 'user',
+        content: 'What is in this image?',
+        image_parts: [{ mime_type: 'image/png', content: PNG_BASE64 }],
+      }])
+    })
+
+    it('marks a remote image URL that cannot be carried inline', async () => {
+      const OpenAI = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
+      const mockOpenai = OpenAI.createOpenAI({
+        apiKey: 'test-api-key',
+        fetch: mockChatResponse(),
+        compatibility: 'strict',
+      })
+
+      await ai.generateText({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe' },
+            { type: 'file', mediaType: 'image/png', data: new URL('https://example.com/cat.png') },
+          ],
+        }],
+        runtimeContext: MOCK_TELEMETRY_METADATA,
+      })
+
+      const { llmobsSpans } = await getEvents(3)
+
+      const languageModelCallSpan = llmobsSpans.find(s => s.name === 'languageModelCall')
+
+      assert.deepStrictEqual(languageModelCallSpan.meta.input.messages, [
+        { role: 'user', content: 'Describe[Image]' },
+      ])
     })
 
     it('creates a span for embed', async () => {
