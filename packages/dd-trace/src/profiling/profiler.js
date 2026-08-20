@@ -4,27 +4,14 @@ const { EventEmitter } = require('events')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
+const { getOwnWebTags, isOutermostWebSpan } = require('../opentracing/span-projections')
 const { buildProfilingRuntime } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
-const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
+const { endpointNameFromTags } = require('./webspan-utils')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
-
-function findWebSpan (startedSpans, spanId) {
-  for (let i = startedSpans.length; --i >= 0;) {
-    const ispan = startedSpans[i]
-    const context = ispan.context()
-    if (context._spanId === spanId) {
-      if (isWebServerSpan(context.getTags())) {
-        return true
-      }
-      spanId = context._parentId
-    }
-  }
-  return false
-}
 
 const MISSING_SOURCE_MAPS_TOKEN = 'dd:has-missing-map-files'
 
@@ -288,15 +275,11 @@ class Profiler extends EventEmitter {
   }
 
   #onSpanFinish (span) {
-    const context = span.context()
-    const tags = context.getTags()
-    if (!isWebServerSpan(tags)) return
+    if (!isOutermostWebSpan(span)) return
 
+    const tags = getOwnWebTags(span)
     const endpointName = endpointNameFromTags(tags)
     if (!endpointName) return
-
-    // Make sure this is the outermost web span, just in case so we don't overcount
-    if (findWebSpan(getStartedSpans(context), context._parentId)) return
 
     let counter = this.#endpointCounts.get(endpointName)
     if (counter === undefined) {

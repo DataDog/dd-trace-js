@@ -136,6 +136,9 @@ describe('AppSec Index', function () {
     }
 
     const apiSecuritySampler = proxyquire('../../src/appsec/api_security/sampler', {
+      '../../opentracing/event-writer': {
+        sampleForApiSecurity: () => web._prioritySampler.isSampled(),
+      },
       '../../plugins/util/web': web,
     })
     apiSecurity = proxyquire('../../src/appsec/api_security', {
@@ -170,6 +173,9 @@ describe('AppSec Index', function () {
     const authHandlers = proxyquire('../../src/appsec/handlers/auth', {
       '../../plugins/util/web': web,
       '../../log': log,
+      '../../opentracing/span-projections': {
+        hasUserSessionId: span => Boolean(span._tags['usr.session_id']),
+      },
       '../user_tracking': UserTracking,
     })
 

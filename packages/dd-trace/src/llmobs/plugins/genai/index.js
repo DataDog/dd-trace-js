@@ -56,7 +56,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
 
     const inputs = args[0]
     const response = ctx.result
-    const error = !!span.context().getTag('error')
+    const error = Boolean(ctx.error)
 
     const operation = getOperation(methodName)
 

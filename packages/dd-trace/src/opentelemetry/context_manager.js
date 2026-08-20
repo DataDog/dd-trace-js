@@ -3,9 +3,14 @@
 const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, setAllBaggageItems, removeAllBaggageItems } = require('../baggage')
+const { getSpanStore } = require('../opentracing/span-store')
 
 const ActiveSpanProxy = require('./active-span-proxy')
 const SpanContext = require('./span_context')
+const { getDatadogSpan } = require('./span-registry')
+
+const activeSpans = new WeakMap()
+const spanContexts = new WeakMap()
 
 class ContextManager {
   constructor () {
@@ -33,7 +38,7 @@ class ContextManager {
     }
 
     // If stored span wraps the active DD span, prefer the stored context
-    if (storedSpan && storedSpan._ddSpan === activeSpan) {
+    if (storedSpan && getDatadogSpan(storedSpan) === activeSpan) {
       if (otelBaggages) return propagation.setBaggage(store, otelBaggages)
       return store
     }
@@ -44,24 +49,28 @@ class ContextManager {
     }
 
     const ddContext = activeSpan.context()
+    let spanContext = spanContexts.get(ddContext)
 
-    if (!ddContext._otelSpanContext) {
-      ddContext._otelSpanContext = new SpanContext(ddContext)
+    if (spanContext === undefined) {
+      spanContext = new SpanContext(ddContext)
+      spanContexts.set(ddContext, spanContext)
     }
 
     // Cache the active-span proxy next to the bridge span context. This lets
     // `trace.getActiveSpan()` forward attribute/status/link/exception writes
     // onto the active Datadog span rather than returning a NonRecordingSpan
     // whose mutation methods are silent no-ops.
-    if (!ddContext._otelActiveSpan) {
-      ddContext._otelActiveSpan = new ActiveSpanProxy(activeSpan, ddContext._otelSpanContext)
+    let otelActiveSpan = activeSpans.get(ddContext)
+    if (otelActiveSpan === undefined) {
+      otelActiveSpan = new ActiveSpanProxy(activeSpan, spanContext)
+      activeSpans.set(ddContext, otelActiveSpan)
     }
 
-    if (store && trace.getSpan(store) === ddContext._otelActiveSpan) {
+    if (store && trace.getSpan(store) === otelActiveSpan) {
       return otelBaggages ? propagation.setBaggage(store, otelBaggages) : store
     }
 
-    const wrappedContext = trace.setSpan(baseContext, ddContext._otelActiveSpan)
+    const wrappedContext = trace.setSpan(baseContext, otelActiveSpan)
     return otelBaggages ? propagation.setBaggage(wrappedContext, otelBaggages) : wrappedContext
   }
 
@@ -84,9 +93,9 @@ class ContextManager {
     } else {
       removeAllBaggageItems()
     }
-    if (span && span._ddSpan) {
-      const ddSpan = span._ddSpan
-      const parentStore = storage('legacy').getStore(ddSpan._store) ?? storage('legacy').getStore()
+    const ddSpan = span && getDatadogSpan(span)
+    if (ddSpan) {
+      const parentStore = storage('legacy').getStore(getSpanStore(ddSpan)) ?? storage('legacy').getStore()
       return storage('legacy').run({ ...parentStore, span: ddSpan }, run)
     }
     return run()

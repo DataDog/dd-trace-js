@@ -113,7 +113,7 @@ class DatabasePlugin extends StoragePlugin {
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
       span._processor.sample(span)
-      const traceparent = span._spanContext.toTraceparent()
+      const traceparent = span.context().toTraceparent()
       return `${dbmComment},traceparent='${traceparent}'`
     }
   }

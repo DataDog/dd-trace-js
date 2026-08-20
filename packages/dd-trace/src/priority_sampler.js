@@ -15,6 +15,7 @@ const {
   },
 } = require('../../../ext')
 const log = require('./log')
+const eventWriter = require('./opentracing/event-writer')
 const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
@@ -116,10 +117,9 @@ class PrioritySampler {
     const tag = this._getPriorityFromTags(context.getTags(), context)
 
     if (this.validate(tag)) {
-      context._sampling.priority = tag
-      context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
+      eventWriter.setSamplingPriority(context, tag, SAMPLING_MECHANISM_MANUAL)
     } else if (auto) {
-      context._sampling.priority = this._getPriorityFromAuto(root)
+      eventWriter.setSamplingPriority(context, this._getPriorityFromAuto(root))
     } else {
       return
     }
@@ -183,10 +183,8 @@ class PrioritySampler {
       return // noop span
     }
 
-    context._sampling.priority = samplingPriority
-
     const mechanism = product?.mechanism ?? SAMPLING_MECHANISM_MANUAL
-    context._sampling.mechanism = mechanism
+    eventWriter.setSamplingPriority(context, samplingPriority, mechanism)
 
     log.trace(span, samplingPriority, mechanism)
 
@@ -254,13 +252,13 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    */
   #getPriorityByRule (context, rule) {
-    context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
-    context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rule.sampleRate)
-    context._sampling.mechanism = SAMPLING_MECHANISM_RULE
+    eventWriter.setTraceDecision(context, SAMPLING_RULE_DECISION, rule.sampleRate)
+    eventWriter.setTraceTag(context, SAMPLING_KNUTH_RATE, formatKnuthRate(rule.sampleRate))
+    eventWriter.setSamplingMechanism(context, SAMPLING_MECHANISM_RULE)
     if (rule.provenance === 'customer') {
-      context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
+      eventWriter.setSamplingMechanism(context, SAMPLING_MECHANISM_REMOTE_USER)
     } else if (rule.provenance === 'dynamic') {
-      context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
+      eventWriter.setSamplingMechanism(context, SAMPLING_MECHANISM_REMOTE_DYNAMIC)
     }
 
     return rule.sample(context) && this._isSampledByRateLimit(context)
@@ -279,7 +277,7 @@ class PrioritySampler {
     // TODO: Change underscored properties to private ones.
     const allowed = this._limiter.isAllowed()
 
-    context._trace[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
+    eventWriter.setTraceDecision(context, SAMPLING_LIMIT_DECISION, this._limiter.effectiveRate())
 
     return allowed
   }
@@ -296,13 +294,13 @@ class PrioritySampler {
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
     const rate = sampler.rate()
-    context._trace[SAMPLING_AGENT_DECISION] = rate
+    eventWriter.setTraceDecision(context, SAMPLING_AGENT_DECISION, rate)
 
     if (sampler === defaultSampler) {
-      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+      eventWriter.setSamplingMechanism(context, SAMPLING_MECHANISM_DEFAULT)
     } else {
-      context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rate)
-      context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
+      eventWriter.setTraceTag(context, SAMPLING_KNUTH_RATE, formatKnuthRate(rate))
+      eventWriter.setSamplingMechanism(context, SAMPLING_MECHANISM_AGENT)
     }
 
     return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
@@ -322,14 +320,14 @@ class PrioritySampler {
 
     if (priority >= AUTO_KEEP) {
       if (!trace.tags[DECISION_MAKER_KEY]) {
-        trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
+        eventWriter.setTraceTag(context, DECISION_MAKER_KEY, `-${mechanism}`)
       }
     } else if (trace.tags[DECISION_MAKER_KEY] !== undefined) {
       // Clear by assigning undefined rather than deleting: `delete` drops
       // trace.tags into V8 dictionary (slow) mode for the per-trace extract
       // and propagation scans that follow. Both skip undefined values, so the
       // emitted meta and injected headers are unchanged.
-      trace.tags[DECISION_MAKER_KEY] = undefined
+      eventWriter.setTraceTag(context, DECISION_MAKER_KEY, undefined)
     }
   }
 
@@ -382,7 +380,7 @@ class PrioritySampler {
    * @param {Product} [product]
    */
   static keepTrace (span, product) {
-    span?._prioritySampler?.setPriority(span, USER_KEEP, product)
+    if (span) eventWriter.keepTrace(span, product)
   }
 }
 

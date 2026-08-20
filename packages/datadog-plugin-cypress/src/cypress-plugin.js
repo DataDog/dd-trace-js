@@ -586,6 +586,7 @@ class CypressPlugin {
     this.lastFinishedTest = null
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
+    this.testSpanState = new WeakMap()
     this.testSuiteSpan = null
     this.finishedTestSuiteSpans = []
     this.testModuleSpan = null
@@ -1039,7 +1040,7 @@ class CypressPlugin {
 
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
 
-    return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
+    const span = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
       childOf,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
@@ -1050,6 +1051,12 @@ class CypressPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+    this.testSpanState.set(span, {
+      hasCodeOwners: Boolean(codeOwners),
+      isDisabled: Boolean(isDisabled),
+      isQuarantined: Boolean(isQuarantined),
+    })
+    return span
   }
 
   /**
@@ -1538,22 +1545,24 @@ class CypressPlugin {
 
         // Update test status - but NOT for non-ATF quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
-        const isQuarantinedTest = finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
+        const spanState = finishedTest.spanState
+        const isQuarantinedTest = spanState.isQuarantined
         if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
+          spanState.status = cypressTestStatus
           finishedTest.testSpan.setTag('error', latestError)
           if (finishedTest.isAttemptToFix && cypressTestStatus === 'fail') {
             finishedTest.testSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+            spanState.hasPassedAllAtfRetries = false
           }
         }
-        const testManagementTags = finishedTest.testSpan.context().getTags()
         recordTestManagementExecution({
           testSuite: spec.relative,
           testName,
-          status: testManagementTags[TEST_STATUS] || cypressTestStatus,
+          status: spanState.status || cypressTestStatus,
           isAttemptToFix: finishedTest.isAttemptToFix,
-          isDisabled: testManagementTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-          isQuarantined: testManagementTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+          isDisabled: spanState.isDisabled,
+          isQuarantined: spanState.isQuarantined,
         })
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
@@ -1571,29 +1580,23 @@ class CypressPlugin {
 
         if (codeOwners) {
           finishedTest.testSpan.setTag(TEST_CODE_OWNERS, codeOwners)
+          spanState.hasCodeOwners = true
         }
 
         if (isLastAttempt) {
-          const testSpanTags = finishedTest.testSpan.context().getTags()
           const retryKind = getFinalStatusRetryKind({
             finishedTest,
             finishedTestAttempts,
             flakyTestRetriesCount: this.flakyTestRetriesCount,
           })
 
-          const hasFailedAllRetries = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
-          const hasPassedAllAtfRetries =
-            testSpanTags[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
-          const isQuarantined = testSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
-          const isDisabled = testSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
-
           const finalStatus = getFinalStatus({
             status: cypressTestStatus,
             retryKind,
-            hasFailedAllRetries,
-            hasPassedAllAtfRetries,
-            isQuarantined,
-            isDisabled,
+            hasFailedAllRetries: spanState.hasFailedAllRetries,
+            hasPassedAllAtfRetries: spanState.hasPassedAllAtfRetries,
+            isQuarantined: spanState.isQuarantined,
+            isDisabled: spanState.isDisabled,
           })
 
           if (finalStatus) {
@@ -1854,6 +1857,8 @@ class CypressPlugin {
           testStatus = 'pass'
         }
         this.activeTestSpan.setTag(TEST_STATUS, testStatus)
+        const spanState = this.testSpanState.get(this.activeTestSpan)
+        spanState.status = testStatus
 
         const testIdentifier = `${testSuite}\0${testName}`
         let testStatuses = this.testStatuses[testIdentifier]
@@ -1862,8 +1867,6 @@ class CypressPlugin {
         } else {
           testStatuses = this.testStatuses[testIdentifier] = [testStatus]
         }
-        const activeSpanTags = this.activeTestSpan.context().getTags()
-
         if (error) {
           this.activeTestSpan.setTag('error', error)
         }
@@ -1918,6 +1921,7 @@ class CypressPlugin {
           const isLastEfdAttempt = testStatuses.length === efdRetryCount + 1
           if (efdRetryCount > 0 && isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
             this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+            spanState.hasFailedAllRetries = true
           }
         }
         if (isAttemptToFix) {
@@ -1930,19 +1934,22 @@ class CypressPlugin {
           if (isLastAttempt) {
             if (testStatuses.includes('fail')) {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+              spanState.hasPassedAllAtfRetries = false
             }
             if (testStatuses.every(status => status === 'fail')) {
               this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+              spanState.hasFailedAllRetries = true
             } else if (testStatuses.every(status => status === 'pass')) {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+              spanState.hasPassedAllAtfRetries = true
             }
           }
           recordAttemptToFixExecution(this.attemptToFixExecutions, {
             testSuite,
             testName,
             status: testStatus,
-            isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-            isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+            isDisabled: spanState.isDisabled,
+            isQuarantined: spanState.isQuarantined,
           })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
@@ -1950,15 +1957,18 @@ class CypressPlugin {
           this.flakyTestRetriesCount > 0 && testStatuses.length === this.flakyTestRetriesCount + 1 &&
           testStatuses.every(status => status === 'fail')) {
           this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+          spanState.hasFailedAllRetries = true
         }
 
         // Ensure quarantined tests reported from support.js are tagged
         // (This catches cases where the test ran but failed, but Cypress saw it as passed)
         if (isQuarantinedFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+          spanState.isQuarantined = true
         }
         if (isDisabledFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+          spanState.isDisabled = true
         }
 
         if (Array.isArray(commands) && commands.length > 0) {
@@ -1994,6 +2004,7 @@ class CypressPlugin {
           isEfdRetry,
           isEfdManagedTest,
           isAttemptToFix,
+          spanState,
         }
         if (this.finishedTestsByFile[testSuite]) {
           this.finishedTestsByFile[testSuite].push(finishedTest)
@@ -2003,13 +2014,13 @@ class CypressPlugin {
         this.lastFinishedTest = finishedTest
         // test spans are finished at after:spec
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
+          hasCodeOwners: spanState.hasCodeOwners,
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',
-          isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+          isQuarantined: spanState.isQuarantined,
           isModified,
-          isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+          isDisabled: spanState.isDisabled,
         })
         this.activeTestSpan = null
 
@@ -2018,6 +2029,19 @@ class CypressPlugin {
       'dd:addTags': (tags) => {
         if (this.activeTestSpan) {
           this.activeTestSpan.addTags(tags)
+          const spanState = this.testSpanState.get(this.activeTestSpan)
+          if (tags[TEST_STATUS]) spanState.status = tags[TEST_STATUS]
+          if (tags[TEST_CODE_OWNERS]) spanState.hasCodeOwners = true
+          if (tags[TEST_HAS_FAILED_ALL_RETRIES] === 'true') spanState.hasFailedAllRetries = true
+          if (tags[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] !== undefined) {
+            spanState.hasPassedAllAtfRetries = tags[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
+          }
+          if (tags[TEST_MANAGEMENT_IS_DISABLED] !== undefined) {
+            spanState.isDisabled = tags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+          }
+          if (tags[TEST_MANAGEMENT_IS_QUARANTINED] !== undefined) {
+            spanState.isQuarantined = tags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+          }
         }
         return null
       },

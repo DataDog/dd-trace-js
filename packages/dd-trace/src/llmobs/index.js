@@ -23,6 +23,7 @@ const {
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
+const { disable: disableSpanState, enable: enableSpanState, getTraceTags } = require('./span-state')
 const { agentNameWireSafe, appendOptionalPropagatedTag, resolveAgentAttribution, stripTagsetEntry } = require('./util')
 const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
@@ -65,6 +66,7 @@ let globalTracerConfig
  */
 function enable (config) {
   globalTracerConfig = config
+  enableSpanState()
 
   const startTime = performance.now()
   // create writers and eval writer append and flush channels
@@ -112,6 +114,7 @@ function disable () {
   spanWriter?.destroy()
   evalWriter?.destroy()
   spanProcessor?.setWriter(null)
+  disableSpanState()
 
   spanWriter = null
   evalWriter = null
@@ -129,24 +132,24 @@ function handleLLMObsInjection ({ carrier }) {
   const parent = storage.getStore()?.span
   const mlObsSpanTags = LLMObsTagger.tagMap.get(parent)
 
-  const parentContext = parent?.context()
-  const parentId = parentContext?.toSpanId()
+  const parentId = parent?.context().toSpanId()
+  const traceTags = getTraceTags(parent) || {}
   const mlApp =
     mlObsSpanTags?.[ML_APP] ||
-    parentContext?._trace?.tags?.[PROPAGATED_ML_APP_KEY] ||
+    traceTags[PROPAGATED_ML_APP_KEY] ||
     globalTracerConfig.llmobs.mlApp
 
   const sampleRate =
-    mlObsSpanTags?.[SAMPLE_RATE] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLE_RATE_KEY]
+    mlObsSpanTags?.[SAMPLE_RATE] ?? traceTags[PROPAGATED_SAMPLE_RATE_KEY]
   const samplingDecision =
-    mlObsSpanTags?.[SAMPLING_DECISION] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLING_DECISION_KEY]
+    mlObsSpanTags?.[SAMPLING_DECISION] ?? traceTags[PROPAGATED_SAMPLING_DECISION_KEY]
   const sessionId =
     mlObsSpanTags?.[SESSION_ID] ??
-    parentContext?._trace?.tags?.[SESSION_ID_TRACE_DEFAULT_KEY] ??
-    parentContext?._trace?.tags?.[PROPAGATED_SESSION_ID_KEY]
+    traceTags[SESSION_ID_TRACE_DEFAULT_KEY] ??
+    traceTags[PROPAGATED_SESSION_ID_KEY]
   const llmobsTraceId = mlObsSpanTags?.[TRACE_ID]
   const propagatedTraceId = llmobsTraceId === undefined
-    ? parentContext?._trace?.tags?.[PROPAGATED_TRACE_ID_KEY]
+    ? traceTags[PROPAGATED_TRACE_ID_KEY]
     : llmObsTraceIdToWire(llmobsTraceId)
 
   if (!parentId && !mlApp && samplingDecision == null && !sessionId && !propagatedTraceId) return

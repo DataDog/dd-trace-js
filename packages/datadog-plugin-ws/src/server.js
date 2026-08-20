@@ -67,7 +67,7 @@ class WSServerPlugin extends TracingPlugin {
       'resource.name': resourceName,
       'service.name': service,
     }
-    ctx.socket.spanContext = createWebSocketSpanContext(ctx.span._spanContext)
+    ctx.socket.spanContext = createWebSocketSpanContext(ctx.span.context())
     ctx.socket.hasTraceHeaders = hasTraceHeaders(req.headers)
 
     // Initialize message counters for span pointers

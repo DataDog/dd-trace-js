@@ -1,8 +1,8 @@
 'use strict'
 
-const { HTTP_ROUTE } = require('../../../../../ext/tags')
-const web = require('../../plugins/util/web')
 const { getParse, getMatch } = require('../../../../datadog-instrumentations/src/path-to-regexp')
+const { getApiSecurityFramework, getApiSecurityHttpRoute } = require('../../opentracing/span-projections')
+const web = require('../../plugins/util/web')
 
 /**
  * Normalize an HTTP route to the RFC-1103 _dd.appsec.normalized_route format.
@@ -423,8 +423,8 @@ function normalizeRouteExpress (route, params, urlPath, parse, makeMatcher) {
  * @returns {string|null}
  */
 function normalizeRoute (req) {
-  const spanContext = web.root(req)?.context()
-  const component = spanContext?.getTag?.('component')
+  const span = web.root(req)
+  const component = getApiSecurityFramework(span)
 
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
@@ -438,7 +438,7 @@ function normalizeRoute (req) {
       const makeMatcher = getMatch()
       if (parse === undefined || makeMatcher === undefined) return null
       // Reuse the http.route tag set by web.setRouteOrEndpointTag just before this hook.
-      const route = spanContext.getTag(HTTP_ROUTE)
+      const route = getApiSecurityHttpRoute(span)
       return normalizeRouteExpress(route, req.params, req.originalUrl || req.url, parse, makeMatcher)
     }
     default:

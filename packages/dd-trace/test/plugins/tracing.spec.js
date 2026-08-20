@@ -11,12 +11,20 @@ const TracingPlugin = require('../../src/plugins/tracing')
 const { SVC_SRC_KEY } = require('../../src/constants')
 const DatadogSpanContext = require('../../src/opentracing/span_context')
 const {
-  INTEGRATION_SERVICE,
   MANUAL,
   resolveServiceSource,
 } = require('../../src/service-naming/source-resolver')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
+
+function makeSpan (tags = {}) {
+  const context = new DatadogSpanContext({ tags })
+  return {
+    _spanContext: context,
+    context: () => context,
+    setTag: context.setTag.bind(context),
+  }
+}
 
 describe('TracingPlugin', () => {
   describe('startSpan method', () => {
@@ -24,9 +32,7 @@ describe('TracingPlugin', () => {
     let plugin
 
     beforeEach(() => {
-      startSpanSpy = sinon.stub().callsFake((_name, opts) => ({
-        _spanContext: new DatadogSpanContext({ tags: { ...opts.tags } }),
-      }))
+      startSpanSpy = sinon.stub().callsFake((_name, opts) => makeSpan({ ...opts.tags }))
       plugin = new TracingPlugin({
         _tracer: {
           startSpan: startSpanSpy,
@@ -131,11 +137,15 @@ describe('TracingPlugin', () => {
     })
 
     it('records the integration claim using the tracer service', () => {
-      const span = { _spanContext: new DatadogSpanContext() }
+      const span = makeSpan({
+        'service.name': 'kafka-broker',
+        [SVC_SRC_KEY]: 'kafka',
+      })
 
       plugin.stampIntegrationService(span, 'kafka-broker')
+      resolveServiceSource(span, 'tracer-default')
 
-      assert.strictEqual(span[INTEGRATION_SERVICE], 'kafka-broker')
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), 'kafka')
     })
   })
 
@@ -148,16 +158,19 @@ describe('TracingPlugin', () => {
     })
 
     it('sets service.name and stamps the integration claim', () => {
-      const span = { _spanContext: new DatadogSpanContext() }
+      const span = makeSpan({ [SVC_SRC_KEY]: 'opt.plugin' })
 
       plugin.setServiceName(span, 'express-app')
+      resolveServiceSource(span, 'tracer-default')
 
-      assert.deepStrictEqual(span._spanContext.getTags(), { 'service.name': 'express-app' })
-      assert.strictEqual(span[INTEGRATION_SERVICE], 'express-app')
+      assert.deepStrictEqual(span._spanContext.getTags(), {
+        'service.name': 'express-app',
+        [SVC_SRC_KEY]: 'opt.plugin',
+      })
     })
 
     it('detects user override at finish when service.name is later mutated', () => {
-      const span = { _spanContext: new DatadogSpanContext({ tags: { [SVC_SRC_KEY]: 'opt.plugin' } }) }
+      const span = makeSpan({ [SVC_SRC_KEY]: 'opt.plugin' })
       plugin.setServiceName(span, 'express-app')
 
       span._spanContext.setTag('service.name', 'user-svc')

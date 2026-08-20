@@ -8,15 +8,17 @@ const { timeOrigin } = performance
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
+const { getSpanDuration } = require('../opentracing/span-lifecycle')
 const DatadogSpan = require('../opentracing/span')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
 const id = require('../id')
+const { getDatadogContext } = require('../opentracing/context-registry')
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
+const { getDatadogSpan } = require('./span-registry')
 const spanEndingHook = require('./span-ending-hook')
-const { setOtelOperationName, setOtelResource } = require('./span-helpers')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -152,7 +154,7 @@ class Span extends BridgeSpanBase {
 
     const ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, {
       operationName: spanNameMapper(spanName, kind, attributes),
-      context: spanContext._ddContext,
+      context: getDatadogContext(spanContext),
       startTime,
       hostname: _tracer._hostname,
       integrationName: parentTracer?._isOtelLibrary ? 'otel.library' : 'otel',
@@ -179,7 +181,7 @@ class Span extends BridgeSpanBase {
 
     this._parentTracer = parentTracer
     this._context = context
-    this.#otelName = spanName || this._ddSpan.context()._name
+    this.#otelName = spanName || getDatadogSpan(this).context()._name
 
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
@@ -189,7 +191,7 @@ class Span extends BridgeSpanBase {
   }
 
   get parentSpanId () {
-    const { _parentId } = this._ddSpan.context()
+    const { _parentId } = getDatadogSpan(this).context()
     return _parentId && _parentId.toString(16)
   }
 
@@ -211,7 +213,7 @@ class Span extends BridgeSpanBase {
   }
 
   spanContext () {
-    return new SpanContext(this._ddSpan.context())
+    return new SpanContext(getDatadogSpan(this).context())
   }
 
   /**
@@ -241,9 +243,9 @@ class Span extends BridgeSpanBase {
     if (this.ended) return this
     this.#otelName = name
     if (this._otelTraceSemanticsEnabled) {
-      setOtelResource(this._ddSpan, name)
+      this._updateDatadogName(name, false)
     } else {
-      setOtelOperationName(this._ddSpan, name)
+      this._updateDatadogName(name, true)
     }
     return this
   }
@@ -262,14 +264,14 @@ class Span extends BridgeSpanBase {
 
     // Must run before `finish()`, while the DD span is still unfinished. See span-ending-hook.js.
     if (spanEndingHook.hook !== undefined) {
-      spanEndingHook.hook(this._ddSpan)
+      this._withDatadogSpan(spanEndingHook.hook)
     }
-    this._ddSpan.finish(endTime)
+    this._finishDatadogSpan(endTime)
     this._spanProcessor.onEnd(this)
   }
 
   get duration () {
-    return this._ddSpan._duration
+    return getSpanDuration(getDatadogSpan(this))
   }
 }
 

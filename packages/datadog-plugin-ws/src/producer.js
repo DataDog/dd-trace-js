@@ -72,8 +72,8 @@ class WSProducerPlugin extends TracingPlugin {
           const counter = incrementWebSocketCounter(ctx.socket, 'sendCounter')
 
           const ptrHash = buildWebSocketSpanPointerHash(
-            handshakeContext._traceId,
-            handshakeContext._spanId,
+            handshakeContext.toTraceId(true),
+            handshakeContext.toSpanId(true),
             counter,
             true, // isServer
             false // isIncoming (this is outgoing)

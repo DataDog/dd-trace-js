@@ -1,7 +1,10 @@
 'use strict'
 
 const { readDatadogTraceId, readTraceparent } = require('../../dd-trace/src/carrier')
+const id = require('../../dd-trace/src/id')
 const DatadogSpanContext = require('../../dd-trace/src/opentracing/span_context')
+const TraceState = require('../../dd-trace/src/opentracing/propagation/tracestate')
+const { AUTO_KEEP, AUTO_REJECT } = require('../../../ext/priority')
 
 const TRACE_ID_UPPER_TAG = '_dd.p.tid'
 
@@ -16,19 +19,20 @@ const socketCounters = new WeakMap()
 function createWebSocketSpanContext (spanContext) {
   if (!spanContext) return
 
-  const traceIdUpper = spanContext._trace?.tags?.[TRACE_ID_UPPER_TAG]
-  const trace = traceIdUpper
+  const [version, traceId, spanId, flags] = spanContext.toTraceparent().split('-')
+  const traceIdUpper = traceId.slice(0, 16)
+  const trace = traceIdUpper &&
+    traceIdUpper !== '0000000000000000'
     ? { started: [], finished: [], tags: { [TRACE_ID_UPPER_TAG]: traceIdUpper } }
     : undefined
 
   return new DatadogSpanContext({
-    traceId: spanContext._traceId,
-    spanId: spanContext._spanId,
-    parentId: spanContext._parentId,
-    sampling: spanContext._sampling,
-    traceparent: spanContext._traceparent,
-    tracestate: spanContext._tracestate,
-    isRemote: spanContext._isRemote,
+    traceId: id(traceId.slice(-16), 16),
+    spanId: id(spanId, 16),
+    sampling: { priority: (Number.parseInt(flags, 16) & 1) === 1 ? AUTO_KEEP : AUTO_REJECT },
+    traceparent: { version },
+    tracestate: TraceState.fromString(spanContext.toTracestate()),
+    isRemote: false,
     trace,
   })
 }
@@ -76,8 +80,8 @@ function incrementWebSocketCounter (socket, counterType) {
  * Format: <prefix><128 bit hex trace id><64 bit hex span id><32 bit hex counter>
  * Prefix: 'S' for server outgoing or client incoming, 'C' for server incoming or client outgoing
  *
- * @param {bigint} handshakeTraceId - The trace ID from the handshake span (as a BigInt)
- * @param {bigint} handshakeSpanId - The span ID from the handshake span (as a BigInt)
+ * @param {string|bigint} handshakeTraceId - The trace ID from the handshake span
+ * @param {string|bigint} handshakeSpanId - The span ID from the handshake span
  * @param {number} counter - The message counter
  * @param {boolean} isServer - Whether this is a server (true) or client (false)
  * @param {boolean} isIncoming - Whether this is an incoming message (true) or outgoing (false)
@@ -90,10 +94,14 @@ function buildWebSocketSpanPointerHash (handshakeTraceId, handshakeSpanId, count
   const prefix = (isServer && !isIncoming) || (!isServer && isIncoming) ? 'S' : 'C'
 
   // Pad trace ID to 32 hex chars (128 bits)
-  const traceIdHex = handshakeTraceId.toString(16).padStart(32, '0')
+  const traceIdHex = typeof handshakeTraceId === 'string'
+    ? handshakeTraceId.padStart(32, '0')
+    : handshakeTraceId.toString(16).padStart(32, '0')
 
   // Pad span ID to 16 hex chars (64 bits)
-  const spanIdHex = handshakeSpanId.toString(16).padStart(16, '0')
+  const spanIdHex = typeof handshakeSpanId === 'string'
+    ? handshakeSpanId.padStart(16, '0')
+    : handshakeSpanId.toString(16).padStart(16, '0')
 
   // Pad counter to 8 hex chars (32 bits)
   const counterHex = counter.toString(16).padStart(8, '0')
@@ -113,21 +121,7 @@ function buildWebSocketSpanPointerHash (handshakeTraceId, handshakeSpanId, count
  * @returns {boolean} True if the span has distributed tracing context
  */
 function hasDistributedTracingContext (spanContext, socket) {
-  if (!spanContext) return false
-
-  // Check if this span has a parent. If the parent was extracted from remote headers,
-  // then this span is part of a distributed trace.
-  // We check if the span has a parent by looking at _parentId.
-  // In the JavaScript tracer, when a context is extracted from headers and a child span
-  // is created, the child will have _parentId set to the extracted parent's span ID.
-  //
-  // For testing purposes, we also check if Datadog trace headers are present in the socket's
-  // upgrade request, which indicates distributed tracing context was sent by the client.
-  if (spanContext._parentId !== null) {
-    return true
-  }
-
-  return !!socket?.hasTraceHeaders
+  return Boolean(spanContext && socket?.hasTraceHeaders)
 }
 
 module.exports = {

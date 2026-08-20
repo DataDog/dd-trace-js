@@ -370,8 +370,10 @@ describe('OTel Context Manager', () => {
     })
 
     it('caches the proxy so repeated calls return the same object', () => {
-      ddTracer.trace('dd-active', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
         assert.strictEqual(trace.getActiveSpan(), trace.getActiveSpan())
+        assert.strictEqual(ddSpan.context()._otelSpanContext, undefined)
+        assert.strictEqual(ddSpan.context()._otelActiveSpan, undefined)
       })
     })
 

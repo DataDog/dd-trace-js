@@ -1,6 +1,7 @@
 'use strict'
 
 const { USER_KEEP, AUTO_KEEP } = require('../../../ext').priority
+const eventWriter = require('./opentracing/event-writer')
 const SamplingRule = require('./sampling_rule')
 
 /**
@@ -46,10 +47,10 @@ class SpanSampler {
     for (const span of started) {
       const rule = this.findRule(span)
       if (rule && rule.sample(spanContext)) {
-        span.context()._spanSampling = {
+        eventWriter.setSpanSamplingDecision(span.context(), {
           sampleRate: rule.sampleRate,
           maxPerSecond: rule.maxPerSecond,
-        }
+        })
       }
     }
   }

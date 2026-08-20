@@ -1,13 +1,12 @@
 'use strict'
 
-const { spanHasError } = require('../../../util')
 const { formatIO } = require('../messages')
 const LangChainLLMObsHandler = require('.')
 
 class LangChainLLMObsVectorStoreHandler extends LangChainLLMObsHandler {
-  setMetaTags ({ span, inputs, results }) {
+  setMetaTags ({ span, inputs, results, error }) {
     const input = formatIO(inputs)
-    if (spanHasError(span)) {
+    if (error) {
       this._tagger.tagRetrievalIO(span, input)
       return
     }

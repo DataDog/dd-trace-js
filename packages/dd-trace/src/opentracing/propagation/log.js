@@ -1,6 +1,7 @@
 'use strict'
 
 const id = require('../../id')
+const eventWriter = require('../event-writer')
 const DatadogSpanContext = require('../span_context')
 
 class LogPropagator {
@@ -60,7 +61,7 @@ class LogPropagator {
         spanId: id(carrier.dd.span_id, 10),
       })
 
-      spanContext._trace.tags['_dd.p.tid'] = hi
+      eventWriter.setTraceTag(spanContext, '_dd.p.tid', hi)
 
       return spanContext
     }

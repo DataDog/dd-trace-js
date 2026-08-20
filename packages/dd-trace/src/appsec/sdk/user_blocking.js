@@ -4,6 +4,7 @@ const { USER_ID } = require('../addresses')
 const waf = require('../waf')
 const { block, getBlockingAction } = require('../blocking')
 const log = require('../../log')
+const { hasUserId } = require('../../opentracing/span-projections')
 const web = require('../../plugins/util/web')
 const { getActiveRequest } = require('../store')
 const { setUserTags } = require('./set_user')
@@ -22,7 +23,7 @@ function checkUserAndSetUser (tracer, user) {
 
   const rootSpan = getRootSpan()
   if (rootSpan) {
-    if (!rootSpan.context().getTag('usr.id')) {
+    if (!hasUserId(rootSpan)) {
       setUserTags(user, rootSpan)
     }
   } else {

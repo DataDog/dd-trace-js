@@ -1,5 +1,7 @@
 'use strict'
 
+const { performance } = require('node:perf_hooks')
+
 const dc = require('dc-polyfill')
 
 const { storage } = require('../../datadog-core')
@@ -505,11 +507,11 @@ function wrapResolve (resolve) {
     }
 
     const executeSpan = rootCtx.executeSpan
-    const startTime = executeSpan._getTime()
+    const startTime = performance.timeOrigin + performance.now()
     const span = rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime)
 
     return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.currentStore, (err, res) => {
-      const endTime = executeSpan._getTime()
+      const endTime = performance.timeOrigin + performance.now()
       rootCtx.plugin.finishResolveSpan(span, field, err, res, endTime || startTime)
       if (updateFieldCh.hasSubscribers) {
         updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })

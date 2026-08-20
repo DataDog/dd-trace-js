@@ -47,17 +47,13 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
   }
 
   getLLMObsSpanRegisterOptions (ctx) {
-    const span = ctx.currentStore?.span
-    const spanContext = span?.context()
-    const tags = spanContext?.getTags() || {}
-
-    const modelProvider = tags['langchain.request.provider'] // could be undefined
-    const modelName = tags['langchain.request.model'] // could be undefined
+    const modelProvider = ctx.modelProvider
+    const modelName = ctx.modelName
     const kind = this.getKind(ctx.type, modelProvider)
 
     const instance = ctx.instance || ctx.self
     const handler = this._handlers[ctx.type]
-    const name = handler?.getName({ span, instance })
+    const name = handler?.getName({ instance, resource: ctx.resource })
 
     if (name == null) return
 
@@ -81,32 +77,39 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       return
     }
 
-    const provider = span?.context()?.getTag('langchain.request.provider')
+    const provider = ctx.modelProvider
     const integrationName = this.getIntegrationName(type, provider)
-    this.setMetadata(span, provider)
+    this.setMetadata(span, ctx.instance)
 
     const inputs = ctx.args?.[0]
     const options = ctx.args?.[1]
     const results = ctx.result
 
-    this._handlers[type].setMetaTags({ span, inputs, results, options, integrationName })
+    this._handlers[type].setMetaTags({
+      span,
+      inputs,
+      results,
+      options,
+      integrationName,
+      error: Boolean(ctx.error),
+    })
   }
 
-  setMetadata (span, provider) {
-    if (!provider) return
-
+  setMetadata (span, instance) {
     const metadata = {}
 
     // these fields won't be set for non model-based operations
-    const spanContext = span?.context()
     const temperature =
-      spanContext?.getTag(`langchain.request.${provider}.parameters.temperature`) ||
-      spanContext?.getTag(`langchain.request.${provider}.parameters.model_kwargs.temperature`)
+      instance?.temperature ??
+      instance?.modelKwargs?.temperature ??
+      instance?.model_kwargs?.temperature
 
     const maxTokens =
-      spanContext?.getTag(`langchain.request.${provider}.parameters.max_tokens`) ||
-      spanContext?.getTag(`langchain.request.${provider}.parameters.maxTokens`) ||
-      spanContext?.getTag(`langchain.request.${provider}.parameters.model_kwargs.max_tokens`)
+      instance?.maxTokens ??
+      instance?.max_tokens ??
+      instance?.modelKwargs?.maxTokens ??
+      instance?.modelKwargs?.max_tokens ??
+      instance?.model_kwargs?.max_tokens
 
     if (temperature) {
       metadata.temperature = Number.parseFloat(temperature)

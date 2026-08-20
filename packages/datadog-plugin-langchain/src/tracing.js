@@ -53,6 +53,8 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     const instance = ctx.instance
     const provider = handler.extractProvider(instance)
     const model = handler.extractModel(instance)
+    ctx.modelProvider = provider
+    ctx.modelName = model
 
     const span = this.startSpan('langchain.request', {
       service: this.config.service,

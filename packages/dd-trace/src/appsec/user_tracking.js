@@ -2,6 +2,7 @@
 
 const crypto = require('crypto')
 const log = require('../log')
+const eventWriter = require('../opentracing/event-writer')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
 const telemetry = require('./telemetry')
@@ -10,6 +11,14 @@ const waf = require('./waf')
 
 // the RFC doesn't include '_id', but it's common in MongoDB
 const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']
+const LOGIN_SUCCESS_SDK_OWNED_TAGS = new Set([
+  'appsec.events.users.login.success.usr.login',
+  'usr.id',
+])
+const LOGIN_FAILURE_SDK_OWNED_TAGS = new Set([
+  'appsec.events.users.login.failure.usr.login',
+  'appsec.events.users.login.failure.usr.id',
+])
 
 let collectionMode
 
@@ -91,53 +100,35 @@ function trackLogin (framework, login, user, success, rootSpan) {
     [addresses.USER_LOGIN]: login,
   }
 
-  const spanContext = rootSpan.context()
   const sdkTag = `_dd.appsec.events.users.login.${success ? 'success' : 'failure'}.sdk`
-  const isSdkCalled = spanContext.getTag(sdkTag) === 'true'
-
-  // used to not overwrite tags set by SDK
-  function shouldSetTag (tag) {
-    return !(isSdkCalled && spanContext.getTag(tag))
-  }
+  let sdkOwnedTags
 
   if (success) {
     newTags = {
       'appsec.events.users.login.success.track': 'true',
+      'appsec.events.users.login.success.usr.login': login,
       '_dd.appsec.events.users.login.success.auto.mode': collectionMode,
       '_dd.appsec.usr.login': login,
     }
 
-    if (shouldSetTag('appsec.events.users.login.success.usr.login')) {
-      newTags['appsec.events.users.login.success.usr.login'] = login
-    }
-
     if (userId) {
       newTags['_dd.appsec.usr.id'] = userId
-
-      if (shouldSetTag('usr.id')) {
-        newTags['usr.id'] = userId
-        persistent[addresses.USER_ID] = userId
-      }
+      newTags['usr.id'] = userId
     }
 
+    sdkOwnedTags = LOGIN_SUCCESS_SDK_OWNED_TAGS
     persistent[addresses.LOGIN_SUCCESS] = null
   } else {
     newTags = {
       'appsec.events.users.login.failure.track': 'true',
+      'appsec.events.users.login.failure.usr.login': login,
       '_dd.appsec.events.users.login.failure.auto.mode': collectionMode,
       '_dd.appsec.usr.login': login,
     }
 
-    if (shouldSetTag('appsec.events.users.login.failure.usr.login')) {
-      newTags['appsec.events.users.login.failure.usr.login'] = login
-    }
-
     if (userId) {
       newTags['_dd.appsec.usr.id'] = userId
-
-      if (shouldSetTag('appsec.events.users.login.failure.usr.id')) {
-        newTags['appsec.events.users.login.failure.usr.id'] = userId
-      }
+      newTags['appsec.events.users.login.failure.usr.id'] = userId
     }
 
     /* TODO: if one day we have this info
@@ -146,12 +137,20 @@ function trackLogin (framework, login, user, success, rootSpan) {
     }
     */
 
+    sdkOwnedTags = LOGIN_FAILURE_SDK_OWNED_TAGS
     persistent[addresses.LOGIN_FAILURE] = null
   }
 
   keepTrace(rootSpan, ASM)
 
-  rootSpan.addTags(newTags)
+  const userIdWritten = eventWriter.setAppSecAutoLoginTags(
+    rootSpan,
+    sdkTag,
+    newTags,
+    sdkOwnedTags,
+    'usr.id'
+  )
+  if (success && userId && userIdWritten) persistent[addresses.USER_ID] = userId
 
   return waf.run({ persistent })
 }
@@ -166,16 +165,7 @@ function trackUser (user, rootSpan) {
     return
   }
 
-  rootSpan.setTag('_dd.appsec.usr.id', userId)
-
-  const isSdkCalled = rootSpan.context().getTag('_dd.appsec.user.collection_mode') === 'sdk'
-  // do not override SDK
-  if (!isSdkCalled) {
-    rootSpan.addTags({
-      'usr.id': userId,
-      '_dd.appsec.user.collection_mode': collectionMode,
-    })
-
+  if (eventWriter.setAppSecAutoUser(rootSpan, userId, collectionMode)) {
     return waf.run({
       persistent: {
         [addresses.USER_ID]: userId,

@@ -1,6 +1,7 @@
 'use strict'
 
-const { performance } = require('perf_hooks')
+const { performance } = require('node:perf_hooks')
+const { getCodeHotspotIds } = require('../../../opentracing/span-projections')
 const TracingPlugin = require('../../../plugins/tracing')
 
 // We are leveraging the TracingPlugin class for its functionality to bind
@@ -51,9 +52,10 @@ class EventPlugin extends TracingPlugin {
       return
     }
 
-    const context = (ctx.currentStore?.span || this.activeSpan)?.context()
-    event._ddSpanId = context?.toBigIntSpanId()
-    event._ddRootSpanId = context?._trace.started[0]?.context().toBigIntSpanId() || event._ddSpanId
+    const span = ctx.currentStore?.span || this.activeSpan
+    const ids = span && getCodeHotspotIds(span)
+    event._ddSpanId = ids?.spanId?.toBigInt()
+    event._ddRootSpanId = ids?.localRootSpanId?.toBigInt() ?? event._ddSpanId
 
     this.#eventHandler(this.extendEvent(event, ctx))
   }

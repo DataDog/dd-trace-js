@@ -3,7 +3,8 @@
 const { TTLCache } = require('../../../../../vendor/dist/@isaacs/ttlcache')
 const web = require('../../plugins/util/web')
 const log = require('../../log')
-const { AUTO_REJECT, USER_REJECT } = require('../../../../../ext/priority')
+const eventWriter = require('../../opentracing/event-writer')
+const { getHttpEndpoint } = require('../../opentracing/span-projections')
 const { keepTrace } = require('../../priority_sampler')
 const { ASM } = require('../../standalone/product')
 const { isBlocked } = require('../blocking')
@@ -55,17 +56,7 @@ function sampleRequest (req, res, record = false) {
   const rootSpan = web.root(req)
   if (!rootSpan) return SamplingDecision.SKIP
 
-  if (!asmStandaloneEnabled) {
-    let priority = getSpanPriority(rootSpan)
-    if (!priority) {
-      rootSpan._prioritySampler?.sample(rootSpan)
-      priority = getSpanPriority(rootSpan)
-    }
-
-    if (priority === AUTO_REJECT || priority === USER_REJECT) {
-      return SamplingDecision.SKIP
-    }
-  }
+  if (!asmStandaloneEnabled && !eventWriter.sampleForApiSecurity(rootSpan)) return SamplingDecision.SKIP
 
   const resolved = resolveSamplingKey(req, res)
   if (!resolved) return SamplingDecision.SKIP
@@ -127,15 +118,10 @@ function getRouteOrEndpoint (context, statusCode) {
 
   if (statusCode === 404) return null
 
-  const endpoint = context?.span?.context()?.getTag?.('http.endpoint')
+  const endpoint = getHttpEndpoint(context?.span)
   if (endpoint) return endpoint
 
   return null
-}
-
-function getSpanPriority (span) {
-  const spanContext = span.context?.()
-  return spanContext._sampling?.priority
 }
 
 module.exports = {

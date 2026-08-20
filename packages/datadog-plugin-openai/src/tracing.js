@@ -2,8 +2,9 @@
 
 const path = require('path')
 
-const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../datadog-core')
+const { getSpanDuration } = require('../../dd-trace/src/opentracing/span-lifecycle')
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
 
@@ -81,6 +82,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     const { methodName, args } = ctx
     const payload = normalizeRequestPayload(methodName, args)
     const normalizedMethodName = normalizeMethodName(methodName)
+    const resource = DD_MAJOR >= 6 ? normalizedMethodName : methodName
 
     const store = storage('legacy').getStore() || {}
 
@@ -89,10 +91,11 @@ class OpenAiTracingPlugin extends TracingPlugin {
     // the normalized method name corresponds to the resource name (e.g. createChatCompletion, createCompletion)
     store.originalMethodName = methodName
     store.normalizedMethodName = normalizedMethodName
+    store.openaiResource = resource
 
     const span = this.startSpan('openai.request', {
       service: this.config.service,
-      resource: DD_MAJOR >= 6 ? normalizedMethodName : methodName,
+      resource,
       type: 'openai',
       kind: 'client',
       meta: {
@@ -158,7 +161,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     const span = store?.span
     if (!span) return
 
-    const error = !!span.context().getTag('error')
+    const error = Boolean(store.openaiError)
 
     let headers, body, method, path
     if (!error) {
@@ -172,7 +175,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
       headers = Object.fromEntries(headers)
     }
 
-    const resource = span.context().getTag('resource.name')
+    const resource = store.openaiResource
     const normalizedMethodName = store.normalizedMethodName
 
     body = coerceResponseBody(body, normalizedMethodName)
@@ -207,13 +210,14 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
     span.finish()
     this.sendLog(resource, span, tags, openaiStore, error)
-    this.sendMetrics(headers, body, endpoint, span._duration, error, tags)
+    this.sendMetrics(headers, body, endpoint, getSpanDuration(span), error, tags)
   }
 
   error (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
 
+    ctx.currentStore.openaiError = true
     super.error(ctx) // add normal error tag
 
     const errorType = ctx.error?.type

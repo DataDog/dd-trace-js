@@ -1,16 +1,15 @@
 'use strict'
 
 const LLMObsTagger = require('../../../tagger')
-const { spanHasError } = require('../../../util')
 const LangChainLLMObsHandler = require('.')
 
 class LangChainLLMObsLlmHandler extends LangChainLLMObsHandler {
-  setMetaTags ({ span, inputs, results }) {
+  setMetaTags ({ span, inputs, results, error }) {
     const isWorkflow = LLMObsTagger.getSpanKind(span) === 'workflow'
     const prompts = Array.isArray(inputs) ? inputs : [inputs]
 
     let outputs
-    if (spanHasError(span)) {
+    if (error) {
       outputs = [{ content: '' }]
     } else {
       outputs = results.generations.map(completion => ({ content: completion[0].text }))

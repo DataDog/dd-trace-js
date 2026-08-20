@@ -88,8 +88,8 @@ class WSClosePlugin extends TracingPlugin {
           const counter = incrementWebSocketCounter(ctx.socket, counterType)
 
           const ptrHash = buildWebSocketSpanPointerHash(
-            handshakeContext._traceId,
-            handshakeContext._spanId,
+            handshakeContext.toTraceId(true),
+            handshakeContext.toSpanId(true),
             counter,
             true, // isServer
             isIncoming

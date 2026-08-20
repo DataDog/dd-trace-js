@@ -7,6 +7,8 @@ const tracer = require('../../')
 
 const id = require('../id')
 const log = require('../log')
+const { getDatadogContext } = require('../opentracing/context-registry')
+const eventWriter = require('../opentracing/event-writer')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
 const TraceState = require('../opentracing/propagation/tracestate')
 const SpanContext = require('./span_context')
@@ -86,8 +88,9 @@ class Tracer {
       traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16),
     })
 
-    spanContext._ddContext._sampling = { priority: samplingPriority }
-    spanContext._ddContext._trace = { ...spanContext._ddContext._trace, origin }
+    const datadogContext = getDatadogContext(spanContext)
+    eventWriter.setSamplingPriority(datadogContext, samplingPriority)
+    eventWriter.setOrigin(datadogContext, origin)
     return spanContext
   }
 
@@ -100,8 +103,9 @@ class Tracer {
     const parentSpanContext = parentSpan?.spanContext()
     let spanContext
     if (parentSpanContext && api.trace.isSpanContextValid(parentSpanContext)) {
-      spanContext = parentSpanContext._ddContext
-        ? this._createSpanContextFromParent(parentSpanContext._ddContext)
+      const datadogContext = getDatadogContext(parentSpanContext)
+      spanContext = datadogContext
+        ? this._createSpanContextFromParent(datadogContext)
         : this._createSpanContextForNewSpan(parentSpanContext)
     } else {
       spanContext = new SpanContext()

@@ -1,5 +1,6 @@
 'use strict'
 
+const { getApiSecurityFramework } = require('../../opentracing/span-projections')
 const web = require('../../plugins/util/web')
 const { isSchemaAttribute } = require('../reporter')
 const appsecTelemetry = require('../telemetry')
@@ -35,7 +36,7 @@ function reportRequest (req, samplingDecision, wafResult) {
 }
 
 function getFramework (req) {
-  return web.root(req)?.context()?.getTag?.('component')
+  return getApiSecurityFramework(web.root(req))
 }
 
 function hasSchemaAttributes (attributes) {

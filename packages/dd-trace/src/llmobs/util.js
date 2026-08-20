@@ -2,6 +2,7 @@
 
 const id = require('../id')
 const log = require('../log')
+const eventWriter = require('../opentracing/event-writer')
 const {
   LLMOBS_PARENT_ID_BRIDGE_KEY,
   LLMOBS_TRACE_ID_BRIDGE_KEY,
@@ -11,6 +12,7 @@ const {
   PARENT_AGENT_NAME,
   PARENT_AGENT_SPAN_ID,
 } = require('./constants/tags')
+const spanState = require('./span-state')
 
 const DECIMAL_TRACE_ID_REGEX = /^\d+$/
 const HEX_TRACE_ID_REGEX = /^[0-9a-f]{32}$/i
@@ -332,7 +334,7 @@ function agentNameWireSafe (name) {
 function resolveAgentAttribution (tags, span) {
   if (!tags) return { name: undefined, spanId: undefined }
   if (tags[SPAN_KIND] === 'agent') {
-    return { name: tags[NAME] || span._name, spanId: span.context().toSpanId() }
+    return { name: tags[NAME] || spanState.getOperationName(span), spanId: span.context().toSpanId() }
   }
   return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID] }
 }
@@ -368,11 +370,6 @@ function appendOptionalPropagatedTag (tags, key, value, safeguard, maxTagSetLeng
   return `${tags}${entry}`
 }
 
-function spanHasError (span) {
-  const spanContext = span.context()
-  return !!(spanContext.getTag('error') || spanContext.getTag('error.type'))
-}
-
 // LLM SDKs stream tool-call argument JSON across SSE chunks; a malformed
 // accumulation would otherwise throw straight into the chunk subscriber.
 function safeJsonParse (value, fallback) {
@@ -394,11 +391,16 @@ function safeJsonParse (value, fallback) {
  * @param {{ includeParentId?: boolean, llmobsTraceId?: string }} [opts]
  */
 function writeBridgeTags (span, { includeParentId = true, llmobsTraceId } = {}) {
-  const traceTags = span?.context?.()._trace?.tags
-  if (!traceTags || traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) return
-  traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = llmobsTraceId ?? span.context().toTraceId(true)
+  const context = span?.context?.()
+  if (!context?.toTraceId || !context?.toSpanId) return
+  const written = eventWriter.setTraceTagIfAbsent(
+    span,
+    LLMOBS_TRACE_ID_BRIDGE_KEY,
+    llmobsTraceId ?? context.toTraceId(true)
+  )
+  if (!written) return
   if (includeParentId) {
-    traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
+    eventWriter.setTraceTag(span, LLMOBS_PARENT_ID_BRIDGE_KEY, context.toSpanId())
   }
 }
 
@@ -411,34 +413,7 @@ function writeBridgeTags (span, { includeParentId = true, llmobsTraceId } = {}) 
  * @returns {string | null}
  */
 function findGenAIAncestorSpanId (span) {
-  const ctx = span?.context?.()
-  let parentId = ctx?._parentId?.toString(10)
-  if (!parentId || parentId === '0') return null
-
-  const started = ctx._trace?.started
-  if (!started || started.length === 0) return null
-
-  // Linear scan per hop — parent chains are short, avoids a per-call Map.
-  while (parentId && parentId !== '0') {
-    let parent = null
-    for (const s of started) {
-      if (s.context()._spanId.toString(10) === parentId) {
-        parent = s
-        break
-      }
-    }
-    if (!parent) return null
-
-    const tags = parent.context().getTags()
-    if (tags) {
-      for (const key of Object.keys(tags)) {
-        if (key.startsWith('gen_ai.')) return parentId
-      }
-    }
-
-    parentId = parent.context()._parentId?.toString(10)
-  }
-  return null
+  return spanState.findGenAIAncestorSpanId(span)
 }
 
 /**
@@ -532,7 +507,6 @@ module.exports = {
   validateKind,
   getFunctionArguments,
   safeJsonParse,
-  spanHasError,
   writeBridgeTags,
   validateToolDefinitions,
 }

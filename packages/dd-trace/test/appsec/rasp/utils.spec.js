@@ -20,7 +20,7 @@ describe('RASP - utils.js', () => {
     stackTrace = {
       reportStackTrace: sinon.stub(),
       getCallsiteFrames: sinon.stub().returns([]),
-      canReportStackTrace: sinon.stub().returns(false),
+      STACK_TRACE_NAMESPACES: { RASP: 'exploit' },
     }
 
     telemetry = {
@@ -86,20 +86,20 @@ describe('RASP - utils.js', () => {
       }
 
       web.root.returns(rootSpan)
-      stackTrace.canReportStackTrace.returns(true)
 
       utils.handleResult(result, req, undefined, undefined, config, raspRule)
-      sinon.assert.calledOnceWithExactly(stackTrace.reportStackTrace, rootSpan, stackId, sinon.match.array)
+      sinon.assert.calledOnceWithExactly(
+        stackTrace.reportStackTrace,
+        rootSpan,
+        stackId,
+        sinon.match.array,
+        'exploit',
+        2
+      )
     })
 
-    it('should not report stack trace when max stack traces limit is reached', () => {
-      const rootSpan = {
-        meta_struct: {
-          '_dd.stack': {
-            exploit: ['stack1', 'stack2'],
-          },
-        },
-      }
+    it('should let the span writer enforce the max stack traces limit', () => {
+      const rootSpan = {}
       const result = {
         actions: {
           generate_stack: {
@@ -111,7 +111,14 @@ describe('RASP - utils.js', () => {
       web.root.returns(rootSpan)
 
       utils.handleResult(result, req, undefined, undefined, config, raspRule)
-      sinon.assert.notCalled(stackTrace.reportStackTrace)
+      sinon.assert.calledOnceWithExactly(
+        stackTrace.reportStackTrace,
+        rootSpan,
+        'stackId',
+        sinon.match.array,
+        'exploit',
+        2
+      )
     })
 
     it('should not report stack trace when rootSpan is null', () => {

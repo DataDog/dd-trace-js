@@ -24,6 +24,8 @@ describe('reporter', () => {
   let web
   let telemetry
   let prioritySampler
+  let spanProjections
+  let eventWriter
 
   const defaultReporterConfig = {
     rateLimit: 100,
@@ -43,6 +45,7 @@ describe('reporter', () => {
     }
 
     const spanTags = {}
+    const structuredTagKeys = new Set()
     const spanContext = {
       _tags: spanTags,
       getTags () { return this._tags },
@@ -55,7 +58,38 @@ describe('reporter', () => {
       context: sinon.stub().returns(spanContext),
       addTags: sinon.stub(),
       setTag: sinon.stub(),
+      setStructuredTagIfAbsent: sinon.stub().callsFake(key => {
+        if (structuredTagKeys.has(key)) return false
+
+        structuredTagKeys.add(key)
+        return true
+      }),
       keep: sinon.stub(),
+    }
+
+    eventWriter = {
+      addAppSecEvent: sinon.stub().callsFake((rootSpan, attackData, remoteAddress) => {
+        const currentJson = spanTags['_dd.appsec.json']
+        const attackDataString = JSON.stringify(attackData)
+        const appSecJson = currentJson
+          ? currentJson.slice(0, -2) + ',' + attackDataString.slice(1) + '}'
+          : '{"triggers":' + attackDataString + '}'
+        const tags = {
+          'appsec.event': 'true',
+          '_dd.appsec.json': appSecJson,
+        }
+        if (spanTags['_dd.origin'] === undefined) tags['_dd.origin'] = 'appsec'
+        if (remoteAddress !== undefined) tags['network.client.ip'] = remoteAddress
+        Object.assign(spanTags, tags)
+        rootSpan.addTags(tags)
+        return appSecJson
+      }),
+      copyTags: sinon.stub().callsFake((source, destination, mappings) => {
+        for (const [sourceTag, destinationTag] of mappings) {
+          const value = spanTags[sourceTag]
+          if (value !== undefined && value !== null) destination.setTag(destinationTag, value)
+        }
+      }),
     }
 
     web = {
@@ -75,8 +109,14 @@ describe('reporter', () => {
       getRequestMetrics: sinon.stub(),
     }
 
+    spanProjections = {
+      shouldCollectAppSecEventHeaders: sinon.stub().returns(false),
+    }
+
     Reporter = proxyquire('../../src/appsec/reporter', {
       '../plugins/util/web': web,
+      '../opentracing/event-writer': eventWriter,
+      '../opentracing/span-projections': spanProjections,
       './telemetry': telemetry,
     })
   })
@@ -433,7 +473,7 @@ describe('reporter', () => {
     })
 
     it('should not overwrite origin tag', () => {
-      span.context()._tags = { '_dd.origin': 'tracer' }
+      span.context().setTag('_dd.origin', 'tracer')
 
       Reporter.reportAttack({ events: [] })
 
@@ -446,7 +486,7 @@ describe('reporter', () => {
     })
 
     it('should merge attacks json', () => {
-      span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
+      span.context().setTag('_dd.appsec.json', '{"triggers":[{"rule":{},"rule_matches":[{}]}]}')
 
       Reporter.reportAttack({
         events: [
@@ -470,7 +510,7 @@ describe('reporter', () => {
     })
 
     it('should call standalone sample', () => {
-      span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
+      span.context().setTag('_dd.appsec.json', '{"triggers":[{"rule":{},"rule_matches":[{}]}]}')
 
       Reporter.reportAttack({
         events: [
@@ -604,7 +644,11 @@ describe('reporter', () => {
           ],
         })
 
-        assert.deepStrictEqual(span.meta_struct['http.request.body'], expectedBody)
+        sinon.assert.calledOnceWithExactly(
+          span.setStructuredTagIfAbsent,
+          'http.request.body',
+          expectedBody
+        )
       })
 
       it('should not report request body in meta struct on rasp event when disabled', () => {
@@ -634,7 +678,7 @@ describe('reporter', () => {
           ],
         })
 
-        assert.strictEqual(span.meta_struct?.['http.request.body'], undefined)
+        sinon.assert.notCalled(span.setStructuredTagIfAbsent)
       })
 
       describe('Request body truncation', () => {
@@ -758,7 +802,7 @@ describe('reporter', () => {
           })
 
           sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.request_body_size.exceeded', 'true')
-          span.context()._tags = { '_dd.appsec.rasp.request_body_size.exceeded': 'true' }
+          span.context().setTag('_dd.appsec.rasp.request_body_size.exceeded', 'true')
 
           const res = {}
           Reporter.finishRequest(req, res, {}, req.body)
@@ -873,8 +917,6 @@ describe('reporter', () => {
     })
 
     it('should do nothing when passed incomplete objects', () => {
-      span.context()._tags['appsec.event'] = 'true'
-
       web.root.withArgs(null).returns(null)
       web.root.withArgs({}).returns(span)
 
@@ -995,7 +1037,7 @@ describe('reporter', () => {
         },
       }
 
-      span.context()._tags['appsec.event'] = 'true'
+      spanProjections.shouldCollectAppSecEventHeaders.returns(true)
 
       Reporter.finishRequest(req, res)
       sinon.assert.calledOnceWithExactly(web.root, req)
@@ -1019,7 +1061,7 @@ describe('reporter', () => {
           return {}
         },
       }
-      span.context()._tags['appsec.event'] = 'true'
+      spanProjections.shouldCollectAppSecEventHeaders.returns(true)
 
       Reporter.finishRequest(req, res)
 
@@ -1044,8 +1086,7 @@ describe('reporter', () => {
         },
       }
 
-      span.context()
-        ._tags['appsec.events.users.login.success.track'] = 'true'
+      spanProjections.shouldCollectAppSecEventHeaders.returns(true)
 
       Reporter.finishRequest(req, res)
 
@@ -1070,8 +1111,7 @@ describe('reporter', () => {
         },
       }
 
-      span.context()
-        ._tags['appsec.events.users.login.failure.track'] = 'true'
+      spanProjections.shouldCollectAppSecEventHeaders.returns(true)
 
       Reporter.finishRequest(req, res)
 
@@ -1096,8 +1136,7 @@ describe('reporter', () => {
         },
       }
 
-      span.context()
-        ._tags['appsec.events.custon.event.track'] = 'true'
+      spanProjections.shouldCollectAppSecEventHeaders.returns(true)
 
       Reporter.finishRequest(req, res)
 
@@ -1217,7 +1256,7 @@ describe('reporter', () => {
             return extendedResponseHeadersAndValues
           },
         }
-        span.context()._tags['appsec.event'] = 'true'
+        spanProjections.shouldCollectAppSecEventHeaders.returns(true)
 
         const config = getAppSecConfig({
           rateLimit: 100,
@@ -1256,7 +1295,7 @@ describe('reporter', () => {
             return extendedResponseHeadersAndValues
           },
         }
-        span.context()._tags['appsec.event'] = 'true'
+        spanProjections.shouldCollectAppSecEventHeaders.returns(true)
 
         const maxHeaders = 20
         const reportedExtReqHeadersCount = maxHeaders - (requestHeadersToTrackOnEvent.length + 1)
@@ -1307,7 +1346,7 @@ describe('reporter', () => {
             return extendedResponseHeadersAndValues
           },
         }
-        span.context()._tags['appsec.event'] = 'true'
+        spanProjections.shouldCollectAppSecEventHeaders.returns(true)
 
         const config = getAppSecConfig({
           rateLimit: 100,

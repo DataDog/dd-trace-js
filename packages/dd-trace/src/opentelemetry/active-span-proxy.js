@@ -1,7 +1,6 @@
 'use strict'
 
 const BridgeSpanBase = require('./bridge-span-base')
-const { setOtelResource } = require('./span-helpers')
 
 /**
  * OTel `Span`-compatible proxy around an already-active Datadog span.
@@ -32,7 +31,7 @@ class ActiveSpanProxy extends BridgeSpanBase {
    * @param {string} name
    */
   updateName (name) {
-    setOtelResource(this._ddSpan, name)
+    this._updateDatadogName(name, false)
     return this
   }
 

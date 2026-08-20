@@ -1,7 +1,11 @@
 'use strict'
 
 const web = require('../../plugins/util/web')
-const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
+const {
+  getCallsiteFrames,
+  reportStackTrace,
+  STACK_TRACE_NAMESPACES,
+} = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
 const log = require('../../log')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
@@ -51,13 +55,15 @@ function handleResult (result, req, res, abortController, config, raspRule) {
 
   const ruleTriggered = !!result?.events?.length
 
-  if (generateStackTraceAction && enabled && canReportStackTrace(rootSpan, maxStackTraces)) {
+  if (generateStackTraceAction && enabled && rootSpan) {
     const frames = getCallsiteFrames(maxDepth, handleResult)
 
     reportStackTrace(
       rootSpan,
       generateStackTraceAction.stack_id,
-      frames
+      frames,
+      STACK_TRACE_NAMESPACES.RASP,
+      maxStackTraces
     )
   }
 

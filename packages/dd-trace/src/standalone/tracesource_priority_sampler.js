@@ -3,7 +3,8 @@
 const PrioritySampler = require('../priority_sampler')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
-const { SAMPLING_MECHANISM_DEFAULT } = require('../constants')
+const { SAMPLING_MECHANISM_DEFAULT, TRACE_SOURCE_PROPAGATION_KEY } = require('../constants')
+const eventWriter = require('../opentracing/event-writer')
 const { addTraceSourceTag, hasTraceSourcePropagationTag } = require('./tracesource')
 const { getProductRateLimiter } = require('./product')
 
@@ -36,7 +37,7 @@ class TraceSourcePrioritySampler extends PrioritySampler {
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
 
-    context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+    eventWriter.setSamplingMechanism(context, SAMPLING_MECHANISM_DEFAULT)
 
     if (hasTraceSourcePropagationTag(context._trace.tags)) {
       return USER_KEEP
@@ -52,7 +53,12 @@ class TraceSourcePrioritySampler extends PrioritySampler {
     super.setPriority(span, samplingPriority, product)
 
     const context = this._getContext(span)
-    addTraceSourceTag(context?._trace?.tags, product)
+    const tags = context?._trace?.tags
+    if (!tags || !product) return
+
+    const traceSourceTags = { [TRACE_SOURCE_PROPAGATION_KEY]: tags[TRACE_SOURCE_PROPAGATION_KEY] }
+    addTraceSourceTag(traceSourceTags, product)
+    eventWriter.setTraceTag(context, TRACE_SOURCE_PROPAGATION_KEY, traceSourceTags[TRACE_SOURCE_PROPAGATION_KEY])
   }
 }
 

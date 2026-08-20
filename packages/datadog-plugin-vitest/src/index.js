@@ -1,5 +1,7 @@
 'use strict'
 
+const { performance } = require('node:perf_hooks')
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { writeDatadogParentId, writeDatadogTraceId } = require('../../dd-trace/src/carrier')
@@ -94,6 +96,7 @@ class VitestPlugin extends CiPlugin {
     super(...args)
 
     this.taskToFinishTime = new WeakMap()
+    this.spanToStartTime = new WeakMap()
 
     this.addSub('ci:vitest:session:configuration', ({ onDone }) => {
       const testSessionSpanContext = this.testSessionSpan?.context()
@@ -186,14 +189,16 @@ class VitestPlugin extends CiPlugin {
         isBrowserMode,
       }, true)
 
+      const spanStartTime = startTime ?? performance.timeOrigin + performance.now()
       const span = this.startTestSpan(
         testName,
         testSuite,
         testSuiteSpan,
         extraTags,
         testExecutionId,
-        startTime
+        spanStartTime
       )
+      this.spanToStartTime.set(span, spanStartTime)
 
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
@@ -226,7 +231,10 @@ class VitestPlugin extends CiPlugin {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
 
-        const finishTime = typeof duration === 'number' ? span._startTime + duration : span._getTime()
+        const spanStartTime = this.spanToStartTime.get(span)
+        const finishTime = typeof duration === 'number'
+          ? spanStartTime + duration
+          : performance.timeOrigin + performance.now()
         this.taskToFinishTime.set(task, finishTime)
 
         ctx.parentStore = ctx.currentStore
@@ -309,8 +317,9 @@ class VitestPlugin extends CiPlugin {
       }
       const finish = () => {
         if (Number.isFinite(duration) && duration >= 0) {
+          const spanStartTime = this.spanToStartTime.get(span)
           span.finish(
-            span._startTime + Math.max(duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION, 0)
+            spanStartTime + Math.max(duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION, 0)
           ) // milliseconds
         } else {
           span.finish() // `duration` is empty for retries, so we'll use clock time

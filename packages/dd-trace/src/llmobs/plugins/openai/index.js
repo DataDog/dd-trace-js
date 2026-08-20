@@ -81,7 +81,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     const inputs = ctx.args[0] // completion, chat completion, and embeddings take one argument
     const response = ctx.result?.data // no result if error
-    const error = !!span.context().getTag('error')
+    const error = Boolean(ctx.error)
 
     const operation = getOperation(methodName)
 

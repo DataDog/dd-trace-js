@@ -3,11 +3,18 @@
 const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const dc = require('dc-polyfill')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('./setup/core')
 
-const webTagsCache = require('../src/web-tags-cache')
+const spanProjections = {
+  getOwnWebTags: sinon.spy(span => span.tags),
+  getParentSpan: sinon.spy(span => span.parent),
+}
+const webTagsCache = proxyquire('../src/web-tags-cache', {
+  './opentracing/span-projections': spanProjections,
+})
 
 // One trace's started-spans list, shared by every span the helpers below build,
 // mirroring how DatadogSpanContext._trace.started is shared across a trace. The
@@ -18,14 +25,8 @@ function makeTrace () {
 
 function makeSpan (trace, { spanId, parentId, tags = {} } = {}) {
   const span = {
-    context () {
-      return {
-        _spanId: spanId,
-        _parentId: parentId,
-        _trace: trace,
-        getTags: () => tags,
-      }
-    },
+    parent: trace.started.find(candidate => candidate.spanId === parentId),
+    spanId,
     tags,
   }
   trace.started.push(span)
@@ -92,13 +93,16 @@ describe('web-tags-cache', () => {
     it('walks the parent chain once and caches the answer', () => {
       const trace = makeTrace()
       const tags = { ...WEB }
-      const parent = makeSpan(trace, { spanId: 'a', tags })
+      makeSpan(trace, { spanId: 'a', tags })
       const child = makeSpan(trace, { spanId: 'b', parentId: 'a' })
-      const getTags = sinon.spy(parent.context(), 'getTags')
+      const symbols = Object.getOwnPropertySymbols(child)
+      const callsBefore = spanProjections.getOwnWebTags.callCount
       assert.equal(webTagsCache.getCachedWebTags(child), tags)
-      const callsAfterFirst = getTags.callCount
+      const callsAfterFirst = spanProjections.getOwnWebTags.callCount
       assert.equal(webTagsCache.getCachedWebTags(child), tags)
-      assert.equal(getTags.callCount, callsAfterFirst)
+      assert.ok(callsAfterFirst > callsBefore)
+      assert.equal(spanProjections.getOwnWebTags.callCount, callsAfterFirst)
+      assert.deepStrictEqual(Object.getOwnPropertySymbols(child), symbols)
     })
   })
 

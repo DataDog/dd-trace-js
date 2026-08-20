@@ -38,8 +38,9 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     // Inject current span's trace context into message attributes
     this.tracer.inject(activeSpan, 'text_map', attributes)
 
-    const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
-    if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
+    const fullTraceId = activeSpan.context().toTraceId(true)
+    const traceIdUpperBits = fullTraceId.slice(0, 16)
+    if (traceIdUpperBits !== '0000000000000000') attributes['_dd.p.tid'] = traceIdUpperBits
 
     if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
     if (topicName) attributes['pubsub.topic'] = topicName
@@ -104,8 +105,10 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
     const lastSlash = topic.lastIndexOf('/')
     const topicName = lastSlash === -1 ? topic : topic.slice(lastSlash + 1)
+    const batchStartTime = Date.now()
     const batchSpan = this.startSpan({
       childOf: parentData ? this.#extractParentContext(parentData) : undefined,
+      startTime: batchStartTime,
       resource: `${api} to Topic ${topicName}`,
       meta: {
         'gcloud.project_id': projectId,
@@ -129,7 +132,8 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const batchSpanIdHex = spanCtx.toSpanId(true)
     // Extract lower 64 bits (last 16 hex chars) for trace ID
     const batchTraceIdHex = fullTraceIdHex.slice(-16)
-    const batchTraceIdUpper = spanCtx._trace.tags['_dd.p.tid']
+    const traceIdUpper = fullTraceIdHex.slice(0, 16)
+    const batchTraceIdUpper = traceIdUpper === '0000000000000000' ? undefined : traceIdUpper
 
     if (spanLinkData.length) {
       batchSpan.setTag('_dd.span_links', JSON.stringify(
@@ -142,7 +146,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     }
 
     const messageCountStr = String(messageCount)
-    const startTimeStr = String(Math.floor(batchSpan._startTime))
+    const startTimeStr = String(batchStartTime)
 
     for (let i = 0; i < messageCount; i++) {
       const msg = messages[i]
@@ -173,7 +177,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   }
 
   bindFinish (ctx) {
-    if (ctx.batchSpan && !ctx.batchSpan._duration) ctx.batchSpan.finish()
+    ctx.batchSpan?.finish()
     return super.bindFinish(ctx)
   }
 

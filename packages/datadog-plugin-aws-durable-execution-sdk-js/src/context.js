@@ -33,7 +33,7 @@ class BaseContextPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const spanName = this.constructor.spanName
-    const parentName = this.activeSpan?.context()._name
+    const parentName = storage('legacy').getStore()?.awsDurableSpanName
     const operationName = this.getOperationName(ctx)
     const resource = HIGH_CARDINALITY_PARENT_SPAN_NAMES.has(parentName) ? undefined : operationName
 
@@ -55,6 +55,7 @@ class BaseContextPlugin extends TracingPlugin {
       meta,
       metrics,
     }, ctx)
+    ctx.currentStore.awsDurableSpanName = spanName
 
     return ctx.currentStore
   }

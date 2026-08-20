@@ -132,8 +132,7 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
    * @override
    */
   getLLMObsSpanRegisterOptions (ctx) {
-    const span = ctx.currentStore?.span
-    const operation = getOperation(span)
+    const operation = getOperation(ctx.name)
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
 
@@ -147,7 +146,7 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const operation = getOperation(span)
+    const operation = getOperation(ctx.name)
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
 

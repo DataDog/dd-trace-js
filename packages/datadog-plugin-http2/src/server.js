@@ -39,7 +39,7 @@ class Http2ServerPlugin extends ServerPlugin {
     }
 
     span.setTag(COMPONENT, this.constructor.id)
-    span._integrationName = this.constructor.id
+    span.setIntegrationName(this.constructor.id)
 
     ctx.currentStore.req = req
     ctx.currentStore.res = res

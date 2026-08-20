@@ -13,8 +13,15 @@ const SPAN_ID_HEX = '1112131415161718'
 const TRACE_ID_BYTES = Uint8Array.from(Buffer.from(TRACE_ID_HEX, 'hex'))
 const SPAN_ID_BYTES = Uint8Array.from(Buffer.from(SPAN_ID_HEX, 'hex'))
 
-function makeSpan ({ traceId = TRACE_ID_HEX, spanId = SPAN_ID_HEX, parentId, tags = {} } = {}) {
+function makeSpan ({
+  traceId = TRACE_ID_HEX,
+  spanId = SPAN_ID_HEX,
+  localRootSpanId = spanId,
+  parentId,
+  tags = {},
+} = {}) {
   return {
+    localRootSpanId,
     context () {
       return {
         _spanId: spanId,
@@ -34,7 +41,12 @@ function makeSpan ({ traceId = TRACE_ID_HEX, spanId = SPAN_ID_HEX, parentId, tag
 // endpoint records on.
 function makeWebSpanWithChild (webTags) {
   const parent = makeSpan({ tags: webTags })
-  const child = makeSpan({ spanId: '2122232425262728', parentId: SPAN_ID_HEX, tags: {} })
+  const child = makeSpan({
+    spanId: '2122232425262728',
+    localRootSpanId: SPAN_ID_HEX,
+    parentId: SPAN_ID_HEX,
+    tags: {},
+  })
   return { parent, child, webTags }
 }
 
@@ -68,6 +80,11 @@ describe('otel-thread-ctx', () => {
       '../../datadog-core/src/storage': overrides.storage || storageStub,
       './storage-channels': overrides.storageChannels || storageChannelsStub,
       './web-tags-cache': overrides.webTagsCache || webTagsCacheStub,
+      './opentracing/span-projections': {
+        getCodeHotspotIds: span => ({
+          localRootSpanId: { toString: () => span.localRootSpanId },
+        }),
+      },
       './log': overrides.log || log,
     })
   }
@@ -324,27 +341,16 @@ describe('otel-thread-ctx', () => {
         [SPAN_ID_HEX, 'GET /x', THREAD_NAME, THREAD_ID_STR])
     })
 
-    it('encodes the local-root-span id from the first started-spans entry', () => {
+    it('encodes the projected local-root-span id', () => {
       const rootHex = '99aabbccddeeff00'
-      const rootSpan = makeSpan({ spanId: rootHex })
-      activeSpan = makeSpan({ parentId: rootHex })
-      // Plant the root in the started-spans list of the active span's trace.
-      activeSpan.context = function () {
-        return {
-          _spanId: SPAN_ID_HEX,
-          _parentId: rootHex,
-          _trace: { started: [rootSpan] },
-          toTraceId: () => TRACE_ID_HEX.padStart(32, '0'),
-          toSpanId: () => SPAN_ID_HEX.padStart(16, '0'),
-          getTags: () => ({}),
-        }
-      }
+      activeSpan = makeSpan({ parentId: rootHex, localRootSpanId: rootHex })
       enterCh.publish()
       assert.equal(constructedContexts[0].attributes[0], rootHex)
     })
 
     it('skips re-entering on re-entry when the same context is already active', () => {
       activeSpan = makeSpan()
+      const symbols = Object.getOwnPropertySymbols(activeSpan)
       enterCh.publish()
       sinon.assert.calledOnce(setActive)
       assert.equal(constructedContexts.length, 1)
@@ -354,6 +360,7 @@ describe('otel-thread-ctx', () => {
       enterCh.publish()
       sinon.assert.calledOnce(setActive)
       assert.equal(constructedContexts.length, 1)
+      assert.deepStrictEqual(Object.getOwnPropertySymbols(activeSpan), symbols)
     })
 
     it('re-installs the same context when the active context drifts to another span and back', () => {

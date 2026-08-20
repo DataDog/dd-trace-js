@@ -82,8 +82,8 @@ class WSReceiverPlugin extends TracingPlugin {
           const counter = incrementWebSocketCounter(ctx.socket, 'receiveCounter')
 
           const ptrHash = buildWebSocketSpanPointerHash(
-            handshakeContext._traceId,
-            handshakeContext._spanId,
+            handshakeContext.toTraceId(true),
+            handshakeContext.toSpanId(true),
             counter,
             true, // isServer
             true // isIncoming

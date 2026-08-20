@@ -5,9 +5,11 @@ const { performance } = require('node:perf_hooks')
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../constants')
+const { getDatadogContext } = require('../opentracing/context-registry')
 const DatadogSpanContext = require('../opentracing/span_context')
 const TraceState = require('../opentracing/propagation/tracestate')
 const { DD_MAJOR } = require('../../../../version')
+const { isSpanFinished } = require('../opentracing/span-lifecycle')
 
 const id = require('../id')
 
@@ -15,7 +17,6 @@ const { timeOrigin } = performance
 
 /**
  * @typedef {{
- *   _ddContext?: import('../opentracing/span_context'),
  *   toTraceId?: (get128?: boolean) => string,
  *   toSpanId?: (get128?: boolean) => string,
  *   traceId?: string,
@@ -38,7 +39,7 @@ const { timeOrigin } = performance
  * @param {import('../opentracing/span')} ddSpan
  */
 function isWritable (ddSpan) {
-  return ddSpan._duration === undefined
+  return !isSpanFinished(ddSpan)
 }
 
 /**
@@ -101,7 +102,7 @@ function normalizeOtelEvent (attributesOrStartTime, startTime) {
 
 /**
  * Accepts the native `DatadogSpanContext` (`toTraceId`/`toSpanId`), the bridge wrapper
- * (`_ddContext`), or a standard OTel `SpanContext` (`traceId`/`spanId` strings); returns
+ * (registered out of band), or a standard OTel `SpanContext` (`traceId`/`spanId` strings); returns
  * a `DatadogSpanContext` or `undefined` when nothing usable is present.
  *
  * @param {LinkContextLike | undefined | null} context
@@ -109,7 +110,8 @@ function normalizeOtelEvent (attributesOrStartTime, startTime) {
 function normalizeLinkContext (context) {
   if (!context) return
 
-  if (context._ddContext) return context._ddContext
+  const datadogContext = getDatadogContext(context)
+  if (datadogContext) return datadogContext
 
   if (isDatadogSpanContext(context)) return context
 

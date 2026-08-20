@@ -2,35 +2,14 @@
 
 const util = require('util')
 const { AUTO_KEEP } = require('../../../../ext/priority')
+const eventWriter = require('./event-writer')
 
 // the lowercase, hex encoded upper 64 bits of a 128-bit trace id, if present
 const TRACE_ID_128 = '_dd.p.tid'
 
 class DatadogSpanContext {
   constructor (props) {
-    props ||= {}
-
-    this._traceId = props.traceId
-    this._spanId = props.spanId
-    this._isRemote = props.isRemote ?? true
-    this._parentId = props.parentId || null
-    this._name = props.name
-    this._isFinished = props.isFinished || false
-    this._tags = props.tags || {}
-    this._sampling = props.sampling || {}
-    this._spanSampling = undefined
-    this._links = props.links || []
-    this._baggageItems = props.baggageItems || {}
-    this._traceparent = props.traceparent
-    this._tracestate = props.tracestate
-    this._noop = props.noop || null
-    this._trace = props.trace || {
-      started: [],
-      finished: [],
-      tags: {},
-    }
-    this._otelSpanContext = undefined
-    this._otelActiveSpan = undefined
+    eventWriter.initializeContext(this, props)
   }
 
   [util.inspect.custom] () {
@@ -62,9 +41,36 @@ class DatadogSpanContext {
     return this._spanId.toBigInt()
   }
 
-  toTraceparent () {
+  /**
+   * Return the trace identifier used by deterministic samplers.
+   *
+   * @returns {bigint}
+   */
+  toBigIntTraceId () {
+    return this._traceId.toBigInt()
+  }
+
+  /**
+   * Return W3C trace flags after materializing lazy priority sampling.
+   *
+   * @returns {number}
+   */
+  toTraceFlags () {
     this._ensureSamplingPriority()
-    const flags = this._sampling.priority >= AUTO_KEEP ? '01' : '00'
+    return this._sampling.priority >= AUTO_KEEP ? 1 : 0
+  }
+
+  /**
+   * Serialize W3C tracestate from the propagation envelope.
+   *
+   * @returns {string}
+   */
+  toTracestate () {
+    return this._tracestate?.toString() || ''
+  }
+
+  toTraceparent () {
+    const flags = this.toTraceFlags() ? '01' : '00'
     const traceId = this.toTraceId(true)
     const spanId = this.toSpanId(true)
     const version = (this._traceparent && this._traceparent.version) || '00'
@@ -93,7 +99,7 @@ class DatadogSpanContext {
    * @param {unknown} value - Tag value
    */
   setTag (key, value) {
-    this._tags[key] = value
+    eventWriter.setTag(this, key, value)
   }
 
   /**
@@ -116,7 +122,7 @@ class DatadogSpanContext {
    * Delete a tag.
    * @param {string} key - Tag key
    */
-  deleteTag (key) { delete this._tags[key] }
+  deleteTag (key) { eventWriter.deleteTag(this, key) }
 
   /**
    * Get the live internal tags map. The returned reference is mutable;
@@ -134,7 +140,7 @@ class DatadogSpanContext {
   /**
    * Clear all tags.
    */
-  clearTags () { this._tags = Object.create(null) }
+  clearTags () { eventWriter.clearTags(this) }
 }
 
 module.exports = DatadogSpanContext

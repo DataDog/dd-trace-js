@@ -3,8 +3,9 @@
 const zlib = require('zlib')
 const dc = require('dc-polyfill')
 
-const { NETWORK_CLIENT_IP } = require('../../../../ext/tags')
 const web = require('../plugins/util/web')
+const eventWriter = require('../opentracing/event-writer')
+const { shouldCollectAppSecEventHeaders } = require('../opentracing/span-projections')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
@@ -382,36 +383,13 @@ function reportAttack ({ events: attackData, actions }, req, rootSpan) {
 
   if (!req || !rootSpan) return
 
-  const spanContext = rootSpan.context()
-
-  const newTags = {
-    'appsec.event': 'true',
-  }
-
-  // TODO: maybe add this to format.js later (to take decision as late as possible)
-  if (!spanContext.getTag('_dd.origin')) {
-    newTags['_dd.origin'] = 'appsec'
-  }
-
-  const currentJson = spanContext.getTag('_dd.appsec.json')
-
-  // merge JSON arrays without parsing them
-  const attackDataStr = JSON.stringify(attackData)
-  newTags['_dd.appsec.json'] = currentJson
-    ? currentJson.slice(0, -2) + ',' + attackDataStr.slice(1) + '}'
-    : '{"triggers":' + attackDataStr + '}'
-
-  if (req.socket) {
-    newTags[NETWORK_CLIENT_IP] = req.socket.remoteAddress
-  }
-
-  rootSpan.addTags(newTags)
+  const appSecJson = eventWriter.addAppSecEvent(rootSpan, attackData, req.socket?.remoteAddress)
 
   // Add _dd.appsec.json tag to inferred proxy span
   if (config.inferredProxyServicesEnabled) {
     const context = web.getContext(req)
     if (context?.inferredProxySpan) {
-      context.inferredProxySpan.setTag('_dd.appsec.json', newTags['_dd.appsec.json'])
+      context.inferredProxySpan.setTag('_dd.appsec.json', appSecJson)
     }
   }
 
@@ -484,26 +462,20 @@ function truncateRequestBody (target, depth = 0) {
 function reportRequestBody (rootSpan, requestBody, comesFromRaspAction = false) {
   if (!requestBody || isEmpty(requestBody)) return
 
-  if (!rootSpan.meta_struct) {
-    rootSpan.meta_struct = {}
-  }
+  const { truncated, value } = truncateRequestBody(requestBody)
+  const reported = rootSpan.setStructuredTagIfAbsent('http.request.body', value)
 
-  if (rootSpan.meta_struct['http.request.body']) {
+  if (!reported) {
     // If the rasp.exceed metric exists, set also the same for the new tag
-    const sizeExceedTagValue = rootSpan.context().getTag('_dd.appsec.rasp.request_body_size.exceeded')
-
-    if (sizeExceedTagValue) {
-      rootSpan.setTag('_dd.appsec.request_body_size.exceeded', sizeExceedTagValue)
-    }
-  } else {
-    const { truncated, value } = truncateRequestBody(requestBody)
-    rootSpan.meta_struct['http.request.body'] = value
-    if (truncated) {
-      const sizeExceedTagKey = comesFromRaspAction
-        ? '_dd.appsec.rasp.request_body_size.exceeded' // TODO old metric to delete in a major
-        : '_dd.appsec.request_body_size.exceeded'
-      rootSpan.setTag(sizeExceedTagKey, 'true')
-    }
+    eventWriter.copyTags(rootSpan, rootSpan, [[
+      '_dd.appsec.rasp.request_body_size.exceeded',
+      '_dd.appsec.request_body_size.exceeded',
+    ]])
+  } else if (truncated) {
+    const sizeExceedTagKey = comesFromRaspAction
+      ? '_dd.appsec.rasp.request_body_size.exceeded' // TODO old metric to delete in a major
+      : '_dd.appsec.request_body_size.exceeded'
+    rootSpan.setTag(sizeExceedTagKey, 'true')
   }
 }
 
@@ -610,11 +582,9 @@ function finishRequest (req, res, storedResponseHeaders, requestBody, rootSpan) 
 
   incrementWafRequestsMetric(req)
 
-  const tags = rootSpan.context().getTags()
-
   const extendedDataCollection = extendedDataCollectionRequest.get(req)
   const newTags = getCollectedHeaders(
-    req, res, shouldCollectEventHeaders(tags), storedResponseHeaders, extendedDataCollection
+    req, res, shouldCollectAppSecEventHeaders(rootSpan), storedResponseHeaders, extendedDataCollection
   )
 
   if (extendedDataCollection) {
@@ -622,20 +592,6 @@ function finishRequest (req, res, storedResponseHeaders, requestBody, rootSpan) 
   }
 
   rootSpan.addTags(newTags)
-}
-
-function shouldCollectEventHeaders (tags = {}) {
-  if (tags['appsec.event'] === 'true') {
-    return true
-  }
-
-  for (const tagName of Object.keys(tags)) {
-    if (tagName.startsWith('appsec.events.')) {
-      return true
-    }
-  }
-
-  return false
 }
 
 module.exports = {

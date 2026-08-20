@@ -3,6 +3,7 @@
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { getAmqpMessageSize, DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
+const { storage } = require('../../datadog-core')
 
 class RheaProducerPlugin extends ProducerPlugin {
   static id = 'rhea'
@@ -26,23 +27,24 @@ class RheaProducerPlugin extends ProducerPlugin {
         [CLIENT_PORT_KEY]: port,
       },
     }, ctx)
+    ctx.currentStore.rheaTargetName = name
 
     return ctx.currentStore
   }
 
   encode (msg) {
-    addDeliveryAnnotations(msg, this.tracer, this.activeSpan)
+    const store = storage('legacy').getStore()
+    addDeliveryAnnotations(msg, this.tracer, store?.span, store?.rheaTargetName)
   }
 }
 
-function addDeliveryAnnotations (msg, tracer, span) {
+function addDeliveryAnnotations (msg, tracer, span, targetName) {
   if (msg) {
     msg.delivery_annotations ||= {}
 
     tracer.inject(span, 'text_map', msg.delivery_annotations)
 
     if (tracer._config.dsmEnabled) {
-      const targetName = span.context().getTag('amqp.link.target.address')
       const payloadSize = getAmqpMessageSize({ content: msg.body, headers: msg.delivery_annotations })
       const dataStreamsContext = tracer
         .setCheckpoint(['direction:out', `exchange:${targetName}`, 'type:rabbitmq'], span, payloadSize)

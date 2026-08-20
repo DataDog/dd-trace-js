@@ -6,6 +6,7 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 const SpanContext = require('../../src/opentelemetry/span_context')
+const { getDatadogContext } = require('../../src/opentracing/context-registry')
 const DDSpanContext = require('../../src/opentracing/span_context')
 const id = require('../../src/id')
 const { USER_REJECT, AUTO_REJECT, AUTO_KEEP, USER_KEEP } = require('../../../../ext/priority')
@@ -14,7 +15,7 @@ const TraceState = require('../../src/opentracing/propagation/tracestate')
 describe('OTel Span Context', () => {
   it('should create new dd context if none given', () => {
     const context = new SpanContext()
-    assert.ok(context._ddContext instanceof DDSpanContext)
+    assert.ok(getDatadogContext(context) instanceof DDSpanContext)
   })
 
   it('should accept given dd context as-is', () => {
@@ -24,7 +25,7 @@ describe('OTel Span Context', () => {
       spanId,
     })
     const context = new SpanContext(ddContext)
-    assert.strictEqual(context._ddContext, ddContext)
+    assert.strictEqual(getDatadogContext(context), ddContext)
   })
 
   it('should accept object to build new dd context', () => {
@@ -33,7 +34,7 @@ describe('OTel Span Context', () => {
       traceId: spanId,
       spanId,
     })
-    const ddContext = context._ddContext
+    const ddContext = getDatadogContext(context)
     assert.ok(ddContext instanceof DDSpanContext)
     assert.strictEqual(ddContext._traceId, spanId)
     assert.strictEqual(ddContext._spanId, spanId)

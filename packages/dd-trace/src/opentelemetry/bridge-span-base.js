@@ -1,5 +1,6 @@
 'use strict'
 
+const { isSpanFinished } = require('../opentracing/span-lifecycle')
 const {
   addOtelEvent,
   addOtelLink,
@@ -8,7 +9,10 @@ const {
   recordException,
   setOtelAttribute,
   setOtelAttributes,
+  setOtelOperationName,
+  setOtelResource,
 } = require('./span-helpers')
+const { registerDatadogSpan } = require('./span-registry')
 
 /**
  * Shared base for the OTel-bridge span classes (`Span` and `ActiveSpanProxy`). Subclasses
@@ -16,12 +20,11 @@ const {
  * and `updateName()`. The writable-span gate lives in the helpers in `span-helpers.js`,
  * so neither bridge can drift from it.
  *
- * `_ddSpan` is left as a `_underscore` field rather than `#private` so the bridge does not
- * expand its published API to expose the underlying DD span. External callers that need
- * the reference (`ContextManager` proxy-cache check, OTLP serialization, tests) reach in
- * via `_ddSpan`, matching the existing convention for "internal, may break".
+ * The wrapped span is private. Cross-module adapter identity is maintained by
+ * `span-registry.js` rather than by exposing a mutable backing field.
  */
 class BridgeSpanBase {
+  #datadogSpan
   // OTel SpanStatusCode: 0 = UNSET, 1 = OK, 2 = ERROR. Tracked for OK-is-final precedence.
   #statusCode = 0
 
@@ -29,12 +32,13 @@ class BridgeSpanBase {
    * @param {import('../opentracing/span')} ddSpan
    */
   constructor (ddSpan) {
-    this._ddSpan = ddSpan
+    this.#datadogSpan = ddSpan
+    registerDatadogSpan(this, ddSpan)
     this._otelTraceSemanticsEnabled = false
   }
 
   get ended () {
-    return this._ddSpan._duration !== undefined
+    return isSpanFinished(this.#datadogSpan)
   }
 
   isRecording () {
@@ -46,7 +50,7 @@ class BridgeSpanBase {
    * @param {import('@opentelemetry/api').AttributeValue} value
    */
   setAttribute (key, value) {
-    setOtelAttribute(this._ddSpan, key, value, this._otelTraceSemanticsEnabled)
+    setOtelAttribute(this.#datadogSpan, key, value, this._otelTraceSemanticsEnabled)
     return this
   }
 
@@ -54,7 +58,7 @@ class BridgeSpanBase {
    * @param {import('@opentelemetry/api').Attributes} attributes
    */
   setAttributes (attributes) {
-    setOtelAttributes(this._ddSpan, attributes, this._otelTraceSemanticsEnabled)
+    setOtelAttributes(this.#datadogSpan, attributes, this._otelTraceSemanticsEnabled)
     return this
   }
 
@@ -64,7 +68,7 @@ class BridgeSpanBase {
    * @param {import('@opentelemetry/api').TimeInput} [startTime]
    */
   addEvent (name, attributesOrStartTime, startTime) {
-    addOtelEvent(this._ddSpan, name, attributesOrStartTime, startTime)
+    addOtelEvent(this.#datadogSpan, name, attributesOrStartTime, startTime)
     return this
   }
 
@@ -75,7 +79,7 @@ class BridgeSpanBase {
    * @param {import('@opentelemetry/api').Attributes} [attrs]
    */
   addLink (link, attrs) {
-    addOtelLink(this._ddSpan, link, attrs)
+    addOtelLink(this.#datadogSpan, link, attrs)
     return this
   }
 
@@ -83,7 +87,7 @@ class BridgeSpanBase {
    * @param {import('@opentelemetry/api').Link[]} links
    */
   addLinks (links) {
-    addOtelLinks(this._ddSpan, links)
+    addOtelLinks(this.#datadogSpan, links)
     return this
   }
 
@@ -92,15 +96,52 @@ class BridgeSpanBase {
    * @param {import('@opentelemetry/api').TimeInput} [timeInput]
    */
   recordException (exception, timeInput) {
-    recordException(this._ddSpan, exception, timeInput, this._otelTraceSemanticsEnabled)
+    recordException(this.#datadogSpan, exception, timeInput, this._otelTraceSemanticsEnabled)
   }
 
   /**
    * @param {import('@opentelemetry/api').SpanStatus} status
    */
   setStatus (status) {
-    this.#statusCode = applyOtelStatus(this._ddSpan, this.#statusCode, status, this._otelTraceSemanticsEnabled)
+    this.#statusCode = applyOtelStatus(
+      this.#datadogSpan,
+      this.#statusCode,
+      status,
+      this._otelTraceSemanticsEnabled
+    )
     return this
+  }
+
+  /**
+   * Apply an OTel name update to the wrapped Datadog span.
+   *
+   * @param {string} name
+   * @param {boolean} operationName
+   */
+  _updateDatadogName (name, operationName) {
+    if (operationName) {
+      setOtelOperationName(this.#datadogSpan, name)
+    } else {
+      setOtelResource(this.#datadogSpan, name)
+    }
+  }
+
+  /**
+   * Finish the wrapped Datadog span.
+   *
+   * @param {number} endTime
+   */
+  _finishDatadogSpan (endTime) {
+    this.#datadogSpan.finish(endTime)
+  }
+
+  /**
+   * Invoke a callback with the wrapped Datadog span without exposing it.
+   *
+   * @param {(span: import('../opentracing/span')) => void} callback
+   */
+  _withDatadogSpan (callback) {
+    callback(this.#datadogSpan)
   }
 }
 

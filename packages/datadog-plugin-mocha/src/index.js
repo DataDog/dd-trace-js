@@ -175,6 +175,7 @@ class MochaPlugin extends CiPlugin {
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
     this._pendingTestSuiteSpans = []
+    this._failedTestSuiteSpans = new WeakSet()
     this._timeOrigin = dateNow()
     this._perfOrigin = performance.now()
 
@@ -479,7 +480,7 @@ class MochaPlugin extends CiPlugin {
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
       if (testSuiteSpan) {
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
-        if (!testSuiteSpan.context().getTag(TEST_STATUS)) {
+        if (!this._failedTestSuiteSpans.has(testSuiteSpan)) {
           testSuiteSpan.setTag(TEST_STATUS, status)
         }
         const exporter = this.tracer._exporter
@@ -506,6 +507,7 @@ class MochaPlugin extends CiPlugin {
       if (testSuiteSpan) {
         testSuiteSpan.setTag('error', error)
         testSuiteSpan.setTag(TEST_STATUS, 'fail')
+        this._failedTestSuiteSpans.add(testSuiteSpan)
 
         ctx.parentStore = ctx.currentStore
         ctx.currentStore = { ...ctx.currentStore, testSuiteSpan }

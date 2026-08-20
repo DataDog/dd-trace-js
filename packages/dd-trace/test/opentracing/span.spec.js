@@ -538,6 +538,26 @@ describe('Span', () => {
     })
   })
 
+  describe('setTagIfAbsent', () => {
+    it('writes only the first value and reports the atomic outcome', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      assert.strictEqual(span.setTagIfAbsent('error', 1), true)
+      assert.strictEqual(span.setTagIfAbsent('error', 2), false)
+      assert.strictEqual(span.context().getTag('error'), 1)
+    })
+  })
+
+  describe('setTagsIfTagMatches', () => {
+    it('updates an owned tag set without exposing the current value', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      assert.strictEqual(span.setTagsIfTagMatches('route', undefined, { route: '/one', resource: 'one' }), true)
+      assert.strictEqual(span.setTagsIfTagMatches('route', '/other', { route: '/two' }), false)
+      assert.deepStrictEqual(span.context().getTags(), { route: '/one', resource: 'one' })
+    })
+  })
+
   describe('addTags', () => {
     beforeEach(() => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })

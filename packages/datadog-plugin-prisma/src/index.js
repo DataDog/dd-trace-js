@@ -47,6 +47,7 @@ class PrismaPlugin extends DatabasePlugin {
       childOf,
       resource: spanName,
       service,
+      startTime: hrTimeToUnixTimeMs(engineSpan.startTime),
       kind: engineSpan.kind,
       meta: {
         prisma: {
@@ -72,7 +73,6 @@ class PrismaPlugin extends DatabasePlugin {
     }
 
     const activeSpan = this.startSpan(this.operationName({ operation: 'engine' }), options)
-    activeSpan._startTime = hrTimeToUnixTimeMs(engineSpan.startTime)
     const children = childrenByParent.get(engineSpan.id)
     if (children) {
       for (const span of children) {

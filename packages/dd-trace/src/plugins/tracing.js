@@ -3,7 +3,8 @@
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../constants')
-const { INTEGRATION_SERVICE } = require('../service-naming/source-resolver')
+const eventWriter = require('../opentracing/event-writer')
+const { setIntegrationService } = require('../service-naming/source-resolver')
 const Plugin = require('./plugin')
 
 const legacyStorage = storage('legacy')
@@ -143,7 +144,7 @@ class TracingPlugin extends Plugin {
    */
   stampIntegrationService (span, name) {
     if (name === undefined) return
-    span[INTEGRATION_SERVICE] = name
+    setIntegrationService(span, name)
   }
 
   /**
@@ -159,8 +160,7 @@ class TracingPlugin extends Plugin {
    * @param {string} name Service name the integration is claiming.
    */
   setServiceName (span, name) {
-    // eslint-disable-next-line eslint-rules/eslint-prefer-set-service-name -- this is the implementation
-    span._spanContext.setTag('service.name', name)
+    eventWriter.setTag(span, 'service.name', name)
     this.stampIntegrationService(span, name)
   }
 

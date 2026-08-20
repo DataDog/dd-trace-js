@@ -6,12 +6,12 @@ const { performance } = require('node:perf_hooks')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../../ext/priority')
 
 describe('API Security Sampler', () => {
   const req = { route: { path: '/test' }, method: 'GET' }
   const res = { statusCode: 200 }
-  let apiSecuritySampler, SamplingDecision, webStub, blockingStub, span, clock, performanceNowStub
+  let apiSecuritySampler, SamplingDecision, webStub, blockingStub, eventWriterStub, projectionsStub
+  let span, clock, performanceNowStub
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({
@@ -32,17 +32,23 @@ describe('API Security Sampler', () => {
       isBlocked: sinon.stub().returns(false),
     }
 
+    eventWriterStub = {
+      sampleForApiSecurity: sinon.stub().returns(true),
+    }
+
+    projectionsStub = {
+      getHttpEndpoint: sinon.stub().callsFake(span => span?.httpEndpoint),
+    }
+
     apiSecuritySampler = proxyquire('../../../src/appsec/api_security/sampler', {
       '../../plugins/util/web': webStub,
+      '../../opentracing/event-writer': eventWriterStub,
+      '../../opentracing/span-projections': projectionsStub,
       '../blocking': blockingStub,
     })
     SamplingDecision = apiSecuritySampler.SamplingDecision
 
-    span = {
-      context: sinon.stub().returns({
-        _sampling: { priority: AUTO_KEEP },
-      }),
-    }
+    span = {}
 
     webStub.root.returns(span)
     webStub.getContext.returns({ paths: ['path'] })
@@ -65,12 +71,12 @@ describe('API Security Sampler', () => {
   })
 
   it('should return SKIP for AUTO_REJECT priority', () => {
-    span.context.returns({ _sampling: { priority: AUTO_REJECT } })
+    eventWriterStub.sampleForApiSecurity.returns(false)
     assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SKIP)
   })
 
   it('should return SKIP for USER_REJECT priority', () => {
-    span.context.returns({ _sampling: { priority: USER_REJECT } })
+    eventWriterStub.sampleForApiSecurity.returns(false)
     assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SKIP)
   })
 
@@ -144,14 +150,9 @@ describe('API Security Sampler', () => {
       assert.strictEqual(apiSecuritySampler.wasSampled(req, res404), true)
     })
 
-    it('should sample for AUTO_KEEP priority without checking prioritySampler', () => {
-      span.context.returns({ _sampling: { priority: AUTO_KEEP } })
+    it('should sample when the atomic sampling decision allows it', () => {
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SAMPLE)
-    })
-
-    it('should sample for USER_KEEP priority without checking prioritySampler', () => {
-      span.context.returns({ _sampling: { priority: USER_KEEP } })
-      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SAMPLE)
+      sinon.assert.calledOnceWithExactly(eventWriterStub.sampleForApiSecurity, span)
     })
   })
 
@@ -207,33 +208,33 @@ describe('API Security Sampler', () => {
     })
 
     it('returns MISSING_ROUTE when there is no route and status is not 404 and response is not blocked', () => {
-      webStub.getContext.returns({ paths: [], span: { context: () => ({ _tags: {} }) } })
+      webStub.getContext.returns({ paths: [], span: {} })
 
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.MISSING_ROUTE)
     })
 
     it('returns SKIP (not MISSING_ROUTE) on 404 routeless responses', () => {
-      webStub.getContext.returns({ paths: [], span: { context: () => ({ _tags: {} }) } })
+      webStub.getContext.returns({ paths: [], span: {} })
 
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, { statusCode: 404 }, true), SamplingDecision.SKIP)
     })
 
     it('returns SKIP (not MISSING_ROUTE) on blocked routeless responses', () => {
-      webStub.getContext.returns({ paths: [], span: { context: () => ({ _tags: {} }) } })
+      webStub.getContext.returns({ paths: [], span: {} })
       blockingStub.isBlocked.returns(true)
 
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
     })
 
     it('returns SKIP (not MISSING_ROUTE) when priority is rejected', () => {
-      span.context.returns({ _sampling: { priority: AUTO_REJECT } })
-      webStub.getContext.returns({ paths: [], span: { context: () => ({ _tags: {} }) } })
+      eventWriterStub.sampleForApiSecurity.returns(false)
+      webStub.getContext.returns({ paths: [], span: {} })
 
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
     })
 
     it('does not record routeless requests in the TTL cache (missing_route ignores TTL)', () => {
-      webStub.getContext.returns({ paths: [], span: { context: () => ({ _tags: {} }) } })
+      webStub.getContext.returns({ paths: [], span: {} })
 
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.MISSING_ROUTE)
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.MISSING_ROUTE)
@@ -247,6 +248,8 @@ describe('API Security Sampler', () => {
       keepTraceStub = sinon.stub()
       apiSecuritySampler = proxyquire('../../../src/appsec/api_security/sampler', {
         '../../plugins/util/web': webStub,
+        '../../opentracing/event-writer': eventWriterStub,
+        '../../opentracing/span-projections': projectionsStub,
         '../blocking': blockingStub,
         '../../priority_sampler': {
           keepTrace: keepTraceStub,
@@ -272,10 +275,10 @@ describe('API Security Sampler', () => {
     })
 
     it('should not check priority sampling in standalone mode', () => {
-      span.context.returns({ _sampling: { priority: AUTO_REJECT } })
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SAMPLE)
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
       assert.strictEqual(keepTraceStub.calledWith(span, 'asm'), true)
+      sinon.assert.notCalled(eventWriterStub.sampleForApiSecurity)
     })
   })
 
@@ -286,14 +289,7 @@ describe('API Security Sampler', () => {
 
     function makeSpan (tags) {
       return {
-        context: sinon.stub().returns({
-          _sampling: { priority: AUTO_KEEP },
-          _tags: tags,
-          getTag: (key) => tags[key],
-          getTags: () => tags,
-          setTag: (key, value) => { tags[key] = value },
-          hasTag: (key) => key in tags,
-        }),
+        httpEndpoint: tags['http.endpoint'],
       }
     }
 
@@ -327,12 +323,7 @@ describe('API Security Sampler', () => {
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SAMPLE)
 
       // Same http.route but different http.endpoint; should share the TTL slot
-      const spanWithDifferentEndpoint = {
-        context: sinon.stub().returns({
-          _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/other' },
-        }),
-      }
+      const spanWithDifferentEndpoint = makeSpan({ 'http.endpoint': '/api/other' })
       webStub.root.returns(spanWithDifferentEndpoint)
       webStub.getContext.returns({ paths: ['/users/:id'], span: spanWithDifferentEndpoint })
 

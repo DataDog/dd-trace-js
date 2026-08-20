@@ -62,7 +62,7 @@ class HttpClientPlugin extends ClientPlugin {
 
     // TODO: Figure out a better way to do this for any span.
     if (!allowed) {
-      span._spanContext._trace.record = false
+      span.setRecording(false)
     }
 
     if (this.shouldInjectTraceHeaders(options, uri)) {

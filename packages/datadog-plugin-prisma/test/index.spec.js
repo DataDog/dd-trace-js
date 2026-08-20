@@ -153,12 +153,9 @@ describe('Plugin', () => {
       const helper = new DatadogTracingHelper(undefined, {})
 
       const span = {
-        _spanContext: {
-          _sampling: { priority: 0 },
-          _traceparent: { version: 'ff' },
-          toTraceId: () => '00000000000000000000000000000001',
-          toSpanId: () => '0000000000000001',
-        },
+        context: () => ({
+          toTraceparent: () => 'ff-00000000000000000000000000000001-0000000000000001-00',
+        }),
       }
 
       storage('legacy').enterWith({ span })
@@ -168,8 +165,6 @@ describe('Plugin', () => {
         traceparentWithExplicitNotSampledPriority,
         'ff-00000000000000000000000000000001-0000000000000001-01'
       )
-
-      span._spanContext._sampling.priority = undefined
 
       const traceparentWithUndefinedPriority = helper.getTraceParent()
       assert.strictEqual(
@@ -183,7 +178,7 @@ describe('Plugin', () => {
       const helper = new DatadogTracingHelper(undefined, {})
 
       const spanContext = { hello: 'world' }
-      storage('legacy').enterWith({ span: { _spanContext: spanContext } })
+      storage('legacy').enterWith({ span: { context: () => spanContext } })
 
       assert.strictEqual(helper.getActiveContext(), spanContext)
     })
