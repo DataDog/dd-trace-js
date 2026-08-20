@@ -73,8 +73,8 @@ withVersions('passport-local', 'passport-local', version => {
     })
 
     after(async () => {
-      server.close()
       try {
+        server?.close()
         await agent.close()
       } finally {
         appsec.disable()
