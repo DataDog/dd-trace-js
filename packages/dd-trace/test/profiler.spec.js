@@ -7,7 +7,7 @@ const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const configUpdateChannel = dc.channel('config:update')
+const configUpdateChannel = dc.channel('datadog:config:update')
 
 describe('profiler', () => {
   let profiler

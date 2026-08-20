@@ -4,7 +4,7 @@ const dc = require('dc-polyfill')
 
 const log = require('./log')
 
-const configUpdateChannel = dc.channel('config:update')
+const configUpdateChannel = dc.channel('datadog:config:update')
 
 /** @type {boolean | undefined} */
 module.started = undefined

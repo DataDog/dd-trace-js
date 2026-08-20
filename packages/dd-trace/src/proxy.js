@@ -43,7 +43,7 @@ const OPENFEATURE_STATE_NOOP = 0
 const OPENFEATURE_STATE_LAZY = 1
 const OPENFEATURE_STATE_ACTIVE = 2
 
-const configUpdateChannel = dc.channel('config:update')
+const configUpdateChannel = dc.channel('datadog:config:update')
 
 const profiler = require('./profiler')
 

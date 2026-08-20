@@ -4849,7 +4849,7 @@ rules:
     let configUpdateChannel
 
     beforeEach(() => {
-      configUpdateChannel = dc.channel('config:update')
+      configUpdateChannel = dc.channel('datadog:config:update')
       subscriber = sinon.spy()
       configUpdateChannel.subscribe(subscriber)
     })

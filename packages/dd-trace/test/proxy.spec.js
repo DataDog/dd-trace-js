@@ -659,7 +659,7 @@ describe('TracerProxy', () => {
       })
 
       it('should publish the config on the config-update channel during init', () => {
-        const configUpdateChannel = dc.channel('config:update')
+        const configUpdateChannel = dc.channel('datadog:config:update')
         const subscriber = sinon.spy()
         configUpdateChannel.subscribe(subscriber)
 

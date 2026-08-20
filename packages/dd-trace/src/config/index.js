@@ -84,7 +84,7 @@ let configInstance = null
 
 // Fires whenever remote config applies a new value; profiling and other RC-driven consumers
 // subscribe here instead of proxy.js hardcoding a call into each of them.
-const configUpdateChannel = dc.channel('config:update')
+const configUpdateChannel = dc.channel('datadog:config:update')
 
 // An entry that is undefined means it is the default value.
 /** @type {Map<ConfigPath, TelemetrySource>} */
