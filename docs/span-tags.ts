@@ -1,4 +1,4 @@
-import tracer, { Span, SpanOptions, SpanTags, TracerOptions } from '..'
+import tracer, { Span, SpanOptions, TracerOptions } from '..'
 import tracerV5 = require('../index.d.v5')
 
 declare module '..' {
@@ -28,6 +28,8 @@ interface Tags {
   object: TagObject
 }
 
+interface EmptyTags {}
+
 interface ErrorMetaTags {
   'error.type': Error
   'error.message': Error
@@ -42,6 +44,7 @@ declare const errorMetaKey: 'error.type' | 'error.message' | 'error.stack'
 declare const mixedErrorMetaKey: 'error.message' | 'error.details'
 declare const errorOrBoolean: Error | boolean
 declare const errorMetaTags: ErrorMetaTags
+declare const emptyTags: EmptyTags
 declare const opaqueObject: object
 declare const tagObject: TagObject
 declare const tags: Tags
@@ -62,22 +65,27 @@ span.addTags({ error: new Error('boom') })
 span.addTags({ error: errorOrBoolean })
 span.addTags(errorMetaTags)
 span.addTags(tags)
+span.addTags({})
+span.addTags(emptyTags)
 tracer.startSpan('test', { tags })
 tracer.trace('test', { tags }, () => {})
 tracer.wrap('test', { tags }, () => {})
 tracer.wrap('test', () => ({ tags }), () => {})
 tracer.init({ tags })
+tracer.init({ tags: {} })
+tracer.init({ tags: emptyTags })
 
-const spanTags: SpanTags<Tags> = tags
-const spanOptions: SpanOptions<Tags> = { tags }
-const defaultSpanTags: SpanTags = { error: new Error('boom') }
+const spanOptions: SpanOptions = { tags }
 const defaultSpanOptions: SpanOptions = { tags: { error: new Error('boom') } }
 const tracerOptions: TracerOptions = { customOption: true, tags: { string: 'value' } }
 const tracerOptionsWithError: TracerOptions = { tags: { error: new Error('boom') } }
 const tracerOptionsWithNamedTags: TracerOptions = { tags }
-void spanTags
+tracer.startSpan('test', spanOptions)
+tracer.startSpan('test', defaultSpanOptions)
+tracer.init(tracerOptions)
+tracer.init(tracerOptionsWithError)
+tracer.init(tracerOptionsWithNamedTags)
 void spanOptions
-void defaultSpanTags
 void defaultSpanOptions
 void tracerOptions
 void tracerOptionsWithError
@@ -111,8 +119,12 @@ span.setTag('null', null)
 span.setTag('undefined', undefined)
 // @ts-expect-error Nested object tag values are not supported.
 span.addTags({ nested: { child: { value: 'value' } } })
+// @ts-expect-error Arrays are not tag maps.
+span.addTags(['value'])
+// @ts-expect-error Functions are not tag maps.
+span.addTags(() => {})
 // @ts-expect-error Unsupported members of tag unions are not supported.
-const unsupportedTagUnion: SpanTags<TagUnion> = tagUnion
+span.addTags(tagUnion)
 // @ts-expect-error Nested object tag values are not supported.
 tracer.startSpan('test', { tags: { nested: { child: { value: 'value' } } } })
 // @ts-expect-error Nested object tag values are not supported.
@@ -123,6 +135,10 @@ tracer.wrap('test', { tags: { nested: { child: { value: 'value' } } } }, () => {
 tracer.wrap('test', () => ({ tags: { nested: { child: { value: 'value' } } } }), () => {})
 // @ts-expect-error Nested object tag values are not supported.
 tracer.init({ tags: { nested: { child: { value: 'value' } } } })
+// @ts-expect-error Arrays are not tag maps.
+tracer.init({ tags: ['value'] })
+// @ts-expect-error Unsupported members of tag unions are not supported.
+tracer.init({ tags: tagUnion })
 
 v5Span.setTag('object', tagObject)
 v5Span.setTag('error', errorOrBoolean)
@@ -132,17 +148,22 @@ v5Span.addTags({ error: new Error('boom') })
 v5Span.addTags({ error: errorOrBoolean })
 v5Span.addTags(errorMetaTags)
 v5Span.addTags(tags)
+v5Span.addTags({})
+v5Span.addTags(emptyTags)
 tracerV5.startSpan('test', { tags })
 tracerV5.trace('test', { tags }, () => {})
 tracerV5.wrap('test', { tags }, () => {})
 tracerV5.wrap('test', () => ({ tags }), () => {})
 tracerV5.init({ customOption: true, tags })
+tracerV5.init({ tags: {} })
+tracerV5.init({ tags: emptyTags })
 
-const v5SpanTags: tracerV5.SpanTags = { error: new Error('boom') }
 const v5SpanOptions: tracerV5.SpanOptions = { tags: { error: new Error('boom') } }
 const v5TracerOptionsWithError: tracerV5.TracerOptions = { tags: { error: new Error('boom') } }
 const v5TracerOptionsWithNamedTags: tracerV5.TracerOptions = { tags }
-void v5SpanTags
+tracerV5.startSpan('test', v5SpanOptions)
+tracerV5.init(v5TracerOptionsWithError)
+tracerV5.init(v5TracerOptionsWithNamedTags)
 void v5SpanOptions
 void v5TracerOptionsWithError
 void v5TracerOptionsWithNamedTags
@@ -165,8 +186,12 @@ v5Span.setTag('error.type', undefined)
 v5Span.setTag(mixedErrorMetaKey, new Error('boom'))
 // @ts-expect-error Nested object tag values are not supported.
 v5Span.addTags({ nested: { child: { value: 'value' } } })
+// @ts-expect-error Arrays are not tag maps.
+v5Span.addTags(['value'])
+// @ts-expect-error Functions are not tag maps.
+v5Span.addTags(() => {})
 // @ts-expect-error Unsupported members of tag unions are not supported.
-const unsupportedV5TagUnion: tracerV5.SpanTags<TagUnion> = tagUnion
+v5Span.addTags(tagUnion)
 // @ts-expect-error Nested object tag values are not supported.
 tracerV5.startSpan('test', { tags: { nested: { child: { value: 'value' } } } })
 // @ts-expect-error Nested object tag values are not supported.
@@ -177,3 +202,7 @@ tracerV5.wrap('test', { tags: { nested: { child: { value: 'value' } } } }, () =>
 tracerV5.wrap('test', () => ({ tags: { nested: { child: { value: 'value' } } } }), () => {})
 // @ts-expect-error Nested object tag values are not supported.
 tracerV5.init({ tags: { nested: { child: { value: 'value' } } } })
+// @ts-expect-error Arrays are not tag maps.
+tracerV5.init({ tags: ['value'] })
+// @ts-expect-error Unsupported members of tag unions are not supported.
+tracerV5.init({ tags: tagUnion })
