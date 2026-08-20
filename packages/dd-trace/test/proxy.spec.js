@@ -49,6 +49,7 @@ describe('TracerProxy', () => {
   let openfeatureProvider
   let registerTelemetryFlusher
   let initializeServerlessTelemetry
+  let supportsServerlessTelemetryRetention
   let flushAll
 
   beforeEach(() => {
@@ -188,6 +189,7 @@ describe('TracerProxy', () => {
 
     registerTelemetryFlusher = sinon.stub().returns(() => {})
     initializeServerlessTelemetry = sinon.spy()
+    supportsServerlessTelemetryRetention = sinon.stub().returns(true)
     flushAll = sinon.spy()
 
     profiler = {
@@ -280,6 +282,7 @@ describe('TracerProxy', () => {
       './serverless': {
         IS_SERVERLESS: false,
         initializeServerlessTelemetry,
+        supportsServerlessTelemetryRetention,
       },
       './flush': { flushAll, registerTelemetryFlusher },
     })
@@ -620,6 +623,16 @@ describe('TracerProxy', () => {
         const done = sinon.spy()
         telemetry.flushAll(done)
         sinon.assert.calledOnceWithExactly(flushAll, proxy._tracer, done, undefined)
+      })
+
+      it('does not create a lifecycle owner outside a retention platform', () => {
+        supportsServerlessTelemetryRetention.returns(false)
+        proxy = new ProxyClass()
+
+        proxy.init()
+
+        assert.strictEqual(proxy._serverlessTelemetry, undefined)
+        sinon.assert.calledWithExactly(initializeServerlessTelemetry, undefined)
       })
 
       it('should expose noop metrics methods prior to initialization', () => {

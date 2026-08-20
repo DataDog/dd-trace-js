@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 
-const { describe, it, afterEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const { logs } = require('@opentelemetry/api-logs')
 const { metrics } = require('@opentelemetry/api')
 const { channel } = require('dc-polyfill')
@@ -13,6 +13,7 @@ require('./setup/core')
 const {
   getServerlessPlatformTags,
   getServerlessPlatform,
+  supportsServerlessTelemetryRetention,
   createServerlessDeliveryTracker,
   enableGCPPubSubPushSubscription,
   initializeServerlessTelemetry,
@@ -32,9 +33,11 @@ describe('TelemetryDeliveryTracker', () => {
     try {
       delete process.env.VERCEL
       assert.strictEqual(createServerlessDeliveryTracker(), undefined)
+      assert.strictEqual(supportsServerlessTelemetryRetention(), false)
 
       process.env.VERCEL = '1'
       assert.ok(createServerlessDeliveryTracker() instanceof TelemetryDeliveryTracker)
+      assert.strictEqual(supportsServerlessTelemetryRetention(), true)
     } finally {
       if (originalVercel === undefined) delete process.env.VERCEL
       else process.env.VERCEL = originalVercel
@@ -205,6 +208,10 @@ describe('Vercel telemetry retention', () => {
     'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT',
   ]
   const originalEndpoints = Object.fromEntries(endpointVariables.map(name => [name, process.env[name]]))
+
+  beforeEach(() => {
+    process.env.VERCEL = '1'
+  })
 
   afterEach(() => {
     if (originalContext === undefined) delete globalThis[requestContext]

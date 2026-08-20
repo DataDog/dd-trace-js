@@ -63,10 +63,20 @@ function getServerlessPlatform () {
 }
 
 /**
+ * Whether the current platform can retain an invocation for telemetry delivery.
+ *
+ * Add future serverless platforms here as they gain an equivalent retention hook.
+ * @returns {boolean}
+ */
+function supportsServerlessTelemetryRetention () {
+  return getServerlessPlatform().isVercel
+}
+
+/**
  * Creates delivery tracking for platforms with an invocation retention hook.
  */
 function createServerlessDeliveryTracker () {
-  if (getServerlessPlatform().isVercel) {
+  if (supportsServerlessTelemetryRetention()) {
     return new (require('./serverless/telemetry-delivery-tracker'))()
   }
 }
@@ -76,7 +86,7 @@ function createServerlessDeliveryTracker () {
  * @param {{ flushAll?: (done: () => void) => void }} tracer
  */
 function initializeServerlessTelemetry (tracer) {
-  if (getServerlessPlatform().isVercel) {
+  if (supportsServerlessTelemetryRetention()) {
     return require('./serverless/vercel').registerVercelTelemetryRetention(tracer)
   }
 }
@@ -84,6 +94,7 @@ function initializeServerlessTelemetry (tracer) {
 module.exports = {
   getServerlessPlatformTags,
   getServerlessPlatform,
+  supportsServerlessTelemetryRetention,
   createServerlessDeliveryTracker,
   getIsGCPFunction,
   getIsAzureFunction,

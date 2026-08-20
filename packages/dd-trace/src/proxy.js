@@ -12,7 +12,7 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const { IS_SERVERLESS, initializeServerlessTelemetry } = require('./serverless')
+const { IS_SERVERLESS, initializeServerlessTelemetry, supportsServerlessTelemetryRetention } = require('./serverless')
 const { flushAll, registerTelemetryFlusher } = require('./flush')
 const processTags = require('./process-tags')
 const { isTrue } = require('./util')
@@ -103,10 +103,11 @@ class Tracer extends NoopProxy {
     this._pluginManager = new PluginManager(this)
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
-    // Keep a stable lifecycle owner even when tracing is disabled. In that
-    // configuration logs and metrics can still have registered flushers.
-    this._serverlessTelemetry = {
-      flushAll: (done, options) => flushAll(this._tracer, done, options),
+    // Logs and metrics can need retention even when tracing is disabled.
+    if (supportsServerlessTelemetryRetention()) {
+      this._serverlessTelemetry = {
+        flushAll: (done, options) => flushAll(this._tracer, done, options),
+      }
     }
     this._flare = new LazyModule(() => require('./flare'))
     this.setBaggageItem = setBaggageItem

@@ -51,6 +51,18 @@ describe('Tracer', () => {
   })
 
   describe('flushAll', () => {
+    let originalVercel
+
+    beforeEach(() => {
+      originalVercel = process.env.VERCEL
+      process.env.VERCEL = '1'
+    })
+
+    afterEach(() => {
+      if (originalVercel === undefined) delete process.env.VERCEL
+      else process.env.VERCEL = originalVercel
+    })
+
     it('flushes registered telemetry pipelines with the configured trace exporter', () => {
       const { flushAll, registerTelemetryFlusher } = require('../src/flush')
       const tracer = {
@@ -140,6 +152,18 @@ describe('Tracer', () => {
         timeout.restore()
         clearTimeout.restore()
       }
+    })
+
+    it('does not retain telemetry flushers outside a supported platform', () => {
+      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      delete process.env.VERCEL
+      const telemetryFlusher = sinon.stub()
+      const unregister = registerTelemetryFlusher(telemetryFlusher)
+
+      flushAll(undefined, sinon.spy())
+
+      sinon.assert.notCalled(telemetryFlusher)
+      unregister()
     })
   })
 

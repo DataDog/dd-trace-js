@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('./log')
+const { supportsServerlessTelemetryRetention } = require('./serverless')
 
 /**
  * @typedef {(done: () => void) => void | Promise<void>} TelemetryFlusher
@@ -18,6 +19,8 @@ const postTraceTelemetryFlushers = new Set()
  * @returns {() => void} Removes this pipeline when its provider is replaced.
  */
 function registerTelemetryFlusher (flusher, options) {
+  if (!supportsServerlessTelemetryRetention()) return () => {}
+
   const flushers = options?.afterTrace ? postTraceTelemetryFlushers : telemetryFlushers
   flushers.add(flusher)
   // Avoid retaining a replaced provider or flushing it alongside the new one.
