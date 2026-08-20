@@ -84,11 +84,10 @@ describe('Plugin', () => {
         let server
         let port
 
-        before(() => agent.load('apollo'))
-        before(() => setupFixtures())
-        before(() => setupApollo(version))
-
-        before(() => {
+        before(async () => {
+          await agent.load('apollo')
+          await setupFixtures()
+          await setupApollo(version)
           ApolloServer = require('../../../versions/@apollo/server/index.js').get().ApolloServer
           startStandaloneServer =
             require('../../../versions/@apollo/server@4.0.0/node_modules/@apollo/server/dist/cjs/standalone/index.js')
@@ -99,11 +98,10 @@ describe('Plugin', () => {
             subscriptions: false, // Disable subscriptions (not supported with Apollo Gateway)
           })
 
-          return startStandaloneServer(server, {
+          const { url } = await startStandaloneServer(server, {
             listen: { port: 0 },
-          }).then(({ url }) => {
-            port = new URL(url).port
           })
+          port = new URL(url).port
         })
 
         after(() => {
@@ -139,9 +137,11 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => agent.load('apollo'))
-        before(() => setupFixtures())
-        before(() => setupApollo(version))
+        before(async () => {
+          await agent.load('apollo')
+          await setupFixtures()
+          await setupApollo(version)
+        })
 
         it('should instrument apollo/gateway', done => {
           const operationName = 'MyQuery'
@@ -514,9 +514,11 @@ describe('Plugin', () => {
         )
 
         describe('with configuration', () => {
-          before(() => agent.load('apollo', { service: 'custom', source: true, signature: false }))
-          before(() => setupFixtures())
-          before(() => setupApollo(version))
+          before(async () => {
+            await agent.load('apollo', { service: 'custom', source: true, signature: false })
+            await setupFixtures()
+            await setupApollo(version)
+          })
 
           it('should be configured with the correct values', done => {
             const operationName = 'MyQuery'
@@ -566,9 +568,11 @@ describe('Plugin', () => {
             },
           }
 
-          before(() => agent.load('apollo', config))
-          before(() => setupFixtures())
-          before(() => setupApollo(version))
+          before(async () => {
+            await agent.load('apollo', config)
+            await setupFixtures()
+            await setupApollo(version)
+          })
 
           afterEach(() => Object.keys(config.hooks).forEach(
             key => config.hooks[key].resetHistory()
