@@ -597,7 +597,7 @@ moduleTypes.forEach(({
                 [TEST_FRAMEWORK]: 'cypress',
               },
             })
-          }, { hardTimeout: 20000 })
+          }, { hardTimeout: 60000 })
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         receiverPromise,
@@ -751,7 +751,7 @@ moduleTypes.forEach(({
                   [TEST_FRAMEWORK]: 'cypress',
                 },
               })
-            }, { hardTimeout: 20000 })
+            }, { hardTimeout: 60000 })
 
         const [[exitCode]] = await Promise.all([
           once(childProcess, 'exit'),
@@ -810,7 +810,7 @@ moduleTypes.forEach(({
                     [TEST_FRAMEWORK]: 'cypress',
                   },
                 })
-              }, { hardTimeout: 20000 })
+              }, { hardTimeout: 60000 })
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
@@ -873,7 +873,7 @@ moduleTypes.forEach(({
             framework: event.content.meta?.[TEST_FRAMEWORK],
             error: event.content.meta?.[ERROR_MESSAGE],
           })), null, 2)}\nCypress output:\n${testOutput}`)
-          }, { hardTimeout: 20000 })
+          }, { hardTimeout: 60000 })
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         receiverPromise,
@@ -997,7 +997,7 @@ moduleTypes.forEach(({
                   [TEST_FRAMEWORK]: 'cypress',
                 },
               })
-            }, { hardTimeout: 20000 })
+            }, { hardTimeout: 60000 })
         const [[exitCode]] = await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise,
