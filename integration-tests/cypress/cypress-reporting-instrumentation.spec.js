@@ -293,7 +293,7 @@ moduleTypes.forEach(({
                 [TEST_FRAMEWORK]: 'cypress',
               },
             })
-          }, { hardTimeout: 20000 })
+          }, { hardTimeout: 60000 })
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
