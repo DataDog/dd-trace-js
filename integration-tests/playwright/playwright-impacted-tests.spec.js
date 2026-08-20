@@ -17,6 +17,7 @@ const {
 } = require('../helpers')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
+  TEST_STATUS,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
@@ -25,6 +26,7 @@ const {
   TEST_RETRY_REASON,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const { PLAYWRIGHT_VERSION } = process.env
@@ -41,6 +43,22 @@ const DEFAULT_IMPACTED_KNOWN_TESTS = {
       ['impacted test should be impacted', 'impacted test 2 should be impacted 2'],
     'unimpacted-test.js':
       ['unimpacted test should not be impacted'],
+  },
+}
+
+const IMPACTED_QUARANTINE_MANAGEMENT_TESTS = {
+  playwright: {
+    suites: {
+      'impacted-test.js': {
+        tests: {
+          'impacted test should be impacted': {
+            properties: {
+              quarantined: true,
+            },
+          },
+        },
+      },
+    },
   },
 }
 
@@ -257,6 +275,67 @@ versions.forEach((version) => {
           receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
           receiver.setSettings({ impacted_tests_enabled: true })
           await runImpactedTest(receiver, { isModified: true })
+        })
+
+        it('quarantines EFD-managed impacted tests without native retry duplication', async (receiver) => {
+          receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
+          receiver.setTestManagementTests(IMPACTED_QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD,
+                '10s': NUM_RETRIES_EFD,
+              },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+            test_management: { enabled: true },
+          })
+
+          let testOutput = ''
+          let proc
+          try {
+            proc = exec(
+              './node_modules/.bin/playwright test -c playwright.config.js impacted-test.js --retries=1',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  PW_BASE_URL: `http://localhost:${webAppPort}`,
+                  TEST_DIR: './ci-visibility/playwright-tests-impacted-tests',
+                  GITHUB_BASE_REF: '',
+                },
+              }
+            )
+            proc.stdout?.on('data', data => { testOutput += data.toString() })
+            proc.stderr?.on('data', data => { testOutput += data.toString() })
+
+            const eventsPromise = receiver
+              .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                const quarantinedTests = tests.filter(
+                  test => test.meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+                )
+
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+                assert.strictEqual(quarantinedTests.length, NUM_RETRIES_EFD + 1)
+                assert.ok(quarantinedTests.every(test => test.meta[TEST_STATUS] === 'fail'))
+                assert.ok(quarantinedTests.every(test => test.meta[TEST_IS_MODIFIED] === 'true'))
+                assert.strictEqual(
+                  quarantinedTests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length,
+                  NUM_RETRIES_EFD
+                )
+              }, { hardTimeout: 60_000 })
+
+            const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0, testOutput)
+          } finally {
+            proc?.kill()
+          }
         })
 
         it('does not manage impacted tests when the EFD retry budget is zero', async (receiver) => {

@@ -922,7 +922,11 @@ versions.forEach((version) => {
       })
 
       context('quarantine', () => {
-        const getTestAssertions = (receiver, { isQuarantining, hasFlakyTests }) =>
+        const getTestAssertions = (receiver, {
+          isQuarantining,
+          hasFlakyTests,
+          expectedQuarantinedTestCount,
+        }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -955,7 +959,7 @@ versions.forEach((version) => {
                 if (hasFlakyTests) {
                   assert.strictEqual(quarantinedTests[1].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 } else {
-                  assert.strictEqual(quarantinedTests.length, 1)
+                  assert.strictEqual(quarantinedTests.length, expectedQuarantinedTestCount)
                 }
                 assert.strictEqual(quarantinedTests[0].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 assertObjectContains(testSession.meta, {
@@ -978,7 +982,8 @@ versions.forEach((version) => {
          *   isQuarantining?: boolean,
          *   extraEnvVars?: Record<string, string>,
          *   cliArgs?: string,
-         *   hasFlakyTests?: boolean
+         *   hasFlakyTests?: boolean,
+         *   expectedQuarantinedTestCount?: number
          * }} options
          */
         const runQuarantineTest = async (receiver, {
@@ -986,8 +991,13 @@ versions.forEach((version) => {
           extraEnvVars,
           cliArgs = 'quarantine-test.js',
           hasFlakyTests = false,
+          expectedQuarantinedTestCount = 1,
         }) => {
-          const testAssertionsPromise = getTestAssertions(receiver, { isQuarantining, hasFlakyTests })
+          const testAssertionsPromise = getTestAssertions(receiver, {
+            isQuarantining,
+            hasFlakyTests,
+            expectedQuarantinedTestCount,
+          })
           let testOutput = ''
           let proc
           try {
@@ -1031,6 +1041,16 @@ versions.forEach((version) => {
           await runQuarantineTest(receiver, { isQuarantining: true })
         })
 
+        it('can quarantine each repeated test instance', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: true } })
+          await runQuarantineTest(receiver, {
+            isQuarantining: true,
+            cliArgs: 'quarantine-test.js --repeat-each=2',
+            expectedQuarantinedTestCount: 2,
+          })
+        })
+
         it('can quarantine tests when there are other flaky tests retried with --retries', async (receiver) => {
           receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
           receiver.setSettings({ test_management: { enabled: true } })
@@ -1059,6 +1079,7 @@ versions.forEach((version) => {
           shouldUseCustomReporter = false,
           shouldFailBeforeAll = false,
           shouldFailGlobalTeardown = false,
+          shouldReachMaxFailures = false,
           shouldPassRetries = false,
         } = {}) => {
           const numRetries = 3
@@ -1084,13 +1105,15 @@ versions.forEach((version) => {
           try {
             proc = exec(
               './node_modules/.bin/playwright test -c playwright.config.js quarantine-test.js ' +
-                (shouldFailBeforeAll ? 'failing-before-all-test.js' : ''),
+                (shouldFailBeforeAll ? 'failing-before-all-test.js ' : '') +
+                (shouldReachMaxFailures ? 'zzz-passing-test.js' : ''),
               {
                 cwd,
                 env: {
                   ...getCiVisAgentlessConfig(receiver.port),
                   ...(shouldUseCustomReporter ? { PLAYWRIGHT_FROZEN_REPORTER: '1' } : {}),
                   ...(shouldFailGlobalTeardown ? { FAIL_GLOBAL_TEARDOWN: '1' } : {}),
+                  ...(shouldReachMaxFailures ? { MAX_FAILURES: '1', PLAYWRIGHT_WORKERS: '1' } : {}),
                   PW_BASE_URL: `http://localhost:${webAppPort}`,
                   TEST_DIR: './ci-visibility/playwright-tests-test-management',
                   ...(shouldPassRetries ? { SHOULD_PASS_EFD_RETRIES: '1' } : {}),
@@ -1110,34 +1133,42 @@ versions.forEach((version) => {
 
                 assert.strictEqual(
                   testSession.meta[TEST_STATUS],
-                  shouldFailBeforeAll || shouldFailGlobalTeardown ? 'fail' : 'pass'
+                  shouldFailBeforeAll || shouldFailGlobalTeardown || shouldReachMaxFailures ? 'fail' : 'pass'
                 )
-                assert.strictEqual(tests.length, numRetries + 1)
-                assert.strictEqual(
-                  tests.filter(test => test.meta[TEST_STATUS] === 'fail').length,
-                  shouldPassRetries ? 1 : numRetries + 1
-                )
-                assert.strictEqual(
-                  tests.filter(test => test.meta[TEST_STATUS] === 'pass').length,
-                  shouldPassRetries ? numRetries : 0
-                )
+                if (shouldReachMaxFailures) {
+                  assert.ok(tests.length >= 1 && tests.length <= numRetries + 1)
+                  assert.ok(tests.some(test => test.meta[TEST_STATUS] === 'fail'))
+                } else {
+                  assert.strictEqual(tests.length, numRetries + 1)
+                  assert.strictEqual(
+                    tests.filter(test => test.meta[TEST_STATUS] === 'fail').length,
+                    shouldPassRetries ? 1 : numRetries + 1
+                  )
+                  assert.strictEqual(
+                    tests.filter(test => test.meta[TEST_STATUS] === 'pass').length,
+                    shouldPassRetries ? numRetries : 0
+                  )
+                }
                 for (const test of tests) {
                   assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 }
 
                 const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-                assert.strictEqual(retries.length, numRetries)
                 assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd))
 
                 const finalTests = tests.filter(test => TEST_FINAL_STATUS in test.meta)
-                assert.strictEqual(finalTests.length, 1)
-                assert.strictEqual(finalTests[0].meta[TEST_FINAL_STATUS], 'skip')
+                if (!shouldReachMaxFailures) {
+                  assert.strictEqual(retries.length, numRetries)
+                  assert.strictEqual(finalTests.length, 1)
+                  assert.strictEqual(finalTests[0].meta[TEST_FINAL_STATUS], 'skip')
+                }
               }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
 
             const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
             assert.match(testOutput, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
-            assert.strictEqual(exitCode, shouldFailBeforeAll || shouldFailGlobalTeardown ? 1 : 0, testOutput)
+            const shouldFail = shouldFailBeforeAll || shouldFailGlobalTeardown || shouldReachMaxFailures
+            assert.strictEqual(exitCode, shouldFail ? 1 : 0, testOutput)
           } finally {
             proc?.kill()
           }
@@ -1161,6 +1192,10 @@ versions.forEach((version) => {
 
         it('does not quarantine a global teardown failure when an EFD retry passes', async (receiver) => {
           await runEfdQuarantineTest(receiver, { shouldFailGlobalTeardown: true, shouldPassRetries: true })
+        })
+
+        it('does not quarantine tests skipped after max failures is reached', async (receiver) => {
+          await runEfdQuarantineTest(receiver, { shouldReachMaxFailures: true })
         })
 
         it('quarantines failures when a hook passes on a native retry', async (receiver) => {

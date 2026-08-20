@@ -46,7 +46,7 @@ const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionConfigurationCh = channel('ci:playwright:session:configuration')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
 const reporterErrorCh = channel('ci:playwright:reporter:error')
-const reporterFailureCountCh = channel('ci:playwright:reporter:failure-count')
+const reporterRunSummaryCh = channel('ci:playwright:reporter:run-summary')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
@@ -112,8 +112,7 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
-let playwrightFailureCount
-let quarantinedButNotAttemptToFixTestKeys = new Set()
+let playwrightRunSummary
 let recordedTestOptimizationExecutions = new Set()
 let testsReportedInGenerateSummary = new Set()
 const newTestsWithDynamicNames = new Set()
@@ -870,9 +869,6 @@ function testEndHandler ({
   }
 
   const testProperties = getTestProperties(test)
-  if (testProperties.quarantined && !testProperties.attemptToFix) {
-    quarantinedButNotAttemptToFixTestKeys.add(testStatusKey)
-  }
   const hasRecordedTestOptimizationExecution = recordedTestOptimizationExecutions.has(test)
 
   if (!hasRecordedTestOptimizationExecution) {
@@ -1262,7 +1258,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
   return async function (config) {
     reporterError = undefined
     hasReporterError = false
-    playwrightFailureCount = undefined
+    playwrightRunSummary = undefined
     let restoreReporterConsoleError
     if (satisfies(playwrightVersion, '>=1.60.0') && config?.config) {
       const DatadogPlaywrightReporter = require('./playwright-reporter')
@@ -1437,24 +1433,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
     if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
-      let totalIgnorableFailureCount = 0
-
-      for (const [testKey, testStatuses] of testsToTestStatuses) {
-        if (!quarantinedButNotAttemptToFixTestKeys.has(testKey)) continue
-
-        const lastStatus = testStatuses.at(-1)
-        if (!efdManagedTestKeys.has(testKey)) {
-          if (lastStatus === 'fail') totalIgnorableFailureCount += 1
-          continue
-        }
-
-        // EFD retries are separate Playwright tests, so each failed clone contributes one runner failure.
-        for (const testStatus of testStatuses) {
-          if (testStatus === 'fail') totalIgnorableFailureCount += 1
-        }
-      }
-
-      if (totalIgnorableFailureCount > 0 && totalIgnorableFailureCount === playwrightFailureCount) {
+      const { failureCount, quarantinedFailureCount, hasIncompleteTests } = playwrightRunSummary || {}
+      if (!hasIncompleteTests && quarantinedFailureCount > 0 && quarantinedFailureCount === failureCount) {
         runAllTestsReturn = 'passed'
         preventedToFail = true
       }
@@ -1481,8 +1461,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     startedSuites = []
     remainingTestsByFile = {}
-    playwrightFailureCount = undefined
-    quarantinedButNotAttemptToFixTestKeys = new Set()
+    playwrightRunSummary = undefined
     recordedTestOptimizationExecutions = new Set()
     testsReportedInGenerateSummary = new Set()
     efdManagedTestKeys.clear()
@@ -1671,8 +1650,8 @@ reporterErrorCh.subscribe((error) => {
   recordReporterError(error)
 })
 
-reporterFailureCountCh.subscribe((failureCount) => {
-  playwrightFailureCount = failureCount
+reporterRunSummaryCh.subscribe((runSummary) => {
+  playwrightRunSummary = runSummary
 })
 
 /**
@@ -1906,11 +1885,6 @@ function processRootSuite (createRootSuiteReturnValue) {
       }
       if (testProperties.quarantined) {
         test._ddIsQuarantined = true
-        if (!testProperties.attemptToFix) {
-          // Do not skip quarantined tests, let them run and overwrite results post-run if they fail
-          const testFqn = getTestFullyQualifiedName(test)
-          quarantinedButNotAttemptToFixTestKeys.add(testFqn)
-        }
       }
       if (testProperties.attemptToFix) {
         test._ddIsAttemptToFix = true
@@ -1951,6 +1925,8 @@ function processRootSuite (createRootSuiteReturnValue) {
     for (const impactedTest of impactedTests) {
       impactedTest._ddIsModified = true
       if (shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped') {
+        // Prevent ATR or `--retries` from retrying tests that EFD manages.
+        impactedTest.retries = 0
         markEfdManagedTest(impactedTest)
         const fileSuite = getSuiteType(impactedTest, 'file')
         if (!fileSuitesWithImpactedTestsToProjects.has(fileSuite)) {

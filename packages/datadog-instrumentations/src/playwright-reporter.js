@@ -3,7 +3,7 @@
 const { channel } = require('dc-polyfill')
 
 const reporterErrorCh = channel('ci:playwright:reporter:error')
-const reporterFailureCountCh = channel('ci:playwright:reporter:failure-count')
+const reporterRunSummaryCh = channel('ci:playwright:reporter:run-summary')
 const PLAYWRIGHT_REPORTER_ERROR_MESSAGE = 'Error in reporter'
 const PLAYWRIGHT_REPORTER_ERROR_CALLER_RE =
   /^\s*at wrapAsync .*?[\\/]playwright[\\/]lib[\\/]runner[\\/]index\.js:\d+:\d+\)?$/
@@ -75,13 +75,23 @@ class DatadogPlaywrightReporter {
    */
   onEnd () {
     let failureCount = this.fatalErrorCount
+    let quarantinedFailureCount = 0
+    let hasIncompleteTests = false
     const tests = this.suite?.allTests?.()
     if (tests) {
       for (const test of tests) {
-        if (test.outcome() === 'unexpected') failureCount += 1
+        const outcome = test.outcome()
+        if (outcome === 'unexpected') {
+          failureCount += 1
+          if (test._ddIsQuarantined && !test._ddIsAttemptToFix) quarantinedFailureCount += 1
+        } else if (outcome === 'skipped' && !test._ddIsDisabled) {
+          const { results } = test
+          hasIncompleteTests ||= results.some(result => result.status === 'interrupted') ||
+            !results.length || test.expectedStatus !== 'skipped'
+        }
       }
     }
-    reporterFailureCountCh.publish(failureCount)
+    reporterRunSummaryCh.publish({ failureCount, quarantinedFailureCount, hasIncompleteTests })
 
     if (!this.captureReporterErrors) return
 
