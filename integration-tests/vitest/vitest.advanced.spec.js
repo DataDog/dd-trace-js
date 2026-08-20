@@ -740,8 +740,10 @@ versions.forEach((version) => {
 
     // Coverage report upload only works for >=2.0.0 (when vitest has proper coverage support)
     // v4 dropped support for Node 18
-    if (version === 'latest' && NODE_MAJOR >= 20) {
-      context('coverage report upload', () => {
+    {
+      const coverageReportUploadContext = version === 'latest' && NODE_MAJOR >= 20 ? context : context.skip
+
+      coverageReportUploadContext('coverage report upload', () => {
         const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
         const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
 
@@ -1376,8 +1378,10 @@ versions.forEach((version) => {
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })
 
-      if (version === 'latest') {
-        it('sets final_status tag to skip for disabled tests', async () => {
+      {
+        const latestVersionTest = version === 'latest' ? it : it.skip
+
+        latestVersionTest('sets final_status tag to skip for disabled tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
           receiver.setTestManagementTests({
             vitest: {
@@ -1437,7 +1441,7 @@ versions.forEach((version) => {
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })
 
-        it('sets final_status tag to skip for quarantined tests', async () => {
+        latestVersionTest('sets final_status tag to skip for quarantined tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
           receiver.setTestManagementTests({
             vitest: {

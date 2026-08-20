@@ -22,7 +22,7 @@
   "dependencies": {
     "@apollo/server": "5.5.1",
     "@koa/router": "15.7.0",
-    "@smithy/smithy-client": "4.15.0",
+    "@smithy/smithy-client": "4.15.2",
     "aws-sdk": "2.1693.0",
     "axios": "1.19.0",
     "esbuild": "^0.28.0",
