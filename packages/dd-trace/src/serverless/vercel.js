@@ -3,8 +3,11 @@
 const { channel } = require('dc-polyfill')
 
 const { getEnvironmentVariable } = require('../config/helper')
+const log = require('../log')
 
+const httpRequestStartChannel = channel('apm:http:server:request:start')
 const httpRequestFinishChannel = channel('apm:http:server:request:finish')
+const http2RequestStartChannel = channel('apm:http2:server:request:start')
 const http2ResponseEmitChannel = channel('apm:http2:server:response:emit')
 const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
 const VERCEL_FLUSH_TIMEOUT = 2000
@@ -23,7 +26,8 @@ function flushVercelTelemetry (tracer, done) {
   setImmediate(() => {
     try {
       tracer.flushAll(done, { timeout: VERCEL_FLUSH_TIMEOUT })
-    } catch {
+    } catch (error) {
+      log.warn('Unable to flush Vercel telemetry:', error)
       done()
     }
   })
@@ -42,7 +46,8 @@ function registerVercelRequestFlush (tracer) {
   try {
     waitUntil(pending)
     flushVercelTelemetry(tracer, done)
-  } catch {
+  } catch (error) {
+    log.warn('Unable to retain Vercel telemetry:', error)
     done()
   }
 }
@@ -62,15 +67,21 @@ function registerVercelTelemetryRetention (tracer) {
   if (existing) return existing
 
   if (typeof tracer?.flushAll !== 'function') return
+  // Keep the core response wrappers active even when the HTTP tracing plugins are disabled.
+  const activateHttpLifecycle = () => {}
   const flushRequest = () => registerVercelRequestFlush(tracer)
   const flushHttp2Response = ({ eventName }) => {
     if (eventName === 'close') flushRequest()
   }
+  httpRequestStartChannel.subscribe(activateHttpLifecycle)
   httpRequestFinishChannel.subscribe(flushRequest)
+  http2RequestStartChannel.subscribe(activateHttpLifecycle)
   http2ResponseEmitChannel.subscribe(flushHttp2Response)
 
   const unregister = () => {
+    httpRequestStartChannel.unsubscribe(activateHttpLifecycle)
     httpRequestFinishChannel.unsubscribe(flushRequest)
+    http2RequestStartChannel.unsubscribe(activateHttpLifecycle)
     http2ResponseEmitChannel.unsubscribe(flushHttp2Response)
     vercelRetentionHandlers.delete(tracer)
   }

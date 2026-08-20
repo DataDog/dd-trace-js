@@ -1,12 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
 const http = require('node:http')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const { logs } = require('@opentelemetry/api-logs')
 const { metrics } = require('@opentelemetry/api')
 const { channel } = require('dc-polyfill')
+const sinon = require('sinon')
 
 require('./setup/core')
 
@@ -229,6 +231,7 @@ describe('Vercel telemetry retention', () => {
     process.env.DD_LOGS_OTEL_ENABLED = 'true'
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
     const received = new Set()
+    const responses = []
     let intakeReceived
     let metricPayloads = 0
     const intake = http.createServer((req, res) => {
@@ -240,7 +243,7 @@ describe('Vercel telemetry retention', () => {
           metricPayloads++
         }
         if (req.url === '/v1/traces') received.add('traces')
-        res.end()
+        responses.push(res)
         if (received.size === 3 && metricPayloads === 2) intakeReceived()
       })
     })
@@ -271,10 +274,18 @@ describe('Vercel telemetry retention', () => {
       unregister = registerVercelTelemetryRetention(tracer)
       channel('apm:http:server:request:finish').publish({})
       await intakeRequests
+
+      let settled = false
+      retained.then(() => { settled = true })
+      await new Promise(resolve => setImmediate(resolve))
+      assert.strictEqual(settled, false)
+
+      for (const response of responses) response.end()
       await retained
       assert.deepStrictEqual(received, new Set(['traces', 'logs', 'metrics']))
       assert.strictEqual(metricPayloads, 2)
     } finally {
+      for (const response of responses) response.end()
       unregister?.()
       metrics.getMeterProvider()?.reader?.shutdown()
       logs.getLoggerProvider()?.shutdown?.()
@@ -328,6 +339,109 @@ describe('Vercel telemetry retention', () => {
       assert.strictEqual(flushes, 1)
     } finally {
       unregister()
+    }
+  })
+
+  it('retains an instrumented HTTP request without HTTP tracing plugins', () => {
+    const vercelModule = require.resolve('../src/serverless/vercel')
+    const instrumentationRegister = require.resolve('../../datadog-instrumentations/src/helpers/register')
+    const script = `
+      process.env.VERCEL = '1'
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
+      const { registerVercelTelemetryRetention } = require(${JSON.stringify(vercelModule)})
+      require(${JSON.stringify(instrumentationRegister)})
+      const http = require('node:http')
+      const requestContext = Symbol.for('@vercel/request-context')
+      let retained
+      let flushes = 0
+      globalThis[requestContext] = { get: () => ({ waitUntil: promise => { retained = promise } }) }
+      const unregister = registerVercelTelemetryRetention({ flushAll: done => { flushes++; done() } })
+      const server = http.createServer((_req, res) => res.end())
+      const fail = error => {
+        unregister()
+        server.close(() => { throw error })
+      }
+      server.listen(0, '127.0.0.1', () => {
+        const { port } = server.address()
+        http.get('http://127.0.0.1:' + port, res => {
+          res.resume()
+          res.once('end', () => {
+            setTimeout(() => {
+              if (!retained) return fail(new Error('Vercel retention was not registered'))
+              retained.then(() => {
+                if (flushes !== 1) return fail(new Error('Vercel telemetry was not flushed'))
+                unregister()
+                server.close()
+              })
+            }, 0)
+          })
+        }).on('error', fail)
+      })
+    `
+    const result = spawnSync(process.execPath, ['--eval', script], { encoding: 'utf8', timeout: 5_000 })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+  })
+
+  it('retains an instrumented HTTP/2 request without HTTP tracing plugins', () => {
+    const vercelModule = require.resolve('../src/serverless/vercel')
+    const instrumentationRegister = require.resolve('../../datadog-instrumentations/src/helpers/register')
+    const script = `
+      process.env.VERCEL = '1'
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
+      const { registerVercelTelemetryRetention } = require(${JSON.stringify(vercelModule)})
+      require(${JSON.stringify(instrumentationRegister)})
+      const http2 = require('node:http2')
+      const requestContext = Symbol.for('@vercel/request-context')
+      let retained
+      let flushes = 0
+      globalThis[requestContext] = { get: () => ({ waitUntil: promise => { retained = promise } }) }
+      const unregister = registerVercelTelemetryRetention({ flushAll: done => { flushes++; done() } })
+      const server = http2.createServer()
+      const fail = error => {
+        unregister()
+        server.close(() => { throw error })
+      }
+      server.on('stream', stream => {
+        stream.respond({ ':status': 200 })
+        stream.end()
+      })
+      server.listen(0, '127.0.0.1', () => {
+        const { port } = server.address()
+        const client = http2.connect('http://127.0.0.1:' + port)
+        const request = client.request()
+        request.resume()
+        request.once('end', () => {
+          client.close()
+          setTimeout(() => {
+            if (!retained) return fail(new Error('Vercel retention was not registered'))
+            retained.then(() => {
+              if (flushes !== 1) return fail(new Error('Vercel telemetry was not flushed'))
+              unregister()
+              server.close()
+            })
+          }, 0)
+        })
+        request.end()
+      })
+    `
+    const result = spawnSync(process.execPath, ['--eval', script], { encoding: 'utf8', timeout: 5_000 })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+  })
+
+  it('logs a Vercel waitUntil registration failure', () => {
+    const error = new Error('request context closed')
+    const warn = sinon.stub(require('../src/log'), 'warn')
+    globalThis[requestContext] = { get: () => ({ waitUntil: () => { throw error } }) }
+    const unregister = registerVercelTelemetryRetention({ flushAll () {} })
+
+    try {
+      channel('apm:http:server:request:finish').publish({})
+      sinon.assert.calledWith(warn, 'Unable to retain Vercel telemetry:', error)
+    } finally {
+      unregister()
+      warn.restore()
     }
   })
 

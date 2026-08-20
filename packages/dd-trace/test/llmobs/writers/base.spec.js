@@ -242,6 +242,23 @@ describe('BaseLLMObsWriter', () => {
       sinon.assert.calledOnce(request)
     })
 
+    it('flushes a lifecycle request after agent strategy selection completes', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'bar' })
+      const done = sinon.spy()
+
+      writer.flush(done)
+
+      sinon.assert.notCalled(request)
+      sinon.assert.notCalled(done)
+      writer.setAgentless(true)
+
+      sinon.assert.calledOnce(request)
+      request.firstCall.args[2]()
+      sinon.assert.calledOnce(done)
+    })
+
     it('waits for an export already in flight', () => {
       process.env.VERCEL = '1'
       writer = new BaseLLMObsWriter(options)

@@ -34,6 +34,8 @@ class LLMObsBuffer {
 
 class BaseLLMObsWriter {
   #destroyer
+  /** @type {Function[]} */
+  #pendingFlushes = []
   #serverlessDeliveryTracker = createServerlessDeliveryTracker()
   /** @type {Map<string, LLMObsBuffer>} */
   #multiTenantBuffers = new Map()
@@ -118,7 +120,10 @@ class BaseLLMObsWriter {
    * @param {Function} [done]
    */
   flush (done) {
-    if (this._agentless == null) return done?.()
+    if (this._agentless == null) {
+      if (done) this.#pendingFlushes.push(done)
+      return
+    }
 
     const requests = this.#drainBuffers()
     if (!this.#serverlessDeliveryTracker) {
@@ -189,13 +194,19 @@ class BaseLLMObsWriter {
 
   makePayload (events) {}
 
-  destroy () {
+  /**
+   * Stops periodic flushing and drains buffered events.
+   * @param {Function} [done] Called after queued and active deliveries complete.
+   */
+  destroy (done) {
     if (this.#destroyer) {
       logger.debug(`Stopping ${this.constructor.name}`)
       clearInterval(this._periodic)
       globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
-      this.flush()
+      this.flush(done)
       this.#destroyer = undefined
+    } else {
+      done?.()
     }
   }
 
@@ -207,6 +218,10 @@ class BaseLLMObsWriter {
     this._endpoint = endpoint
 
     logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
+
+    const pendingFlushes = this.#pendingFlushes
+    this.#pendingFlushes = []
+    for (const done of pendingFlushes) this.flush(done)
   }
 
   _getUrlAndPath () {

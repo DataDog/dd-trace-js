@@ -79,6 +79,21 @@ describe('span-stats exporter', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('waits for an encoder-triggered export during the flush boundary', () => {
+    exporter = new Exporter({ url })
+    const onFlush = Writer.firstCall.args[0].onFlush
+    let automaticDone
+    writer.append = sinon.stub().callsFake(() => onFlush(done => { automaticDone = done }))
+    writer.flush = sinon.stub().callsFake(done => done())
+    const done = sinon.spy()
+
+    exporter.export('boundary export', done)
+
+    sinon.assert.notCalled(done)
+    automaticDone()
+    sinon.assert.calledOnce(done)
+  })
+
   it('does not retain a failed writer flush', () => {
     writer.flush = sinon.stub()
     writer.flush.onFirstCall().throws(new Error('encode failed'))

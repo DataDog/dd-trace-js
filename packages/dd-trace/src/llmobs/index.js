@@ -75,9 +75,11 @@ function enable (config) {
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
   spanWriter = new LLMObsSpanWriter(config)
+  const currentEvalWriter = evalWriter
+  const currentSpanWriter = spanWriter
   // Replace the prior callback when LLMObs writers are reinitialized.
   unregisterTelemetryFlusher?.()
-  unregisterTelemetryFlusher = registerTelemetryFlusher(flushWriters)
+  unregisterTelemetryFlusher = registerTelemetryFlusher(done => flushWriters(done, currentSpanWriter, currentEvalWriter))
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -101,8 +103,10 @@ function enable (config) {
       }
     }
 
-    evalWriter?.setAgentless(useAgentless)
-    spanWriter?.setAgentless(useAgentless)
+    // A disable can happen while transport selection is still pending. Keep
+    // configuring these writers so their queued lifecycle flushes can drain.
+    currentEvalWriter.setAgentless(useAgentless)
+    currentSpanWriter.setAgentless(useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
     log.debug('[LLMObs] Enabled LLM Observability with configuration: %o', config.llmobs)
@@ -116,15 +120,30 @@ function disable () {
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsInjection)
   if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
-  spanWriter?.destroy()
-  evalWriter?.destroy()
+  const retiredSpanWriter = spanWriter
+  const retiredEvalWriter = evalWriter
   spanProcessor?.setWriter(null)
-  // Do not retain disabled writers in serverless lifecycle flushing.
   unregisterTelemetryFlusher?.()
   unregisterTelemetryFlusher = undefined
 
   spanWriter = null
   evalWriter = null
+
+  // Keep destroy-triggered deliveries reachable until every writer has drained.
+  const retiredWriters = [retiredSpanWriter, retiredEvalWriter].filter(Boolean)
+  if (retiredWriters.length === 0) {
+    log.debug('[LLMObs] Disabled LLM Observability')
+    return
+  }
+  let remainingWriters = retiredWriters.length
+  let unregisterRetiredFlusher
+  const onWriterDestroyed = () => {
+    if (--remainingWriters === 0) unregisterRetiredFlusher?.()
+  }
+  unregisterRetiredFlusher = registerTelemetryFlusher(done => {
+    flushWriters(done, retiredSpanWriter, retiredEvalWriter)
+  })
+  for (const writer of retiredWriters) writer.destroy(onWriterDestroyed)
 
   log.debug('[LLMObs] Disabled LLM Observability')
 }
@@ -202,7 +221,14 @@ function handleLLMObsInjection ({ carrier }) {
   if (tags !== existing) writeDatadogTags(carrier, tags)
 }
 
-function flushWriters (done) {
+/**
+ * Flushes the specified LLMObs writers and joins deliveries active at the boundary.
+ * @param {Function} [done]
+ * @param {LLMObsSpanWriter | null} [currentSpanWriter]
+ * @param {LLMObsEvalMetricsWriter | null} [currentEvalWriter]
+ * @returns {boolean} `true` when a writer throws synchronously.
+ */
+function flushWriters (done, currentSpanWriter = spanWriter, currentEvalWriter = evalWriter) {
   let failed = false
   const deliveryTracker = createServerlessDeliveryTracker()
   const flush = writer => {
@@ -216,8 +242,8 @@ function flushWriters (done) {
     }
   }
 
-  flush(spanWriter)
-  flush(evalWriter)
+  flush(currentSpanWriter)
+  flush(currentEvalWriter)
   deliveryTracker?.waitForIdle(done)
   if (!deliveryTracker) done?.()
   return failed
