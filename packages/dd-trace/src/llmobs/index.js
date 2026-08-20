@@ -79,7 +79,9 @@ function enable (config) {
   const currentSpanWriter = spanWriter
   // Replace the prior callback when LLMObs writers are reinitialized.
   unregisterTelemetryFlusher?.()
-  unregisterTelemetryFlusher = registerTelemetryFlusher(done => flushWriters(done, currentSpanWriter, currentEvalWriter))
+  unregisterTelemetryFlusher = registerTelemetryFlusher(done => {
+    flushWriters(done, currentSpanWriter, currentEvalWriter)
+  })
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -136,13 +138,12 @@ function disable () {
     return
   }
   let remainingWriters = retiredWriters.length
-  let unregisterRetiredFlusher
-  const onWriterDestroyed = () => {
-    if (--remainingWriters === 0) unregisterRetiredFlusher?.()
-  }
-  unregisterRetiredFlusher = registerTelemetryFlusher(done => {
+  const unregisterRetiredFlusher = registerTelemetryFlusher(done => {
     flushWriters(done, retiredSpanWriter, retiredEvalWriter)
   })
+  function onWriterDestroyed () {
+    if (--remainingWriters === 0) unregisterRetiredFlusher?.()
+  }
   for (const writer of retiredWriters) writer.destroy(onWriterDestroyed)
 
   log.debug('[LLMObs] Disabled LLM Observability')

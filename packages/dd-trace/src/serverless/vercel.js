@@ -56,6 +56,9 @@ function getVercelRequestContext () {
   return globalThis[VERCEL_REQUEST_CONTEXT]?.get?.()
 }
 
+// Keeps core response wrappers active without creating an HTTP tracing span.
+function activateHttpLifecycle () {}
+
 /**
  * Retains a Vercel Node Function until configured telemetry exporters complete.
  *
@@ -68,7 +71,6 @@ function registerVercelTelemetryRetention (tracer) {
 
   if (typeof tracer?.flushAll !== 'function') return
   // Keep the core response wrappers active even when the HTTP tracing plugins are disabled.
-  const activateHttpLifecycle = () => {}
   const flushRequest = () => registerVercelRequestFlush(tracer)
   const flushHttp2Response = ({ eventName }) => {
     if (eventName === 'close') flushRequest()
