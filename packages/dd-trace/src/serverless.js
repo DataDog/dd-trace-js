@@ -63,6 +63,15 @@ function getServerlessPlatform () {
 }
 
 /**
+ * Creates delivery tracking for platforms with an invocation retention hook.
+ */
+function createServerlessDeliveryTracker () {
+  if (getServerlessPlatform().isVercel) {
+    return new (require('./serverless/telemetry-delivery-tracker'))()
+  }
+}
+
+/**
  * Registers the lifecycle adapter selected by the detected serverless platform.
  * @param {{ flushAll?: (done: () => void) => void }} tracer
  */
@@ -75,6 +84,7 @@ function initializeServerlessTelemetry (tracer) {
 module.exports = {
   getServerlessPlatformTags,
   getServerlessPlatform,
+  createServerlessDeliveryTracker,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,

@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
+const TelemetryDeliveryTracker = require('../../../src/serverless/telemetry-delivery-tracker')
 
 describe('Exporter', () => {
   let url
@@ -19,6 +20,7 @@ describe('Exporter', () => {
   let prioritySampler
   let span
   let writerOptions
+  let createServerlessDeliveryTracker
 
   beforeEach(() => {
     url = 'http://www.example.com:8126'
@@ -34,9 +36,11 @@ describe('Exporter', () => {
       writerOptions = options
       return writer
     })
+    createServerlessDeliveryTracker = sinon.stub()
 
     Exporter = proxyquire('../../../src/exporters/agent', {
       './writer': Writer,
+      '../../serverless': { createServerlessDeliveryTracker },
     })
   })
 
@@ -117,6 +121,10 @@ describe('Exporter', () => {
   })
 
   describe('flush', () => {
+    beforeEach(() => {
+      createServerlessDeliveryTracker.returns(new TelemetryDeliveryTracker())
+    })
+
     it('waits for trace exports already in flight', () => {
       const callbacks = []
       writer.flush = sinon.spy(done => callbacks.push(done))
@@ -176,6 +184,20 @@ describe('Exporter', () => {
 
       sinon.assert.notCalled(flushed)
       inFlightDone()
+      sinon.assert.calledOnce(flushed)
+    })
+
+    it('waits for the boundary export without serverless retention', () => {
+      createServerlessDeliveryTracker.resetBehavior()
+      let complete
+      writer.flush = sinon.stub().callsFake(done => { complete = done })
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      exporter.flush(flushed)
+
+      sinon.assert.notCalled(flushed)
+      complete()
       sinon.assert.calledOnce(flushed)
     })
   })

@@ -5,6 +5,7 @@ const https = require('node:https')
 const { URL } = require('node:url')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
+const { createServerlessDeliveryTracker } = require('../../serverless')
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
@@ -20,7 +21,7 @@ const legacyStorage = storage('legacy')
  */
 class OtlpHttpExporterBase {
   #transport = https
-  #activeRequests = new Set()
+  #serverlessDeliveryTracker
 
   /**
    * Creates a new OtlpHttpExporterBase instance.
@@ -33,6 +34,7 @@ class OtlpHttpExporterBase {
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
    */
   constructor (url, headers, timeout, protocol, signalType) {
+    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this.protocol = protocol
     this.signalType = signalType
 
@@ -81,6 +83,13 @@ class OtlpHttpExporterBase {
    * @protected
    */
   sendPayload (payload, resultCallback) {
+    if (this.#serverlessDeliveryTracker) {
+      return this.#serverlessDeliveryTracker.track(done => this.#sendPayload(payload, resultCallback, done))
+    }
+    this.#sendPayload(payload, resultCallback)
+  }
+
+  #sendPayload (payload, resultCallback, done) {
     const options = {
       ...this.options,
       headers: {
@@ -89,15 +98,12 @@ class OtlpHttpExporterBase {
       },
     }
 
-    const activeRequest = { callbacks: [] }
-    this.#activeRequests.add(activeRequest)
     let completed = false
     const complete = result => {
       if (completed) return
       completed = true
-      this.#activeRequests.delete(activeRequest)
       resultCallback(result)
-      for (const callback of activeRequest.callbacks) callback()
+      done?.()
     }
 
     try {
@@ -145,21 +151,12 @@ class OtlpHttpExporterBase {
   }
 
   /**
-   * Calls back once OTLP requests active at the flush boundary have completed.
+   * Calls back once Vercel-tracked requests active at the flush boundary complete.
    * @param {Function} [done]
    */
   flush (done) {
-    if (!done) return
-    const activeRequests = [...this.#activeRequests]
-    if (activeRequests.length === 0) {
-      done()
-      return
-    }
-    let pending = activeRequests.length
-    const complete = () => {
-      if (--pending === 0) done()
-    }
-    for (const request of activeRequests) request.callbacks.push(complete)
+    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.waitForIdle(done)
+    done?.()
   }
 
   /**

@@ -9,6 +9,7 @@ const log = require('./log')
 const Histogram = require('./histogram')
 const { entityId } = require('./exporters/common/docker')
 const { registerTelemetryFlusher } = require('./flush')
+const { createServerlessDeliveryTracker } = require('./serverless')
 
 const legacyStorage = storage('legacy')
 
@@ -26,6 +27,8 @@ const TYPE_HISTOGRAM = 'h'
 class DogStatsDClient {
   #lookup
   #tagsPrefix
+  #serverlessDeliveryTracker
+
   constructor (options) {
     this.#lookup = options.lookup
     if (options.metricsProxyUrl) {
@@ -42,7 +45,7 @@ class DogStatsDClient {
     this._tags = options.tags
     this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
     this._queue = []
-    this._activeFlushes = new Set()
+    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._buffer = ''
     this._offset = 0
     this._udp4 = this._socket('udp4')
@@ -71,39 +74,25 @@ class DogStatsDClient {
 
   flush (done) {
     const queue = this._enqueue()
-    const activeFlushes = [...this._activeFlushes]
 
-    if (queue.length === 0) return this._joinFlushes(activeFlushes, done)
+    if (queue.length === 0) {
+      if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.waitForIdle(done)
+      return done?.()
+    }
 
     log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
     this._queue = []
 
-    const flush = { callbacks: [] }
-    this._activeFlushes.add(flush)
-    activeFlushes.push(flush)
-    this._joinFlushes(activeFlushes, done)
-
-    if (this._httpOptions) {
-      this._sendHttp(queue, () => this._completeFlush(flush))
-    } else {
-      this._sendUdp(queue, () => this._completeFlush(flush))
+    const send = complete => {
+      if (this._httpOptions) this._sendHttp(queue, complete)
+      else this._sendUdp(queue, complete)
     }
-  }
-
-  _joinFlushes (flushes, done) {
-    if (!done) return
-    let pending = flushes.length
-    if (pending === 0) return done()
-    const complete = () => {
-      if (--pending === 0) done()
+    if (this.#serverlessDeliveryTracker) {
+      this.#serverlessDeliveryTracker.track(send)
+      return this.#serverlessDeliveryTracker.waitForIdle(done)
     }
-    for (const flush of flushes) flush.callbacks.push(complete)
-  }
-
-  _completeFlush (flush) {
-    this._activeFlushes.delete(flush)
-    for (const done of flush.callbacks) done()
+    send(done)
   }
 
   _sendHttp (queue, done) {

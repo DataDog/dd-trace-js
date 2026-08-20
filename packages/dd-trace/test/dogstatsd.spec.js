@@ -12,6 +12,7 @@ const proxyquire = require('proxyquire')
 const datadogCore = require('../../datadog-core')
 
 require('./setup/core')
+const TelemetryDeliveryTracker = require('../src/serverless/telemetry-delivery-tracker')
 
 describe('dogstatsd', () => {
   let client
@@ -33,6 +34,7 @@ describe('dogstatsd', () => {
   let docker
   let log
   let registerTelemetryFlusher
+  let createServerlessDeliveryTracker
 
   beforeEach((done) => {
     udp6 = {
@@ -76,11 +78,13 @@ describe('dogstatsd', () => {
     docker = {}
     log = { debug: sinon.stub(), error: sinon.stub() }
     registerTelemetryFlusher = sinon.stub()
+    createServerlessDeliveryTracker = sinon.stub()
 
     const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
       dgram,
       '../../datadog-core': datadogCore,
       './flush': { registerTelemetryFlusher },
+      './serverless': { createServerlessDeliveryTracker },
       './exporters/common/docker': docker,
       './log': log,
     })
@@ -256,6 +260,7 @@ describe('dogstatsd', () => {
     udp4.send = sinon.stub().callsFake((...args) => {
       completeFirstFlush = args.at(-1)
     })
+    createServerlessDeliveryTracker.returns(new TelemetryDeliveryTracker())
     client = createDogStatsDClient()
     client.gauge('test.avg', 1)
     client.flush()

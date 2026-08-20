@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
+const TelemetryDeliveryTracker = require('../../../src/serverless/telemetry-delivery-tracker')
 
 describe('span-stats exporter', () => {
   let url
@@ -16,6 +17,7 @@ describe('span-stats exporter', () => {
   let Writer
   let writer
   let log
+  let createServerlessDeliveryTracker
 
   beforeEach(() => {
     url = new URL('http://www.example.com:8126')
@@ -25,10 +27,12 @@ describe('span-stats exporter', () => {
     }
     Writer = sinon.stub().returns(writer)
     log = { error: sinon.spy() }
+    createServerlessDeliveryTracker = sinon.stub().returns(new TelemetryDeliveryTracker())
 
     Exporter = proxyquire('../../../src/exporters/span-stats', {
       './writer': { Writer },
       '../../log': log,
+      '../../serverless': { createServerlessDeliveryTracker },
     }).SpanStatsExporter
   })
 

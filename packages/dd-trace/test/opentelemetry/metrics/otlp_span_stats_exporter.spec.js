@@ -124,8 +124,10 @@ describe('OtlpStatsExporter', () => {
   let exporter
   let httpStub
   let mockReq
+  let originalVercel
 
   beforeEach(() => {
+    originalVercel = process.env.VERCEL
     mockReq = {
       write: sinon.stub(),
       end: sinon.stub(),
@@ -151,6 +153,8 @@ describe('OtlpStatsExporter', () => {
 
   afterEach(() => {
     httpStub.restore()
+    if (originalVercel === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = originalVercel
   })
 
   it('sends a POST to /v1/metrics', () => {
@@ -233,10 +237,12 @@ describe('OtlpStatsExporter', () => {
       callback(mockRes)
       return mockReq
     })
+    process.env.VERCEL = '1'
+    const serverlessExporter = new OtlpStatsExporter('http://localhost:4318/v1/metrics', 'http/json', RESOURCE_ATTRS)
     const flushed = sinon.spy()
 
-    exporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
-    exporter.flush(flushed)
+    serverlessExporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
+    serverlessExporter.flush(flushed)
 
     sinon.assert.notCalled(flushed)
     onEnd()
@@ -257,11 +263,13 @@ describe('OtlpStatsExporter', () => {
       callback(mockRes)
       return mockReq
     })
+    process.env.VERCEL = '1'
+    const serverlessExporter = new OtlpStatsExporter('http://localhost:4318/v1/metrics', 'http/json', RESOURCE_ATTRS)
     const flushed = sinon.spy()
 
-    exporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
-    exporter.flush(flushed)
-    exporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
+    serverlessExporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
+    serverlessExporter.flush(flushed)
+    serverlessExporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
 
     onEnd[0]()
     sinon.assert.calledOnce(flushed)

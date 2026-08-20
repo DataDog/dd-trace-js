@@ -13,6 +13,7 @@ require('./setup/core')
 const {
   getServerlessPlatformTags,
   getServerlessPlatform,
+  createServerlessDeliveryTracker,
   enableGCPPubSubPushSubscription,
   initializeServerlessTelemetry,
 } = require('../src/serverless')
@@ -21,8 +22,55 @@ const { flushAll, registerTelemetryFlusher } = require('../src/flush')
 const Tracer = require('../src/tracer')
 const { initializeOpenTelemetryLogs } = require('../src/opentelemetry/logs')
 const { initializeOpenTelemetryMetrics } = require('../src/opentelemetry/metrics')
+const TelemetryDeliveryTracker = require('../src/serverless/telemetry-delivery-tracker')
 const agent = require('./plugins/agent')
 const { getConfigFresh } = require('./helpers/config')
+
+describe('TelemetryDeliveryTracker', () => {
+  it('is created only for Vercel', () => {
+    const originalVercel = process.env.VERCEL
+    try {
+      delete process.env.VERCEL
+      assert.strictEqual(createServerlessDeliveryTracker(), undefined)
+
+      process.env.VERCEL = '1'
+      assert.ok(createServerlessDeliveryTracker() instanceof TelemetryDeliveryTracker)
+    } finally {
+      if (originalVercel === undefined) delete process.env.VERCEL
+      else process.env.VERCEL = originalVercel
+    }
+  })
+
+  it('joins deliveries that were active at the retention boundary', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    const complete = []
+    let done = 0
+
+    tracker.track(callback => complete.push(callback))
+    tracker.track(callback => complete.push(callback))
+    tracker.waitForIdle(() => { done++ })
+
+    complete.shift()()
+    assert.strictEqual(done, 0)
+    complete.shift()()
+    assert.strictEqual(done, 1)
+  })
+
+  it('does not wait for deliveries that begin after the retention boundary', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    const complete = []
+    let done = 0
+
+    tracker.track(callback => complete.push(callback))
+    tracker.waitForIdle(() => { done++ })
+    tracker.track(callback => complete.push(callback))
+
+    complete.shift()()
+    assert.strictEqual(done, 1)
+    complete.shift()()
+    assert.strictEqual(done, 1)
+  })
+})
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE

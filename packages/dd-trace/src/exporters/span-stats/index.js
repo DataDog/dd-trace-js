@@ -1,76 +1,45 @@
 'use strict'
 
 const log = require('../../log')
+const { createServerlessDeliveryTracker } = require('../../serverless')
 const { Writer } = require('./writer')
 
 class SpanStatsExporter {
-  #activeFlushes = new Set()
+  #serverlessDeliveryTracker
 
   constructor (config) {
+    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._url = config.url
     this._writer = new Writer({ url: this._url, onFlush: this.#trackWriterFlush.bind(this) })
   }
 
   export (payload, done) {
-    if (done) {
-      const activeFlushes = [...this.#activeFlushes]
-      let pending = activeFlushes.length + 1
-      const complete = () => {
-        if (--pending === 0) done()
-      }
-      for (const flush of activeFlushes) flush.callbacks.push(complete)
-      this._writer.append(payload)
-      try {
-        this.#flush(complete)
-      } catch (error) {
-        // `#flush` has notified the boundary request; keep waiting for prior exports.
-        log.error('Failed to flush span stats: %s', error.message)
-      }
-      return
-    }
     this._writer.append(payload)
-    this.#flush()
+    try {
+      this.#flush(this.#serverlessDeliveryTracker ? undefined : done)
+    } catch (error) {
+      if (!done) throw error
+      log.error('Failed to flush span stats: %s', error.message)
+    }
+    this.#serverlessDeliveryTracker?.waitForIdle(done)
   }
 
   flush (done) {
-    const activeFlushes = [...this.#activeFlushes]
-    let pending = activeFlushes.length + 1
-    const complete = () => {
-      if (--pending === 0) done?.()
-    }
-    for (const flush of activeFlushes) flush.callbacks.push(complete)
-    this.#flush(complete)
+    this.#flush(this.#serverlessDeliveryTracker ? undefined : done)
+    this.#serverlessDeliveryTracker?.waitForIdle(done)
   }
 
   #flush (done) {
-    const flush = { callbacks: done ? [done] : [] }
-    this.#activeFlushes.add(flush)
-    const complete = () => {
-      this.#activeFlushes.delete(flush)
-      for (const callback of flush.callbacks) callback()
+    const flushWriter = this._writer.flushDirect ?? this._writer.flush
+    if (this.#serverlessDeliveryTracker) {
+      return this.#serverlessDeliveryTracker.track(flushWriter.bind(this._writer), done)
     }
-    try {
-      const flushWriter = this._writer.flushDirect ?? this._writer.flush
-      flushWriter.call(this._writer, complete)
-    } catch (error) {
-      complete()
-      throw error
-    }
+    flushWriter.call(this._writer, done)
   }
 
   #trackWriterFlush (flush, done) {
-    const activeFlush = { callbacks: done ? [done] : [] }
-    this.#activeFlushes.add(activeFlush)
-    const complete = () => {
-      this.#activeFlushes.delete(activeFlush)
-      for (const callback of activeFlush.callbacks) callback()
-    }
-    try {
-      flush(complete)
-    } catch (error) {
-      complete()
-      throw error
-    }
+    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.track(flush, done)
+    flush(done)
   }
 }
 

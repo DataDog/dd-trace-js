@@ -2,13 +2,15 @@
 
 const { URL } = require('url')
 const log = require('../../log')
+const { createServerlessDeliveryTracker } = require('../../serverless')
 const Writer = require('./writer')
 
 class AgentExporter {
   #timer
-  #activeFlushes = new Set()
+  #serverlessDeliveryTracker
 
   constructor (config, prioritySampler) {
+    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._config = config
     const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
     this._url = config.url
@@ -56,57 +58,39 @@ class AgentExporter {
     }
   }
 
-  flush (done = () => {}) {
+  flush (done) {
     clearTimeout(this.#timer)
     this.#timer = undefined
 
-    // Snapshot before the boundary flush so a failed encoding cannot cause a
-    // Vercel lifecycle flush to abandon exports that were already in flight.
-    let activeFlushes = [...this.#activeFlushes]
+    if (!this.#serverlessDeliveryTracker) {
+      try {
+        return this.#flush(done)
+      } catch (error) {
+        log.error('Failed to flush traces: %s', error.message)
+        done?.()
+        return
+      }
+    }
+
     try {
       this.#flush()
     } catch (error) {
       log.error('Failed to flush traces: %s', error.message)
     }
-    activeFlushes = [...new Set([...activeFlushes, ...this.#activeFlushes])]
-    if (activeFlushes.length === 0) return done()
-
-    let pending = activeFlushes.length
-    const complete = () => {
-      if (--pending === 0) done()
-    }
-    for (const flush of activeFlushes) flush.callbacks.push(complete)
+    this.#serverlessDeliveryTracker.waitForIdle(done)
   }
 
   #flush (done) {
-    const flush = { callbacks: done ? [done] : [] }
-    this.#activeFlushes.add(flush)
-    const complete = () => {
-      this.#activeFlushes.delete(flush)
-      for (const callback of flush.callbacks) callback()
+    const flush = this._writer.flushDirect ?? this._writer.flush
+    if (this.#serverlessDeliveryTracker) {
+      return this.#serverlessDeliveryTracker.track(flush.bind(this._writer), done)
     }
-    try {
-      const flush = this._writer.flushDirect ?? this._writer.flush
-      flush.call(this._writer, complete)
-    } catch (error) {
-      complete()
-      throw error
-    }
+    flush.call(this._writer, done)
   }
 
   #trackWriterFlush (flush, done) {
-    const activeFlush = { callbacks: done ? [done] : [] }
-    this.#activeFlushes.add(activeFlush)
-    const complete = () => {
-      this.#activeFlushes.delete(activeFlush)
-      for (const callback of activeFlush.callbacks) callback()
-    }
-    try {
-      flush(complete)
-    } catch (error) {
-      complete()
-      throw error
-    }
+    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.track(flush, done)
+    flush(done)
   }
 }
 
