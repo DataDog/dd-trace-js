@@ -61,7 +61,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
             DD_FEATURE_FLAGS_ENABLED: 'true',
-            // Preserve the existing RC exposure path until agentless emission is supported.
+            // Use Remote Config so this Agent-mode test can deliver the fixture.
             DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config',
           },
         })
