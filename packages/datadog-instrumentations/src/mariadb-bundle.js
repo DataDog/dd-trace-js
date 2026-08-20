@@ -30,6 +30,7 @@ const wrappedClients = new WeakSet()
 const wrappedConnections = new WeakSet()
 const IMPORT_FILE_RESOURCE = 'IMPORT FILE'
 const noop = () => {}
+const POOL_ACQUISITION_COMPACTION_THRESHOLD = 1024
 const STATUS_IN_TRANSACTION = 1
 const transactionMethods = [
   ['beginTransaction', 'START TRANSACTION'],
@@ -57,7 +58,7 @@ const transactionMethods = [
  * @property {number} [start]
  */
 /** @typedef {import('node:async_hooks').AsyncLocalStorage<PoolAcquisition>} PoolAcquisitionStorage */
-/** @typedef {{ acquisitions: PoolAcquisition[], index: number }} PendingPoolAcquisitions */
+/** @typedef {{ acquisitions: Array<PoolAcquisition | undefined>, index: number }} PendingPoolAcquisitions */
 
 /** @type {ClusterSelectionStorage | undefined} */
 let clusterSelectionStorage
@@ -168,6 +169,27 @@ function isPoolAcquisitionPending (acquisition) {
 }
 
 /**
+ * Releases a consumed acquisition and periodically compacts its queue.
+ *
+ * @param {PendingPoolAcquisitions} pending
+ * @returns {void}
+ */
+function discardPoolAcquisition (pending) {
+  pending.acquisitions[pending.index++] = undefined
+
+  if (
+    pending.index < POOL_ACQUISITION_COMPACTION_THRESHOLD ||
+    pending.index * 2 < pending.acquisitions.length ||
+    pending.index === pending.acquisitions.length
+  ) {
+    return
+  }
+
+  pending.acquisitions = pending.acquisitions.slice(pending.index)
+  pending.index = 0
+}
+
+/**
  * Removes completed entries from the front of a pool's acquisition queue.
  *
  * @param {object} pool
@@ -178,9 +200,10 @@ function prunePoolAcquisitions (pool) {
   if (pending === undefined) return
 
   while (pending.index < pending.acquisitions.length) {
-    const acquisition = pending.acquisitions[pending.index]
+    const acquisition = /** @type {PoolAcquisition} */ (pending.acquisitions[pending.index])
     if (isPoolAcquisitionPending(acquisition)) return
-    pending.index++
+
+    discardPoolAcquisition(pending)
   }
 
   pendingPoolAcquisitions.delete(pool)
@@ -197,7 +220,9 @@ function takePoolAcquisition (pool) {
   if (pending === undefined) return
 
   while (pending.index < pending.acquisitions.length) {
-    const acquisition = pending.acquisitions[pending.index++]
+    const acquisition = /** @type {PoolAcquisition} */ (pending.acquisitions[pending.index])
+    discardPoolAcquisition(pending)
+
     if (isPoolAcquisitionPending(acquisition)) return acquisition
   }
 

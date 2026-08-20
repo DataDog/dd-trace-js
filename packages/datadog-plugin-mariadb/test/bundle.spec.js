@@ -183,6 +183,22 @@ describe('Plugin', () => {
           await assertion
         })
 
+        it('tags bundled stream errors', async () => {
+          const sql = 'SELECT * FROM definitely_missing_stream_table'
+
+          await Promise.all([
+            agent.assertFirstTraceSpan({
+              resource: sql,
+              meta: {
+                [ERROR_TYPE]: ANY_STRING,
+                [ERROR_MESSAGE]: ANY_STRING,
+                [ERROR_STACK]: ANY_STRING,
+              },
+            }, { spanResourceMatch: /definitely_missing_stream_table/ }),
+            assert.rejects(consumeStream(connection.queryStream(sql))),
+          ])
+        })
+
         it('traces transaction helpers only when MariaDB sends a command', async () => {
           const assertion = assertTraceResources('bundle.promise.transactions', [
             'START TRANSACTION',
@@ -408,6 +424,30 @@ describe('Plugin', () => {
               nowStub.restore()
             }
           } finally {
+            await pool.end()
+          }
+        })
+
+        it('preserves bundled pool acquisition order across queue compaction', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+          const connection = await pool.getConnection()
+          const queries = new Array(1025)
+          let released = false
+
+          try {
+            for (let index = 0; index < queries.length; index++) {
+              queries[index] = pool.query('SELECT 1 AS compaction_probe')
+            }
+
+            await connection.release()
+            released = true
+            const results = await Promise.all(queries)
+
+            assert.strictEqual(results.length, 1025)
+            assert.strictEqual(results[0][0].compaction_probe, 1)
+            assert.strictEqual(results[1024][0].compaction_probe, 1)
+          } finally {
+            if (!released) await connection.release()
             await pool.end()
           }
         })
