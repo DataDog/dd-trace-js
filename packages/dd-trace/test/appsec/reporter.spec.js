@@ -68,6 +68,7 @@ describe('reporter', () => {
       incrementWafConfigErrorsMetric: sinon.stub(),
       incrementWafUpdatesMetric: sinon.stub(),
       incrementWafRequestsMetric: sinon.stub(),
+      incrementRequestDurationMetrics: sinon.stub(),
       updateWafRequestsMetricTags: sinon.stub(),
       updateRaspRequestsMetricTags: sinon.stub(),
       updateRaspRuleSkippedMetricTags: sinon.stub(),
@@ -1115,6 +1116,14 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementWafRequestsMetric, req)
+    })
+
+    it('should call incrementRequestDurationMetrics', () => {
+      const req = {}
+      const res = {}
+      Reporter.finishRequest(req, res)
+
+      sinon.assert.calledOnceWithExactly(telemetry.incrementRequestDurationMetrics, req)
     })
 
     it('should set waf.duration tags if there are metrics stored', () => {
