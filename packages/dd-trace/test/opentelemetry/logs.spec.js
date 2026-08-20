@@ -144,6 +144,7 @@ describe('OpenTelemetry Logs', () => {
 
   describe('Logs Export', () => {
     it('waits for an in-flight export during forceFlush', () => {
+      process.env.VERCEL = '1'
       let exportDone
       let flushDone
       const processor = new BatchLogRecordProcessor({
@@ -163,6 +164,7 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('drains queued batches and waits for earlier size-triggered exports', () => {
+      process.env.VERCEL = '1'
       const batches = []
       const callbacks = []
       const flushCallbacks = []
@@ -204,6 +206,7 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('does not wait for records emitted after the flush boundary', () => {
+      process.env.VERCEL = '1'
       const exports = []
       let firstExportDone
       const processor = new BatchLogRecordProcessor({
@@ -222,6 +225,22 @@ describe('OpenTelemetry Logs', () => {
 
       assert.deepStrictEqual(exports, [['before']])
       sinon.assert.calledOnce(done)
+    })
+
+    it('does not retain log delivery outside Vercel', () => {
+      let exportDone
+      const processor = new BatchLogRecordProcessor({
+        export: (records, done) => { exportDone = done },
+        flush: sinon.spy(),
+      }, 60_000, 1)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'outside Vercel' }, { name: 'test' })
+      processor.forceFlush(done)
+
+      sinon.assert.notCalled(processor.exporter.flush)
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(typeof exportDone, 'function')
     })
 
     it('exports logs with complete OTLP structure, trace correlation, and instrumentation info', () => {

@@ -4,6 +4,7 @@ const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config/helper')
+const { createServerlessDeliveryTracker } = require('../../serverless')
 
 const logger = require('../../log')
 
@@ -33,7 +34,7 @@ class LLMObsBuffer {
 
 class BaseLLMObsWriter {
   #destroyer
-  #activeRequests = new Set()
+  #serverlessDeliveryTracker = createServerlessDeliveryTracker()
   /** @type {Map<string, LLMObsBuffer>} */
   #multiTenantBuffers = new Map()
 
@@ -119,16 +120,18 @@ class BaseLLMObsWriter {
   flush (done) {
     if (this._agentless == null) return done?.()
 
-    const activeRequests = [...this.#activeRequests]
     const requests = this.#drainBuffers()
-    let pending = activeRequests.length + requests.length
-    const complete = () => {
-      if (--pending === 0) done?.()
+    if (!this.#serverlessDeliveryTracker) {
+      // Only invocation-retaining platforms need completion-aware delivery.
+      for (const request of requests) this.#send(request)
+      done?.()
+      return
     }
 
-    if (pending === 0) return done?.()
-    for (const activeRequest of activeRequests) activeRequest.callbacks.push(complete)
-    for (const request of requests) this.#send(request, complete)
+    for (const request of requests) {
+      this.#serverlessDeliveryTracker.track(done => this.#send(request, done))
+    }
+    this.#serverlessDeliveryTracker.waitForIdle(done)
   }
 
   #drainBuffers () {
@@ -169,13 +172,10 @@ class BaseLLMObsWriter {
 
   #send ({ events, options, url }, done) {
     const payload = this._encode(this.makePayload(events))
-    const activeRequest = { callbacks: done ? [done] : [] }
-    this.#activeRequests.add(activeRequest)
     log.debug('Encoded LLMObs payload: %s', payload)
     request(payload, options, (err, resp, code) => {
       parseResponseAndLog(err, code, events.length, url, this._eventType)
-      this.#activeRequests.delete(activeRequest)
-      for (const callback of activeRequest.callbacks) callback()
+      done?.()
     })
   }
 

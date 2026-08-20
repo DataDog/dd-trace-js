@@ -35,11 +35,13 @@ describe('module', () => {
   let fetchAgentInfoStub
   let registerTelemetryFlusher
   let unregisterTelemetryFlusher
+  let originalVercel
 
   /** @type {import('sinon').SinonStub} */
   let startupLogStub
 
   beforeEach(() => {
+    originalVercel = process.env.VERCEL
     store = {}
     logger = { debug: sinon.stub() }
 
@@ -95,6 +97,8 @@ describe('module', () => {
   })
 
   afterEach(() => {
+    if (originalVercel === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = originalVercel
     sinon.restore()
     llmobsModule.disable()
   })
@@ -463,6 +467,7 @@ describe('module', () => {
   })
 
   it('registers both LLMObs writers for lifecycle flushing', () => {
+    process.env.VERCEL = '1'
     llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
     const done = sinon.spy()
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
@@ -483,6 +488,7 @@ describe('module', () => {
   })
 
   it('continues flushing when one LLMObs writer throws', () => {
+    process.env.VERCEL = '1'
     llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
     const done = sinon.spy()
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue

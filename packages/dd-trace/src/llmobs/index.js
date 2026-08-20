@@ -5,6 +5,7 @@ const { channel } = require('dc-polyfill')
 const { readDatadogTags, writeDatadogTags } = require('../carrier')
 const { registerTelemetryFlusher } = require('../flush')
 const log = require('../log')
+const { createServerlessDeliveryTracker } = require('../serverless')
 const { DD_MAJOR } = require('../../../../version')
 const startupLogs = require('../startup-log')
 const {
@@ -202,24 +203,23 @@ function handleLLMObsInjection ({ carrier }) {
 }
 
 function flushWriters (done) {
-  let pending = 2
   let failed = false
-  const complete = () => {
-    if (--pending === 0) done?.()
-  }
+  const deliveryTracker = createServerlessDeliveryTracker()
   const flush = writer => {
     try {
-      if (writer) writer.flush(complete)
-      else complete()
+      if (deliveryTracker && writer) deliveryTracker.track(complete => writer.flush(complete))
+      // Non-serverless flushes retain the existing writer behavior.
+      else writer?.flush()
     } catch (error) {
       failed = true
       log.warn('Failed to flush LLMObs writer:', error.message)
-      complete()
     }
   }
 
   flush(spanWriter)
   flush(evalWriter)
+  deliveryTracker?.waitForIdle(done)
+  if (!deliveryTracker) done?.()
   return failed
 }
 

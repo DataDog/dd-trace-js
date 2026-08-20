@@ -1,5 +1,7 @@
 'use strict'
 
+const { createServerlessDeliveryTracker } = require('../../serverless')
+
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
@@ -58,30 +60,39 @@ class BatchLogRecordProcessor {
    */
   forceFlush (done) {
     this.#clearTimer()
+
+    const deliveryTracker = createServerlessDeliveryTracker()
+    if (!deliveryTracker) {
+      // Normal processes preserve the existing fire-and-forget batch flush.
+      this.#export()
+      done?.()
+      return
+    }
+
     // Flush only records present at this boundary. New records belong to the
     // later request that produced them and must not extend this lifecycle flush.
     const logRecords = this.#logRecords
     this.#logRecords = []
-    let pending = 2
-    const complete = () => {
-      if (--pending === 0) done?.()
-    }
 
     // Join exports already active at this boundary before draining this snapshot.
-    if (typeof this.exporter.flush === 'function') this.exporter.flush(complete)
-    else complete()
-
-    const flushNext = () => {
-      if (logRecords.length === 0) {
-        complete()
-        return
-      }
-
-      // Drain the boundary snapshot one batch at a time.
-      const batch = logRecords.splice(0, this.#maxExportBatchSize)
-      this.exporter.export(batch, flushNext)
+    if (typeof this.exporter.flush === 'function') {
+      deliveryTracker.track(complete => this.exporter.flush(complete))
     }
-    flushNext()
+
+    deliveryTracker.track(complete => {
+      const flushNext = () => {
+        if (logRecords.length === 0) {
+          complete()
+          return
+        }
+
+        // Drain the boundary snapshot one batch at a time.
+        const batch = logRecords.splice(0, this.#maxExportBatchSize)
+        this.exporter.export(batch, flushNext)
+      }
+      flushNext()
+    })
+    deliveryTracker.waitForIdle(done)
   }
 
   /**

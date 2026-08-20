@@ -11,6 +11,7 @@ const { useEnv } = require('../../../../../integration-tests/helpers')
 const { removeDestroyHandler } = require('../util')
 
 describe('BaseLLMObsWriter', () => {
+  const originalVercel = process.env.VERCEL
   let BaseLLMObsWriter
   let writer
   let request
@@ -49,6 +50,8 @@ describe('BaseLLMObsWriter', () => {
   })
 
   afterEach(() => {
+    if (originalVercel === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = originalVercel
     clock.restore()
     removeDestroyHandler()
   })
@@ -240,6 +243,7 @@ describe('BaseLLMObsWriter', () => {
     })
 
     it('waits for an export already in flight', () => {
+      process.env.VERCEL = '1'
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(true)
       writer.makePayload = (events) => ({ events })
@@ -257,6 +261,7 @@ describe('BaseLLMObsWriter', () => {
     })
 
     it('waits for every request drained at the flush boundary', () => {
+      process.env.VERCEL = '1'
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(true)
       writer.makePayload = (events) => ({ events })
@@ -273,6 +278,22 @@ describe('BaseLLMObsWriter', () => {
       sinon.assert.notCalled(done)
       callbacks[1]()
       sinon.assert.calledOnce(done)
+    })
+
+    it('does not retain requests outside Vercel', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'bar' })
+      let requestDone
+      const done = sinon.spy()
+      request.callsFake((payload, requestOptions, callback) => { requestDone = callback })
+
+      writer.flush()
+      writer.flush(done)
+
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(typeof requestDone, 'function')
     })
   })
 
