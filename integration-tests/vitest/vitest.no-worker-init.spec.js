@@ -1824,6 +1824,7 @@ describe('impacted test', () => {
             assert.strictEqual(retry.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
           }
           assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'skip')
+          assert.strictEqual(tests.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
         },
         { hardTimeout: 60_000 }
       )

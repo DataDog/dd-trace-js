@@ -1095,8 +1095,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
         testProperties,
         type,
         statuses,
-        isFinalAttempt,
-        hasFailure
+        isFinalAttempt
       ),
       isRetry: index > 0,
       status: attemptStatus,
@@ -1136,11 +1135,10 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
  * @param {'attempt_to_fix'|'early_flake_detection'|'external'} type
  * @param {string[]} statuses
  * @param {boolean} isFinalAttempt
- * @param {boolean} hasFailure
  * @returns {boolean}
  */
-function hasFailedAllManagedRetries (task, testProperties, type, statuses, isFinalAttempt, hasFailure) {
-  if (!isFinalAttempt || !hasFailure || statuses.length === 0 || !statuses.every(status => status === 'fail')) {
+function hasFailedAllManagedRetries (task, testProperties, type, statuses, isFinalAttempt) {
+  if (!isFinalAttempt || statuses.length === 0 || !statuses.every(status => status === 'fail')) {
     return false
   }
 
@@ -1275,7 +1273,6 @@ function reportFinalTestAttempt (testReport) {
         testProperties,
         'external',
         ['fail'],
-        true,
         true
       ),
       isRetry: (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
