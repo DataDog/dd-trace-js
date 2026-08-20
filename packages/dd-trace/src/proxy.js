@@ -1,5 +1,7 @@
 'use strict'
 
+const dc = require('dc-polyfill')
+
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
@@ -40,6 +42,10 @@ const OFFLINE_VALIDATION_EXPORTERS = new Set([
 const OPENFEATURE_STATE_NOOP = 0
 const OPENFEATURE_STATE_LAZY = 1
 const OPENFEATURE_STATE_ACTIVE = 2
+
+const configUpdateChannel = dc.channel('config:update')
+
+const profiler = require('./profiler')
 
 class LazyModule {
   constructor (provider) {
@@ -91,6 +97,9 @@ function defineLazily (obj, property, getClass, ...args) {
 
 class Tracer extends NoopProxy {
   #openfeatureState = OPENFEATURE_STATE_NOOP
+
+  /** @type {boolean} */
+  #profilerConfigured = false
 
   constructor () {
     super()
@@ -214,20 +223,8 @@ class Tracer extends NoopProxy {
         openfeatureRemoteConfig.enable(rc, () => this.openfeature, subscribeOpenfeatureToRemoteConfig)
       }
 
-      if (config.profiling.DD_PROFILING_ENABLED === 'true') {
-        this._profilerStarted = this._startProfiler(config)
-      } else {
-        this._profilerStarted = false
-        if (config.profiling.DD_PROFILING_ENABLED === 'auto') {
-          const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-          const ssiHeuristics = new SSIHeuristics(config)
-          ssiHeuristics.start()
-          ssiHeuristics.onTriggered(() => {
-            this._startProfiler(config)
-            ssiHeuristics.onTriggered() // deregister this callback
-          })
-        }
-      }
+      configUpdateChannel.publish(config)
+      this.#profilerConfigured = true
 
       // Experimental: mirror the active trace ID, span ID and endpoint into
       // an OTEP-4947 thread-local context record an out-of-process eBPF
@@ -293,22 +290,6 @@ class Tracer extends NoopProxy {
     }
 
     return this
-  }
-
-  /**
-   * @param {import('./config/config-base')} config - Tracer configuration
-   */
-  _startProfiler (config) {
-    // do not stop tracer initialization if the profiler fails to be imported
-    try {
-      return require('./profiler').start(config)
-    } catch (error) {
-      log.error(
-        'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
-        error
-      )
-      return false
-    }
   }
 
   /**
@@ -424,15 +405,13 @@ class Tracer extends NoopProxy {
    * @override
    */
   get profiling () {
-    // Lazily require the profiler module and cache the result. If profiling
-    // is not enabled, runWithLabels still works as a passthrough (just calls fn()).
-    const profilerModule = require('./profiler')
+    // If profiling is not enabled, runWithLabels still works as a passthrough (just calls fn()).
     const profiling = {
       setCustomLabelKeys (keys) {
-        profilerModule.setCustomLabelKeys(keys)
+        profiler.setCustomLabelKeys(keys)
       },
       runWithLabels (labels, fn) {
-        return profilerModule.runWithLabels(labels, fn)
+        return profiler.runWithLabels(labels, fn)
       },
     }
     Reflect.defineProperty(this, 'profiling', { value: profiling, configurable: true, enumerable: true })
@@ -443,11 +422,11 @@ class Tracer extends NoopProxy {
    * @override
    */
   profilerStarted () {
-    if (this._profilerStarted === undefined) {
+    if (!this.#profilerConfigured) {
       // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
-    return Promise.resolve(this._profilerStarted)
+    return Promise.resolve(profiler.started ?? false)
   }
 
   /**
