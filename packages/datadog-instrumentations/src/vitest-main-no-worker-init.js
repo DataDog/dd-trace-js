@@ -1058,7 +1058,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
   const errors = browserEnvironment
     ? normalizeVitestBrowserErrors(result?.errors)
     : result?.errors || []
-  const finalAttemptStatus = finalStatus(statuses)
+  const finalAttemptStatus = finalStatus(statuses, testProperties)
   const hasFailure = finalAttemptStatus === 'fail'
   const attempts = []
   const attemptCount = getRepeatedAttemptCount(task, statuses)
@@ -1165,7 +1165,8 @@ function getAttemptToFixFinalStatus (statuses) {
   return statuses.includes('fail') ? 'fail' : 'pass'
 }
 
-function getEarlyFlakeDetectionFinalStatus (statuses) {
+function getEarlyFlakeDetectionFinalStatus (statuses, testProperties) {
+  if (testProperties.isDisabled || testProperties.isQuarantined) return 'skip'
   return statuses.includes('pass') ? 'pass' : 'fail'
 }
 
