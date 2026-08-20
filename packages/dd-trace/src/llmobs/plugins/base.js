@@ -81,6 +81,7 @@ class LLMObsPlugin extends TracingPlugin {
     }
 
     this.setLLMObsTags(ctx)
+    if (ctx.llmobs) llmobsStorage.enterWith(ctx.llmobs.parent)
   }
 
   configure (config) {
