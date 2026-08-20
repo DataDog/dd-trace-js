@@ -111,7 +111,7 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
-let quarantinedButNotAttemptToFixFqns = new Set()
+let quarantinedButNotAttemptToFixTestKeys = new Set()
 let recordedTestOptimizationExecutions = new Set()
 let testsReportedInGenerateSummary = new Set()
 const newTestsWithDynamicNames = new Set()
@@ -870,6 +870,9 @@ function testEndHandler ({
   }
 
   const testProperties = getTestProperties(test)
+  if (testProperties.quarantined && !testProperties.attemptToFix) {
+    quarantinedButNotAttemptToFixTestKeys.add(testStatusKey)
+  }
   const hasRecordedTestOptimizationExecution = recordedTestOptimizationExecutions.has(test)
 
   if (!hasRecordedTestOptimizationExecution) {
@@ -1436,12 +1439,12 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       let totalFailedTestCount = 0
       let totalPureQuarantinedFailedTestCount = 0
 
-      for (const [fqn, testStatuses] of testsToTestStatuses) {
+      for (const [testKey, testStatuses] of testsToTestStatuses) {
         // Only count as failed if the final status (after retries) is 'fail'
         const lastStatus = testStatuses.at(-1)
         if (lastStatus === 'fail') {
           totalFailedTestCount += 1
-          if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
+          if (quarantinedButNotAttemptToFixTestKeys.has(testKey)) {
             totalPureQuarantinedFailedTestCount += 1
           }
         }
@@ -1476,7 +1479,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     startedSuites = []
     remainingTestsByFile = {}
-    quarantinedButNotAttemptToFixFqns = new Set()
+    quarantinedButNotAttemptToFixTestKeys = new Set()
     recordedTestOptimizationExecutions = new Set()
     testsReportedInGenerateSummary = new Set()
     efdManagedTestKeys.clear()
@@ -1897,7 +1900,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         if (!testProperties.attemptToFix) {
           // Do not skip quarantined tests, let them run and overwrite results post-run if they fail
           const testFqn = getTestFullyQualifiedName(test)
-          quarantinedButNotAttemptToFixFqns.add(testFqn)
+          quarantinedButNotAttemptToFixTestKeys.add(testFqn)
         }
       }
       if (testProperties.attemptToFix) {
@@ -1954,6 +1957,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         '_ddIsModified',
         '_ddIsEfdRetry',
         (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null),
+        (test) => test._ddIsQuarantined && '_ddIsQuarantined',
       ],
       earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
       (copiedTest, originalTest, retryIndex) => {
@@ -1995,7 +1999,11 @@ function processRootSuite (createRootSuiteReturnValue) {
       applyRetriesToTests(
         fileSuitesWithNewTestsToProjects,
         isNewTest,
-        ['_ddIsNew', '_ddIsEfdRetry'],
+        [
+          '_ddIsNew',
+          '_ddIsEfdRetry',
+          (test) => test._ddIsQuarantined && '_ddIsQuarantined',
+        ],
         earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
         (copiedTest, originalTest, retryIndex) => {
           markEfdRetryTest(copiedTest, retryIndex, originalTest)
