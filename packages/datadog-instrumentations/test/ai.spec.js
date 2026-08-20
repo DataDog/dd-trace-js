@@ -5,12 +5,13 @@ const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { wrapModelWithLifecycle } = require('../src/ai')
+const { register, wrapModelWithLifecycle } = require('../src/ai')
 
 const doGenerateBeforeChannel = channel('dd-trace:vercel-ai:doGenerate:before')
 const doGenerateAfterChannel = channel('dd-trace:vercel-ai:doGenerate:after')
 const doStreamBeforeChannel = channel('dd-trace:vercel-ai:doStream:before')
 const doStreamAfterChannel = channel('dd-trace:vercel-ai:doStream:after')
+const instrumentationLoadChannel = channel('dd-trace:instrumentation:load')
 
 const prompt = [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }]
 
@@ -106,6 +107,20 @@ function subscribeAbortOnCall (channels, abortOnCall, err) {
     }
   }
 }
+
+describe('register', () => {
+  it('activates the AI plugin through the standard instrumentation-load channel', () => {
+    const activated = sinon.spy()
+    instrumentationLoadChannel.subscribe(activated)
+
+    try {
+      register()
+      sinon.assert.calledOnceWithExactly(activated, { name: 'ai' }, 'dd-trace:instrumentation:load')
+    } finally {
+      instrumentationLoadChannel.unsubscribe(activated)
+    }
+  })
+})
 
 describe('wrapModelWithLifecycle', () => {
   let model
