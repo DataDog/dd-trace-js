@@ -107,6 +107,11 @@ function valuesAreEqual (left, right) {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
+function snapshotPayload (payload) {
+  // Keep pending values independent from live records while a request is in flight.
+  return structuredClone(payload)
+}
+
 function updateFromInsertedRecord (recordId, record, payload) {
   const update = { id: recordId }
   if (!valuesAreEqual(record.input, payload.input)) update.input = record.input
@@ -416,7 +421,7 @@ class Dataset {
     const insertRecords = []
     const insertPayloads = new Map()
     for (const [recordId, record] of this.#newRecordsById) {
-      const payload = serializedRecord(record)
+      const payload = snapshotPayload(serializedRecord(record))
       insertRecords.push(payload)
       insertPayloads.set(recordId, payload)
     }
@@ -427,7 +432,7 @@ class Dataset {
       const tagOperations = this.#pendingTagOperations.get(recordId)
       if (tagOperations) update.tagOperations = tagOperations
       else delete update.tagOperations
-      const payload = serializedRecordUpdate(update)
+      const payload = snapshotPayload(serializedRecordUpdate(update))
       updateRecords.push(payload)
       updatePayloads.set(recordId, payload)
     }
