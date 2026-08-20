@@ -192,7 +192,10 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
         const proxiedObject = {
           // Exercise the real client factory (incl. process tags) but with the spy DogStatsD client.
           './client': proxyquire('../src/runtime_metrics/client', {
-            '../dogstatsd': { DogStatsDClient: Client },
+            '../dogstatsd': {
+              DogStatsDClient: Client,
+              createMetricsTransport: (config, clientConfig) => new Client(clientConfig),
+            },
           }),
         }
         if (!nativeMetrics) {
@@ -522,7 +525,10 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
 
           const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
             './client': proxyquire('../src/runtime_metrics/client', {
-              '../dogstatsd': { DogStatsDClient: LocalClient },
+              '../dogstatsd': {
+                DogStatsDClient: LocalClient,
+                createMetricsTransport: (config, clientConfig) => new LocalClient(clientConfig),
+              },
             }),
             '@datadog/native-metrics': nativeMetricsModule,
           })
@@ -568,7 +574,10 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
 
           const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
             './client': proxyquire('../src/runtime_metrics/client', {
-              '../dogstatsd': { DogStatsDClient: LocalClient },
+              '../dogstatsd': {
+                DogStatsDClient: LocalClient,
+                createMetricsTransport: (config, clientConfig) => new LocalClient(clientConfig),
+              },
             }),
             '../../../../version': { NODE_MAJOR: 24, NODE_MINOR: 19 },
             '@datadog/native-metrics': {
@@ -978,7 +987,10 @@ describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIterati
 
     localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
       './client': proxyquire('../src/runtime_metrics/client', {
-        '../dogstatsd': { DogStatsDClient: LocalClient },
+        '../dogstatsd': {
+          DogStatsDClient: LocalClient,
+          createMetricsTransport: (config, clientConfig) => new LocalClient(clientConfig),
+        },
       }),
       '@datadog/native-metrics': { start: nativeMetricsStart, stop () {} },
     })
