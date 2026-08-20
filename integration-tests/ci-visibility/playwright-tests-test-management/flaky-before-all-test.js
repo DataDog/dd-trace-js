@@ -2,7 +2,9 @@
 
 const { test } = require('@playwright/test')
 
-test.beforeAll((_fixtures, testInfo) => {
+// Playwright 1.62 requires the first hook argument to use object destructuring.
+// eslint-disable-next-line no-empty-pattern
+test.beforeAll(({}, testInfo) => {
   if (testInfo.retry === 0) {
     throw new Error('flaky beforeAll failure')
   }

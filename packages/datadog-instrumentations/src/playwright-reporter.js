@@ -3,6 +3,7 @@
 const { channel } = require('dc-polyfill')
 
 const reporterErrorCh = channel('ci:playwright:reporter:error')
+const reporterFailureCountCh = channel('ci:playwright:reporter:failure-count')
 const PLAYWRIGHT_REPORTER_ERROR_MESSAGE = 'Error in reporter'
 const PLAYWRIGHT_REPORTER_ERROR_CALLER_RE =
   /^\s*at wrapAsync .*?[\\/]playwright[\\/]lib[\\/]runner[\\/]index\.js:\d+:\d+\)?$/
@@ -29,6 +30,17 @@ function isPlaywrightReporterError (message) {
 
 class DatadogPlaywrightReporter {
   /**
+   * Creates a reporter that observes the finalized Playwright result independently of user reporters.
+   *
+   * @param {object} [options]
+   * @param {boolean} [options.captureReporterErrors]
+   */
+  constructor ({ captureReporterErrors = true } = {}) {
+    this.captureReporterErrors = captureReporterErrors
+    this.fatalErrorCount = 0
+  }
+
+  /**
    * Restores console error after Playwright completes the reporter lifecycle.
    *
    * @returns {void}
@@ -46,11 +58,33 @@ class DatadogPlaywrightReporter {
   }
 
   /**
+   * Records the suite so finalized test outcomes can be counted in onEnd.
+   *
+   * @param {object} configOrSuite
+   * @param {object} [suite]
+   * @returns {void}
+   */
+  onBegin (configOrSuite, suite) {
+    this.suite = suite || configOrSuite
+  }
+
+  /**
    * Marks the beginning of reporter finalization so later reporter errors can be identified.
    *
    * @returns {void}
    */
   onEnd () {
+    let failureCount = this.fatalErrorCount
+    const tests = this.suite?.allTests?.()
+    if (tests) {
+      for (const test of tests) {
+        if (test.outcome() === 'unexpected') failureCount += 1
+      }
+    }
+    reporterFailureCountCh.publish(failureCount)
+
+    if (!this.captureReporterErrors) return
+
     this.isFinalizing = true
     // Playwright 1.60 and 1.61 only expose reporter errors through this exact console call.
     // eslint-disable-next-line no-console
@@ -83,7 +117,11 @@ class DatadogPlaywrightReporter {
    * @returns {void}
    */
   onError (error) {
-    if (this.isFinalizing) reporterErrorCh.publish(error)
+    if (this.isFinalizing) {
+      reporterErrorCh.publish(error)
+    } else {
+      this.fatalErrorCount += 1
+    }
   }
 
   /**

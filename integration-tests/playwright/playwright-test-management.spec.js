@@ -1056,6 +1056,7 @@ versions.forEach((version) => {
         })
 
         const runEfdQuarantineTest = async (receiver, {
+          shouldUseCustomReporter = false,
           shouldFailBeforeAll = false,
           shouldFailGlobalTeardown = false,
           shouldPassRetries = false,
@@ -1088,6 +1089,7 @@ versions.forEach((version) => {
                 cwd,
                 env: {
                   ...getCiVisAgentlessConfig(receiver.port),
+                  ...(shouldUseCustomReporter ? { PLAYWRIGHT_FROZEN_REPORTER: '1' } : {}),
                   ...(shouldFailGlobalTeardown ? { FAIL_GLOBAL_TEARDOWN: '1' } : {}),
                   PW_BASE_URL: `http://localhost:${webAppPort}`,
                   TEST_DIR: './ci-visibility/playwright-tests-test-management',
@@ -1143,6 +1145,10 @@ versions.forEach((version) => {
 
         it('can quarantine a new test when all EFD attempts fail', async (receiver) => {
           await runEfdQuarantineTest(receiver)
+        })
+
+        it('can quarantine a new test with a custom reporter', async (receiver) => {
+          await runEfdQuarantineTest(receiver, { shouldUseCustomReporter: true })
         })
 
         it('can quarantine a new test when an EFD retry passes', async (receiver) => {

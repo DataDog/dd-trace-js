@@ -46,6 +46,7 @@ const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionConfigurationCh = channel('ci:playwright:session:configuration')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
 const reporterErrorCh = channel('ci:playwright:reporter:error')
+const reporterFailureCountCh = channel('ci:playwright:reporter:failure-count')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
@@ -1512,6 +1513,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 function reportersHook (reportersPackage) {
   return shimmer.wrap(reportersPackage, 'createReporters', createReporters => async function () {
     const reporters = await createReporters.apply(this, arguments)
+    const DatadogPlaywrightReporter = require('./playwright-reporter')
+    reporters.unshift(new DatadogPlaywrightReporter({ captureReporterErrors: false }))
     for (const reporter of reporters) {
       if (instrumentedPlaywrightReporters.has(reporter)) continue
 
@@ -1666,6 +1669,10 @@ pageGotoCh.subscribe({
 
 reporterErrorCh.subscribe((error) => {
   recordReporterError(error)
+})
+
+reporterFailureCountCh.subscribe((failureCount) => {
+  playwrightFailureCount = failureCount
 })
 
 /**
@@ -2477,9 +2484,7 @@ function generateSummaryWrapper (generateSummary) {
         })
       }
     }
-    const summary = generateSummary.apply(this, args)
-    playwrightFailureCount = (summary.unexpected?.length || 0) + (summary.fatalErrors?.length || 0)
-    return summary
+    return generateSummary.apply(this, args)
   }
 }
 
