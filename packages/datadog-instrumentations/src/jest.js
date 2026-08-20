@@ -3304,24 +3304,17 @@ function isJestEnvironmentTornDown (runtime) {
  * @param {boolean} waitForFinish
  */
 function publishTestSuiteFinish (payload, waitForFinish) {
-  let finishPromise
+  if (!testSuiteFinishCh.hasSubscribers) return
 
-  if (testSuiteFinishCh.hasSubscribers) {
-    if (waitForFinish) {
-      finishPromise = getChannelPromise(testSuiteFinishCh, {
-        ...payload,
-        waitForFinish,
-      })
-    } else {
-      testSuiteFinishCh.publish(payload)
-    }
+  if (!waitForFinish) {
+    testSuiteFinishCh.publish(payload)
+    return
   }
 
-  if (!isJestWorker || !agentlessFlushCh.hasSubscribers) return finishPromise
-
-  return finishPromise
-    ? finishPromise.then(() => getChannelBarrierPromise(agentlessFlushCh))
-    : getChannelBarrierPromise(agentlessFlushCh)
+  return getChannelPromise(testSuiteFinishCh, {
+    ...payload,
+    waitForFinish,
+  })
 }
 
 function cleanupTestSuiteState (testSuiteAbsolutePath) {
@@ -3538,6 +3531,27 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
 
   return jestAdapter
 }
+
+/**
+ * @param {{ teardown?: (...args: unknown[]) => unknown }} testWorker
+ * @returns {{ teardown?: (...args: unknown[]) => unknown }}
+ */
+function testWorkerWrapper (testWorker) {
+  const teardown = testWorker.teardown
+  testWorker.teardown = function () {
+    const result = teardown?.apply(this, arguments)
+    if (!isJestWorker || !agentlessFlushCh.hasSubscribers) return result
+
+    return Promise.resolve(result).then(() => getChannelBarrierPromise(agentlessFlushCh))
+  }
+  return testWorker
+}
+
+addHook({
+  name: 'jest-runner',
+  file: 'build/testWorker.js',
+  versions: [MINIMUM_JEST_VERSION],
+}, testWorkerWrapper)
 
 addHook({
   name: 'jest-circus',

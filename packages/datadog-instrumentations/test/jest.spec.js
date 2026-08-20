@@ -12,6 +12,7 @@ const agentlessFlushCh = channel('ci:agentless:flush')
 describe('jest instrumentation', () => {
   let jestAdapterHook
   let jestRuntimeHook
+  let jestTestWorkerHook
   let nativeRequire
 
   before(() => {
@@ -44,6 +45,11 @@ describe('jest instrumentation', () => {
 
     const runtimeHookCall = addHook.getCalls().find(({ args }) => args[0].name === 'jest-runtime')
     jestRuntimeHook = runtimeHookCall.args[1]
+
+    const testWorkerHookCall = addHook.getCalls().find(({ args }) =>
+      args[0].name === 'jest-runner' && args[0].file === 'build/testWorker.js'
+    )
+    jestTestWorkerHook = testWorkerHookCall.args[1]
   })
 
   it('caches the instrumented native logger export in the Jest registry', () => {
@@ -88,56 +94,63 @@ describe('jest instrumentation', () => {
     assert.strictEqual(runtime._moduleRegistry.get(modulePath).exports, instrumentedLogger)
   })
 
-  /**
-   * @param {Function} adapter
-   * @returns {Promise<{ result?: object, error?: Error }>}
-   */
-  async function finishAdapterAfterFlush (adapter) {
-    const wrappedAdapter = jestAdapterHook(adapter, '29.7.0')
+  it('defers the agentless flush until a multi-suite Jest worker tears down', async () => {
+    const suiteResults = { numFailingTests: 0 }
+    const wrappedAdapter = jestAdapterHook(sinon.stub().resolves(suiteResults), '29.7.0')
+    const testWorker = jestTestWorkerHook({})
     let completeFlush
+    let flushCount = 0
     const onFlush = ({ registerCompletion }) => {
+      flushCount++
       completeFlush = registerCompletion()
     }
     agentlessFlushCh.subscribe(onFlush)
 
     try {
+      for (const testSuiteAbsolutePath of ['/test/first.js', '/test/second.js']) {
+        assert.strictEqual(await wrappedAdapter(undefined, undefined, {
+          globalConfig: {},
+          testEnvironmentOptions: {},
+          testSuiteAbsolutePath,
+        }), suiteResults)
+      }
+      assert.strictEqual(flushCount, 0)
+
       let settled = false
-      const outcomePromise = wrappedAdapter(undefined, undefined, {
-        globalConfig: {},
-        testEnvironmentOptions: {},
-        testSuiteAbsolutePath: '/test/suite.js',
-      }).then(
-        result => {
-          settled = true
-          return { result }
-        },
-        error => {
-          settled = true
-          return { error }
-        }
-      )
+      const teardownPromise = testWorker.teardown().then(() => {
+        settled = true
+      })
 
       await new Promise(setImmediate)
 
+      assert.strictEqual(flushCount, 1)
       assert.strictEqual(settled, false)
       completeFlush()
-      return outcomePromise
+      await teardownPromise
+      assert.strictEqual(settled, true)
     } finally {
       agentlessFlushCh.unsubscribe(onFlush)
     }
-  }
-
-  it('waits for the agentless flush in ordinary Jest workers', async () => {
-    const suiteResults = { numFailingTests: 0 }
-    const adapter = sinon.stub().resolves(suiteResults)
-
-    assert.deepStrictEqual(await finishAdapterAfterFlush(adapter), { result: suiteResults })
   })
 
-  it('waits for the agentless flush before propagating Jest worker failures', async () => {
+  it('does not wait for the agentless flush before propagating Jest suite failures', async () => {
     const failure = new Error('boom')
-    const adapter = sinon.stub().rejects(failure)
+    const wrappedAdapter = jestAdapterHook(sinon.stub().rejects(failure), '29.7.0')
+    let flushCount = 0
+    const onFlush = () => {
+      flushCount++
+    }
+    agentlessFlushCh.subscribe(onFlush)
 
-    assert.deepStrictEqual(await finishAdapterAfterFlush(adapter), { error: failure })
+    try {
+      await assert.rejects(wrappedAdapter(undefined, undefined, {
+        globalConfig: {},
+        testEnvironmentOptions: {},
+        testSuiteAbsolutePath: '/test/suite.js',
+      }), failure)
+      assert.strictEqual(flushCount, 0)
+    } finally {
+      agentlessFlushCh.unsubscribe(onFlush)
+    }
   })
 })
