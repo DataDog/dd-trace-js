@@ -97,12 +97,12 @@ describe('OpenFeature Module', () => {
       sinon.assert.calledOnceWithExactly(replacementWriter.setEnabled, true, currentRoute)
     })
 
-    it('should not setup the Agent-only writer in agentless mode', () => {
+    it('should setup exposure delivery in agentless mode', () => {
       config.DD_AGENTLESS_ENABLED = true
       openfeatureModule.enable(config)
 
-      sinon.assert.notCalled(ExposuresWriterStub)
-      sinon.assert.notCalled(setExposureDeliveryStrategyStub)
+      sinon.assert.calledOnceWithExactly(ExposuresWriterStub, config)
+      sinon.assert.calledOnce(setExposureDeliveryStrategyStub)
     })
 
     it('should handle multiple enable calls gracefully', () => {

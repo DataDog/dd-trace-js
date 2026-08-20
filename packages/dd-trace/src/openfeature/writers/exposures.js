@@ -188,7 +188,7 @@ class ExposuresWriter extends BaseFFEWriter {
   }
 
   /**
-   * Flushes buffered exposure events to the agent
+   * Flushes buffered exposure events to the configured destination
    */
   flush () {
     if (!this.#enabled) {

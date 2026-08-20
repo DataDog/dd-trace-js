@@ -140,7 +140,7 @@ class BaseFFEWriter {
   }
 
   /**
-   * Flushes all buffered events to the agent
+   * Flushes all buffered events to the configured destination
    */
   flush () {
     if (this._buffer.length === 0) {
