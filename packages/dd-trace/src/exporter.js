@@ -54,4 +54,21 @@ function hasCiValidationEnvironment () {
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR')
 }
 
+/**
+ * Whether the OTLP export that OTel semantics mode forces has to yield to the Lambda log
+ * transport: true in a Lambda that can only reach the backend through its log, and only while the
+ * caller has not pointed OTLP at a collector of their own.
+ *
+ * @returns {boolean}
+ */
+function requiresLambdaLogExporter () {
+  if (!usesLambdaLogExporter()) return false
+
+  // `createOtlpTraceExporter` reads the trace-specific endpoint and `Config` fills in a default
+  // for it, so only the environment shows whether the caller chose one.
+  return getEnvironmentVariable('OTEL_EXPORTER_OTLP_ENDPOINT') === undefined &&
+    getEnvironmentVariable('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT') === undefined
+}
+
 module.exports.usesLambdaLogExporter = usesLambdaLogExporter
+module.exports.requiresLambdaLogExporter = requiresLambdaLogExporter

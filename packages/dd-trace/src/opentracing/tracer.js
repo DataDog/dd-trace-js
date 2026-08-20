@@ -40,14 +40,10 @@ class DatadogTracer {
     // spans must reach the Electron SDK's IPC bridge, not an OTLP endpoint,
     // even when OTEL_* vars are set for unrelated telemetry.
     // A Lambda without the extension or the mini agent reaches the backend only by writing spans
-    // to its log for the Forwarder, and the default OTLP endpoint has no collector there, so
-    // replacing that transport loses them silently. An explicitly configured OTLP endpoint means
-    // the caller has somewhere for them to go.
-    const keepsLambdaLogExporter = getExporter.usesLambdaLogExporter() &&
-      config.OTEL_EXPORTER_OTLP_ENDPOINT === undefined
-
+    // to its log for the Forwarder, so replacing that transport with an OTLP endpoint nobody
+    // listens on loses them silently.
     if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility &&
-      config.experimental.exporter !== 'electron' && !keepsLambdaLogExporter) {
+      config.experimental.exporter !== 'electron' && !getExporter.requiresLambdaLogExporter()) {
       const { createOtlpTraceExporter } = require('../opentelemetry/trace')
       this._exporter = createOtlpTraceExporter(config)
     } else {
