@@ -1341,16 +1341,6 @@
         "default": null
       }
     ],
-    "DD_LLMOBS_PROJECT_NAME": [
-      {
-        "implementation": "B",
-        "type": "string",
-        "configurationNames": [
-          "llmobs.projectName"
-        ],
-        "default": null
-      }
-    ],
     "DD_LLMOBS_SAMPLE_RATE": [
       {
         "implementation": "A",
