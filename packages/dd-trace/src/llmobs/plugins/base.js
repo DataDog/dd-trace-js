@@ -18,7 +18,7 @@ class LLMObsPlugin extends TracingPlugin {
     throw new Error('setLLMObsTags must be implemented by the subclass')
   }
 
-  getLLMObsSpanRegisterOptions (ctx) {
+  getLLMObsSpanRegisterOptions (ctx, parent) {
     throw new Error('getLLMObsSPanRegisterOptions must be implemented by the subclass')
   }
 
@@ -29,10 +29,11 @@ class LLMObsPlugin extends TracingPlugin {
     if (!enabled) return
 
     const parentStore = llmobsStorage.getStore()
+    const parent = parentStore?.span
     const apmStore = ctx.currentStore
     const span = apmStore?.span
 
-    const registerOptions = this.getLLMObsSpanRegisterOptions(ctx)
+    const registerOptions = this.getLLMObsSpanRegisterOptions(ctx, parent)
 
     // register options may not be set for operations we do not trace with llmobs
     // ie OpenAI fine tuning jobs, file jobs, etc.
@@ -44,7 +45,7 @@ class LLMObsPlugin extends TracingPlugin {
       ctx.llmobs.parent = parentStore
 
       this._tagger.registerLLMObsSpan(span, {
-        parent: parentStore?.span,
+        parent,
         integration: this.constructor.integration,
         ...registerOptions,
       })

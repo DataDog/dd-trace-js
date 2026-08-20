@@ -1,8 +1,9 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const BaseLLMObsPlugin = require('../base')
 const { getModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
+const LLMObsTagger = require('../../tagger')
+const BaseLLMObsPlugin = require('../base')
 
 const toolCreationCh = channel('tracing:orchestrion:ai:tool:start')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')
@@ -131,12 +132,18 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
   /**
    * @override
    */
-  getLLMObsSpanRegisterOptions (ctx) {
+  getLLMObsSpanRegisterOptions (ctx, parent) {
     const operation = getOperation(ctx.name)
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
 
-    return { kind, name: getLlmObsSpanName(operation, ctx.attributes['ai.telemetry.functionId']) }
+    const name = getLlmObsSpanName(operation, ctx.attributes['ai.telemetry.functionId'])
+    if (kind === 'tool' && LLMObsTagger.getSpanKind(parent) === 'llm') {
+      const semanticParent = LLMObsTagger.getParent(parent)
+      if (semanticParent) return { kind, name, parent: semanticParent }
+    }
+
+    return { kind, name }
   }
 
   /**

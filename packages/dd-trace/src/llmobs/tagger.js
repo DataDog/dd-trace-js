@@ -74,6 +74,7 @@ const {
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
 const registry = new WeakMap()
+const parents = new WeakMap()
 
 class LLMObsTagger {
   /** @type {import('../config/config-base')} */
@@ -113,6 +114,16 @@ class LLMObsTagger {
     return registry.get(span)?.[SPAN_KIND]
   }
 
+  /**
+   * Return the semantic LLMObs parent captured when a span was registered.
+   *
+   * @param {import('../opentracing/span') | undefined} span
+   * @returns {import('../opentracing/span') | undefined}
+   */
+  static getParent (span) {
+    return parents.get(span)
+  }
+
   registerLLMObsSpan (span, {
     modelName,
     modelProvider,
@@ -142,6 +153,7 @@ class LLMObsTagger {
     }
 
     this._register(span)
+    parents.set(span, parent)
 
     const traceTags = getTraceTags(span) || {}
 

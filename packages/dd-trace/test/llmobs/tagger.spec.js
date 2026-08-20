@@ -200,6 +200,7 @@ describe('tagger', () => {
           '_ml_obs.session_id': 'my-session',
           '_ml_obs.llmobs_parent_id': '5678',
         })
+        assert.strictEqual(Tagger.getParent(span), parentSpan)
       })
 
       it('uses the propagated trace id if provided', () => {

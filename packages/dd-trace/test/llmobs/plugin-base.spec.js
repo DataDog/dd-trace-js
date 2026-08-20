@@ -12,14 +12,22 @@ class TracingPlugin {
   }
 }
 
-class LLMObsTagger {}
+class LLMObsTagger {
+  registerLLMObsSpan () {}
+}
 
 const BaseLLMObsPlugin = proxyquire('../../src/llmobs/plugins/base', {
   '../../plugins/tracing': TracingPlugin,
   '../tagger': LLMObsTagger,
+  '../telemetry': { incrementLLMObsSpanStartCount () {} },
 })
 
 class TestLLMObsPlugin extends BaseLLMObsPlugin {
+  getLLMObsSpanRegisterOptions (ctx, parent) {
+    this.registerOptionsParent = parent
+    return { kind: 'tool' }
+  }
+
   setLLMObsTags () {
     this.storeDuringTagging = llmobsStorage.getStore()
   }
@@ -36,6 +44,17 @@ describe('BaseLLMObsPlugin', () => {
 
   afterEach(() => {
     llmobsStorage.enterWith(undefined)
+  })
+
+  it('passes the ambient LLMObs parent to register option resolution', () => {
+    const parent = {}
+    const ctx = { currentStore: { span: {} } }
+
+    llmobsStorage.enterWith({ span: parent })
+
+    plugin.start(ctx)
+
+    assert.strictEqual(plugin.registerOptionsParent, parent)
   })
 
   it('restores the parent LLMObs store after async tagging', () => {
