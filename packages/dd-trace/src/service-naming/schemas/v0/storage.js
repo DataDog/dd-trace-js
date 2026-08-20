@@ -72,6 +72,14 @@ const storage = {
         return optionServiceSource({ tracerService, pluginConfig, connectionName, integration: 'aerospike' })
       },
     },
+    'azure-cosmos': {
+      opName: () => 'cosmosdb.query',
+      serviceName: ({ tracerService, pluginConfig }) =>
+        pluginConfig.service || `${tracerService}-azure-cosmos`,
+      serviceSource: ({ pluginConfig }) => {
+        return optionServiceSource({ pluginConfig, integration: 'azure-cosmos' })
+      },
+    },
     'cassandra-driver': {
       opName: () => 'cassandra.query',
       serviceName: ({ tracerService, pluginConfig, system }) =>

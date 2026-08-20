@@ -34,7 +34,7 @@ function extractDatadog (job) {
  * @returns {string | {name: string, source?: string}}
  */
 function consumerService (frame) {
-  return frame.config.service || frame.serviceName({ type: 'messaging', kind: 'consumer' })
+  return frame.serviceName({ type: 'messaging', kind: 'consumer' })
 }
 
 // The carrier was already lifted out of telemetry metadata during extraction so that the remote
@@ -65,7 +65,6 @@ const operation = {
     name: 'bullmq.processJob',
     service: consumerService,
     resource: field('queueName'),
-    type: 'messaging',
     kind: 'consumer',
     tags: {
       component: 'bullmq',

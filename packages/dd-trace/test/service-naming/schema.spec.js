@@ -156,4 +156,68 @@ describe('Service naming', () => {
       })
     })
   })
+
+  describe('Azure Cosmos service resolution', () => {
+    const azureCosmosName = (schema, pluginConfig) =>
+      schema.getServiceName('storage', 'client', 'azure-cosmos', {
+        tracerService: 'test',
+        pluginConfig,
+      })
+
+    it('uses its integration service and source in v0', () => {
+      assert.deepStrictEqual(
+        azureCosmosName(v0, {}),
+        { name: 'test-azure-cosmos', source: 'azure-cosmos' }
+      )
+    })
+
+    it('uses the tracer service without an integration source in v1', () => {
+      assert.deepStrictEqual(
+        azureCosmosName(v1, {}),
+        { name: 'test', source: undefined }
+      )
+    })
+
+    for (const [name, schema] of [['v0', v0], ['v1', v1]]) {
+      it(`uses an explicitly configured service and source in ${name}`, () => {
+        assert.deepStrictEqual(
+          azureCosmosName(schema, { service: 'custom' }),
+          { name: 'custom', source: 'opt.plugin' }
+        )
+      })
+    }
+  })
+
+  describe('BullMQ service resolution', () => {
+    const bullmqName = (schema, kind, pluginConfig) =>
+      schema.getServiceName('messaging', kind, 'bullmq', {
+        tracerService: 'test',
+        pluginConfig,
+      })
+
+    for (const kind of ['producer', 'consumer']) {
+      it(`uses its integration service and source for a ${kind} in v0`, () => {
+        assert.deepStrictEqual(
+          bullmqName(v0, kind, {}),
+          { name: 'test-bullmq', source: 'bullmq' }
+        )
+      })
+
+      it(`uses the tracer service without an integration source for a ${kind} in v1`, () => {
+        assert.deepStrictEqual(
+          bullmqName(v1, kind, {}),
+          { name: 'test', source: undefined }
+        )
+      })
+
+      for (const [name, schema] of [['v0', v0], ['v1', v1]]) {
+        it(`uses an explicitly configured service and source for a ${kind} in ${name}`, () => {
+          assert.deepStrictEqual(
+            bullmqName(schema, kind, { service: 'custom' }),
+            { name: 'custom', source: 'opt.plugin' }
+          )
+        })
+      }
+    }
+  })
 })

@@ -4,7 +4,9 @@ const assert = require('node:assert/strict')
 
 const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
+const log = require('../../dd-trace/src/log')
 const BullmqPlugin = require('../src')
 
 const DSM_KEY = 'dd-pathway-ctx-base64'
@@ -14,6 +16,7 @@ describe('bullmq pipeline stages', () => {
   let addedTags
   let checkpoints
   let decoded
+  let logError
   let plugin
   let tracer
   let tracerConfig
@@ -22,6 +25,7 @@ describe('bullmq pipeline stages', () => {
     addedTags = []
     checkpoints = []
     decoded = []
+    logError = sinon.stub(log, 'error')
 
     const spanContext = { getTag: () => undefined, getTags: () => ({}), setTag: () => {} }
     const span = {
@@ -46,7 +50,7 @@ describe('bullmq pipeline stages', () => {
         checkpoints.push({ edgeTags, payloadSize })
         return { hash: Buffer.alloc(8), pathwayStartNs: 1e6, edgeStartNs: 2e6 }
       },
-      startSpan: () => span,
+      startSpan: sinon.stub().returns(span),
     }
 
     tracerConfig = { spanComputePeerService: false }
@@ -54,6 +58,7 @@ describe('bullmq pipeline stages', () => {
 
   afterEach(() => {
     plugin?.configure(false)
+    logError.restore()
   })
 
   /**
@@ -152,6 +157,7 @@ describe('bullmq pipeline stages', () => {
       assert.strictEqual(carrier[TRACE_KEY], '1')
       assert.strictEqual(carrier[DSM_KEY], undefined)
       assert.deepStrictEqual(checkpoints, [])
+      assert.strictEqual(tracer.startSpan.firstCall.args[1].tags['span.type'], undefined)
     })
 
     it('adds code-origin tags through the producer stage', async () => {
@@ -161,7 +167,11 @@ describe('bullmq pipeline stages', () => {
       const result = await invoke('Queue_add', { arguments: ['job', {}, {}], self: { name: 'queue' } })
 
       assert.strictEqual(result, 'library-result')
-      assert.ok(addedTags.some(tags => tags['_dd.code_origin.type'] === 'exit'))
+      const tags = addedTags.find(tags => tags['_dd.code_origin.type'] === 'exit')
+      assert.ok(tags)
+      assert.strictEqual(typeof tags['_dd.code_origin.frames.0.file'], 'string')
+      assert.match(tags['_dd.code_origin.frames.0.line'], /^\d+$/)
+      assert.match(tags['_dd.code_origin.frames.0.column'], /^\d+$/)
     })
   })
 
@@ -195,6 +205,131 @@ describe('bullmq pipeline stages', () => {
 
       assert.strictEqual(checkpoints.length, 1)
       assert.strictEqual(readCarrier(jobs[1].opts).carrier[TRACE_KEY], '1')
+    })
+
+    it('records a zero-size checkpoint for a job without a payload', async () => {
+      load()
+      const jobs = [{ name: 'empty' }]
+
+      await invoke('Queue_addBulk', { arguments: [jobs], self: { name: 'queue' } })
+
+      assert.strictEqual(checkpoints.length, 1)
+      assert.strictEqual(checkpoints[0].payloadSize, 0)
+      assert.strictEqual(readCarrier(jobs[0].opts).carrier[TRACE_KEY], '1')
+    })
+  })
+
+  describe('producer filtering', () => {
+    it('rejects Queue.add before tracing or carrier mutation', async () => {
+      const producerFilter = sinon.stub().returns(false)
+      load({ producerFilter })
+      const opts = {}
+
+      const result = await invoke('Queue_add', {
+        arguments: ['job', { id: 1 }, opts],
+        self: { name: 'queue' },
+      })
+
+      assert.strictEqual(result, 'library-result')
+      sinon.assert.calledOnceWithExactly(producerFilter, {
+        name: 'job', data: { id: 1 }, opts, queueName: 'queue',
+      })
+      sinon.assert.notCalled(tracer.startSpan)
+      assert.strictEqual(opts.telemetry, undefined)
+      assert.deepStrictEqual(checkpoints, [])
+    })
+
+    it('continues Queue.add when the producer filter throws', async () => {
+      const producerFilter = sinon.stub().throws(new Error('bad filter'))
+      load({ producerFilter })
+      const opts = {}
+
+      const result = await invoke('Queue_add', {
+        arguments: ['job', { id: 1 }, opts],
+        self: { name: 'queue' },
+      })
+
+      assert.strictEqual(result, 'library-result')
+      sinon.assert.calledOnce(tracer.startSpan)
+      assert.strictEqual(readCarrier(opts).carrier[TRACE_KEY], '1')
+      sinon.assert.calledOnce(logError)
+      assert.match(logError.firstCall.args[0], /filtering is disabled/)
+    })
+
+    it('propagates only into Queue.addBulk jobs accepted by the filter', async () => {
+      const producerFilter = sinon.stub().callsFake(({ name }) => name === 'keep')
+      load({ producerFilter })
+      const skipped = { name: 'skip', data: { id: 1 } }
+      const accepted = { name: 'keep', data: { id: 2 } }
+
+      await invoke('Queue_addBulk', { arguments: [[skipped, accepted]], self: { name: 'queue' } })
+
+      assert.strictEqual(skipped.opts, undefined)
+      assert.strictEqual(readCarrier(accepted.opts).carrier[TRACE_KEY], '1')
+      assert.deepStrictEqual(producerFilter.args.map(([job]) => job), [
+        { name: 'skip', data: { id: 1 }, opts: undefined, queueName: 'queue' },
+        { name: 'keep', data: { id: 2 }, opts: undefined, queueName: 'queue' },
+      ])
+      assert.strictEqual(tracer.startSpan.firstCall.args[1].tags['messaging.batch.message_count'], 2)
+    })
+
+    it('rejects Queue.addBulk when every job is filtered out', async () => {
+      const producerFilter = sinon.stub().returns(false)
+      load({ producerFilter })
+      const jobs = [{ name: 'first' }, { name: 'second' }]
+
+      const result = await invoke('Queue_addBulk', { arguments: [jobs], self: { name: 'queue' } })
+
+      assert.strictEqual(result, 'library-result')
+      sinon.assert.calledTwice(producerFilter)
+      sinon.assert.notCalled(tracer.startSpan)
+      assert.deepStrictEqual(jobs, [{ name: 'first' }, { name: 'second' }])
+      assert.deepStrictEqual(checkpoints, [])
+    })
+
+    it('continues Queue.addBulk with every valid job when the filter throws', async () => {
+      const producerFilter = sinon.stub().throws(new Error('bad filter'))
+      load({ producerFilter })
+      const jobs = [{ name: 'first' }, { name: 'second' }]
+
+      await invoke('Queue_addBulk', { arguments: [jobs], self: { name: 'queue' } })
+
+      sinon.assert.calledOnce(producerFilter)
+      sinon.assert.calledOnce(tracer.startSpan)
+      assert.strictEqual(readCarrier(jobs[0].opts).carrier[TRACE_KEY], '1')
+      assert.strictEqual(readCarrier(jobs[1].opts).carrier[TRACE_KEY], '1')
+      assert.strictEqual(checkpoints.length, 2)
+      sinon.assert.calledOnce(logError)
+    })
+
+    it('uses the unfiltered batch directly when no producer filter is configured', async () => {
+      load()
+      const first = { name: 'first' }
+      const second = { name: 'second' }
+      const jobs = [first, null, second]
+
+      await invoke('Queue_addBulk', { arguments: [jobs], self: { name: 'queue' } })
+
+      assert.strictEqual(readCarrier(first.opts).carrier[TRACE_KEY], '1')
+      assert.strictEqual(readCarrier(second.opts).carrier[TRACE_KEY], '1')
+      assert.strictEqual(tracer.startSpan.firstCall.args[1].tags['messaging.batch.message_count'], 3)
+      assert.strictEqual(checkpoints.length, 2)
+      sinon.assert.notCalled(logError)
+    })
+
+    it('passes FlowProducer.add fields to the filter and honors rejection', async () => {
+      const producerFilter = sinon.stub().returns(false)
+      load({ producerFilter })
+      const flow = { name: 'flow', data: { id: 1 }, opts: { delay: 10 }, queueName: 'flow-queue' }
+
+      const result = await invoke('FlowProducer_add', { arguments: [flow] })
+
+      assert.strictEqual(result, 'library-result')
+      sinon.assert.calledOnceWithExactly(producerFilter, {
+        name: 'flow', data: { id: 1 }, opts: { delay: 10 }, queueName: 'flow-queue',
+      })
+      sinon.assert.notCalled(tracer.startSpan)
+      assert.strictEqual(flow.opts.telemetry, undefined)
     })
   })
 

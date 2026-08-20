@@ -1,7 +1,8 @@
 'use strict'
 
-const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const { createIntegrationPlugin } = require('../../dd-trace/src/plugins/integration-pipeline')
+const { exitCodeOrigin } = require('../../dd-trace/src/plugins/stages/code-origin')
+const { createPeerServiceStage } = require('../../dd-trace/src/plugins/stages/peer-service')
 
 /**
  * @typedef {object} CosmosRequestContext
@@ -147,9 +148,18 @@ function getResultTags (frame) {
   }
 }
 
+/**
+ * Resolve the Azure Cosmos service through the storage-client naming schema.
+ *
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
+ * @returns {{name: string, source?: string}}
+ */
+function getService (frame) {
+  return frame.serviceName({ type: 'storage', kind: 'client' })
+}
+
 module.exports = createIntegrationPlugin({
   id: 'azure-cosmos',
-  base: DatabasePlugin,
   operations: [{
     target: { module: '@azure/cosmos', name: 'executePlugins' },
     lifecycle: 'async',
@@ -158,11 +168,16 @@ module.exports = createIntegrationPlugin({
     skip: frame => isEmptyPathRead(frame) ? 'noop' : 'parent',
     span: {
       name: 'cosmosdb.query',
+      service: getService,
       resource: frame => frame.data.resource,
       type: 'cosmosdb',
       kind: 'client',
       tags: frame => frame.data.tags,
       resultTags: getResultTags,
     },
+    stages: [
+      exitCodeOrigin,
+      createPeerServiceStage({ precursors: ['db.name'] }),
+    ],
   }],
 })

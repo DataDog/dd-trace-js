@@ -11,9 +11,10 @@ The pipeline is internal and experimental. It is not a public API, and its decla
 At this checkpoint, branch `pabloerhard/feat-new-orchestrion-pipeline` has reached this implementation state:
 
 - BullMQ is the first full pipeline migration and exercises producer, consumer, propagation, and DSM stages.
-- Azure Cosmos is migrated to one async pipeline operation while retaining `DatabasePlugin` as its semantic base.
-- The engine accepts a `TracingPlugin` subclass through `base`, evaluates `skip` as a literal or frame resolver, and
-  completes materialized spans through the selected base class's `finish()` method.
+- Azure Cosmos is migrated to one async pipeline operation with schema-driven service naming and explicit peer-service
+  and code-origin stages.
+- The generated class always extends `TracingPlugin`; definitions cannot inherit behavior through a configurable base.
+  `skip` remains a literal or frame resolver.
 - Correlation context is reserved before optional span materialization. The materialized span adopts the same context,
   preserving IDs exposed to span-independent stages.
 - The compiler installs context/span stores only for operations whose stages need them. Frames, correlation strings,
@@ -30,10 +31,6 @@ Verification completed at this checkpoint:
 - BullMQ regression matrix after shared compiler optimization: 126 passing;
 - Azure Cosmos changed production source: 100% line coverage;
 - focused ESLint and `git diff --check`: passing.
-- optimized Azure microbenchmark: 1,368 ns accepted, 251 ns duplicate rejection, 295 ns empty-path rejection, and
-  74 ns inherited no-op; the respective exact legacy medians are 1,048, 231, 270, and 77 ns.
-- real SDK/emulator trials found no detectable request-level difference; the sub-microsecond delta was below the
-  roughly 0.9-1.4 ms request-time variance.
 
 Repository-wide lint is not a valid clean-checkout signal in the current local workspace because it traverses an
 unrelated nested worktree, generated integration-test artifacts, and a pre-existing OpenTracing indentation error.
@@ -47,13 +44,13 @@ Do not use that observation to waive focused lint or CI on subsequent changes.
 | [`integration-pipeline.spec.js`](../../test/plugins/integration-pipeline.spec.js) | Executable contract for ordering, correlation, spanless operations, errors, no-op scopes, and validation. |
 | [`stages/code-origin.js`](./stages/code-origin.js) | Shared exit code-origin capability. |
 | [`stages/messaging.js`](./stages/messaging.js) | Shared propagation and Data Streams capability. Read before hand-writing either in a plugin. |
+| [`stages/peer-service.js`](./stages/peer-service.js) | Shared outbound peer-service finalization. |
 | [`stages/messaging.spec.js`](../../test/plugins/stages/messaging.spec.js) | Executable contract for edge tags, carrier sharing, batching, gating, and inbound decode ordering. |
 | [`INTEGRATION_PIPELINE_NOTES.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_NOTES.md) | Mechanical walkthrough using BullMQ and Azure Cosmos. |
 | [`INTEGRATION_PIPELINE_RATIONALE.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_RATIONALE.md) | Adoption argument, architecture score, risks, and rollout criteria. |
 | [BullMQ plugin](../../../datadog-plugin-bullmq/src/index.js) | Messaging integration using multiple operations and product stages. |
-| [Azure Cosmos plugin](../../../datadog-plugin-azure-cosmos/src/index.js) | Database integration using a compatibility base and a resolved skip mode. |
+| [Azure Cosmos plugin](../../../datadog-plugin-azure-cosmos/src/index.js) | Database integration using explicit naming and outbound stages with a resolved skip mode. |
 | [Orchestrion config index](../../../datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js) | Registration point for source-rewriter definitions. |
-| [Azure Cosmos benchmark](../../../../benchmark/sirun/plugin-azure-cosmos-pipeline/README.md) | Persistent baseline/candidate measurement for accepted, rejected, and inherited no-op paths. |
 
 Before changing an integration or its Orchestrion match, read the relevant upstream library source for the oldest and
 newest supported versions. Inspect the matched function, its callers, its result and error shapes, and sibling paths
@@ -78,7 +75,7 @@ source event
   -> record errors and unwind error hooks
   -> extract completion data and apply result tags
   -> unwind completion hooks
-  -> run base-class finalization and restore stores
+  -> finish the span and restore stores
 ```
 
 An integration definition should contain integration-specific facts. It should not recreate subscriptions, async
@@ -91,7 +88,6 @@ The top-level definition passed to `createIntegrationPlugin` has this shape:
 ```js
 createIntegrationPlugin({
   id: 'integration-id',
-  base: DatabasePlugin, // optional; defaults to TracingPlugin
   source,               // optional; defaults to the Orchestrion adapter
   configure,            // optional config transformation
   operations: [],       // required and non-empty
@@ -101,20 +97,6 @@ createIntegrationPlugin({
 ### `id`
 
 The existing integration ID used by the plugin manager, configuration, telemetry, and integration tagging.
-
-### `base`
-
-An optional `TracingPlugin` subclass. The default is `TracingPlugin` itself.
-
-Select the same semantic base as the legacy integration when that base has behavior the migration must retain. Azure
-Cosmos selects `DatabasePlugin`, which preserves storage service naming, peer-service computation, code-origin exit
-tags, database configuration, and base-class `finish()` behavior.
-
-The generated class overrides automatic trace subscriptions because the pipeline registers its own source channels.
-Other constructor, `configure()`, `startSpan()`, and `finish()` behavior from the selected base still applies.
-
-Do not select a base only to access a convenient internal method. Match the library type and preserve its complete
-contract. A base must be `TracingPlugin` or a subclass; invalid bases fail definition validation.
 
 ### `source`
 
@@ -149,7 +131,7 @@ identity and terminal-event contract in pipeline tests.
 
 ### `configure`
 
-An optional function applied to non-boolean plugin configuration before the selected base is configured:
+An optional function applied to non-boolean plugin configuration before `TracingPlugin` is configured:
 
 ```js
 configure: config => ({ ...config, compiledFilter: compileFilter(config) })
@@ -463,7 +445,7 @@ One `PipelineFrame` is created for each accepted or rejected invocation prepared
 | `correlation` | Reserved IDs and `inject(format, carrier)` for accepted operations. Undefined while gating a rejection. |
 | `trace` | Narrow annotation capability. Tags are buffered until a span exists and discarded for permanently spanless calls. |
 | `config` | Configured integration options after the optional definition transform. |
-| `serviceName(options)` | Existing schema-aware service-name resolver. |
+| `serviceName(options)` | Schema-aware resolver that supplies the integration ID and configured plugin options. |
 | `propagation.extract(format, carrier)` | Existing tracer propagation extraction. |
 | `dataStreams.decode(carrier)` | Decode an incoming DSM pathway. |
 | `dataStreams.setCheckpoint(tags, size)` | Create a DSM checkpoint using the operation's trace capability. |
@@ -474,6 +456,10 @@ started stages, and lifecycle flags.
 
 Do not confuse the frame with an Orchestrion `ctx`, JavaScript stack frame, or span. It is the integration-facing
 workspace and capability boundary for one invocation.
+
+Authors pass only the semantic schema coordinates, for example `frame.serviceName({ type: 'storage', kind: 'client' })`.
+The pipeline supplies the integration ID and current plugin configuration; the selected v0/v1 schema owns the default
+name, configuration override, and service-source attribution.
 
 ## Store and lifecycle invariants
 
@@ -497,9 +483,9 @@ receive correlation and run span-independent stages. Store restoration is owned 
 The pipeline reserves a `DatadogSpanContext` before optional span creation. A later span adopts it exactly once, so IDs
 observed or injected before tracing are the IDs recorded on the span.
 
-Completion always deletes invocation state in a `finally` block. When a span exists, completion calls the selected
-base's `finish(invocation)` rather than directly finishing the span. This preserves outbound/database finalization such
-as peer-service tags.
+Completion always deletes invocation state in a `finally` block. When a span exists, completion calls
+`TracingPlugin#finish(invocation)`. Outbound finalization such as peer-service tagging is declared as a stage instead of
+arriving through inheritance.
 
 ## Reference migrations
 
@@ -527,7 +513,8 @@ Read:
 Azure Cosmos demonstrates:
 
 - one async database operation;
-- selecting `DatabasePlugin` as a compatibility base;
+- schema-driven v0/v1 service naming with service-source attribution;
+- explicit peer-service and exit code-origin stages;
 - response and error fields through `resultTags`;
 - a resolved skip mode;
 - preserving request-level dedupe and nested HTTP suppression;
@@ -553,7 +540,7 @@ Read the existing instrumentation, plugin, tests, and upstream source. Record:
 - DSM, AppSec, IAST, or other product work;
 - filter, dedupe, recursion, and no-op rules;
 - nested span behavior for accepted and rejected calls;
-- selected base-class behavior;
+- inherited legacy behavior that must be expressed by the definition or a shared stage;
 - integration configuration and user callbacks;
 - CJS, ESM, browser, or alternate build paths.
 
@@ -569,6 +556,9 @@ or another product depends on argument identity for every invocation.
 
 Use one operation per observed source target. Keep Orchestrion as the default. If an existing source function can be
 matched statically, do not replace it with shimmer. When shimmer is unavoidable, document the concrete limitation.
+The source adapter is a transport boundary, not an escape hatch for dynamic interception, pre-lifecycle mutation,
+custom streaming or callback ownership, or result-identity constraints. If an adapter would contain operation-specific
+control flow, keep the integration on the existing plugin model until a reusable lifecycle contract emerges.
 
 ### 4. Separate semantic extraction from lifecycle
 
@@ -677,8 +667,7 @@ a fake test path that cannot occur through instrumentation and the plugin manage
 
 ## Known limitations and open work
 
-- The generated plugin still extends `TracingPlugin`, directly or through a compatibility base. Tracing is not an
-  independently loadable pipeline capability.
+- The generated plugin still extends `TracingPlugin`. Tracing is not an independently loadable pipeline capability.
 - `storage('legacy')` remains a compatibility bridge.
 - Only the `tracing` stage requirement exists.
 - No non-Orchestrion source adapter has been proven.
@@ -688,19 +677,16 @@ a fake test path that cannot occur through instrumentation and the plugin manage
 - `when` and resolved `skip` are separate and may repeat a gate computation.
 - Priority sampling can still require a materialized span, so BullMQ propagation remains tracing-dependent.
 - Globally disabled tracing still selects a no-op tracer that cannot reserve normal unique correlation contexts.
-- The optimized Azure Cosmos benchmark still shows a 31% isolated accepted-path regression (about 320 ns), while
-  explicit rejections are 9-10% slower (20-25 ns) and inherited no-op is at parity. Real SDK/emulator trials cannot
-  resolve that delta against roughly millisecond requests. See `benchmark/sirun/plugin-azure-cosmos-pipeline` and
-  keep measuring before adopting the engine in much hotter integrations.
+- The compiler avoids installing unused stores and lazily creates capabilities, but representative persistent
+  benchmarks are still required before adopting the engine in substantially hotter integrations.
 - `createMessagingStage` is shared across BullMQ's four operations but has only one integration as a consumer. Its
   descriptor shape is not frozen; confirm or correct it against a header-map carrier (kafkajs or amqplib) before
   promoting propagation and Data Streams to declarative operation keywords alongside `span`.
-- Azure Cosmos shares no product stage with BullMQ, so no capability is yet proven across integration types.
-- Compatibility removal criteria for the legacy store and base-class bridge are not defined.
+- Azure Cosmos and BullMQ both use the code-origin stage; peer-service now has its own reusable outbound stage.
+- Compatibility removal criteria for the legacy store are not defined.
 
-The Azure benchmark covers accepted, rejected, and inherited no-op paths plus a one-off real emulator comparison. Add
-equivalent persistent measurements for BullMQ, simple synchronous integrations, and globally disabled tracing before
-broad adoption. Warm up for roughly one second, run at least five trials, and reproduce results in a fresh shell.
+Add representative persistent measurements for BullMQ, simple synchronous integrations, and globally disabled tracing
+before broad adoption. Warm up for roughly one second, run at least five trials, and reproduce results in a fresh shell.
 
 ## Completion checklist
 
@@ -711,7 +697,7 @@ An agent should not declare a migration complete until all of the following are 
 - every source target and build format is instrumented;
 - channel subscriber cardinality was audited;
 - legacy span shape, errors, propagation, DSM, and configuration are preserved;
-- selected base-class behavior is asserted through observable output;
+- every inherited legacy behavior is either removed intentionally or asserted through observable output;
 - every gate includes accepted, rejected, and sibling cases;
 - no-op and parent inheritance behavior is pinned;
 - source-boundary or real-library tests replace internal helper tests;

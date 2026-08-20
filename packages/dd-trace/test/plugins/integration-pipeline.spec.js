@@ -23,10 +23,21 @@ const stageEvents = []
 const contextStorage = storage('context')
 const spanStorage = storage('span')
 const legacyStorage = storage('legacy')
+const resultStatus = result('status')
 
 function extractOptionalTrace (invocation) {
   if (invocation.arguments[0].failExtractor) throw new Error('author extractor failed')
   return invocation.arguments[0].trace
+}
+
+function extractStatus (invocation, frame) {
+  if (frame.data.operation === 'throw-complete') throw new Error('complete extractor failed')
+  return resultStatus(invocation)
+}
+
+function resolveStatusTag (frame) {
+  if (frame.data.operation === 'throw-result-tags') throw new Error('result tag resolver failed')
+  return frame.data.status
 }
 
 const correlationStage = {
@@ -117,7 +128,7 @@ const PipelinePlugin = createIntegrationPlugin({
           peer: self('host'),
         },
         complete: {
-          status: result('status'),
+          status: extractStatus,
         },
       },
       when: frame => frame.data.operation !== 'ignored',
@@ -131,7 +142,7 @@ const PipelinePlugin = createIntegrationPlugin({
           'example.peer': field('peer'),
         },
         resultTags: {
-          'example.status': field('status'),
+          'example.status': resolveStatusTag,
         },
       },
       stages: [correlationStage, propagationStage, telemetryStage],
@@ -404,6 +415,56 @@ describe('IntegrationPipeline', () => {
     await noTraces
   })
 
+  it('isolates a throwing completion extractor and still unwinds stages and finishes the span', async () => {
+    const invocation = {
+      arguments: [{ operation: 'throw-complete' }, {}],
+      self: { host: 'api.example.test' },
+    }
+    const assertion = agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'example.request')
+      assert.strictEqual(span.resource, 'throw-complete')
+      assert.strictEqual(span.meta['example.status'], undefined)
+    })
+
+    const resultPromise = requestChannel.tracePromise(() => Promise.resolve({ status: 202 }), invocation)
+
+    assert.deepStrictEqual(await resultPromise, { status: 202 })
+    await assertion
+    assert.deepStrictEqual(stageEvents, [
+      'correlation:start',
+      'propagation:start',
+      'telemetry:start',
+      'telemetry:complete',
+      'propagation:complete',
+      'correlation:complete',
+    ])
+  })
+
+  it('isolates a throwing result-tag resolver and still unwinds stages and finishes the span', async () => {
+    const invocation = {
+      arguments: [{ operation: 'throw-result-tags' }, {}],
+      self: { host: 'api.example.test' },
+    }
+    const assertion = agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'example.request')
+      assert.strictEqual(span.resource, 'throw-result-tags')
+      assert.strictEqual(span.meta['example.status'], undefined)
+    })
+
+    const resultPromise = requestChannel.tracePromise(() => Promise.resolve({ status: 202 }), invocation)
+
+    assert.deepStrictEqual(await resultPromise, { status: 202 })
+    await assertion
+    assert.deepStrictEqual(stageEvents, [
+      'correlation:start',
+      'propagation:start',
+      'telemetry:start',
+      'telemetry:complete',
+      'propagation:complete',
+      'correlation:complete',
+    ])
+  })
+
   it('inherits the active parent when an explicit parent resolver returns undefined', async () => {
     const parent = tracer.startSpan('example.parent')
     const assertion = agent.assertSomeTraces(traces => {
@@ -459,7 +520,7 @@ describe('IntegrationPipeline', () => {
         base: class {},
         operations: [{ target: { module: 'example', name: 'request' }, lifecycle: 'sync' }],
       }),
-      { message: 'Integration pipeline "invalid" requires a TracingPlugin base' }
+      { message: 'Integration pipeline "invalid" definition has an unknown "base" field' }
     )
     assert.throws(
       () => createIntegrationPlugin({ id: 'invalid', operations: [{ target: {} }] }),
@@ -488,7 +549,7 @@ describe('IntegrationPipeline', () => {
           span: {},
         }],
       }),
-      { message: 'Integration operation "request" has a trace definition without a span name' }
+      { message: 'Integration operation "request" requires a span name or resolver' }
     )
     assert.throws(
       () => createIntegrationPlugin({
@@ -510,6 +571,106 @@ describe('IntegrationPipeline', () => {
         ],
       }),
       { message: 'Integration pipeline "invalid" repeats target "example:request"' }
+    )
+  })
+
+  it('rejects malformed extractors, gates, spans, and stages', () => {
+    const operation = {
+      target: { module: 'example', name: 'request' },
+      lifecycle: 'sync',
+    }
+
+    assert.throws(
+      () => createIntegrationPlugin({ id: 'invalid', operations: [null] }),
+      { message: 'Integration pipeline "invalid" has an invalid operation' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({ id: 'invalid', operations: [{ ...operation, extract: null }] }),
+      { message: 'Integration operation "request" has an invalid extract definition' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        operations: [{ ...operation, extract: { start: { resource: 'not-a-function' } } }],
+      }),
+      { message: 'Integration operation "request" extract.start field "resource" requires an extractor function' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        operations: [{ ...operation, extract: { completed: () => ({}) } }],
+      }),
+      { message: 'Integration operation "request" extract definition has an unknown "completed" field' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        operations: [{ ...operation, extract: { complete: [] } }],
+      }),
+      { message: 'Integration operation "request" extract.complete must be a function or field record' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({ id: 'invalid', operations: [{ ...operation, when: true }] }),
+      { message: 'Integration operation "request" requires a when function' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({ id: 'invalid', operations: [{ ...operation, span: [] }] }),
+      { message: 'Integration operation "request" has an invalid span definition' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({ id: 'invalid', operations: [{ ...operation, span: { name: {} } }] }),
+      { message: 'Integration operation "request" requires a span name or resolver' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        operations: [{ ...operation, span: { name: 'example.request', resultTags: [] } }],
+      }),
+      { message: 'Integration operation "request" span resultTags must be a function or field record' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({ id: 'invalid', operations: [{ ...operation, stages: {} }] }),
+      { message: 'Integration operation "request" requires a stage list' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({ id: 'invalid', operations: [{ ...operation, stages: [null] }] }),
+      { message: 'Integration operation "request" has an invalid stage' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({ id: 'invalid', operations: [{ ...operation, stages: [{ name: '' }] }] }),
+      { message: 'Integration operation "request" has a stage without a non-empty name' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        operations: [{ ...operation, stages: [{ name: 'bad', statr () {} }] }],
+      }),
+      { message: 'Integration operation "request" stage has an unknown "statr" field' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        operations: [{ ...operation, stages: [{ name: 'bad', requires: 'tracing' }] }],
+      }),
+      { message: 'Integration stage "bad" requires a capability list' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        operations: [{ ...operation, stages: [{ name: 'bad', start: true }] }],
+      }),
+      { message: 'Integration stage "bad" has an invalid start hook' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        operations: [{
+          ...operation,
+          span: { name: 'example.request' },
+          stages: [{ name: 'bad', requires: ['unknown'] }],
+        }],
+      }),
+      { message: 'Integration stage "bad" requires an unknown capability' }
     )
   })
 })

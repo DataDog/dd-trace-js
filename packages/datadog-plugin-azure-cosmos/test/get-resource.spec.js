@@ -59,6 +59,7 @@ describe('azure-cosmos pipeline', () => {
         const assertion = agent.assertFirstTraceSpan(span => {
           assert.strictEqual(span.resource, expected)
           assert.strictEqual(span.service, 'test-azure-cosmos')
+          assert.strictEqual(span.meta['_dd.svc_src'], 'azure-cosmos')
           assert.strictEqual(span.meta['peer.service'], 'myDb')
           assert.strictEqual(span.meta['_dd.peer.service.source'], 'db.name')
         })
@@ -193,5 +194,29 @@ describe('azure-cosmos pipeline', () => {
     }, { arguments: [undefined, requestContext, undefined, 'operation'] }))
 
     await noTraces
+  })
+
+  describe('with a configured service', () => {
+    before(() => agent.reload('azure-cosmos', { service: 'custom-cosmos' }))
+
+    it('resolves the service and its source through the naming schema', async () => {
+      const assertion = agent.assertFirstTraceSpan(span => {
+        assert.strictEqual(span.service, 'custom-cosmos')
+        assert.strictEqual(span.meta['_dd.svc_src'], 'opt.plugin')
+      })
+      const requestContext = {
+        operationType: 'read',
+        resourceType: 'docs',
+        path: '/dbs/myDb/colls/myContainer/docs/item-id',
+      }
+
+      await Promise.all([
+        assertion,
+        channel.tracePromise(
+          () => Promise.resolve({ code: 200 }),
+          { arguments: [undefined, requestContext, undefined, 'operation'] }
+        ),
+      ])
+    })
   })
 })

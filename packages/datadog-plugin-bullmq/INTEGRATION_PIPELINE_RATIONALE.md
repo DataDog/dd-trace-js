@@ -103,21 +103,35 @@ work more reliable: a model can fill a constrained declaration and reuse known s
 plugin lifecycle whose hidden invariants vary by reference plugin. That is an expected benefit, not yet a measured
 quality claim; it should be evaluated on subsequent migrations.
 
-### 5. Orchestrion becomes an input, not an architectural constraint
+### 5. Orchestrion supplies the intended lifecycle shape
 
-Orchestrion is the default source today, but the engine depends on a small source contract: resolve lifecycle channel
-names and normalize a message into an invocation. Extraction, gating, correlation, tracing, and stages do not build
-Orchestrion channel names themselves.
+The engine depends on a small source contract: resolve lifecycle channel names and normalize a message into an
+invocation. Extraction, gating, correlation, tracing, and stages do not build Orchestrion channel names themselves.
+That boundary keeps source mechanics out of integration definitions.
 
-This matters even if no second source is added soon. Source-specific assumptions have a named boundary, so a future
-instrumentation change should require replacing an adapter instead of reshaping every integration declaration.
+It does not mean arbitrary sources are equally good pipeline candidates. Orchestrion supplies the uniform function
+lifecycle the pipeline standardizes. Shimmer integrations commonly exist because they need dynamic interception,
+pre-lifecycle mutation, streaming or callback ownership, or result-identity preservation. Encoding those exceptions in
+a source adapter would recreate bespoke plugin orchestration behind a different name. Adopt another source only when
+it can provide the same bounded lifecycle without integration-specific control flow.
 
-### 6. The design supports incremental adoption
+### 6. Operation lists replace lifecycle-only composites
 
-The generated class still satisfies the current plugin-manager contract and extends `TracingPlugin`, directly or
-through a selected compatibility base. Azure Cosmos selects `DatabasePlugin`, retaining its storage service naming,
-peer-service finalization, and code-origin behavior. Existing plugin loading, configuration, span creation, and error
-tagging continue to work. `storage('legacy')` is mirrored during the migration.
+BullMQ's former `CompositePlugin` existed to group producer and consumer classes that repeated the same subscription,
+storage, and completion machinery. A pipeline definition lists those operations directly, while stages express shared
+capabilities such as propagation, DSM, and code origin. Adding an operation no longer requires another plugin subclass
+or another composite entry.
+
+Composites that coordinate independent products, configuration domains, or genuinely different lifecycles remain
+valid. Moving those concerns into extractors or stages would be a regression to plugin-style imperative orchestration,
+not successful pipeline composition.
+
+### 7. The design supports incremental adoption
+
+The generated class still satisfies the current plugin-manager contract and extends `TracingPlugin`. Azure Cosmos
+resolves service naming through the existing schemas and declares peer-service and code-origin behavior as stages.
+Existing plugin loading, configuration, span creation, and error tagging continue to work. `storage('legacy')` is
+mirrored during the migration.
 
 That compatibility lets us validate the new model integration by integration. We do not need a flag day, and a plugin
 that does not fit the model can remain on the existing base classes while the missing abstraction is understood.
@@ -135,7 +149,7 @@ The current experiment establishes more than a smaller source file:
 - malformed customer metadata and stage failures do not break the BullMQ call;
 - store restoration, error hooks, reverse completion, and definition validation have direct tests;
 - the Redis-backed BullMQ plugin CI passes across the versions in the test matrix.
-- a database client uses the same lifecycle while retaining `DatabasePlugin` behavior;
+- a database client uses the same lifecycle while composing its required outbound behavior explicitly;
 - one Cosmos source target resolves either parent inheritance or no-op suppression for rejected invocations;
 - Cosmos response and error fields are applied through the common completion path;
 - the emulator-backed Cosmos plugin CI passes for the oldest and newest supported SDKs and for ESM loading.
@@ -154,10 +168,10 @@ still be proven. A higher number means the design better satisfies the dimension
 | Explicit contracts | 5/10 | 8/10 | Operation validation, source normalization, stage requirements, and a bounded frame replace lifecycle conventions spread across handlers. |
 | Testability at boundaries | 6/10 | 9/10 | Context reservation/materialization, store separation, stage order, no-op behavior, and invalid definitions have direct contract tests. |
 | Extensibility | 5/10 | 8/10 | New operations primarily add declarations and stages; new sources have an adapter boundary. More product capabilities still need design. |
-| Hot-path fitness | 8/10 | 7/10 | Rejected paths are within 9-10%, inherited no-op is at parity, and accepted calls retain a 31% isolated overhead that is not measurable at Cosmos request scale. |
+| Hot-path fitness | 8/10 | 7/10 | The compiler omits unused stores and capabilities, but broader persistent benchmark coverage is still needed. |
 
-The proposal clears the architectural bar on five dimensions. Hot-path fitness remains below the direct plugin model,
-but the remaining cost is bounded and no longer a rollout blocker for network integrations like Azure Cosmos.
+The proposal clears the architectural bar on five dimensions. Hot-path fitness remains below the direct plugin model
+until representative persistent benchmarks establish the cost across accepted, rejected, and tracing-disabled paths.
 
 ## What this approach does not yet prove
 
@@ -174,40 +188,15 @@ materializes correlation and capability blocks, precompiles extractors/resolvers
 tag blocks, avoids rejected-operation state retention, and keeps the inherited no-op path ahead of frame allocation.
 These are reusable pipeline optimizations rather than Azure-specific shortcuts.
 
-On 2026-08-17, seven fresh-process trials compared the exact pre-migration Azure Cosmos plugin from `HEAD` with the
-optimized working-tree pipeline. Values below are medians on Apple Silicon with Node.js 25. The persistent benchmark
-drives real diagnostic-channel bindings and completion handlers, allocates real `DatadogSpanContext` instances, and
-stubs only span export.
-
-| Azure Cosmos path | Legacy ns/op | Pipeline ns/op | Pipeline / legacy |
-| --- | ---: | ---: | ---: |
-| Accepted and completed span | 1,048 | 1,368 | 1.31x |
-| Duplicate request rejected to parent | 231 | 251 | 1.09x |
-| Empty-path read rejected to no-op | 270 | 295 | 1.09x |
-| Accepted operation under inherited no-op | 77 | 74 | parity |
-
-Relative to the first pipeline implementation, this reduces accepted cost by 64%, the explicit rejection paths by
-about 49%, and inherited no-op cost by 96%. The remaining migration delta is about 320 ns for an accepted callback and
-20-25 ns for rejected callbacks.
-
-An end-to-end benchmark also ran the exact two plugin implementations with the real Cosmos SDK, tracer, mock-agent
-export path, and local Cosmos emulator. Across 32 fresh processes (1,000-5,000 timed item reads each), request times
-were roughly 0.9-1.4 ms and the legacy/pipeline distributions completely overlapped. In six simultaneous paired runs,
-the pipeline process was faster five times, which is not evidence that it is faster; it demonstrates that emulator and
-scheduler variance is much larger than the sub-microsecond instrumentation delta. No request-level slowdown was
-detectable.
-
-At a representative 1 ms request, one accepted pipeline callback adds about 0.032% request time versus legacy; even
-two accepted callbacks are about 0.064%. The CPU delta is roughly 0.032% of one core at 1,000 accepted callbacks/s,
-0.32% at 10,000/s, and 3.2% at 100,000/s. This cost applies only to matching integration callbacks, not to every tracer
-operation. Keep the persistent microbenchmark as the regression gate, and add BullMQ, synchronous, and globally
-disabled measurements before broad adoption into substantially hotter libraries.
+Performance still needs a durable gate. Add representative benchmarks for BullMQ, simple synchronous operations,
+rejected gates, inherited no-op scopes, and globally disabled tracing before broad adoption into hotter libraries.
+The benchmark must drive the real diagnostic-channel lifecycle and context reservation; timing isolated resolver
+helpers would hide the engine costs the measurement is intended to constrain.
 
 ### Tracing is separated logically, not fully modularized
 
-The generated plugin still extends `TracingPlugin`, either directly or through a selected compatibility base, and span
-construction still flows through existing tracer internals. The raw span is private to the engine, but tracing is not
-yet a separately loadable pipeline capability.
+The generated plugin still extends `TracingPlugin`, and span construction still flows through existing tracer
+internals. The raw span is private to the engine, but tracing is not yet a separately loadable pipeline capability.
 
 This is enough to make stage dependencies honest and to support spanless operations. It is not yet the final product
 composition architecture.

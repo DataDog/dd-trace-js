@@ -138,7 +138,7 @@ function extractBulkJobs (context, frame) {
  * @returns {string | {name: string, source?: string}}
  */
 function producerService (frame) {
-  return frame.config.service || frame.serviceName({ type: 'messaging', kind: 'producer' })
+  return frame.serviceName({ type: 'messaging', kind: 'producer' })
 }
 
 // Every producer target propagates and checkpoints identically. Only the message set, where its
@@ -194,7 +194,6 @@ const operations = [
       name: 'bullmq.add',
       service: producerService,
       resource: field('queueName'),
-      type: 'messaging',
       kind: 'producer',
       tags: {
         ...producerTags,
@@ -219,7 +218,6 @@ const operations = [
       name: 'bullmq.addBulk',
       service: producerService,
       resource: field('queueName'),
-      type: 'messaging',
       kind: 'producer',
       tags: {
         ...producerTags,
@@ -249,7 +247,6 @@ const operations = [
       name: 'bullmq.add',
       service: producerService,
       resource: field('queueName'),
-      type: 'messaging',
       kind: 'producer',
       tags: {
         ...producerTags,

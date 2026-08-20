@@ -3,12 +3,17 @@
 const { storage } = require('../../../datadog-core')
 const log = require('../log')
 const { addExitCodeOrigin } = require('./stages/code-origin')
+const { addPeerService } = require('./stages/peer-service')
 const TracingPlugin = require('./tracing')
 
 const contextStorage = storage('context')
 const spanStorage = storage('span')
 const legacyStorage = storage('legacy')
 const spanContextKey = Symbol('integration.pipeline.span_context')
+const definitionFields = new Set(['id', 'source', 'configure', 'operations'])
+const extractorPhases = new Set(['start', 'complete'])
+const spanFields = new Set(['enabled', 'name', 'service', 'resource', 'type', 'kind', 'tags', 'metrics', 'resultTags'])
+const stageFields = new Set(['name', 'requires', 'start', 'complete', 'error'])
 
 /**
  * @typedef {object} InvocationContext
@@ -142,7 +147,6 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
 /**
  * @typedef {object} IntegrationDefinition
  * @property {string} id
- * @property {typeof TracingPlugin} [base]
  * @property {IntegrationSource} [source]
  * @property {(config: Record<string, unknown>) => Record<string, unknown>} [configure]
  * @property {IntegrationOperation[]} operations
@@ -373,7 +377,7 @@ class IntegrationFrame {
    * @returns {string | {name: string, source?: string}}
    */
   serviceName (options) {
-    return this.#plugin.serviceName(options)
+    return this.#plugin.serviceName({ ...options, pluginConfig: this.config })
   }
 
   /**
@@ -388,6 +392,18 @@ class IntegrationFrame {
     if (!config?.enabled || !config.experimental?.exit_spans?.enabled) return
 
     this.#state.span.addTags(createTags(topOfStackFunc))
+  }
+
+  /**
+   * Apply a built-in peer-service stage without exposing the span or tracer configuration.
+   *
+   * @param {(span: import('../opentracing/span'), tracerConfig: import('../config/config-base'),
+   *   precursors: string[]) => void} tagPeerService
+   * @param {string[]} precursors
+   * @returns {void}
+   */
+  [addPeerService] (tagPeerService, precursors) {
+    tagPeerService(this.#state.span, this.#plugin._tracerConfig, precursors)
   }
 }
 
@@ -585,10 +601,14 @@ function completeOperation (plugin, operation, invocation, states) {
   try {
     if (state.skipped) return
     if (!state.failed) {
-      extractComplete(operation.completeExtractors, invocation, state.frame)
-      if (state.span) {
-        const resultTags = resolveRecord(operation.resultTagResolvers, state.frame)
-        if (resultTags) state.span.addTags(resultTags)
+      try {
+        extractComplete(operation.completeExtractors, invocation, state.frame)
+        if (state.span) {
+          const resultTags = resolveRecord(operation.resultTagResolvers, state.frame)
+          if (resultTags) state.span.addTags(resultTags)
+        }
+      } catch (error) {
+        logOperationFailure(plugin, operation, 'complete', error)
       }
     }
     unwindStages(state, 'complete')
@@ -596,6 +616,25 @@ function completeOperation (plugin, operation, invocation, states) {
     states.delete(invocation)
     if (state.span) plugin.finish(invocation)
   }
+}
+
+/**
+ * Report an integration-authored lifecycle failure without throwing into the instrumented application.
+ *
+ * @param {TracingPlugin} plugin
+ * @param {NormalizedOperation} operation
+ * @param {'start' | 'complete'} phase
+ * @param {unknown} error
+ * @returns {void}
+ */
+function logOperationFailure (plugin, operation, phase, error) {
+  log.error(
+    'Integration pipeline "%s" operation "%s" failed during %s: %s',
+    plugin.constructor.id,
+    operation.target.name,
+    phase,
+    error?.message || error
+  )
 }
 
 function bindSafely (plugin, operation, message, source, states, store, bind) {
@@ -606,13 +645,63 @@ function bindSafely (plugin, operation, message, source, states, store, bind) {
   } catch (error) {
     const state = invocation && states.get(invocation)
     if (state) state.failed = true
-    log.error(
-      'Integration pipeline "%s" operation "%s" failed during start: %s',
-      plugin.constructor.id,
-      operation.target.name,
-      error?.message || error
-    )
+    logOperationFailure(plugin, operation, 'start', error)
     return store.getStore()
+  }
+}
+
+function isRecord (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function validateFields (value, fields, description) {
+  for (const name of Object.keys(value)) {
+    if (!fields.has(name)) throw new TypeError(`${description} has an unknown "${name}" field`)
+  }
+}
+
+function validateExtractor (extractor, description) {
+  if (extractor === undefined || typeof extractor === 'function') return
+  if (!isRecord(extractor)) throw new TypeError(`${description} must be a function or field record`)
+
+  for (const [name, resolver] of Object.entries(extractor)) {
+    if (typeof resolver !== 'function') {
+      throw new TypeError(`${description} field "${name}" requires an extractor function`)
+    }
+  }
+}
+
+function validateSpan (span, operationName) {
+  if (!isRecord(span)) throw new TypeError(`Integration operation "${operationName}" has an invalid span definition`)
+  validateFields(span, spanFields, `Integration operation "${operationName}" span definition`)
+
+  if ((typeof span.name !== 'string' || span.name.length === 0) && typeof span.name !== 'function') {
+    throw new TypeError(`Integration operation "${operationName}" requires a span name or resolver`)
+  }
+  for (const fieldName of ['tags', 'metrics', 'resultTags']) {
+    const value = span[fieldName]
+    if (value !== undefined && typeof value !== 'function' && !isRecord(value)) {
+      throw new TypeError(
+        `Integration operation "${operationName}" span ${fieldName} must be a function or field record`
+      )
+    }
+  }
+}
+
+function validateStage (stage, operationName) {
+  if (!isRecord(stage)) throw new TypeError(`Integration operation "${operationName}" has an invalid stage`)
+  validateFields(stage, stageFields, `Integration operation "${operationName}" stage`)
+
+  if (typeof stage.name !== 'string' || stage.name.length === 0) {
+    throw new TypeError(`Integration operation "${operationName}" has a stage without a non-empty name`)
+  }
+  if (stage.requires !== undefined && !Array.isArray(stage.requires)) {
+    throw new TypeError(`Integration stage "${stage.name}" requires a capability list`)
+  }
+  for (const hook of ['start', 'complete', 'error']) {
+    if (stage[hook] !== undefined && typeof stage[hook] !== 'function') {
+      throw new TypeError(`Integration stage "${stage.name}" has an invalid ${hook} hook`)
+    }
   }
 }
 
@@ -624,16 +713,16 @@ function validateDefinition (definition) {
   if (!Array.isArray(definition.operations) || definition.operations.length === 0) {
     throw new TypeError(`Integration pipeline "${definition.id}" requires at least one operation`)
   }
-  if (definition.base !== undefined &&
-    (typeof definition.base !== 'function' || !(definition.base === TracingPlugin ||
-      definition.base.prototype instanceof TracingPlugin))) {
-    throw new TypeError(`Integration pipeline "${definition.id}" requires a TracingPlugin base`)
-  }
+  validateFields(definition, definitionFields, `Integration pipeline "${definition.id}" definition`)
 
   const targets = new Set()
   for (const operation of definition.operations) {
+    if (!isRecord(operation)) {
+      throw new TypeError(`Integration pipeline "${definition.id}" has an invalid operation`)
+    }
     const { target, lifecycle, span, stages = [] } = operation
-    if (!target || typeof target.module !== 'string' || typeof target.name !== 'string') {
+    if (!target || typeof target.module !== 'string' || target.module.length === 0 ||
+      typeof target.name !== 'string' || target.name.length === 0) {
       throw new TypeError(`Integration pipeline "${definition.id}" has an invalid target`)
     }
     if (lifecycle !== 'sync' && lifecycle !== 'async') {
@@ -643,10 +732,23 @@ function validateDefinition (definition) {
       operation.skip !== 'parent' && operation.skip !== 'noop') {
       throw new TypeError(`Integration operation "${target.name}" has an invalid skip mode`)
     }
-    if (span && span.name === undefined) {
-      throw new TypeError(`Integration operation "${target.name}" has a trace definition without a span name`)
+    if (operation.when !== undefined && typeof operation.when !== 'function') {
+      throw new TypeError(`Integration operation "${target.name}" requires a when function`)
+    }
+    if (operation.extract !== undefined) {
+      if (!isRecord(operation.extract)) {
+        throw new TypeError(`Integration operation "${target.name}" has an invalid extract definition`)
+      }
+      validateFields(operation.extract, extractorPhases, `Integration operation "${target.name}" extract definition`)
+      validateExtractor(operation.extract.start, `Integration operation "${target.name}" extract.start`)
+      validateExtractor(operation.extract.complete, `Integration operation "${target.name}" extract.complete`)
+    }
+    if (span !== undefined) validateSpan(span, target.name)
+    if (!Array.isArray(stages)) {
+      throw new TypeError(`Integration operation "${target.name}" requires a stage list`)
     }
     for (const stage of stages) {
+      validateStage(stage, target.name)
       if (stage.requires?.some(capability => capability !== 'tracing')) {
         throw new TypeError(`Integration stage "${stage.name}" requires an unknown capability`)
       }
@@ -701,9 +803,8 @@ function createIntegrationPlugin (definition) {
   validateDefinition(definition)
   const operations = normalizeOperations(definition.operations)
   const source = definition.source || orchestrionSource
-  const PluginBase = definition.base || TracingPlugin
 
-  return class IntegrationPipeline extends PluginBase {
+  return class IntegrationPipeline extends TracingPlugin {
     static id = definition.id
     static operation = definition.id
 

@@ -41,8 +41,7 @@ and the products that act on that event.
 | `packages/datadog-plugin-bullmq/src/index.js` | Compiles the BullMQ integration definition into the plugin-manager class. |
 | `packages/datadog-plugin-bullmq/src/producer.js` | Producer operation declarations, telemetry-metadata carrier codec, and outbound message descriptors. |
 | `packages/datadog-plugin-bullmq/src/consumer.js` | Consumer declaration, carrier extraction, parent selection, and inbound message descriptor. |
-| `packages/datadog-plugin-azure-cosmos/src/index.js` | Declares an async database operation and selects `DatabasePlugin` as its compatibility base. |
-| `benchmark/sirun/plugin-azure-cosmos-pipeline` | Baseline/candidate hot-path benchmark for accepted, rejected, and inherited no-op calls. |
+| `packages/datadog-plugin-azure-cosmos/src/index.js` | Declares an async database operation with schema naming and outbound stages. |
 
 ## 1. An integration is a definition
 
@@ -56,11 +55,10 @@ module.exports = createIntegrationPlugin({
 })
 ```
 
-The result is a class named `IntegrationPipeline` that extends `TracingPlugin` by default. Reusable stages preserve
-operation-specific behavior such as producer code-origin tagging without recreating the inbound/outbound plugin
-hierarchy. A definition can still select a `TracingPlugin` subclass with `base` when behavior cannot be expressed by
-the pipeline lifecycle; Azure Cosmos currently uses `DatabasePlugin`. The generated class has the static `id` and
-`operation` fields expected by the current plugin manager, so loading and configuration do not need a separate path.
+The result is a class named `IntegrationPipeline` that extends `TracingPlugin`. Reusable stages preserve
+operation-specific behavior such as producer code-origin and peer-service tagging without recreating the
+inbound/outbound plugin hierarchy. The generated class has the static `id` and `operation` fields expected by the
+current plugin manager, so loading and configuration do not need a separate path.
 
 The definition is validated before subscriptions are registered. It rejects missing IDs, empty operation lists,
 invalid targets or lifecycles, duplicate targets, spans without names, unknown capabilities, and tracing-dependent
@@ -239,12 +237,15 @@ A stage receives one `PipelineFrame` with these surfaces:
 | `frame.correlation` | Stable IDs and propagation injection without exposing a span. |
 | `frame.trace.setTag` | Narrow trace annotation, buffered until tracing exists. |
 | `frame.config` | Configured integration options. |
-| `frame.serviceName` | Existing schema-aware service-name resolution. |
+| `frame.serviceName` | Schema-aware resolution with the integration ID and configured plugin options supplied. |
 | `frame.propagation.extract` | Parent-context extraction from a carrier. |
 | `frame.dataStreams` | DSM decode and checkpoint operations. |
 
 The frame intentionally has no `span`, `tracer`, `plugin`, or mutable pipeline `state`. If a product needs another
 operation, that should become a deliberate capability instead of an internal reach-through.
+
+An integration supplies only schema coordinates such as `{ type: 'messaging', kind: 'producer' }`. The selected schema
+owns the default name, plugin `service` override, and service-source attribution.
 
 ## 10. Terminal events unwind the operation
 
@@ -324,16 +325,17 @@ Producer and consumer differences are declarations; subscription, capability, an
 2. Reject request-level hooks already represented by an enclosing operation span while inheriting that parent scope.
 3. Reject empty-path account reads with a no-op scope so their nested HTTP request is suppressed as before.
 4. Extract the low-cardinality resource, database, container, connection mode, endpoint, and user agent.
-5. Materialize a `cosmosdb.query` span through `DatabasePlugin`, preserving its storage service and peer-service rules.
-6. Add status and substatus fields from either the response or the SDK error before the span finishes.
+5. Resolve its v0/v1 service name and source through the storage schema, then materialize a `cosmosdb.query` span.
+6. Apply exit code-origin and peer-service behavior through explicit stages.
+7. Add status and substatus fields from either the response or the SDK error before the span finishes.
 
-This migration added two source-independent contracts: definitions can select a compatible `TracingPlugin` base, and
-the skip mode can resolve from the extracted frame. The lifecycle engine still owns subscriptions and completion.
+This migration proves schema-aware service resolution, reusable outbound stages, and a skip mode resolved from the
+extracted frame. The lifecycle engine still owns subscriptions and completion.
 
 ## Current boundaries
 
-- The compiled class still extends `TracingPlugin`, directly or through a selected compatibility base; tracing is
-  private to the pipeline but not yet an independently loadable capability.
+- The compiled class still extends `TracingPlugin`; tracing is private to the pipeline but not yet an independently
+  loadable capability.
 - `storage('legacy')` remains necessary for compatibility with code outside the experiment.
 - BullMQ propagation cannot safely move before tracing until sampling decisions can be made from context alone.
 - `DD_TRACE_ENABLED=false` still selects a global no-op tracer that cannot reserve real unique correlation contexts.

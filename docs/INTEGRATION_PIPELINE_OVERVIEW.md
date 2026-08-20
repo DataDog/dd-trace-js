@@ -165,11 +165,39 @@ operation declares, so simple or rejected operations avoid unrelated work.
 The change is ownership: integration authors describe the behavior, while the pipeline consistently orchestrates how
 that behavior runs.
 
+## Why the initial scope is Orchestrion
+
+The pipeline is designed around a stable function invocation with a uniform `start`, `end`, `asyncEnd`, and `error`
+lifecycle. Orchestrion supplies that shape directly, including the original arguments, receiver, result, and error,
+without requiring each integration to maintain a runtime wrapper.
+
+The source adapter keeps channel naming and invocation normalization out of the engine, but it is not a claim that
+every shimmer integration belongs in the pipeline. Shimmer is used precisely for cases that often break the standard
+operation model: dynamically-created methods, mutation that must happen before lifecycle subscribers run, streaming
+or callback ownership, and results whose identity cannot be substituted. Forcing those cases into a source adapter
+would move bespoke plugin logic into the adapter and recreate the problem the pipeline is meant to solve.
+
+A shimmer source is a reasonable candidate only when it can expose the same bounded invocation lifecycle without
+integration-specific control flow. Otherwise it should remain on the existing plugin model until a reusable lifecycle
+or capability is proven by more than one integration.
+
+## What happens to composite plugins
+
+The pipeline removes `CompositePlugin` when the composite exists only to collect several operations for one
+integration. BullMQ previously needed separate producer and consumer plugin classes because each class owned its own
+subscriptions and lifecycle; its four operations now live in one definition and share stages directly.
+
+That does not make every composite obsolete. A composite may still coordinate independent products, distinct
+configuration domains, or genuinely different source lifecycles. Folding those concerns into one pipeline definition
+would regress to plugin-style orchestration hidden inside extractors or stages. The useful test is whether the children
+share the pipeline lifecycle and differ only in declared operation facts—not whether they happen to share a package ID.
+
 ## Current scope
 
 BullMQ proves that four operations with different payload shapes can share one propagation and Data Streams capability.
-Azure Cosmos proves that the same engine can preserve specialized `DatabasePlugin` behavior. The design is still being
-evaluated for more lifecycle shapes and hotter integrations before broader adoption.
+Azure Cosmos proves that the same engine can combine schema-aware service naming with reusable outbound stages without
+selecting a specialized plugin base. The design is still being evaluated for more lifecycle shapes and hotter
+integrations before broader adoption.
 
 The messaging capability is shared inside BullMQ but has only one integration as a consumer, so its declaration shape
 stays provisional until a second messaging library confirms it.

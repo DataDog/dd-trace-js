@@ -33,6 +33,11 @@ const storage = {
       serviceName: configWithFallback,
       serviceSource: optionServiceSource,
     },
+    'azure-cosmos': {
+      opName: () => 'cosmosdb.query',
+      serviceName: configWithFallback,
+      serviceSource: optionServiceSource,
+    },
     'cassandra-driver': {
       opName: () => 'cassandra.query',
       serviceName: configWithFallback,

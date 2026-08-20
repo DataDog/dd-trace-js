@@ -10,6 +10,20 @@ function integrationSource (source) {
   return () => source
 }
 
+function bullmqServiceName ({ tracerService, pluginConfig }) {
+  return pluginConfig.service || `${tracerService}-bullmq`
+}
+
+function bullmqServiceSource ({ pluginConfig }) {
+  return pluginConfig.service ? 'opt.plugin' : 'bullmq'
+}
+
+const bullmq = {
+  opName: () => 'bullmq.add',
+  serviceName: bullmqServiceName,
+  serviceSource: bullmqServiceSource,
+}
+
 const messaging = {
   producer: {
     amqplib: {
@@ -75,11 +89,7 @@ const messaging = {
       serviceName: awsServiceV0,
       serviceSource: awsServiceSource,
     },
-    bullmq: {
-      opName: () => 'bullmq.add',
-      serviceName: ({ tracerService }) => `${tracerService}-bullmq`,
-      serviceSource: integrationSource('bullmq'),
-    },
+    bullmq,
   },
   consumer: {
     amqplib: {
@@ -139,9 +149,8 @@ const messaging = {
       serviceSource: awsServiceSource,
     },
     bullmq: {
+      ...bullmq,
       opName: () => 'bullmq.processJob',
-      serviceName: ({ tracerService }) => `${tracerService}-bullmq`,
-      serviceSource: integrationSource('bullmq'),
     },
   },
   client: {
