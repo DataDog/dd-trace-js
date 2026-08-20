@@ -41,6 +41,22 @@ class DatadogPlaywrightReporter {
   }
 
   /**
+   * Identifies this reporter as implementing Playwright's reporter v2 contract.
+   *
+   * @returns {'v2'}
+   */
+  version () {
+    return 'v2'
+  }
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   * @returns {void}
+   */
+  onConfigure () {}
+
+  /**
    * Restores console error after Playwright completes the reporter lifecycle.
    *
    * @returns {void}
@@ -67,6 +83,48 @@ class DatadogPlaywrightReporter {
   onBegin (configOrSuite, suite) {
     this.suite = suite || configOrSuite
   }
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   * @returns {void}
+   */
+  onTestBegin () {}
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   * @returns {void}
+   */
+  onStdOut () {}
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   * @returns {void}
+   */
+  onStdErr () {}
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   * @returns {void}
+   */
+  onTestEnd () {}
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   * @returns {void}
+   */
+  onStepBegin () {}
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   * @returns {void}
+   */
+  onStepEnd () {}
 
   /**
    * Marks the beginning of reporter finalization so later reporter errors can be identified.
@@ -119,6 +177,13 @@ class DatadogPlaywrightReporter {
     DatadogPlaywrightReporter.originalConsoleError = originalConsoleError
     DatadogPlaywrightReporter.consoleError = consoleError
   }
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   * @returns {void}
+   */
+  onExit () {}
 
   /**
    * Reports errors emitted by Playwright while later reporters are finalizing.
