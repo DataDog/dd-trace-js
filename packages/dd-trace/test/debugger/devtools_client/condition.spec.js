@@ -126,7 +126,7 @@ describe('Expression language', function () {
         `[(() => {
           try {
             const result = foo
-            return typeof result === 'string' ? result : $dd_inspect(result, $dd_segmentInspectOptions)
+            return $dd_inspectSegment(result, "foo")
           } catch (e) {
             return { expr: "foo", message: \`\${e.name}: \${e.message}\` }
           }
@@ -146,12 +146,31 @@ describe('Expression language', function () {
         `["foo: ",(() => {
           try {
             const result = foo
-            return typeof result === 'string' ? result : $dd_inspect(result, $dd_segmentInspectOptions)
+            return $dd_inspectSegment(result, "foo")
           } catch (e) {
             return { expr: "foo", message: \`\${e.name}: \${e.message}\` }
           }
         })()]`
       )
+    })
+
+    it('should thread the direct-reference identifier to $dd_inspectSegment', function () {
+      assert.deepStrictEqual(compileSegments([{ dsl: 'password', json: { ref: 'password' } }]),
+        `[(() => {
+          try {
+            const result = password
+            return $dd_inspectSegment(result, "password")
+          } catch (e) {
+            return { expr: "password", message: \`\${e.name}: \${e.message}\` }
+          }
+        })()]`
+      )
+      // getmember compiles to a guarded accessor, so assert only that the terminal member
+      // name is threaded as the direct-reference identifier.
+      const memberResult = compileSegments(
+        [{ dsl: 'user.password', json: { getmember: [{ ref: 'user' }, 'password'] } }]
+      )
+      assert.match(memberResult, /return \$dd_inspectSegment\(result, "password"\)/)
     })
   })
 })
