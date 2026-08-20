@@ -11,14 +11,14 @@ const log = require('../../log')
  * @property {number} [timeout] - Request timeout in milliseconds
  * @property {object} config - Tracer configuration object
  * @property {string} endpoint - API endpoint path
- * @property {URL} [agentUrl] - Base URL for the agent
+ * @property {URL} [agentUrl] - Base URL for event delivery
  * @property {number} [payloadSizeLimit] - Maximum payload size in bytes
  * @property {number} [eventSizeLimit] - Maximum individual event size in bytes
  * @property {object} [headers] - Additional HTTP headers
  */
 
 /**
- * BaseFFEWriter is the base class for sending Feature Flagging & Exposure Events payloads to the Datadog Agent.
+ * BaseFFEWriter sends Feature Flagging and Experimentation events to the Agent or a direct intake.
  * @class BaseFFEWriter
  */
 class BaseFFEWriter {
@@ -100,7 +100,7 @@ class BaseFFEWriter {
   }
 
   /**
-   * Flushes all buffered events to the agent
+   * Flushes all buffered events to the configured destination
    */
   flush () {
     if (this._buffer.length === 0) {

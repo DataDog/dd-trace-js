@@ -17,6 +17,45 @@ const BaseFFEWriter = require('./base')
 const PENDING_MAX_EVENTS = 1000
 
 /**
+ * Builds the Agent proxy or direct intake transport options.
+ *
+ * @param {import('../../config/config-base')} config - Tracer configuration object
+ * @returns {{ agentUrl?: URL, endpoint: string, headers: Record<string, string> }} Writer transport options
+ */
+function getWriterOptions (config) {
+  if (config.DD_AGENTLESS_ENABLED) {
+    if (!config.DD_API_KEY) {
+      throw new Error('DD_API_KEY is required for agentless OpenFeature exposures')
+    }
+
+    const site = config.site.toLowerCase()
+    const hostname = `${EVP_SUBDOMAIN_VALUE}.${site}`
+    const agentUrl = new URL(`https://${hostname}`)
+    if (agentUrl.hostname !== hostname || agentUrl.origin !== `https://${hostname}`) {
+      throw new Error(`Invalid DD_SITE for agentless OpenFeature exposures: ${config.site}`)
+    }
+
+    return {
+      agentUrl,
+      endpoint: EXPOSURES_ENDPOINT,
+      headers: {
+        'DD-API-KEY': config.DD_API_KEY,
+      },
+    }
+  }
+
+  const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/$/, '')
+  const endpoint = EXPOSURES_ENDPOINT.replace(/^\/+/, '')
+
+  return {
+    endpoint: `${basePath}/${endpoint}`,
+    headers: {
+      [EVP_SUBDOMAIN_HEADER_NAME]: EVP_SUBDOMAIN_VALUE,
+    },
+  }
+}
+
+/**
  * @typedef {object} ExposureEvent
  * @property {number} timestamp - Unix timestamp in milliseconds
  * @property {object} allocation - Allocation information
@@ -45,10 +84,10 @@ const PENDING_MAX_EVENTS = 1000
  */
 
 /**
- * ExposuresWriter is responsible for sending exposure events to the Datadog Agent.
+ * ExposuresWriter sends exposure events to the Datadog Agent or direct intake.
  */
 class ExposuresWriter extends BaseFFEWriter {
-  // Disabled until the agent strategy probe resolves.
+  // Disabled until the configured delivery mode enables it.
   #enabled = false
 
   /** @type {ExposureEvent[]} */
@@ -63,18 +102,15 @@ class ExposuresWriter extends BaseFFEWriter {
    * @param {import('../../config/config-base')} config - Tracer configuration object
    */
   constructor (config) {
-    const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/$/, '')
-    const endpoint = EXPOSURES_ENDPOINT.replace(/^\/+/, '')
-    const fullEndpoint = `${basePath}/${endpoint}`
+    const { agentUrl, endpoint, headers } = getWriterOptions(config)
 
     super({
       config,
-      endpoint: fullEndpoint,
+      endpoint,
+      agentUrl,
       payloadSizeLimit: EVP_PAYLOAD_SIZE_LIMIT,
       eventSizeLimit: EVP_EVENT_SIZE_LIMIT,
-      headers: {
-        [EVP_SUBDOMAIN_HEADER_NAME]: EVP_SUBDOMAIN_VALUE,
-      },
+      headers,
     })
 
     /** @type {ExposureContext} */
@@ -139,7 +175,7 @@ class ExposuresWriter extends BaseFFEWriter {
   }
 
   /**
-   * Flushes buffered exposure events to the agent
+   * Flushes buffered exposure events to the configured destination
    */
   flush () {
     if (!this.#enabled) {

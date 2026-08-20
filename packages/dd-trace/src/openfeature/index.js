@@ -35,16 +35,25 @@ function _handleFlush () {
  * @returns {void}
  */
 function enable (config) {
-  if (config.DD_AGENTLESS_ENABLED) return
-
   if (exposuresWriter) {
     log.warn('%s already enabled', exposuresWriter.constructor.name)
     return
   }
 
-  exposuresWriter = new ExposuresWriter(config)
+  try {
+    exposuresWriter = new ExposuresWriter(config)
+  } catch (error) {
+    log.error('Unable to configure OpenFeature exposure delivery: %s', error.message)
+    return
+  }
+
   exposureSubmitCh.subscribe(_handleExposureSubmit)
   flushCh.subscribe(_handleFlush)
+
+  if (config.DD_AGENTLESS_ENABLED) {
+    exposuresWriter.setEnabled(true)
+    return
+  }
 
   setAgentStrategy(config, hasAgent => {
     exposuresWriter?.setEnabled(hasAgent)

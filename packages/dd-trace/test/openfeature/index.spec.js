@@ -15,6 +15,7 @@ describe('OpenFeature Module', () => {
   let mockWriter
   let ExposuresWriterStub
   let setAgentStrategyStub
+  let log
 
   beforeEach(() => {
     config = {
@@ -31,8 +32,14 @@ describe('OpenFeature Module', () => {
 
     ExposuresWriterStub = sinon.stub().returns(mockWriter)
     setAgentStrategyStub = sinon.stub()
+    log = {
+      debug: sinon.spy(),
+      error: sinon.spy(),
+      warn: sinon.spy(),
+    }
 
     openfeatureModule = proxyquire('../../src/openfeature', {
+      '../log': log,
       './writers/exposures': ExposuresWriterStub,
       './writers/util': { setAgentStrategy: setAgentStrategyStub },
     })
@@ -55,11 +62,25 @@ describe('OpenFeature Module', () => {
       sinon.assert.calledOnce(setAgentStrategyStub)
     })
 
-    it('should not setup the Agent-only writer in agentless mode', () => {
+    it('should enable direct exposure delivery in agentless mode', () => {
       config.DD_AGENTLESS_ENABLED = true
       openfeatureModule.enable(config)
 
-      sinon.assert.notCalled(ExposuresWriterStub)
+      sinon.assert.calledOnceWithExactly(ExposuresWriterStub, config)
+      sinon.assert.calledOnceWithExactly(mockWriter.setEnabled, true)
+      sinon.assert.notCalled(setAgentStrategyStub)
+    })
+
+    it('should not enable exposure delivery when its writer configuration is invalid', () => {
+      ExposuresWriterStub.throws(new Error('invalid direct intake'))
+
+      openfeatureModule.enable(config)
+
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        'Unable to configure OpenFeature exposure delivery: %s',
+        'invalid direct intake'
+      )
       sinon.assert.notCalled(setAgentStrategyStub)
     })
 
