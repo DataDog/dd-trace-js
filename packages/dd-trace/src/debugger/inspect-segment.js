@@ -2,6 +2,8 @@
 
 const { inspect, types } = require('node:util')
 
+const { NODE_MAJOR } = require('../../../../version')
+
 /** @typedef {NonNullable<ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>>} PropertyDescriptor */
 /** @typedef {Map<unknown, unknown> | Set<unknown>} Collection */
 
@@ -23,10 +25,6 @@ const segmentInspectOptions = {
   maxStringLength: 8 * 1024,
   breakLength: Infinity,
 }
-const collectionLimitSupported = inspect(
-  new Set([1, 2, 3, 4]),
-  segmentInspectOptions
-).includes('... 1 more item')
 
 module.exports = inspectSegment
 
@@ -97,14 +95,14 @@ function inspectSegment (value) {
 }
 
 /**
- * Inspect a Map or Set while bounding the number of entries on runtimes where `util.inspect` does not.
+ * Inspect a Map or Set while bounding the number of entries on Node.js 18, where `util.inspect` does not.
  *
  * @param {Collection} value
  * @param {boolean} isMap
  * @returns {string}
  */
 function inspectCollection (value, isMap) {
-  if (collectionLimitSupported) return inspect(value, segmentInspectOptions)
+  if (NODE_MAJOR !== 18) return inspect(value, segmentInspectOptions)
 
   const size = (isMap ? mapSizeGetter : setSizeGetter).call(value)
   if (size <= maxCollectionEntries) return inspect(value, segmentInspectOptions)
