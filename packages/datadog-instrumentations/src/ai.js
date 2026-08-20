@@ -1,6 +1,7 @@
 'use strict'
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const { addHook, getHooks } = require('./helpers/instrument')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
@@ -272,6 +273,11 @@ for (const hook of getHooks('ai')) {
 
 const aiSdkTelemetryChannel = tracingChannel('ai:telemetry')
 const aiSdkTelemetryStreamedChunkChannel = channel('dd-trace:vercel-ai:chunk')
+const instrumentationLoadChannel = channel('dd-trace:instrumentation:load')
+
+const disabledInstrumentations = new Set(
+  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').map(name => name.trim())
+)
 
 // as of the v7 release, the ai sdk does not automatically aggregate streamed responses
 // we will handle emitting the chunks directly for products to handle
@@ -282,7 +288,7 @@ let subscribed = false
  * @returns {void}
  */
 function register () {
-  if (subscribed) return
+  if (subscribed || disabledInstrumentations.has('ai')) return
   subscribed = true
 
   // ai sdk v7 only supported on node.js 22+
@@ -311,6 +317,9 @@ function register () {
       ctx.result.stream = ctx.result.stream.pipeThrough(transform)
     },
   })
+
+  // Bundled AI SDK code does not trigger the normal module-load hook.
+  instrumentationLoadChannel.publish({ name: 'ai' })
 }
 
 addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
