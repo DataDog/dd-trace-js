@@ -788,14 +788,14 @@ versions.forEach((version) => {
         })
       }
 
-      it('uploads a failure screenshot attached after test end', async (receiver, run) => {
+      it('uploads a failure screenshot deferred by test code', async (receiver, run) => {
         const { proc, getTestOutput } = runWithFailureScreenshots(
           receiver,
           run,
           'only-on-failure',
           true,
           getCiVisAgentlessConfig(receiver.port),
-          { PLAYWRIGHT_DELAY_FAILURE_SCREENSHOT_ATTACH: 'true' }
+          { PLAYWRIGHT_DEFER_FAILURE_SCREENSHOT_ATTACHMENT: 'true' }
         )
         const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
           proc,

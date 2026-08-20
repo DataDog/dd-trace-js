@@ -1,27 +1,34 @@
 'use strict'
 
-const { test, expect } = require('@playwright/test')
+const { test: base, expect } = require('@playwright/test')
 
-if (process.env.PLAYWRIGHT_DELAY_FAILURE_SCREENSHOT_ATTACH === 'true' && process.send) {
-  const originalSend = process.send
-  let delayedAttachMessage
-
-  process.send = function (message) {
-    const dispatchMethod = message?.method === '__dispatch__' && message.params?.method
-    if (dispatchMethod === 'attach' && message.params.params?._ddIsAutomaticFailureScreenshot) {
-      delayedAttachMessage = message
-      return true
+let releaseDeferredFailureScreenshot
+const test = base.extend({
+  deferFailureScreenshotAttachment: [async ({ screenshot }, use, testInfo) => {
+    if (process.env.PLAYWRIGHT_DEFER_FAILURE_SCREENSHOT_ATTACHMENT !== 'true' || screenshot === 'off') {
+      await use()
+      return
     }
 
-    const result = originalSend.apply(process, arguments)
-    if (dispatchMethod === 'testEnd' && delayedAttachMessage) {
-      process.send = originalSend
-      originalSend.call(process, delayedAttachMessage)
-      delayedAttachMessage = undefined
+    const originalAttachmentsPush = testInfo.attachments.push
+    testInfo.attachments.push = (...attachments) => {
+      const hasFailureScreenshot = attachments.some(({ name, path }) =>
+        name === 'screenshot' && /test-failed-1\.png$/.test(path ?? ''))
+      if (hasFailureScreenshot) {
+        releaseDeferredFailureScreenshot = () => originalAttachmentsPush(...attachments)
+        return testInfo.attachments.length + attachments.length
+      }
+      return originalAttachmentsPush(...attachments)
     }
-    return result
-  }
-}
+    await use()
+  }, { auto: true }],
+  releaseDeferredFailureScreenshot: [async ({ screenshot }, use) => {
+    await use()
+    if (screenshot !== 'off' && releaseDeferredFailureScreenshot) {
+      setImmediate(releaseDeferredFailureScreenshot)
+    }
+  }, { auto: true, scope: 'worker' }],
+})
 
 test('does not upload programmatic screenshots', async ({ page }, testInfo) => {
   await page.goto(process.env.PW_BASE_URL)
