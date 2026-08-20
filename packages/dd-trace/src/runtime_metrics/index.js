@@ -45,7 +45,7 @@ module.exports = {
   },
 
   flush (done) {
-    runtimeMetrics.flush(done)
+    return runtimeMetrics.flush(done)
   },
 }
 

@@ -3,9 +3,10 @@
 const http = require('node:http')
 const https = require('node:https')
 const { URL } = require('node:url')
+
 const { storage } = require('../../../../datadog-core')
+const PendingOperations = require('../../exporters/common/pending-operations')
 const log = require('../../log')
-const { createServerlessDeliveryTracker } = require('../../serverless')
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
@@ -20,8 +21,8 @@ const legacyStorage = storage('legacy')
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
+  #operations = new PendingOperations()
   #transport = https
-  #serverlessDeliveryTracker
 
   /**
    * Creates a new OtlpHttpExporterBase instance.
@@ -34,7 +35,6 @@ class OtlpHttpExporterBase {
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
    */
   constructor (url, headers, timeout, protocol, signalType) {
-    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this.protocol = protocol
     this.signalType = signalType
 
@@ -83,13 +83,6 @@ class OtlpHttpExporterBase {
    * @protected
    */
   sendPayload (payload, resultCallback) {
-    if (this.#serverlessDeliveryTracker) {
-      return this.#serverlessDeliveryTracker.track(done => this.#sendPayload(payload, resultCallback, done))
-    }
-    this.#sendPayload(payload, resultCallback)
-  }
-
-  #sendPayload (payload, resultCallback, done) {
     const options = {
       ...this.options,
       headers: {
@@ -98,12 +91,16 @@ class OtlpHttpExporterBase {
       },
     }
 
+    const operationDone = this.#operations.start()
     let completed = false
     const complete = result => {
       if (completed) return
       completed = true
-      resultCallback(result)
-      done?.()
+      try {
+        resultCallback(result)
+      } finally {
+        operationDone()
+      }
     }
 
     try {
@@ -151,12 +148,11 @@ class OtlpHttpExporterBase {
   }
 
   /**
-   * Calls back once Vercel-tracked requests active at the flush boundary complete.
+   * Calls back once OTLP requests active at the flush boundary have completed.
    * @param {Function} [done]
    */
   flush (done) {
-    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.waitForIdle(done)
-    done?.()
+    if (done) return this.#operations.wait(done)
   }
 
   /**

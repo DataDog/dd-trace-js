@@ -27,12 +27,10 @@ const os = require('os')
  * @package
  */
 
-const { registerTelemetryFlusher } = require('../../flush')
+const { registerFlusher } = require('../../flush')
 const LoggerProvider = require('./logger_provider')
 const BatchLogRecordProcessor = require('./batch_log_processor')
 const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
-
-let unregisterTelemetryFlusher
 
 /**
  * Initializes OpenTelemetry Logs support
@@ -78,14 +76,16 @@ function initializeOpenTelemetryLogs (config) {
   )
 
   // Create logger provider with processor for Datadog Agent export
-  const loggerProvider = new LoggerProvider({ processor })
+  let unregisterLifecycleFlusher
+  const loggerProvider = new LoggerProvider({
+    processor,
+    onShutdown: () => unregisterLifecycleFlusher?.(),
+  })
 
   // Expose this provider to application calls through the OpenTelemetry Logs API.
-  loggerProvider.register()
-  // Remove the old provider callback so lifecycle retention flushes only this global provider.
-  unregisterTelemetryFlusher?.()
-  // Include final log batches in lifecycle retention with trace delivery.
-  unregisterTelemetryFlusher = registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
+  if (loggerProvider.register()) {
+    unregisterLifecycleFlusher = registerFlusher('otel-logs', loggerProvider.forceFlush.bind(loggerProvider))
+  }
 }
 
 module.exports = {

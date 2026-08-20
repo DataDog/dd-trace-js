@@ -167,6 +167,15 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
         proxy.flush(done)
         sinon.assert.calledOnceWithExactly(runtimeMetrics.flush, done)
       })
+
+      it('returns the active runtime metrics cancellation', () => {
+        const cancel = sinon.spy()
+        runtimeMetrics.flush = sinon.stub().returns(cancel)
+        config.runtimeMetrics.enabled = true
+        proxy.start(config)
+
+        assert.strictEqual(proxy.flush(sinon.spy()), cancel)
+      })
     })
 
     describe('runtimeMetrics', () => {
@@ -274,6 +283,14 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
             done(error)
           }
         })
+      })
+
+      it('returns the DogStatsD flush cancellation', () => {
+        const cancel = sinon.spy()
+        client.flush.resetBehavior()
+        client.flush.returns(cancel)
+
+        assert.strictEqual(runtimeMetrics.flush(sinon.spy()), cancel)
       })
 
       describe('start', () => {

@@ -3,6 +3,7 @@
 const { channel } = require('dc-polyfill')
 
 const { getEnvironmentVariable } = require('../config/helper')
+const log = require('../log')
 
 const httpRequestFinishChannel = channel('apm:http:server:request:finish')
 const http2ResponseEmitChannel = channel('apm:http2:server:response:emit')
@@ -23,17 +24,23 @@ function flushVercelTelemetry (tracer, done) {
   setImmediate(() => {
     try {
       tracer.flushAll(done, { timeout: VERCEL_FLUSH_TIMEOUT })
-    } catch {
+    } catch (error) {
+      log.error('Failed to flush Vercel telemetry: %s', error)
       done()
     }
   })
 }
 
 function registerVercelRequestFlush (tracer) {
-  const requestContext = getVercelRequestContext()
-  if (!requestContext) return
-
-  const { waitUntil } = requestContext
+  let waitUntil
+  try {
+    const requestContext = getVercelRequestContext()
+    if (!requestContext) return
+    waitUntil = requestContext.waitUntil
+  } catch (error) {
+    log.error('Failed to access Vercel request context: %s', error)
+    return
+  }
   if (typeof waitUntil !== 'function') return
 
   // Retain the invocation synchronously, then flush after the response completes.
@@ -42,7 +49,8 @@ function registerVercelRequestFlush (tracer) {
   try {
     waitUntil(pending)
     flushVercelTelemetry(tracer, done)
-  } catch {
+  } catch (error) {
+    log.error('Failed to retain Vercel invocation: %s', error)
     done()
   }
 }

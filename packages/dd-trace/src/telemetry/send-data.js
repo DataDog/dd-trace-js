@@ -1,7 +1,10 @@
 'use strict'
 
+const PendingOperations = require('../exporters/common/pending-operations')
 const request = require('../exporters/common/request')
 const log = require('../log')
+
+const operations = new PendingOperations()
 
 /**
  * @typedef {Record<string, unknown>} TelemetryPayloadObject
@@ -147,10 +150,10 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   if (isCiVisibilityAgentlessMode) {
     try {
       url = testOptimization.DD_CIVISIBILITY_AGENTLESS_URL ?? new URL(getAgentlessTelemetryEndpoint(config.site))
-    } catch (err) {
-      log.error('Telemetry endpoint url is invalid', err)
+    } catch (error) {
+      log.error('Telemetry endpoint url is invalid', error)
       // No point to do the request if the URL is invalid
-      return cb(err, { payload, reqType })
+      return cb(error, { payload, reqType })
     }
   }
 
@@ -175,7 +178,13 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     host,
   })
 
-  request(data, options, (error) => {
+  const complete = operations.start()
+  let responded = false
+  /** @param {Error|null} error */
+  const onResponse = error => {
+    if (responded) return
+    responded = true
+    let awaitingFallback = false
     if (error && config.DD_API_KEY && config.site) {
       if (agentTelemetry) {
         log.warn('Agent telemetry failed, started agentless telemetry')
@@ -187,6 +196,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         backendUrl = new URL(getAgentlessTelemetryEndpoint(config.site))
       } catch {
         log.error('Invalid Telemetry URL')
+        complete()
         return
       }
       const backendHeader = { ...options.headers, 'DD-API-KEY': config.DD_API_KEY }
@@ -196,11 +206,26 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         headers: backendHeader,
         path: '/api/v2/apmtelemetry',
       }
-      request(data, backendOptions, (error) => {
-        if (error) {
-          log.error('Error sending telemetry data', error)
+      let fallbackResponded = false
+      /** @param {Error|null} fallbackError */
+      const onFallbackResponse = fallbackError => {
+        if (fallbackResponded) return
+        fallbackResponded = true
+        try {
+          if (fallbackError) {
+            log.error('Error sending telemetry data', fallbackError)
+          }
+        } finally {
+          complete()
         }
-      })
+      }
+      try {
+        request(data, backendOptions, onFallbackResponse)
+      } catch (fallbackError) {
+        if (fallbackResponded) throw fallbackError
+        onFallbackResponse(fallbackError)
+      }
+      awaitingFallback = true
     }
 
     if (!error && !agentTelemetry) {
@@ -209,8 +234,28 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     }
 
     // call the callback function so that we can track the error and payload
-    cb(error, { payload, reqType })
-  })
+    try {
+      cb(error, { payload, reqType })
+    } finally {
+      if (!awaitingFallback) complete()
+    }
+  }
+  try {
+    request(data, options, onResponse)
+  } catch (error) {
+    if (responded) throw error
+    onResponse(error)
+  }
 }
 
-module.exports = { sendData }
+/**
+ * Calls back after telemetry requests active at this boundary complete.
+ *
+ * @param {() => void} [done]
+ * @returns {(() => void)|undefined} Detaches the callback from this boundary.
+ */
+function flush (done) {
+  if (done) return operations.wait(done)
+}
+
+module.exports = { flush, sendData }

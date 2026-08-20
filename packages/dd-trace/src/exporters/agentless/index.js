@@ -5,6 +5,7 @@ const os = require('node:os')
 
 const log = require('../../log')
 const { entityId } = require('../common/docker')
+const PendingOperations = require('../common/pending-operations')
 const tracerVersion = require('../../../../../package.json').version
 const Writer = require('./writer')
 const { computeIntakeUrl } = require('./intake')
@@ -15,6 +16,7 @@ const { computeIntakeUrl } = require('./intake')
  * Batches multiple traces per request using timer-based flushing.
  */
 class AgentlessExporter {
+  #operations = new PendingOperations()
   #timer
   #config
 
@@ -52,6 +54,7 @@ class AgentlessExporter {
       url: this._url,
       site,
       metadata,
+      onFlush: this.#operations.track.bind(this.#operations),
     })
 
     const ddTrace = globalThis[Symbol.for('dd-trace')]
@@ -120,10 +123,20 @@ class AgentlessExporter {
     clearTimeout(this.#timer)
     this.#timer = undefined
     try {
-      this._writer.flush(done)
-    } catch (err) {
-      log.error('Failed to flush traces: %s', err.message)
-      done()
+      this.#flush()
+    } catch (error) {
+      log.error('Failed to flush traces: %s', error)
+    }
+    return this.#operations.wait(done)
+  }
+
+  #flush () {
+    const complete = this.#operations.start()
+    try {
+      this._writer.flushDirect(complete)
+    } catch (error) {
+      complete()
+      throw error
     }
   }
 }

@@ -13,7 +13,6 @@ const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
-const { flushAll } = require('./flush')
 const log = require('./log')
 // Always-on writer (console.warn), not the channel-gated `log`: these surface regardless of
 // DD_TRACE_DEBUG.
@@ -25,9 +24,18 @@ const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 
+/** @typedef {import('./opentracing/tracer').LifecycleFlushers} LifecycleFlushers */
+
 class DatadogTracer extends Tracer {
-  constructor (config, prioritySampler) {
-    super(config, prioritySampler)
+  /**
+   * @param {import('./config/config-base')} config
+   * @param {import('./priority_sampler')} [prioritySampler]
+   * @param {typeof import('./flush').registerFlusher} [registerFlusher]
+   */
+  constructor (config, prioritySampler, registerFlusher) {
+    /** @type {LifecycleFlushers|undefined} */
+    const lifecycleFlushers = registerFlusher ? {} : undefined
+    super(config, prioritySampler, lifecycleFlushers)
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
@@ -50,6 +58,15 @@ class DatadogTracer extends Tracer {
         log.warn('Could not store tracer configuration for service discovery')
       }
       this._inmem_cfg = metadata
+    }
+
+    if (lifecycleFlushers) {
+      if (lifecycleFlushers.traces) {
+        registerFlusher('traces', lifecycleFlushers.traces, { trace: true })
+      }
+      if (lifecycleFlushers.spanStats) {
+        registerFlusher('span-stats', lifecycleFlushers.spanStats)
+      }
     }
   }
 
@@ -149,15 +166,6 @@ class DatadogTracer extends Tracer {
   setUrl (url) {
     this._exporter.setUrl(url)
     this._dataStreamsProcessor.setUrl(url)
-  }
-
-  /**
-   * Flushes every configured telemetry pipeline.
-   * @param {Function} [done] Called after every configured export completes
-   * @param {{ timeout?: number }} [options] Bounds this flush operation.
-   */
-  flushAll (done, options) {
-    flushAll(this, done, options)
   }
 
   scope () {

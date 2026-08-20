@@ -4,12 +4,13 @@ const os = require('os')
 const dc = require('dc-polyfill')
 
 const tracerVersion = require('../../../../package.json').version
+const { registerFlusher } = require('../flush')
 const { errors } = require('../startup-log')
 const logger = require('../log')
 const processTags = require('../process-tags')
 const dependencies = require('./dependencies')
 const endpoints = require('./endpoints')
-const { sendData } = require('./send-data')
+const { flush: flushRequests, sendData } = require('./send-data')
 const { manager: metricsManager } = require('./metrics')
 const telemetryLogger = require('./logs')
 const sessionPropagation = require('./session-propagation')
@@ -205,6 +206,39 @@ function appClosing () {
   telemetryLogger.send(config, application, host)
 }
 
+function sendMetrics () {
+  metricsManager.send(config, application, host)
+}
+
+function sendLogs () {
+  telemetryLogger.send(config, application, host)
+}
+
+/**
+ * @param {() => void} source
+ */
+function flushTelemetrySource (source) {
+  try {
+    source()
+  } catch (error) {
+    logger.error('Failed to flush instrumentation telemetry: %s', error)
+  }
+}
+
+/**
+ * Drains instrumentation telemetry buffered before a lifecycle boundary.
+ *
+ * @param {() => void} done
+ * @returns {(() => void)|undefined} Detaches the request boundary callback.
+ */
+function flush (done) {
+  flushTelemetrySource(dependencies.flush)
+  flushTelemetrySource(endpoints.flush)
+  flushTelemetrySource(sendMetrics)
+  flushTelemetrySource(sendLogs)
+  return flushRequests(done)
+}
+
 /**
  * @param {import('../config/config-base')} config
  * @returns {TelemetryApplication}
@@ -331,6 +365,7 @@ function start (aConfig, thePluginManager) {
   telemetryLogger.start(config)
   endpoints.start(config, application, host, getRetryData, updateRetryData)
   sessionPropagation.start(config)
+  registerFlusher('instrumentation-telemetry', flush)
 
   sendData(config, application, host, 'app-started', appStarted(config))
 

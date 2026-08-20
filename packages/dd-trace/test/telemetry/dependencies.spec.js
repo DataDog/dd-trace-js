@@ -355,6 +355,23 @@ describe('dependencies', () => {
         }
       })
     })
+
+    it('flushes the last accepted dependency batch and the first overflow dependency', () => {
+      const requestPrefix = 'flush-module'
+      requirePackageJson.returns({ version: '1.0.0' })
+      global.setImmediate = () => ({ unref () {} })
+      for (let i = 0; i < 2001; i++) {
+        const request = requestPrefix + i
+        const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+        moduleLoadStartChannel.publish({ request, filename })
+      }
+
+      dependencies.flush()
+
+      sinon.assert.calledTwice(sendData)
+      assert.strictEqual(sendData.firstCall.args[4].dependencies.length, 2000)
+      assert.strictEqual(sendData.secondCall.args[4].dependencies.length, 1)
+    })
   })
 
   describe('with configuration', () => {

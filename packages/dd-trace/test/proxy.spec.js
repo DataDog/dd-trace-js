@@ -47,7 +47,8 @@ describe('TracerProxy', () => {
   let NoopDogStatsDClient
   let OpenFeatureProvider
   let openfeatureProvider
-  let registerTelemetryFlusher
+  let registerFlusher
+  let unregisterFlusher
   let initializeServerlessTelemetry
   let flushAll
 
@@ -186,7 +187,8 @@ describe('TracerProxy', () => {
       flush: sinon.spy(),
     }
 
-    registerTelemetryFlusher = sinon.stub().returns(() => {})
+    registerFlusher = sinon.stub()
+    unregisterFlusher = sinon.stub()
     initializeServerlessTelemetry = sinon.spy()
     flushAll = sinon.spy()
 
@@ -281,7 +283,7 @@ describe('TracerProxy', () => {
         IS_SERVERLESS: false,
         initializeServerlessTelemetry,
       },
-      './flush': { flushAll, registerTelemetryFlusher },
+      './flush': { flushAll, registerFlusher, unregisterFlusher },
     })
 
     proxy = new ProxyClass()
@@ -604,7 +606,8 @@ describe('TracerProxy', () => {
         const done = sinon.spy()
 
         proxy.init()
-        registerTelemetryFlusher.firstCall.args[0](done)
+        const registration = registerFlusher.getCalls().find(({ args }) => args[0] === 'runtime-metrics')
+        registration.args[1](done)
 
         sinon.assert.calledOnceWithExactly(runtimeMetrics.flush, done)
       })
@@ -619,7 +622,14 @@ describe('TracerProxy', () => {
         assert.strictEqual(typeof telemetry.flushAll, 'function')
         const done = sinon.spy()
         telemetry.flushAll(done)
-        sinon.assert.calledOnceWithExactly(flushAll, proxy._tracer, done, undefined)
+        sinon.assert.calledOnceWithExactly(flushAll, done)
+      })
+
+      it('injects lifecycle registration into the tracer owner', () => {
+        proxy.init()
+
+        sinon.assert.calledWith(DatadogTracer, config, sinon.match.object, registerFlusher)
+        sinon.assert.calledOnce(initializeServerlessTelemetry)
       })
 
       it('should expose noop metrics methods prior to initialization', () => {

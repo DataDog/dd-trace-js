@@ -239,6 +239,53 @@ describe('BaseLLMObsWriter', () => {
       sinon.assert.calledOnce(request)
     })
 
+    it('waits for transport selection before a lifecycle flush', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'bar' })
+      const done = sinon.spy()
+
+      writer.flush(done)
+
+      sinon.assert.notCalled(request)
+      sinon.assert.notCalled(done)
+
+      writer.setAgentless(false)
+      sinon.assert.calledOnce(request)
+      request.firstCall.args[2]()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('detaches a cancelled lifecycle flush after transport selection', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.makePayload = events => ({ events })
+      writer.append({ foo: 'bar' })
+      const done = sinon.spy()
+      let requestDone
+      request.callsFake((payload, requestOptions, callback) => { requestDone = callback })
+
+      const cancel = writer.flush(done)
+      writer.setAgentless(false)
+      cancel()
+      requestDone()
+
+      sinon.assert.notCalled(done)
+    })
+
+    it('does not start a cancelled lifecycle flush after transport selection', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.makePayload = events => ({ events })
+      writer.append({ foo: 'bar' })
+      const done = sinon.spy()
+
+      const cancel = writer.flush(done)
+      cancel()
+      writer.setAgentless(false)
+
+      sinon.assert.notCalled(request)
+      sinon.assert.notCalled(done)
+    })
+
     it('waits for an export already in flight', () => {
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(true)
@@ -249,6 +296,49 @@ describe('BaseLLMObsWriter', () => {
       request.callsFake((payload, requestOptions, callback) => { requestDone = callback })
 
       writer.flush()
+      writer.flush(done)
+
+      sinon.assert.notCalled(done)
+      requestDone()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('waits for an export already in flight when the boundary payload fails', () => {
+      const boundaryError = null
+      let payloadCount = 0
+      let requestDone
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = events => {
+        if (++payloadCount === 2) throw boundaryError
+        return { events }
+      }
+      request.callsFake((payload, requestOptions, callback) => { requestDone = callback })
+      const done = sinon.spy()
+
+      writer.append({ foo: 'in flight' })
+      writer.flush()
+      writer.append({ foo: 'boundary' })
+      writer.flush(done)
+
+      sinon.assert.notCalled(done)
+      requestDone()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('waits for an export already in flight when the boundary request fails', () => {
+      const boundaryError = null
+      let requestDone
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = events => ({ events })
+      request.onFirstCall().callsFake((payload, requestOptions, callback) => { requestDone = callback })
+      request.onSecondCall().callsFake(() => { throw boundaryError })
+      const done = sinon.spy()
+
+      writer.append({ foo: 'in flight' })
+      writer.flush()
+      writer.append({ foo: 'boundary' })
       writer.flush(done)
 
       sinon.assert.notCalled(done)

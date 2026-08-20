@@ -458,6 +458,18 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(processor.timer, undefined)
   })
 
+  it('completes force flush when span statistics are disabled', () => {
+    exporter.export.resetHistory()
+    const disabledConfig = { ...config, stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false, interval: 10 } }
+    const processor = new SpanStatsProcessor(disabledConfig)
+    const done = sinon.spy()
+
+    processor.forceFlush(done)
+
+    sinon.assert.notCalled(exporter.export)
+    sinon.assert.calledOnce(done)
+  })
+
   it('should track span stats', () => {
     assert.strictEqual(processor.buckets.size, 0)
     for (let i = 0; i < n; i++) {
@@ -647,7 +659,7 @@ describe('SpanStatsProcessor', () => {
 
   it('force flushes pending OTLP span statistics', () => {
     const exporter = {
-      export: sinon.stub().callsFake((_drained, _bucketSizeNs, done) => done()),
+      export: sinon.stub(),
       flush: sinon.stub().callsFake(done => done()),
     }
     const p = new SpanStatsProcessor(config, exporter)
@@ -659,16 +671,28 @@ describe('SpanStatsProcessor', () => {
 
     assert.ok(exporter.export.calledOnce)
     assert.ok(exporter.flush.calledOnce)
+    sinon.assert.callOrder(exporter.export, exporter.flush)
     assert.ok(flushed)
     assert.strictEqual(p.buckets.size, 0)
   })
 
-  it('snapshots prior OTLP exports before starting the boundary export', () => {
-    let priorDone
-    let exportDone
+  it('returns OTLP span statistics cancellation', () => {
+    const cancel = sinon.spy()
     const exporter = {
-      flush: sinon.stub().callsFake(done => { priorDone = done }),
-      export: sinon.stub().callsFake((_drained, _bucketSizeNs, done) => { exportDone = done }),
+      export: sinon.stub(),
+      flush: sinon.stub().returns(cancel),
+    }
+    const processor = new SpanStatsProcessor(config, exporter)
+    clearTimeout(processor.timer)
+
+    assert.strictEqual(processor.forceFlush(sinon.spy()), cancel)
+  })
+
+  it('starts the boundary OTLP export before joining active exports', () => {
+    let flushDone
+    const exporter = {
+      flush: sinon.stub().callsFake(done => { flushDone = done }),
+      export: sinon.stub(),
     }
     const p = new SpanStatsProcessor(config, exporter)
     clearTimeout(p.timer)
@@ -677,10 +701,28 @@ describe('SpanStatsProcessor', () => {
 
     p.forceFlush(done)
 
-    sinon.assert.callOrder(exporter.flush, exporter.export)
-    exportDone()
+    sinon.assert.callOrder(exporter.export, exporter.flush)
     sinon.assert.notCalled(done)
-    priorDone()
+    flushDone()
+    sinon.assert.calledOnce(done)
+  })
+
+  it('joins active OTLP exports when the boundary export fails', () => {
+    const boundaryError = null
+    let flushDone
+    const exporter = {
+      export: sinon.stub().callsFake(() => { throw boundaryError }),
+      flush: sinon.stub().callsFake(done => { flushDone = done }),
+    }
+    const p = new SpanStatsProcessor(config, exporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    const done = sinon.spy()
+
+    p.forceFlush(done)
+
+    sinon.assert.notCalled(done)
+    flushDone()
     sinon.assert.calledOnce(done)
   })
 

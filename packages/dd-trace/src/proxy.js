@@ -13,7 +13,7 @@ const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS, initializeServerlessTelemetry } = require('./serverless')
-const { flushAll, registerTelemetryFlusher } = require('./flush')
+const { flushAll, registerFlusher, unregisterFlusher } = require('./flush')
 const processTags = require('./process-tags')
 const { isTrue } = require('./util')
 const {
@@ -41,8 +41,6 @@ const OFFLINE_VALIDATION_EXPORTERS = new Set([
 const OPENFEATURE_STATE_NOOP = 0
 const OPENFEATURE_STATE_LAZY = 1
 const OPENFEATURE_STATE_ACTIVE = 2
-
-let unregisterRuntimeMetricsFlusher
 
 class LazyModule {
   constructor (provider) {
@@ -94,6 +92,7 @@ function defineLazily (obj, property, getClass, ...args) {
 
 class Tracer extends NoopProxy {
   #openfeatureState = OPENFEATURE_STATE_NOOP
+  #serverlessTelemetry
 
   constructor () {
     super()
@@ -105,8 +104,8 @@ class Tracer extends NoopProxy {
     this._tracingInitialized = false
     // Keep a stable lifecycle owner even when tracing is disabled. In that
     // configuration logs and metrics can still have registered flushers.
-    this._serverlessTelemetry = {
-      flushAll: (done, options) => flushAll(this._tracer, done, options),
+    this.#serverlessTelemetry = {
+      flushAll,
     }
     this._flare = new LazyModule(() => require('./flare'))
     this.setBaggageItem = setBaggageItem
@@ -261,14 +260,10 @@ class Tracer extends NoopProxy {
         initializeOpenTelemetryMetrics(config)
       }
 
-      unregisterRuntimeMetricsFlusher?.()
-      unregisterRuntimeMetricsFlusher = undefined
+      unregisterFlusher('runtime-metrics')
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
-        // Agent trace response metrics are recorded asynchronously, so drain
-        // runtime metrics after the trace export has completed.
-        unregisterRuntimeMetricsFlusher = registerTelemetryFlusher(
-          done => runtimeMetrics.flush(done), { afterTrace: true })
+        registerFlusher('runtime-metrics', runtimeMetrics.flush.bind(runtimeMetrics), { afterTrace: true })
       }
 
       this.#updateTracing(config)
@@ -374,7 +369,7 @@ class Tracer extends NoopProxy {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
           : undefined
-        this._tracer = new DatadogTracer(config, prioritySampler)
+        this._tracer = new DatadogTracer(config, prioritySampler, registerFlusher)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
@@ -408,7 +403,7 @@ class Tracer extends NoopProxy {
       startupLog()
     }
 
-    initializeServerlessTelemetry(this._serverlessTelemetry)
+    initializeServerlessTelemetry(this.#serverlessTelemetry)
   }
 
   /**

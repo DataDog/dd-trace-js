@@ -3,12 +3,11 @@
 const assert = require('node:assert/strict')
 const URL = require('url').URL
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
-const TelemetryDeliveryTracker = require('../../../src/serverless/telemetry-delivery-tracker')
 
 describe('Exporter', () => {
   let url
@@ -20,7 +19,7 @@ describe('Exporter', () => {
   let prioritySampler
   let span
   let writerOptions
-  let createServerlessDeliveryTracker
+  let clock
 
   beforeEach(() => {
     url = 'http://www.example.com:8126'
@@ -29,6 +28,7 @@ describe('Exporter', () => {
     writer = {
       append: sinon.spy(),
       flush: sinon.spy(),
+      flushDirect: sinon.spy(),
       setUrl: sinon.spy(),
     }
     prioritySampler = {}
@@ -36,11 +36,9 @@ describe('Exporter', () => {
       writerOptions = options
       return writer
     })
-    createServerlessDeliveryTracker = sinon.stub()
 
     Exporter = proxyquire('../../../src/exporters/agent', {
       './writer': Writer,
-      '../../serverless': { createServerlessDeliveryTracker },
     })
   })
 
@@ -75,24 +73,25 @@ describe('Exporter', () => {
 
   describe('when interval is set to a positive number', () => {
     beforeEach(() => {
+      clock = sinon.useFakeTimers()
       exporter = new Exporter({ url, flushInterval }, prioritySampler)
     })
 
-    it('should not flush if export has not been called', (done) => {
-      exporter = new Exporter({ url, flushInterval }, prioritySampler)
-      setTimeout(() => {
-        sinon.assert.notCalled(writer.flush)
-        done()
-      }, flushInterval + 100)
+    afterEach(() => {
+      clock.restore()
     })
 
-    it('should flush after the configured interval if a payload has been exported', (done) => {
-      exporter = new Exporter({ url, flushInterval }, prioritySampler)
+    it('should not flush if export has not been called', () => {
+      clock.tick(flushInterval + 100)
+
+      sinon.assert.notCalled(writer.flushDirect)
+    })
+
+    it('should flush after the configured interval if a payload has been exported', () => {
       exporter.export([{}])
-      setTimeout(() => {
-        sinon.assert.called(writer.flush)
-        done()
-      }, flushInterval + 100)
+      clock.tick(flushInterval + 100)
+
+      sinon.assert.called(writer.flushDirect)
     })
 
     describe('export', () => {
@@ -116,18 +115,15 @@ describe('Exporter', () => {
 
     it('should flush right away when interval is set to 0', () => {
       exporter.export([span])
-      sinon.assert.called(writer.flush)
+      sinon.assert.calledOnce(writer.flushDirect)
+      sinon.assert.notCalled(writer.flush)
     })
   })
 
   describe('flush', () => {
-    beforeEach(() => {
-      createServerlessDeliveryTracker.returns(new TelemetryDeliveryTracker())
-    })
-
     it('waits for trace exports already in flight', () => {
       const callbacks = []
-      writer.flush = sinon.spy(done => callbacks.push(done))
+      writer.flushDirect = sinon.spy(done => callbacks.push(done))
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
       const flushed = sinon.spy()
 
@@ -138,6 +134,21 @@ describe('Exporter', () => {
       sinon.assert.notCalled(flushed)
       callbacks[0]()
       sinon.assert.calledOnce(flushed)
+    })
+
+    it('detaches a cancelled flush boundary from exports already in flight', () => {
+      const callbacks = []
+      writer.flushDirect = sinon.spy(done => callbacks.push(done))
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      exporter.export([span])
+      const cancel = exporter.flush(flushed)
+      cancel()
+
+      callbacks[1]()
+      callbacks[0]()
+      sinon.assert.notCalled(flushed)
     })
 
     it('waits for an encoder-triggered writer flush already in flight', () => {
@@ -149,7 +160,7 @@ describe('Exporter', () => {
       const flushed = sinon.spy()
 
       // This is the path the encoder uses when it crosses its soft limit.
-      exporter._writer.flush()
+      writer.flush()
       exporter.flush(flushed)
 
       callbacks[1]()
@@ -158,10 +169,25 @@ describe('Exporter', () => {
       sinon.assert.calledOnce(flushed)
     })
 
+    it('completes the encoder callback after its writer flush', () => {
+      let requestDone
+      const flushDirect = sinon.spy(done => { requestDone = done })
+      writer.flushDirect = flushDirect
+      writer.flush = sinon.spy(done => writerOptions.onFlush(flushDirect, done))
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const done = sinon.spy()
+
+      writer.flush(done)
+
+      sinon.assert.notCalled(done)
+      requestDone()
+      sinon.assert.calledOnce(done)
+    })
+
     it('does not retain a failed writer flush', () => {
-      writer.flush = sinon.stub()
-      writer.flush.onFirstCall().throws(new Error('encode failed'))
-      writer.flush.onSecondCall().callsFake(done => done())
+      writer.flushDirect = sinon.stub()
+      writer.flushDirect.onFirstCall().throws(new Error('encode failed'))
+      writer.flushDirect.onSecondCall().callsFake(done => done())
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
       const flushed = sinon.spy()
 
@@ -173,9 +199,10 @@ describe('Exporter', () => {
 
     it('waits for an earlier export when the boundary flush fails', () => {
       let inFlightDone
-      writer.flush = sinon.stub()
-      writer.flush.onFirstCall().callsFake(done => { inFlightDone = done })
-      writer.flush.onSecondCall().throws(new Error('encode failed'))
+      const boundaryError = null
+      writer.flushDirect = sinon.stub()
+      writer.flushDirect.onFirstCall().callsFake(done => { inFlightDone = done })
+      writer.flushDirect.onSecondCall().callsFake(() => { throw boundaryError })
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
       const flushed = sinon.spy()
 
@@ -184,20 +211,6 @@ describe('Exporter', () => {
 
       sinon.assert.notCalled(flushed)
       inFlightDone()
-      sinon.assert.calledOnce(flushed)
-    })
-
-    it('waits for the boundary export without serverless retention', () => {
-      createServerlessDeliveryTracker.resetBehavior()
-      let complete
-      writer.flush = sinon.stub().callsFake(done => { complete = done })
-      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
-      const flushed = sinon.spy()
-
-      exporter.flush(flushed)
-
-      sinon.assert.notCalled(flushed)
-      complete()
       sinon.assert.calledOnce(flushed)
     })
   })

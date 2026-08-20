@@ -90,6 +90,30 @@ describe('common Writer', () => {
     )
   })
 
+  it('wraps writer-initiated flushes with the configured lifecycle owner', () => {
+    const done = sinon.stub()
+    const cancel = sinon.stub()
+    const onFlush = sinon.stub().callsFake((flush, callback) => {
+      flush(callback)
+      return cancel
+    })
+    writer = new Writer({ url: 'http://localhost:8126', onFlush })
+    writer._encoder = encoder
+    writer._sendPayload = sinon.stub()
+
+    const result = writer.flush(done, { deadline: 42 })
+
+    assert.strictEqual(result, cancel)
+    sinon.assert.calledOnceWithExactly(onFlush, sinon.match.func, done)
+    sinon.assert.calledOnceWithExactly(
+      writer._sendPayload,
+      Buffer.from('payload'),
+      2,
+      done,
+      { deadline: 42 }
+    )
+  })
+
   it('drops a non-final payload when the request buffer is full', () => {
     request.writable = false
     const done = sinon.stub()

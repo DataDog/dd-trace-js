@@ -33,8 +33,8 @@ describe('module', () => {
   let LLMObsSpanWriterSpy
   let LLMObsEvalMetricsWriterSpy
   let fetchAgentInfoStub
-  let registerTelemetryFlusher
-  let unregisterTelemetryFlusher
+  let registerFlusher
+  let unregisterFlusher
 
   /** @type {import('sinon').SinonStub} */
   let startupLogStub
@@ -57,13 +57,13 @@ describe('module', () => {
     })
 
     fetchAgentInfoStub = sinon.stub()
-    unregisterTelemetryFlusher = sinon.stub()
-    registerTelemetryFlusher = sinon.stub().returns(unregisterTelemetryFlusher)
+    registerFlusher = sinon.stub()
+    unregisterFlusher = sinon.stub()
 
     const llmobsModuleProxyRequireMeta = {
       './writers/spans': LLMObsSpanWriterSpy,
       './writers/evaluations': LLMObsEvalMetricsWriterSpy,
-      '../flush': { registerTelemetryFlusher },
+      '../flush': { registerFlusher, unregisterFlusher },
       '../log': logger,
       './storage': {
         storage: {
@@ -462,6 +462,17 @@ describe('module', () => {
     sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload, undefined)
   })
 
+  it('does not register lifecycle flushing when enable fails', () => {
+    const subscribeError = new Error('subscribe failed')
+    sinon.stub(evalMetricAppendCh, 'subscribe').throws(subscribeError)
+
+    assert.throws(
+      () => llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } }),
+      subscribeError
+    )
+    sinon.assert.notCalled(registerFlusher)
+  })
+
   it('registers both LLMObs writers for lifecycle flushing', () => {
     llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
     const done = sinon.spy()
@@ -472,7 +483,7 @@ describe('module', () => {
     spanWriter.flush.callsFake(callback => { flushSpan = callback })
     evalWriter.flush.callsFake(callback => { flushEvaluation = callback })
 
-    registerTelemetryFlusher.firstCall.args[0](done)
+    registerFlusher.firstCall.args[1](done)
 
     sinon.assert.calledOnce(spanWriter.flush)
     sinon.assert.calledOnce(evalWriter.flush)
@@ -482,15 +493,32 @@ describe('module', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('cancels both LLMObs lifecycle boundaries', () => {
+    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
+    const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue
+    const cancelSpan = sinon.spy()
+    const cancelEvaluation = sinon.spy()
+    spanWriter.flush.returns(cancelSpan)
+    evalWriter.flush.returns(cancelEvaluation)
+
+    const cancel = registerFlusher.firstCall.args[1](sinon.spy())
+    cancel()
+
+    sinon.assert.calledOnce(cancelSpan)
+    sinon.assert.calledOnce(cancelEvaluation)
+  })
+
   it('continues flushing when one LLMObs writer throws', () => {
     llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    const flushError = null
     const done = sinon.spy()
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
     const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue
-    spanWriter.flush.throws(new Error('bad payload'))
+    spanWriter.flush.callsFake(() => { throw flushError })
     evalWriter.flush.callsFake(callback => callback())
 
-    registerTelemetryFlusher.firstCall.args[0](done)
+    registerFlusher.firstCall.args[1](done)
 
     sinon.assert.calledOnce(evalWriter.flush)
     sinon.assert.calledOnce(done)
@@ -505,6 +533,6 @@ describe('module', () => {
     assert.strictEqual(evalMetricAppendCh.hasSubscribers, false)
     assert.strictEqual(spanFinishCh.hasSubscribers, false)
     assert.strictEqual(flushCh.hasSubscribers, false)
-    sinon.assert.calledOnce(unregisterTelemetryFlusher)
+    sinon.assert.calledOnceWithExactly(unregisterFlusher, 'llmobs')
   })
 })

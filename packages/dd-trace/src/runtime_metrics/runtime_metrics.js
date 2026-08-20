@@ -167,7 +167,7 @@ module.exports = {
   flush (done) {
     if (!client) return done?.()
     capture?.()
-    client.flush(done)
+    return client.flush(done)
   },
 }
 

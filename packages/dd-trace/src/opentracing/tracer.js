@@ -19,8 +19,19 @@ const SpanContext = require('./span_context')
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
 
+/**
+ * @typedef {object} LifecycleFlushers
+ * @property {import('../flush').Flusher} [spanStats]
+ * @property {import('../flush').Flusher} [traces]
+ */
+
 class DatadogTracer {
-  constructor (config, prioritySampler) {
+  /**
+   * @param {import('../config/config-base')} config
+   * @param {PrioritySampler} [prioritySampler]
+   * @param {LifecycleFlushers} [lifecycleFlushers]
+   */
+  constructor (config, prioritySampler, lifecycleFlushers) {
     this._config = config
     this._service = config.service
     // Lowercased once for span_format's per-span base-service comparison.
@@ -66,6 +77,13 @@ class DatadogTracer {
     }
     if (config.reportHostname) {
       this._hostname = os.hostname()
+    }
+
+    if (lifecycleFlushers) {
+      const { flush } = this._exporter
+      if (typeof flush === 'function') lifecycleFlushers.traces = flush.bind(this._exporter)
+      const { stats } = this._processor
+      if (stats) lifecycleFlushers.spanStats = stats.forceFlush.bind(stats)
     }
   }
 

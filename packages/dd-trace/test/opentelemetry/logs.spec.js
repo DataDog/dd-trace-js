@@ -16,6 +16,7 @@ const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_load
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const BatchLogRecordProcessor = require('../../src/opentelemetry/logs/batch_log_processor')
+const LoggerProvider = require('../../src/opentelemetry/logs/logger_provider')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -143,6 +144,68 @@ describe('OpenTelemetry Logs', () => {
   })
 
   describe('Logs Export', () => {
+    it('does not register a lifecycle flusher when global provider registration fails', () => {
+      const registerFlusher = sinon.spy()
+      class FailingLoggerProvider {
+        forceFlush () {}
+        register () { throw new Error('registration failed') }
+      }
+      const { initializeOpenTelemetryLogs } = proxyquire.noPreserveCache()('../../src/opentelemetry/logs', {
+        '../../flush': { registerFlusher },
+        './logger_provider': FailingLoggerProvider,
+      })
+
+      assert.throws(() => initializeOpenTelemetryLogs(getConfigFresh()), /registration failed/)
+      sinon.assert.notCalled(registerFlusher)
+    })
+
+    it('does not register a lifecycle flusher when the global provider is already owned', () => {
+      const registerFlusher = sinon.spy()
+      class RefusedLoggerProvider {
+        forceFlush () {}
+        register () { return false }
+      }
+      const { initializeOpenTelemetryLogs } = proxyquire.noPreserveCache()('../../src/opentelemetry/logs', {
+        '../../flush': { registerFlusher },
+        './logger_provider': RefusedLoggerProvider,
+      })
+
+      initializeOpenTelemetryLogs(getConfigFresh())
+
+      sinon.assert.notCalled(registerFlusher)
+    })
+
+    it('does not replace the global context manager when the global provider is already owned', () => {
+      const loggerProvider = new LoggerProvider()
+      sinon.stub(logs, 'setGlobalLoggerProvider').returns({})
+      const setGlobalContextManager = sinon.stub(context, 'setGlobalContextManager')
+
+      assert.strictEqual(loggerProvider.register(), false)
+      sinon.assert.notCalled(setGlobalContextManager)
+    })
+
+    it('notifies its lifecycle owner once when the provider shuts down', () => {
+      const onShutdown = sinon.spy()
+      const loggerProvider = new LoggerProvider({ onShutdown })
+
+      loggerProvider.shutdown()
+      loggerProvider.shutdown()
+
+      sinon.assert.calledOnce(onShutdown)
+    })
+
+    it('does not flush the provider after it shuts down', () => {
+      const log = require('../../src/log')
+      const warn = sinon.spy(log, 'warn')
+      const { loggerProvider } = setupLogs()
+      loggerProvider.shutdown()
+      const warningsAfterShutdown = warn.callCount
+
+      require('../../src/flush').flushAll()
+
+      assert.strictEqual(warn.callCount, warningsAfterShutdown)
+    })
+
     it('waits for an in-flight export during forceFlush', () => {
       let exportDone
       let flushDone
@@ -160,6 +223,57 @@ describe('OpenTelemetry Logs', () => {
       sinon.assert.notCalled(done)
       flushDone()
       sinon.assert.calledOnce(done)
+    })
+
+    it('waits for an in-flight export when the boundary export fails', () => {
+      const boundaryError = null
+      let exportCount = 0
+      let flushDone
+      const processor = new BatchLogRecordProcessor({
+        export: () => {
+          if (++exportCount === 2) throw boundaryError
+        },
+        flush: done => { flushDone = done },
+      }, 60_000, 2)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'in flight 1' }, { name: 'test' })
+      processor.onEmit({ body: 'in flight 2' }, { name: 'test' })
+      processor.onEmit({ body: 'boundary' }, { name: 'test' })
+      processor.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      flushDone()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('detaches a cancelled force flush from an in-flight export', () => {
+      let flushDone
+      const cancelActive = sinon.spy()
+      const processor = new BatchLogRecordProcessor({
+        export: sinon.spy(),
+        flush: done => {
+          flushDone = done
+          return cancelActive
+        },
+      }, 60_000, 1)
+      const done = sinon.spy()
+
+      const cancel = processor.forceFlush(done)
+      assert.strictEqual(typeof cancel, 'function')
+      cancel()
+      flushDone()
+
+      sinon.assert.notCalled(done)
+      sinon.assert.calledOnce(cancelActive)
+    })
+
+    it('returns processor cancellation through the provider', () => {
+      const cancel = sinon.spy()
+      const processor = { forceFlush: sinon.stub().returns(cancel) }
+      const loggerProvider = new LoggerProvider({ processor })
+
+      assert.strictEqual(loggerProvider.forceFlush(sinon.spy()), cancel)
     })
 
     it('drains queued batches and waits for earlier size-triggered exports', () => {

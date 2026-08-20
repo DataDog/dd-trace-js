@@ -22,9 +22,11 @@ class AgentlessWriter extends BaseWriter {
    * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
    * @param {string} [options.site] - The Datadog site
    * @param {object} [options.metadata] - Metadata to pass to the encoder (hostname, env, etc.)
+   * @param {import('../common/writer').FlushOwner} [options.onFlush]
+   *   Wraps writer-initiated flushes for lifecycle tracking
    */
-  constructor ({ url, site = 'datadoghq.com', metadata = {} }) {
-    super({ url })
+  constructor ({ url, site = 'datadoghq.com', metadata = {}, onFlush }) {
+    super({ url, onFlush })
     this._encoder = new AgentlessJSONEncoder(this, metadata)
 
     if (!url) {
@@ -54,10 +56,10 @@ class AgentlessWriter extends BaseWriter {
   }
 
   /**
-   * Flushes accumulated traces to the intake as a single request.
+   * Flushes without the lifecycle wrapper.
    * @param {Function} [done] - Callback when send completes
    */
-  flush (done = () => {}) {
+  flushDirect (done = () => {}) {
     if (!request.writable) {
       const count = this._encoder.count()
       if (count > 0) {

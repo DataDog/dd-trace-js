@@ -54,8 +54,8 @@ class MeterProvider {
    * @param {Function} [done] Called after the metric export completes
    */
   forceFlush (done) {
-    if (this.reader) this.reader.forceFlush(done)
-    else done?.()
+    if (this.reader) return this.reader.forceFlush(done)
+    done?.()
   }
 }
 

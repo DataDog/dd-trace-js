@@ -15,6 +15,7 @@ const {
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
 const id = require('./id')
+const log = require('./log')
 
 const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
 const ZERO_ID = id('0')
@@ -243,14 +244,14 @@ class SpanStatsProcessor {
    * @param {Function} [done]
    */
   forceFlush (done) {
-    this.#flush(done)
+    return this.#flush(done)
   }
 
   #flush (done) {
     const drained = this.#drainBuckets()
 
     if (this.enabled && !this.otlpExporter) {
-      this.exporter.export({
+      return this.exporter.export({
         Hostname: this.hostname,
         Env: this.env,
         Version: this.version || version,
@@ -261,23 +262,18 @@ class SpanStatsProcessor {
         Sequence: ++this.sequence,
         ProcessTags: processTags.serialized,
       }, done)
-    } else if (this.otlpExporter && drained.length > 0) {
-      if (typeof this.otlpExporter.flush === 'function' && done) {
-        // Snapshot requests already in flight before starting this boundary
-        // export, so a later invocation cannot extend this lifecycle barrier.
-        let pending = 2
-        const complete = () => {
-          if (--pending === 0) done()
-        }
-        this.otlpExporter.flush(complete)
-        this.otlpExporter.export(drained, this.bucketSizeNs, complete)
-      } else {
-        this.otlpExporter.export(drained, this.bucketSizeNs, done)
+    }
+    if (!this.otlpExporter) return done?.()
+
+    if (drained.length > 0) {
+      try {
+        this.otlpExporter.export(drained, this.bucketSizeNs)
+      } catch (error) {
+        log.error('Failed to flush OpenTelemetry span stats: %s', error)
       }
-    } else if (this.otlpExporter) {
-      if (typeof this.otlpExporter.flush === 'function') this.otlpExporter.flush(done)
-      else done?.()
-    } else done?.()
+    }
+
+    return this.otlpExporter.flush(done)
   }
 
   onSpanFinished (span) {

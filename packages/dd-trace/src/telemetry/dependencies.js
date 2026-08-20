@@ -21,61 +21,68 @@ let isFirstModule = true
 let getRetryData
 let updateRetryData
 
-function waitAndSend (config, application, host) {
-  setImmediate(() => {
-    if (savedDependenciesToSend.size === 0) {
-      return
-    }
-    const dependencies = []
-    let send = 0
-    for (const dependency of savedDependenciesToSend) {
-      const [name, version, initialLoadModule] = dependency.split(' ')
-      // If a dependency is from the initial load, *always* send the event
-      // Otherwise, only send if dependencyCollection is enabled
-      const sendModule = isTrue(initialLoadModule) || config.telemetry.DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
+function send () {
+  if (savedDependenciesToSend.size === 0) return
 
-      savedDependenciesToSend.delete(dependency)
+  const dependencies = []
+  let sent = 0
+  for (const dependency of savedDependenciesToSend) {
+    const [name, version, initialLoadModule] = dependency.split(' ')
+    // If a dependency is from the initial load, *always* send the event
+    // Otherwise, only send if dependencyCollection is enabled
+    const sendModule = isTrue(initialLoadModule) || config.telemetry.DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
 
-      if (sendModule) {
-        dependencies.push({ name, version })
-        send++
-        if (send === 2000) {
-          // v2 documentation specifies up to 2000 dependencies can be sent at once
-          break
-        }
+    savedDependenciesToSend.delete(dependency)
+
+    if (sendModule) {
+      dependencies.push({ name, version })
+      sent++
+      if (sent === 2000) {
+        // v2 documentation specifies up to 2000 dependencies can be sent at once
+        break
       }
     }
+  }
 
-    /**
-     * @type { { dependencies: typeof dependencies } | {
-     *   request_type: string,
-     *   payload: typeof dependencies
-     * }[]}
-     */
-    let payload = { dependencies }
-    let reqType = 'app-dependencies-loaded'
-    const retryData = getRetryData()
+  /**
+   * @type { { dependencies: typeof dependencies } | {
+   *   request_type: string,
+   *   payload: typeof dependencies
+   * }[]}
+   */
+  let payload = { dependencies }
+  let reqType = 'app-dependencies-loaded'
+  const retryData = getRetryData()
 
-    if (retryData) {
-      payload = [{
-        request_type: 'app-dependencies-loaded',
-        payload,
-      }, {
-        request_type: retryData.reqType,
-        payload: retryData.payload,
-      }]
-      reqType = 'message-batch'
-    } else if (!dependencies.length) {
-      // No retry data and no dependencies, nothing to send
-      return
-    }
+  if (retryData) {
+    payload = [{
+      request_type: 'app-dependencies-loaded',
+      payload,
+    }, {
+      request_type: retryData.reqType,
+      payload: retryData.payload,
+    }]
+    reqType = 'message-batch'
+  } else if (!dependencies.length) {
+    // No retry data and no dependencies, nothing to send
+    return
+  }
 
-    sendData(config, application, host, reqType, payload, updateRetryData)
+  sendData(config, application, host, reqType, payload, updateRetryData)
+}
 
-    if (savedDependenciesToSend.size > 0) {
-      waitAndSend(config, application, host)
-    }
+function waitAndSend () {
+  setImmediate(() => {
+    send()
+    if (savedDependenciesToSend.size > 0) waitAndSend()
   }).unref?.()
+}
+
+/**
+ * Drains dependencies buffered before a lifecycle boundary.
+ */
+function flush () {
+  while (savedDependenciesToSend.size > 0) send()
 }
 
 function loadAllTheLoadedModules () {
@@ -120,7 +127,7 @@ function onModuleLoad (data) {
               savedDependenciesToSend.add(`${dependencyAndVersion} ${initialLoad}`)
               detectedDependencyVersions.add(dependencyAndVersion)
 
-              waitAndSend(config, application, host)
+              waitAndSend()
             }
           } catch {
             // can not read the package.json, do nothing
@@ -171,4 +178,4 @@ function stop () {
     moduleLoadStartChannel.unsubscribe(onModuleLoad)
   }
 }
-module.exports = { start, stop }
+module.exports = { flush, start, stop }

@@ -6,14 +6,12 @@ const { metrics } = require('@opentelemetry/api')
 
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
-const { registerTelemetryFlusher } = require('../../flush')
+const { registerFlusher } = require('../../flush')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
 
 const RESERVED_TRACER_TAGS = new Set(['service', 'env', 'version', 'runtime_id', 'runtime-id'])
-let unregisterTelemetryFlusher
-
 /**
  * @typedef {import('../../config')} Config
  */
@@ -71,19 +69,28 @@ function initializeOpenTelemetryMetrics (config) {
     resourceAttributes
   )
 
+  let unregisterLifecycleFlusher
   const reader = new PeriodicMetricReader(
     exporter,
     config.OTEL_METRIC_EXPORT_INTERVAL,
     config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
-    config.OTEL_BSP_MAX_QUEUE_SIZE
+    config.OTEL_BSP_MAX_QUEUE_SIZE,
+    () => unregisterLifecycleFlusher?.()
   )
 
   const meterProvider = new MeterProvider({ reader })
-  metrics.setGlobalMeterProvider(meterProvider)
-  // Remove the old provider callback so lifecycle retention flushes only this global provider.
-  unregisterTelemetryFlusher?.()
-  // Include the final metric collection and export in lifecycle retention.
-  unregisterTelemetryFlusher = registerTelemetryFlusher(done => meterProvider.forceFlush(done))
+  let ownsGlobalProvider
+  try {
+    ownsGlobalProvider = metrics.setGlobalMeterProvider(meterProvider)
+  } catch (error) {
+    reader.shutdown()
+    throw error
+  }
+  if (ownsGlobalProvider) {
+    unregisterLifecycleFlusher = registerFlusher('otel-metrics', meterProvider.forceFlush.bind(meterProvider))
+  } else {
+    reader.shutdown()
+  }
 }
 
 /**

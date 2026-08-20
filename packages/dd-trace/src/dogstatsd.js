@@ -4,12 +4,12 @@ const dgram = require('dgram')
 const isIP = require('net').isIP
 
 const { storage } = require('../../datadog-core')
+const PendingOperations = require('./exporters/common/pending-operations')
 const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
 const { entityId } = require('./exporters/common/docker')
-const { registerTelemetryFlusher } = require('./flush')
-const { createServerlessDeliveryTracker } = require('./serverless')
+const { registerFlusher } = require('./flush')
 
 const legacyStorage = storage('legacy')
 
@@ -26,9 +26,8 @@ const TYPE_HISTOGRAM = 'h'
  */
 class DogStatsDClient {
   #lookup
+  #operations = new PendingOperations()
   #tagsPrefix
-  #serverlessDeliveryTracker
-
   constructor (options) {
     this.#lookup = options.lookup
     if (options.metricsProxyUrl) {
@@ -45,7 +44,6 @@ class DogStatsDClient {
     this._tags = options.tags
     this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
     this._queue = []
-    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._buffer = ''
     this._offset = 0
     this._udp4 = this._socket('udp4')
@@ -74,25 +72,19 @@ class DogStatsDClient {
 
   flush (done) {
     const queue = this._enqueue()
+    if (queue.length > 0) {
+      log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
-    if (queue.length === 0) {
-      if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.waitForIdle(done)
-      return done?.()
+      this._queue = []
+
+      /** @param {() => void} complete */
+      const send = complete => this._httpOptions
+        ? this._sendHttp(queue, complete)
+        : this._sendUdp(queue, complete)
+      this.#operations.track(send)
     }
 
-    log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
-
-    this._queue = []
-
-    const send = complete => {
-      if (this._httpOptions) this._sendHttp(queue, complete)
-      else this._sendUdp(queue, complete)
-    }
-    if (this.#serverlessDeliveryTracker) {
-      this.#serverlessDeliveryTracker.track(send)
-      return this.#serverlessDeliveryTracker.waitForIdle(done)
-    }
-    send(done)
+    if (done) return this.#operations.wait(done)
   }
 
   _sendHttp (queue, done) {
@@ -243,7 +235,7 @@ class MetricsAggregationClient {
     this._captureGauges()
     this._captureHistograms()
 
-    this._client.flush(done)
+    return this._client.flush(done)
   }
 
   reset () {
@@ -396,7 +388,7 @@ class CustomMetrics {
     setInterval(flush, 10 * 1000).unref?.()
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush)
-    registerTelemetryFlusher(done => this.flush(done))
+    registerFlusher('custom-metrics', flush)
   }
 
   increment (stat, value = 1, tags) {

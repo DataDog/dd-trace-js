@@ -135,9 +135,10 @@ function buildEndpointObjects (endpoints) {
 }
 
 /**
+ * @param {boolean} [scheduleNext]
  * @returns {void}
  */
-function flushAndSend () {
+function flushAndSend (scheduleNext = true) {
   flushScheduled = false
   if (pendingEndpoints.size === 0) return
 
@@ -175,7 +176,14 @@ function flushAndSend () {
   }
 
   // If more endpoints accumulated while sending, schedule another flush.
-  if (pendingEndpoints.size) scheduleFlush()
+  if (scheduleNext && pendingEndpoints.size) scheduleFlush()
+}
+
+/**
+ * Drains endpoints buffered before a lifecycle boundary.
+ */
+function flush () {
+  while (pendingEndpoints.size > 0) flushAndSend(false)
 }
 
 /**
@@ -209,6 +217,7 @@ function stop () {
 }
 
 module.exports = {
+  flush,
   start,
   stop,
 }

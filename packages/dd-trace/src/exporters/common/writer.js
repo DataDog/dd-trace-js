@@ -9,15 +9,58 @@ const { safeJSONStringify } = require('./util')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
+/**
+ * @callback FlushDone
+ * @param {Error} [error]
+ */
+
+/**
+ * @callback FlushOperation
+ * @param {FlushDone} [done]
+ * @returns {void}
+ */
+
+/**
+ * @callback FlushOwner
+ * @param {FlushOperation} flush
+ * @param {FlushDone} [done]
+ * @returns {void|(() => void)}
+ */
+
 class Writer {
-  constructor ({ url, beforeFirstFlush }) {
+  #onFlush
+
+  /**
+   * @param {object} options
+   * @param {URL|string|null|undefined} options.url
+   * @param {() => void} [options.beforeFirstFlush]
+   * @param {FlushOwner} [options.onFlush]
+   */
+  constructor ({ url, beforeFirstFlush, onFlush }) {
     this._url = url
     this._beforeFirstFlush = beforeFirstFlush
+    this.#onFlush = onFlush
   }
 
   #isFirstFlush = true
 
-  flush (done = () => {}, options) {
+  /**
+   * @param {FlushDone} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void|(() => void)}
+   */
+  flush (done, options) {
+    /** @param {FlushDone} [callback] */
+    const flush = callback => this.flushDirect(callback, options)
+    if (this.#onFlush) return this.#onFlush(flush, done)
+    flush(done)
+  }
+
+  /**
+   * @param {FlushDone} [done]
+   * @param {{ deadline?: number }} [options]
+   */
+  flushDirect (done = () => {}, options) {
     const count = this._encoder.count()
 
     if (!request.writable && options?.deadline === undefined) {

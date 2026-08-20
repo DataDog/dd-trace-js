@@ -1,45 +1,39 @@
 'use strict'
 
 const log = require('../../log')
-const { createServerlessDeliveryTracker } = require('../../serverless')
+const PendingOperations = require('../common/pending-operations')
 const { Writer } = require('./writer')
 
 class SpanStatsExporter {
-  #serverlessDeliveryTracker
+  #operations = new PendingOperations()
 
   constructor (config) {
-    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._url = config.url
-    this._writer = new Writer({ url: this._url, onFlush: this.#trackWriterFlush.bind(this) })
+    this._writer = new Writer({ url: this._url, onFlush: this.#operations.track.bind(this.#operations) })
   }
 
   export (payload, done) {
+    if (done) {
+      this._writer.append(payload)
+      try {
+        this.#flush()
+      } catch (error) {
+        log.error('Failed to flush span stats: %s', error)
+      }
+      return this.#operations.wait(done)
+    }
     this._writer.append(payload)
+    this.#flush()
+  }
+
+  #flush () {
+    const complete = this.#operations.start()
     try {
-      this.#flush(this.#serverlessDeliveryTracker ? undefined : done)
+      this._writer.flushDirect(complete)
     } catch (error) {
-      if (!done) throw error
-      log.error('Failed to flush span stats: %s', error.message)
+      complete()
+      throw error
     }
-    this.#serverlessDeliveryTracker?.waitForIdle(done)
-  }
-
-  flush (done) {
-    this.#flush(this.#serverlessDeliveryTracker ? undefined : done)
-    this.#serverlessDeliveryTracker?.waitForIdle(done)
-  }
-
-  #flush (done) {
-    const flushWriter = this._writer.flushDirect ?? this._writer.flush
-    if (this.#serverlessDeliveryTracker) {
-      return this.#serverlessDeliveryTracker.track(flushWriter.bind(this._writer), done)
-    }
-    flushWriter.call(this._writer, done)
-  }
-
-  #trackWriterFlush (flush, done) {
-    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.track(flush, done)
-    flush(done)
   }
 }
 

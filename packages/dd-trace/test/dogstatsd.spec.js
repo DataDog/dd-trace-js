@@ -12,7 +12,6 @@ const proxyquire = require('proxyquire')
 const datadogCore = require('../../datadog-core')
 
 require('./setup/core')
-const TelemetryDeliveryTracker = require('../src/serverless/telemetry-delivery-tracker')
 
 describe('dogstatsd', () => {
   let client
@@ -30,11 +29,9 @@ describe('dogstatsd', () => {
   let udsPath
   let statusCode
   let sockets
-  let assertData
   let docker
   let log
-  let registerTelemetryFlusher
-  let createServerlessDeliveryTracker
+  let registerFlusher
 
   beforeEach((done) => {
     udp6 = {
@@ -77,14 +74,12 @@ describe('dogstatsd', () => {
 
     docker = {}
     log = { debug: sinon.stub(), error: sinon.stub() }
-    registerTelemetryFlusher = sinon.stub()
-    createServerlessDeliveryTracker = sinon.stub()
+    registerFlusher = sinon.stub()
 
     const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
       dgram,
       '../../datadog-core': datadogCore,
-      './flush': { registerTelemetryFlusher },
-      './serverless': { createServerlessDeliveryTracker },
+      './flush': { registerFlusher },
       './exporters/common/docker': docker,
       './log': log,
     })
@@ -94,7 +89,6 @@ describe('dogstatsd', () => {
 
     httpData = []
     statusCode = 200
-    assertData = undefined
     sockets = []
     httpServer = http.createServer((req, res) => {
       assert.strictEqual(req.method, 'POST')
@@ -103,7 +97,6 @@ describe('dogstatsd', () => {
       req.on('end', () => {
         res.statusCode = statusCode
         res.end()
-        setTimeout(() => assertData && assertData(httpData))
       })
     }).listen(0, () => {
       httpPort = httpServer.address().port
@@ -118,7 +111,6 @@ describe('dogstatsd', () => {
         req.on('data', d => httpData.push(d))
         req.on('end', () => {
           res.end()
-          setTimeout(() => assertData && assertData(httpData))
         })
       }).listen(udsPath, () => {
         done()
@@ -260,7 +252,6 @@ describe('dogstatsd', () => {
     udp4.send = sinon.stub().callsFake((...args) => {
       completeFirstFlush = args.at(-1)
     })
-    createServerlessDeliveryTracker.returns(new TelemetryDeliveryTracker())
     client = createDogStatsDClient()
     client.gauge('test.avg', 1)
     client.flush()
@@ -276,6 +267,20 @@ describe('dogstatsd', () => {
 
     assert.strictEqual(completeFirstFlush instanceof Function, true)
     completeFirstFlush()
+  })
+
+  it('releases the flush boundary when delivery throws synchronously', () => {
+    client = createDogStatsDClient({
+      metricsProxyUrl: new URL('ftp://example.com'),
+    })
+    client.gauge('test.avg', 1)
+
+    assert.throws(() => client.flush(), { code: 'ERR_INVALID_PROTOCOL' })
+
+    const done = sinon.spy()
+    client.flush(done)
+
+    sinon.assert.calledOnce(done)
   })
 
   it('logs the metric count and the UDP transport on a non-empty flush', () => {
@@ -392,41 +397,37 @@ describe('dogstatsd', () => {
 
   const udsIt = os.platform() === 'win32' ? it.skip : it
   udsIt('should support HTTP via unix domain socket', (done) => {
-    assertData = () => {
-      try {
-        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:0|g\ntest.avg2:2|g\n')
-        done()
-      } catch (e) {
-        done(e)
-      }
-    }
-
     client = createDogStatsDClient({
       metricsProxyUrl: `unix://${udsPath}`,
     })
 
     client.gauge('test.avg', 0)
     client.gauge('test.avg2', 2)
-    client.flush()
+    client.flush(() => {
+      try {
+        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:0|g\ntest.avg2:2|g\n')
+        done()
+      } catch (error) {
+        done(error)
+      }
+    })
   })
 
   it('should support HTTP via port', (done) => {
-    assertData = () => {
-      try {
-        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
-        done()
-      } catch (e) {
-        done(e)
-      }
-    }
-
     client = createDogStatsDClient({
       metricsProxyUrl: `http://localhost:${httpPort}`,
     })
 
     client.gauge('test.avg', 1)
     client.gauge('test.avg2', 2)
-    client.flush()
+    client.flush(() => {
+      try {
+        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
+        done()
+      } catch (error) {
+        done(error)
+      }
+    })
   })
 
   it('calls the flush callback after the HTTP proxy responds', (done) => {
@@ -446,38 +447,24 @@ describe('dogstatsd', () => {
   })
 
   it('should support HTTP via URL object', (done) => {
-    assertData = () => {
-      try {
-        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
-        done()
-      } catch (e) {
-        done(e)
-      }
-    }
-
     client = createDogStatsDClient({
       metricsProxyUrl: new URL(`http://localhost:${httpPort}`),
     })
 
     client.gauge('test.avg', 1)
     client.gauge('test.avg2', 2)
-    client.flush()
+    client.flush(() => {
+      try {
+        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
+        done()
+      } catch (error) {
+        done(error)
+      }
+    })
   })
 
   it('should fail over to UDP when receiving HTTP 404 error from agent', (done) => {
-    assertData = () => {
-      setTimeout(() => {
-        try {
-          sinon.assert.called(udp4.send)
-          assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:10|c\n')
-          assert.strictEqual(udp4.send.firstCall.args[2], 16)
-          done()
-        } catch (e) {
-          done(e)
-        }
-      })
-    }
-
+    udp4.send = sinon.stub().callsFake((...args) => args.at(-1)())
     statusCode = 404
 
     client = createDogStatsDClient({
@@ -486,7 +473,16 @@ describe('dogstatsd', () => {
 
     client.increment('test.count', 10)
 
-    client.flush()
+    client.flush(() => {
+      try {
+        sinon.assert.calledOnce(udp4.send)
+        assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:10|c\n')
+        assert.strictEqual(udp4.send.firstCall.args[2], 16)
+        done()
+      } catch (error) {
+        done(error)
+      }
+    })
   })
 
   it('should fail over to UDP when receiving network error from agent', (done) => {
@@ -532,10 +528,27 @@ describe('dogstatsd', () => {
       client.gauge('test.avg', 10)
       const done = sinon.spy()
 
-      registerTelemetryFlusher.firstCall.args[0](done)
+      registerFlusher.firstCall.args[1](done)
 
       sinon.assert.calledOnce(done)
       sinon.assert.calledOnce(udp4.send)
+    })
+
+    it('returns lifecycle cancellation through the aggregation client', () => {
+      let sendDone
+      udp4.send = sinon.stub().callsFake((_buffer, _offset, _length, _port, _host, done) => {
+        sendDone = done
+      })
+      client = createCustomMetrics()
+      client.gauge('test.avg', 10)
+      const done = sinon.spy()
+
+      const cancel = registerFlusher.firstCall.args[1](done)
+      assert.strictEqual(typeof cancel, 'function')
+      cancel()
+      sendDone()
+
+      sinon.assert.notCalled(done)
     })
 
     it('.gauge()', () => {

@@ -202,6 +202,29 @@ describe('sendData', () => {
     assert.deepStrictEqual(url, new URL('https://my-intake.example/'))
   })
 
+  it('reports an invalid CI Visibility agentless telemetry URL without sending', () => {
+    const callback = sinon.spy()
+
+    sendDataModule.sendData(
+      {
+        isCiVisibility: true,
+        testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: true },
+        tags: { 'runtime-id': '123' },
+        site: 'x:notaport',
+      },
+      application,
+      host,
+      'req-type',
+      {},
+      callback
+    )
+
+    sinon.assert.notCalled(request)
+    sinon.assert.calledOnce(callback)
+    assert.ok(callback.firstCall.args[0] instanceof Error)
+    assert.deepStrictEqual(callback.firstCall.args[1], { payload: {}, reqType: 'req-type' })
+  })
+
   it('sends the agentless backend telemetry with a URL object when the agent request fails', () => {
     request.yields(new Error('agent unreachable'))
 
@@ -220,6 +243,172 @@ describe('sendData', () => {
     const backendOptions = request.getCall(1).args[1]
     assert.deepStrictEqual(backendOptions.url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
     assert.strictEqual(backendOptions.headers['DD-API-KEY'], 'secret-key')
+  })
+
+  it('waits for an agentless fallback active at the flush boundary', () => {
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        site: 'datadoghq.eu',
+        tags: { 'runtime-id': '123' },
+      },
+      application,
+      host,
+      'req-type'
+    )
+    const done = sinon.spy()
+
+    sendDataModule.flush(done)
+    request.firstCall.args[2](new Error('agent unreachable'))
+
+    sinon.assert.notCalled(done)
+    request.secondCall.args[2]()
+    sinon.assert.calledOnce(done)
+  })
+
+  it('detaches a cancelled request flush boundary', () => {
+    sendDataModule.sendData(
+      { tags: { 'runtime-id': '123' } },
+      application,
+      host,
+      'req-type'
+    )
+    const done = sinon.spy()
+
+    const cancel = sendDataModule.flush(done)
+    assert.strictEqual(typeof cancel, 'function')
+    cancel()
+    request.firstCall.args[2]()
+
+    sinon.assert.notCalled(done)
+  })
+
+  it('completes once when the primary transport responds more than once', () => {
+    const callback = sinon.spy()
+    sendDataModule.sendData(
+      { tags: { 'runtime-id': '123' } },
+      application,
+      host,
+      'req-type',
+      {},
+      callback
+    )
+    const respond = request.firstCall.args[2]
+
+    respond(null)
+    respond(new Error('late response'))
+    const done = sinon.spy()
+    sendDataModule.flush(done)
+
+    sinon.assert.calledOnceWithExactly(callback, null, { payload: {}, reqType: 'req-type' })
+    sinon.assert.calledOnce(done)
+  })
+
+  it('completes once when the fallback transport responds more than once', () => {
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        site: 'datadoghq.eu',
+        tags: { 'runtime-id': '123' },
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    request.firstCall.args[2](new Error('agent unreachable'))
+    const respond = request.secondCall.args[2]
+    respond(null)
+    respond(new Error('late fallback response'))
+    const done = sinon.spy()
+    sendDataModule.flush(done)
+
+    sinon.assert.calledOnce(done)
+  })
+
+  it('rethrows when the primary transport throws after responding', () => {
+    const error = new Error('post-response failure')
+    request.callsFake((data, options, callback) => {
+      callback(null)
+      throw error
+    })
+
+    assert.throws(() => sendDataModule.sendData(
+      { tags: { 'runtime-id': '123' } },
+      application,
+      host,
+      'req-type'
+    ), error)
+
+    const done = sinon.spy()
+    sendDataModule.flush(done)
+    sinon.assert.calledOnce(done)
+  })
+
+  it('rethrows when the fallback transport throws after responding', () => {
+    const error = new Error('post-fallback-response failure')
+    request.onFirstCall().callsFake((data, options, callback) => callback(new Error('agent unreachable')))
+    request.onSecondCall().callsFake((data, options, callback) => {
+      callback(null)
+      throw error
+    })
+
+    assert.throws(() => sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        site: 'datadoghq.eu',
+        tags: { 'runtime-id': '123' },
+      },
+      application,
+      host,
+      'req-type'
+    ), error)
+
+    const done = sinon.spy()
+    sendDataModule.flush(done)
+    sinon.assert.calledOnce(done)
+  })
+
+  it('releases the request flush boundary when the transport throws synchronously', () => {
+    const error = new Error('request failed synchronously')
+    const callback = sinon.spy()
+    request.throws(error)
+
+    sendDataModule.sendData(
+      { tags: { 'runtime-id': '123' } },
+      application,
+      host,
+      'req-type',
+      {},
+      callback
+    )
+
+    const done = sinon.spy()
+    sendDataModule.flush(done)
+
+    sinon.assert.calledOnceWithExactly(callback, error, { payload: {}, reqType: 'req-type' })
+    sinon.assert.calledOnce(done)
+  })
+
+  it('releases the request flush boundary when the fallback transport throws synchronously', () => {
+    request.onSecondCall().throws(new Error('fallback failed synchronously'))
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        site: 'datadoghq.eu',
+        tags: { 'runtime-id': '123' },
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    request.firstCall.args[2](new Error('agent unreachable'))
+    const done = sinon.spy()
+    sendDataModule.flush(done)
+
+    assert.strictEqual(request.callCount, 2)
+    sinon.assert.calledOnce(done)
   })
 
   it('skips the agentless backend request when the endpoint URL is invalid', () => {

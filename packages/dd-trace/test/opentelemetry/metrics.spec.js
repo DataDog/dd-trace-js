@@ -663,6 +663,87 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Lifecycle', () => {
+    it('does not register a lifecycle flusher when global provider registration fails', () => {
+      const registerFlusher = sinon.spy()
+      const shutdown = sinon.spy()
+      class MetricReader {
+        shutdown () { shutdown() }
+      }
+      class FailingMeterProvider {
+        forceFlush () {}
+      }
+      const metricApi = {
+        setGlobalMeterProvider () { throw new Error('registration failed') },
+      }
+      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {
+        '@opentelemetry/api': { metrics: metricApi },
+        '../../flush': { registerFlusher },
+        './meter_provider': FailingMeterProvider,
+        './periodic_metric_reader': MetricReader,
+      })
+
+      assert.throws(() => initializeOpenTelemetryMetrics(getConfigFresh()), /registration failed/)
+      sinon.assert.notCalled(registerFlusher)
+      sinon.assert.calledOnce(shutdown)
+    })
+
+    it('does not register a lifecycle flusher when the global provider is already owned', () => {
+      const registerFlusher = sinon.spy()
+      const shutdown = sinon.spy()
+      class MetricReader {
+        shutdown () { shutdown() }
+      }
+      class RefusedMeterProvider {
+        forceFlush () {}
+      }
+      const metricApi = {
+        setGlobalMeterProvider: sinon.stub().returns(false),
+      }
+      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {
+        '@opentelemetry/api': { metrics: metricApi },
+        '../../flush': { registerFlusher },
+        './meter_provider': RefusedMeterProvider,
+        './periodic_metric_reader': MetricReader,
+      })
+
+      initializeOpenTelemetryMetrics(getConfigFresh())
+
+      sinon.assert.notCalled(registerFlusher)
+      sinon.assert.calledOnce(shutdown)
+    })
+
+    it('does not flush the reader after it shuts down', () => {
+      const log = require('../../src/log')
+      const warn = sinon.spy(log, 'warn')
+      const { meterProvider } = setupMetrics()
+      meterProvider.reader.shutdown()
+      const warningsAfterShutdown = warn.callCount
+
+      require('../../src/flush').flushAll()
+
+      assert.strictEqual(warn.callCount, warningsAfterShutdown)
+    })
+
+    it('notifies its lifecycle owner once when the reader shuts down', () => {
+      const onShutdown = sinon.spy()
+      const reader = new PeriodicMetricReader({}, 60_000, 'DELTA', 1024, onShutdown)
+
+      reader.shutdown()
+      reader.shutdown()
+
+      sinon.assert.calledOnce(onShutdown)
+    })
+
+    it('does not warn while shutting down the reader for the first time', () => {
+      const log = require('../../src/log')
+      const warn = sinon.spy(log, 'warn')
+      const reader = new PeriodicMetricReader({}, 60_000, 'DELTA', 1024)
+
+      reader.shutdown()
+
+      sinon.assert.notCalled(warn)
+    })
+
     it('waits for an in-flight export during forceFlush', () => {
       const exports = []
       const flushes = []
@@ -688,6 +769,79 @@ describe('OpenTelemetry Meter Provider', () => {
       sinon.assert.calledOnce(done)
       exports[0]({ code: 0 })
       reader.shutdown()
+    })
+
+    it('waits for an in-flight export when the boundary export fails', () => {
+      const boundaryError = null
+      let exportCount = 0
+      let activeExportDone
+      let flushDone
+      const reader = new PeriodicMetricReader({
+        export: (metrics, done) => {
+          if (++exportCount === 1) activeExportDone = done
+          else throw boundaryError
+        },
+        flush: done => {
+          if (exportCount === 0) done()
+          else flushDone = done
+        },
+      }, 60_000, 'DELTA', 1024)
+      const meter = new MeterProvider({ reader }).getMeter('test')
+      const firstDone = sinon.spy()
+      const done = sinon.spy()
+
+      meter.createCounter('in-flight').add(1)
+      reader.forceFlush(firstDone)
+      meter.createCounter('boundary').add(1)
+      reader.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      flushDone()
+      sinon.assert.calledOnce(done)
+      activeExportDone({ code: 0 })
+      sinon.assert.calledOnce(firstDone)
+      reader.shutdown()
+    })
+
+    it('detaches a cancelled force flush from in-flight metric exports', () => {
+      let exportDone
+      let flushDone
+      const cancelActive = sinon.spy()
+      const reader = new PeriodicMetricReader({
+        export: (metricData, done) => { exportDone = done },
+        flush: done => {
+          flushDone = done
+          return cancelActive
+        },
+      }, 60_000, 'DELTA', 1024)
+      const meter = new MeterProvider({ reader }).getMeter('test')
+      const done = sinon.spy()
+      meter.createCounter('boundary').add(1)
+
+      const cancel = reader.forceFlush(done)
+      assert.strictEqual(typeof cancel, 'function')
+      cancel()
+      exportDone({ code: 0 })
+      flushDone()
+
+      sinon.assert.notCalled(done)
+      sinon.assert.calledOnce(cancelActive)
+      reader.shutdown()
+    })
+
+    it('returns reader cancellation through the provider', () => {
+      const cancel = sinon.spy()
+      const reader = { forceFlush: sinon.stub().returns(cancel) }
+
+      assert.strictEqual(new MeterProvider({ reader }).forceFlush(sinon.spy()), cancel)
+    })
+
+    it('completes a provider flush without a reader', () => {
+      const done = sinon.spy()
+
+      new MeterProvider().forceFlush(done)
+
+      sinon.assert.calledOnce(done)
     })
 
     it('handles shutdown gracefully', async () => {

@@ -3,7 +3,7 @@
 const { channel } = require('dc-polyfill')
 
 const { readDatadogTags, writeDatadogTags } = require('../carrier')
-const { registerTelemetryFlusher } = require('../flush')
+const { registerFlusher, unregisterFlusher } = require('../flush')
 const log = require('../log')
 const { DD_MAJOR } = require('../../../../version')
 const startupLogs = require('../startup-log')
@@ -58,8 +58,6 @@ let spanWriter
 /** @type {LLMObsEvalMetricsWriter | null} */
 let evalWriter
 
-let unregisterTelemetryFlusher
-
 /** @type {import('../config/config-base')} */
 let globalTracerConfig
 
@@ -74,9 +72,6 @@ function enable (config) {
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
   spanWriter = new LLMObsSpanWriter(config)
-  // Replace the prior callback when LLMObs writers are reinitialized.
-  unregisterTelemetryFlusher?.()
-  unregisterTelemetryFlusher = registerTelemetryFlusher(flushWriters)
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -106,6 +101,7 @@ function enable (config) {
     telemetry.recordLLMObsEnabled(startTime, config)
     log.debug('[LLMObs] Enabled LLM Observability with configuration: %o', config.llmobs)
   })
+  registerFlusher('llmobs', flushLifecycleWriters)
 }
 
 function disable () {
@@ -118,9 +114,7 @@ function disable () {
   spanWriter?.destroy()
   evalWriter?.destroy()
   spanProcessor?.setWriter(null)
-  // Do not retain disabled writers in serverless lifecycle flushing.
-  unregisterTelemetryFlusher?.()
-  unregisterTelemetryFlusher = undefined
+  unregisterFlusher('llmobs')
 
   spanWriter = null
   evalWriter = null
@@ -201,19 +195,20 @@ function handleLLMObsInjection ({ carrier }) {
   if (tags !== existing) writeDatadogTags(carrier, tags)
 }
 
-function flushWriters (done) {
+function flushWriters (done, cancellations) {
   let pending = 2
   let failed = false
   const complete = () => {
     if (--pending === 0) done?.()
   }
+  /** @param {LLMObsSpanWriter|LLMObsEvalMetricsWriter} writer */
   const flush = writer => {
     try {
-      if (writer) writer.flush(complete)
-      else complete()
+      const cancel = writer.flush(complete)
+      if (typeof cancel === 'function') cancellations?.push(cancel)
     } catch (error) {
       failed = true
-      log.warn('Failed to flush LLMObs writer:', error.message)
+      log.warn('Failed to flush LLMObs writer: %s', error)
       complete()
     }
   }
@@ -221,6 +216,20 @@ function flushWriters (done) {
   flush(spanWriter)
   flush(evalWriter)
   return failed
+}
+
+/**
+ * Flushes both writers for a lifecycle boundary and allows timeout cleanup.
+ *
+ * @param {() => void} done
+ * @returns {() => void} Detaches both writer boundary callbacks.
+ */
+function flushLifecycleWriters (done) {
+  const cancellations = []
+  flushWriters(done, cancellations)
+  return () => {
+    for (const cancel of cancellations) cancel()
+  }
 }
 
 function handleFlush () {

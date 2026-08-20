@@ -157,6 +157,18 @@ describe('endpoints telemetry', () => {
       assert.strictEqual(secondPayload.endpoints.length, 50)
     })
 
+    it('flushes the last accepted endpoint batch and the first overflow endpoint', () => {
+      for (let i = 0; i < 101; i++) {
+        fastifyRouteCh.publish({ routeOptions: { method: 'GET', path: '/flush-' + i } })
+      }
+
+      endpoints.flush()
+
+      sinon.assert.calledTwice(sendData)
+      assert.strictEqual(sendData.firstCall.args[4].endpoints.length, 100)
+      assert.strictEqual(sendData.secondCall.args[4].endpoints.length, 1)
+    })
+
     it('should record express route and add HEAD for GET', () => {
       expressRouteCh.publish({ method: 'GET', path: '/test' })
 

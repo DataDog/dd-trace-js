@@ -16,6 +16,7 @@ describe('AgentlessExporter', () => {
   let Exporter
   let exporter
   let writer
+  let writerOptions
   let initialHandlersSize
   let clock
 
@@ -25,10 +26,12 @@ describe('AgentlessExporter', () => {
     writer = {
       append: sinon.stub(),
       flush: sinon.stub().callsFake((cb) => cb && cb()),
+      flushDirect: sinon.stub().callsFake((cb) => cb && cb()),
       setUrl: sinon.stub(),
     }
 
-    const Writer = function () {
+    const Writer = function (options) {
+      writerOptions = options
       return writer
     }
 
@@ -189,23 +192,74 @@ describe('AgentlessExporter', () => {
     it('should flush writer immediately', () => {
       exporter.flush()
 
-      sinon.assert.called(writer.flush)
+      sinon.assert.calledOnce(writer.flushDirect)
+      sinon.assert.notCalled(writer.flush)
     })
 
     it('should clear pending timer on explicit flush', () => {
       exporter.export([{ name: 'test' }])
       exporter.flush()
 
-      sinon.assert.calledOnce(writer.flush)
+      sinon.assert.calledOnce(writer.flushDirect)
+      sinon.assert.notCalled(writer.flush)
 
       // Timer should be cleared, so ticking should not trigger another flush
       clock.tick(1000)
 
-      sinon.assert.calledOnce(writer.flush)
+      sinon.assert.calledOnce(writer.flushDirect)
+      sinon.assert.notCalled(writer.flush)
     })
 
     it('should call callback when done', (done) => {
       exporter.flush(done)
+    })
+
+    it('releases the flush boundary when the writer throws synchronously', () => {
+      const error = new Error('flush failed')
+      const errorLog = sinon.stub(require('../../../src/log'), 'error')
+      const done = sinon.spy()
+      writer.flushDirect.throws(error)
+
+      exporter.flush(done)
+
+      sinon.assert.calledOnceWithExactly(errorLog, 'Failed to flush traces: %s', error)
+      sinon.assert.calledOnce(done)
+    })
+
+    it('waits for agentless trace exports already in flight', () => {
+      const callbacks = []
+      writer.flushDirect = sinon.spy(done => callbacks.push(done))
+      writer.flush.callsFake(done => {
+        const flush = callback => writer.flushDirect(callback)
+        if (writerOptions.onFlush) return writerOptions.onFlush(flush, done)
+        flush(done)
+      })
+      exporter = new Exporter({ flushInterval: 0 })
+      const done = sinon.spy()
+
+      exporter.export([{ name: 'in flight' }])
+      exporter.flush(done)
+
+      callbacks[1]()
+      sinon.assert.notCalled(done)
+      callbacks[0]()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('detaches a cancelled flush boundary from agentless trace exports', () => {
+      const callbacks = []
+      writer.flushDirect = sinon.spy(done => callbacks.push(done))
+      writer.flush.callsFake(done => writerOptions.onFlush(callback => writer.flushDirect(callback), done))
+      exporter = new Exporter({ flushInterval: 0 })
+      const done = sinon.spy()
+
+      exporter.export([{ name: 'in flight' }])
+      const cancel = exporter.flush(done)
+      cancel()
+      callbacks[1]()
+      callbacks[0]()
+
+      sinon.assert.notCalled(done)
     })
   })
 

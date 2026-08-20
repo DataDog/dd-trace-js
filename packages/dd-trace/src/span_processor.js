@@ -20,7 +20,7 @@ class SpanProcessor {
 
     if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
-      this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
+      this.stats = new SpanStatsProcessor(config, otlpStatsExporter)
     }
 
     this._spanSampler = new SpanSampler(config.sampler)
@@ -68,7 +68,7 @@ class SpanProcessor {
           isFirstSpanInChunk = false
           // Span stats read Datadog HTTP tag names from the formatted span, so
           // record them before the OTel rename — an export-only transform.
-          this._stats?.onSpanFinished(formattedSpan)
+          this.stats?.onSpanFinished(formattedSpan)
           if (this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
             applyHttpOtelSemantics(formattedSpan)
           }

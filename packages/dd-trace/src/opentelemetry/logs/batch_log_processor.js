@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('../../log')
+
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
@@ -55,6 +57,7 @@ class BatchLogRecordProcessor {
   /**
    * Forces an immediate flush of all pending log records.
    * @param {Function} [done] Called after all pending log exports complete
+   * @returns {() => void} Detaches the callback from this flush boundary
    */
   forceFlush (done) {
     this.#clearTimer()
@@ -68,8 +71,7 @@ class BatchLogRecordProcessor {
     }
 
     // Join exports already active at this boundary before draining this snapshot.
-    if (typeof this.exporter.flush === 'function') this.exporter.flush(complete)
-    else complete()
+    const cancelActive = this.exporter.flush(complete)
 
     const flushNext = () => {
       if (logRecords.length === 0) {
@@ -79,9 +81,18 @@ class BatchLogRecordProcessor {
 
       // Drain the boundary snapshot one batch at a time.
       const batch = logRecords.splice(0, this.#maxExportBatchSize)
-      this.exporter.export(batch, flushNext)
+      try {
+        this.exporter.export(batch, flushNext)
+      } catch (error) {
+        log.error('Failed to flush OpenTelemetry logs: %s', error)
+        complete()
+      }
     }
     flushNext()
+    return () => {
+      done = undefined
+      cancelActive?.()
+    }
   }
 
   /**

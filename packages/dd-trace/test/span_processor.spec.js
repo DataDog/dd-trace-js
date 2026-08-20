@@ -340,7 +340,7 @@ describe('SpanProcessor', () => {
       }
       const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
       const statsView = {}
-      processor._stats = {
+      processor.stats = {
         onSpanFinished: sinon.spy(span => {
           statsView.method = span.meta['http.method']
           statsView.statusCode = span.meta['http.status_code']

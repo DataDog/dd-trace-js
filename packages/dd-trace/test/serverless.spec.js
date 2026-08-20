@@ -1,76 +1,32 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { fork } = require('node:child_process')
+const { once } = require('node:events')
 const http = require('node:http')
+const path = require('node:path')
+const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 
 const { describe, it, afterEach } = require('mocha')
 const { logs } = require('@opentelemetry/api-logs')
 const { metrics } = require('@opentelemetry/api')
 const { channel } = require('dc-polyfill')
+const sinon = require('sinon')
+
+const { FakeAgent } = require('../../../integration-tests/helpers')
 
 require('./setup/core')
 
 const {
   getServerlessPlatformTags,
   getServerlessPlatform,
-  createServerlessDeliveryTracker,
   enableGCPPubSubPushSubscription,
   initializeServerlessTelemetry,
 } = require('../src/serverless')
 const { registerVercelTelemetryRetention } = require('../src/serverless/vercel')
-const { flushAll, registerTelemetryFlusher } = require('../src/flush')
-const Tracer = require('../src/tracer')
-const { initializeOpenTelemetryLogs } = require('../src/opentelemetry/logs')
-const { initializeOpenTelemetryMetrics } = require('../src/opentelemetry/metrics')
-const TelemetryDeliveryTracker = require('../src/serverless/telemetry-delivery-tracker')
+const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+const log = require('../src/log')
 const agent = require('./plugins/agent')
-const { getConfigFresh } = require('./helpers/config')
-
-describe('TelemetryDeliveryTracker', () => {
-  it('is created only for Vercel', () => {
-    const originalVercel = process.env.VERCEL
-    try {
-      delete process.env.VERCEL
-      assert.strictEqual(createServerlessDeliveryTracker(), undefined)
-
-      process.env.VERCEL = '1'
-      assert.ok(createServerlessDeliveryTracker() instanceof TelemetryDeliveryTracker)
-    } finally {
-      if (originalVercel === undefined) delete process.env.VERCEL
-      else process.env.VERCEL = originalVercel
-    }
-  })
-
-  it('joins deliveries that were active at the retention boundary', () => {
-    const tracker = new TelemetryDeliveryTracker()
-    const complete = []
-    let done = 0
-
-    tracker.track(callback => complete.push(callback))
-    tracker.track(callback => complete.push(callback))
-    tracker.waitForIdle(() => { done++ })
-
-    complete.shift()()
-    assert.strictEqual(done, 0)
-    complete.shift()()
-    assert.strictEqual(done, 1)
-  })
-
-  it('does not wait for deliveries that begin after the retention boundary', () => {
-    const tracker = new TelemetryDeliveryTracker()
-    const complete = []
-    let done = 0
-
-    tracker.track(callback => complete.push(callback))
-    tracker.waitForIdle(() => { done++ })
-    tracker.track(callback => complete.push(callback))
-
-    complete.shift()()
-    assert.strictEqual(done, 1)
-    complete.shift()()
-    assert.strictEqual(done, 1)
-  })
-})
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE
@@ -132,31 +88,38 @@ describe('Vercel span metadata', () => {
   })
 
   it('adds present Vercel metadata to encoded spans', async () => {
-    process.env = {
-      ...environment,
-      VERCEL: '1',
-      VERCEL_DEPLOYMENT_ID: 'dpl_123',
-      VERCEL_ENV: 'preview',
-      VERCEL_PROJECT_ID: 'prj_123',
-      VERCEL_REGION: 'iad1',
-      VERCEL_TARGET_ENV: 'staging',
-    }
-
-    const tracer = await agent.load([], [], {
-      service: 'vercel-metadata-test',
-      tags: { 'vercel.region': 'custom-region' },
-    })
-    tracer.startSpan('vercel-span').finish()
-
-    await agent.assertSomeTraces(traces => {
+    const fakeAgent = await new FakeAgent().start()
+    const received = fakeAgent.assertMessageReceived(({ payload }) => {
       assert.deepStrictEqual(Object.fromEntries(
-        Object.entries(traces[0][0].meta).filter(([name]) => name.startsWith('vercel.'))
+        Object.entries(payload[0][0].meta).filter(([name]) => name.startsWith('vercel.'))
       ), {
         'vercel.project_id': 'prj_123',
         'vercel.environment': 'preview',
         'vercel.region': 'custom-region',
       })
     })
+    const child = fork(path.join(__dirname, 'fixtures', 'vercel-telemetry.js'), [], {
+      env: {
+        ...process.env,
+        DD_TRACE_AGENT_PORT: fakeAgent.port,
+        VERCEL: '1',
+        VERCEL_DEPLOYMENT_ID: 'dpl_123',
+        VERCEL_ENV: 'preview',
+        VERCEL_PROJECT_ID: 'prj_123',
+        VERCEL_REGION: 'iad1',
+        VERCEL_TARGET_ENV: 'staging',
+        VERCEL_TEST_SPAN_METADATA: '1',
+      },
+      silent: true,
+    })
+    const childExited = once(child, 'exit')
+    try {
+      await received
+    } finally {
+      if (child.exitCode === null) child.kill()
+      await childExited
+      await fakeAgent.stop()
+    }
   })
 
   it('discovers only present Vercel metadata as platform tags', () => {
@@ -218,11 +181,7 @@ describe('Vercel telemetry retention', () => {
   })
 
   it('retains trace, log, and metric payloads until their intake responses complete', async () => {
-    process.env.OTEL_TRACES_EXPORTER = 'otlp'
-    process.env.DD_LOGS_OTEL_ENABLED = 'true'
-    process.env.DD_METRICS_OTEL_ENABLED = 'true'
     const received = new Set()
-    let intakeReceived
     let metricPayloads = 0
     const intake = http.createServer((req, res) => {
       req.resume()
@@ -234,43 +193,100 @@ describe('Vercel telemetry retention', () => {
         }
         if (req.url === '/v1/traces') received.add('traces')
         res.end()
-        if (received.size === 3 && metricPayloads === 2) intakeReceived()
       })
     })
     await new Promise(resolve => intake.listen(0, '127.0.0.1', resolve))
     const { port } = intake.address()
     const endpoint = `http://127.0.0.1:${port}`
-    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = `${endpoint}/v1/traces`
-    process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = `${endpoint}/v1/logs`
-    process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = `${endpoint}/v1/metrics`
+    const child = fork(path.join(__dirname, 'fixtures', 'vercel-telemetry.js'), [], {
+      env: {
+        ...process.env,
+        DD_LOGS_OTEL_ENABLED: 'true',
+        DD_METRICS_OTEL_ENABLED: 'true',
+        OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: `${endpoint}/v1/logs`,
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: `${endpoint}/v1/metrics`,
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${endpoint}/v1/traces`,
+        OTEL_TRACES_EXPORTER: 'otlp',
+        VERCEL: '1',
+        VERCEL_TEST_OTEL: '1',
+      },
+      silent: true,
+    })
+    const childExited = once(child, 'exit')
 
-    let retained
-    globalThis[requestContext] = {
-      get: () => ({ waitUntil: promise => { retained = promise } }),
-    }
-    const intakeRequests = new Promise(resolve => { intakeReceived = resolve })
-
-    let unregister
     try {
-      const config = getConfigFresh({ service: 'serverless-flush' })
-      const tracer = new Tracer(config)
-      initializeOpenTelemetryLogs(config)
-      initializeOpenTelemetryMetrics(config)
+      await once(child, 'message')
 
-      tracer.trace('serverless.flush', {}, () => {})
-      logs.getLogger('serverless-flush').emit({ body: 'flush me' })
-      metrics.getMeter('serverless-flush').createCounter('flush.me').add(1)
+      const retained = once(child, 'message')
+      child.send('request')
+      const [retainedMessage] = await retained
+      assert.deepStrictEqual(retainedMessage, { type: 'retained', value: true })
 
-      unregister = registerVercelTelemetryRetention(tracer)
-      channel('apm:http:server:request:finish').publish({})
-      await intakeRequests
-      await retained
+      const released = once(child, 'message')
+      const [releasedMessage] = await released
+      assert.deepStrictEqual(releasedMessage, { type: 'released' })
+      const [code, signal] = await childExited
+      assert.strictEqual(code, 0)
+      assert.strictEqual(signal, null)
       assert.deepStrictEqual(received, new Set(['traces', 'logs', 'metrics']))
       assert.strictEqual(metricPayloads, 2)
     } finally {
-      unregister?.()
-      metrics.getMeterProvider()?.reader?.shutdown()
-      logs.getLoggerProvider()?.shutdown?.()
+      if (child.exitCode === null) child.kill()
+      await new Promise(resolve => intake.close(resolve))
+    }
+  })
+
+  it('retains instrumentation telemetry when APM tracing is disabled', async () => {
+    const responses = []
+    let releaseResponses = false
+    let telemetryReceived
+    const intakeReceived = new Promise(resolve => { telemetryReceived = resolve })
+    const intake = http.createServer((request, response) => {
+      request.resume()
+      request.once('end', () => {
+        if (releaseResponses) response.end()
+        else responses.push(response)
+        telemetryReceived()
+      })
+    })
+    await new Promise(resolve => intake.listen(0, '127.0.0.1', resolve))
+    const endpoint = `http://127.0.0.1:${intake.address().port}`
+    const child = fork(path.join(__dirname, 'fixtures', 'vercel-telemetry.js'), [], {
+      env: {
+        ...process.env,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+        DD_TRACE_AGENT_URL: endpoint,
+        VERCEL: '1',
+      },
+      silent: true,
+    })
+    const childExited = once(child, 'exit')
+
+    try {
+      const ready = once(child, 'message')
+      await Promise.all([intakeReceived, ready])
+
+      const retained = once(child, 'message')
+      child.send('request')
+      const [retainedMessage] = await retained
+      assert.deepStrictEqual(retainedMessage, { type: 'retained', value: true })
+
+      let released = false
+      child.once('message', () => { released = true })
+      const releasedMessage = once(child, 'message')
+      await setImmediatePromise()
+      assert.strictEqual(released, false)
+
+      releaseResponses = true
+      for (const response of responses) response.end()
+      const [message] = await releasedMessage
+      assert.deepStrictEqual(message, { type: 'released' })
+      const [code, signal] = await childExited
+      assert.strictEqual(code, 0)
+      assert.strictEqual(signal, null)
+    } finally {
+      if (child.exitCode === null) child.kill()
+      for (const response of responses) response.end()
       await new Promise(resolve => intake.close(resolve))
     }
   })
@@ -335,10 +351,8 @@ describe('Vercel telemetry retention', () => {
       flushes++
       completeTelemetry.push(done)
     }
-    const unregisterTelemetry = registerTelemetryFlusher(telemetryFlusher)
-    const unregister = registerVercelTelemetryRetention({
-      flushAll: (done, options) => flushAll(undefined, done, options),
-    })
+    registerFlusher('telemetry', telemetryFlusher)
+    const unregister = registerVercelTelemetryRetention({ flushAll })
     try {
       channel('apm:http:server:request:finish').publish({})
       await new Promise(resolve => setImmediate(resolve))
@@ -354,7 +368,7 @@ describe('Vercel telemetry retention', () => {
       await retained
     } finally {
       unregister()
-      unregisterTelemetry()
+      unregisterFlusher('telemetry')
     }
   })
 
@@ -407,6 +421,106 @@ describe('Vercel telemetry retention', () => {
       assert.deepStrictEqual(options, { timeout: 2_000 })
     } finally {
       unregister?.()
+    }
+  })
+
+  it('logs a Vercel telemetry flush failure before releasing the invocation', async () => {
+    const error = 'flush failed'
+    const errorLog = sinon.stub(log, 'error')
+    let retained
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: promise => { retained = promise } }),
+    }
+
+    const unregister = registerVercelTelemetryRetention({
+      flushAll () {
+        throw error
+      },
+    })
+    try {
+      channel('apm:http:server:request:finish').publish({})
+      await retained
+
+      sinon.assert.calledOnceWithExactly(errorLog, 'Failed to flush Vercel telemetry: %s', error)
+    } finally {
+      unregister()
+      errorLog.restore()
+    }
+  })
+
+  it('logs a Vercel waitUntil failure without flushing', () => {
+    const error = null
+    const errorLog = sinon.stub(log, 'error')
+    const flushAll = sinon.spy()
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: () => { throw error } }),
+    }
+
+    const unregister = registerVercelTelemetryRetention({ flushAll })
+    try {
+      channel('apm:http:server:request:finish').publish({})
+
+      sinon.assert.notCalled(flushAll)
+      sinon.assert.calledWithExactly(errorLog, 'Failed to retain Vercel invocation: %s', error)
+    } finally {
+      unregister()
+      errorLog.restore()
+    }
+  })
+
+  it('does not flush without an active Vercel request context', () => {
+    const flushAll = sinon.spy()
+    globalThis[requestContext] = { get: () => undefined }
+
+    const unregister = registerVercelTelemetryRetention({ flushAll })
+    try {
+      channel('apm:http:server:request:finish').publish({})
+
+      sinon.assert.notCalled(flushAll)
+    } finally {
+      unregister()
+    }
+  })
+
+  it('logs a Vercel request-context lookup failure without flushing', () => {
+    const error = new Error('context lookup failed')
+    const errorLog = sinon.stub(log, 'error')
+    const flushAll = sinon.spy()
+    globalThis[requestContext] = {
+      get () { throw error },
+    }
+
+    const unregister = registerVercelTelemetryRetention({ flushAll })
+    try {
+      channel('apm:http:server:request:finish').publish({})
+
+      sinon.assert.notCalled(flushAll)
+      sinon.assert.calledOnceWithExactly(errorLog, 'Failed to access Vercel request context: %s', error)
+    } finally {
+      unregister()
+      errorLog.restore()
+    }
+  })
+
+  it('logs a Vercel waitUntil lookup failure without flushing', () => {
+    const error = new Error('waitUntil lookup failed')
+    const errorLog = sinon.stub(log, 'error')
+    const flushAll = sinon.spy()
+    globalThis[requestContext] = {
+      get: () => Object.defineProperty({}, 'waitUntil', {
+        get () { throw error },
+      }),
+    }
+
+    const unregister = registerVercelTelemetryRetention({ flushAll })
+    try {
+      channel('apm:http:server:request:finish').publish({})
+
+      sinon.assert.notCalled(flushAll)
+      sinon.assert.calledOnceWithExactly(errorLog, 'Failed to access Vercel request context: %s', error)
+    } finally {
+      unregister()
+      errorLog.restore()
     }
   })
 

@@ -17,21 +17,19 @@ const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 class AgentWriter extends BaseWriter {
   #request = commonRequest
   #requestTracker
-  #onFlush
 
   constructor (...args) {
     super({
       ...args[0],
       beforeFirstFlush: () => firstFlushChannel.publish(),
     })
-    const { prioritySampler, lookup, protocolVersion, headers, isTestOptimization, onFlush } = args[0]
+    const { prioritySampler, lookup, protocolVersion, headers, isTestOptimization } = args[0]
     const AgentEncoder = getEncoder(protocolVersion)
 
     this._prioritySampler = prioritySampler
     this._lookup = lookup
     this._protocolVersion = protocolVersion
     this._headers = headers
-    this.#onFlush = onFlush
     this._encoder = new AgentEncoder(this)
     if (isTestOptimization) {
       this.#request = require('../../ci-visibility/exporters/request')
@@ -40,25 +38,12 @@ class AgentWriter extends BaseWriter {
     }
   }
 
-  /**
-   * Flushes payloads, including requests already in flight during Test Optimization finalization.
-   *
-   * @param {(error?: Error) => void} [done]
-   * @param {{ deadline?: number }} [options]
-   * @returns {void}
-   */
-  flush (done, options) {
-    const flush = callback => this.flushDirect(callback, options)
-    if (this.#onFlush) return this.#onFlush(flush, done)
-    flush(done)
-  }
-
   flushDirect (done, options) {
     if (this.#requestTracker) {
       this.#requestTracker.flush(done, options)
       return
     }
-    super.flush(done, options)
+    super.flushDirect(done, options)
   }
 
   _sendPayload (data, count, done, flushOptions) {

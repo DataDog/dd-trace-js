@@ -51,92 +51,428 @@ describe('Tracer', () => {
   })
 
   describe('flushAll', () => {
-    it('flushes registered telemetry pipelines with the configured trace exporter', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
-      const tracer = {
-        _exporter: {
-          flush: sinon.stub().callsFake(done => done()),
+    it('registers its trace exporter without requiring span statistics', () => {
+      const registerFlusher = sinon.spy()
+
+      tracer = new Tracer(config, undefined, registerFlusher)
+
+      sinon.assert.calledWith(registerFlusher, 'traces', sinon.match.func, { trace: true })
+      sinon.assert.neverCalledWith(registerFlusher, 'span-stats', sinon.match.func)
+    })
+
+    it('does not require lifecycle flushing from the log exporter', () => {
+      const registerFlusher = sinon.spy()
+      config.experimental.exporter = 'log'
+
+      tracer = new Tracer(config, undefined, registerFlusher)
+
+      sinon.assert.neverCalledWith(registerFlusher, 'traces', sinon.match.func)
+    })
+
+    it('registers configured span statistics through the base tracer owner', () => {
+      const registerFlusher = sinon.spy()
+      config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+
+      tracer = new Tracer(config, undefined, registerFlusher)
+
+      sinon.assert.calledWith(registerFlusher, 'span-stats', sinon.match.func)
+    })
+
+    it('registers lifecycle callbacks supplied by the base tracer owner', () => {
+      const traceFlusher = sinon.spy()
+      const spanStatsFlusher = sinon.spy()
+      const registerFlusher = sinon.spy()
+      const OwnedTracer = proxyquire('../src/tracer', {
+        './opentracing/tracer': class {
+          constructor (tracerConfig, prioritySampler, lifecycleFlushers) {
+            lifecycleFlushers.traces = traceFlusher
+            lifecycleFlushers.spanStats = spanStatsFlusher
+          }
         },
-      }
+      })
+
+      tracer = new OwnedTracer(config, undefined, registerFlusher)
+
+      sinon.assert.calledWithExactly(registerFlusher, 'traces', traceFlusher, { trace: true })
+      sinon.assert.calledWithExactly(registerFlusher, 'span-stats', spanStatsFlusher)
+    })
+
+    it('does not register exporters from a partially initialized tracer', () => {
+      const constructorError = new Error('scope failed')
+      const registerFlusher = sinon.spy()
+      const PartialTracer = proxyquire('../src/tracer', {
+        './opentracing/tracer': class {
+          constructor () {
+            this._exporter = { flush () {} }
+            this._processor = {}
+          }
+        },
+        './scope': class {
+          constructor () { throw constructorError }
+        },
+      })
+
+      assert.throws(() => new PartialTracer(config, undefined, registerFlusher), constructorError)
+      sinon.assert.notCalled(registerFlusher)
+    })
+
+    it('replaces a configured pipeline with the same name', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const first = sinon.stub().callsFake(done => done())
+      const second = sinon.stub().callsFake(done => done())
+      const done = sinon.spy()
+
+      const unregisterFirst = registerFlusher('logs', first)
+      registerFlusher('logs', second)
+      unregisterFirst()
+      flushAll(done)
+
+      sinon.assert.notCalled(first)
+      sinon.assert.calledOnce(second)
+      sinon.assert.calledOnce(done)
+      unregisterFlusher('logs')
+    })
+
+    it('flushes registered telemetry pipelines with the configured trace exporter', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const traceFlusher = sinon.stub().callsFake(done => done())
       const telemetryFlusher = sinon.stub().callsFake(done => done())
-      const unregister = registerTelemetryFlusher(telemetryFlusher)
       let completed = false
+      registerFlusher('traces', traceFlusher, { trace: true })
+      registerFlusher('telemetry', telemetryFlusher)
 
-      flushAll(tracer, () => { completed = true })
+      flushAll(() => { completed = true })
 
-      sinon.assert.calledOnce(tracer._exporter.flush)
+      sinon.assert.calledOnce(traceFlusher)
       sinon.assert.calledOnce(telemetryFlusher)
       assert.strictEqual(completed, true)
-      unregister()
+      unregisterFlusher('traces')
+      unregisterFlusher('telemetry')
     })
 
     it('flushes post-trace telemetry after the trace exporter completes', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
       let traceDone
-      const tracer = { _exporter: { flush: sinon.stub().callsFake(done => { traceDone = done }) } }
+      const traceFlusher = sinon.stub().callsFake(done => { traceDone = done })
       const runtimeMetricsFlusher = sinon.stub().callsFake(done => done())
-      const unregister = registerTelemetryFlusher(runtimeMetricsFlusher, { afterTrace: true })
       const done = sinon.spy()
+      registerFlusher('traces', traceFlusher, { trace: true })
+      registerFlusher('runtime-metrics', runtimeMetricsFlusher, { afterTrace: true })
 
-      flushAll(tracer, done)
+      flushAll(done)
 
       sinon.assert.notCalled(runtimeMetricsFlusher)
       traceDone()
       sinon.assert.calledOnce(runtimeMetricsFlusher)
       sinon.assert.calledOnce(done)
-      unregister()
+      unregisterFlusher('traces')
+      unregisterFlusher('runtime-metrics')
+    })
+
+    it('flushes post-trace telemetry immediately without a trace exporter', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const runtimeMetricsFlusher = sinon.stub().callsFake(done => done())
+      const done = sinon.spy()
+      registerFlusher('runtime-metrics', runtimeMetricsFlusher, { afterTrace: true })
+
+      try {
+        flushAll(done)
+
+        sinon.assert.calledOnce(runtimeMetricsFlusher)
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregisterFlusher('runtime-metrics')
+      }
     })
 
     it('flushes registered telemetry pipelines without a trace exporter', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
       const telemetryFlusher = sinon.stub().callsFake(done => done())
-      const unregister = registerTelemetryFlusher(telemetryFlusher)
       const done = sinon.spy()
+      registerFlusher('telemetry', telemetryFlusher)
 
-      flushAll(undefined, done)
+      flushAll(done)
 
       sinon.assert.calledOnce(telemetryFlusher)
       sinon.assert.calledOnce(done)
-      unregister()
+      unregisterFlusher('telemetry')
     })
 
     it('waits for callback flushers that return a synchronous status', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
       let flushDone
       const telemetryFlusher = sinon.stub().callsFake(done => {
         flushDone = done
         return false
       })
-      const unregister = registerTelemetryFlusher(telemetryFlusher)
       const done = sinon.spy()
+      registerFlusher('telemetry', telemetryFlusher)
 
       try {
-        flushAll(undefined, done)
+        flushAll(done)
 
         sinon.assert.notCalled(done)
         flushDone()
         sinon.assert.calledOnce(done)
       } finally {
-        unregister()
+        unregisterFlusher('telemetry')
+      }
+    })
+
+    it('waits for promise flushers', async () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      let resolveFlusher
+      const flusherPromise = new Promise(resolve => { resolveFlusher = resolve })
+      registerFlusher('telemetry', () => flusherPromise)
+      let completed = false
+      const flushed = new Promise(resolve => {
+        flushAll(() => {
+          completed = true
+          resolve()
+        })
+      })
+
+      try {
+        assert.strictEqual(completed, false)
+        resolveFlusher()
+        await flushed
+        assert.strictEqual(completed, true)
+      } finally {
+        unregisterFlusher('telemetry')
+      }
+    })
+
+    it('logs a failure reported through the flusher callback', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const log = require('../src/log')
+      const errorLog = sinon.stub(log, 'error')
+      const flushError = new Error('flush failed')
+      const done = sinon.spy()
+      registerFlusher('telemetry', flushDone => flushDone(flushError))
+
+      try {
+        flushAll(done)
+
+        sinon.assert.calledOnceWithExactly(errorLog, 'Error flushing telemetry pipeline: %s', flushError)
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregisterFlusher('telemetry')
+        errorLog.restore()
+      }
+    })
+
+    it('ignores a promise rejection after its flusher callback completes', async () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const log = require('../src/log')
+      const errorLog = sinon.stub(log, 'error')
+      const flushError = new Error('late failure')
+      const done = sinon.spy()
+      registerFlusher('telemetry', flushDone => {
+        flushDone()
+        return Promise.reject(flushError)
+      })
+
+      try {
+        flushAll(done)
+        await new Promise(resolve => setImmediate(resolve))
+
+        sinon.assert.notCalled(errorLog)
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregisterFlusher('telemetry')
+        errorLog.restore()
+      }
+    })
+
+    it('completes once when a flusher invokes its callback more than once', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const done = sinon.spy()
+      registerFlusher('telemetry', flushDone => {
+        flushDone()
+        flushDone()
+      })
+
+      try {
+        flushAll(done)
+
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregisterFlusher('telemetry')
+      }
+    })
+
+    it('logs an error thrown after a flusher completes without completing twice', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const log = require('../src/log')
+      const errorLog = sinon.stub(log, 'error')
+      const flushError = new Error('post-completion failure')
+      const done = sinon.spy()
+      registerFlusher('telemetry', flushDone => {
+        flushDone()
+        throw flushError
+      })
+
+      try {
+        flushAll(done)
+
+        sinon.assert.calledOnceWithExactly(errorLog, 'Error flushing telemetry pipeline: %s', flushError)
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregisterFlusher('telemetry')
+        errorLog.restore()
+      }
+    })
+
+    it('logs a falsy value thrown by a flusher', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const log = require('../src/log')
+      const errorLog = sinon.stub(log, 'error')
+      const flushError = null
+      const done = sinon.spy()
+      registerFlusher('telemetry', () => { throw flushError })
+
+      try {
+        flushAll(done)
+
+        sinon.assert.calledOnceWithExactly(errorLog, 'Error flushing telemetry pipeline: %s', flushError)
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregisterFlusher('telemetry')
+        errorLog.restore()
+      }
+    })
+
+    it('continues flushing sibling pipelines when one flusher throws', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const flushError = new Error('logs failed')
+      const metricsFlusher = sinon.stub().callsFake(done => done())
+      const done = sinon.spy()
+      registerFlusher('logs', () => { throw flushError })
+      registerFlusher('metrics', metricsFlusher)
+
+      try {
+        flushAll(done)
+
+        sinon.assert.calledOnce(metricsFlusher)
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregisterFlusher('logs')
+        unregisterFlusher('metrics')
+      }
+    })
+
+    it('logs a falsy value rejected by a promise flusher', async () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const log = require('../src/log')
+      const errorLog = sinon.stub(log, 'error')
+      const flushError = null
+      registerFlusher('telemetry', () => Promise.reject(flushError))
+
+      try {
+        await new Promise(resolve => flushAll(resolve))
+
+        sinon.assert.calledOnceWithExactly(errorLog, 'Error flushing telemetry pipeline: %s', flushError)
+      } finally {
+        unregisterFlusher('telemetry')
+        errorLog.restore()
       }
     })
 
     it('bounds configured telemetry flushing', () => {
-      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
       const timeout = sinon.stub(global, 'setTimeout')
       const clearTimeout = sinon.stub(global, 'clearTimeout')
+      const cancel = sinon.spy()
       const done = sinon.spy()
-      const unregister = registerTelemetryFlusher(() => {})
+      registerFlusher('telemetry', () => cancel)
 
       try {
-        flushAll({}, done, { timeout: 2_000 })
+        flushAll(done, { timeout: 2_000 })
 
         sinon.assert.calledWith(timeout, sinon.match.func, 2_000)
         timeout.firstCall.args[0]()
         sinon.assert.calledOnce(done)
+        sinon.assert.calledOnce(cancel)
         sinon.assert.called(clearTimeout)
       } finally {
-        unregister()
+        unregisterFlusher('telemetry')
+        timeout.restore()
+        clearTimeout.restore()
+      }
+    })
+
+    it('continues cancelling telemetry flushes when one cancellation throws', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const timeout = sinon.stub(global, 'setTimeout')
+      const clearTimeout = sinon.stub(global, 'clearTimeout')
+      const failedCancel = sinon.stub().throws(new Error('cancel failed'))
+      const successfulCancel = sinon.spy()
+      const done = sinon.spy()
+      registerFlusher('logs', () => failedCancel)
+      registerFlusher('metrics', () => successfulCancel)
+
+      try {
+        flushAll(done, { timeout: 2_000 })
+        timeout.firstCall.args[0]()
+
+        sinon.assert.calledOnce(failedCancel)
+        sinon.assert.calledOnce(successfulCancel)
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregisterFlusher('logs')
+        unregisterFlusher('metrics')
+        timeout.restore()
+        clearTimeout.restore()
+      }
+    })
+
+    it('cancels only telemetry flushes still pending at the timeout', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const timeout = sinon.stub(global, 'setTimeout')
+      const clearTimeout = sinon.stub(global, 'clearTimeout')
+      const completedCancel = sinon.spy()
+      const pendingCancel = sinon.spy()
+      let completeLogs
+      registerFlusher('logs', done => {
+        completeLogs = done
+        return completedCancel
+      })
+      registerFlusher('metrics', () => pendingCancel)
+
+      try {
+        flushAll(sinon.spy(), { timeout: 2_000 })
+        completeLogs()
+        timeout.firstCall.args[0]()
+
+        sinon.assert.notCalled(completedCancel)
+        sinon.assert.calledOnce(pendingCancel)
+      } finally {
+        unregisterFlusher('logs')
+        unregisterFlusher('metrics')
+        timeout.restore()
+        clearTimeout.restore()
+      }
+    })
+
+    it('does not start post-trace telemetry after the flush times out', () => {
+      const { flushAll, registerFlusher, unregisterFlusher } = require('../src/flush')
+      const timeout = sinon.stub(global, 'setTimeout')
+      const clearTimeout = sinon.stub(global, 'clearTimeout')
+      let traceDone
+      const traceFlusher = sinon.stub().callsFake(done => { traceDone = done })
+      const runtimeMetricsFlusher = sinon.spy()
+      registerFlusher('traces', traceFlusher, { trace: true })
+      registerFlusher('runtime-metrics', runtimeMetricsFlusher, { afterTrace: true })
+
+      try {
+        flushAll(sinon.spy(), { timeout: 2_000 })
+        timeout.firstCall.args[0]()
+        traceDone()
+
+        sinon.assert.notCalled(runtimeMetricsFlusher)
+      } finally {
+        unregisterFlusher('traces')
+        unregisterFlusher('runtime-metrics')
         timeout.restore()
         clearTimeout.restore()
       }

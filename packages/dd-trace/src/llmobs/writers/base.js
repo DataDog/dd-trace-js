@@ -2,6 +2,7 @@
 
 const { URL, format } = require('node:url')
 const path = require('node:path')
+const PendingOperations = require('../../exporters/common/pending-operations')
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config/helper')
 
@@ -33,9 +34,11 @@ class LLMObsBuffer {
 
 class BaseLLMObsWriter {
   #destroyer
-  #activeRequests = new Set()
   /** @type {Map<string, LLMObsBuffer>} */
   #multiTenantBuffers = new Map()
+  #operations = new PendingOperations()
+  #ready = new PendingOperations()
+  #readyDone = this.#ready.start()
 
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
     this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
@@ -117,18 +120,30 @@ class BaseLLMObsWriter {
    * @param {Function} [done]
    */
   flush (done) {
-    if (this._agentless == null) return done?.()
+    if (this._agentless == null) {
+      if (!done) return
 
-    const activeRequests = [...this.#activeRequests]
-    const requests = this.#drainBuffers()
-    let pending = activeRequests.length + requests.length
-    const complete = () => {
-      if (--pending === 0) done?.()
+      let cancelFlush
+      let cancelled = false
+      const cancelReady = this.#ready.wait(() => {
+        if (!cancelled) cancelFlush = this.flush(done)
+      })
+      return () => {
+        cancelled = true
+        cancelReady()
+        cancelFlush?.()
+      }
     }
 
-    if (pending === 0) return done?.()
-    for (const activeRequest of activeRequests) activeRequest.callbacks.push(complete)
-    for (const request of requests) this.#send(request, complete)
+    const requests = this.#drainBuffers()
+    for (const request of requests) {
+      try {
+        this.#send(request)
+      } catch (error) {
+        log.warn('Failed to flush LLMObs payload: %s', error)
+      }
+    }
+    if (done) return this.#operations.wait(done)
   }
 
   #drainBuffers () {
@@ -167,16 +182,22 @@ class BaseLLMObsWriter {
     return requests
   }
 
-  #send ({ events, options, url }, done) {
+  #send ({ events, options, url }) {
     const payload = this._encode(this.makePayload(events))
-    const activeRequest = { callbacks: done ? [done] : [] }
-    this.#activeRequests.add(activeRequest)
+    const complete = this.#operations.start()
     log.debug('Encoded LLMObs payload: %s', payload)
-    request(payload, options, (err, resp, code) => {
-      parseResponseAndLog(err, code, events.length, url, this._eventType)
-      this.#activeRequests.delete(activeRequest)
-      for (const callback of activeRequest.callbacks) callback()
-    })
+    try {
+      request(payload, options, (err, resp, code) => {
+        try {
+          parseResponseAndLog(err, code, events.length, url, this._eventType)
+        } finally {
+          complete()
+        }
+      })
+    } catch (error) {
+      complete()
+      throw error
+    }
   }
 
   #cleanupEmptyBuffers () {
@@ -207,6 +228,8 @@ class BaseLLMObsWriter {
     this._endpoint = endpoint
 
     logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
+    this.#readyDone?.()
+    this.#readyDone = undefined
   }
 
   _getUrlAndPath () {

@@ -102,6 +102,7 @@ class PeriodicMetricReader {
   #droppedCount = 0
   #timer = null
   #isShutdown = false
+  #onShutdown
   #exportInterval
   #aggregator
   #batchCallbacks = []
@@ -113,10 +114,12 @@ class PeriodicMetricReader {
    * @param {number} exportInterval - Export interval in milliseconds
    * @param {string} temporalityPreference - Temporality preference: DELTA, CUMULATIVE, or LOWMEMORY
    * @param {number} maxBatchedQueueSize - Maximum number of measurements to queue before dropping
+   * @param {() => void} [onShutdown] - Called when this reader first shuts down
    */
-  constructor (exporter, exportInterval, temporalityPreference, maxBatchedQueueSize) {
+  constructor (exporter, exportInterval, temporalityPreference, maxBatchedQueueSize, onShutdown) {
     this.exporter = exporter
     this.observableInstruments = new Set()
+    this.#onShutdown = onShutdown
     this.#exportInterval = exportInterval
     this.#aggregator = new MetricAggregator(temporalityPreference, maxBatchedQueueSize)
     this.#startTimer()
@@ -198,6 +201,7 @@ class PeriodicMetricReader {
   /**
    * Forces an immediate collection and export of all metrics.
    * @param {Function} [done] Called after the metric export completes
+   * @returns {(() => void)|undefined} Detaches the callback from this flush boundary
    */
   forceFlush (done) {
     if (this.#isShutdown) {
@@ -211,9 +215,19 @@ class PeriodicMetricReader {
     }
 
     // Snapshot requests already active before starting this flush's export.
-    if (typeof this.exporter.flush === 'function') this.exporter.flush(complete)
-    else complete()
-    this.#collectAndExport(complete)
+    const cancelActive = typeof this.exporter.flush === 'function'
+      ? this.exporter.flush(complete)
+      : complete()
+    try {
+      this.#collectAndExport(complete)
+    } catch (error) {
+      log.error('Failed to flush OpenTelemetry metrics: %s', error)
+      complete()
+    }
+    return () => {
+      done = undefined
+      cancelActive?.()
+    }
   }
 
   /**
@@ -226,8 +240,9 @@ class PeriodicMetricReader {
       return
     }
     this.#isShutdown = true
+    this.#onShutdown?.()
+    this.#onShutdown = undefined
     this.#clearTimer()
-    this.forceFlush()
   }
 
   /**

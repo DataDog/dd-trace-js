@@ -22,6 +22,7 @@ const Logger = require('./logger')
 class LoggerProvider {
   #loggers
   #contextManager
+  #onShutdown
 
   /**
    * Creates a new LoggerProvider instance with a single processor for Datadog Agent export.
@@ -29,9 +30,11 @@ class LoggerProvider {
    * @param {object} [options] - LoggerProvider options
    * @param {BatchLogRecordProcessor} [options.processor] - Single LogRecordProcessor instance for
    *   exporting logs to Datadog Agent
+   * @param {() => void} [options.onShutdown] - Called when this provider first shuts down
    */
   constructor (options = {}) {
     this.processor = options.processor
+    this.#onShutdown = options.onShutdown
     this.#loggers = new Map()
     this.#contextManager = new ContextManager()
     this.isShutdown = false
@@ -71,15 +74,19 @@ class LoggerProvider {
 
   /**
    * Registers this logger provider as the global provider.
+   * @returns {boolean} Whether this provider owns the global registration
    */
   register () {
     if (this.isShutdown) {
       log.warn('Cannot register after shutdown')
-      return
+      return false
     }
-    // Set context manager, this is required to correlate logs to spans
-    context.setGlobalContextManager(this.#contextManager)
-    logs.setGlobalLoggerProvider(this)
+    const ownsGlobalProvider = logs.setGlobalLoggerProvider(this) === this
+    if (ownsGlobalProvider) {
+      // Set context manager, this is required to correlate logs to spans
+      context.setGlobalContextManager(this.#contextManager)
+    }
+    return ownsGlobalProvider
   }
 
   /**
@@ -92,7 +99,7 @@ class LoggerProvider {
       return
     }
 
-    this.processor.forceFlush(done)
+    return this.processor.forceFlush(done)
   }
 
   /**
@@ -102,6 +109,8 @@ class LoggerProvider {
   shutdown () {
     if (!this.isShutdown) {
       this.isShutdown = true
+      this.#onShutdown?.()
+      this.#onShutdown = undefined
     }
   }
 
