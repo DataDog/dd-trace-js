@@ -176,6 +176,24 @@ describe('BaseLLMObsWriter', () => {
     sinon.assert.calledWith(logger.warn, 'BaseLLMObsWriter event buffer full (limit is 1000), dropping event')
   })
 
+  describe('in a Lambda environment', () => {
+    useEnv({
+      AWS_LAMBDA_FUNCTION_NAME: 'my-function',
+    })
+
+    it('flushes synchronously on append instead of using a periodic timer', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+
+      writer.append({ foo: 'bar' })
+
+      assert.strictEqual(writer._periodic, undefined)
+      assert.strictEqual(writer._buffer.events.length, 0)
+      sinon.assert.calledOnce(request)
+    })
+  })
+
   describe('flush', () => {
     it('flushes a buffer in agentless mode', () => {
       writer = new BaseLLMObsWriter(options)
