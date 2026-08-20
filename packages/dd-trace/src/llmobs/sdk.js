@@ -24,6 +24,7 @@ const {
   validateTimestamp,
 } = require('./eval-metric')
 const {
+  findMessageMediaPartKey,
   getFunctionArguments,
   validateKind,
 } = require('./util')
@@ -292,6 +293,7 @@ class LLMObs extends NoopLLMObs {
         } else if (spanKind === 'retrieval') {
           this._tagger.tagRetrievalIO(span, inputData, outputData)
         } else {
+          this.#warnUnsupportedMediaParts(span, spanKind, inputData, outputData)
           this._tagger.tagTextIO(span, inputData, outputData)
         }
       }
@@ -632,6 +634,31 @@ class LLMObs extends NoopLLMObs {
     }
 
     this.annotate(span, annotations, true)
+  }
+
+  // Only `llm` spans route through `tagLLMIO`, so media parts annotated on a kind that falls through
+  // to `tagTextIO` (agent, workflow, task, tool, experiment) are stringified into the input/output
+  // value: unvalidated, camelCase, and not rendered as media. Say so out loud rather than losing them
+  // quietly. `embedding` and `retrieval` already reject message-shaped data in their own taggers.
+  /**
+   * @param {Span} span
+   * @param {string} spanKind
+   * @param {unknown} inputData
+   * @param {unknown} outputData
+   * @returns {void}
+   */
+  #warnUnsupportedMediaParts (span, spanKind, inputData, outputData) {
+    const mediaPartKey = findMessageMediaPartKey(inputData) ?? findMessageMediaPartKey(outputData)
+    if (mediaPartKey === undefined) return
+
+    logger.warn(
+      '"%s" on a "%s" span is not recorded as media: only an "llm" span emits typed media parts. ' +
+      'It is serialized into the span value unvalidated and will not render. Use kind "llm" instead.',
+      mediaPartKey,
+      spanKind
+    )
+
+    telemetry.recordUnsupportedMediaParts(span, mediaPartKey)
   }
 
   _active () {

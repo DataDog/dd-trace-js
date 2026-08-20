@@ -126,6 +126,20 @@ function recordLLMObsAnnotate (span, err, value = 1) {
   llmobsMetrics.count('annotations', tags).inc(value)
 }
 
+// Counts annotations carrying media parts on a span kind that cannot emit them as typed parts.
+// Deliberately a separate metric rather than an `error_type` on `annotations`: the annotation still
+// succeeds, so folding it in would redefine `annotations{error:1}` as something other than "annotate
+// threw". `mediaPartKey` comes from a fixed key list, so it is safe as a tag.
+function recordUnsupportedMediaParts (span, mediaPartKey, value = 1) {
+  const mlObsTags = LLMObsTagger.tagMap.get(span) || {}
+  const tags = {
+    span_kind: mlObsTags[SPAN_KIND] || 'N/A',
+    media_part_key: mediaPartKey,
+  }
+
+  llmobsMetrics.count('annotations.unsupported_media_parts', tags).inc(value)
+}
+
 function recordCostTagsAnnotated (span, source, value = 1) {
   const mlObsTags = LLMObsTagger.tagMap.get(span) || {}
   const tags = {
@@ -213,6 +227,7 @@ module.exports = {
   recordLLMObsSpanSize,
   recordDroppedPayload,
   recordLLMObsAnnotate,
+  recordUnsupportedMediaParts,
   recordCostTagsAnnotated,
   recordCostTagsSubmitted,
   recordUserFlush,

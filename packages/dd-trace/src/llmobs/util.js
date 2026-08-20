@@ -576,6 +576,41 @@ function imagePartFromDataUri (url) {
   const base64 = url.slice(comma + 1)
   return base64 ? formatImagePart(base64, mimeType) : undefined
 }
+// The message keys the tagger turns into typed wire fields (`audio_parts`, `image_parts`) in
+// `#tagMessages`. Keep in sync with the keys destructured there; a third media type has to be
+// added in both places.
+const MESSAGE_MEDIA_PART_KEYS = ['audioParts', 'imageParts']
+
+// Reports the first media part key found on annotated input/output data, or `undefined` if there is
+// none. Only `llm` spans route through `#tagMessages`, so on any other kind these keys are neither
+// validated nor emitted as typed parts, and the SDK warns instead of discarding them quietly.
+/**
+ * @param {unknown} data
+ * @returns {string | undefined}
+ */
+function findMessageMediaPartKey (data) {
+  let mediaPartKey
+
+  // A string or number input skips the scan entirely, allocating nothing.
+  if (typeof data === 'object' && data !== null) {
+    const messages = Array.isArray(data) ? data : [data]
+
+    for (const message of messages) {
+      if (typeof message !== 'object' || message === null) continue
+
+      for (const key of MESSAGE_MEDIA_PART_KEYS) {
+        if (message[key] != null) {
+          mediaPartKey = key
+          break
+        }
+      }
+
+      if (mediaPartKey !== undefined) break
+    }
+  }
+
+  return mediaPartKey
+}
 
 module.exports = {
   agentNameWireSafe,
@@ -583,6 +618,7 @@ module.exports = {
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
+  findMessageMediaPartKey,
   generateLlmObsTraceId,
   imagePartFromDataUri,
   isDataUri,

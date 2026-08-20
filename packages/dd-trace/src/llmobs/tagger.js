@@ -803,6 +803,8 @@ class LLMObsTagger {
         continue
       }
 
+      // A new media part key added here also belongs in `MESSAGE_MEDIA_PART_KEYS` (util.js), which is
+      // how the SDK warns when it is annotated on a span kind that never reaches this tagger.
       const {
         role = '',
         content,

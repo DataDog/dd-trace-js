@@ -9,8 +9,10 @@ const sinon = require('sinon')
 
 const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 const LLMObsTagger = require('../../../src/llmobs/tagger')
+const telemetry = require('../../../src/llmobs/telemetry')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
+const log = require('../../../src/log')
 const agent = require('../../plugins/agent')
 const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
@@ -1140,6 +1142,126 @@ describe('sdk', () => {
               image_parts: [{ mime_type: 'image/jpeg', attachment_key: 'key-123' }],
             },
           ],
+        })
+      })
+    })
+
+    describe('media parts on a span kind that cannot carry them', () => {
+      const imagePart = { mimeType: 'image/png', content: 'iVBORw0KGgo=' }
+      const audioPart = { mimeType: 'audio/wav', content: 'aGVsbG8=' }
+
+      let warn
+      let recordUnsupportedMediaParts
+
+      beforeEach(() => {
+        warn = sinon.stub(log, 'warn')
+        recordUnsupportedMediaParts = sinon.stub(telemetry, 'recordUnsupportedMediaParts')
+      })
+
+      afterEach(() => {
+        warn.restore()
+        recordUnsupportedMediaParts.restore()
+      })
+
+      // Every kind that falls through to `tagTextIO`. `embedding` and `retrieval` reject
+      // message-shaped data in their own taggers, so they are already loud.
+      for (const kind of ['task', 'workflow', 'agent', 'tool']) {
+        it(`warns and records telemetry for a "${kind}" span`, () => {
+          const inputData = [{ role: 'user', content: 'hi', imageParts: [imagePart] }]
+
+          llmobs.trace({ kind, name: 'test' }, span => {
+            llmobs.annotate({ inputData })
+
+            sinon.assert.calledOnce(warn)
+            assert.match(warn.firstCall.args[0], /only an "llm" span emits typed media parts/)
+            assert.deepStrictEqual(warn.firstCall.args.slice(1), ['imageParts', kind])
+
+            sinon.assert.calledOnceWithExactly(recordUnsupportedMediaParts, span, 'imageParts')
+          })
+        })
+      }
+
+      it('names audioParts when that is the key present', () => {
+        const inputData = [{ role: 'user', content: 'hi', audioParts: [audioPart] }]
+
+        llmobs.trace({ kind: 'task', name: 'test' }, span => {
+          llmobs.annotate({ inputData })
+
+          assert.deepStrictEqual(warn.firstCall.args.slice(1), ['audioParts', 'task'])
+          sinon.assert.calledOnceWithExactly(recordUnsupportedMediaParts, span, 'audioParts')
+        })
+      })
+
+      it('detects media parts on outputData', () => {
+        llmobs.trace({ kind: 'task', name: 'test' }, () => {
+          llmobs.annotate({ outputData: [{ role: 'assistant', content: 'hi', imageParts: [imagePart] }] })
+
+          sinon.assert.calledOnce(warn)
+          assert.deepStrictEqual(warn.firstCall.args.slice(1), ['imageParts', 'task'])
+        })
+      })
+
+      it('detects media parts on a single message object', () => {
+        llmobs.trace({ kind: 'task', name: 'test' }, () => {
+          llmobs.annotate({ inputData: { role: 'user', content: 'hi', imageParts: [imagePart] } })
+
+          sinon.assert.calledOnce(warn)
+        })
+      })
+
+      it('still serializes the annotated data into the span value', () => {
+        const inputData = [{ role: 'user', content: 'hi', imageParts: [imagePart] }]
+
+        llmobs.trace({ kind: 'task', name: 'test' }, span => {
+          llmobs.annotate({ inputData })
+
+          assert.strictEqual(
+            LLMObsTagger.tagMap.get(span)['_ml_obs.meta.input.value'],
+            JSON.stringify(inputData)
+          )
+        })
+      })
+
+      it('does not warn for an llm span, which records the parts as typed', () => {
+        const inputData = [{ role: 'user', content: 'hi', imageParts: [imagePart], audioParts: [audioPart] }]
+
+        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+          llmobs.annotate({ inputData })
+
+          sinon.assert.notCalled(warn)
+          sinon.assert.notCalled(recordUnsupportedMediaParts)
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span)['_ml_obs.meta.input.messages'], [{
+            role: 'user',
+            content: 'hi',
+            audio_parts: [{ mime_type: 'audio/wav', content: 'aGVsbG8=' }],
+            image_parts: [{ mime_type: 'image/png', content: 'iVBORw0KGgo=' }],
+          }])
+        })
+      })
+
+      it('does not warn for a task span carrying no media parts', () => {
+        llmobs.trace({ kind: 'task', name: 'test' }, () => {
+          llmobs.annotate({ inputData: [{ role: 'user', content: 'hi' }], outputData: 'plain string' })
+
+          sinon.assert.notCalled(warn)
+          sinon.assert.notCalled(recordUnsupportedMediaParts)
+        })
+      })
+
+      it('does not warn for a task span annotated with a plain string', () => {
+        llmobs.trace({ kind: 'task', name: 'test' }, () => {
+          llmobs.annotate({ inputData: 'hi', outputData: 'there' })
+
+          sinon.assert.notCalled(warn)
+        })
+      })
+
+      it('tolerates a null entry alongside a message carrying media parts', () => {
+        llmobs.trace({ kind: 'task', name: 'test' }, () => {
+          llmobs.annotate({ inputData: [null, { role: 'user', content: 'hi', imageParts: [imagePart] }] })
+
+          sinon.assert.calledOnce(warn)
+          assert.deepStrictEqual(warn.firstCall.args.slice(1), ['imageParts', 'task'])
         })
       })
     })
