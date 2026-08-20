@@ -11,8 +11,8 @@ const { AUDIO_MIME_TYPES } = require('./constants')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
-  extractTextFromContentItem,
   extractContentParts,
+  extractResponseInputContent,
   hasMultimodalInputs,
   getOpenAIModelProvider,
 } = require('./utils')
@@ -32,17 +32,19 @@ function isIterable (obj) {
 }
 
 // Flattens multimodal chat input messages (array `content`) into readable text plus structured
-// `audioParts`, leaving plain-string messages untouched. Model-agnostic: keys off message
-// structure, so it works for any audio-capable chat model (gpt-audio*, gpt-4o-audio-preview, ...).
+// `audioParts` and `imageParts`, leaving plain-string messages untouched. Model-agnostic: keys off
+// message structure, so it works for any audio- or vision-capable chat model (gpt-audio*,
+// gpt-4o-audio-preview, gpt-4o, ...).
 function flattenChatInputMessages (messages) {
   if (!Array.isArray(messages)) return messages
 
   return messages.map(message => {
     if (!Array.isArray(message?.content)) return message
 
-    const { content, audioParts } = extractContentParts(message.content)
+    const { content, audioParts, imageParts } = extractContentParts(message.content)
     const flattenedMessage = { ...message, content }
     if (audioParts.length) flattenedMessage.audioParts = audioParts
+    if (imageParts.length) flattenedMessage.imageParts = imageParts
     return flattenedMessage
   })
 }
@@ -294,17 +296,20 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           if (!role) continue
 
           let content = ''
+          let imageParts
           if (Array.isArray(item.content)) {
-            const textParts = item.content
-              .map(extractTextFromContentItem)
-              .filter(Boolean)
-            content = textParts.join('')
+            const extracted = extractResponseInputContent(item.content)
+            content = extracted.content
+            if (extracted.imageParts.length) imageParts = extracted.imageParts
           } else if (typeof item.content === 'string') {
             content = item.content
           }
 
-          if (content) {
-            inputMessages.push({ role, content })
+          // An image-only message carries no text, so it would otherwise be dropped here.
+          if (content || imageParts) {
+            const inputMessage = { role, content }
+            if (imageParts) inputMessage.imageParts = imageParts
+            inputMessages.push(inputMessage)
           }
         } else if (item.type === 'function_call') {
           inputMessages.push({

@@ -1,6 +1,7 @@
 'use strict'
 
-const { extractContentParts, extractTextFromContentItem } = require('../openai/utils')
+const { INPUT_TYPE_IMAGE } = require('../openai/constants')
+const { extractContentParts, extractResponseInputContent, extractTextFromContentItem } = require('../openai/utils')
 const { safeJsonParse } = require('../../util')
 
 /**
@@ -8,14 +9,30 @@ const { safeJsonParse } = require('../../util')
  * provider-specific image or audio inputs.
  *
  * @param {Array<object>} parts
- * @returns {{ content: string, audioParts: Array<{ mimeType: string, content: string }> }}
+ * @returns {{
+ *   content: string,
+ *   audioParts: Array<{ mimeType: string, content: string }>,
+ *   imageParts: Array<{ mimeType: string, content: string }>,
+ * }}
  */
 function extractMessageContent (parts) {
   const contentParts = []
   const audioParts = []
+  const imageParts = []
 
   for (const part of parts) {
     if (!part) continue
+
+    // Responses-shape images are handled before the text path: `extractTextFromContentItem` returns
+    // the raw `image_url` for an `input_image`, which would splice an entire inline base64 payload
+    // into the text instead of attaching it as an image part.
+    if (part.type === INPUT_TYPE_IMAGE) {
+      const extracted = extractResponseInputContent([part])
+      if (extracted.content) contentParts.push(extracted.content)
+      if (extracted.imageParts.length > 0) imageParts.push(...extracted.imageParts)
+      continue
+    }
+
     const text = extractTextFromContentItem(part)
     if (text) {
       contentParts.push(text)
@@ -25,9 +42,10 @@ function extractMessageContent (parts) {
     const extracted = extractContentParts([part])
     if (extracted.content) contentParts.push(extracted.content)
     if (extracted.audioParts.length > 0) audioParts.push(...extracted.audioParts)
+    if (extracted.imageParts.length > 0) imageParts.push(...extracted.imageParts)
   }
 
-  return { content: contentParts.join(''), audioParts }
+  return { content: contentParts.join(''), audioParts, imageParts }
 }
 
 /**
@@ -72,6 +90,7 @@ function normalizeChatCompletionMessage (message) {
     content: message.content ?? '',
   }
   if (message.audioParts?.length > 0) normalized.audioParts = message.audioParts
+  if (message.imageParts?.length > 0) normalized.imageParts = message.imageParts
   const toolCalls = extractChatCompletionToolCalls(message)
   if (toolCalls.length > 0) normalized.toolCalls = toolCalls
   if (message.tool_call_id) normalized.toolId = message.tool_call_id
@@ -105,16 +124,18 @@ function extractInputMessages (input, instructions) {
 
         let content = ''
         let audioParts
+        let imageParts
         if (Array.isArray(item.content)) {
           const extracted = extractMessageContent(item.content)
           content = extracted.content
           audioParts = extracted.audioParts
+          imageParts = extracted.imageParts
         } else if (typeof item.content === 'string') {
           content = item.content
         }
 
-        const message = normalizeChatCompletionMessage({ ...item, content, role, audioParts })
-        if (content || message.audioParts || message.toolCalls || message.toolId) {
+        const message = normalizeChatCompletionMessage({ ...item, content, role, audioParts, imageParts })
+        if (content || message.audioParts || message.imageParts || message.toolCalls || message.toolId) {
           messages.push(message)
         }
       } else if (item.type === 'function_call') {

@@ -501,7 +501,7 @@ function audioMimeTypeFromFormat (fmt, mimeTypeLookup = {}) {
   return mimeTypeLookup[fmt] ?? `audio/${fmt}`
 }
 
-// Builds an audio part from raw audio bytes (base64-encoded) or an existing base64 string. Only
+// Builds a media part from raw bytes (base64-encoded) or an existing base64 string. Only
 // Buffer/Uint8Array inputs are base64-encoded; any other shape is passed through so a malformed
 // auto-instrumented payload can't throw (the tagger soft-skips a non-string `content`).
 /**
@@ -509,11 +509,72 @@ function audioMimeTypeFromFormat (fmt, mimeTypeLookup = {}) {
  * @param {string} mimeType
  * @returns {{ mimeType: string, content: string }}
  */
-function formatAudioPart (data, mimeType) {
+function formatMediaPart (data, mimeType) {
   const content = Buffer.isBuffer(data) || ArrayBuffer.isView(data)
     ? Buffer.from(data).toString('base64')
     : data
   return { mimeType, content }
+}
+
+// Audio and image parts share a wire shape, so they share the builder. Both names are
+// exported so call sites read for the modality they handle.
+const formatAudioPart = formatMediaPart
+const formatImagePart = formatMediaPart
+
+const DATA_URI_PREFIX = 'data:'
+const BASE64_MARKER = ';base64'
+const IMAGE_MIME_PREFIX = 'image/'
+// `image/` plus a subtype and any parameters; RFC 6838 caps a subtype at 127 characters.
+const MAX_MEDIA_TYPE_LENGTH = 255
+
+// True when the reference is an inline `data:` URI, whatever its media type or encoding.
+//
+// Callers need this to tell "not inline, so keep the remote reference as text" apart from "inline but
+// unparseable, which must never be recorded verbatim" — a data URI we failed to parse still carries
+// its whole payload, so falling back to the raw reference would emit megabytes of base64 as text.
+// Only the 5-character prefix is lowercased; lowercasing the whole URL would copy the payload.
+/**
+ * @param {string | undefined} url
+ * @returns {url is string} - a type predicate, so callers narrow `url` before slicing it
+ */
+function isDataUri (url) {
+  return typeof url === 'string' &&
+    url.slice(0, DATA_URI_PREFIX.length).toLowerCase() === DATA_URI_PREFIX
+}
+
+// Parses a base64 `data:` URI carrying an image into an image part.
+//
+// Returns undefined for anything that isn't an inline base64 image — a remote `https://` link, a
+// `file_id` reference, a non-image media type, a non-base64 (percent-encoded) data URI, or a
+// malformed one. Pair it with `isDataUri` so an unparseable data URI becomes a marker rather than
+// raw text. Media-type parameters (`;charset=...`) are dropped to match the `mime_type` the backend
+// expects. Scheme and media type are matched case-insensitively, as dd-trace-py's regex is.
+//
+// Whitespace inside the payload is deliberately not stripped: a well-formed data URI has none,
+// base64 decoders tolerate it, and scanning a multi-megabyte string on every image would cost
+// more than it saves. This differs from dd-trace-py, which normalizes it.
+/**
+ * @param {string | undefined} url - a caller may pass an absent reference straight through
+ * @returns {{ mimeType: string, content: string } | undefined}
+ */
+function imagePartFromDataUri (url) {
+  if (!isDataUri(url)) return
+
+  // A media type plus its parameters is short. Bailing on an oversized header keeps a crafted one
+  // from being copied and, worse, emitted as a multi-megabyte `mime_type` that bypasses the content
+  // cap entirely. Checked before any slice of the header is taken.
+  const comma = url.indexOf(',')
+  if (comma === -1 || comma - DATA_URI_PREFIX.length > MAX_MEDIA_TYPE_LENGTH) return
+
+  const header = url.slice(DATA_URI_PREFIX.length, comma)
+  if (header.slice(-BASE64_MARKER.length).toLowerCase() !== BASE64_MARKER) return
+
+  // `header` ends with `;base64`, so there is always at least one semicolon to slice on.
+  const mimeType = header.slice(0, header.indexOf(';')).toLowerCase()
+  if (!mimeType.startsWith(IMAGE_MIME_PREFIX) || mimeType.length === IMAGE_MIME_PREFIX.length) return
+
+  const base64 = url.slice(comma + 1)
+  return base64 ? formatImagePart(base64, mimeType) : undefined
 }
 
 module.exports = {
@@ -523,9 +584,12 @@ module.exports = {
   encodeUnicode,
   findGenAIAncestorSpanId,
   generateLlmObsTraceId,
+  imagePartFromDataUri,
+  isDataUri,
   llmObsTraceIdToWire,
   normalizeLlmObsTraceId,
   formatAudioPart,
+  formatImagePart,
   resolveAgentAttribution,
   stripTagsetEntry,
   validateCostTags,

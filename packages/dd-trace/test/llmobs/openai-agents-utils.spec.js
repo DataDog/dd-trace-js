@@ -63,6 +63,45 @@ describe('openai-agents utils', () => {
       )
     })
 
+    it('captures a Chat Completions inline base64 image', () => {
+      const input = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'what is in this image?' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgo=' } },
+        ],
+      }]
+
+      assert.deepStrictEqual(
+        extractInputMessages(input),
+        [{
+          role: 'user',
+          content: 'what is in this image?',
+          imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=' }],
+        }]
+      )
+    })
+
+    it('captures a Responses inline base64 image instead of inlining it into the text', () => {
+      const input = [{
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'inspect ' },
+          { type: 'input_image', image_url: 'data:image/jpeg;base64,/9j/4AAQ' },
+        ],
+      }]
+
+      assert.deepStrictEqual(
+        extractInputMessages(input),
+        [{
+          role: 'user',
+          content: 'inspect ',
+          imageParts: [{ mimeType: 'image/jpeg', content: '/9j/4AAQ' }],
+        }]
+      )
+    })
+
     it('ignores null items and preserves image and file input parts', () => {
       const input = [
         null,

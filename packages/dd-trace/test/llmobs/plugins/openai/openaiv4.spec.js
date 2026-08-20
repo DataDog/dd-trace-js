@@ -19,6 +19,10 @@ const {
 const MODEL_AUDIO = 'gpt-audio-mini-2025-12-15'
 const MODEL_IMAGE = 'gpt-4o-2024-08-06'
 
+// A real 1x1 PNG (68 bytes), so the inline-image cassette is reproducible and the API accepts it as
+// a genuine image. Counterpart to makeWavClip below.
+const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII='
+
 // Deterministic real WAV bytes for a short mono 16-bit sine tone, so the audio-input cassette is
 // reproducible and the API accepts it as genuine audio.
 function makeWavClip ({ seconds = 0.4, freq = 440, rate = 16000 } = {}) {
@@ -333,6 +337,53 @@ describe('integrations', () => {
             },
           ],
           metadata: { modalities: ['text', 'audio'], audio: { voice: 'alloy', format: 'mp3' } },
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
+        })
+      })
+
+      // The request side is what this exercises, so the response in this cassette
+      // (openai_chat_completions_post_345f0067.json) is hand-authored rather than recorded: a real
+      // gpt-4o reply to a 1x1 PNG adds nothing, and recording needs a live API key. The assertion
+      // that matters — the inline image becoming an `image_parts` entry — comes from the real
+      // request travelling through the plugin, tagger and span writer.
+      it('submits a chat completion span with an inline base64 image captured as an image part', async () => {
+        await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'What is in this image?' },
+                { type: 'image_url', image_url: { url: `data:image/png;base64,${PNG_B64}` } },
+              ],
+            },
+          ],
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createChatCompletion',
+          modelName: MODEL_IMAGE,
+          modelProvider: 'openai',
+          // Inline image is captured as a structured part (rendered inline), so no [image] marker.
+          inputMessages: [
+            {
+              role: 'user',
+              content: 'What is in this image?',
+              image_parts: [{ mime_type: 'image/png', content: PNG_B64 }],
+            },
+          ],
+          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          metadata: {},
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
