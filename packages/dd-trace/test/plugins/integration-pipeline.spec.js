@@ -95,8 +95,13 @@ const optionalContextStage = {
     stageEvents.push('optional-context:start')
     if (frame.invocation.arguments[0].failStage) throw new Error('stage failed')
   },
-  complete () {
+  complete (frame) {
     stageEvents.push('optional-context:complete')
+    if (frame.invocation.arguments[0].failTerminalStage) throw new Error('completion stage failed')
+  },
+  error (frame) {
+    stageEvents.push('optional-context:error')
+    if (frame.invocation.arguments[0].failTerminalStage) throw new Error('error stage failed')
   },
 }
 
@@ -262,6 +267,106 @@ describe('IntegrationPipeline', () => {
     ])
   })
 
+  it('records synchronous throws from asynchronous operations', async () => {
+    const error = new Error('request threw synchronously')
+    const invocation = {
+      arguments: [{ operation: 'throw' }, {}],
+      self: { host: 'api.example.test' },
+    }
+
+    const assertion = agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'example.request')
+      assert.strictEqual(span.resource, 'throw')
+      assert.strictEqual(span.error, 1)
+      assert.strictEqual(span.meta['error.message'], error.message)
+    })
+
+    assert.throws(
+      () => requestChannel.tracePromise(() => { throw error }, invocation),
+      error
+    )
+
+    await assertion
+    assert.deepStrictEqual(stageEvents, [
+      'correlation:start',
+      'propagation:start',
+      'telemetry:start',
+      'telemetry:error',
+      'propagation:error',
+      'correlation:error',
+      'telemetry:complete',
+      'propagation:complete',
+      'correlation:complete',
+    ])
+  })
+
+  it('ignores duplicate asynchronous completion events', async () => {
+    const invocation = {
+      arguments: [{ operation: 'duplicate-completion' }, {}],
+      self: { host: 'api.example.test' },
+    }
+    const assertion = agent.assertFirstTraceSpan({
+      name: 'example.request',
+      resource: 'duplicate-completion',
+    })
+
+    await Promise.all([
+      assertion,
+      requestChannel.tracePromise(() => Promise.resolve({ status: 200 }), invocation),
+    ])
+
+    const noDuplicateTrace = agent.assertNoTraces(() => {
+      throw new Error('duplicate completion unexpectedly finished a second trace')
+    }, { timeoutMs: 100 })
+    requestChannel.asyncEnd.publish(invocation)
+
+    await noDuplicateTrace
+    assert.deepStrictEqual(stageEvents, [
+      'correlation:start',
+      'propagation:start',
+      'telemetry:start',
+      'telemetry:complete',
+      'propagation:complete',
+      'correlation:complete',
+    ])
+  })
+
+  it('isolates interleaved asynchronous operation state', async () => {
+    const operationCount = 64
+    const completions = new Array(operationCount)
+    const results = new Array(operationCount)
+    const traceIds = new Set()
+    const resources = new Set()
+    const assertion = agent.assertSomeTraces(traces => {
+      for (const span of traces.flat()) {
+        if (span.name === 'example.request' && span.resource.startsWith('concurrent-')) {
+          resources.add(span.resource)
+        }
+      }
+      assert.strictEqual(resources.size, operationCount)
+    })
+
+    for (let i = 0; i < operationCount; i++) {
+      const carrier = {}
+      const invocation = {
+        arguments: [{ operation: `concurrent-${i}` }, carrier],
+        self: { host: 'api.example.test' },
+      }
+      let complete
+      const pending = new Promise(resolve => { complete = resolve })
+      completions[i] = complete
+      results[i] = requestChannel.tracePromise(() => pending, invocation)
+      traceIds.add(carrier.reservedTraceId)
+    }
+
+    assert.strictEqual(traceIds.size, operationCount)
+    for (let i = operationCount - 1; i >= 0; i--) {
+      completions[i]({ status: 200 + i })
+    }
+
+    await Promise.all([assertion, ...results])
+  })
+
   it('supports a second synchronous traced operation', async () => {
     const assertion = agent.assertFirstTraceSpan(span => {
       assert.strictEqual(span.name, 'example.ping')
@@ -273,6 +378,23 @@ describe('IntegrationPipeline', () => {
 
     const result = pingChannel.traceSync(() => ({ status: 204 }), { arguments: ['ping'] })
     assert.deepStrictEqual(result, { status: 204 })
+    await assertion
+  })
+
+  it('releases completed invocation state before the context object is reused', async () => {
+    const resources = new Set()
+    const assertion = agent.assertSomeTraces(traces => {
+      for (const span of traces.flat()) {
+        if (span.name === 'example.ping') resources.add(span.resource)
+      }
+      assert.deepStrictEqual(resources, new Set(['first', 'second']))
+    })
+    const invocation = { arguments: ['first'] }
+
+    assert.deepStrictEqual(pingChannel.traceSync(() => ({ status: 200 }), invocation), { status: 200 })
+    invocation.arguments[0] = 'second'
+    assert.deepStrictEqual(pingChannel.traceSync(() => ({ status: 201 }), invocation), { status: 201 })
+
     await assertion
   })
 
@@ -371,6 +493,28 @@ describe('IntegrationPipeline', () => {
     }), 'completed')
 
     assert.deepStrictEqual(stageEvents, ['optional-context:start', 'optional-context:complete'])
+    assert.strictEqual(contextStorage.getStore(), undefined)
+    assert.strictEqual(spanStorage.getStore(), undefined)
+    await noTraces
+  })
+
+  it('isolates terminal stage failures from application errors', async () => {
+    const applicationError = new Error('application failed')
+    const noTraces = agent.assertNoTraces(() => {
+      throw new Error('terminal-stage failure unexpectedly produced a trace')
+    }, { timeoutMs: 100 })
+
+    assert.throws(() => optionalChannel.traceSync(() => {
+      throw applicationError
+    }, {
+      arguments: [{ trace: false, failTerminalStage: true }],
+    }), applicationError)
+
+    assert.deepStrictEqual(stageEvents, [
+      'optional-context:start',
+      'optional-context:error',
+      'optional-context:complete',
+    ])
     assert.strictEqual(contextStorage.getStore(), undefined)
     assert.strictEqual(spanStorage.getStore(), undefined)
     await noTraces
