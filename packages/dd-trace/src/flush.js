@@ -10,6 +10,7 @@ const { supportsServerlessTelemetryRetention } = require('./serverless')
 /** @type {Set<TelemetryFlusher>} */
 const telemetryFlushers = new Set()
 const postTraceTelemetryFlushers = new Set()
+const noTelemetryFlushers = []
 
 /**
  * Registers a configured telemetry pipeline so serverless lifecycle retention
@@ -40,8 +41,12 @@ function flushAll (tracer, done, options) {
   const traceExporter = tracer?._exporter
   const traceFlusher = traceExporter?.flush
   const spanStatsFlusher = tracer?._processor?._stats?.forceFlush
+  const flushers = telemetryFlushers.size === 0 ? noTelemetryFlushers : [...telemetryFlushers]
+  const postTraceFlushers = postTraceTelemetryFlushers.size === 0
+    ? noTelemetryFlushers
+    : [...postTraceTelemetryFlushers]
   // TODO: Include DSM after DataStreamsProcessor exposes a completion-aware flush API.
-  let pending = telemetryFlushers.size + postTraceTelemetryFlushers.size +
+  let pending = flushers.length + postTraceFlushers.length +
     (typeof traceFlusher === 'function' ? 1 : 0) +
     (typeof spanStatsFlusher === 'function' ? 1 : 0)
   let completed = false
@@ -84,15 +89,15 @@ function flushAll (tracer, done, options) {
 
   if (typeof traceFlusher === 'function') {
     flush(done => traceFlusher.call(traceExporter, done), () => {
-      for (const flusher of postTraceTelemetryFlushers) flush(flusher)
+      for (const flusher of postTraceFlushers) flush(flusher)
     })
   } else {
-    for (const flusher of postTraceTelemetryFlushers) flush(flusher)
+    for (const flusher of postTraceFlushers) flush(flusher)
   }
   if (typeof spanStatsFlusher === 'function') {
     flush(done => spanStatsFlusher.call(tracer._processor._stats, done))
   }
-  for (const flusher of telemetryFlushers) flush(flusher)
+  for (const flusher of flushers) flush(flusher)
 }
 
 module.exports = { flushAll, registerTelemetryFlusher }

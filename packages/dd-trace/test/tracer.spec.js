@@ -99,17 +99,66 @@ describe('Tracer', () => {
       unregister()
     })
 
+    it('flushes the pipelines configured at the start of the boundary', () => {
+      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      let traceDone
+      const originalFlusher = sinon.stub().callsFake(done => done())
+      const replacementFlusher = sinon.stub().callsFake(done => done())
+      const originalPostTraceFlusher = sinon.stub().callsFake(done => done())
+      const replacementPostTraceFlusher = sinon.stub().callsFake(done => done())
+      const unregisterOriginal = registerTelemetryFlusher(originalFlusher)
+      const unregisterOriginalPostTrace = registerTelemetryFlusher(originalPostTraceFlusher, { afterTrace: true })
+      let unregisterReplacement
+      let unregisterReplacementPostTrace
+      const tracer = {
+        _exporter: {
+          flush: sinon.stub().callsFake(done => {
+            unregisterOriginal()
+            unregisterReplacement = registerTelemetryFlusher(replacementFlusher)
+            traceDone = done
+          }),
+        },
+      }
+      const done = sinon.spy()
+
+      try {
+        flushAll(tracer, done)
+        unregisterOriginalPostTrace()
+        unregisterReplacementPostTrace = registerTelemetryFlusher(
+          replacementPostTraceFlusher, { afterTrace: true })
+        traceDone()
+
+        sinon.assert.calledOnce(originalFlusher)
+        sinon.assert.notCalled(replacementFlusher)
+        sinon.assert.calledOnce(originalPostTraceFlusher)
+        sinon.assert.notCalled(replacementPostTraceFlusher)
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregisterOriginal()
+        unregisterReplacement?.()
+        unregisterOriginalPostTrace()
+        unregisterReplacementPostTrace?.()
+      }
+    })
+
     it('flushes registered telemetry pipelines without a trace exporter', () => {
       const { flushAll, registerTelemetryFlusher } = require('../src/flush')
       const telemetryFlusher = sinon.stub().callsFake(done => done())
+      const postTraceTelemetryFlusher = sinon.stub().callsFake(done => done())
       const unregister = registerTelemetryFlusher(telemetryFlusher)
+      const unregisterPostTrace = registerTelemetryFlusher(postTraceTelemetryFlusher, { afterTrace: true })
       const done = sinon.spy()
 
-      flushAll(undefined, done)
+      try {
+        flushAll(undefined, done)
 
-      sinon.assert.calledOnce(telemetryFlusher)
-      sinon.assert.calledOnce(done)
-      unregister()
+        sinon.assert.calledOnce(telemetryFlusher)
+        sinon.assert.calledOnce(postTraceTelemetryFlusher)
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregister()
+        unregisterPostTrace()
+      }
     })
 
     it('waits for callback flushers that return a synchronous status', () => {
