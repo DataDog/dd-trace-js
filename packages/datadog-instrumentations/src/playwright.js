@@ -1440,11 +1440,14 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       let totalPureQuarantinedFailedTestCount = 0
 
       for (const [testKey, testStatuses] of testsToTestStatuses) {
-        // Only count as failed if the final status (after retries) is 'fail'
         const lastStatus = testStatuses.at(-1)
-        if (lastStatus === 'fail') {
+        const hasPureQuarantinedFailure = quarantinedButNotAttemptToFixTestKeys.has(testKey) &&
+          testStatuses.includes('fail')
+
+        // EFD retries are separate Playwright tests, so an earlier quarantined failure still makes the run fail.
+        if (lastStatus === 'fail' || hasPureQuarantinedFailure) {
           totalFailedTestCount += 1
-          if (quarantinedButNotAttemptToFixTestKeys.has(testKey)) {
+          if (hasPureQuarantinedFailure) {
             totalPureQuarantinedFailedTestCount += 1
           }
         }
