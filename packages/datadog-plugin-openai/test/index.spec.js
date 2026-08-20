@@ -25,7 +25,6 @@ describe('Plugin', () => {
   let clock
   let metricStub
   let externalLoggerStub
-  let realVersion
   let tracer
   let globalFile
 
@@ -34,7 +33,7 @@ describe('Plugin', () => {
   })
 
   describe('openai', () => {
-    withVersions('openai', 'openai', version => {
+    withVersions('openai', 'openai', (version, _, realVersion) => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       before(async () => {
@@ -56,7 +55,6 @@ describe('Plugin', () => {
 
         const requiredModule = require(moduleRequirePath)
         const module = requiredModule.get()
-        realVersion = requiredModule.version()
 
         if (semver.satisfies(realVersion, '>=5.0.0') && NODE_MAJOR < 20) {
           /**
