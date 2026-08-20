@@ -4,12 +4,15 @@ const assert = require('node:assert/strict')
 const { Writable } = require('node:stream')
 const { inspect } = require('node:util')
 
+const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+
+const logSubmissionCh = channel('ci:log-submission:log')
 
 describe('Plugin', () => {
   let logger
@@ -72,8 +75,18 @@ describe('Plugin', () => {
         })
 
         it('should add the trace identifiers to logger instances', () => {
+          const submittedLogs = []
+          const onLogSubmission = payload => {
+            submittedLogs.push(payload)
+          }
+          logSubmissionCh.subscribe(onLogSubmission)
+
           tracer.scope().activate(span, () => {
-            logger.info('message')
+            try {
+              logger.info('message')
+            } finally {
+              logSubmissionCh.unsubscribe(onLogSubmission)
+            }
 
             sinon.assert.called(stream.write)
 
@@ -83,7 +96,31 @@ describe('Plugin', () => {
               trace_id: span.context().toTraceId(true),
               span_id: span.context().toSpanId(),
             })
+
+            assert.strictEqual(submittedLogs.length, 1)
+            const [submittedLog] = submittedLogs
+            const submittedRecord = JSON.parse(submittedLog.message)
+            assert.strictEqual(submittedLog.source, 'bunyan')
+            assert.strictEqual(submittedRecord.msg, 'message')
+            assertObjectContains(submittedRecord.dd, record.dd)
           })
+        })
+
+        it('should not submit records when Bunyan skips emission', () => {
+          const submittedLogs = []
+          const onLogSubmission = payload => {
+            submittedLogs.push(payload)
+          }
+          logSubmissionCh.subscribe(onLogSubmission)
+
+          try {
+            logger._emit({ level: 20, msg: 'filtered message' }, true)
+          } finally {
+            logSubmissionCh.unsubscribe(onLogSubmission)
+          }
+
+          sinon.assert.notCalled(stream.write)
+          assert.strictEqual(submittedLogs.length, 0)
         })
 
         it('should not mutate the original record', () => {
