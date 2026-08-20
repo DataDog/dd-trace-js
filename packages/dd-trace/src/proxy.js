@@ -170,9 +170,10 @@ class Tracer extends NoopProxy {
         spanleak.startScrubber()
       }
 
+      let rc
       if (config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED && !config.isCiVisibility) {
         const RemoteConfig = require('./remote_config')
-        const rc = new RemoteConfig(config)
+        rc = new RemoteConfig(config)
 
         const tracingRemoteConfig = require('./config/remote_config')
         tracingRemoteConfig.enable(rc, config, () => {
@@ -204,14 +205,14 @@ class Tracer extends NoopProxy {
           appsecRemoteConfig.enable(rc, config, this._modules.appsec)
         }
 
-        if (config.dynamicInstrumentation.enabled) {
-          DynamicInstrumentation.start(config, rc)
-        }
-
         const openfeatureRemoteConfig = require('./openfeature/remote_config')
         const subscribeOpenfeatureToRemoteConfig = config.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
           config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'remote_config'
         openfeatureRemoteConfig.enable(rc, () => this.openfeature, subscribeOpenfeatureToRemoteConfig)
+      }
+
+      if (config.dynamicInstrumentation.enabled && (rc || config.dynamicInstrumentation.probeFile)) {
+        DynamicInstrumentation.start(config, rc)
       }
 
       if (config.profiling.DD_PROFILING_ENABLED === 'true') {

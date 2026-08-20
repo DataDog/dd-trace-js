@@ -183,6 +183,32 @@ describe('input message http requests', function () {
     done()
   })
 
+  it('should send directly to the debugger intake in agentless mode', function () {
+    const sendAgentless = proxyquire('../../../src/debugger/devtools_client/send', {
+      './config': createConfigMock({
+        agentless: true,
+        apiKey: 'test-api-key',
+        inputPath: '/api/v2/debugger',
+        runtimeId: 'test-runtime-id',
+        url: new URL('https://debugger-intake.us3.datadoghq.com'),
+      }),
+      './json-buffer': JSONBuffer,
+      '../../exporters/common/request': request,
+      './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+    })
+
+    sendAgentless(message, logger, dd, snapshot)
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(request)
+    const options = getRequestOptions(request)
+    assert.match(options.path, /^\/api\/v2\/debugger\?ddtags=/)
+    assert.match(options.path, /runtime_id%3Atest-runtime-id/)
+    assert.strictEqual(options.url.href, 'https://debugger-intake.us3.datadoghq.com/')
+    assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
+    assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'agent-debugger')
+  })
+
   it('should fallback to /debugger/v1/diagnostics on 404 from v2 endpoint', function (done) {
     const configStub = createConfigMock({ inputPath: '/debugger/v2/input' })
 
