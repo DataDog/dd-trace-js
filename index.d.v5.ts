@@ -333,28 +333,36 @@ interface Plugins {
 
 type SpanTagScalar = string | number | boolean | Buffer | URL
 type ErrorMetaTag = 'error.type' | 'error.message' | 'error.stack'
+type StringOnlySpanTag = 'service.name' | 'span.type' | 'resource.name'
+type ValidatedSpanTagObject<Value extends object> =
+  keyof Value extends never ? never :
+  Extract<keyof Value, symbol> extends never ? Value extends {
+    [Key in keyof Value]:
+      [Exclude<Value[Key], undefined>] extends [never] ? never :
+      Exclude<Value[Key], undefined> extends SpanTagScalar ? Value[Key] : never
+  } ? Value : never :
+  never
 type ValidatedSpanTagValue<Value> =
   Value extends SpanTagScalar ? Value :
-  Value extends Error ? never :
   Value extends readonly unknown[] ? never :
   Value extends (...args: never[]) => unknown ? never :
-  Value extends object ? keyof Value extends never ? never : Value extends {
-    [Key in keyof Value]: Exclude<Value[Key], undefined> extends SpanTagScalar ? Value[Key] : never
-  } ? Value : never :
+  Value extends object ? ValidatedSpanTagObject<Value> :
   never
 type SpanTagValueForKey<Key, Value> =
   [Key] extends ['error']
     ? Value extends Error ? Value : ValidatedSpanTagValue<Value>
     : [Key] extends [ErrorMetaTag]
       ? NonNullable<Value>
-      : ValidatedSpanTagValue<Value>
+      : [Key] extends [StringOnlySpanTag]
+        ? Value extends string ? Value : never
+        : ValidatedSpanTagValue<Value>
 type ValidatedSpanTags<Tags extends object> =
   Tags extends readonly unknown[] ? never :
   Tags extends (...args: never[]) => unknown ? never :
   keyof Tags extends never ? Tags :
-  {
+  Extract<keyof Tags, symbol> extends never ? {
     [Key in keyof Tags]: SpanTagValueForKey<Key, Tags[Key]>
-  }
+  } : never
 type SpanTagsOption<Tags extends object> =
   { tags?: Tags } &
   (object extends Tags ? object : { tags?: ValidatedSpanTags<Tags> })
