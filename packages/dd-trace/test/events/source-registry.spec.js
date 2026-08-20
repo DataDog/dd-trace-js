@@ -6,6 +6,7 @@ const { describe, it } = require('mocha')
 const dc = require('dc-polyfill')
 const sinon = require('sinon')
 
+const log = require('../../src/log')
 const { EventSourceRegistry, getEventSourceRegistry } = require('../../src/events/source-registry')
 
 describe('EventSourceRegistry', () => {
@@ -152,6 +153,36 @@ describe('EventSourceRegistry', () => {
     assert.strictEqual(store, secondStore)
     sinon.assert.calledOnceWithExactly(first, event, parentStore)
     sinon.assert.calledOnceWithExactly(second, event, firstStore)
+  })
+
+  it('isolates contributor failures and continues composing stores', () => {
+    const registry = new EventSourceRegistry()
+    const event = {}
+    const parentStore = { parent: true }
+    const finalStore = { final: true }
+    const error = new Error('contributor failed')
+    const logError = sinon.stub(log, 'error')
+    registry.registerContributor('db.query', 'failing', {
+      start () {
+        throw error
+      },
+    })
+    const succeeding = sinon.stub().returns(finalStore)
+    registry.registerContributor('db.query', 'succeeding', { start: succeeding })
+
+    try {
+      assert.strictEqual(registry.runContributors('db.query', 'start', event, parentStore), finalStore)
+      sinon.assert.calledOnceWithExactly(succeeding, event, parentStore)
+      sinon.assert.calledOnceWithExactly(
+        logError,
+        'Event contributor "%s" failed during %s: %s',
+        'failing',
+        'start',
+        error.message
+      )
+    } finally {
+      logError.restore()
+    }
   })
 
   it('keeps a source active while either APM or a product contributor needs it', () => {

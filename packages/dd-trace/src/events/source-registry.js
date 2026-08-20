@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('../log')
+
 class EventSourceRegistry {
   #operations = new Map()
 
@@ -131,14 +133,18 @@ class EventSourceRegistry {
     const contributors = this.#operations.get(operation)?.contributors
     if (!contributors) return store
 
-    for (const contributor of contributors.values()) {
+    for (const [id, contributor] of contributors) {
       if (contributor.sources && !contributor.sources.has(event.source?.integration)) continue
 
       const handler = contributor[phase]
       if (!handler) continue
 
-      const nextStore = handler(event, store)
-      if (nextStore !== undefined) store = nextStore
+      try {
+        const nextStore = handler(event, store)
+        if (nextStore !== undefined) store = nextStore
+      } catch (error) {
+        log.error('Event contributor "%s" failed during %s: %s', id, phase, error?.message || error)
+      }
     }
 
     return store
