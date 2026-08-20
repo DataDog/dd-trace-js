@@ -2012,6 +2012,7 @@ function createJasminePlugin (libraryConfig) {
       finish: () => {
         context._isFinished = true
       },
+      finishOpenChildren () {},
       setTag: (name, value) => {
         tags[name] = value
       },

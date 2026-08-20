@@ -14,7 +14,11 @@ const { resolveServiceSource } = require('../service-naming/source-resolver')
 const telemetryMetrics = require('../telemetry/metrics')
 const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
+const { getDatadogContext } = require('./context-registry')
+const eventWriter = require('./event-writer')
+const { isSpanFinished } = require('./span-lifecycle')
 const SpanContext = require('./span_context')
+const { setSpanStore } = require('./span-store')
 
 const dateNow = Date.now
 
@@ -86,37 +90,32 @@ class DatadogSpan {
     const operationName = fields.operationName
     const parent = fields.parent || null
     const hostname = fields.hostname
+    const integrationName = fields.integrationName || 'opentracing'
 
     this.#parentTracer = tracer
-    this._debug = debug
-    this._processor = processor
-    this._prioritySampler = prioritySampler
-    this._store = storage('legacy').getHandle()
-    this._duration = undefined
-
-    this._events = []
-
-    // For internal use only. You probably want `context()._name`.
-    // This name property is not updated when the span name changes.
-    // This is necessary for span count metrics.
-    this._name = operationName
-    this._integrationName = fields.integrationName || 'opentracing'
-
-    getIntegrationCounter('spans_created', this._integrationName).inc()
-
-    this._spanContext = this._createContext(parent, fields)
-    this._spanContext._name = operationName
-    if (fields.tags) Object.assign(this._spanContext.getTags(), fields.tags)
-    this._spanContext._hostname = hostname
-
-    this._spanContext._trace.started.push(this)
-
-    this._startTime = fields.startTime || this._getTime()
-
-    this._links = fields.links?.map(link => ({
-      context: link.context._ddContext ?? link.context,
+    const spanContext = this._createContext(parent, fields)
+    const startTime = fields.startTime || getTime(spanContext)
+    const links = fields.links?.map(link => ({
+      context: getDatadogContext(link.context) ?? link.context,
       attributes: this._sanitizeAttributes(link.attributes),
     })) ?? []
+
+    eventWriter.startSpan(this, {
+      context: spanContext,
+      processor,
+      prioritySampler,
+      debug,
+      operationName,
+      integrationName,
+      startTime,
+      links,
+      hostname,
+      parentContext: parent,
+    })
+    setSpanStore(this, storage('legacy').getHandle())
+    if (fields.tags) eventWriter.setTags(this, fields.tags)
+
+    getIntegrationCounter('spans_created', integrationName).inc()
 
     if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
@@ -176,12 +175,34 @@ class DatadogSpan {
   }
 
   setOperationName (name) {
-    this._spanContext._name = name
+    eventWriter.setOperationName(this, name)
+    return this
+  }
+
+  /**
+   * Set the integration that owns this span.
+   *
+   * @param {string} name
+   * @returns {DatadogSpan}
+   */
+  setIntegrationName (name) {
+    eventWriter.setIntegrationName(this, name)
+    return this
+  }
+
+  /**
+   * Enable or disable recording for this span's trace.
+   *
+   * @param {boolean} enabled
+   * @returns {DatadogSpan}
+   */
+  setRecording (enabled) {
+    eventWriter.setRecording(this, enabled)
     return this
   }
 
   setBaggageItem (key, value) {
-    this._spanContext._baggageItems[key] = value
+    eventWriter.setBaggageItem(this, key, value)
     return this
   }
 
@@ -194,17 +215,17 @@ class DatadogSpan {
   }
 
   removeBaggageItem (key) {
-    delete this._spanContext._baggageItems[key]
+    eventWriter.removeBaggageItem(this, key)
   }
 
   removeAllBaggageItems () {
-    this._spanContext._baggageItems = {}
+    eventWriter.removeAllBaggageItems(this)
   }
 
   setTag (key, value) {
     this._spanContext.setTag(key, value)
 
-    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
+    if (isSamplingPriorityTag(key)) {
       this._prioritySampler.sample(this, false)
     }
 
@@ -213,6 +234,19 @@ class DatadogSpan {
     }
 
     return this
+  }
+
+  /**
+   * Set a tag only when it is absent, without exposing the current tag value.
+   *
+   * @param {string} key
+   * @param {unknown} value
+   * @returns {boolean}
+   */
+  setTagIfAbsent (key, value) {
+    const written = eventWriter.setTagIfAbsent(this, key, value)
+    if (written && tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
+    return written
   }
 
   addTags (keyValueMap) {
@@ -221,11 +255,10 @@ class DatadogSpan {
     // surface, and no internal v6 caller passes one (see MIGRATING.md).
     // v5 still accepts both via `tagger.add` for `config.tags` /
     // `options.tags` callers that pass `'key:val,key:val'` strings.
-    const tags = this._spanContext.getTags()
     let mayChangeSamplingPriority
 
     if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
-      Object.assign(tags, keyValueMap)
+      eventWriter.setTags(this, keyValueMap)
       mayChangeSamplingPriority =
         MANUAL_KEEP in keyValueMap ||
         MANUAL_DROP in keyValueMap ||
@@ -233,14 +266,16 @@ class DatadogSpan {
     } else {
       /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
       if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
+        const tags = {}
         tagger.add(tags, keyValueMap)
+        eventWriter.setTags(this, tags)
         mayChangeSamplingPriority = true
       } else {
         return this
       }
     }
 
-    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
+    if (mayChangeSamplingPriority) {
       this._prioritySampler.sample(this, false)
     }
 
@@ -249,6 +284,20 @@ class DatadogSpan {
     }
 
     return this
+  }
+
+  /**
+   * Set tags only while a caller-owned tag value still matches the span.
+   *
+   * @param {string} expectedKey
+   * @param {unknown} expectedValue
+   * @param {Record<string, unknown>} tags
+   * @returns {boolean}
+   */
+  setTagsIfTagMatches (expectedKey, expectedValue, tags) {
+    const written = eventWriter.setTagsIfTagMatches(this, expectedKey, expectedValue, tags)
+    if (written && tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
+    return written
   }
 
   log () {
@@ -266,8 +315,8 @@ class DatadogSpan {
 
     const { context, attributes } = link
 
-    this._links.push({
-      context: context._ddContext ?? context,
+    eventWriter.addLink(this, {
+      context: getDatadogContext(context) ?? context,
       attributes: this._sanitizeAttributes(attributes),
     })
   }
@@ -303,13 +352,57 @@ class DatadogSpan {
       }
     }
     event.startTime = startTime || this._getTime()
-    this._events.push(event)
+    eventWriter.addEvent(this, event)
+  }
+
+  /**
+   * Set structured span metadata.
+   *
+   * @param {string} key
+   * @param {unknown} value
+   * @returns {DatadogSpan}
+   */
+  setStructuredTag (key, value) {
+    eventWriter.setStructuredTag(this, key, value)
+    return this
+  }
+
+  /**
+   * Set structured span metadata only when the key is absent.
+   *
+   * @param {string} key
+   * @param {unknown} value
+   * @returns {boolean}
+   */
+  setStructuredTagIfAbsent (key, value) {
+    return eventWriter.setStructuredTagIfAbsent(this, key, value)
+  }
+
+  /**
+   * Append a stack trace while atomically enforcing its configured cap.
+   *
+   * @param {string} namespace
+   * @param {object} value
+   * @param {number} maxItems
+   * @returns {boolean}
+   */
+  appendStackTrace (namespace, value, maxItems) {
+    return eventWriter.appendStackTrace(this, namespace, value, maxItems)
+  }
+
+  /**
+   * Finish all open child spans, optionally restricted to an integration.
+   *
+   * @param {string} [integrationName]
+   * @returns {DatadogSpan}
+   */
+  finishOpenChildren (integrationName) {
+    eventWriter.finishOpenChildren(this, integrationName)
+    return this
   }
 
   finish (finishTime) {
-    if (this._duration !== undefined) {
-      return
-    }
+    if (isSpanFinished(this)) return
 
     if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_STATE_TRACKING && !this._spanContext.getTag('service.name')) {
       log.error('Finishing invalid span: %s', this)
@@ -339,9 +432,7 @@ class DatadogSpan {
       ? this._getTime()
       : (Number.parseFloat(finishTime) || this._getTime())
 
-    this._duration = finishTime - this._startTime
-    this._spanContext._trace.finished.push(this)
-    this._spanContext._isFinished = true
+    if (!eventWriter.finishSpan(this, finishTime)) return
     finishCh.publish(this)
     this._processor.process(this)
   }
@@ -427,34 +518,41 @@ class DatadogSpan {
         traceId: spanId,
         spanId,
       })
-      spanContext._trace.startTime = startTime
+      eventWriter.setTraceStartTime(spanContext, startTime)
 
       if (fields.traceId128BitGenerationEnabled) {
-        spanContext._trace.tags['_dd.p.tid'] = Math.floor(startTime / 1000).toString(16)
+        eventWriter.setTraceTag(spanContext, '_dd.p.tid', Math.floor(startTime / 1000).toString(16)
           .padStart(8, '0')
-          .padEnd(16, '0')
+          .padEnd(16, '0'))
       }
 
       if (propagationBehavior === 'restart') {
-        spanContext._baggageItems = baggage ?? {}
+        eventWriter.replaceBaggageItems(spanContext, baggage ?? {})
       }
     }
 
-    spanContext._trace.ticks ||= now()
+    eventWriter.setTraceTicksIfAbsent(spanContext, now)
     if (startTime) {
-      spanContext._trace.startTime = startTime
+      eventWriter.setTraceStartTime(spanContext, startTime)
     }
     // SpanContext was NOT propagated from a remote parent
-    spanContext._isRemote = false
+    eventWriter.setRemote(spanContext, false)
 
     return spanContext
   }
 
   _getTime () {
-    const { startTime, ticks } = this._spanContext._trace
-
-    return startTime + now() - ticks
+    return getTime(this._spanContext)
   }
+}
+
+/**
+ * @param {import('./span_context')} context
+ * @returns {number}
+ */
+function getTime (context) {
+  const { startTime, ticks } = context._trace
+  return startTime + now() - ticks
 }
 
 function createRegistry (type) {

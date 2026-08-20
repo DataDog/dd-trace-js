@@ -29,7 +29,7 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
     }, ctx)
 
     if (ctx.functionName === 'tryAddMessage') {
-      span._spanContext._name = 'azure.servicebus.create'
+      span.setOperationName('azure.servicebus.create')
       span.setTag('messaging.operation', 'create')
 
       if (ctx.msg.messageID !== undefined) {

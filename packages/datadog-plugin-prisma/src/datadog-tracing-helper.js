@@ -36,17 +36,12 @@ class DatadogTracingHelper {
   getTraceParent (context) {
     const store = storage('legacy').getStore()
     const span = store?.span
-    if (span?._spanContext) {
-      const context = span._spanContext
-
-      const traceId = context.toTraceId(true)
-      const spanId = context.toSpanId(true)
-      const version = (context._traceparent && context._traceparent.version) || '00'
-
+    if (span) {
+      const traceparent = span.context().toTraceparent()
       // always sampled a sampled traceparent due to the following reasons:
       // 1. Datadog spans are sampled on span.finish
       // 2. Prisma engine spans only generate spans when the trace is sampled
-      return `${version}-${traceId}-${spanId}-01`
+      return `${traceparent.slice(0, -2)}01`
     }
 
     // No active span - return sampled
@@ -82,7 +77,7 @@ class DatadogTracingHelper {
 
   getActiveContext () {
     const store = storage('legacy').getStore()
-    return store?.span?._spanContext
+    return store?.span?.context()
   }
 
   /**

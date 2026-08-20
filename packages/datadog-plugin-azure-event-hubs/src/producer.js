@@ -30,7 +30,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
     }, ctx)
 
     if (ctx.functionName === 'tryAdd') {
-      span._spanContext._name = 'azure.eventhubs.create'
+      span.setOperationName('azure.eventhubs.create')
       span.setTag('messaging.operation', 'create')
 
       if (ctx.eventData.messageID !== undefined) {

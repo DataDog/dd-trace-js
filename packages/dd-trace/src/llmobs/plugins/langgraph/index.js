@@ -2,7 +2,6 @@
 
 const LLMObsPlugin = require('../base')
 const { formatIO } = require('../langchain/messages')
-const { spanHasError } = require('../../util')
 
 const streamDataMap = new WeakMap()
 
@@ -63,7 +62,7 @@ class NextStreamLLMObsPlugin extends LLMObsPlugin {
 
     // Tag on last chunk
     if (ctx.result?.done) {
-      const hasError = ctx.error || spanHasError(span)
+      const hasError = Boolean(ctx.error)
       this.#tagAndCleanup(span, hasError)
     }
   }

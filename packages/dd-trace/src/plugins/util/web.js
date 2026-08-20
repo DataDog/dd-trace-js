@@ -4,10 +4,10 @@ const uniq = require('../../../../datadog-core/src/utils/src/uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = 'http_headers'
 const log = require('../../log')
+const eventWriter = require('../../opentracing/event-writer')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
-const { ERROR_MESSAGE } = require('../../constants')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
@@ -18,15 +18,12 @@ const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
-const RESOURCE_NAME = tags.RESOURCE_NAME
 const SPAN_TYPE = tags.SPAN_TYPE
 const SPAN_KIND = tags.SPAN_KIND
-const ERROR = tags.ERROR
 const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
-const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
@@ -93,9 +90,9 @@ const web = {
 
     if (!span) return
 
-    span.context()._name = `${name}.request`
-    span.context().setTag('component', name)
-    span._integrationName = name
+    span.setOperationName(`${name}.request`)
+    span.setTag('component', name)
+    span.setIntegrationName(name)
 
     web.setConfig(req, config)
   },
@@ -108,7 +105,7 @@ const web = {
 
     if (!config.filter(req.url)) {
       span.setTag(MANUAL_DROP, true)
-      span.context()._trace.isRecording = false
+      span.setRecording(false)
     }
 
     if (config.service) {
@@ -124,7 +121,7 @@ const web = {
     let span
 
     if (context.span) {
-      context.span.context()._name = name
+      context.span.setOperationName(name)
       span = context.span
     } else {
       span = web.startServerlessSpanWithInferredProxy(tracer, config, name, req, traceCtx)
@@ -224,7 +221,7 @@ const web = {
     const headers = req.headers
     const reqCtx = contexts.get(req)
     const store = legacyStorage.getStore()
-    const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
+    const pubsubSpan = store?.pubsubPushReceiveSpan
 
     let childOf = pubsubSpan || this.extractIncomingServerContext(tracer, headers)
 
@@ -248,21 +245,11 @@ const web = {
     const context = contexts.get(req)
     const { span, inferredProxySpan, error } = context
 
-    const spanContext = span.context()
-    const spanHasExistingError = spanContext.getTag('error') || spanContext.getTag(ERROR_MESSAGE)
-    const inferredSpanContext = inferredProxySpan?.context()
-    const inferredSpanHasExistingError = inferredSpanContext?.getTag('error') ||
-      inferredSpanContext?.getTag(ERROR_MESSAGE)
-
     const isValidStatusCode = context.config.validateStatus(statusCode)
 
-    if (!spanHasExistingError && !isValidStatusCode) {
-      span.setTag(ERROR, error || true)
-    }
-
-    if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
-      inferredProxySpan.setTag(ERROR, error || true)
-    }
+    if (isValidStatusCode) return
+    eventWriter.setWebErrorIfAbsent(span, error || true)
+    if (inferredProxySpan) eventWriter.setWebErrorIfAbsent(inferredProxySpan, error || true)
   },
 
   // Add an error to the request
@@ -411,26 +398,20 @@ function splitHeader (str) {
 
 function addRequestTags (context, spanType) {
   const { req, span, inferredProxySpan, config } = context
-  const spanContext = span.context()
-
-  // Idempotency guard. `addRequestTags` runs in `web.startSpan` for the
-  // normal HTTP path and again in `web.finishSpan`; without this guard the
-  // second call would re-extract the URL, re-obfuscate the query string,
-  // and re-publish five `tagsUpdateCh` events with the same values. The
-  // serverless path skips `startSpan` and lands here first, in which case
-  // HTTP_URL is unset and the work runs normally.
-  if (spanContext.hasTag(HTTP_URL)) return
+  if (context.requestTagsAdded) return
 
   const url = extractURL(req)
   const type = spanType ?? WEB
 
-  span.addTags({
+  const requestTagsAdded = eventWriter.setWebRequestTagsIfAbsent(span, {
     [HTTP_URL]: obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: type,
     [HTTP_USERAGENT]: req.headers['user-agent'],
   })
+  context.requestTagsAdded = true
+  if (!requestTagsAdded) return
 
   // OTel `network.peer.address` is the immediate socket peer. It has no Datadog
   // equivalent and the socket isn't available at serialization, so (unlike the
@@ -442,11 +423,10 @@ function addRequestTags (context, spanType) {
   }
 
   // if client ip has already been set by appsec, no need to run it again
-  if (config.extractIp && !spanContext.hasTag(HTTP_CLIENT_IP)) {
+  if (config.extractIp) {
     const clientIp = config.extractIp(config, req)
 
-    if (clientIp) {
-      span.setTag(HTTP_CLIENT_IP, clientIp)
+    if (clientIp && span.setTagIfAbsent(HTTP_CLIENT_IP, clientIp)) {
       inferredProxySpan?.setTag(HTTP_CLIENT_IP, clientIp)
     }
   }
@@ -483,11 +463,6 @@ function addResponseTags (context) {
 function applyRouteOrEndpointTag (context) {
   const { paths, span, config } = context
   if (!span) return
-  const spanContext = span.context()
-
-  // AppSec runs this from a pre-finish hook and the finish path runs it
-  // again. http.route is terminal once set; nothing supersedes it.
-  if (spanContext.hasTag(HTTP_ROUTE)) return
 
   // Skip the `Array.prototype.join` builtin in the empty / single-segment
   // cases; `paths[0]` covers both (`undefined` is falsy for the empty case).
@@ -497,29 +472,19 @@ function applyRouteOrEndpointTag (context) {
     // A framework route supersedes any http.endpoint fallback a pre-finish
     // call stamped before the route resolved; it must not be gated on
     // HTTP_ENDPOINT.
-    span.setTag(HTTP_ROUTE, route)
+    span.setTagIfAbsent(HTTP_ROUTE, route)
     return
   }
 
   // Route unavailable. Compute the http.endpoint fallback once across both calls.
-  if (!config.resourceRenamingEnabled || spanContext.hasTag(HTTP_ENDPOINT)) return
-
-  const url = spanContext.getTag(HTTP_URL)
-  const endpoint = url ? calculateHttpEndpoint(url) : '/'
-  span.setTag(HTTP_ENDPOINT, endpoint)
+  if (config.resourceRenamingEnabled) {
+    eventWriter.setHttpEndpointIfAbsent(span, calculateHttpEndpoint)
+  }
 }
 
 function addResourceTag (context) {
   const { req, span } = context
-  const spanContext = span.context()
-
-  if (spanContext.getTag(RESOURCE_NAME)) return
-
-  const resource = [req.method, spanContext.getTag(HTTP_ROUTE)]
-    .filter(Boolean)
-    .join(' ')
-
-  span.setTag(RESOURCE_NAME, resource)
+  eventWriter.setWebResourceNameIfAbsent(span, req.method)
 }
 
 function addRequestHeaders (context) {

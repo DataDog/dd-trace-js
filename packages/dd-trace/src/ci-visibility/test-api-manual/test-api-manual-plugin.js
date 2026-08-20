@@ -7,6 +7,7 @@ const {
   getTestSuitePath,
 } = require('../../plugins/util/test')
 const { storage } = require('../../../../datadog-core')
+const { getSpanStore } = require('../../opentracing/span-store')
 
 const legacyStorage = storage('legacy')
 
@@ -28,9 +29,10 @@ class TestApiManualPlugin extends CiPlugin {
       const store = legacyStorage.getStore()
       const testSpan = store && store.span
       if (testSpan) {
-        const previousStore = testSpan._store === undefined
+        const spanStore = getSpanStore(testSpan)
+        const previousStore = spanStore === undefined
           ? undefined
-          : legacyStorage.getStore(testSpan._store)
+          : legacyStorage.getStore(spanStore)
         testSpan.setTag(TEST_STATUS, status)
         if (error) {
           testSpan.setTag('error', error)

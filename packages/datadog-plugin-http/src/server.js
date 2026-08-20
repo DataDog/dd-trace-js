@@ -50,7 +50,7 @@ class HttpServerPlugin extends ServerPlugin {
       span.setTag(SVC_SRC_KEY, this.#serviceSource)
     }
     span.setTag(COMPONENT, this.constructor.id)
-    span._integrationName = this.constructor.id
+    span.setIntegrationName(this.constructor.id)
 
     const context = web.getContext(req)
     context.parentStore = store

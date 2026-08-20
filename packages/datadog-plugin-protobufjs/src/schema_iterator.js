@@ -1,6 +1,7 @@
 'use strict'
 
 const PROTOBUF = 'protobuf'
+const schemaSpans = new WeakSet()
 const {
   SCHEMA_DEFINITION,
   SCHEMA_ID,
@@ -135,11 +136,12 @@ class SchemaExtractor {
       return
     }
 
-    if (span.context().getTag(SCHEMA_TYPE) && operation === 'serialization') {
+    if (schemaSpans.has(span) && operation === 'serialization') {
       // we have already added a schema to this span, this call is an encode of nested schema types
       return
     }
 
+    schemaSpans.add(span)
     span.setTag(SCHEMA_TYPE, PROTOBUF)
     span.setTag(SCHEMA_NAME, removeLeadingPeriod(descriptor.fullName))
     span.setTag(SCHEMA_OPERATION, operation)

@@ -63,6 +63,9 @@ describe('user_blocking - Internal API', () => {
       './utils': { getRootSpan },
       '../blocking': { block },
       '../../log': log,
+      '../../opentracing/span-projections': {
+        hasUserId: span => Boolean(span.context().getTag('usr.id')),
+      },
     })
   })
 

@@ -8,6 +8,8 @@ require('../setup/core')
 
 const { DD_MAJOR } = require('../../../../version')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
+const { registerDatadogContext } = require('../../src/opentracing/context-registry')
+const { markSpanFinished } = require('../../src/opentracing/span-lifecycle')
 const {
   addOtelEvent,
   addOtelLink,
@@ -33,10 +35,7 @@ function createMockDdSpan ({ ended = false } = {}) {
   const links = []
   let operationName
 
-  return {
-    // Match the DD span shape: `_duration` is undefined while recording, a number once
-    // finished. The helpers' `isWritable` gate reads this directly.
-    _duration: ended ? 100 : undefined,
+  const span = {
     setTag (key, value) { tags[key] = value },
     // `IGNORE_OTEL_ERROR` is a Symbol key; use ownKeys so Symbol entries are not skipped.
     addTags (kv) {
@@ -63,6 +62,9 @@ function createMockDdSpan ({ ended = false } = {}) {
     get links () { return links },
     get operationName () { return operationName },
   }
+
+  if (ended) markSpanFinished(span, 100)
+  return span
 }
 
 describe('OTel bridge helpers', () => {
@@ -418,9 +420,12 @@ describe('OTel bridge helpers', () => {
   })
 
   describe('normalizeLinkContext', () => {
-    it('returns the bridge wrapper\'s _ddContext when present', () => {
+    it('returns the bridge wrapper\'s registered Datadog context', () => {
       const ddContext = { marker: 'inner' }
-      assert.strictEqual(normalizeLinkContext({ _ddContext: ddContext }), ddContext)
+      const wrapper = {}
+      registerDatadogContext(wrapper, ddContext)
+
+      assert.strictEqual(normalizeLinkContext(wrapper), ddContext)
     })
 
     it('returns a DatadogSpanContext-shaped input as-is', () => {

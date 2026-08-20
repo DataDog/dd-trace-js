@@ -1,9 +1,20 @@
 'use strict'
 
 const { SVC_SRC_KEY } = require('../constants')
+const eventWriter = require('../opentracing/event-writer')
 
-const INTEGRATION_SERVICE = Symbol('dd.integrationService')
+const integrationServices = new WeakMap()
 const MANUAL = 'm'
+
+/**
+ * Record the service name claimed by an integration without attaching state to the span.
+ *
+ * @param {object} span
+ * @param {string} service
+ */
+function setIntegrationService (span, service) {
+  integrationServices.set(span, service)
+}
 
 /**
  * Reconcile `_dd.svc_src` against the span's final `service.name`. Called from
@@ -20,31 +31,12 @@ const MANUAL = 'm'
  * @param {string|undefined} tracerService The tracer's configured default service.
  */
 function resolveServiceSource (span, tracerService) {
-  const spanContext = span._spanContext
-  const currentService = spanContext.getTag('service.name')
-  const existingSource = spanContext.getTag(SVC_SRC_KEY)
-
-  if (currentService === tracerService) {
-    if (existingSource === undefined) return
-    // Clear by assigning undefined rather than deleting: `delete` on the plain
-    // `_tags` object drops it into dictionary (slow) mode, so the per-span
-    // extractTags scan that follows pays the slow path. The encode loop skips
-    // undefined values, so the emitted meta is unchanged.
-    spanContext.setTag(SVC_SRC_KEY, undefined)
-    return
-  }
-
-  const marker = span[INTEGRATION_SERVICE]
-
-  if (marker === currentService) {
-    return
-  }
-
-  spanContext.setTag(SVC_SRC_KEY, MANUAL)
+  const marker = integrationServices.get(span)
+  eventWriter.resolveServiceSource(span, tracerService, marker, SVC_SRC_KEY, MANUAL)
 }
 
 module.exports = {
-  INTEGRATION_SERVICE,
   MANUAL,
   resolveServiceSource,
+  setIntegrationService,
 }

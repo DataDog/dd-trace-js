@@ -7,6 +7,7 @@ const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
 const { APM_TRACING_ENABLED_KEY } = require('./constants')
+const eventWriter = require('./opentracing/event-writer')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -96,7 +97,7 @@ class SpanProcessor {
     this._killAll = true
   }
 
-  _erase (trace, active) {
+  _erase (trace, active = []) {
     if (this._config.DD_TRACE_EXPERIMENTAL_STATE_TRACKING) {
       const started = new Set()
       const startedIds = new Set()
@@ -170,6 +171,7 @@ class SpanProcessor {
 
     trace.started = active
     trace.finished = []
+    eventWriter.replaceTraceSpans(trace, active)
   }
 }
 

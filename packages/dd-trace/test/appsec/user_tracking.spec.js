@@ -14,6 +14,7 @@ describe('User Tracking', () => {
   let log
   let waf
   let keepTrace
+  let eventWriter
 
   let setCollectionMode
   let trackLogin
@@ -46,8 +47,31 @@ describe('User Tracking', () => {
 
     keepTrace = sinon.stub()
 
+    eventWriter = {
+      setAppSecAutoLoginTags: sinon.stub().callsFake((span, sdkTag, tags, sdkOwnedTags, trackedTag) => {
+        const writtenTags = {}
+        const sdkCalled = currentTags[sdkTag] === 'true'
+        for (const key of Object.keys(tags)) {
+          if (sdkCalled && sdkOwnedTags.has(key) && currentTags[key]) continue
+          writtenTags[key] = tags[key]
+        }
+        span.addTags(writtenTags)
+        return Object.hasOwn(writtenTags, trackedTag)
+      }),
+      setAppSecAutoUser: sinon.stub().callsFake((span, userId, mode) => {
+        span.setTag('_dd.appsec.usr.id', userId)
+        if (currentTags['_dd.appsec.user.collection_mode'] === 'sdk') return false
+        span.addTags({
+          'usr.id': userId,
+          '_dd.appsec.user.collection_mode': mode,
+        })
+        return true
+      }),
+    }
+
     const UserTracking = proxyquire('../../src/appsec/user_tracking', {
       '../log': log,
+      '../opentracing/event-writer': eventWriter,
       '../priority_sampler': { keepTrace },
       './waf': waf,
     })

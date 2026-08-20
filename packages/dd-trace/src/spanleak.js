@@ -2,7 +2,9 @@
 
 /* eslint-disable no-console */
 
+const { channel } = require('dc-polyfill')
 const SortedSet = require('../../../vendor/dist/tlhunter-sorted-set')
+const eventWriter = require('./opentracing/event-writer')
 
 const INTERVAL = 1000 // look for expired spans every 1s
 const LIFETIME = 60 * 1000 // all spans have a max lifetime of 1m
@@ -18,6 +20,8 @@ const MODES = {
 module.exports.MODES = MODES
 
 const spans = new SortedSet()
+const spanNames = new WeakMap()
+const spanStartedCh = channel('dd-trace:span:event-writer:span-started')
 
 // TODO: should these also be delivered as runtime metrics?
 
@@ -27,17 +31,24 @@ const spans = new SortedSet()
 
 let interval
 let mode = MODES.DISABLED
+let subscribed = false
 
 module.exports.disable = function () {
   mode = MODES.DISABLED
+  if (subscribed) {
+    spanStartedCh.unsubscribe(onSpanStarted)
+    subscribed = false
+  }
 }
 
 module.exports.enableLogging = function () {
   mode = MODES.LOG
+  subscribeToSpanStarts()
 }
 
 module.exports.enableGarbageCollection = function () {
   mode = MODES.GC_AND_LOG
+  subscribeToSpanStarts()
 }
 
 module.exports.startScrubber = function () {
@@ -60,13 +71,14 @@ module.exports.startScrubber = function () {
       if (!span) continue // span has already been garbage collected
 
       // TODO: Should we also do things like record the route to help users debug leaks?
-      if (!expirationsByType[span._name]) expirationsByType[span._name] = 0
-      expirationsByType[span._name]++
+      const name = spanNames.get(span) || 'unknown'
+      if (!expirationsByType[name]) expirationsByType[name] = 0
+      expirationsByType[name]++
 
       if (!gc) continue // everything after this point is related to manual GC
 
       // TODO: what else can we do to alleviate memory usage
-      span.context().clearTags()
+      eventWriter.clearTags(span)
     }
 
     console.log('expired spans:' +
@@ -93,4 +105,14 @@ function isEnabled () {
 
 function isGarbageCollecting () {
   return mode >= MODES.GC_AND_LOG
+}
+
+function subscribeToSpanStarts () {
+  if (subscribed) return
+  spanStartedCh.subscribe(onSpanStarted)
+  subscribed = true
+}
+
+function onSpanStarted ({ span, operationName }) {
+  spanNames.set(span, operationName)
 }

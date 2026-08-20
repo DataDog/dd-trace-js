@@ -4,6 +4,8 @@ const { HTTP_CLIENT_IP, HTTP_USERAGENT, NETWORK_CLIENT_IP } = require('../../../
 const clone = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
 const { getActiveRequest } = require('../appsec/store')
+const eventWriter = require('../opentracing/event-writer')
+const { getLocalRootSpan } = require('../opentracing/span-projections')
 const { keepTrace } = require('../priority_sampler')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { AI_GUARD } = require('../standalone/product')
@@ -163,11 +165,9 @@ class EvaluationReporter {
     const metaStruct = {
       messages: this.#buildMessagesForMetaStruct(messages, telemetryTags),
     }
-    span.meta_struct = {
-      [TAGS.META_STRUCT_KEY]: metaStruct,
-    }
+    span.setStructuredTag(TAGS.META_STRUCT_KEY, metaStruct)
 
-    const rootSpan = span.context()?._trace?.started?.[0]
+    const rootSpan = getLocalRootSpan(span)
     if (rootSpan) {
       this.#setRootSpanClientIpTags(rootSpan)
       this.#copyServiceEntryTagsToGuardSpan(span, rootSpan)
@@ -298,36 +298,17 @@ class EvaluationReporter {
    * @returns {void}
    */
   #setRootSpanClientIpTags (rootSpan) {
-    const currentTags = rootSpan.context().getTags()
-    const needsHttpClientIp = !Object.hasOwn(currentTags, HTTP_CLIENT_IP)
-    const needsNetworkClientIp = !Object.hasOwn(currentTags, NETWORK_CLIENT_IP)
-
-    if (!needsHttpClientIp && !needsNetworkClientIp) return
-
     const request = getActiveRequest()
     if (!request) return
 
-    const newTags = {}
-    let hasNewTags = false
-
-    if (needsHttpClientIp) {
-      const clientIp = extractIp(this.#config, request)
-      if (clientIp) {
-        newTags[HTTP_CLIENT_IP] = clientIp
-        hasNewTags = true
-      }
+    const clientIp = extractIp(this.#config, request)
+    if (clientIp) {
+      eventWriter.setTagIfAbsent(rootSpan, HTTP_CLIENT_IP, clientIp)
     }
 
-    if (needsNetworkClientIp) {
-      const networkClientIp = request.socket?.remoteAddress
-      if (networkClientIp) {
-        newTags[NETWORK_CLIENT_IP] = networkClientIp
-        hasNewTags = true
-      }
-    }
-
-    if (hasNewTags) {
-      rootSpan.addTags(newTags)
+    const networkClientIp = request.socket?.remoteAddress
+    if (networkClientIp) {
+      eventWriter.setTagIfAbsent(rootSpan, NETWORK_CLIENT_IP, networkClientIp)
     }
   }
 
@@ -339,13 +320,7 @@ class EvaluationReporter {
    * @returns {void}
    */
   #copyServiceEntryTagsToGuardSpan (guardSpan, rootSpan) {
-    const rootTags = rootSpan.context().getTags()
-    for (const [sourceTag, destinationTag] of SERVICE_ENTRY_TAG_MAPPINGS) {
-      const value = rootTags[sourceTag]
-      if (value !== undefined && value !== null) {
-        guardSpan.setTag(destinationTag, value)
-      }
-    }
+    eventWriter.copyTags(rootSpan, guardSpan, SERVICE_ENTRY_TAG_MAPPINGS)
   }
 }
 

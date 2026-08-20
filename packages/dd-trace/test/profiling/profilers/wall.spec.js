@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/core')
+const spanProjections = require('../../../src/opentracing/span-projections')
 
 // Test adapter: these specs predate the constructor reading canonical DD_PROFILING_*
 // names off the tracer config. Map the legacy flat option names to the (config, runtime)
@@ -664,6 +665,7 @@ describe('profilers/native/wall', () => {
       const spanCtx = { _spanId: {}, _parentId: null, _tags: {}, _trace: { started: [] } }
       const span = { context: () => spanCtx }
       spanCtx._trace.started.push(span)
+      spanProjections.startSpan(span, spanCtx)
       currentStore = { span }
 
       // First enter — sets context
@@ -698,6 +700,7 @@ describe('profilers/native/wall', () => {
       const spanCtx = { _spanId: {}, _parentId: null, _tags: {}, _trace: { started: [] } }
       const span = { context: () => spanCtx }
       spanCtx._trace.started.push(span)
+      spanProjections.startSpan(span, spanCtx)
       currentStore = { span }
 
       // First enter — sets context
@@ -787,32 +790,35 @@ describe('profilers/native/wall', () => {
     })
 
     function makeWebSpan () {
-      const tags = {}
       const spanId = {}
       const ctx = {
-        _tags: tags,
+        _tags: {},
         _spanId: spanId,
         _parentId: null,
         _trace: { started: [] },
         getTags () { return this._tags },
       }
-      const span = { context: () => ctx }
+      const span = { context: () => ctx, trace: ctx._trace }
       ctx._trace.started.push(span)
+      spanProjections.startSpan(span, ctx)
+      const tags = spanProjections.getOwnWebTags(span)
       return { span, tags, spanId }
     }
 
     function makeChildSpan (webSpanId, webSpan) {
-      const tags = { 'span.type': 'router' }
       const spanId = {}
       const ctx = {
-        _tags: tags,
+        _tags: {},
         _spanId: spanId,
         _parentId: webSpanId,
-        _trace: { started: [webSpan] },
+        _trace: webSpan.trace,
         getTags () { return this._tags },
       }
       const span = { context: () => ctx }
       ctx._trace.started.push(span)
+      spanProjections.startSpan(span, ctx)
+      spanProjections.setTag(span, 'span.type', 'router')
+      const tags = spanProjections.getOwnWebTags(span)
       return { span, tags }
     }
 
@@ -827,6 +833,7 @@ describe('profilers/native/wall', () => {
 
       // First activation: span.type not yet set → webTags cached as undefined
       currentStore = { span: webSpan }
+      const symbols = Object.getOwnPropertySymbols(webSpan)
       enterCh.publish()
       const ctx0 = localPprof.time.setContext.getCall(0).args[0]
       assert.strictEqual(ctx0.webTags, undefined)
@@ -840,6 +847,7 @@ describe('profilers/native/wall', () => {
       // The tags update channel resolves it in place — no re-activation needed
       tagsUpdateCh.publish(webSpan)
       assert.strictEqual(ctx0.webTags, webSpanTags)
+      assert.deepStrictEqual(Object.getOwnPropertySymbols(webSpan), symbols)
 
       profiler.stop()
     })

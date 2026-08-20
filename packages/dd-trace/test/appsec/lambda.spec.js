@@ -17,9 +17,11 @@ describe('AppSec Lambda handler', () => {
   const fakeSpan = () => {
     const tags = {}
     const spanContext = {
+      _tags: tags,
       getTag (key) { return tags[key] },
     }
     return {
+      _spanContext: spanContext,
       addTags: sinon.stub().callsFake((obj) => Object.assign(tags, obj)),
       setTag: sinon.stub().callsFake((k, v) => { tags[k] = v }),
       context: sinon.stub().returns(spanContext),
@@ -355,12 +357,14 @@ describe('WAF path safety with non-HTTP req', () => {
   const fakeSpan = () => {
     const tags = {}
     const spanContext = {
+      _tags: tags,
       getTags () { return tags },
       getTag (key) { return tags[key] },
       setTag (key, value) { tags[key] = value },
       hasTag (key) { return key in tags },
     }
     return {
+      _spanContext: spanContext,
       addTags: sinon.stub().callsFake((obj) => Object.assign(tags, obj)),
       setTag: sinon.stub().callsFake((k, v) => { tags[k] = v }),
       context: sinon.stub().returns(spanContext),

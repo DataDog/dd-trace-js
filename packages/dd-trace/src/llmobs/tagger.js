@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../log')
+const eventWriter = require('../opentracing/event-writer')
 const Sampler = require('../sampler')
 const { formatKnuthRate } = require('../util')
 const {
@@ -59,6 +60,7 @@ const {
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
+const { enable: enableSpanState, getOperationName, getStartTime, getTraceTags } = require('./span-state')
 const {
   findGenAIAncestorSpanId,
   resolveAgentAttribution,
@@ -72,6 +74,7 @@ const {
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
 const registry = new WeakMap()
+const parents = new WeakMap()
 
 class LLMObsTagger {
   /** @type {import('../config/config-base')} */
@@ -84,6 +87,7 @@ class LLMObsTagger {
     this.#config = config
 
     this.softFail = softFail
+    if (config.llmobs.DD_LLMOBS_ENABLED) enableSpanState()
   }
 
   /**
@@ -110,6 +114,16 @@ class LLMObsTagger {
     return registry.get(span)?.[SPAN_KIND]
   }
 
+  /**
+   * Return the semantic LLMObs parent captured when a span was registered.
+   *
+   * @param {import('../opentracing/span') | undefined} span
+   * @returns {import('../opentracing/span') | undefined}
+   */
+  static getParent (span) {
+    return parents.get(span)
+  }
+
   registerLLMObsSpan (span, {
     modelName,
     modelProvider,
@@ -127,7 +141,7 @@ class LLMObsTagger {
     const spanMlApp =
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
-      span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
+      getTraceTags(span)?.[PROPAGATED_ML_APP_KEY] ||
       this.#config.llmobs.mlApp ||
       this.#config.service // this should always have a default
 
@@ -139,13 +153,14 @@ class LLMObsTagger {
     }
 
     this._register(span)
+    parents.set(span, parent)
 
-    const traceTags = span.context()._trace.tags
+    const traceTags = getTraceTags(span) || {}
 
     const llmobsTraceId =
       registry.get(parent)?.[TRACE_ID] ??
       normalizeLlmObsTraceId(traceTags[PROPAGATED_TRACE_ID_KEY]) ??
-      generateLlmObsTraceId(span._startTime)
+      generateLlmObsTraceId(getStartTime(span) ?? Date.now())
     this._setTag(span, TRACE_ID, llmobsTraceId)
 
     // When the registering span sits below an OTel `gen_ai.*` ancestor, use
@@ -172,7 +187,7 @@ class LLMObsTagger {
 
     const parentId =
       parent?.context().toSpanId() ??
-      span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
+      traceTags[PROPAGATED_PARENT_ID_KEY] ??
       genAIAncestorSpanId ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
@@ -210,7 +225,7 @@ class LLMObsTagger {
   }
 
   #tagSamplingDecision (span, parent) {
-    const traceTags = span.context()._trace.tags
+    const traceTags = getTraceTags(span) || {}
     const parentTags = registry.get(parent)
 
     let sampleRate, samplingDecision
@@ -250,11 +265,11 @@ class LLMObsTagger {
     if (registry.has(parent)) {
       // Local LLMObs parent: attribute to it if it is an agent, else inherit its resolution.
       ({ name, spanId } = resolveAgentAttribution(registry.get(parent), parent))
-    } else if (span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY]) {
+    } else if (getTraceTags(span)?.[PROPAGATED_PARENT_ID_KEY]) {
       // Distributed LLMObs parent: inherit the nearest agent propagated from upstream. The
       // name may be absent when the upstream hop ran an older SDK or its name was not
       // wire-safe; the id-only case is expected and the backend resolves the name by span id.
-      const traceTags = span.context()._trace.tags
+      const traceTags = getTraceTags(span) || {}
       name = traceTags[PROPAGATED_PARENT_AGENT_NAME_KEY]
       spanId = traceTags[PROPAGATED_PARENT_AGENT_ID_KEY]
     }
@@ -925,7 +940,7 @@ class LLMObsTagger {
   _register (span) {
     if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (registry.has(span)) {
-      this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
+      this.#handleFailure(`LLMObs Span "${getOperationName(span) ?? 'unknown'}" already registered.`)
       return
     }
 
@@ -935,7 +950,7 @@ class LLMObsTagger {
   _setTag (span, key, value) {
     if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (!registry.has(span)) {
-      this.#handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
+      this.#handleFailure(`Span "${getOperationName(span) ?? 'unknown'}" must be an LLMObs generated span.`)
       return
     }
 
@@ -948,10 +963,7 @@ class LLMObsTagger {
     // integrations after span start also seed it. First-writer wins, so an explicit session still
     // overrides locally. Cross-service injection is handled centrally in `handleLLMObsInjection`.
     if (key === SESSION_ID && value) {
-      const traceTags = span.context()._trace.tags
-      if (traceTags[SESSION_ID_TRACE_DEFAULT_KEY] === undefined) {
-        traceTags[SESSION_ID_TRACE_DEFAULT_KEY] = value
-      }
+      eventWriter.setTraceTagIfAbsent(span, SESSION_ID_TRACE_DEFAULT_KEY, value)
     }
   }
 }

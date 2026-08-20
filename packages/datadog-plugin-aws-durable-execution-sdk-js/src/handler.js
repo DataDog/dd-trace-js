@@ -86,16 +86,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
 }
 
 function finishOpenChildSpans (executeSpan) {
-  const trace = executeSpan?._spanContext?._trace
-  if (!trace?.started) return
-
-  for (const span of trace.started) {
-    if (span === executeSpan) continue
-    if (span._integrationName !== AwsDurableExecutionSdkJsHandlerPlugin.id) continue
-    if (span._duration === undefined) {
-      span.finish()
-    }
-  }
+  executeSpan?.finishOpenChildren(AwsDurableExecutionSdkJsHandlerPlugin.id)
 }
 
 // Save state is kept on the shared `ctx` so repeated terminate() calls within one execution

@@ -10,6 +10,7 @@ const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 const reusedNextRequestStores = new WeakSet()
 const nextParentRoutes = new WeakMap()
+const nextSpanState = new WeakMap()
 
 class NextPlugin extends ServerPlugin {
   static id = 'next'
@@ -22,8 +23,8 @@ class NextPlugin extends ServerPlugin {
   bindStart ({ req, res }) {
     const store = storage('legacy').getStore()
     const parentSpan = store?.span
-    if (parentSpan?._integrationName === this.constructor.id) {
-      const reusedStore = { ...store, span: parentSpan, req }
+    if (parentSpan && store.nextRequestSpan) {
+      const reusedStore = { ...store, span: parentSpan, req, nextRequestSpan: true }
       reusedNextRequestStores.add(reusedStore)
       return reusedStore
     }
@@ -52,10 +53,10 @@ class NextPlugin extends ServerPlugin {
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    const isHttpParent = parentSpan?._integrationName === 'http'
-    const httpParentSpan = isHttpParent ? parentSpan : undefined
-    const httpParentReq = isHttpParent ? web.getRequest(parentSpan) : undefined
-    return { ...store, span, req, httpParentSpan, httpParentReq }
+    const httpParentReq = parentSpan && web.getRequest(parentSpan)
+    const httpParentSpan = httpParentReq ? parentSpan : undefined
+    nextSpanState.set(span, {})
+    return { ...store, span, req, httpParentSpan, httpParentReq, nextRequestSpan: true }
   }
 
   error ({ span, error }) {
@@ -67,6 +68,8 @@ class NextPlugin extends ServerPlugin {
     }
 
     this.addError(error, span)
+    const state = nextSpanState.get(span)
+    if (state) state.error = error
   }
 
   finish ({ req, res, nextRequest = {} }) {
@@ -76,7 +79,7 @@ class NextPlugin extends ServerPlugin {
     if (reusedNextRequestStores.has(store)) return
 
     const span = store.span
-    const error = span.context().getTag('error')
+    const error = nextSpanState.get(span)?.error
     const requestError = req.error || nextRequest.error
 
     if (requestError) {
@@ -113,7 +116,8 @@ class NextPlugin extends ServerPlugin {
     if (!req) return
 
     // Only use error page names if there's not already a name
-    const current = span.context().getTag('next.page')
+    const state = nextSpanState.get(span)
+    const current = state?.page
     const isErrorPage = errorPages.has(page)
 
     if (current && isErrorPage) {
@@ -138,6 +142,7 @@ class NextPlugin extends ServerPlugin {
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page,
     })
+    if (state) state.page = page
     const routeRequest = httpParentReq || req
     web.setRouteOrEndpointTag(routeRequest)
     setHttpParentRoute(httpParentSpan, req.method, page, isStatic)
@@ -169,13 +174,11 @@ function normalizeAppPath (page) {
 
 function setHttpParentRoute (span, method, page, isStatic) {
   if (!span) return
-  const currentRoute = span.context().getTag(HTTP_ROUTE)
-
-  // Only refine a route that Next itself set; static resources are fallbacks.
-  if (currentRoute && (nextParentRoutes.get(span) !== currentRoute || isStatic)) return
-
-  span.setTag(HTTP_ROUTE, page)
-  span.setTag(RESOURCE_NAME, `${method} ${page}`.trim())
-  nextParentRoutes.set(span, page)
+  const expectedRoute = isStatic ? undefined : nextParentRoutes.get(span)
+  const written = span.setTagsIfTagMatches(HTTP_ROUTE, expectedRoute, {
+    [HTTP_ROUTE]: page,
+    [RESOURCE_NAME]: `${method} ${page}`.trim(),
+  })
+  if (written) nextParentRoutes.set(span, page)
 }
 module.exports = NextPlugin

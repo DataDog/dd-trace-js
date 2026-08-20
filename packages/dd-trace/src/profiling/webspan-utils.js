@@ -45,26 +45,8 @@ function finalEndpoint (tags) {
   return endpoint
 }
 
-// The trace's started-spans list, whose first entry is the local root span by
-// repo-wide convention — priority_sampler, span_format, the wall profiler's
-// local-root-span-id label, the event plugins and the OTEP-4947 writer all read
-// it that way, and web-tags-cache walks it to find a span's parent.
-//
-// Partial flush weakens that convention for every one of them alike:
-// span_processor's _erase() replaces the list with the still-active spans only,
-// so once a trace crosses DD_TRACE_PARTIAL_FLUSH_MIN_SPANS a local root that has
-// already finished drops out, and the first entry becomes merely the oldest span
-// still running — while a finished web-server ancestor stops being reachable for
-// the parent-chain walk. Correcting it needs a local-root reference the tracer
-// core keeps across flushes; until there is one, consumers share the same skew
-// on large traces rather than each compensating differently.
-function getStartedSpans (context) {
-  return context._trace.started
-}
-
 module.exports = {
   isWebServerSpan,
   endpointNameFromTags,
   finalEndpoint,
-  getStartedSpans,
 }

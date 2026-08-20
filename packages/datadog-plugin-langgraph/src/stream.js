@@ -1,7 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { spanHasError } = require('../../dd-trace/src/llmobs/util')
+const { hasError } = require('../../dd-trace/src/opentracing/span-projections')
 
 // We are only tracing Pregel.stream because Pregel.invoke calls stream internally resulting in
 // a graph with spans that look redundant.
@@ -29,7 +29,7 @@ class NextStreamPlugin extends TracingPlugin {
   asyncEnd (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
-    if (ctx.result.done === true || spanHasError(span)) {
+    if (ctx.result.done === true || hasError(span)) {
       span.finish()
     }
   }

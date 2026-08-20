@@ -65,26 +65,22 @@ const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
  * @returns {SpanTags}
  */
 function getSpanTags (ctx) {
-  const span = ctx.currentStore?.span
-  return /** @type {SpanTags} */ (ctx.attributes ?? span?.context().getTags() ?? {})
+  return /** @type {SpanTags} */ (ctx.attributes ?? {})
 }
 
 /**
- * Get the operation name from the span name
+ * Get the operation name from the instrumentation-owned span name.
  *
  * @example
- * span._name = 'ai.generateText'
- * getOperation(span) // 'generateText'
+ * getOperation('ai.generateText') // 'generateText'
  *
  * @example
- * span._name = 'ai.generateText.doGenerate'
- * getOperation(span) // 'doGenerate'
+ * getOperation('ai.generateText.doGenerate') // 'doGenerate'
  *
- * @param {import('../../../opentracing/span')} span
+ * @param {string} name
  * @returns {string | undefined}
  */
-function getOperation (span) {
-  const name = span._name
+function getOperation (name) {
   if (!name) return
 
   return name.split('.').pop()

@@ -107,6 +107,16 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(finishedSpan.context().getTags(), {})
   })
 
+  it('should default to retaining no active spans when erased directly', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+
+    processor._erase(trace)
+
+    assert.deepStrictEqual(trace.started, [])
+    assert.deepStrictEqual(trace.finished, [])
+  })
+
   it('should not flush a partial trace below the flushMinSpans threshold', () => {
     trace.started = [activeSpan, finishedSpan]
     trace.finished = [finishedSpan]

@@ -3,7 +3,8 @@
 const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
-const { endpointNameFromTags, finalEndpoint, getStartedSpans } = require('../webspan-utils')
+const { getCodeHotspotIds } = require('../../opentracing/span-projections')
+const { endpointNameFromTags, finalEndpoint } = require('../webspan-utils')
 const { SAMPLING_INTERVAL } = require('../constants')
 const {
   enterCh,
@@ -28,7 +29,7 @@ const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
-const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
+const profilingContexts = new WeakMap()
 
 let kSampleCount
 
@@ -233,7 +234,7 @@ class NativeWallProfiler {
       // (a node::ObjectWrap with its own v8::Global<v8::Value>) in the native
       // profiler. Skip the call if the CPED already holds this sampleContext,
       // which is the common case when the same span is repeatedly activated:
-      // #getProfilingContext caches profilingContext on span[ProfilingContext],
+      // #getProfilingContext caches profilingContext for each span,
       // so identity comparison short-circuits.
       } else if (current !== sampleContext) {
         this.#pprof.time.setContext(sampleContext)
@@ -253,16 +254,14 @@ class NativeWallProfiler {
   }
 
   #getProfilingContext (span) {
-    let profilingContext = span[ProfilingContext]
+    let profilingContext = profilingContexts.get(span)
     if (profilingContext === undefined) {
-      const context = span.context()
-
       let spanId
       let rootSpanId
       if (this.#codeHotspotsEnabled) {
-        const startedSpans = getStartedSpans(context)
-        spanId = context._spanId
-        rootSpanId = startedSpans.length ? startedSpans[0].context()._spanId : context._spanId
+        const ids = getCodeHotspotIds(span)
+        spanId = ids?.spanId
+        rootSpanId = ids?.localRootSpanId
       }
 
       // webTags is snapshotted into the sample context at getProfilingContext
@@ -272,7 +271,7 @@ class NativeWallProfiler {
       const webTags = this.#endpointCollectionEnabled ? webTagsCache.getCachedWebTags(span) : undefined
 
       profilingContext = { spanId, rootSpanId, webTags }
-      span[ProfilingContext] = profilingContext
+      profilingContexts.set(span, profilingContext)
     }
     return profilingContext
   }
@@ -285,9 +284,7 @@ class NativeWallProfiler {
   }
 
   #spanFinished (span) {
-    if (span[ProfilingContext] !== undefined) {
-      span[ProfilingContext] = undefined
-    }
+    profilingContexts.delete(span)
   }
 
   // Invoked (via webTagsCache.resolvedCh) once per span at the moment the
@@ -296,7 +293,7 @@ class NativeWallProfiler {
   // pick it up.
   #spanTagsUpdated (span) {
     if (!this.#started) return
-    const profilingContext = span[ProfilingContext]
+    const profilingContext = profilingContexts.get(span)
     if (profilingContext === undefined) return
     profilingContext.webTags = webTagsCache.getCachedWebTags(span)
   }

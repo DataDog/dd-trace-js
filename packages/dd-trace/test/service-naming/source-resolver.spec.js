@@ -7,17 +7,21 @@ const { describe, it } = require('mocha')
 require('../setup/core')
 const DatadogSpanContext = require('../../src/opentracing/span_context')
 const {
-  INTEGRATION_SERVICE,
   MANUAL,
   resolveServiceSource,
+  setIntegrationService,
 } = require('../../src/service-naming/source-resolver')
 
 const TRACER_SERVICE = 'app'
 const SVC_SRC_KEY = '_dd.svc_src'
 
 function makeSpan (tags = {}, marker) {
-  const span = { _spanContext: new DatadogSpanContext({ tags: { ...tags } }) }
-  if (marker !== undefined) span[INTEGRATION_SERVICE] = marker
+  const context = new DatadogSpanContext({ tags: { ...tags } })
+  const span = {
+    _spanContext: context,
+    context: () => context,
+  }
+  if (marker !== undefined) setIntegrationService(span, marker)
   return span
 }
 

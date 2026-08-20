@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../../log')
+const { hasUserSessionId } = require('../../opentracing/span-projections')
 const web = require('../../plugins/util/web')
 const addresses = require('../addresses')
 const { handleResults } = require('../blocking')
@@ -43,8 +44,7 @@ function onExpressSession ({ req, res, sessionId, abortController }) {
     return
   }
 
-  const isSdkCalled = rootSpan.context().getTag('usr.session_id')
-  if (isSdkCalled) return
+  if (hasUserSessionId(rootSpan)) return
 
   const results = waf.run({
     persistent: {

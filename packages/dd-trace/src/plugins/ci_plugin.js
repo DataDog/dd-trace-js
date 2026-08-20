@@ -20,6 +20,7 @@ const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 const { DD_MAJOR } = require('../../../../version')
 const { version: tracerVersion } = require('../../../../package.json')
 const id = require('../id')
+const eventWriter = require('../opentracing/event-writer')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const {
   CI_PROVIDER_NAME,
@@ -888,8 +889,7 @@ module.exports = class CiPlugin extends Plugin {
     if (testSuiteSpan) {
       // This is a hack to get good time resolution on test events, while keeping
       // the test event as the root span of its trace.
-      childOf._trace.startTime = testSuiteSpan.context()._trace.startTime
-      childOf._trace.ticks = testSuiteSpan.context()._trace.ticks
+      eventWriter.copyTraceTiming(childOf, testSuiteSpan.context())
 
       const suiteTags = {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
@@ -923,7 +923,7 @@ module.exports = class CiPlugin extends Plugin {
         integrationName: this.constructor.id,
       })
 
-    testSpan.context()._trace.origin = CI_APP_ORIGIN
+    eventWriter.setOrigin(testSpan, CI_APP_ORIGIN)
 
     return testSpan
   }

@@ -35,8 +35,8 @@ const {
 } = require('./storage-channels')
 const {
   finalEndpoint,
-  getStartedSpans,
 } = require('./profiling/webspan-utils')
+const { getCodeHotspotIds } = require('./opentracing/span-projections')
 const webTagsCache = require('./web-tags-cache')
 
 // OTEP-4947 duplicates are last-wins, so appending a later endpoint value would
@@ -94,7 +94,7 @@ const ATTRIBUTE_KEYS = [
 const THREAD_NAME = (isMainThread ? 'Main' : `Worker #${threadId}`) + ' Event Loop'
 const THREAD_ID = String(threadId)
 
-// Cache slot on span objects. One ThreadContext is built per span on first
+// One ThreadContext is built per span on first
 // activation and re-installed across every async-context frame that
 // re-enters the span — V8's AsyncContextFrame inherits the JS
 // reference verbatim, and the context's record buffer is mutated in
@@ -105,7 +105,7 @@ const THREAD_ID = String(threadId)
 //             time onEnter activates the span, and cleared on span finish, which
 //             is how a pendingEndpoints waiter recognizes a record it must no
 //             longer append to.
-const CachedSym = Symbol('OtelThreadCtx.cached')
+const contexts = new WeakMap()
 
 let started = false
 let ThreadContext
@@ -113,28 +113,24 @@ let getContext
 let clearContext
 
 function getOrBuildContext (span) {
-  let cached = span[CachedSym]
+  let cached = contexts.get(span)
   if (cached !== undefined && cached.context !== undefined) return cached.context
   const spanContext = span.context()
   const traceId = Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
   const spanId = Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex'))
-  // Local root span: the first entry in the trace's started-spans list, or
-  // this span itself when it IS the root. Encoded as 16-char lowercase hex
-  // per the libdatadog convention.
-  const startedSpans = getStartedSpans(spanContext)
-  const rootContext = startedSpans.length ? startedSpans[0].context() : spanContext
+  const localRootSpanId = getCodeHotspotIds(span)?.localRootSpanId
   // Only write the endpoint when its value has settled; otherwise leave a hole
   // and wait for webTagsCache to announce that it has.
   const webTags = webTagsCache.getCachedWebTags(span)
   const endpoint = finalEndpoint(webTags)
   const attrs = []
-  attrs[LOCAL_ROOT_SPAN_ID_IDX] = rootContext.toSpanId(true)
+  attrs[LOCAL_ROOT_SPAN_ID_IDX] = localRootSpanId?.toString(16) ?? spanContext.toSpanId(true)
   if (endpoint !== undefined) attrs[ENDPOINT_IDX] = endpoint
   attrs[THREAD_NAME_IDX] = THREAD_NAME
   attrs[THREAD_ID_IDX] = THREAD_ID
   if (cached === undefined) {
     cached = {}
-    span[CachedSym] = cached
+    contexts.set(span, cached)
   }
   cached.context = new ThreadContext(traceId, spanId, attrs)
   if (endpoint === undefined) awaitEndpoint(webTags, cached)
@@ -181,9 +177,9 @@ function onEnter () {
 
 function onSpanFinished (span) {
   if (!started) return
-  const cached = span[CachedSym]
+  const cached = contexts.get(span)
   if (cached === undefined) return
-  span[CachedSym] = undefined
+  contexts.delete(span)
   const context = cached.context
   if (context === undefined) return
   // The span is over, so its record must stop presenting itself as an active
@@ -219,7 +215,7 @@ function onSpanFinished (span) {
 // descendants enlisted under.
 function onEndpointResolved (span) {
   if (!started) return
-  const webTags = span.context().getTags()
+  const webTags = webTagsCache.getCachedWebTags(span)
   const waiting = pendingEndpoints.get(webTags)
   if (waiting === undefined) return
   const endpoint = finalEndpoint(webTags)
@@ -237,7 +233,7 @@ function onEndpointResolved (span) {
 // only ever about the announced span's own record.
 function onWebTagsResolved (span) {
   if (!started) return
-  const cached = span[CachedSym]
+  const cached = contexts.get(span)
   if (cached === undefined || cached.context === undefined) return
   const webTags = webTagsCache.getCachedWebTags(span)
   const endpoint = finalEndpoint(webTags)

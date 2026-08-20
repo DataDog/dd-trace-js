@@ -37,7 +37,8 @@
 // deactivate() when they stop caring.
 
 const dc = require('dc-polyfill')
-const { finalEndpoint, isWebServerSpan, getStartedSpans } = require('./profiling/webspan-utils')
+const { getOwnWebTags, getParentSpan } = require('./opentracing/span-projections')
+const { finalEndpoint, isWebServerSpan } = require('./profiling/webspan-utils')
 
 // Fields on the cache entry:
 //   resolved:      true once the parent-chain walk has run.
@@ -45,17 +46,17 @@ const { finalEndpoint, isWebServerSpan, getStartedSpans } = require('./profiling
 //                  empty (no web-server span found in the started-spans chain).
 //   endpointFinal: true once this span is a web-server span whose endpoint name
 //                  has settled and endpointResolvedCh has been published for it.
-const CachedSym = Symbol('WebTagsCache')
+const cache = new WeakMap()
 
 const tagsUpdateCh = dc.channel('dd-trace:span:tags:update')
 const resolvedCh = dc.channel('dd-trace:web-tags:resolved')
 const endpointResolvedCh = dc.channel('dd-trace:web-tags:endpoint-resolved')
 
 function getCache (span) {
-  let cached = span[CachedSym]
+  let cached = cache.get(span)
   if (cached === undefined) {
     cached = {}
-    span[CachedSym] = cached
+    cache.set(span, cached)
   }
   return cached
 }
@@ -67,21 +68,13 @@ function getCache (span) {
 function getCachedWebTags (span) {
   const cached = getCache(span)
   if (cached.resolved) return cached.webTags
-  const spanContext = span.context()
-  const tags = spanContext.getTags()
+  const tags = getOwnWebTags(span)
   let webTags
   if (isWebServerSpan(tags)) {
     webTags = tags
   } else {
-    const parentId = spanContext._parentId
-    const startedSpans = getStartedSpans(spanContext)
-    for (let i = startedSpans.length; --i >= 0;) {
-      const ispan = startedSpans[i]
-      if (ispan.context()._spanId === parentId) {
-        webTags = getCachedWebTags(ispan)
-        break
-      }
-    }
+    const parent = getParentSpan(span)
+    if (parent !== undefined) webTags = getCachedWebTags(parent)
   }
   cached.webTags = webTags
   cached.resolved = true
@@ -95,9 +88,9 @@ function getCachedWebTags (span) {
 // `DatadogSpan#setTag` / `addTags` never enter the publish path on our
 // behalf.
 function onTagsUpdate (span) {
-  const cached = span[CachedSym]
+  const cached = cache.get(span)
   if (cached === undefined || !cached.resolved) return
-  const tags = span.context().getTags()
+  const tags = getOwnWebTags(span)
   if (cached.webTags === undefined) {
     if (!isWebServerSpan(tags)) return
     cached.webTags = tags

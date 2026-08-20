@@ -88,7 +88,7 @@ class UndiciPlugin extends HttpClientPlugin {
 
     // Disable recording if not allowed
     if (!allowed) {
-      span._spanContext._trace.record = false
+      span.setRecording(false)
     }
 
     // Capture request headers if configured

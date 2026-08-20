@@ -2,6 +2,7 @@
 
 const { SCI_COMMIT_SHA, SCI_REPOSITORY_URL } = require('./constants')
 const getGitMetadata = require('./git_metadata')
+const eventWriter = require('./opentracing/event-writer')
 
 class GitMetadataTagger {
   #commitSHA
@@ -17,9 +18,8 @@ class GitMetadataTagger {
 
   tagGitMetadata (spanContext) {
     if (this.#enabled) {
-      const tags = spanContext._trace.tags
-      tags[SCI_COMMIT_SHA] = this.#commitSHA
-      tags[SCI_REPOSITORY_URL] = this.#repositoryUrl
+      eventWriter.setTraceTag(spanContext, SCI_COMMIT_SHA, this.#commitSHA)
+      eventWriter.setTraceTag(spanContext, SCI_REPOSITORY_URL, this.#repositoryUrl)
     }
   }
 }

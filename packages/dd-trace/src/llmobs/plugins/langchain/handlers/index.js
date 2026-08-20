@@ -6,8 +6,8 @@ class LangChainLLMObsHandler {
     this._tagger = tagger
   }
 
-  getName ({ span }) {
-    return span?.context()?.getTag('resource.name')
+  getName ({ resource }) {
+    return resource
   }
 
   setMetaTags () {}

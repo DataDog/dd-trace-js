@@ -15,7 +15,9 @@ require('../../').init()
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
+const { getDatadogSpan } = require('../../src/opentelemetry/span-registry')
 const NoopTracer = require('../../src/noop/tracer')
+const { getDatadogContext } = require('../../src/opentracing/context-registry')
 const DatadogSpan = require('../../src/opentracing/span')
 const tracer = require('../../')
 
@@ -55,7 +57,7 @@ describe('OTel Tracer', () => {
     const span = otelTracer.startSpan('name')
     assert.ok(span instanceof Span)
 
-    const ddSpan = span._ddSpan
+    const ddSpan = getDatadogSpan(span)
     assert.ok(ddSpan instanceof DatadogSpan)
     assert.strictEqual(ddSpan._name, 'name')
   })
@@ -70,7 +72,7 @@ describe('OTel Tracer', () => {
       },
     })
 
-    const ddSpanContext = span._ddSpan.context()
+    const ddSpanContext = getDatadogSpan(span).context()
     assert.strictEqual(ddSpanContext.getTag('foo'), 'bar')
   })
 
@@ -152,7 +154,7 @@ describe('OTel Tracer', () => {
 
     otelTracer.startActiveSpan('name', (span) => {
       assert.ok(span instanceof Span)
-      assert.strictEqual(span._ddSpan, storage('legacy').getStore()?.span)
+      assert.strictEqual(getDatadogSpan(span), storage('legacy').getStore()?.span)
     })
   })
 
@@ -163,7 +165,7 @@ describe('OTel Tracer', () => {
 
     tracer.trace('dd-trace-sub', (ddSpan) => {
       const otelSpan = otelTracer.startSpan('name')
-      isChildOf(otelSpan._ddSpan, ddSpan)
+      isChildOf(getDatadogSpan(otelSpan), ddSpan)
     })
   })
 
@@ -175,7 +177,7 @@ describe('OTel Tracer', () => {
     otelTracer.startActiveSpan('name', (otelSpan) => {
       // NOTE: tracer.startSpan(...) does not use active context. Is this a bug?
       tracer.trace('dd-trace-sub', (ddSpan) => {
-        isChildOf(ddSpan, otelSpan._ddSpan)
+        isChildOf(ddSpan, getDatadogSpan(otelSpan))
       })
     })
   })
@@ -187,7 +189,7 @@ describe('OTel Tracer', () => {
 
     otelTracer.startActiveSpan('name', (outer) => {
       const inner = otelTracer.startSpan('name')
-      isChildOf(inner._ddSpan, outer._ddSpan)
+      isChildOf(getDatadogSpan(inner), getDatadogSpan(outer))
     })
   })
 
@@ -201,8 +203,8 @@ describe('OTel Tracer', () => {
         root: true,
       })
 
-      const parentContext = outer._ddSpan.context()
-      const childContext = inner._ddSpan.context()
+      const parentContext = getDatadogSpan(outer).context()
+      const childContext = getDatadogSpan(inner).context()
 
       assert.notStrictEqual(childContext.toTraceId(), parentContext.toTraceId())
       assert.notDeepStrictEqual(childContext._parentId, parentContext._spanId)
@@ -216,23 +218,23 @@ describe('OTel Tracer', () => {
     otelTracer.startActiveSpan('otel-root', async (root) => {
       await new Promise(resolve => setTimeout(resolve, 200))
       otelTracer.startActiveSpan('otel-parent1', async (parent1) => {
-        isChildOf(parent1._ddSpan, root._ddSpan)
+        isChildOf(getDatadogSpan(parent1), getDatadogSpan(root))
         await new Promise(resolve => setTimeout(resolve, 400))
         otelTracer.startActiveSpan('otel-child1', async (child) => {
-          isChildOf(child._ddSpan, parent1._ddSpan)
+          isChildOf(getDatadogSpan(child), getDatadogSpan(parent1))
           await new Promise(resolve => setTimeout(resolve, 600))
         })
       })
       const orphan1 = otelTracer.startSpan('orphan1')
-      isChildOf(orphan1._ddSpan, root._ddSpan)
+      isChildOf(getDatadogSpan(orphan1), getDatadogSpan(root))
       const ctx = api.trace.setSpan(api.context.active(), root)
 
       otelTracer.startActiveSpan('otel-parent2', ctx, async (parent2) => {
-        isChildOf(parent2._ddSpan, root._ddSpan)
+        isChildOf(getDatadogSpan(parent2), getDatadogSpan(root))
         await new Promise(resolve => setTimeout(resolve, 400))
         const ctx = api.trace.setSpan(api.context.active(), root)
         otelTracer.startActiveSpan('otel-child2', ctx, async (child) => {
-          isChildOf(child._ddSpan, parent2._ddSpan)
+          isChildOf(getDatadogSpan(child), getDatadogSpan(parent2))
           await new Promise(resolve => setTimeout(resolve, 600))
         })
       })
@@ -271,31 +273,34 @@ describe('OTel Tracer', () => {
 
     it('writes sampling priority onto the wrapped Datadog context', () => {
       const spanContext = convert(1, 'other=bleh,dd=s:2;o:synthetics;t.dm:-4')
-      assert.strictEqual(spanContext._ddContext._sampling.priority, USER_KEEP)
-      assert.strictEqual(spanContext._ddContext._trace.origin, 'synthetics')
+      const datadogContext = getDatadogContext(spanContext)
+      assert.strictEqual(datadogContext._sampling.priority, USER_KEEP)
+      assert.strictEqual(datadogContext._trace.origin, 'synthetics')
       assert.strictEqual(spanContext.traceFlags, 1)
     })
 
     it('preserves the existing _trace.started/finished/tags when writing origin', () => {
       const spanContext = convert(1, 'other=bleh,dd=s:1;o:foo')
-      assert.deepStrictEqual(spanContext._ddContext._trace.started, [])
-      assert.deepStrictEqual(spanContext._ddContext._trace.finished, [])
-      assert.deepStrictEqual(spanContext._ddContext._trace.tags, {})
-      assert.strictEqual(spanContext._ddContext._trace.origin, 'foo')
+      const datadogContext = getDatadogContext(spanContext)
+      assert.deepStrictEqual(datadogContext._trace.started, [])
+      assert.deepStrictEqual(datadogContext._trace.finished, [])
+      assert.deepStrictEqual(datadogContext._trace.tags, {})
+      assert.strictEqual(datadogContext._trace.origin, 'foo')
     })
 
     it('falls back to AUTO_REJECT/AUTO_KEEP when tracestate has no s: field', () => {
       const rejected = convert(0, 'other=bleh,dd=o:foo;t.dm:-4')
-      assert.strictEqual(rejected._ddContext._sampling.priority, AUTO_REJECT)
+      assert.strictEqual(getDatadogContext(rejected)._sampling.priority, AUTO_REJECT)
 
       const kept = convert(1, 'other=bleh,dd=o:foo;t.dm:-4')
-      assert.strictEqual(kept._ddContext._sampling.priority, AUTO_KEEP)
+      assert.strictEqual(getDatadogContext(kept)._sampling.priority, AUTO_KEEP)
     })
 
     it('falls back to AUTO_KEEP for RUM traces without a priority', () => {
       const spanContext = convert(1, 'other=bleh,dd=o:rum')
-      assert.strictEqual(spanContext._ddContext._sampling.priority, AUTO_KEEP)
-      assert.strictEqual(spanContext._ddContext._trace.origin, 'rum')
+      const datadogContext = getDatadogContext(spanContext)
+      assert.strictEqual(datadogContext._sampling.priority, AUTO_KEEP)
+      assert.strictEqual(datadogContext._trace.origin, 'rum')
     })
   })
 
@@ -305,7 +310,7 @@ describe('OTel Tracer', () => {
     const otelTracer = new Tracer({}, {}, tracerProvider)
     otelTracer.startActiveSpan('otel-top-level', async (root) => {
       tracer.trace('ddtrace-top-level', async (ddSpan) => {
-        isChildOf(ddSpan, root._ddSpan)
+        isChildOf(ddSpan, getDatadogSpan(root))
         await new Promise(resolve => setTimeout(resolve, 200))
         tracer.trace('ddtrace-child', async (ddSpanChild) => {
           isChildOf(ddSpanChild, ddSpan)
@@ -313,12 +318,12 @@ describe('OTel Tracer', () => {
         })
 
         otelTracer.startActiveSpan('otel-child', async (otelSpan) => {
-          isChildOf(otelSpan._ddSpan, ddSpan)
+          isChildOf(getDatadogSpan(otelSpan), ddSpan)
           await new Promise(resolve => setTimeout(resolve, 200))
           tracer.trace('ddtrace-grandchild', async (ddSpanGrandchild) => {
-            isChildOf(ddSpanGrandchild, otelSpan._ddSpan)
+            isChildOf(ddSpanGrandchild, getDatadogSpan(otelSpan))
             otelTracer.startActiveSpan('otel-grandchild', async (otelGrandchild) => {
-              isChildOf(otelGrandchild._ddSpan, ddSpanGrandchild)
+              isChildOf(getDatadogSpan(otelGrandchild), ddSpanGrandchild)
               await new Promise(resolve => setTimeout(resolve, 200))
             })
           })

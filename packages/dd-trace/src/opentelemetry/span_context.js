@@ -1,7 +1,7 @@
 'use strict'
 
 const api = require('@opentelemetry/api')
-const { AUTO_KEEP } = require('../../../../ext/priority')
+const { registerDatadogContext } = require('../opentracing/context-registry')
 const DatadogSpanContext = require('../opentracing/span_context')
 const id = require('../id')
 
@@ -14,31 +14,32 @@ function newContext () {
 }
 
 class SpanContext {
+  #datadogContext
+
   constructor (context) {
     if (!(context instanceof DatadogSpanContext)) {
       context = context
         ? new DatadogSpanContext(context)
         : newContext()
     }
-    this._ddContext = context
+    this.#datadogContext = context
+    registerDatadogContext(this, context)
   }
 
   get traceId () {
-    return this._ddContext.toTraceId(true)
+    return this.#datadogContext.toTraceId(true)
   }
 
   get spanId () {
-    return this._ddContext.toSpanId(true)
+    return this.#datadogContext.toSpanId(true)
   }
 
   get traceFlags () {
-    this._ddContext._ensureSamplingPriority()
-    return this._ddContext._sampling.priority >= AUTO_KEEP ? 1 : 0
+    return this.#datadogContext.toTraceFlags()
   }
 
   get traceState () {
-    const ts = this._ddContext._tracestate
-    return api.createTraceState(ts ? ts.toString() : '')
+    return api.createTraceState(this.#datadogContext.toTracestate())
   }
 }
 

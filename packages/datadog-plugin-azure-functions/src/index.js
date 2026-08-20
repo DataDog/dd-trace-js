@@ -53,8 +53,8 @@ class AzureFunctionsPlugin extends TracingPlugin {
         ctx
       )
 
-      span._integrationName = 'azure-functions'
-      span.context().setTag('component', 'azure-functions')
+      span.setIntegrationName('azure-functions')
+      span.setTag('component', 'azure-functions')
       span.addTags(meta)
       webContext.span = span
       webContext.azureFunctionCtx = ctx

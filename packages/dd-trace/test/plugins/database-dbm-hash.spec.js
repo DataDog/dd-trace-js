@@ -42,12 +42,8 @@ describe('DatabasePlugin DBM Hash', () => {
       context: () => ({
         _tags: contextTags,
         getTags: () => contextTags,
-      }),
-      _spanContext: {
-        _tags: contextTags,
-        getTags: () => contextTags,
         toTraceparent: () => 'traceparent-value',
-      },
+      }),
       setTag: function (key, value) {
         this._tags = this._tags || {}
         this._tags[key] = value

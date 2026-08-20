@@ -17,6 +17,8 @@ const tracer = require('../../').init()
 
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
+const { getDatadogSpan } = require('../../src/opentelemetry/span-registry')
+const { getDatadogContext } = require('../../src/opentracing/context-registry')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
@@ -43,7 +45,7 @@ describe('OTel Span', () => {
   it('should inherit service and host name from tracer', () => {
     const span = makeSpan('name')
 
-    const context = span._ddSpan.context()
+    const context = getDatadogSpan(span).context()
     assert.strictEqual(context.getTag(SERVICE_NAME), tracer._tracer._service)
     assert.strictEqual(context._hostname, tracer._hostname)
   })
@@ -55,7 +57,7 @@ describe('OTel Span', () => {
     tags.dd_llmobs_enabled = 'false'
     try {
       const span = makeSpan('name')
-      assert.strictEqual(span._ddSpan.context().getTag('dd_llmobs_enabled'), 'false')
+      assert.strictEqual(getDatadogSpan(span).context().getTag('dd_llmobs_enabled'), 'false')
     } finally {
       delete tags.dd_llmobs_enabled
     }
@@ -66,7 +68,7 @@ describe('OTel Span', () => {
     tags.custom_tag = 'from-config'
     try {
       const span = makeSpan('name', { attributes: { custom_tag: 'from-span' } })
-      assert.strictEqual(span._ddSpan.context().getTag('custom_tag'), 'from-span')
+      assert.strictEqual(getDatadogSpan(span).context().getTag('custom_tag'), 'from-span')
     } finally {
       delete tags.custom_tag
     }
@@ -83,7 +85,7 @@ describe('OTel Span', () => {
     tags[SPAN_KIND] = 'from-config-tags'
     try {
       const span = makeSpan('name', { kind: api.SpanKind.CONSUMER })
-      const context = span._ddSpan.context()
+      const context = getDatadogSpan(span).context()
       assert.strictEqual(context.getTag(SERVICE_NAME), tracer._tracer._service)
       assert.strictEqual(context.getTag(RESOURCE_NAME), 'name')
       assert.strictEqual(context.getTag(SPAN_KIND), kinds.CONSUMER)
@@ -280,14 +282,14 @@ describe('OTel Span', () => {
   it('should copy span name to resource.name', () => {
     const span = makeSpan('name')
 
-    const context = span._ddSpan.context()
+    const context = getDatadogSpan(span).context()
     assert.strictEqual(context.getTag(RESOURCE_NAME), 'name')
   })
 
   it('should copy span kind to span.kind', () => {
     const span = makeSpan('name', { kind: api.SpanKind.CONSUMER })
 
-    const context = span._ddSpan.context()
+    const context = getDatadogSpan(span).context()
     assert.strictEqual(context.getTag(SPAN_KIND), kinds.CONSUMER)
   })
 
@@ -296,14 +298,25 @@ describe('OTel Span', () => {
 
     const spanContext = span.spanContext()
     assert.ok(spanContext instanceof SpanContext)
-    assert.strictEqual(spanContext._ddContext, span._ddSpan.context())
+    assert.strictEqual(getDatadogContext(spanContext), getDatadogSpan(span).context())
+  })
+
+  it('should expose immutable identifier-only legacy context compatibility', () => {
+    const span = makeSpan('name')
+    const spanContext = span.spanContext()
+    const legacyContext = span._ddSpan.context()
+
+    assert.strictEqual(legacyContext._traceId.toString(16), spanContext.traceId)
+    assert.strictEqual(legacyContext._spanId.toString(16), spanContext.spanId)
+    assert.ok(Object.isFrozen(legacyContext))
+    assert.notStrictEqual(span._ddSpan, getDatadogSpan(span))
   })
 
   it('should expose duration', () => {
     const span = makeSpan('name')
     span.end()
 
-    assert.strictEqual(span.duration, span._ddSpan._duration)
+    assert.strictEqual(span.duration, getDatadogSpan(span)._duration)
   })
 
   it('should expose trace provider resource', () => {
@@ -334,7 +347,7 @@ describe('OTel Span', () => {
     const span = makeSpan('original name')
     span.updateName('updated name')
 
-    assert.strictEqual(span._ddSpan.context()._name, 'updated name')
+    assert.strictEqual(getDatadogSpan(span).context()._name, 'updated name')
     assert.strictEqual(span.name, 'updated name')
   })
 
@@ -344,13 +357,13 @@ describe('OTel Span', () => {
 
     span.updateName('after end')
 
-    assert.strictEqual(span._ddSpan.context()._name, 'name')
+    assert.strictEqual(getDatadogSpan(span).context()._name, 'name')
   })
 
   it('should set attributes', () => {
     const span = makeSpan('name')
 
-    const tags = span._ddSpan.context().getTags()
+    const tags = getDatadogSpan(span).context().getTags()
 
     span.setAttribute('foo', 'bar')
     assert.strictEqual(tags.foo, 'bar')
@@ -363,7 +376,7 @@ describe('OTel Span', () => {
     it('should remap when setting attributes', () => {
       const span = makeSpan('name')
 
-      const tags = span._ddSpan.context().getTags()
+      const tags = getDatadogSpan(span).context().getTags()
 
       span.setAttributes({ 'http.response.status_code': 200 })
       assert.strictEqual(tags['http.status_code'], '200')
@@ -372,7 +385,7 @@ describe('OTel Span', () => {
     it('should remap when setting singular attribute', () => {
       const span = makeSpan('name')
 
-      const tags = span._ddSpan.context().getTags()
+      const tags = getDatadogSpan(span).context().getTags()
 
       span.setAttribute('http.response.status_code', 200)
       assert.strictEqual(tags['http.status_code'], '200')
@@ -384,7 +397,7 @@ describe('OTel Span', () => {
     const span2 = makeSpan('name2')
     const span3 = makeSpan('name3')
 
-    const { _links } = span._ddSpan
+    const { _links } = getDatadogSpan(span)
 
     span.addLink({ context: span2.spanContext() })
     assert.strictEqual(_links.length, 1)
@@ -413,7 +426,7 @@ describe('OTel Span', () => {
 
     span.end()
 
-    const formatted = spanFormat(span._ddSpan)
+    const formatted = spanFormat(getDatadogSpan(span))
     assert.ok(
       Object.hasOwn(formatted.meta, '_dd.span_links'),
       `Available keys: ${inspect(Object.keys(formatted.meta))}`
@@ -431,7 +444,7 @@ describe('OTel Span', () => {
 
   it('should add span pointers', () => {
     const span = makeSpan('name')
-    const { _links } = span._ddSpan
+    const { _links } = getDatadogSpan(span)
 
     span.addSpanPointer('pointer_kind', 'd', 'abc123')
     assert.strictEqual(_links.length, 1)
@@ -458,18 +471,18 @@ describe('OTel Span', () => {
 
   it('should set status', () => {
     const unset = makeSpan('name')
-    const unsetCtx = unset._ddSpan.context()
+    const unsetCtx = getDatadogSpan(unset).context()
     unset.setStatus({ code: 0, message: 'unset' })
     assert.ok(!unsetCtx.hasTag(ERROR_MESSAGE))
 
     const ok = makeSpan('name')
-    const okCtx = ok._ddSpan.context()
+    const okCtx = getDatadogSpan(ok).context()
     ok.setStatus({ code: 1, message: 'ok' })
     assert.ok(!okCtx.hasTag(ERROR_MESSAGE))
     assert.ok(!okCtx.hasTag(IGNORE_OTEL_ERROR))
 
     const error = makeSpan('name')
-    const errorCtx = error._ddSpan.context()
+    const errorCtx = getDatadogSpan(error).context()
     error.setStatus({ code: 2, message: 'error' })
     assert.strictEqual(errorCtx.getTag(ERROR_MESSAGE), 'error')
     assert.strictEqual(errorCtx.getTag(IGNORE_OTEL_ERROR), false)
@@ -484,13 +497,13 @@ describe('OTel Span', () => {
     const datenow = Date.now()
     span.recordException(error, datenow)
 
-    const tags = span._ddSpan.context().getTags()
+    const tags = getDatadogSpan(span).context().getTags()
     assert.strictEqual(tags[ERROR_TYPE], error.name)
     assert.strictEqual(tags[ERROR_MESSAGE], error.message)
     assert.strictEqual(tags[ERROR_STACK], error.stack)
     assert.strictEqual(tags[IGNORE_OTEL_ERROR], true)
 
-    const events = span._ddSpan._events
+    const events = getDatadogSpan(span)._events
     assert.strictEqual(events.length, 1)
     assert.deepStrictEqual(events, [{
       name: error.name,
@@ -501,20 +514,20 @@ describe('OTel Span', () => {
       startTime: datenow,
     }])
 
-    let formatted = spanFormat(span._ddSpan)
+    let formatted = spanFormat(getDatadogSpan(span))
     assert.strictEqual(formatted.error, 0)
     assert.ok(!('doNotSetTraceError' in formatted.meta))
 
     // Set error code
     span.setStatus({ code: 2, message: 'error' })
 
-    formatted = spanFormat(span._ddSpan)
+    formatted = spanFormat(getDatadogSpan(span))
     assert.strictEqual(formatted.error, 1)
 
     span.recordException(new Error('foobar'), Date.now())
 
     // Keep the error set to 1
-    formatted = spanFormat(span._ddSpan)
+    formatted = spanFormat(getDatadogSpan(span))
     assert.strictEqual(formatted.error, 1)
     assert.ok(Object.hasOwn(formatted, 'meta'), `Available keys: ${inspect(Object.keys(formatted))}`)
     assert.strictEqual(formatted.meta['error.message'], 'foobar')
@@ -536,12 +549,12 @@ describe('OTel Span', () => {
     const error = new TestError()
     span.recordException(error)
 
-    const tags = span._ddSpan.context().getTags()
+    const tags = getDatadogSpan(span).context().getTags()
     assert.strictEqual(tags[ERROR_TYPE], error.name)
     assert.strictEqual(tags[ERROR_MESSAGE], error.message)
     assert.strictEqual(tags[ERROR_STACK], error.stack)
 
-    const events = span._ddSpan._events
+    const events = getDatadogSpan(span)._events
     assert.strictEqual(events.length, 1)
     assert.deepStrictEqual(events, [{
       name: error.name,
@@ -558,7 +571,7 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
     span.end()
 
-    const tags = span._ddSpan.context().getTags()
+    const tags = getDatadogSpan(span).context().getTags()
 
     span.setStatus({ code: 2, message: 'error' })
     assert.ok(
@@ -570,7 +583,7 @@ describe('OTel Span', () => {
   describe('setStatus precedence (OTel spec)', () => {
     it('OK locks the status against subsequent ERROR and UNSET writes', () => {
       const span = makeSpan('name')
-      const tags = span._ddSpan.context().getTags()
+      const tags = getDatadogSpan(span).context().getTags()
 
       span.setStatus({ code: 1 })
       span.setStatus({ code: 2, message: 'late error' })
@@ -581,7 +594,7 @@ describe('OTel Span', () => {
 
     it('ERROR can be overridden by a later ERROR with a fresh message', () => {
       const span = makeSpan('name')
-      const tags = span._ddSpan.context().getTags()
+      const tags = getDatadogSpan(span).context().getTags()
 
       span.setStatus({ code: 2, message: 'first error' })
       span.setStatus({ code: 2, message: 'second error' })
@@ -591,7 +604,7 @@ describe('OTel Span', () => {
 
     it('UNSET is always a no-op even before any successful write', () => {
       const span = makeSpan('name')
-      const tags = span._ddSpan.context().getTags()
+      const tags = getDatadogSpan(span).context().getTags()
 
       span.setStatus({ code: 0, message: 'ignored' })
 
@@ -612,13 +625,13 @@ describe('OTel Span', () => {
     span.recordException(new Error('after end'))
     span.updateName('after end')
 
-    const tags = span._ddSpan.context().getTags()
+    const tags = getDatadogSpan(span).context().getTags()
     assert.ok(!('after.end' in tags))
     assert.ok(!('after.end.batch' in tags))
     assert.ok(!(ERROR_MESSAGE in tags))
     assert.ok(!(ERROR_TYPE in tags))
-    assert.strictEqual(span._ddSpan._links.length, 0)
-    assert.strictEqual(span._ddSpan._events.length, 0)
+    assert.strictEqual(getDatadogSpan(span)._links.length, 0)
+    assert.strictEqual(getDatadogSpan(span)._events.length, 0)
   })
 
   it('should mark ended and expose recording state', () => {
@@ -626,13 +639,14 @@ describe('OTel Span', () => {
 
     assert.strictEqual(span.ended, false)
     assert.strictEqual(span.isRecording(), true)
-    assert.strictEqual(span._ddSpan._duration, undefined)
+    assert.strictEqual(getDatadogSpan(span)._duration, undefined)
 
     span.end()
 
     assert.strictEqual(span.ended, true)
     assert.strictEqual(span.isRecording(), false)
-    assert.ok(Object.hasOwn(span._ddSpan, '_duration'), `Available keys: ${inspect(Object.keys(span._ddSpan))}`)
+    const keys = inspect(Object.keys(getDatadogSpan(span)))
+    assert.ok(Object.hasOwn(getDatadogSpan(span), '_duration'), `Available keys: ${keys}`)
   })
 
   it('should trigger span processor events', () => {
@@ -666,8 +680,8 @@ describe('OTel Span', () => {
       { 'error.code': '403', 'unknown values': [1, ['h', 'a', [false]]] }, datenow)
     span2.addEvent('Web page loaded')
     span2.addEvent('Button changed color', { colors: [112, 215, 70], 'response.time': 134.3, success: true })
-    const events1 = span1._ddSpan._events
-    const events2 = span2._ddSpan._events
+    const events1 = getDatadogSpan(span1)._events
+    const events2 = getDatadogSpan(span2)._events
     assert.strictEqual(events1.length, 1)
     assert.deepStrictEqual(events1, [{
       name: 'Web page unresponsive',
@@ -692,7 +706,7 @@ describe('OTel Span', () => {
 
     // Numeric startTime (not hrTime array) guarantees span_format's Math.round(startTime * 1e6)
     // is finite; absent `attributes` key guarantees no { '0': s, '1': n } leak.
-    assert.deepStrictEqual(span._ddSpan._events, [
+    assert.deepStrictEqual(getDatadogSpan(span)._events, [
       { name: 'hr-time-as-second-arg', startTime: hrTimeMs },
       { name: 'date-as-second-arg', startTime: date.getTime() },
       { name: 'attrs-and-hr-time', attributes: { code: 42 }, startTime: hrTimeMs },
@@ -711,7 +725,7 @@ describe('OTel Span', () => {
     it('does not mirror http.response.status_code to http.status_code', () => {
       const span = makeSpan('my-span')
       span.setAttribute('http.response.status_code', 200)
-      const tags = span._ddSpan.context().getTags()
+      const tags = getDatadogSpan(span).context().getTags()
 
       assert.strictEqual(tags['http.response.status_code'], 200)
       assert.strictEqual(tags['http.status_code'], undefined)
@@ -720,7 +734,7 @@ describe('OTel Span', () => {
     it('does not set error tags on recordException', () => {
       const span = makeSpan('my-span')
       span.recordException(new Error('boom'))
-      const tags = span._ddSpan.context().getTags()
+      const tags = getDatadogSpan(span).context().getTags()
 
       assert.strictEqual(tags[ERROR_TYPE], undefined)
       assert.strictEqual(tags[ERROR_MESSAGE], undefined)
@@ -731,7 +745,7 @@ describe('OTel Span', () => {
       const span = makeSpan('original name')
       span.updateName('updated name')
 
-      assert.strictEqual(span._ddSpan.context().getTag(RESOURCE_NAME), 'updated name')
+      assert.strictEqual(getDatadogSpan(span).context().getTag(RESOURCE_NAME), 'updated name')
       assert.strictEqual(span.name, 'updated name')
     })
   })

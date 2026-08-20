@@ -850,11 +850,7 @@ function getTestTypeFromFramework (testFramework) {
  * @param {import('../../opentracing/span')} span
  */
 function finishAllTraceSpans (span) {
-  for (const traceSpan of span.context()._trace.started) {
-    if (traceSpan !== span && traceSpan._duration === undefined) {
-      traceSpan.finish()
-    }
-  }
+  span.finishOpenChildren()
 }
 
 /**

@@ -36,7 +36,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
   #finishPushReceiveSpan (req) {
     const pushReceiveSpan = pushReceiveSpans.get(req)
-    if (pushReceiveSpan && !pushReceiveSpan._duration) {
+    if (pushReceiveSpan) {
       pushReceiveSpan.finish()
       pushReceiveSpans.delete(req)
     }
@@ -90,7 +90,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       return
     }
 
-    this.enter(pushReceiveSpan, { req, res })
+    this.enter(pushReceiveSpan, { req, res, pubsubPushReceiveSpan: pushReceiveSpan })
     pushReceiveSpans.set(req, pushReceiveSpan)
   }
 
@@ -170,7 +170,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       return null
     }
 
-    span._integrationName = 'google-cloud-pubsub'
+    span.setIntegrationName('google-cloud-pubsub')
     // Calculate delivery latency (queue time from publish to delivery)
     if (publishStartTime) {
       const deliveryDuration = Date.now() - Number(publishStartTime)
@@ -180,12 +180,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     this.#addBatchMetadata(span, attrs)
 
     if (linkContext) {
-      if (span.addLink) {
-        span.addLink({ context: linkContext, attributes: {} })
-      } else {
-        span._links ??= []
-        span._links.push({ context: linkContext, attributes: {} })
-      }
+      span.addLink({ context: linkContext, attributes: {} })
     }
 
     return span

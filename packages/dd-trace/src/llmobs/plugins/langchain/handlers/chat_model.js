@@ -1,14 +1,13 @@
 'use strict'
 
 const LLMObsTagger = require('../../../tagger')
-const { spanHasError } = require('../../../util')
 const { getRole } = require('../messages')
 const LangChainLLMObsHandler = require('.')
 
 const LLM = 'llm'
 
 class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
-  setMetaTags ({ span, inputs, results, options, integrationName }) {
+  setMetaTags ({ span, inputs, results, options, integrationName, error }) {
     if (integrationName === 'openai' && options?.response_format) {
       // langchain-openai will call a beta client if "response_format" is passed in on the options object
       // we do not trace these calls, so this should be an llm span
@@ -28,7 +27,7 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
       }
     }
 
-    if (spanHasError(span)) {
+    if (error) {
       if (isWorkflow) {
         this._tagger.tagTextIO(span, inputMessages, [{ content: '' }])
       } else {

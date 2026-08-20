@@ -2,9 +2,10 @@
 
 const assert = require('node:assert/strict')
 
+const { channel } = require('dc-polyfill')
 const { before, describe, it } = require('mocha')
-
-const getConfig = require('../../src/config')
+const eventWriter = require('../../src/opentracing/event-writer')
+const spanState = require('../../src/llmobs/span-state')
 const {
   agentNameWireSafe,
   appendOptionalPropagatedTag,
@@ -20,7 +21,6 @@ const {
   validateCostTags,
   safeJsonParse,
   validateKind,
-  spanHasError,
   writeBridgeTags,
 } = require('../../src/llmobs/util')
 
@@ -336,42 +336,6 @@ describe('util', () => {
     })
   })
 
-  describe('spanHasError', () => {
-    let Span
-    let tracer
-    let ps
-
-    before(() => {
-      Span = require('../../src/opentracing/span')
-      tracer = { _config: getConfig() }
-      ps = {
-        sample () {},
-      }
-    })
-
-    it('returns false when there is no error', () => {
-      const span = new Span(tracer, null, ps, {})
-      assert.strictEqual(spanHasError(span), false)
-    })
-
-    it('returns true if the span has an "error" tag', () => {
-      const span = new Span(tracer, null, ps, {})
-      span.setTag('error', true)
-      assert.strictEqual(spanHasError(span), true)
-    })
-
-    it('returns true if the span has the error properties as tags', () => {
-      const err = new Error('boom')
-      const span = new Span(tracer, null, ps, {})
-
-      span.setTag('error.type', err.name)
-      span.setTag('error.msg', err.message)
-      span.setTag('error.stack', err.stack)
-
-      assert.strictEqual(spanHasError(span), true)
-    })
-  })
-
   describe('writeBridgeTags', () => {
     function makeSpan (traceTags = {}) {
       return {
@@ -417,24 +381,32 @@ describe('util', () => {
   })
 
   describe('findGenAIAncestorSpanId', () => {
-    // Build a minimal Datadog-shaped span fixture: each span has `_spanId`,
-    // optional `_parentId`, `_tags`, and shares the `_trace.started` array
-    // so the helper can walk up the chain via `_parentId` lookup.
+    before(() => spanState.enable())
+
     function makeTrace (spanDefs) {
-      const started = []
-      const trace = { started, tags: {} }
+      const spans = []
+      const traceIdentity = {}
+      let parent
       for (const def of spanDefs) {
-        const tags = def.tags || {}
-        started.push({
-          context: () => ({
-            _spanId: { toString: () => def.spanId },
-            _parentId: def.parentId ? { toString: () => def.parentId } : null,
-            getTags () { return tags },
-            _trace: trace,
-          }),
+        const context = {
+          _tags: {},
+          _trace: { tags: {} },
+          toSpanId () { return def.spanId },
+        }
+        channel('dd-trace:span:event-writer:context-initialized').publish({ context, traceIdentity })
+        const span = { context () { return context } }
+        channel('dd-trace:span:event-writer:span-started').publish({
+          span,
+          context,
+          parentContext: parent,
+          operationName: 'test',
+          startTime: 0,
         })
+        eventWriter.setTags(span, def.tags || {})
+        spans.push(span)
+        parent = context
       }
-      return started
+      return spans
     }
 
     it('returns the nearest gen_ai.* ancestor span_id', () => {

@@ -49,5 +49,14 @@ describe('NoopTracer', () => {
       assert.strictEqual(typeof span.context().toSpanId, 'function')
       assert.match(span.context().toSpanId(), /^\d+$/)
     })
+
+    it('accepts internal semantic writes without recording state', () => {
+      const span = tracer.startSpan()
+
+      assert.strictEqual(span.setIntegrationName('http'), span)
+      assert.strictEqual(span.setRecording(false), span)
+      assert.strictEqual(span.setTagIfAbsent('error', 1), false)
+      assert.strictEqual(span.setTagsIfTagMatches('route', undefined, { route: '/' }), false)
+    })
   })
 })

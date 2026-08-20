@@ -2,9 +2,11 @@
 
 const assert = require('node:assert/strict')
 
+const { channel } = require('dc-polyfill')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+const eventWriter = require('../../src/opentracing/event-writer')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
 const { writeBridgeTags, findGenAIAncestorSpanId, normalizeLlmObsTraceId } = require('../../src/llmobs/util')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -28,6 +30,7 @@ describe('tagger', () => {
       _tags: {},
       _trace: { tags: {} },
       _traceId: { toBigInt () { return 0x1111111111111111n } },
+      toBigIntTraceId () { return 0x1111111111111111n },
       toTraceId () { return '00000000000000001111111111111111' },
       toSpanId () { return '2222222222222222' },
     }
@@ -114,7 +117,7 @@ describe('tagger', () => {
       })
 
       it('inherits the trace-level default session when the span sets none', () => {
-        spanContext._trace.tags['_ml_obs.trace_session_id'] = 'trace-session'
+        eventWriter.setTraceTag(spanContext, '_ml_obs.trace_session_id', 'trace-session')
 
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
@@ -122,7 +125,7 @@ describe('tagger', () => {
       })
 
       it('inherits the session propagated from an upstream service', () => {
-        spanContext._trace.tags['_dd.p.llmobs_sid'] = 'propagated-session'
+        eventWriter.setTraceTag(spanContext, '_dd.p.llmobs_sid', 'propagated-session')
 
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
@@ -130,7 +133,7 @@ describe('tagger', () => {
       })
 
       it('lets an explicit session override without changing the established trace default', () => {
-        spanContext._trace.tags['_ml_obs.trace_session_id'] = 'trace-session'
+        eventWriter.setTraceTag(spanContext, '_ml_obs.trace_session_id', 'trace-session')
 
         tagger.registerLLMObsSpan(span, { kind: 'llm', sessionId: 'other-session' })
 
@@ -197,10 +200,11 @@ describe('tagger', () => {
           '_ml_obs.session_id': 'my-session',
           '_ml_obs.llmobs_parent_id': '5678',
         })
+        assert.strictEqual(Tagger.getParent(span), parentSpan)
       })
 
       it('uses the propagated trace id if provided', () => {
-        spanContext._trace.tags['_dd.p.llmobs_trace_id'] = '141393847380800662846519802803680448779'
+        eventWriter.setTraceTag(spanContext, '_dd.p.llmobs_trace_id', '141393847380800662846519802803680448779')
 
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
@@ -211,7 +215,7 @@ describe('tagger', () => {
       })
 
       it('uses the propagated parent id if provided', () => {
-        spanContext._trace.tags['_dd.p.llmobs_parent_id'] = '-567'
+        eventWriter.setTraceTag(spanContext, '_dd.p.llmobs_parent_id', '-567')
 
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
@@ -288,9 +292,9 @@ describe('tagger', () => {
         })
 
         it('inherits the rate and decision propagated from an upstream service', () => {
-          spanContext._trace.tags['_dd.p.llmobs_parent_id'] = '5678'
-          spanContext._trace.tags['_dd.p.llmobs_sr'] = '0.25'
-          spanContext._trace.tags['_dd.p.llmobs_sd'] = '0'
+          eventWriter.setTraceTag(spanContext, '_dd.p.llmobs_parent_id', '5678')
+          eventWriter.setTraceTag(spanContext, '_dd.p.llmobs_sr', '0.25')
+          eventWriter.setTraceTag(spanContext, '_dd.p.llmobs_sd', '0')
 
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
@@ -322,7 +326,7 @@ describe('tagger', () => {
           // Distributed trace from a service that predates sampling propagation:
           // there is an LLMObs parent context but no rate/decision. We must not
           // start a fresh (divergent) decision mid-trace — mirrors dd-trace-py.
-          spanContext._trace.tags['_dd.p.llmobs_parent_id'] = '5678'
+          eventWriter.setTraceTag(spanContext, '_dd.p.llmobs_parent_id', '5678')
 
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
@@ -333,7 +337,7 @@ describe('tagger', () => {
       })
 
       it('uses the propagated mlApp over the global mlApp if both are provided', () => {
-        spanContext._trace.tags['_dd.p.llmobs_ml_app'] = 'my-propagated-ml-app'
+        eventWriter.setTraceTag(spanContext, '_dd.p.llmobs_ml_app', 'my-propagated-ml-app')
 
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
@@ -347,7 +351,7 @@ describe('tagger', () => {
         })
 
         it('uses the mlApp from the propagated mlApp if no mlApp is provided', () => {
-          spanContext._trace.tags['_dd.p.llmobs_ml_app'] = 'my-propagated-ml-app'
+          eventWriter.setTraceTag(spanContext, '_dd.p.llmobs_ml_app', 'my-propagated-ml-app')
 
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
@@ -471,22 +475,30 @@ describe('tagger', () => {
             const genAISpanId = '333333333333333'
             const leafSpanId = '444444444444444'
             const traceTags = {}
-            const traceStarted = []
+            const traceIdentity = { tags: traceTags }
 
             const genAISpanCtx = {
-              _spanId: { toString: () => genAISpanId },
-              _parentId: null,
-              getTags () { return { 'gen_ai.operation.name': 'invoke_agent' } },
-              _trace: { tags: traceTags, started: traceStarted },
+              _tags: {},
+              _trace: traceIdentity,
+              toSpanId () { return genAISpanId },
             }
             const genAISpan = { context: () => genAISpanCtx }
+            channel('dd-trace:span:event-writer:context-initialized').publish({
+              context: genAISpanCtx,
+              traceIdentity,
+            })
+            channel('dd-trace:span:event-writer:span-started').publish({
+              span: genAISpan,
+              context: genAISpanCtx,
+              operationName: 'gen_ai',
+              startTime: 0,
+            })
+            eventWriter.setTag(genAISpan, 'gen_ai.operation.name', 'invoke_agent')
 
             const leafTags = {}
             const leafSpanCtx = {
-              _spanId: { toString: () => leafSpanId },
-              _parentId: { toString: () => genAISpanId },
-              getTags () { return leafTags },
-              _trace: { tags: traceTags, started: traceStarted },
+              _tags: leafTags,
+              _trace: traceIdentity,
               toTraceId () { return '00000000000000009999999999999999' },
               toSpanId () { return leafSpanId },
             }
@@ -495,7 +507,17 @@ describe('tagger', () => {
               setTag (k, v) { leafTags[k] = v },
             }
 
-            traceStarted.push(genAISpan, leafSpan)
+            channel('dd-trace:span:event-writer:context-initialized').publish({
+              context: leafSpanCtx,
+              traceIdentity,
+            })
+            channel('dd-trace:span:event-writer:span-started').publish({
+              span: leafSpan,
+              context: leafSpanCtx,
+              parentContext: genAISpanCtx,
+              operationName: 'leaf',
+              startTime: 0,
+            })
 
             realTagger.registerLLMObsSpan(leafSpan, { kind: 'llm' })
 

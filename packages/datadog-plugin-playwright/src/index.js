@@ -29,7 +29,6 @@ const {
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_IS_RUM_ACTIVE,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
@@ -86,6 +85,7 @@ class PlaywrightPlugin extends CiPlugin {
     super(...args)
 
     this._testSuiteSpansByTestSuiteAbsolutePath = new Map()
+    this._testSpanState = new WeakMap()
     this.numFailedTests = 0
     this.numFailedSuites = 0
     this.pendingTestFinishes = 0
@@ -262,8 +262,12 @@ class PlaywrightPlugin extends CiPlugin {
 
     this.addSub('ci:playwright:test:page-goto', (ctx) => {
       const activeSpan = storage('legacy').getStore()?.span
-      if (!setRumTestCorrelation(ctx, activeSpan)) {
+      const testSpan = setRumTestCorrelation(ctx, activeSpan)
+      if (!testSpan) {
         log.error('ci:playwright:test:page-goto: test span not found')
+      } else if (ctx.isRumActive) {
+        const spanState = this._testSpanState.get(testSpan)
+        if (spanState) spanState.isRumActive = true
       }
     })
 
@@ -420,7 +424,7 @@ class PlaywrightPlugin extends CiPlugin {
         return
       }
 
-      const isRUMActive = span.context().getTag(TEST_IS_RUM_ACTIVE)
+      const spanState = this._testSpanState.get(span) || {}
 
       span.setTag(TEST_STATUS, testStatus)
 
@@ -510,9 +514,9 @@ class PlaywrightPlugin extends CiPlugin {
         TELEMETRY_EVENT_FINISHED,
         'test',
         {
-          hasCodeOwners: !!span.context().getTag(TEST_CODE_OWNERS),
+          hasCodeOwners: spanState.hasCodeOwners,
           isNew,
-          isRum: isRUMActive === 'true' || undefined,
+          isRum: spanState.isRumActive || undefined,
           browserDriver: 'playwright',
           isQuarantined,
           isDisabled,
@@ -654,7 +658,15 @@ class PlaywrightPlugin extends CiPlugin {
       extraTags.test_source_absolute_path = testSourceFileAbsolutePath
     }
 
-    return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
+    const span = super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
+    this._testSpanState.set(span, {
+      hasCodeOwners: Boolean(this.getCodeOwners({
+        ...extraTags,
+        [TEST_SUITE]: testSuite,
+      })),
+      isRumActive: false,
+    })
+    return span
   }
 }
 

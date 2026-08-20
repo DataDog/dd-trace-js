@@ -61,7 +61,7 @@ class Http2ClientPlugin extends ClientPlugin {
 
     // TODO: Figure out a better way to do this for any span.
     if (!allowed) {
-      span._spanContext._trace.record = false
+      span.setRecording(false)
     }
 
     addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, this.config)

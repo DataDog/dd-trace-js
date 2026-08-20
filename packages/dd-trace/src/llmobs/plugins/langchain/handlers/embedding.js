@@ -1,12 +1,11 @@
 'use strict'
 
 const LLMObsTagger = require('../../../tagger')
-const { spanHasError } = require('../../../util')
 const { formatIO } = require('../messages')
 const LangChainLLMObsHandler = require('.')
 
 class LangChainLLMObsEmbeddingHandler extends LangChainLLMObsHandler {
-  setMetaTags ({ span, inputs, results }) {
+  setMetaTags ({ span, inputs, results, error }) {
     const isWorkflow = LLMObsTagger.getSpanKind(span) === 'workflow'
     let embeddingInput, embeddingOutput
 
@@ -17,7 +16,7 @@ class LangChainLLMObsEmbeddingHandler extends LangChainLLMObsHandler {
       embeddingInput = input.map(doc => ({ text: doc }))
     }
 
-    if (spanHasError(span) || !results) {
+    if (error || !results) {
       embeddingOutput = ''
     } else {
       let embeddingDimensions, embeddingsCount

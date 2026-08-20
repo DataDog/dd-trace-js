@@ -1,6 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
+const { getSpanStore } = require('./opentracing/span-store')
 
 const legacyStorage = storage('legacy')
 
@@ -16,7 +17,7 @@ class Scope {
     if (typeof callback !== 'function') return callback
 
     const oldStore = legacyStorage.getStore()
-    const newStore = span ? legacyStorage.getStore(span._store) : oldStore
+    const newStore = span ? legacyStorage.getStore(getSpanStore(span)) : oldStore
 
     legacyStorage.enterWith({ ...newStore, span })
 

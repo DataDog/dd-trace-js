@@ -6,6 +6,7 @@ const { isError } = require('../util')
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
+const { isSpanFinished } = require('../opentracing/span-lifecycle')
 const {
   SPAN_KIND,
   OUTPUT_VALUE,
@@ -271,7 +272,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_span_type'
         throw new Error('Span must be an LLMObs-generated span')
       }
-      if (span._duration !== undefined) {
+      if (isSpanFinished(span)) {
         err = 'invalid_finished_span'
         throw new Error('Cannot annotate a finished span')
       }

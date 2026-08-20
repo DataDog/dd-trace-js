@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 // path-to-regexp is a transitive (vendored) dependency; require it directly to exercise the
 // normalizer against the real Express 5 parser/matcher (path-to-regexp 8).
@@ -10,7 +11,12 @@ const { parse: rawParse, match: rawMatch } = require('path-to-regexp')
 const {
   normalizeRouteExpress,
   normalizeRoute,
-} = require('../../../src/appsec/api_security/normalized-route')
+} = proxyquire('../../../src/appsec/api_security/normalized-route', {
+  '../../opentracing/span-projections': {
+    getApiSecurityFramework: span => span?.framework,
+    getApiSecurityHttpRoute: span => span?.route,
+  },
+})
 
 // Mirror the getParse instrumentation adapter: TokenData ({ tokens }) or undefined.
 function parse (pattern) {
@@ -270,7 +276,7 @@ describe('normalizeRouteExpress', () => {
     // A process can serve both Express majors while the parser adapters are process-wide, so the
     // major is decided per request off the serving app.
     it('returns null for an Express 4 request even when a parser is available', () => {
-      const span = { context: () => ({ getTag: tag => (tag === 'component' ? 'express' : '/users/:id') }) }
+      const span = { framework: 'express', route: '/users/:id' }
       const req = { originalUrl: '/users/1', params: { id: '1' }, app: { del () {} } }
       const web = require('../../../src/plugins/util/web')
       const root = sinon.stub(web, 'root').returns(span)
@@ -283,7 +289,7 @@ describe('normalizeRouteExpress', () => {
 
     // The host never loaded path-to-regexp 8 here, so there is no parser to read the route with.
     it('returns null when no path-to-regexp 8 adapter is available', () => {
-      const span = { context: () => ({ getTag: tag => (tag === 'component' ? 'express' : '/users/:id') }) }
+      const span = { framework: 'express', route: '/users/:id' }
       const req = { originalUrl: '/users/1', params: { id: '1' } }
       const web = require('../../../src/plugins/util/web')
       const root = sinon.stub(web, 'root').returns(span)

@@ -38,6 +38,9 @@ describe('API Security domain', () => {
 
       apiSecurity = proxyquire('../../../src/appsec/api_security', {
         './sampler': sampler,
+        '../../opentracing/span-projections': {
+          getApiSecurityFramework: span => span.context().getTag('component'),
+        },
         '../../plugins/util/web': web,
         '../reporter': reporter,
         '../telemetry': telemetry,

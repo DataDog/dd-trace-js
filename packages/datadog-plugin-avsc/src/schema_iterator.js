@@ -1,6 +1,7 @@
 'use strict'
 
 const AVRO = 'avro'
+const schemaSpans = new WeakSet()
 const {
   SCHEMA_DEFINITION,
   SCHEMA_ID,
@@ -140,11 +141,12 @@ class SchemaExtractor {
       return
     }
 
-    if (span.context().getTag(SCHEMA_TYPE) && operation === 'serialization') {
+    if (schemaSpans.has(span) && operation === 'serialization') {
       // we have already added a schema to this span, this call is an encode of nested schema types
       return
     }
 
+    schemaSpans.add(span)
     span.setTag(SCHEMA_TYPE, AVRO)
     span.setTag(SCHEMA_NAME, descriptor.name)
     span.setTag(SCHEMA_OPERATION, operation)
