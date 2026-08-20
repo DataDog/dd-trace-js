@@ -1575,7 +1575,7 @@ describe('Plugin', () => {
             await checkTraces
           })
 
-          it('makes a successful call with usage included', async () => {
+          chatStreamingResponseTest('makes a successful call with usage included', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1623,7 +1623,7 @@ describe('Plugin', () => {
             await checkTraces
           })
 
-          it('tags multiple responses 2', async () => {
+          chatStreamingResponseTest('tags multiple responses 2', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].name, 'openai.request')
@@ -1666,7 +1666,7 @@ describe('Plugin', () => {
             await checkTraces
           })
 
-          it('excludes image_url from usage', async () => {
+          chatStreamingResponseTest('excludes image_url from usage', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].name, 'openai.request')
