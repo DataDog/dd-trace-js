@@ -60,6 +60,23 @@ describe('exporter', () => {
     assert.strictEqual(require('../src/exporter').usesLambdaLogExporter(), false)
   })
 
+  it('should require the Lambda log transport when no OTLP collector was configured', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+
+    assert.strictEqual(require('../src/exporter').requiresLambdaLogExporter(), true)
+  })
+
+  it('should yield to either explicitly configured OTLP endpoint in Lambda', () => {
+    // `createOtlpTraceExporter` reads the trace-specific one, so both have to count.
+    for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env[key] = 'http://collector:4318'
+
+      assert.strictEqual(require('../src/exporter').requiresLambdaLogExporter(), false, key)
+      delete process.env[key]
+    }
+  })
+
   it('should create an AgentExporter when in Lambda environment with an extension', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
     const stub = sinon.stub(fs, 'existsSync')
