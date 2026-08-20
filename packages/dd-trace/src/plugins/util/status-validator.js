@@ -40,7 +40,7 @@ function getClientStatusValidator (config) {
 /**
  * @param {Record<string, unknown>} config
  * @param {string} optionName - Name of the configuration holding the error status ranges.
- * @param {string} defaultRanges - Ranges covered by `defaultValidator`.
+ * @param {string} defaultRanges - Ranges covered by `defaultValidator`
  * @param {StatusValidator} defaultValidator
  * @returns {StatusValidator}
  */
