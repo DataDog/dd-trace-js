@@ -15,6 +15,7 @@ const {
   incrementWafUpdatesMetric,
   incrementWafConfigErrorsMetric,
   incrementWafRequestsMetric,
+  incrementRequestDurationMetrics,
   updateWafRequestsMetricTags,
   updateRaspRequestsMetricTags,
   updateRaspRuleSkippedMetricTags,
@@ -608,6 +609,7 @@ function finishRequest (req, res, storedResponseHeaders, requestBody, rootSpan) 
 
   if (!req) return
 
+  incrementRequestDurationMetrics(req)
   incrementWafRequestsMetric(req)
 
   const tags = rootSpan.context().getTags()
