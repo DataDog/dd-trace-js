@@ -1055,7 +1055,10 @@ versions.forEach((version) => {
           })
         })
 
-        const runEfdQuarantineTest = async (receiver, shouldPassRetries = false) => {
+        const runEfdQuarantineTest = async (receiver, {
+          shouldFailBeforeAll = false,
+          shouldPassRetries = false,
+        } = {}) => {
           const numRetries = 3
           receiver.setKnownTests({ playwright: {} })
           receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
@@ -1078,7 +1081,8 @@ versions.forEach((version) => {
           let proc
           try {
             proc = exec(
-              './node_modules/.bin/playwright test -c playwright.config.js quarantine-test.js',
+              './node_modules/.bin/playwright test -c playwright.config.js quarantine-test.js ' +
+                (shouldFailBeforeAll ? 'failing-before-all-test.js' : ''),
               {
                 cwd,
                 env: {
@@ -1100,7 +1104,7 @@ versions.forEach((version) => {
                   .map(event => event.content)
                   .filter(test => test.meta[TEST_NAME] === 'quarantine should quarantine failed test')
 
-                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+                assert.strictEqual(testSession.meta[TEST_STATUS], shouldFailBeforeAll ? 'fail' : 'pass')
                 assert.strictEqual(tests.length, numRetries + 1)
                 assert.strictEqual(
                   tests.filter(test => test.meta[TEST_STATUS] === 'fail').length,
@@ -1126,7 +1130,7 @@ versions.forEach((version) => {
 
             const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
             assert.match(testOutput, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
-            assert.strictEqual(exitCode, 0, testOutput)
+            assert.strictEqual(exitCode, shouldFailBeforeAll ? 1 : 0, testOutput)
           } finally {
             proc?.kill()
           }
@@ -1137,7 +1141,58 @@ versions.forEach((version) => {
         })
 
         it('can quarantine a new test when an EFD retry passes', async (receiver) => {
-          await runEfdQuarantineTest(receiver, true)
+          await runEfdQuarantineTest(receiver, { shouldPassRetries: true })
+        })
+
+        it('does not quarantine an independent hook failure when an EFD retry passes', async (receiver) => {
+          await runEfdQuarantineTest(receiver, { shouldFailBeforeAll: true, shouldPassRetries: true })
+        })
+
+        it('does not quarantine an independent hook failure when a native retry passes', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          let testOutput = ''
+          let proc
+          try {
+            proc = exec(
+              './node_modules/.bin/playwright test -c playwright.config.js ' +
+                'quarantine-test.js failing-before-all-test.js --retries=1',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  PW_BASE_URL: `http://localhost:${webAppPort}`,
+                  SHOULD_PASS_NATIVE_RETRIES: '1',
+                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                },
+              }
+            )
+            proc.stdout?.on('data', data => { testOutput += data.toString() })
+            proc.stderr?.on('data', data => { testOutput += data.toString() })
+            const eventsPromise = receiver
+              .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                const tests = events
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+                  .filter(test => test.meta[TEST_NAME] === 'quarantine should quarantine failed test')
+
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(tests.length, 2)
+                assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 1)
+                assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+                for (const test of tests) {
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+                }
+              }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
+
+            const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 1, testOutput)
+          } finally {
+            proc?.kill()
+          }
         })
 
         it('fails if quarantine is not enabled', async (receiver) => {
