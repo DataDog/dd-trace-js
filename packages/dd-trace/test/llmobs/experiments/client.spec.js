@@ -18,11 +18,6 @@ function waitForBackend (defaultDelayMs = 2000) {
   return sleep(Number(process.env.DD_LLMOBS_EXPERIMENTS_READ_AFTER_WRITE_DELAY_MS ?? defaultDelayMs))
 }
 
-function nextDatasetVersion (dataset) {
-  const version = Number(dataset.latestVersion())
-  return Number.isFinite(version) ? version + 1 : null
-}
-
 function recordDataByInputValue (records) {
   return records
     .map(record => ({
@@ -269,10 +264,12 @@ describe('LLMObs Experiments control-plane client', function () {
     assert.match(dataset.id(), /\S+/)
     assert.match(dataset.url(), /^https:\/\//)
 
-    const createdRecords = await client.appendDatasetRecords(projectId, dataset.id(), [
+    const appendResult = await client.appendDatasetRecords(projectId, dataset.id(), [
       { input: { value: 1 }, expected_output: { value: 2 }, metadata: { source: 'client-test' } },
       { input: { value: 2 }, expected_output: { value: 3 }, metadata: { source: 'client-test' } },
     ])
+    const createdRecords = appendResult.records
+    assert.equal(appendResult.version, 1)
     assert.equal(createdRecords.length, 2)
     for (const record of createdRecords) assert.match(record.id, /\S+/)
     assert.deepEqual(recordDataByInputValue(createdRecords), [
@@ -284,7 +281,9 @@ describe('LLMObs Experiments control-plane client', function () {
     const listed = await client.listDatasets(projectId, { name: dataset.name() })
     assert.equal(listed.some(item => item.id() === dataset.id()), true)
 
-    const records = await client.listDatasetRecords(projectId, dataset.id(), { version: nextDatasetVersion(dataset) })
+    const records = await client.listDatasetRecords(projectId, dataset.id(), {
+      version: appendResult.version ?? dataset.version(),
+    })
     assert.equal(records.after, '')
     assert.equal(records.records.length, 2)
     assert.deepEqual(recordDataByInputValue(records.records), [
@@ -302,7 +301,7 @@ describe('LLMObs Experiments control-plane client', function () {
     })
     trackBackendDataset(client, projectId, dataset.id())
 
-    const customRecords = await client.appendDatasetRecords(projectId, dataset.id(), [
+    const appendResult = await client.appendDatasetRecords(projectId, dataset.id(), [
       {
         id: 'custom-a',
         input: { value: 1 },
@@ -316,6 +315,8 @@ describe('LLMObs Experiments control-plane client', function () {
         metadata: { source: 'client-custom-records-test' },
       },
     ])
+    const customRecords = appendResult.records
+    assert.equal(appendResult.version, 1)
     assert.equal(customRecords.length, 2)
     assert.deepEqual(customRecords.map(record => record.id), ['custom-a', 'custom-b'])
     assert.deepEqual(recordDataByInputValue(customRecords), [
@@ -324,7 +325,9 @@ describe('LLMObs Experiments control-plane client', function () {
     ])
 
     await waitForBackend(5_000)
-    const records = await client.listDatasetRecords(projectId, dataset.id(), { version: nextDatasetVersion(dataset) })
+    const records = await client.listDatasetRecords(projectId, dataset.id(), {
+      version: appendResult.version ?? dataset.version(),
+    })
     assert.equal(records.after, '')
     assert.deepEqual(records.records.map(record => record.id).sort(), ['custom-a', 'custom-b'])
     assert.deepEqual(recordDataByInputValue(records.records), [
@@ -396,9 +399,10 @@ describe('LLMObs Experiments control-plane client', function () {
     })
     trackBackendDataset(client, projectId, dataset.id())
 
-    const createdRecords = await client.appendDatasetRecords(projectId, dataset.id(), [
+    const appendResult = await client.appendDatasetRecords(projectId, dataset.id(), [
       { input: { value: 1 }, expected_output: { value: 2 }, metadata: { source: 'client-test' } },
     ])
+    const createdRecords = appendResult.records
     const experiment = await client.createExperiment({
       name: backendClientExperimentName,
       project_id: projectId,
@@ -407,7 +411,7 @@ describe('LLMObs Experiments control-plane client', function () {
       ensure_unique: true,
       run_count: 1,
       metadata: { tags: ['source:client-test'] },
-      dataset_version: nextDatasetVersion(dataset),
+      dataset_version: appendResult.version ?? dataset.version(),
     })
 
     assert.match(experiment.experimentId, /\S+/)
