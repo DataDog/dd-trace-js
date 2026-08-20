@@ -2,6 +2,7 @@
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const log = require('../../dd-trace/src/log')
 const { addHook, getHooks } = require('./helpers/instrument')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
@@ -217,6 +218,8 @@ for (const hook of getHooks('ai')) {
   }
 
   addHook(hook, exports => {
+    log.debug('Vercel AI SDK integration loaded')
+
     const getTracerChannel = tracingChannel('orchestrion:ai:getTracer')
     getTracerChannel.subscribe({
       end (ctx) {
