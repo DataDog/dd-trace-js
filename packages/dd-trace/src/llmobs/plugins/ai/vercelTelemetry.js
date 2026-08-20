@@ -1,6 +1,7 @@
 'use strict'
 
 const { parseModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
+const log = require('../../../log')
 const BaseLLMObsPlugin = require('../base')
 const {
   getLlmObsSpanName,
@@ -195,6 +196,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     // this event will fire multiple times for the same channel
     if (ctx.isStream && ctx.result?.stream && !ctx.streamConsumed) return
 
+    log.debug('Vercel AI SDK telemetry completed: %s', ctx.type)
     super.asyncEnd(ctx)
   }
 
