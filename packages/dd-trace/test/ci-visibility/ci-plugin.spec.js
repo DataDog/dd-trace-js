@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -27,19 +30,38 @@ const {
   GIT_REPOSITORY_URL,
   GIT_TAG,
 } = require('../../src/plugins/util/tags')
+const {
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+} = require('../../src/plugins/util/test')
 
 describe('CiPlugin', () => {
   let CiPlugin
+  let distributionMetric
   let getCodeOwnersFileEntries
   let getRepositoryRoot
   let getTestEnvironmentMetadata
+  let incrementCountMetric
 
   beforeEach(() => {
+    distributionMetric = sinon.stub()
     getCodeOwnersFileEntries = sinon.stub()
     getRepositoryRoot = sinon.stub()
     getTestEnvironmentMetadata = sinon.stub().returns(getTestEnvironmentMetadataPayload())
+    incrementCountMetric = sinon.stub()
 
     CiPlugin = proxyquire('../../src/plugins/ci_plugin', {
+      '../ci-visibility/telemetry': {
+        ...require('../../src/ci-visibility/telemetry'),
+        distributionMetric,
+        incrementCountMetric,
+      },
       './util/git': {
         getRepositoryRoot,
       },
@@ -124,6 +146,488 @@ describe('CiPlugin', () => {
     assert.strictEqual(plugin.skippableSuitesCoverage, undefined)
     sinon.assert.calledOnce(getLibraryConfiguration)
     sinon.assert.calledOnce(onDone)
+  })
+
+  it('does not consider line coverage for Vitest skippable suites', () => {
+    const getSkippableSuites = sinon.stub().callsArgWith(1, null, [])
+    const onDone = sinon.stub()
+    const plugin = createPlugin('vitest_worker', true)
+    plugin.tracer._exporter.getSkippableSuites = getSkippableSuites
+    plugin.libraryConfig = { isCoverageReportUploadEnabled: true }
+
+    dc.channel('ci:vitest:test-suite:skippable').publish({ onDone })
+    plugin.configure(false)
+
+    sinon.assert.calledOnce(getSkippableSuites)
+    assert.strictEqual(getSkippableSuites.firstCall.args[0].isCoverageReportUploadEnabled, true)
+    assert.strictEqual(getSkippableSuites.firstCall.args[0].isLineCoverageSupported, false)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('replaces frozen policy snapshots when dependent requests fail', () => {
+    const plugin = createPlugin('vitest_worker', true)
+    plugin.libraryConfig = Object.freeze({
+      isEarlyFlakeDetectionEnabled: true,
+      isKnownTestsEnabled: true,
+      isTestManagementEnabled: true,
+    })
+    plugin.tracer._exporter.getKnownTests = (configuration, done) => {
+      done(new Error('known tests failed'))
+    }
+    plugin.tracer._exporter.getTestManagementTests = (configuration, done) => {
+      done(new Error('test management failed'))
+    }
+
+    try {
+      dc.channel('ci:vitest:known-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isEarlyFlakeDetectionEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isKnownTestsEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, true)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+
+      dc.channel('ci:vitest:test-management-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, false)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('disables advanced features for basic-reporting library configuration requests', () => {
+    const libraryConfig = {
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isSuitesSkippingEnabled: true,
+      isTestManagementEnabled: true,
+    }
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, null, libraryConfig)
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('jest_worker')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'jest_worker',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      basicReportingOnly: true,
+      frameworkVersion: '1.0.0',
+      onDone,
+    })
+    plugin.configure(false)
+
+    assert.deepStrictEqual(plugin.libraryConfig, {})
+    assert.deepStrictEqual(plugin.getLibraryCapabilitiesTags('1.0.0', { basicReportingOnly: true }), {})
+    assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, {})
+    assert.deepStrictEqual(addMetadataTags.firstCall.args[0], { test: {} })
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('disables only TIA for WebdriverIO library configuration requests', () => {
+    const libraryConfig = {
+      isCodeCoverageEnabled: true,
+      isCoverageReportUploadEnabled: true,
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isImpactedTestsEnabled: true,
+      isItrEnabled: true,
+      isKnownTestsEnabled: true,
+      isSuitesSkippingEnabled: true,
+      isTestManagementEnabled: true,
+    }
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, null, libraryConfig)
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('mocha')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'mocha',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      disableTestImpactAnalysis: true,
+      frameworkVersion: '9.0.0',
+      onDone,
+      testFramework: 'webdriverio',
+    })
+    plugin.configure(false)
+
+    assert.deepStrictEqual(plugin.libraryConfig, {
+      ...libraryConfig,
+      isCodeCoverageEnabled: false,
+      isItrEnabled: false,
+      isSuitesSkippingEnabled: false,
+    })
+    assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, plugin.libraryConfig)
+    assert.deepStrictEqual(addMetadataTags.firstCall.args[0], {
+      test: {
+        [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: undefined,
+        [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
+        [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+        [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: '5',
+        [DD_CAPABILITIES_FAILED_TEST_REPLAY]: '1',
+      },
+    })
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('tags telemetry with the effective test framework', () => {
+    const exportTelemetry = sinon.stub()
+    const plugin = createPlugin('mocha')
+    plugin.tracer._exporter.exportTelemetry = exportTelemetry
+
+    plugin.telemetry.ciVisEvent('event_created', 'session')
+    plugin.testFramework = 'webdriverio'
+    plugin.telemetry.ciVisEvent('event_finished', 'session')
+
+    assert.strictEqual(exportTelemetry.firstCall.args[0].testFramework, 'vitest')
+    assert.strictEqual(exportTelemetry.secondCall.args[0].testFramework, 'webdriverio')
+  })
+
+  it('consumes worker telemetry for every test framework', () => {
+    const plugin = createPlugin('vitest_worker', true)
+
+    dc.channel('ci:vitest:worker-report:telemetry').publish(JSON.stringify([
+      {
+        type: 'ciVisEvent',
+        name: 'code_coverage_started',
+        testLevel: 'suite',
+        testFramework: 'vitest',
+        isUnsupportedCIProvider: false,
+        tags: { library: 'v8' },
+      },
+      {
+        type: 'count',
+        name: 'itr_unskippable',
+        tags: { testLevel: 'suite' },
+        value: 2,
+      },
+      {
+        type: 'distribution',
+        name: 'code_coverage.files',
+        tags: {},
+        measure: 3,
+      },
+    ]))
+    plugin.configure(false)
+
+    sinon.assert.calledWith(incrementCountMetric, 'code_coverage_started', {
+      testLevel: 'suite',
+      testFramework: 'vitest',
+      isUnsupportedCIProvider: false,
+      library: 'v8',
+    })
+    sinon.assert.calledWith(incrementCountMetric, 'itr_unskippable', { testLevel: 'suite' }, 2)
+    sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
+  })
+
+  it('defers worker suite events when the exporter supports late test suite updates', () => {
+    const plugin = createPlugin('vitest_worker')
+    const exportTraceWithDeferredTestSuite = sinon.spy()
+    const exportTrace = sinon.spy()
+    const trace = [{ type: 'test_suite_end', meta: {} }]
+    plugin.tracer._exporter = { export: exportTrace, exportTraceWithDeferredTestSuite }
+
+    plugin._exportWorkerTraceOrBuffer(trace)
+
+    sinon.assert.calledOnceWithExactly(exportTraceWithDeferredTestSuite, trace)
+    sinon.assert.notCalled(exportTrace)
+  })
+
+  it('exports worker traces normally when late test suite updates are unsupported', () => {
+    const plugin = createPlugin('vitest_worker')
+    const exportTrace = sinon.spy()
+    const trace = [{ type: 'test', meta: {} }]
+    plugin.tracer._exporter = { export: exportTrace }
+
+    plugin._exportWorkerTraceOrBuffer(trace)
+
+    sinon.assert.calledOnceWithExactly(exportTrace, trace)
+  })
+
+  it('uploads regular coverage reports from canonical paths', () => {
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const coverageDir = path.join(rootDir, 'coverage')
+    const nestedReportPath = path.join(coverageDir, 'lcov.info')
+    const rootReportPath = path.join(rootDir, 'lcov.info')
+
+    fs.mkdirSync(coverageDir)
+    fs.writeFileSync(nestedReportPath, 'nested coverage')
+    fs.writeFileSync(rootReportPath, 'root coverage')
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+      const nestedReportStats = fs.lstatSync(nestedReportPath, { bigint: true })
+      const rootReportStats = fs.lstatSync(rootReportPath, { bigint: true })
+
+      plugin.uploadCoverageReports({ rootDir: path.relative(process.cwd(), rootDir) })
+
+      sinon.assert.calledTwice(uploadCoverageReport)
+      assert.deepStrictEqual(uploadCoverageReport.firstCall.args[0], {
+        filePath: fs.realpathSync(nestedReportPath),
+        fileDevice: nestedReportStats.dev,
+        fileInode: nestedReportStats.ino,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+      assert.deepStrictEqual(uploadCoverageReport.secondCall.args[0], {
+        filePath: fs.realpathSync(rootReportPath),
+        fileDevice: rootReportStats.dev,
+        fileInode: rootReportStats.ino,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+    } finally {
+      fs.rmSync(rootDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uploads coverage reports through a symlinked root ancestor from canonical paths', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const workspaceDir = path.join(fixtureDir, 'workspace')
+    const rootDir = path.join(workspaceDir, 'root')
+    const linkedWorkspaceDir = path.join(fixtureDir, 'linked-workspace')
+    const linkedRootDir = path.join(linkedWorkspaceDir, 'root')
+    const reportPath = path.join(rootDir, 'lcov.info')
+    const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+    fs.mkdirSync(rootDir, { recursive: true })
+    fs.writeFileSync(reportPath, 'regular coverage')
+    fs.symlinkSync(workspaceDir, linkedWorkspaceDir, directoryLinkType)
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+      const reportStats = fs.lstatSync(reportPath, { bigint: true })
+
+      plugin.uploadCoverageReports({ rootDir: linkedRootDir })
+
+      sinon.assert.calledOnce(uploadCoverageReport)
+      assert.deepStrictEqual(uploadCoverageReport.firstCall.args[0], {
+        filePath: fs.realpathSync(reportPath),
+        fileDevice: reportStats.dev,
+        fileInode: reportStats.ino,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores invalid coverage report roots', () => {
+    const invalidRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    fs.rmSync(invalidRoot, { recursive: true })
+
+    const plugin = createPlugin('jest_worker')
+    const uploadCoverageReport = sinon.stub().yields()
+    plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+    try {
+      plugin.uploadCoverageReports({ rootDir: invalidRoot })
+      fs.writeFileSync(invalidRoot, 'not a directory')
+      plugin.uploadCoverageReports({ rootDir: invalidRoot })
+      plugin.uploadCoverageReports({ rootDir: Symbol('invalid-root') })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(invalidRoot, { force: true })
+    }
+  })
+
+  it('ignores roots that change while their canonical path is resolved', () => {
+    const lstatSync = sinon.stub()
+    lstatSync.onCall(0).returns({
+      dev: 1,
+      ino: 1,
+      isDirectory: () => true,
+      isSymbolicLink: () => false,
+    })
+    lstatSync.onCall(1).returns({ dev: 1, ino: 2 })
+    lstatSync.onCall(2).returns({ isSymbolicLink: () => false })
+    lstatSync.onCall(3).returns({
+      dev: 1,
+      ino: 3,
+      isFile: () => true,
+      isSymbolicLink: () => false,
+    })
+    const { discoverCoverageReports } = proxyquire(
+      '../../src/ci-visibility/coverage-report-discovery',
+      {
+        'node:fs': {
+          lstatSync,
+          realpathSync: sinon.stub().returns('/resolved-root'),
+        },
+      }
+    )
+
+    assert.deepStrictEqual(discoverCoverageReports('/root'), [])
+  })
+
+  it('ignores coverage report paths with non-directory components', () => {
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    fs.writeFileSync(path.join(rootDir, 'coverage'), 'not a directory')
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(rootDir, { recursive: true, force: true })
+    }
+  })
+
+  it('excludes coverage reports reached through linked directories', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideDir = path.join(fixtureDir, 'outside')
+    const linkedRootDir = path.join(fixtureDir, 'linked-root')
+    const outsideReportPath = path.join(outsideDir, 'lcov.info')
+    const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+    fs.mkdirSync(rootDir)
+    fs.mkdirSync(outsideDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.symlinkSync(outsideDir, path.join(rootDir, 'coverage'), directoryLinkType)
+    fs.symlinkSync(outsideDir, linkedRootDir, directoryLinkType)
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+      plugin.uploadCoverageReports({ rootDir: linkedRootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  for (const directoryName of ['root', 'nested']) {
+    it(`excludes coverage reports when the ${directoryName} directory becomes a symlink during discovery`, () => {
+      const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+      const rootDir = path.join(fixtureDir, 'root')
+      const coverageDir = path.join(rootDir, 'coverage')
+      const outsideDir = path.join(fixtureDir, 'root-outside')
+      const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+      fs.mkdirSync(coverageDir, { recursive: true })
+      fs.mkdirSync(path.join(outsideDir, 'coverage'), { recursive: true })
+      fs.writeFileSync(path.join(coverageDir, 'lcov.info'), 'regular coverage')
+      fs.writeFileSync(path.join(outsideDir, 'lcov.info'), 'outside coverage')
+      fs.writeFileSync(path.join(outsideDir, 'coverage', 'lcov.info'), 'outside coverage')
+
+      const canonicalRootDir = fs.realpathSync(rootDir)
+      const swapPath = directoryName === 'root' ? canonicalRootDir : path.join(canonicalRootDir, 'coverage')
+      const swapOnCall = directoryName === 'root' && canonicalRootDir === path.resolve(rootDir) ? 2 : 1
+      const displacedPath = `${swapPath}-displaced`
+      const originalLstatSync = fs.lstatSync
+      let matchingCalls = 0
+      let swapped = false
+      const lstatSync = sinon.stub(fs, 'lstatSync').callsFake(
+        /**
+         * @param {import('node:fs').PathLike} checkedPath
+         * @param {import('node:fs').StatSyncOptions} [options]
+         */
+        (checkedPath, options) => {
+          const stats = originalLstatSync(checkedPath, options)
+          if (checkedPath === swapPath && ++matchingCalls === swapOnCall) {
+            fs.renameSync(swapPath, displacedPath)
+            fs.symlinkSync(outsideDir, swapPath, directoryLinkType)
+            swapped = true
+          }
+          return stats
+        }
+      )
+
+      try {
+        const plugin = createPlugin('jest_worker')
+        const uploadCoverageReport = sinon.stub().yields()
+        plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+        plugin.uploadCoverageReports({ rootDir })
+
+        assert.strictEqual(swapped, true)
+        sinon.assert.notCalled(uploadCoverageReport)
+      } finally {
+        lstatSync.restore()
+        fs.rmSync(fixtureDir, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('excludes symlinked coverage report files', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideReportPath = path.join(fixtureDir, 'outside.info')
+
+    fs.mkdirSync(rootDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.symlinkSync(outsideReportPath, path.join(rootDir, 'lcov.info'))
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  it('excludes hard-linked coverage report files', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideReportPath = path.join(fixtureDir, 'outside.info')
+
+    fs.mkdirSync(rootDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.linkSync(outsideReportPath, path.join(rootDir, 'lcov.info'))
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
   })
 
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
@@ -257,14 +761,14 @@ describe('CiPlugin', () => {
     assert.match(logMessage.logger.thread_name, /^(MainThread|WorkerThread:\d+)$/)
   })
 
-  function createPlugin (exporter) {
+  function createPlugin (exporter, enabled = false) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'
     }
 
     const plugin = new TestPlugin({ _exporter: {} })
     plugin.configure({
-      enabled: false,
+      enabled,
       experimental: {
         exporter,
       },

@@ -6,11 +6,17 @@ const { before, describe, it } = require('mocha')
 
 const getConfig = require('../../src/config')
 const {
+  agentNameWireSafe,
+  appendOptionalPropagatedTag,
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
+  generateLlmObsTraceId,
+  llmObsTraceIdToWire,
   formatAudioPart,
   getFunctionArguments,
+  normalizeLlmObsTraceId,
+  stripTagsetEntry,
   validateCostTags,
   safeJsonParse,
   validateKind,
@@ -19,6 +25,48 @@ const {
 } = require('../../src/llmobs/util')
 
 describe('util', () => {
+  describe('LLMObs trace id propagation', () => {
+    const traceId = '6a5f76e7000000001973227978d8110b'
+    const wireTraceId = '141393847380800662846519802803680448779'
+
+    it('converts a canonical hexadecimal trace id to decimal for propagation', () => {
+      assert.strictEqual(llmObsTraceIdToWire(traceId), wireTraceId)
+    })
+
+    it('normalizes a propagated decimal trace id to canonical hexadecimal', () => {
+      assert.strictEqual(normalizeLlmObsTraceId(wireTraceId), traceId)
+    })
+
+    it('preserves 64-bit decimal trace ids and converts the first 128-bit value', () => {
+      assert.strictEqual(normalizeLlmObsTraceId('18446744073709551615'), '18446744073709551615')
+      assert.strictEqual(
+        normalizeLlmObsTraceId('18446744073709551616'),
+        '00000000000000010000000000000000'
+      )
+    })
+
+    it('preserves hexadecimal and custom trace ids while normalizing', () => {
+      assert.strictEqual(normalizeLlmObsTraceId(traceId), traceId)
+      assert.strictEqual(normalizeLlmObsTraceId('custom-trace-id'), 'custom-trace-id')
+    })
+
+    it('preserves custom trace ids for propagation', () => {
+      assert.strictEqual(llmObsTraceIdToWire('custom-trace-id'), 'custom-trace-id')
+    })
+
+    it('returns undefined for empty trace ids', () => {
+      assert.strictEqual(llmObsTraceIdToWire(''), undefined)
+      assert.strictEqual(normalizeLlmObsTraceId(''), undefined)
+    })
+
+    it('generates a 128-bit trace id containing the start time', () => {
+      const generatedTraceId = generateLlmObsTraceId(1_700_000_000_000)
+
+      assert.match(generatedTraceId, /^[0-9a-f]{32}$/)
+      assert.strictEqual(generatedTraceId.slice(0, 16), '6553f10000000000')
+    })
+  })
+
   describe('encodeUnicode', () => {
     it('should encode unicode characters', () => {
       assert.strictEqual(encodeUnicode('😀'), '\\ud83d\\ude00')
@@ -26,6 +74,89 @@ describe('util', () => {
 
     it('should encode only unicode characters in a string', () => {
       assert.strictEqual(encodeUnicode('test 😀'), 'test \\ud83d\\ude00')
+    })
+  })
+
+  describe('agentNameWireSafe', () => {
+    it('accepts a plain ascii name', () => {
+      assert.strictEqual(agentNameWireSafe('my_agent'), true)
+    })
+
+    it('accepts a name containing "=" (legal in tagset values)', () => {
+      assert.strictEqual(agentNameWireSafe('model=gpt4'), true)
+    })
+
+    it('rejects a name containing a comma (the tagset entry delimiter)', () => {
+      assert.strictEqual(agentNameWireSafe('Researcher, v2'), false)
+    })
+
+    it('rejects a name with a byte outside 0x20-0x7E', () => {
+      assert.strictEqual(agentNameWireSafe('café'), false)
+      assert.strictEqual(agentNameWireSafe('tab\tname'), false)
+    })
+
+    it('accepts a name at the 256 byte cap and rejects the first byte over', () => {
+      assert.strictEqual(agentNameWireSafe('a'.repeat(256)), true)
+      assert.strictEqual(agentNameWireSafe('a'.repeat(257)), false)
+    })
+  })
+
+  describe('appendOptionalPropagatedTag', () => {
+    it('appends key=value to an empty tagset', () => {
+      assert.strictEqual(appendOptionalPropagatedTag('', 'k', 'v'), 'k=v')
+    })
+
+    it('appends with a comma separator to a non-empty tagset', () => {
+      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'v'), 'a=1,k=v')
+    })
+
+    it('returns the original tagset when value is falsy', () => {
+      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', undefined), 'a=1')
+      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', ''), 'a=1')
+    })
+
+    it('returns the original tagset when the safeguard rejects the value', () => {
+      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'bad', () => false), 'a=1')
+    })
+
+    it('appends when the safeguard accepts the value', () => {
+      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'good', () => true), 'a=1,k=good')
+    })
+
+    it('skips the entry when it would exceed maxTagSetLength', () => {
+      // 'a=1' is 3 chars; ',k=v' is 4 chars; total 7. Cap at 6 → skip.
+      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'v', null, 6), 'a=1')
+    })
+
+    it('appends when the entry fits exactly within maxTagSetLength', () => {
+      // 'a=1' (3) + ',k=v' (4) = 7. Cap at 7 → fits.
+      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'v', null, 7), 'a=1,k=v')
+    })
+  })
+
+  describe('stripTagsetEntry', () => {
+    it('removes a key=value entry from the middle of the tagset', () => {
+      assert.strictEqual(stripTagsetEntry('a=1,b=2,c=3', 'b'), 'a=1,c=3')
+    })
+
+    it('removes a key=value entry from the start of the tagset', () => {
+      assert.strictEqual(stripTagsetEntry('b=2,c=3', 'b'), 'c=3')
+    })
+
+    it('removes a key=value entry from the end of the tagset', () => {
+      assert.strictEqual(stripTagsetEntry('a=1,b=2', 'b'), 'a=1')
+    })
+
+    it('removes all occurrences of a duplicate key', () => {
+      assert.strictEqual(stripTagsetEntry('k=old,a=1,k=new', 'k'), 'a=1')
+    })
+
+    it('returns the original tagset unchanged when the key is absent', () => {
+      assert.strictEqual(stripTagsetEntry('a=1,c=3', 'b'), 'a=1,c=3')
+    })
+
+    it('returns empty string when stripping the only entry', () => {
+      assert.strictEqual(stripTagsetEntry('k=v', 'k'), '')
     })
   })
 

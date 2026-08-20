@@ -1,770 +1,666 @@
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
+const { expandLocalPackageScripts } = require('../ci-package-scripts')
 const { buildCiRemediation } = require('../ci-remediation')
-const { getCommandBlocker } = require('../command-blocker')
-const { serializeCommand } = require('../command-runner')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
-const { runInitializationProbe } = require('../init-probe')
-const { findLateInitialization } = require('../late-initialization')
-const { getCiWiringCommand } = require('../local-command')
-const { ensureSafeDirectory } = require('../safe-files')
-const { getMissingEventDiagnosis, summarizeTestOutput } = require('./basic-reporting')
-const {
-  basicEventEvidence,
-  error,
-  fail,
-  findInterestingLines,
-  frameworkOutDir,
-  hasAllBasicEventTypes,
-  incomplete,
-  inconclusive,
-  pass,
-  runInstrumentedCommand,
-  tailInterestingLines,
-} = require('./helpers')
+const { environmentNamesEqual } = require('../environment')
+const { parseLiteralEnvironmentPrefix } = require('../literal-environment')
+const { fail, incomplete } = require('./helpers')
 
-const INCONCLUSIVE_CI_WIRING_FAILURES = new Set([
-  'package-manager-filesystem-blocked',
-  'package-manager-version-mismatch',
-  'watchman-filesystem-blocked',
-  'ci-wiring-command-failed-before-tests',
-  'ci-wiring-command-timed-out',
-  'ci-wiring-no-observed-tests',
-  'ci-wiring-project-filter-mismatch',
-  'ci-wiring-test-filter-mismatch',
-  'no-test-optimization-events',
-])
-
-async function runCiWiring ({ manifest, framework, out, options, basicResult }) {
-  const scenarioName = 'ci-wiring'
-
-  try {
-    const command = getCiWiringCommand(framework)
-    if (!command) return getMissingCiWiringCommandResult(framework, manifest)
-
-    const outDir = frameworkOutDir(out, framework, scenarioName)
-    ensureSafeDirectory(out, outDir, 'CI wiring artifact directory')
-    const baseEvidence = getCiWiringBaseEvidence({ framework, manifest, basicResult, command })
-    const run = await runInstrumentedCommand({
-      framework,
-      out,
-      scenarioName,
-      command,
-      options,
-      ciWiring: true,
-    })
-    const { result, events } = run
-
-    const ciWiringPreflight = getComparableCiWiringPreflight(framework, command)
-    const evidence = {
-      ...baseEvidence,
-      commandExitCode: result.exitCode,
-      commandTimedOut: result.timedOut,
-      commandDescription: command.description,
-      commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
-      ciCommandExecution: {
-        mode: 'full-replay',
-        fullReplayRan: true,
-      },
-      preflight: summarizePreflight(ciWiringPreflight),
-      settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
-      offlineExporterCapture: {
-        mode: run.offline.captureMode,
-        completionCount: run.offline.completionCount,
-        observedEventCount: run.offline.observedEventCount,
-        retainedEventCount: run.offline.retainedEventCount,
-        sampled: run.offline.sampled,
-      },
-      offlineExporterSummary: run.offline.summary,
-      ...basicEventEvidence(events),
-    }
-
-    if (!hasAllBasicEventTypes(events)) {
-      const commandFailure = summarizeCiCommandFailure(result, evidence)
-      if (commandFailure.kind !== 'ci-wiring-command-result-unknown') {
-        evidence.commandFailure = commandFailure
-      }
-      evidence.debugSignals = summarizeCiDebugSignals(result)
-      const probe = await maybeRunInitializationProbe({ command, framework, options, outDir, result, evidence })
-      if (probe.summary) evidence.initializationProbe = probe.summary
-      evidence.monorepoFindings = getMonorepoFindings({ framework, command, probe: probe.summary })
-      evidence.eventLevelFailure = getCiWiringEventFailure({ framework, result, evidence, basicResult })
-      if (isInconclusiveCiWiringFailure(evidence.eventLevelFailure)) {
-        return inconclusive(
-          framework,
-          scenarioName,
-          evidence.eventLevelFailure.summary,
-          evidence,
-          outDir,
-          probe.artifacts
-        )
-      }
-      return fail(framework, scenarioName, evidence.eventLevelFailure.summary, evidence, outDir, probe.artifacts)
-    }
-
-    if (result.exitCode === 0) {
-      return pass(
-        framework,
-        scenarioName,
-        'The CI test command emitted session, module, suite, and test events with the initialization configured ' +
-          'by CI.',
-        evidence,
-        outDir
-      )
-    }
-
-    if (matchesPreflightExitCode(ciWiringPreflight, result.exitCode)) {
-      evidence.commandExitMatchesPreflight = true
-      return pass(
-        framework,
-        scenarioName,
-        'The CI test command emitted session, module, suite, and test events with the initialization configured ' +
-          'by CI. ' +
-          `The command exited ${result.exitCode}, matching the dd-trace-less preflight run.`,
-        evidence,
-        outDir
-      )
-    }
-
-    evidence.commandExitMatchesPreflight = false
-    return fail(
-      framework,
-      scenarioName,
-      `CI wiring emitted Test Optimization events, but the command exited ${result.exitCode}.`,
-      evidence,
-      outDir
-    )
-  } catch (err) {
-    return error(framework, scenarioName, err)
-  }
-}
-
-function isInconclusiveCiWiringFailure (failure) {
-  return INCONCLUSIVE_CI_WIRING_FAILURES.has(failure.kind)
-}
-
-function getCiWiringBaseEvidence ({ framework, manifest, basicResult, command }) {
-  return {
-    commandDescription: command.description,
-    ciCommandCandidate: buildCiCommandCandidate(framework),
-    ciWiring: framework.ciWiring,
-    ciRemediation: buildCiRemediation(framework),
-    nodeOptionsRemoval: findNodeOptionsRemoval(framework, manifest),
-    existingDatadogInitScripts: findDatadogInitScripts(manifest, framework),
-    lateInitialization: findLateInitialization(manifest, framework),
-    directInitializationBasicReporting: summarizeBasicReportingResult(basicResult),
-  }
-}
-
-async function maybeRunInitializationProbe ({ command, framework, options, outDir, result, evidence }) {
-  if (result.timedOut === true || evidence.commandFailure?.blockedByExecutionEnvironment ||
-    evidence.commandFailure?.toolchainBlocked) return {}
-  if (!commandOutputShowsTestsRan(evidence.commandOutputSummary)) return {}
-  if (evidence.nodeOptionsRemoval) {
-    return {
-      summary: {
-        ran: false,
-        skippedBecauseConfigurationProvesRemoval: true,
-        reason: `The package script expansion ${evidence.nodeOptionsRemoval.command} explicitly removes ` +
-          'NODE_OPTIONS before the test runner starts.',
-      },
-    }
-  }
-
-  try {
-    return await runInitializationProbe({
-      command,
-      framework,
-      options,
-      outDir,
-    })
-  } catch (err) {
-    return {
-      summary: {
-        ran: false,
-        error: err && err.message ? err.message : String(err),
-      },
-    }
-  }
-}
-
-function getMissingCiWiringCommandResult (framework, manifest) {
-  const contradiction = getFrameworkCiDiscoveryContradiction(framework, manifest)
-  if (contradiction) {
-    return incomplete(framework, 'ci-wiring',
-      `CI wiring was not replayed: ${contradiction.reason} No live CI-wiring conclusion was reached.`, {
-        ciCommandCandidate: buildCiCommandCandidate(framework),
-        ciWiring: framework.ciWiring,
-        ciDiscovery: contradiction.ciDiscovery,
-        recommendation: contradiction.recommendation,
-      })
-  }
-
-  const ciWiring = framework.ciWiring
-  const diagnosis = ciWiring?.replayBlocker ||
-    ciWiring?.diagnosis ||
-    ciWiring?.reason ||
-    'No replayable CI wiring command was provided in the manifest.'
-  const ciRemediation = buildCiRemediation(framework)
-  const evidence = {
-    ciCommandCandidate: buildCiCommandCandidate(framework),
-    ciWiring,
-    ciRemediation,
-    recommendation: 'Resolve the recorded CI replay blocker, then add ciWiringCommand and rerun validation.',
-  }
-
-  return incomplete(
-    framework,
-    'ci-wiring',
-    `CI wiring was not replayed: ${diagnosis} No live CI-wiring conclusion was reached.`,
-    evidence
-  )
-}
-
-function getCiWiringEventFailure ({ framework, result, evidence, basicResult }) {
-  const localFailure = getMissingEventDiagnosis({ framework, result, evidence })
-  const testsRan = commandOutputShowsTestsRan(evidence.commandOutputSummary)
-
-  if (testsRan) {
-    return {
-      ...localFailure,
-      kind: 'ci-wiring-no-test-optimization-events',
-      summary: getCiWiringTestsRanSummary({ basicResult, evidence, framework }),
-      recommendation: getCiWiringTestsRanRecommendation({ basicResult, evidence, framework }),
-    }
-  }
-
-  const commandFailure = evidence.commandFailure || summarizeCiCommandFailure(result, evidence)
-  if (commandFailure.kind !== 'ci-wiring-command-result-unknown') {
-    return {
-      ...localFailure,
-      kind: commandFailure.kind,
-      missingLevels: localFailure.missingLevels,
-      signals: commandFailure.signals,
-      summary: commandFailure.summary,
-      recommendation: commandFailure.recommendation,
-    }
-  }
-
-  return {
-    ...localFailure,
-    summary: 'The CI-shaped command did not emit Test Optimization events, and the validator could not determine ' +
-      'from its output whether tests ran. Review the recorded stdout/stderr artifacts for the selected CI step.',
-    recommendation: 'Verify the selected CI step is the real test step, then rerun after making the command output ' +
-      'or preflight evidence identify the test runner result.',
-  }
-}
-
-function getCiWiringTestsRanSummary ({ basicResult, evidence, framework }) {
-  if (evidence.nodeOptionsRemoval) {
-    return getNodeOptionsRemovalDiagnosis({ basicResult, evidence, framework })
-  }
-
-  const summary = 'The test command used by the CI job was identified and ran tests. When it ran with only the ' +
-    'environment and setup described by the CI job, no Test Optimization events reached the offline event artifact.'
-  const probeSummary = getInitializationProbeSummary(evidence.initializationProbe, framework)
-  const lateInitializationSummary = getLateInitializationSummary(evidence.lateInitialization)
-
-  if (basicResult?.status === 'pass') {
-    return `${summary}${lateInitializationSummary} ` +
-      'The same selected test command ' +
-      'reported test data when the ' +
-      'validator supplied the ' +
-      'required Datadog initialization directly, so this repository can report when dd-trace is initialized ' +
-      `correctly.${probeSummary}`
-  }
-
-  return `${summary}${lateInitializationSummary}${probeSummary}`
-}
-
-function getCiWiringTestsRanRecommendation ({ basicResult, evidence, framework }) {
-  const existingInitScripts = evidence.existingDatadogInitScripts || []
-  const lateInitialization = evidence.lateInitialization || []
-  const probeReachedTestRunner = evidence.initializationProbe?.ran === true &&
-    evidence.initializationProbe.reachedTestRunnerProcess === true
-  const nodeOptionsRemoval = evidence.nodeOptionsRemoval
-  let recommendation
-
-  if (nodeOptionsRemoval) {
-    const source = nodeOptionsRemoval.scriptName && nodeOptionsRemoval.packageJson
-      ? `Script \`${nodeOptionsRemoval.scriptName}\` in \`${nodeOptionsRemoval.packageJson}\``
-      : 'The package script'
-    recommendation = `${source} clears NODE_OPTIONS before the test runner starts. Remove the empty ` +
-      '`NODE_OPTIONS=` assignment, or pass the CI-provided `-r dd-trace/ci/init` preload to the next command.'
-  } else if (lateInitialization.length > 0) {
-    const setupFiles = lateInitialization.map(finding => `\`${finding.setupFile}\``).join(', ')
-    recommendation = `Move Test Optimization initialization out of Vitest setup file ${setupFiles}. ` +
-      'Vitest setup files run after the test runner starts, which is too late for dd-trace to instrument the ' +
-      'runner. Set `NODE_OPTIONS=-r dd-trace/ci/init` on the CI test command instead.'
-  } else if (existingInitScripts.length > 0) {
-    const scriptNames = existingInitScripts.map(script => `\`${script.name}\``).join(', ')
-    recommendation = `The package already defines ${scriptNames} with the required ` +
-      '`dd-trace/ci/init` preload. Update the identified CI test step to invoke that script, or copy its ' +
-      '`NODE_OPTIONS` initialization into the CI test command.'
-  } else if (probeReachedTestRunner) {
-    recommendation = `${evidence.ciRemediation?.summary || buildCiRemediation(framework).summary} ` +
-      'The NODE_OPTIONS probe reached the test runner for this command shape, so no package-manager or wrapper ' +
-      'change is needed.'
-  } else {
-    recommendation = 'Verify that the CI workflow sets NODE_OPTIONS with dd-trace/ci/init for the final test ' +
-      'runner, and that any package manager, monorepo runner, or wrapper preserves it.'
-  }
-
-  if (basicResult?.status === 'pass' && !nodeOptionsRemoval && lateInitialization.length === 0 &&
-    !probeReachedTestRunner) {
-    return `${recommendation} Compare the passing direct-initialization command with the CI job command to find ` +
-      'where the Datadog setup differs.'
-  }
-
-  return recommendation
-}
-
-function getNodeOptionsRemovalDiagnosis ({ basicResult, evidence, framework }) {
-  const finding = evidence.nodeOptionsRemoval
-  const frameworkName = getDisplayFrameworkName(framework.framework)
-  const ciCommand = evidence.ciCommandCandidate?.command
-    ? `When CI runs \`${evidence.ciCommandCandidate.command}\`, `
-    : 'In the selected CI test job, '
-  const source = finding.scriptName && finding.packageJson
-    ? `script \`${finding.scriptName}\` in \`${finding.packageJson}\``
-    : 'a package script'
-  const directResult = basicResult?.status === 'pass'
-    ? ` When the same ${frameworkName} test command runs with ` +
-      '`NODE_OPTIONS=-r dd-trace/ci/init` supplied directly, it reports test data successfully.'
-    : ''
-
-  return 'The CI test command ran tests, but no Test Optimization events reached the offline event artifact. ' +
-    `${ciCommand}` +
-    `${source} expands to \`${finding.command}\`. The empty \`NODE_OPTIONS=\` assignment clears the Datadog ` +
-    `preload before ${frameworkName} starts.${directResult}`
-}
-
-function findNodeOptionsRemoval (framework, manifest) {
-  const commands = framework.ciWiring?.packageScriptExpansionChain || []
-  for (const command of commands) {
-    if (typeof command !== 'string') continue
-    if (/(?:^|\s)NODE_OPTIONS\s*=\s*(?=\s|$)/.test(command) ||
-      /(?:^|\s)unset\s+NODE_OPTIONS(?:\s|$)/.test(command) ||
-      /(?:^|\s)env\s+-u\s+NODE_OPTIONS(?:\s|$)/.test(command)) {
-      return {
-        command,
-        ...findPackageScriptSource(manifest, framework, command),
-      }
-    }
-  }
-}
-
-function findPackageScriptSource (manifest, framework, command) {
-  const roots = new Set([manifest?.repository?.root, framework.project?.root].filter(Boolean))
-  for (const root of roots) {
-    const packageJsonPath = path.join(root, 'package.json')
-    let packageJson
-    try {
-      packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
-    } catch {
-      continue
-    }
-
-    for (const [scriptName, scriptCommand] of Object.entries(packageJson.scripts || {})) {
-      if (scriptCommand === command) return { packageJson: packageJsonPath, scriptName }
-    }
-  }
-  return {}
-}
-
-function getLateInitializationSummary (findings) {
-  if (!Array.isArray(findings) || findings.length === 0) return ''
-  const setupFiles = findings.map(finding => `\`${finding.setupFile}\``).join(', ')
-  return ' Static configuration inspection found Test Optimization initialization in Vitest setup file ' +
-    `${setupFiles}. Vitest loads setup files after the runner starts, so this initialization is too late to ` +
-    'instrument the test runner.'
+const MAX_CI_FILE_BYTES = 512 * 1024
+const DYNAMIC_COMMAND_PATTERN = /[$`;&|\r\n]|%[^%\s]+%|![^!\s]+!/
+const RUNNER_PATTERNS = {
+  cucumber:
+    /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?cucumber(?:-js)?(?:\.js)?(?:\s|$)/,
+  cypress: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?cypress(?:\.js)?\s+run(?:\s|$)/,
+  jest: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?jest(?:\.js)?(?:\s|$)/,
+  mocha: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?mocha(?:\.js)?(?:\s|$)/,
+  playwright: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?playwright(?:\.js)?\s+test(?:\s|$)/,
+  vitest: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?vitest(?:\.js)?\s+(?:run|--run)(?:\s|$)/,
 }
 
 /**
- * Finds package scripts that already set the required Test Optimization preload.
+ * Audits only structurally anchored, literal CI evidence.
  *
- * @param {object|undefined} manifest normalized validation manifest
- * @param {object} framework manifest framework entry
- * @returns {{name: string, packageJson: string}[]} matching package scripts
+ * @param {object} input audit inputs
+ * @param {object} input.manifest validation manifest
+ * @param {object} input.framework framework entry
+ * @param {Map<string, Buffer|undefined>} [input.projectFileSources] approval-bound project sources
+ * @returns {object} CI audit result
  */
-function findDatadogInitScripts (manifest, framework) {
-  const roots = new Set([framework.project?.root, manifest?.repository?.root].filter(Boolean))
-  const scripts = []
+function runCiWiring ({ manifest, framework, projectFileSources }) {
+  const contradiction = getFrameworkCiDiscoveryContradiction(framework, manifest)
+  if (contradiction) {
+    return getIncomplete(framework, contradiction.reason, {
+      ciDiscovery: contradiction.ciDiscovery,
+      recommendation: contradiction.recommendation,
+    })
+  }
 
-  for (const root of roots) {
-    let packageJson
-    try {
-      packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
-    } catch {
-      continue
-    }
-
-    for (const [name, command] of Object.entries(packageJson.scripts || {})) {
-      if (typeof command !== 'string' || !/\bNODE_OPTIONS\s*=.*\bdd-trace\/ci\/init\b/.test(command)) {
-        continue
+  const ci = framework.ciWiring || {}
+  const evidence = {
+    ciCommandCandidate: buildCiCommandCandidate(framework),
+    conclusion: 'incomplete',
+    domain: 'ci_configuration',
+    evidenceStrength: 'unknown',
+  }
+  if (hasNoSupportedCiConfiguration(manifest, ci)) {
+    return getIncomplete(
+      framework,
+      'No supported CI configuration file was found by bounded repository discovery. The CI audit is incomplete; ' +
+        'this does not prove that the repository has no external CI configuration.',
+      {
+        ...evidence,
+        reasonCode: 'no-supported-ci-configuration',
+        recommendation: 'Identify the CI system and one repository-controlled test job. If CI is configured outside ' +
+          'this repository, review that configuration separately.',
       }
-      scripts.push({
-        name,
-        packageJson: path.join(root, 'package.json'),
-      })
-    }
+    )
   }
-
-  return scripts
-}
-
-function summarizeCiCommandFailure (result, evidence) {
-  const output = `${result.stdout || ''}\n${result.stderr || ''}`
-  const testsRan = commandOutputShowsTestsRan(evidence.commandOutputSummary || [])
-  const common = {
-    exitCode: result.exitCode,
-    stderrExcerpt: tailInterestingLines(result.stderr),
-    stdoutExcerpt: tailInterestingLines(result.stdout),
-  }
-
-  if (testsRan) {
-    return {
-      ...common,
-      kind: 'ci-wiring-command-result-unknown',
-      signals: [],
-      summary: 'The CI-shaped command ran tests; missing Test Optimization events are reported separately.',
-      recommendation: 'Review CI wiring event failure evidence.',
-    }
-  }
-
-  const commandBlocker = getCommandBlocker(result)
-  if (commandBlocker) return { ...common, ...commandBlocker }
-
-  const preloadFailure = detectDatadogPreloadResolutionFailure(output)
-  if (preloadFailure) {
-    return {
-      ...common,
-      kind: 'ci-wiring-preload-resolution-failed',
-      signals: preloadFailure.signals,
-      summary: 'The CI-shaped command failed before tests started because Node could not resolve the Test ' +
-        'Optimization preload `dd-trace/ci/init` from the command working directory.',
-      recommendation: 'Make sure `dd-trace` is installed where the CI command starts, or run the CI command from ' +
-        'the package working directory that can resolve `dd-trace/ci/init`. After the preload resolves, rerun CI ' +
-        'wiring validation to check whether the required Datadog setup reaches the final test runner.',
-    }
-  }
-
-  if (result.timedOut === true) {
-    return {
-      ...common,
-      kind: 'ci-wiring-command-timed-out',
-      signals: [],
-      summary: 'The CI-shaped command timed out before the validator could observe Test Optimization events.',
-      recommendation: 'Choose a smaller representative CI test command or record the setup needed to make the ' +
-        'selected command complete within the validation timeout.',
-    }
-  }
-
-  if (result.exitCode !== 0 && !testsRan) {
-    const termination = Number.isInteger(result.exitCode) ? `exited ${result.exitCode}` : 'failed'
-    const projectFilterMismatch = output.match(/No projects matched the filter\s+["']([^"']+)["']/i)
-    if (projectFilterMismatch) {
-      return {
-        ...common,
-        kind: 'ci-wiring-project-filter-mismatch',
-        signals: [projectFilterMismatch[0]],
-        summary: `The CI-shaped command ${termination} before tests because its added project filter ` +
-          `\`${projectFilterMismatch[1]}\` is not exposed by the configuration loaded from the CI working ` +
-          'directory. No CI wiring conclusion was reached.',
-        recommendation: 'Remove the invented project selector. Choose a representative test from a project the ' +
-          'original CI command actually loads, or mark CI replay unavailable when the real CI wrapper cannot be ' +
-          'focused safely.',
+  if (hasUnavailableRemoteCiCommand(ci)) {
+    return getIncomplete(
+      framework,
+      'The selected CI path delegates test execution to a remote action or reusable workflow whose command is not ' +
+        'available in this repository. The CI audit is incomplete.',
+      {
+        ...evidence,
+        reasonCode: 'remote-ci-command-unavailable',
+        recommendation: 'Review the referenced action or reusable workflow at its pinned revision. Keep the result ' +
+          'incomplete when its final test command and effective environment cannot be bound statically.',
       }
-    }
-
-    if (/No test files found/i.test(output)) {
-      return {
-        ...common,
-        kind: 'ci-wiring-test-filter-mismatch',
-        signals: findInterestingLines(output, [/No test files found/, /filter:/, /include:/]),
-        summary: `The CI-shaped command ${termination} before tests because its focused test filter matched no ` +
-          'files in the project configuration loaded by CI. No CI wiring conclusion was reached.',
-        recommendation: 'Choose a real test included by the exact CI-loaded project and use it consistently for ' +
-          'Basic Reporting and CI wiring. If the CI command cannot be focused without changing its project, cwd, ' +
-          'or wrapper chain, mark CI replay unavailable.',
+    )
+  }
+  const missing = getMissingReviewFields(ci)
+  if (missing.length > 0) {
+    return getIncomplete(
+      framework,
+      `The CI audit is incomplete because ${[
+        `it is missing ${missing.join(', ')}`,
+        ...(ci.reviewComplete === true ? [] : ['the review is not marked complete']),
+      ].join(' and ')}.`,
+      {
+        ...evidence,
+        recommendation: 'Identify one exact CI test job and resolve inherited configuration and wrappers. Leave the ' +
+          'result incomplete when that cannot be proven statically.',
       }
-    }
-
-    const buildErrors = findInterestingLines(output, [
-      /Cannot find module/,
-      /Module not found/,
-      /Error \[ERR_MODULE_NOT_FOUND\]/,
-      /Could not resolve /,
-      /command not found/,
-    ])
-
-    return {
-      ...common,
-      buildErrors,
-      kind: 'ci-wiring-command-failed-before-tests',
-      signals: buildErrors,
-      summary: `The CI-shaped command ${termination} before the validator observed any tests running. ` +
-        'No CI wiring conclusion about Test Optimization initialization was reached for this command.',
-      recommendation: 'Fix or document the command/setup failure first. CI wiring can only be interpreted after ' +
-        'the selected CI-shaped command reaches the test runner.',
-    }
+    )
   }
 
-  if (result.exitCode === 0 && !testsRan) {
-    return {
-      ...common,
-      kind: 'ci-wiring-no-observed-tests',
-      signals: [],
-      summary: 'The CI-shaped command exited 0, but the validator did not observe test-runner output or Test ' +
-        'Optimization events.',
-      recommendation: 'Verify that the selected CI step actually runs tests. If it is a wrapper with unusual ' +
-        'output, record preflight observedTestCount or choose a representative command whose output identifies ' +
-        'the test result.',
-    }
-  }
-
-  return {
-    ...common,
-    kind: 'ci-wiring-command-result-unknown',
-    signals: [],
-    summary: 'The CI-shaped command result did not explain why Test Optimization events were missing.',
-    recommendation: 'Review stdout, stderr, and debug lines for the selected CI-shaped command.',
-  }
-}
-
-function getComparableCiWiringPreflight (framework, command) {
-  if (framework.ciWiringPreflight?.ran === true) {
-    return {
-      ...framework.ciWiringPreflight,
-      source: 'ciWiringPreflight',
-    }
-  }
-
-  if (commandsHaveSameExecutionShape(command, framework.existingTestCommand)) {
-    return {
-      ...framework.preflight,
-      source: 'existingTestCommand',
-    }
-  }
-
-  return {
-    ran: false,
-    reason: 'No dd-trace-less preflight result was recorded for the selected CI wiring command shape.',
-  }
-}
-
-function commandsHaveSameExecutionShape (left, right) {
-  if (!left || !right) return false
-  if (left.cwd !== right.cwd) return false
-  if (Boolean(left.usesShell) !== Boolean(right.usesShell)) return false
-  return serializeCommand(left) === serializeCommand(right)
-}
-
-function detectDatadogPreloadResolutionFailure (output) {
-  if (!/dd-trace(?:\/ci\/init)?/.test(output)) return null
-  if (!/MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|Cannot find module|Cannot find package/.test(output)) return null
-
-  const signals = findInterestingLines(output, [
-    /Cannot find module ['"]dd-trace\/ci\/init['"]/,
-    /Cannot find package ['"]dd-trace['"]/,
-    /Error \[ERR_MODULE_NOT_FOUND\].*dd-trace\/ci\/init/,
-    /MODULE_NOT_FOUND/,
-    /internal\/preload/,
-  ], 8)
-
-  return { signals }
-}
-
-function summarizeCiDebugSignals (result) {
-  const output = `${result.stdout || ''}\n${result.stderr || ''}`
-  const lines = findInterestingLines(output, [
-    /dd-trace/i,
-    /datadog/i,
-    /ci visibility/i,
-    /test optimization/i,
-    /ECONNREFUSED/,
-    /ECONNRESET/,
-    /ETIMEDOUT/,
-    /socket hang up/,
-    /failed to send/i,
-    /writer/i,
-  ], 12)
-
-  return {
-    debugEnvEnabled: true,
-    lines,
-  }
-}
-
-function summarizeBasicReportingResult (basicResult) {
-  if (!basicResult) {
-    return {
-      ran: false,
-      reason: 'Basic Reporting was not run before CI wiring.',
-    }
-  }
-
-  return {
-    ran: true,
-    status: basicResult.status,
-    diagnosis: basicResult.diagnosis,
-  }
-}
-
-function getInitializationProbeSummary (probe, framework) {
-  if (!probe || probe.ran !== true) return ''
-
-  const frameworkName = getDisplayFrameworkName(framework.framework)
-  if (!probe.reachedAnyNodeProcess) {
-    return ' The initialization probe did not reach any Node.js process in the CI command.'
-  }
-
-  if (probe.reachedTestRunnerProcess) {
-    return ` The NODE_OPTIONS probe reached a ${frameworkName} process, so NODE_OPTIONS can reach the test ` +
-      'runner in this command shape; inspect whether the CI workflow actually configures the required Datadog ' +
-      'initialization and environment.'
-  }
-
-  const wrappers = formatToolNames([...probe.wrapperSignals, ...probe.packageManagerSignals])
-  if (wrappers) {
-    return ` The NODE_OPTIONS probe reached ${wrappers}, but it did not appear to reach a ${frameworkName} ` +
-      'process. This usually means a package manager, monorepo runner, or wrapper removes NODE_OPTIONS before ' +
-      'the tests start.'
-  }
-
-  return ` The NODE_OPTIONS probe reached a Node.js process, but it did not appear to reach a ${frameworkName} ` +
-    'process.'
-}
-
-function getMonorepoFindings ({ framework, command, probe }) {
-  const findings = []
-  const commandText = [
-    command.description,
-    command.usesShell ? command.shellCommand : command.argv?.join(' '),
-    framework.ciWiring?.diagnosis,
-    ...(framework.ciWiring?.runnerToolChain || []),
-    ...(framework.ciWiring?.toolChain || []),
-    ...(framework.ciWiring?.commandChain || []),
-  ].filter(Boolean).join('\n')
-
-  if (/\bnx\b/i.test(commandText) || hasProbeTool(probe, 'nx')) {
-    findings.push({
-      id: 'nx-executor-env-forwarding',
-      tool: 'nx',
-      reason: 'Nx executors and wrapper scripts can sit between the CI command and the final test runner.',
-      recommendation: 'Verify that NODE_OPTIONS and Datadog environment variables are preserved by every Nx ' +
-        'target, executor, and wrapper that spawns the test runner.',
+  const source = readProjectSource(ci.configFile, projectFileSources)
+  if (!source) {
+    return getIncomplete(framework, 'The recorded CI configuration file is unavailable or too large to verify.', {
+      ...evidence,
+      recommendation: 'Regenerate the manifest from the current checkout and review the CI file again.',
     })
   }
-
-  if (/\bturbo(?:repo)?\b/i.test(commandText) || hasProbeTool(probe, 'turbo')) {
-    findings.push({
-      id: 'turbo-env-pass-through',
-      tool: 'turbo',
-      reason: 'Turborepo can filter environment variables for tasks.',
-      recommendation: 'Verify turbo.json pass-through settings preserve NODE_OPTIONS and required DD_* variables ' +
-        'for test tasks.',
-    })
+  const jobSource = getSelectedJobSource(source, ci)
+  if (!jobSource ||
+    !containsExecutionCommand(jobSource, ci.command) ||
+    (ci.step && !containsLiteral(jobSource, ci.step))) {
+    return getIncomplete(
+      framework,
+      'The recorded command and step could not be bound structurally to the selected job in the checksum-bound ' +
+        'CI file.',
+      {
+        ...evidence,
+        recommendation: 'Record the exact YAML job key, literal step, and command from one supported CI job. Leave ' +
+          'the audit incomplete when that job structure cannot be verified.',
+      }
+    )
   }
 
-  if (/\blage\b/i.test(commandText) || hasProbeTool(probe, 'lage')) {
-    findings.push({
-      id: 'lage-env-forwarding',
-      tool: 'lage',
-      reason: 'Lage can run package scripts through an intermediate task process.',
-      recommendation: 'Verify the Lage task and any package script it invokes preserve NODE_OPTIONS and required ' +
-        'DD_* variables for the final test runner.',
-    })
+  const command = ci.command.trim()
+  const resolution = getRunnerResolution(command, framework, ci, projectFileSources)
+  const normalizedSource = jobSource.replaceAll('\\', '/')
+  const hasInitialization = /dd-trace\/ci\/init(?:\.js)?\b/.test(normalizedSource)
+  const matrixRelevant = matrixAffectsCiFacts(jobSource, command)
+  const unresolved = classifyUnresolved(ci, resolution, matrixRelevant, jobSource)
+  const initialization = getInitializationFact(ci, hasInitialization)
+  const ciFacts = {
+    initialization,
+    matrix: {
+      status: matrixRelevant ? 'affects_relevant_configuration' : 'not_relevant_to_ci_facts',
+    },
+    runnerInvocation: {
+      ...(resolution.commandPath ? { commandPath: resolution.commandPath } : {}),
+      ...(resolution.lifecycleScripts?.length > 0
+        ? { lifecycleScripts: resolution.lifecycleScripts }
+        : {}),
+      ...(resolution.reason ? { reason: resolution.reason } : {}),
+      ...(resolution.resolvedCommand ? { resolvedCommand: resolution.resolvedCommand } : {}),
+      source: resolution.source,
+      status: resolution.status,
+    },
+    transport: getTransportFact(ci, jobSource),
+    unresolved,
+  }
+  evidence.ciFacts = ciFacts
+
+  const effectiveNodeOptions = resolution.status === 'confirmed'
+    ? getEffectiveNodeOptionsOverride(resolution.commandPath)
+    : undefined
+  const remediation = buildCiRemediation(framework)
+  if (resolution.status === 'confirmed' &&
+    effectiveNodeOptions !== undefined &&
+    !/dd-trace[\\/]ci[\\/]init(?:\.js)?\b/.test(effectiveNodeOptions) &&
+    unresolved.relevant.length === 0) {
+    return getFailure(
+      framework,
+      'The statically resolved CI test path overrides NODE_OPTIONS without the dd-trace/ci/init preload, so Test ' +
+        'Optimization is not initialized in the final runner.',
+      {
+        ...evidence,
+        ciRemediation: remediation,
+        conclusion: 'confirmed_misconfigured',
+        evidenceStrength: 'confirmed_static',
+        recommendation: remediation.summary,
+      }
+    )
   }
 
-  if (probe?.reachedAnyNodeProcess && !probe.reachedTestRunnerProcess && !findNodeOptionsRemoval(framework)) {
-    findings.push({
-      id: 'node-options-not-observed-in-test-runner',
-      tool: 'node',
-      reason: 'The NODE_OPTIONS probe reached an intermediate Node.js process but not the detected test runner.',
-      recommendation: 'Trace the command chain from the CI step to the test runner and find where NODE_OPTIONS is ' +
-        'removed or replaced.',
-    })
+  if (initialization.status === 'missing' &&
+    resolution.status === 'confirmed' &&
+    unresolved.relevant.length === 0) {
+    const transportMissing = ciFacts.transport.status === 'missing'
+    return getFailure(
+      framework,
+      'The checksum-bound CI job reaches the selected test framework through a bounded static command path, but ' +
+        `does not configure the dd-trace/ci/init preload${
+          transportMissing ? ' and declares no visible Datadog Agent or agentless reporting transport' : ''
+        }. Test Optimization is not configured in that job.`,
+      {
+        ...evidence,
+        ciConfigurationStatus: 'not_configured',
+        ciRemediation: remediation,
+        conclusion: 'confirmed_misconfigured',
+        evidenceStrength: 'confirmed_static',
+        recommendation: remediation.summary,
+      }
+    )
   }
 
-  return findings
+  if (resolution.status !== 'confirmed') {
+    const visibleFacts = []
+    if (initialization.status === 'missing') {
+      visibleFacts.push('The selected job has no visible dd-trace/ci/init preload.')
+    }
+    if (ciFacts.transport.status === 'missing') {
+      visibleFacts.push('The recorded review found no visible Datadog Agent or agentless reporting transport.')
+    }
+    const recommendation = /working directory/i.test(resolution.reason)
+      ? 'Keep the CI job\'s actual working directory. Resolve the repository-root wrapper to the selected test ' +
+        'runner statically; do not substitute the framework package directory merely to make the audit conclusive.'
+      : 'Resolve the remaining wrapper or dynamic command statically, or confirm the effective NODE_OPTIONS value ' +
+        'in the final test process with DD_TRACE_DEBUG=1.'
+    return getIncomplete(
+      framework,
+      'The CI audit remains incomplete because the selected command could not be resolved to the ' +
+        `${framework.framework} runner: ${resolution.reason}. ${visibleFacts.join(' ')}`.trim(),
+      {
+        ...evidence,
+        recommendation,
+      }
+    )
+  }
+
+  if (unresolved.relevant.length > 0) {
+    return getIncomplete(
+      framework,
+      'The framework invocation was resolved statically, but relevant CI evidence remains unresolved: ' +
+        `${unresolved.relevant.join('; ')}.`,
+      {
+        ...evidence,
+        recommendation: 'Resolve only the listed configuration that can affect initialization, runner invocation, ' +
+          'or transport. Unrelated runtime matrices do not need further analysis.',
+      }
+    )
+  }
+
+  if (initialization.status !== 'configured') {
+    return getIncomplete(
+      framework,
+      'Static evidence does not establish whether dd-trace/ci/init is configured for the selected test path.',
+      {
+        ...evidence,
+        recommendation: 'Record the literal NODE_OPTIONS configuration for this job or rerun the CI step with ' +
+          'DD_TRACE_DEBUG=1.',
+      }
+    )
+  }
+
+  if (ci.transport?.mode === 'agentless' &&
+    /DD_CIVISIBILITY_AGENTLESS_ENABLED/.test(jobSource) &&
+    !/\b(?:DD_API_KEY|DATADOG_API_KEY)\b/.test(jobSource)) {
+    return getIncomplete(
+      framework,
+      'The selected job visibly enables agentless reporting but has no Datadog API key reference in the ' +
+        'checksum-bound CI file. The key may still be injected outside this file.',
+      {
+        ...evidence,
+        ciRemediation: remediation,
+        recommendation: 'Confirm that DD_API_KEY reaches this test job from the CI secret store.',
+      }
+    )
+  }
+
+  return getIncomplete(
+    framework,
+    'The selected CI job contains Test Optimization initialization, but static inspection cannot prove that the ' +
+      'effective environment and reporting transport reach the final process at runtime.',
+    {
+      ...evidence,
+      conclusion: 'configured_propagation_unverified',
+      evidenceStrength: 'inferred_static',
+      recommendation: 'Rerun this exact CI step with DD_TRACE_DEBUG=1 and confirm initialization in the final test ' +
+        'runner.',
+    }
+  )
 }
 
-function hasProbeTool (probe, name) {
-  const signals = [
-    ...(probe?.wrapperSignals || []),
-    ...(probe?.packageManagerSignals || []),
-    ...(probe?.testRunnerSignals || []),
-  ]
-  return signals.some(signal => signal.name === name)
+/**
+ * Returns the final inline NODE_OPTIONS override along the resolved command path.
+ *
+ * @param {string[]} commandPath selected command and expanded package scripts
+ * @returns {string|undefined} final literal override
+ */
+function getEffectiveNodeOptionsOverride (commandPath = []) {
+  let value
+  for (const command of commandPath) {
+    for (const assignment of normalizeDirectCommand(command).assignments) {
+      if (environmentNamesEqual(assignment.name, 'NODE_OPTIONS')) value = assignment.value
+    }
+  }
+  return value
 }
 
-function formatToolNames (signals) {
-  const names = []
-  const seen = new Set()
-
-  for (const signal of signals) {
-    if (!signal.name || seen.has(signal.name)) continue
-    seen.add(signal.name)
-    names.push(signal.name)
+/**
+ * Resolves a direct runner or a bounded chain of local package scripts.
+ *
+ * @param {string} command selected CI command
+ * @param {object} framework framework manifest entry
+ * @param {object} ci selected CI evidence
+ * @param {Map<string, Buffer|undefined>} [projectFileSources] approval-bound project sources
+ * @returns {object} static runner resolution
+ */
+function getRunnerResolution (command, framework, ci, projectFileSources) {
+  if (getDirectRunner(command, framework.framework)) {
+    return {
+      commandPath: [command],
+      resolvedCommand: command,
+      source: 'direct_ci_command',
+      status: 'confirmed',
+    }
   }
 
-  if (names.length === 0) return ''
-  if (names.length === 1) return names[0]
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
-}
-
-function getDisplayFrameworkName (frameworkName) {
+  if (!ci.workingDirectory ||
+    path.resolve(ci.workingDirectory) !== path.resolve(framework.project.root)) {
+    return {
+      reason: ci.workingDirectory
+        ? 'the selected working directory does not match the approval-bound project package'
+        : 'the selected package-script command has no approval-bound effective working directory',
+      source: 'unresolved_wrapper',
+      status: 'unresolved',
+    }
+  }
+  const scripts = readProjectScripts(framework.project.packageJson, projectFileSources)
+  if (!scripts) {
+    return {
+      reason: 'the approval-bound project package.json is unavailable or invalid',
+      source: 'unresolved_wrapper',
+      status: 'unresolved',
+    }
+  }
+  const expansion = expandLocalPackageScripts(command, scripts)
+  if (expansion.error) {
+    return {
+      lifecycleScripts: expansion.lifecycleScripts,
+      reason: expansion.error,
+      source: 'local_package_script',
+      status: 'unresolved',
+    }
+  }
+  const candidates = expansion.terminals.filter(terminal => {
+    return getDirectRunner(terminal.command, framework.framework)
+  })
+  if (candidates.length === 0) {
+    return {
+      lifecycleScripts: expansion.lifecycleScripts,
+      reason: 'no bounded local package-script path reaches the selected framework runner',
+      source: 'unresolved_wrapper',
+      status: 'unresolved',
+    }
+  }
+  if (candidates.length > 1) {
+    return {
+      lifecycleScripts: expansion.lifecycleScripts,
+      reason: 'more than one bounded local package-script path reaches the selected framework runner',
+      source: 'unresolved_wrapper',
+      status: 'unresolved',
+    }
+  }
+  const candidate = candidates[0]
   return {
-    cucumber: 'Cucumber',
-    cypress: 'Cypress',
-    jest: 'Jest',
-    mocha: 'Mocha',
-    playwright: 'Playwright',
-    vitest: 'Vitest',
-  }[frameworkName] || frameworkName || 'test runner'
+    commandPath: candidate.path,
+    lifecycleScripts: expansion.lifecycleScripts,
+    resolvedCommand: candidate.command,
+    source: 'local_package_script',
+    status: 'confirmed',
+  }
 }
 
-function commandOutputShowsTestsRan (lines) {
-  return lines.some(line => {
-    return /\b\d+\s+(?:passing|passed|failing|failed)\b/i.test(line) ||
-      /\btests?\b.*\b(?:passed|failed)\b/i.test(line) ||
-      /\bSuccessfully ran target\b.*\btest\b/i.test(line) ||
-      /\bsuccess:\s*[1-9]\d*\b/i.test(line) ||
-      /\bfailed:\s*[1-9]\d*\b/i.test(line) ||
-      /\bTasks:\s*[1-9]\d*\s+successful\b/i.test(line)
+function readProjectScripts (filename, projectFileSources) {
+  try {
+    const source = readProjectSource(filename, projectFileSources)
+    if (source === undefined) return
+    const packageJson = JSON.parse(source)
+    if (!packageJson.scripts || typeof packageJson.scripts !== 'object' ||
+      Array.isArray(packageJson.scripts)) return {}
+    return packageJson.scripts
+  } catch {}
+}
+
+function getInitializationFact (ci, hasInitialization) {
+  if (ci.initialization?.status === 'configured' && hasInitialization) {
+    return { status: 'configured', evidence: ci.initialization.evidence }
+  }
+  if (ci.initialization?.status === 'not_configured' && !hasInitialization) {
+    return { status: 'missing', evidence: ci.initialization.evidence }
+  }
+  return {
+    status: 'unresolved',
+    reason: 'recorded initialization status and checksum-bound CI source do not establish the same conclusion',
+  }
+}
+
+function getTransportFact (ci, jobSource) {
+  const mode = ci.transport?.mode
+  if (mode === 'agentless' &&
+    /DD_CIVISIBILITY_AGENTLESS_ENABLED/.test(jobSource) &&
+    !/\b(?:DD_API_KEY|DATADOG_API_KEY)\b/.test(jobSource)) {
+    return { status: 'credentials_unverified', mode }
+  }
+  if (mode === 'agent' || mode === 'agentless') {
+    return { status: 'configured', mode, evidence: ci.transport.evidence }
+  }
+  if (mode === 'none') return { status: 'missing', mode }
+  return { status: 'unresolved', mode: mode || 'unknown' }
+}
+
+function classifyUnresolved (ci, resolution, matrixRelevant, jobSource) {
+  const relevant = []
+  const ignored = []
+  const unresolved = Array.isArray(ci.unresolved) ? ci.unresolved : []
+  const githubHosted = /[/\\]\.github[/\\]workflows[/\\]/.test(ci.configFile) &&
+    /^[ \t]*runs-on:[ \t]*(?:ubuntu|windows|macos)-/mi.test(jobSource)
+
+  for (const item of unresolved) {
+    const isMatrix = /\bmatrix\b/i.test(item)
+    const isResolvedPackagePath = resolution.status === 'confirmed' &&
+      resolution.source === 'local_package_script' &&
+      /\b(?:bun|lifecycle|npm|package script|pnpm|pretest|posttest|yarn)\b/i.test(item)
+    const isAmbientGithubSettings = githubHosted &&
+      /\b(?:repository|organization|environment)[-\s,\w]+\b(?:secrets?|variables?)\b/i.test(item) &&
+      /\b(?:inject|inherit|outside)\b/i.test(item)
+    const isOtherJob = /^Other jobs?\b/i.test(item) ||
+      /\bsecond\b.+\bjob\b.+\bonly\b.+\bselected\b/i.test(item) ||
+      /\brelease\b.+\bcontains no test job\b/i.test(item)
+    if ((isMatrix && !matrixRelevant) ||
+      isResolvedPackagePath ||
+      isAmbientGithubSettings ||
+      isOtherJob) {
+      ignored.push(item)
+    } else {
+      relevant.push(item)
+    }
+  }
+  if (ci.reviewComplete !== true && unresolved.length === 0) {
+    relevant.push('the CI evidence review is not marked complete')
+  }
+  return { ignored, relevant }
+}
+
+function hasNoSupportedCiConfiguration (manifest, ci) {
+  if (ci.configFile || ci.job || ci.command) return false
+  const unresolved = Array.isArray(ci.unresolved) ? ci.unresolved : []
+  return manifest.ciDiscovery?.found?.length === 0 ||
+    unresolved.some(item => /No supported CI configuration file was found/i.test(item))
+}
+
+function hasUnavailableRemoteCiCommand (ci) {
+  if (ci.command) return false
+  const evidence = [
+    ci.step,
+    ...(Array.isArray(ci.unresolved) ? ci.unresolved : []),
+  ].filter(Boolean)
+  if (evidence.some(item => {
+    return /\b(?:remote|external|third-party)\s+(?:action|workflow)\b/i.test(item)
+  })) return true
+
+  return evidence.some(item => {
+    const reference = /^\s*uses:\s*["']?([^"'\s]+)["']?\s*$/im.exec(item)?.[1]
+    return reference && !reference.startsWith('./')
   })
 }
 
-function matchesPreflightExitCode (preflight, exitCode) {
-  return preflight?.ran === true &&
-    Number.isInteger(preflight.exitCode) &&
-    preflight.exitCode === exitCode
+function matrixAffectsCiFacts (jobSource, command) {
+  const matrixReference = /\bmatrix\s*[.[]/
+  if (!matrixReference.test(jobSource)) return false
+  if (matrixReference.test(command)) return true
+  return jobSource.split(/\r?\n/).some(line => {
+    return matrixReference.test(line) &&
+      /\b(?:container|DD_[A-Z0-9_]+|DATADOG_[A-Z0-9_]+|NODE_OPTIONS|runs-on|shell|working-directory)\b/i.test(line)
+  })
 }
 
-function summarizePreflight (preflight) {
-  if (!preflight || preflight.ran !== true) {
-    return {
-      ran: false,
-      reason: preflight?.reason || 'No dd-trace-less preflight result was recorded in the manifest.',
+/**
+ * Locates a direct runner only at the executable position after literal environment assignments.
+ *
+ * @param {string} command selected CI command
+ * @param {string} framework framework name
+ * @returns {{index: number}|undefined} direct runner location
+ */
+function getDirectRunner (command, framework) {
+  if (DYNAMIC_COMMAND_PATTERN.test(command)) return
+  const { index, source } = normalizeDirectCommand(command)
+  if (!RUNNER_PATTERNS[framework]?.test(source)) return
+  return { index }
+}
+
+function normalizeDirectCommand (command) {
+  const prefix = parseLiteralEnvironmentPrefix(command)
+  const assignments = [...prefix.assignments]
+  let source = String(command).slice(prefix.length).replace(/^(?:c8|nyc)(?:\.cmd)?\s+/, '')
+  if (/^cross-env(?:\.cmd)?\s+/.test(source)) {
+    source = source.replace(/^cross-env(?:\.cmd)?\s+/, '')
+    const crossEnv = parseLiteralEnvironmentPrefix(source)
+    assignments.push(...crossEnv.assignments)
+    source = source.slice(crossEnv.length)
+  }
+  source = source.replace(/^(?:(?:bunx|npx)(?:\.cmd)?|(?:pnpm|yarn)(?:\.cmd)?\s+exec)\s+/, '')
+    .replace(/^bun x\s+/, '')
+  return { assignments, index: prefix.length, source }
+}
+
+/**
+ * Returns the selected YAML job block, or undefined when structural binding is unsupported.
+ *
+ * @param {string} source CI configuration source
+ * @param {object} ci selected CI evidence
+ * @returns {string|undefined} selected job source
+ */
+function getSelectedJobSource (source, ci) {
+  if (!/\.ya?ml$/i.test(String(ci.configFile || ''))) return
+  const lines = source.replaceAll('\r\n', '\n').split('\n')
+  const jobName = normalizeYamlKey(ci.job)
+  if (!jobName) return
+
+  const jobsIndex = lines.findIndex(line => /^jobs:\s*(?:#.*)?$/.test(line))
+  if (jobsIndex !== -1) {
+    const jobsEnd = findYamlBlockEnd(lines, jobsIndex, 0)
+    const entries = []
+    for (let index = jobsIndex + 1; index < jobsEnd; index++) {
+      const entry = getYamlKeyEntry(lines[index], index)
+      if (entry) entries.push(entry)
     }
+    const jobIndent = Math.min(...entries.map(entry => entry.indent))
+    const selected = entries.find(entry => entry.indent === jobIndent && entry.key === jobName)
+    if (selected) return getYamlBlock(lines, selected.index, selected.indent)
+    return
   }
 
+  if (!/^\.gitlab-ci\.ya?ml$/i.test(path.basename(ci.configFile))) return
+  const selected = lines
+    .map((line, index) => getYamlKeyEntry(line, index))
+    .find(entry => entry?.indent === 0 && entry.key === jobName)
+  if (selected) return getYamlBlock(lines, selected.index, selected.indent)
+}
+
+function getYamlKeyEntry (line, index) {
+  if (!line || /^\s*(?:#|$)/.test(line) || /^\s/.test(line) && line.includes('\t')) return
+  const match = /^(\s*)(?:"([^"]+)"|'([^']+)'|([^\s:#][^:]*)):\s*(?:#.*)?$/.exec(line)
+  if (!match) return
   return {
-    ran: true,
-    source: preflight.source,
-    exitCode: preflight.exitCode,
-    observedTestCount: preflight.observedTestCount,
-    stdoutSummary: preflight.stdoutSummary,
-    stderrSummary: preflight.stderrSummary,
+    indent: match[1].length,
+    index,
+    key: String(match[2] ?? match[3] ?? match[4]).trim(),
   }
 }
 
-module.exports = {
-  getCiWiringCommand,
-  runCiWiring,
+function normalizeYamlKey (value) {
+  const key = String(value || '').trim().replace(/:\s*$/, '').trim()
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    return key.slice(1, -1)
+  }
+  return key
 }
+
+function getYamlBlock (lines, start, indent) {
+  return lines.slice(start, findYamlBlockEnd(lines, start, indent)).join('\n')
+}
+
+function findYamlBlockEnd (lines, start, indent) {
+  for (let index = start + 1; index < lines.length; index++) {
+    if (/^\s*(?:#|$)/.test(lines[index])) continue
+    const nextIndent = /^\s*/.exec(lines[index])[0].length
+    if (nextIndent <= indent) return index
+  }
+  return lines.length
+}
+
+/**
+ * Returns missing fields required for a conclusive static audit.
+ *
+ * @param {object} ci CI evidence
+ * @returns {string[]} missing field labels
+ */
+function getMissingReviewFields (ci) {
+  return [
+    ['CI file', ci.configFile],
+    ['job', ci.job],
+    ['exact command', ci.command],
+  ].filter(([, value]) => typeof value !== 'string' || !value.trim()).map(([label]) => label)
+}
+
+/**
+ * Reads one bounded regular project file or its approval-bound snapshot.
+ *
+ * @param {string} filename project file
+ * @param {Map<string, Buffer|undefined>} [projectFileSources] approval-bound project sources
+ * @returns {string|undefined} source
+ */
+function readProjectSource (filename, projectFileSources) {
+  if (typeof filename !== 'string') return
+  const resolved = path.resolve(filename)
+  if (projectFileSources) {
+    if (!projectFileSources.has(resolved)) return
+    return projectFileSources.get(resolved)?.toString('utf8')
+  }
+  try {
+    const stat = fs.lstatSync(resolved)
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CI_FILE_BYTES) return
+    return fs.readFileSync(resolved, 'utf8')
+  } catch {}
+}
+
+/**
+ * Checks whether recorded text appears literally after line-ending normalization.
+ *
+ * @param {string} source file source
+ * @param {string} value recorded value
+ * @returns {boolean} literal presence
+ */
+function containsLiteral (source, value) {
+  const normalizedSource = source.replaceAll('\r\n', '\n')
+  const normalizedValue = String(value).replaceAll('\r\n', '\n').trim()
+  return normalizedValue !== '' && normalizedSource.includes(normalizedValue)
+}
+
+function containsExecutionCommand (source, value) {
+  const command = String(value).replaceAll('\r\n', '\n').trim()
+  if (!command) return false
+  const lines = source.replaceAll('\r\n', '\n').split('\n')
+  return lines.some((line, index) => {
+    if (/^\s*#/.test(line)) return false
+    const match = /^\s*(?:-\s*)?(?:run|script):(.*)$/.exec(line)
+    if (!match) return false
+    const scalar = match[1].trim()
+    if (!/^\|[+-]?$/.test(scalar)) return scalar === command
+
+    const indicatorIndent = /^\s*/.exec(line)[0].length
+    const block = []
+    let contentIndent
+    for (let next = index + 1; next < lines.length; next++) {
+      if (!lines[next].trim()) {
+        block.push('')
+        continue
+      }
+      const nextIndent = /^\s*/.exec(lines[next])[0].length
+      if (contentIndent === undefined) {
+        if (nextIndent <= indicatorIndent) break
+        contentIndent = nextIndent
+      } else if (nextIndent < contentIndent) {
+        break
+      }
+      block.push(lines[next])
+    }
+    if (contentIndent === undefined) return false
+    const blockCommand = block.map(candidate => candidate.slice(contentIndent)).join('\n').trim()
+    return blockCommand === command
+  })
+}
+
+/**
+ * Builds an incomplete CI result.
+ *
+ * @param {object} framework framework entry
+ * @param {string} diagnosis diagnosis
+ * @param {object} evidence evidence
+ * @returns {object} result
+ */
+function getIncomplete (framework, diagnosis, evidence) {
+  return incomplete(framework, 'ci-wiring', diagnosis, {
+    ciWiring: framework.ciWiring,
+    ...evidence,
+  })
+}
+
+/**
+ * Builds a confirmed CI failure.
+ *
+ * @param {object} framework framework entry
+ * @param {string} diagnosis diagnosis
+ * @param {object} evidence evidence
+ * @returns {object} result
+ */
+function getFailure (framework, diagnosis, evidence) {
+  return fail(framework, 'ci-wiring', diagnosis, {
+    ciWiring: framework.ciWiring,
+    ...evidence,
+  })
+}
+
+module.exports = { runCiWiring }

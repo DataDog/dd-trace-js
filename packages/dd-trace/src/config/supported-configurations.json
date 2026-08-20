@@ -849,10 +849,9 @@
         "implementation": "A",
         "type": "string",
         "default": "agentless",
-        "allowed": "agentless|remote_config",
-        "description": "Experimental: Select where Feature Flagging loads Universal Flag Configuration. Supported values are agentless and remote_config.",
+        "description": "Select where Feature Flagging loads Universal Flag Configuration. Supported values are agentless and remote_config; offline is reserved and currently unsupported.",
         "namespace": "featureFlags",
-        "transform": "toLowerCase"
+        "transform": "configurationSource"
       }
     ],
     "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL": [
@@ -860,7 +859,7 @@
         "implementation": "A",
         "type": "string",
         "default": null,
-        "description": "Experimental: Override the agentless Feature Flagging UFC endpoint or base URL.",
+        "description": "Override the agentless Feature Flagging UFC endpoint or base URL.",
         "namespace": "featureFlags",
         "sensitive": true
       }
@@ -870,7 +869,7 @@
         "implementation": "A",
         "type": "int",
         "default": "30",
-        "description": "Experimental: Set the agentless Feature Flagging UFC polling interval in seconds, capped at one hour.",
+        "description": "Set the agentless Feature Flagging UFC polling interval in seconds, capped at one hour.",
         "allowed": "[1-9]\\d*",
         "namespace": "featureFlags"
       }
@@ -880,7 +879,7 @@
         "implementation": "A",
         "type": "int",
         "default": "5",
-        "description": "Experimental: Set the agentless Feature Flagging UFC request timeout in seconds.",
+        "description": "Set the agentless Feature Flagging UFC request timeout in seconds.",
         "allowed": "[1-9]\\d*",
         "namespace": "featureFlags"
       }
@@ -1942,6 +1941,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_TEST_MANAGEMENT_REPORT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",
@@ -2439,6 +2446,13 @@
       }
     ],
     "DD_TRACE_BODY_PARSER_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_BROWSER_BUNYAN_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -2992,6 +3006,16 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_HTTP_SERVER_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "500-599",
+        "aliases": [
+          "DD_HTTP_SERVER_ERROR_STATUSES"
+        ]
+      }
+    ],
     "DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED": [
       {
         "implementation": "A",
@@ -3452,6 +3476,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_OPENAI_AGENTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_OPENSEARCH_ENABLED": [
       {
         "implementation": "A",
@@ -3488,6 +3519,13 @@
       }
     ],
     "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_TRACE_OTEL_CTX_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

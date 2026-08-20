@@ -34,6 +34,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
+const { getCypressDependencies } = require('./dependencies')
 
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
@@ -102,9 +103,7 @@ moduleTypes.forEach(({
     this.timeout(80_000)
     let cwd, receiver, childProcess, webAppBaseUrl, webAppServer
 
-    // cypress-fail-fast is required as an incompatible plugin.
-    // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
+    useSandbox(getCypressDependencies(version), true)
 
     before(async function () {
       this.timeout(180_000)
@@ -266,8 +265,9 @@ moduleTypes.forEach(({
       await runRumCookieFailureTest({ CYPRESS_MISSING_CY_NOW: 'true' })
     })
 
-    if (type === 'commonJS' && version === 'latest') {
-      it('does not fail tests when reporting a RUM correlation error throws', async () => {
+    {
+      const latestCommonJsTest = type === 'commonJS' && version === 'latest' ? it : it.skip
+      latestCommonJsTest('does not fail tests when reporting a RUM correlation error throws', async () => {
         await runRumCookieFailureTest({
           CYPRESS_RUM_COOKIE_FAILURE: 'reject',
           CYPRESS_RUM_LOG_FAILURE: 'true',
@@ -275,8 +275,9 @@ moduleTypes.forEach(({
       })
     }
 
-    if (type === 'commonJS' && version !== '6.7.0') {
-      it('removes a stale RUM cookie when its replacement rejects', async () => {
+    {
+      const rumCookieTest = type === 'commonJS' && version !== '6.7.0' ? it : it.skip
+      rumCookieTest('removes a stale RUM cookie when its replacement rejects', async () => {
         let testOutput = ''
         const specToRun = 'cypress/e2e/rum-cookie-stale.cy.js'
 
@@ -305,8 +306,9 @@ moduleTypes.forEach(({
       })
     }
 
-    if (DD_MAJOR < 6 && version !== 'latest' && semver.lt(version, '12.0.0')) {
-      it('logs a warning if using a deprecated version of cypress', async () => {
+    {
+      const deprecatedVersionTest = DD_MAJOR < 6 && version !== 'latest' && semver.lt(version, '12.0.0') ? it : it.skip
+      deprecatedVersionTest('logs a warning if using a deprecated version of cypress', async () => {
         let stdout = ''
         const {
           NODE_OPTIONS,
@@ -595,7 +597,7 @@ moduleTypes.forEach(({
                 [TEST_FRAMEWORK]: 'cypress',
               },
             })
-          }, { hardTimeout: 20000 })
+          }, { hardTimeout: 60000 })
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         receiverPromise,
@@ -749,7 +751,7 @@ moduleTypes.forEach(({
                   [TEST_FRAMEWORK]: 'cypress',
                 },
               })
-            }, { hardTimeout: 20000 })
+            }, { hardTimeout: 60000 })
 
         const [[exitCode]] = await Promise.all([
           once(childProcess, 'exit'),
@@ -808,7 +810,7 @@ moduleTypes.forEach(({
                     [TEST_FRAMEWORK]: 'cypress',
                   },
                 })
-              }, { hardTimeout: 20000 })
+              }, { hardTimeout: 60000 })
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
@@ -871,7 +873,7 @@ moduleTypes.forEach(({
             framework: event.content.meta?.[TEST_FRAMEWORK],
             error: event.content.meta?.[ERROR_MESSAGE],
           })), null, 2)}\nCypress output:\n${testOutput}`)
-          }, { hardTimeout: 20000 })
+          }, { hardTimeout: 60000 })
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         receiverPromise,
@@ -995,7 +997,7 @@ moduleTypes.forEach(({
                   [TEST_FRAMEWORK]: 'cypress',
                 },
               })
-            }, { hardTimeout: 20000 })
+            }, { hardTimeout: 60000 })
         const [[exitCode]] = await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise,

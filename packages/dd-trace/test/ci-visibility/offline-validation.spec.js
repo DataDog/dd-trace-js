@@ -5,6 +5,8 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const proxyquire = require('proxyquire').noPreserveCache()
+
 const {
   cleanupOfflineFixture,
   createOfflineFixture,
@@ -69,6 +71,34 @@ describe('test optimization offline validation artifacts', () => {
     cleanupOfflineFixture(fixture.root)
     cleanupOfflineFixture(otherFixture.root)
     assert.strictEqual(fs.existsSync(fixture.root), false)
+  })
+
+  it('treats a fixture that disappears during cleanup as already removed', () => {
+    const fixture = createOfflineFixture({
+      approvedPlanSha256: 'e'.repeat(64),
+      offlineFixtureNonce: 'e'.repeat(32),
+      framework: { id: 'vitest:cleanup-race' },
+      repositoryRoot,
+      scenarioName: 'basic-reporting',
+    })
+    const raceSafeCleanup = proxyquire(
+      '../../../../ci/test-optimization-validation/offline-fixtures',
+      {
+        'node:fs': {
+          rmSync: filename => {
+            if (filename === fixture.root) {
+              const error = new Error('already removed')
+              error.code = 'ENOENT'
+              throw error
+            }
+            return fs.rmSync(filename)
+          },
+        },
+      }
+    ).cleanupOfflineFixture
+
+    raceSafeCleanup(fixture.root)
+    fs.rmSync(path.dirname(path.dirname(fixture.root)), { force: true, recursive: true })
   })
 
   it('maps colliding sanitized framework ids to distinct stable fixture and artifact paths', () => {

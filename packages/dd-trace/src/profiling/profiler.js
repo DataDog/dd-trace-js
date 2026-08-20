@@ -35,7 +35,7 @@ function profileHasMissingSourceMaps (profile) {
 }
 
 function processInfo (infos, info, type) {
-  if (Object.keys(info).length > 0) {
+  if (info !== undefined) {
     infos[type] = info
   }
 }

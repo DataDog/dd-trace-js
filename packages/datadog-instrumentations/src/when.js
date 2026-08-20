@@ -8,7 +8,7 @@ addHook({
   name: 'when',
   file: 'lib/Promise.js',
   versions: ['>=3'],
-}, Promise => {
-  shimmer.wrap(Promise.prototype, 'then', wrapThen)
-  return Promise
+}, LibraryPromise => {
+  shimmer.wrap(LibraryPromise.prototype, 'then', wrapThen)
+  return LibraryPromise
 })

@@ -7,7 +7,7 @@ module.exports = function (methodName, args, cb) {
   try {
     const res = fs[method](...args)
     cb(res)
-  } catch (e) {
+  } catch {
     cb(null)
   }
 }

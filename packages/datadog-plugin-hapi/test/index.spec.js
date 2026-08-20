@@ -14,7 +14,7 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 // hapi 19.x and 20.x are EOL and hang CI: on error and 404 replies they crash inside their own
 // `Request._finalize` (null `response.statusCode`) and never finish the request, stalling the
 // worker until the job is cancelled. 21.x fixed it, so the matrix covers 16.x and 21+.
-const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
+const versionRange = parseInt(process.versions.node.split('.')[0], 10) > 14
   ? '<17 || >=21'
   : ''
 

@@ -25,7 +25,10 @@ describe('check-require-cache', () => {
     const mod = new Module(filename, module.parent)
 
     content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, format)
+    content = rewriter.rewrite(content, filename, format, {
+      moduleName: name,
+      filePath: 'index.js',
+    })
 
     mod.filename = filename
     mod.paths = Module._nodeModulePaths(dirname(filename))
@@ -40,7 +43,10 @@ describe('check-require-cache', () => {
     const mod = new Module(filename, module.parent)
 
     content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, format)
+    content = rewriter.rewrite(content, filename, format, {
+      moduleName: 'test',
+      filePath: `${name}.js`,
+    })
 
     mod.filename = filename
     mod.paths = Module._nodeModulePaths(dirname(filename))
@@ -292,6 +298,112 @@ describe('check-require-cache', () => {
           astQuery: 'ReturnStatement > CallExpression[callee.object.name="promise"][callee.property.name="then"]',
           channelName: 'trace_promise_async_end',
           transform: 'waitForAsyncEnd',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          functionQuery: {
+            functionName: 'runWithRetry',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runWithRetry"] CatchClause ' +
+            'IfStatement[test.operator=">"][test.left.object.name="state"]' +
+            '[test.left.property.name="remaining"]',
+          channelName: 'trace_await_context_callback',
+          transform: 'awaitContextCallback',
+          transformOptions: {
+            callbackArgumentNames: ['error'],
+            callbackName: 'beforeContinue',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          functionQuery: {
+            functionName: 'consumeFirst',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_side_effect',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="consumeFirst"] ' +
+            'IfStatement[test.callee.object.name="queue"][test.callee.property.name="shift"]',
+          channelName: 'trace_await_context_callback_side_effect',
+          transform: 'awaitContextCallback',
+          transformOptions: {
+            callbackName: 'beforeContinue',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          functionQuery: {
+            functionName: 'chooseBranch',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_alternate',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="chooseBranch"] ' +
+            'IfStatement[test.object.name="state"][test.property.name="usePrimary"]',
+          channelName: 'trace_await_context_callback_alternate',
+          transform: 'awaitContextCallback',
+          transformOptions: {
+            callbackName: 'beforeContinue',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback-sync.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runSynchronously"] IfStatement',
+          channelName: 'trace_await_context_callback_sync',
+          transform: 'awaitContextCallback',
+          transformOptions: {
+            callbackName: 'beforeContinue',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback-unwrapped.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runUnwrapped"] IfStatement',
+          channelName: 'trace_await_context_callback_unwrapped',
+          transform: 'awaitContextCallback',
+          transformOptions: {
+            callbackName: 'beforeContinue',
+          },
         },
         {
           module: {
@@ -562,19 +674,22 @@ describe('check-require-cache', () => {
     assert.ok(subs.start.called)
   })
 
-  it('should wait for an asyncEnd promise when configured', async () => {
+  it('should wait for the resolve callback only before resolving', async () => {
     const { test } = compileFile('trace-promise-async-end')
     const steps = []
 
     subs = {
       asyncEnd (ctx) {
         steps.push('asyncEnd')
-        ctx.asyncEndPromise = new Promise(resolve => {
+        ctx.resolveCallback = onDone => {
           setImmediate(() => {
-            steps.push('asyncEndPromise')
-            resolve()
+            steps.push('resolveCallback')
+            onDone()
           })
-        })
+        }
+        ctx.rejectCallback = () => {
+          assert.fail('reject callback called for a fulfilled promise')
+        }
       },
     }
 
@@ -593,14 +708,237 @@ describe('check-require-cache', () => {
     const result = await resultPromise
 
     assert.equal(result, 'result')
-    assert.deepStrictEqual(steps, ['asyncEnd', 'asyncEndPromise', 'resolved'])
+    assert.deepStrictEqual(steps, ['asyncEnd', 'resolveCallback', 'resolved'])
+  })
+
+  it('should wait for the reject callback only before preserving a rejection', async () => {
+    const { test } = compileFile('trace-promise-async-end')
+    const error = new Error('test rejection')
+    const steps = []
+
+    subs = {
+      asyncEnd (ctx) {
+        steps.push('asyncEnd')
+        ctx.resolveCallback = () => {
+          assert.fail('resolve callback called for a rejected promise')
+        }
+        ctx.rejectCallback = onDone => {
+          setImmediate(() => {
+            steps.push('rejectCallback')
+            onDone()
+          })
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_promise_async_end')
+    ch.subscribe(subs)
+
+    const resultPromise = test(error)
+
+    await Promise.resolve()
+
+    assert.deepStrictEqual(steps, ['asyncEnd'])
+    await assert.rejects(resultPromise, actualError => {
+      steps.push('rejected')
+      return actualError === error
+    })
+    assert.deepStrictEqual(steps, ['asyncEnd', 'rejectCallback', 'rejected'])
+  })
+
+  it('should preserve promise settlement when its callback throws', async () => {
+    const { test } = compileFile('trace-promise-async-end')
+    const error = new Error('test rejection')
+
+    subs = {
+      asyncEnd (ctx) {
+        ctx.resolveCallback = () => {
+          throw new Error('resolve callback error')
+        }
+        ctx.rejectCallback = () => {
+          throw new Error('reject callback error')
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_promise_async_end')
+    ch.subscribe(subs)
+
+    const [result] = await Promise.all([
+      test(),
+      assert.rejects(test(error), actualError => actualError === error),
+    ])
+
+    assert.equal(result, 'result')
+  })
+
+  it('should await a context callback before continuing through a conditional branch', async () => {
+    const { runWithRetry } = compileFile('trace-await-context-callback')
+    const callbackError = new Error('first attempt failed')
+    const steps = []
+    let finishCallback
+    let startCallback
+    const callbackStarted = new Promise(resolve => {
+      startCallback = resolve
+    })
+    const callbackFinished = new Promise(resolve => {
+      finishCallback = resolve
+    })
+    let attempts = 0
+
+    subs = {
+      start (ctx) {
+        ctx.beforeContinue = error => {
+          steps.push(error)
+          startCallback()
+          return callbackFinished
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback')
+    ch.subscribe(subs)
+
+    const resultPromise = runWithRetry(() => {
+      attempts++
+      if (attempts === 1) throw callbackError
+      return 'passed'
+    }, { remaining: 1 })
+
+    await callbackStarted
+
+    assert.equal(attempts, 1)
+    assert.deepStrictEqual(steps, [callbackError])
+
+    finishCallback()
+
+    assert.equal(await resultPromise, 'passed')
+    assert.equal(attempts, 2)
+  })
+
+  it('should recheck the condition after the context callback settles', async () => {
+    const { runWithRetry } = compileFile('trace-await-context-callback')
+    const callbackError = new Error('do not retry')
+    const state = { remaining: 1 }
+    let attempts = 0
+
+    subs = {
+      start (ctx) {
+        ctx.beforeContinue = () => {
+          state.remaining = 0
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback')
+    ch.subscribe(subs)
+
+    await assert.rejects(runWithRetry(() => {
+      attempts++
+      throw callbackError
+    }, state), error => error === callbackError)
+
+    assert.equal(attempts, 1)
+    assert.equal(state.remaining, 0)
+  })
+
+  it('should preserve the conditional branch when the context callback rejects', async () => {
+    const { runWithRetry } = compileFile('trace-await-context-callback')
+    let attempts = 0
+
+    subs = {
+      start (ctx) {
+        ctx.beforeContinue = () => Promise.reject(new Error('observability callback failed'))
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback')
+    ch.subscribe(subs)
+
+    const result = await runWithRetry(() => {
+      attempts++
+      if (attempts === 1) throw new Error('first attempt failed')
+      return 'passed'
+    }, { remaining: 1 })
+
+    assert.equal(result, 'passed')
+    assert.equal(attempts, 2)
+  })
+
+  it('should not recheck a side-effectful condition when no context callback exists', async () => {
+    const { consumeFirst } = compileFile('trace-await-context-callback')
+    const queue = [true, 'remaining']
+
+    subs = { start: sinon.spy() }
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_side_effect')
+    ch.subscribe(subs)
+
+    assert.equal(await consumeFirst(queue), 1)
+    assert.deepStrictEqual(queue, ['remaining'])
+  })
+
+  it('should use the alternate branch when the rechecked condition changes', async () => {
+    const { chooseBranch } = compileFile('trace-await-context-callback')
+    const state = { usePrimary: true }
+
+    subs = {
+      start (ctx) {
+        ctx.beforeContinue = () => {
+          state.usePrimary = false
+        }
+      },
+    }
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_alternate')
+    ch.subscribe(subs)
+
+    assert.equal(await chooseBranch(state), 'fallback')
+  })
+
+  it('should leave synchronous callback targets untouched', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'trace-await-context-callback-sync.js')
+    const source = readFileSync(filename, 'utf8')
+
+    subs = { start: sinon.spy() }
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_sync')
+    ch.subscribe(subs)
+
+    const { runSynchronously } = compileFile('trace-await-context-callback-sync')
+
+    assert.strictEqual(content, source)
+    assert.equal(runSynchronously({ shouldContinue: true }), 'continued')
+    assert.equal(subs.start.callCount, 0)
+  })
+
+  it('should leave targets without a trace wrapper untouched', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'trace-await-context-callback-unwrapped.js')
+    const source = readFileSync(filename, 'utf8')
+
+    subs = { start: sinon.spy() }
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_unwrapped')
+    ch.subscribe(subs)
+
+    const { runUnwrapped } = compileFile('trace-await-context-callback-unwrapped')
+
+    assert.strictEqual(content, source)
+    assert.equal(await runUnwrapped({ shouldContinue: true }), 'continued')
+    assert.equal(subs.start.callCount, 0)
+  })
+
+  it('should leave dependencies without a rewrite target untouched', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
+    const source = readFileSync(filename, 'utf8')
+
+    assert.strictEqual(rewriter.rewrite(source, filename, 'module'), source)
   })
 
   it('should use import when rewriting esm modules', () => {
     const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
 
     content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, 'module')
+    content = rewriter.rewrite(content, filename, 'module', {
+      moduleName: 'test-esm',
+      filePath: 'pregel-class.js',
+    })
 
     assert.match(content, /\bimport\s+.+\s+from\s+"file:\/\//)
     assert.match(content, /tr_ch_apm_tracingChannel/)
@@ -611,7 +949,10 @@ describe('check-require-cache', () => {
     const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
     const source = readFileSync(filename, 'utf8')
 
-    const rewritten = rewriter.rewrite(source, filename, 'module')
+    const rewritten = rewriter.rewrite(source, filename, 'module', {
+      moduleName: 'test-esm',
+      filePath: 'pregel-class.js',
+    })
 
     assert.match(rewritten, /^import\s/m, 'expected an ESM import in the rewritten output')
     assert.doesNotMatch(rewritten, /\brequire\s*\(/, 'CJS require() must not appear in ESM output')

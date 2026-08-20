@@ -78,6 +78,10 @@ module.exports = {
       versions: ['>=3'],
     },
     {
+      name: '@aws-sdk/client-eventbridge',
+      versions: ['>=3'],
+    },
+    {
       name: '@aws-sdk/client-sfn',
       versions: ['>=3'],
     },
@@ -99,6 +103,10 @@ module.exports = {
     },
   ],
   bullmq: [
+    {
+      name: 'ioredis',
+      dep: true,
+    },
     {
       name: 'redis',
       versions: ['>=4'],
@@ -462,7 +470,7 @@ module.exports = {
   mariadb: [
     {
       name: 'mariadb',
-      versions: ['2.5.6', '3.0.0', '3.4.0'],
+      versions: ['2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2'],
     },
   ],
   mercurius: [
@@ -540,6 +548,23 @@ module.exports = {
     {
       name: 'react-dom',
       dep: true,
+    },
+  ],
+  'openai-agents': [
+    {
+      name: '@openai/agents',
+      versions: ['>=0.7.0'],
+      node: '>=22',
+    },
+    {
+      name: '@openai/agents-core',
+      versions: ['>=0.7.0'],
+      node: '>=22',
+    },
+    {
+      name: '@openai/agents-openai',
+      versions: ['>=0.7.0'],
+      node: '>=22',
     },
   ],
   passport: [

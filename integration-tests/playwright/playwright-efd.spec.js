@@ -31,8 +31,8 @@ const { PLAYWRIGHT_VERSION } = process.env
 const NUM_RETRIES_EFD = 3
 const PLAYWRIGHT_EFD_GATHER_TIMEOUT = 60000
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -40,11 +40,7 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   // TODO: Remove this once we drop suppport for v5
-  const contextNewVersions = (...args) => {
-    if (satisfies(version, '>=1.38.0') || version === 'latest') {
-      context(...args)
-    }
-  }
+  const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
@@ -369,6 +365,7 @@ versions.forEach((version) => {
             for (const repeatedTest of repeatedTests) {
               assert.strictEqual(repeatedTest.meta[TEST_IS_NEW], 'true')
               assert.ok(!(TEST_IS_RETRY in repeatedTest.meta))
+              assert.ok(!(TEST_EARLY_FLAKE_ABORT_REASON in repeatedTest.meta))
               assert.ok(!(TEST_RETRY_REASON in repeatedTest.meta))
             }
           }, 45_000)

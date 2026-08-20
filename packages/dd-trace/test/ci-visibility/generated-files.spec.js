@@ -5,11 +5,14 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const proxyquire = require('proxyquire')
+
 const {
   cleanupGeneratedFiles,
   cleanupGeneratedRuntimeFiles,
   writeGeneratedFiles,
 } = require('../../../../ci/test-optimization-validation/generated-files')
+const { createWindowsFileReferenceFs } = require('./validation-test-helpers')
 
 describe('test optimization validation generated files', () => {
   it('allows existing generated files when the content matches', () => {
@@ -202,11 +205,13 @@ describe('test optimization validation generated files', () => {
       fs.writeFileSync(state, 'state\n')
       fs.writeFileSync(unrelated, 'customer data\n')
 
-      cleanupGeneratedFiles({ frameworks: [framework] })
+      const cleanup = cleanupGeneratedFiles({ frameworks: [framework] })
 
       assert.strictEqual(fs.existsSync(generated), false)
       assert.strictEqual(fs.existsSync(state), false)
       assert.strictEqual(fs.readFileSync(unrelated, 'utf8'), 'customer data\n')
+      assert.strictEqual(cleanup.status, 'completed')
+      assert.strictEqual(cleanup.filesRemoved, 2)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -245,6 +250,68 @@ describe('test optimization validation generated files', () => {
     try {
       assert.throws(() => writeGeneratedFiles(framework), /Refusing to delete pre-existing/)
       assert.strictEqual(fs.readFileSync(state, 'utf8'), 'customer data\n')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports generated files retained after their cleanup identity changes', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-replaced-'))
+    const filename = path.join(root, 'dd-test-optimization-validation.test.js')
+    const original = path.join(root, 'original-generated.test.js')
+    const framework = getFramework(root, filename)
+
+    try {
+      writeGeneratedFiles(framework)
+      fs.renameSync(filename, original)
+      fs.writeFileSync(filename, 'customer replacement\n')
+
+      const cleanup = cleanupGeneratedFiles({ frameworks: [framework] })
+
+      assert.strictEqual(cleanup.status, 'incomplete')
+      assert.strictEqual(cleanup.filesRetained, 1)
+      assert.strictEqual(fs.readFileSync(filename, 'utf8'), 'customer replacement\n')
+      assert.strictEqual(fs.existsSync(original), true)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('retains a replaced generated file that reuses a file reference above 2^53', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-windows-'))
+    const filename = path.join(root, 'dd-test-optimization-validation.test.js')
+    const original = path.join(root, 'original-generated.test.js')
+    const framework = getFramework(root, filename)
+    const windowsGeneratedFiles = proxyquire('../../../../ci/test-optimization-validation/generated-files', {
+      'node:fs': createWindowsFileReferenceFs(),
+    })
+
+    try {
+      windowsGeneratedFiles.writeGeneratedFiles(framework)
+      fs.renameSync(filename, original)
+      fs.writeFileSync(filename, 'customer replacement\n')
+
+      const cleanup = windowsGeneratedFiles.cleanupGeneratedFiles({ frameworks: [framework] })
+
+      assert.strictEqual(cleanup.status, 'incomplete')
+      assert.strictEqual(cleanup.filesRetained, 1)
+      assert.strictEqual(fs.readFileSync(filename, 'utf8'), 'customer replacement\n')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports temporary files intentionally retained by the approved plan', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-kept-'))
+    const filename = path.join(root, 'dd-test-optimization-validation.test.js')
+    const framework = getFramework(root, filename)
+
+    try {
+      writeGeneratedFiles(framework)
+      const cleanup = cleanupGeneratedFiles({ frameworks: [framework] }, { keep: true })
+
+      assert.deepStrictEqual(cleanup, { status: 'retained_by_request' })
+      assert.strictEqual(fs.existsSync(filename), true)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

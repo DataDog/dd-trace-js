@@ -9,6 +9,7 @@ const {
   failWithDebugRerun,
   pass,
   prepareGeneratedScenario,
+  reportMissingGeneratedTest,
   requireGeneratedScenario,
   runInstrumentedCommand,
   testEventSamples,
@@ -25,14 +26,14 @@ async function runTestManagement ({ framework, out, options }) {
     const { scenario } = await prepareGeneratedScenario(framework, 'test-management-target')
     const discovery = await discoverScenarioTests({ framework, out, scenarioName, scenario, options })
     if (discovery.tests.length === 0) {
-      return failWithDebugRerun({
+      return reportMissingGeneratedTest({
         command: scenario.runCommand,
         diagnosis: 'The test-management target was not reported during baseline identity discovery.',
-        evidence: discoveryEvidence(discovery),
+        discovery,
         framework,
         options,
         out,
-        outDir: discovery.outDir,
+        scenario,
         scenarioName,
       })
     }
@@ -148,7 +149,7 @@ function buildQuarantinedResponse (framework, scenario, discoveredIdentities = [
   for (const identity of identities) {
     for (const suite of getSuiteCandidates(identity, scenario)) {
       for (const name of getNameCandidates(identity)) {
-        suites[suite] = suites[suite] || { tests: {} }
+        suites[suite] ||= { tests: {} }
         suites[suite].tests[name] = {
           properties: {
             quarantined: true,
@@ -209,7 +210,7 @@ function summarizeManagedTests (testManagementTests) {
     }
     summary.set(displaySuite, testNames)
   }
-  return [...summary.entries()].slice(0, 5).map(([suite, tests]) => ({
+  return [...summary].slice(0, 5).map(([suite, tests]) => ({
     suite,
     tests: [...tests].slice(0, 5),
   }))

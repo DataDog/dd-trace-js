@@ -62,7 +62,7 @@ class SpanProcessor {
           active.push(span)
         } else {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
-          if (isFirstSpanInChunk && stampApmDisabled) {
+          if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
           }
           isFirstSpanInChunk = false

@@ -1,7 +1,6 @@
 'use strict'
 
 const NoopProxy = require('./noop/proxy')
-const { features } = require('./feature-registry')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const { getEnvironmentVariable } = require('./config/helper')
@@ -38,9 +37,9 @@ const OFFLINE_VALIDATION_EXPORTERS = new Set([
   'playwright_worker',
   'vitest_worker',
 ])
-const FEATURE_STATE_NOOP = 0
-const FEATURE_STATE_LAZY = 1
-const FEATURE_STATE_ACTIVE = 2
+const OPENFEATURE_STATE_NOOP = 0
+const OPENFEATURE_STATE_LAZY = 1
+const OPENFEATURE_STATE_ACTIVE = 2
 
 class LazyModule {
   constructor (provider) {
@@ -49,6 +48,7 @@ class LazyModule {
 
   /**
    * @param {import('./config/config-base')} config - Tracer configuration
+   * @param {...unknown} args - Extra arguments forwarded to the lazily loaded module
    */
   enable (config, ...args) {
     this.module = this.provider()
@@ -90,8 +90,7 @@ function defineLazily (obj, property, getClass, ...args) {
 }
 
 class Tracer extends NoopProxy {
-  /** @type {Record<string, number> | undefined} */
-  #featureStates
+  #openfeatureState = OPENFEATURE_STATE_NOOP
 
   constructor () {
     super()
@@ -114,11 +113,8 @@ class Tracer extends NoopProxy {
       aiguard: new LazyModule(() => require('./aiguard')),
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
+      openfeature: new LazyModule(() => require('./openfeature')),
       rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
-    }
-
-    for (const feature of Object.values(features)) {
-      this._modules[feature.name] = new LazyModule(feature.factory)
     }
   }
 
@@ -212,9 +208,10 @@ class Tracer extends NoopProxy {
           DynamicInstrumentation.start(config, rc)
         }
 
-        for (const feature of Object.values(features)) {
-          feature.remoteConfig?.(rc, config, this)
-        }
+        const openfeatureRemoteConfig = require('./openfeature/remote_config')
+        const subscribeOpenfeatureToRemoteConfig = config.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
+          config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'remote_config'
+        openfeatureRemoteConfig.enable(rc, () => this.openfeature, subscribeOpenfeatureToRemoteConfig)
       }
 
       if (config.profiling.DD_PROFILING_ENABLED === 'true') {
@@ -229,6 +226,17 @@ class Tracer extends NoopProxy {
             this._startProfiler(config)
             ssiHeuristics.onTriggered() // deregister this callback
           })
+        }
+      }
+
+      // Experimental: mirror the active trace ID, span ID and endpoint into
+      // an OTEP-4947 thread-local context record an out-of-process eBPF
+      // reader can consume.
+      if (config.DD_TRACE_OTEL_CTX_ENABLED) {
+        try {
+          require('./otel-thread-ctx').start()
+        } catch (e) {
+          log.error('Error starting OTEP-4947 thread context writer', e)
         }
       }
 
@@ -304,28 +312,32 @@ class Tracer extends NoopProxy {
   }
 
   /**
-   * @param {(typeof features)[string]} feature
+   * `tracer.openfeature` is only reachable through this proxy. SSI itself (auto-injecting
+   * the tracer, resolving the vendored provider regardless of the customer's own
+   * `node_modules` layout) is unaffected -- that is what this PR fixes. The remaining gap is
+   * narrower: there is no `dd-trace-api` handoff for `openfeature` yet (see
+   * `packages/datadog-plugin-dd-trace-api`), so an application that calls into the tracer
+   * exclusively through the `dd-trace-api` shim -- instead of `require('dd-trace')` -- cannot
+   * reach the flagging provider through that shim.
+   *
    * @param {import('./config/config-base')} config
    */
-  #enableFeature (feature, config) {
-    const states = this.#featureStates ??= {}
-    const state = states[feature.name] ?? FEATURE_STATE_NOOP
+  #enableOpenfeature (config) {
+    if (this.#openfeatureState !== OPENFEATURE_STATE_NOOP) return
+    this.#openfeatureState = OPENFEATURE_STATE_LAZY
 
-    if (state === FEATURE_STATE_ACTIVE || state === FEATURE_STATE_LAZY) return
-    states[feature.name] = FEATURE_STATE_LAZY
-
-    Reflect.defineProperty(this, feature.name, {
+    Reflect.defineProperty(this, 'openfeature', {
       get: () => {
-        const Provider = feature.provider()
-        const provider = new Provider(this._tracer, config)
+        const FlaggingProvider = require('./openfeature/flagging_provider')
+        const provider = new FlaggingProvider(this._tracer, config)
 
-        this._modules[feature.name].enable(config)
-        Reflect.defineProperty(this, feature.name, {
+        this._modules.openfeature.enable(config)
+        Reflect.defineProperty(this, 'openfeature', {
           value: provider,
           configurable: true,
           enumerable: true,
         })
-        states[feature.name] = FEATURE_STATE_ACTIVE
+        this.#openfeatureState = OPENFEATURE_STATE_ACTIVE
         return provider
       },
       configurable: true,
@@ -372,9 +384,7 @@ class Tracer extends NoopProxy {
       this._modules.llmobs.disable()
     }
 
-    for (const feature of Object.values(features)) {
-      if (feature.isEnabled(config)) this.#enableFeature(feature, config)
-    }
+    if (config.featureFlags.DD_FEATURE_FLAGS_ENABLED) this.#enableOpenfeature(config)
 
     if (this._tracingInitialized) {
       this._tracer.configure(config)

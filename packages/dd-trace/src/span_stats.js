@@ -14,6 +14,10 @@ const {
   GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
+const id = require('./id')
+
+const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
+const ZERO_ID = id('0')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
@@ -108,10 +112,26 @@ class SpanAggKey {
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
     // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.
-    const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE]
-    this.rpcStatusCode = typeof grpcCode === 'number'
-      ? (GRPC_STATUS_NAMES[grpcCode] ?? String(grpcCode))
-      : (grpcCode ?? '')
+    // Normalize to numeric string to match the Agent's parseGRPCStatusString convention.
+    // Also check OTel semantic aliases (rpc.grpc.status_code, rpc.response.status_code) as
+    // the OTel bridge stores attributes under their original key without remapping.
+    const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE] ??
+      span.meta['rpc.grpc.status_code'] ?? span.metrics?.['rpc.grpc.status_code'] ??
+      span.meta['rpc.response.status_code'] ?? span.metrics?.['rpc.response.status_code']
+    if (typeof grpcCode === 'number') {
+      this.rpcStatusCode = String(grpcCode)
+    } else if (grpcCode) {
+      const upper = String(grpcCode).toUpperCase()
+      const numeric = GRPC_STATUS_CODE_MAP[upper]
+      if (numeric === undefined) {
+        const n = Number(grpcCode)
+        this.rpcStatusCode = Number.isInteger(n) && n >= 0 ? String(n) : ''
+      } else {
+        this.rpcStatusCode = numeric
+      }
+    } else {
+      this.rpcStatusCode = ''
+    }
   }
 
   toString () {
@@ -132,9 +152,24 @@ class SpanAggKey {
 }
 
 class SpanBuckets extends Map {
+  #includeTraceRoot
+
+  /**
+   * @param {boolean} [includeTraceRoot]
+   */
+  constructor (includeTraceRoot = false) {
+    super()
+    this.#includeTraceRoot = includeTraceRoot
+  }
+
   forSpan (span) {
     const aggKey = new SpanAggKey(span)
-    const key = aggKey.toString()
+    const baseKey = aggKey.toString()
+    const parentId = span.parent_id
+    if (this.#includeTraceRoot && parentId !== undefined && parentId !== null) {
+      aggKey.isTraceRoot = parentId.equals(ZERO_ID)
+    }
+    const key = this.#includeTraceRoot ? `${baseKey},${aggKey.isTraceRoot}` : baseKey
 
     if (!this.has(key)) {
       this.set(key, new SpanAggStats(aggKey))
@@ -145,9 +180,19 @@ class SpanBuckets extends Map {
 }
 
 class TimeBuckets extends Map {
+  #includeTraceRoot
+
+  /**
+   * @param {boolean} [includeTraceRoot]
+   */
+  constructor (includeTraceRoot = false) {
+    super()
+    this.#includeTraceRoot = includeTraceRoot
+  }
+
   forTime (time) {
     if (!this.has(time)) {
-      this.set(time, new SpanBuckets())
+      this.set(time, new SpanBuckets(this.#includeTraceRoot))
     }
 
     return this.get(time)
@@ -174,7 +219,7 @@ class SpanStatsProcessor {
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
-    this.buckets = new TimeBuckets()
+    this.buckets = new TimeBuckets(Boolean(otlpExporter))
     this.hostname = os.hostname()
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null

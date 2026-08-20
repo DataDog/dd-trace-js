@@ -180,8 +180,10 @@ class SamplingRule {
     if (resource) {
       this.matchers.push(matcher(resource, resourceLocator))
     }
-    for (const [key, value] of Object.entries(tags || {})) {
-      this.matchers.push(matcher(value, makeTagLocator(key)))
+    if (tags) {
+      for (const [key, value] of Object.entries(tags)) {
+        this.matchers.push(matcher(value, makeTagLocator(key)))
+      }
     }
 
     this._sampler = new Sampler(sampleRate)
