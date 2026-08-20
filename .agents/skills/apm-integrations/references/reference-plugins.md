@@ -52,6 +52,7 @@ packages/datadog-plugin-graphql/
 ```
 packages/datadog-plugin-winston/
 packages/datadog-plugin-bunyan/
+packages/datadog-plugin-browser-bunyan/
 packages/datadog-plugin-pino/
 ```
 

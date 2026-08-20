@@ -99,11 +99,10 @@ describe('profilers/native/space', () => {
     sinon.assert.calledOnce(pprof.heap.stop)
   })
 
-  it('should provide info', () => {
+  it('should not provide info', () => {
     const profiler = makeSpace(NativeSpaceProfiler)
 
-    const info = profiler.getInfo()
-    assert.strictEqual(Object.keys(info).length, 0)
+    assert.strictEqual(profiler.getInfo(), undefined)
   })
 
   it('should collect profiles from the pprof space profiler', () => {

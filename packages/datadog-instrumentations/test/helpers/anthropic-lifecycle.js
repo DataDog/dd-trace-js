@@ -68,7 +68,7 @@ function createDeferred () {
 }
 
 /**
- * @returns {Array<{ spec: { file: string }, callback: (exports: object) => object }>}
+ * @returns {Array<{ spec: { file: string }, hook: (exports: object) => object }>}
  */
 function loadAnthropicInstrumentation () {
   const instrumentPath = require.resolve('../../src/helpers/instrument')
@@ -81,10 +81,10 @@ function loadAnthropicInstrumentation () {
     ...realInstrument,
     /**
      * @param {{ file: string }} spec
-     * @param {(exports: object) => object} callback
+     * @param {(exports: object) => object} hook
      */
-    addHook (spec, callback) {
-      hookCallbacks.push({ spec, callback })
+    addHook (spec, hook) {
+      hookCallbacks.push({ spec, hook })
     },
   }
 
@@ -99,14 +99,14 @@ function loadAnthropicInstrumentation () {
 }
 
 /**
- * @param {Array<{ spec: { file: string }, callback: (exports: object) => object }>} hookCallbacks
+ * @param {Array<{ spec: { file: string }, hook: (exports: object) => object }>} hookCallbacks
  * @param {string} filePath
  * @param {typeof FakeMessages} Messages
  */
 function applyShim (hookCallbacks, filePath, Messages) {
-  for (const { spec, callback } of hookCallbacks) {
+  for (const { spec, hook } of hookCallbacks) {
     if (spec.file === `${filePath}.js`) {
-      callback({ Messages })
+      hook({ Messages })
       return
     }
   }

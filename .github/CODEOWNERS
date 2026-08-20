@@ -27,6 +27,7 @@
 
 # AppSec
 /benchmark/sirun/appsec/ @DataDog/asm-js
+/benchmark/sirun/appsec-waf/ @DataDog/asm-js
 /benchmark/sirun/appsec-iast/ @DataDog/asm-js
 /benchmark/sirun/iast/ @DataDog/asm-js
 /integration-tests/appsec/ @DataDog/asm-js
@@ -416,6 +417,7 @@
 /integration-tests/import-variants.spec.js @DataDog/lang-platform-js
 /integration-tests/init/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
+/integration-tests/helpers/fake-agent.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /integration-tests/memory-leak/ @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files-fixtures/ @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files.spec.js @DataDog/lang-platform-js
@@ -436,6 +438,7 @@
 /packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/client-library-headers.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/src/evp_proxy/ @DataDog/lang-platform-js
 /packages/dd-trace/src/heap_snapshots.js @DataDog/lang-platform-js
 /packages/dd-trace/src/histogram.js @DataDog/lang-platform-js
 /packages/dd-trace/src/id.js @DataDog/lang-platform-js
@@ -457,6 +460,7 @@
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/evp_proxy/ @DataDog/lang-platform-js
 /packages/dd-trace/test/esm-named-exports.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporter.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporters/ @DataDog/lang-platform-js

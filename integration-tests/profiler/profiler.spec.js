@@ -11,6 +11,7 @@ const net = require('net')
 const zlib = require('zlib')
 const { inspect } = require('node:util')
 const satisfies = require('semifies')
+const { DDSketch } = require('../../vendor/dist/@datadog/sketches-js')
 const { Profile } = require('../../vendor/dist/pprof-format')
 const {
   FakeAgent,
@@ -853,24 +854,30 @@ describe('profiler', () => {
         namespace: 'profilers',
       })
 
-      const checkDistributions = agent.assertTelemetryReceived({
+      const checkSketches = agent.assertTelemetryReceived({
         fn: ({ _, payload }) => {
           const pp = payload.payload
           const series = pp.series
-          assert.strictEqual(series.length, 2)
-          assert.strictEqual(series[0].metric, 'profile_api.bytes')
-          assert.strictEqual(series[1].metric, 'profile_api.ms')
+          const bytes = series.find(s => s.metric === 'profile_api.bytes')
+          const duration = series.find(s => s.metric === 'profile_api.ms')
+
+          assert.ok(bytes)
+          assert.ok(duration)
+
+          const bytesSketch = DDSketch.fromProto(Buffer.from(bytes.sketch_b64, 'base64'))
+          const durationSketch = DDSketch.fromProto(Buffer.from(duration.sketch_b64, 'base64'))
 
           // Same number of points
-          pointsCount = series[0].points.length
-          assert.strictEqual(pointsCount, series[1].points.length)
+          pointsCount = bytesSketch.count
+          assert.strictEqual(pointsCount, durationSketch.count)
         },
-        requestType: 'distributions',
+        requestType: 'sketches',
         timeout,
+        resolveAtFirstSuccess: true,
         namespace: 'profilers',
       })
 
-      await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions])
+      await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkSketches])
 
       // Same number of requests and points
       assert.strictEqual(requestCount, pointsCount)

@@ -477,7 +477,7 @@ class CypressPlugin {
   testsToSkip = []
   skippedTests = []
   skippedTestIds = new Set()
-  skippableTestsCoverage = {}
+  skippableTestsCoverage
   testSessionCoverageMap = createCoverageMap()
   hasForcedToRunSuites = false
   hasUnskippableSuites = false
@@ -566,7 +566,7 @@ class CypressPlugin {
     this.testsToSkip = []
     this.skippedTests = []
     this.skippedTestIds = new Set()
-    this.skippableTestsCoverage = {}
+    this.skippableTestsCoverage = undefined
     this.testSessionCoverageMap = createCoverageMap()
     this.hasForcedToRunSuites = false
     this.hasUnskippableSuites = false
@@ -680,17 +680,6 @@ class CypressPlugin {
   }
 
   /**
-   * Returns whether the backend supplied skipped-test coverage data.
-   *
-   * @returns {boolean}
-   */
-  hasSkippableTestsCoverage () {
-    return !!(this.skippableTestsCoverage &&
-      typeof this.skippableTestsCoverage === 'object' &&
-      Object.keys(this.skippableTestsCoverage).length > 0)
-  }
-
-  /**
    * Returns whether skipped test coverage should be backfilled into the session coverage map.
    *
    * @returns {boolean}
@@ -699,7 +688,7 @@ class CypressPlugin {
     return this.isItrEnabled &&
       this.isCoverageReportUploadEnabled &&
       this.isTestsSkipped &&
-      this.hasSkippableTestsCoverage()
+      this.skippableTestsCoverage !== undefined
   }
 
   /**
@@ -1162,7 +1151,7 @@ class CypressPlugin {
       } else {
         const { skippableTests, correlationId, skippableTestsCoverage } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
-        this.skippableTestsCoverage = skippableTestsCoverage || {}
+        this.skippableTestsCoverage = skippableTestsCoverage
         this.itrCorrelationId = correlationId
         incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
