@@ -257,24 +257,24 @@
   resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.12.1.tgz#0b15c4781208a77aa08f0efb74d9deb645e800c4"
   integrity sha512-4cKRaO1mB9npfklJjOizzJaNBdZvw1V62EVbSD6Y32zX92bTBq/vAno/TTN9dMAvzomXYmvADpGo4798E9fMoA==
 
-"@datadog/native-appsec@11.0.1":
-  version "11.0.1"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-11.0.1.tgz#8b545a9d968131d9cd7b43fd9594228dfcc18f3c"
-  integrity sha512-Y/XfknUmmJcw4hhQVhqzgdQvfjy+EGmXuUBgtVkI1r+/qS00egYu+wD/x7pOvjdbZNqN96znVszAnXvDQAzMDQ==
+"@datadog/native-appsec@11.0.2":
+  version "11.0.2"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-11.0.2.tgz#98eacb74e065280953f877238e336960a770a754"
+  integrity sha512-Azs5fhwJx/BXHMnz+4PM2d9Is7Ik8uQPSM90nzvTCOcBYhSxuLhCY0EsDik/15CRknV9YoQrP1vmRrCVq3il5w==
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-taint-tracking@4.2.0":
-  version "4.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-4.2.0.tgz#ca05a1510af130e14fad7721b539dcf151ee235f"
-  integrity sha512-NpZABJQoNMzF6cU521RT4GQ8/FbfFRoDepOLTcLYKyw0DY2WmSpg3iG+PoQNK4O3jPSXC++K3rg59GiQgA3Mog==
+"@datadog/native-iast-taint-tracking@4.2.1":
+  version "4.2.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-4.2.1.tgz#fe3fb18f0fdb05aa6812b41aba504acf36c6b3d3"
+  integrity sha512-KRLu3aTXvyAusouAZGTw2w1Xo67cRTw93yG4C9vTMpIgN9FXiqhlcvtNHvUzaA/KRrwtNwbaUELubOtk/kxOFg==
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-metrics@3.1.2":
-  version "3.1.2"
-  resolved "https://registry.yarnpkg.com/@datadog/native-metrics/-/native-metrics-3.1.2.tgz#9dc269bdbc6f5b5c9a30dc6d99bab44d17dd5a37"
-  integrity sha512-7AEWt0ZLr/ogR/9if1DmFBDTg3y67xM+gdhXUXKs+UQMxK0lnjrOHgN7fkpEmUG1uL+EkX2BDE3ENDlQ23J7OQ==
+"@datadog/native-metrics@4.0.0":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-metrics/-/native-metrics-4.0.0.tgz#74f7d6cabc13d263bf6aeb3c1c5c41bbcc31073a"
+  integrity sha512-rS6Qc8WAbOgbrtDYdqK15gi2xbuIEyfuquUH05g+2DOdiNAswNAGrlIuSdJZQF/qoJzjcFvxb9kCHu8BjiPfQQ==
   dependencies:
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
