@@ -97,7 +97,9 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 const CHILD_MESSAGE_CALL = 1
 
 // Maximum time we'll wait for the tracer to flush
-const FLUSH_TIMEOUT = 10_000
+// The exporter has a 10-second bounded final-flush deadline. Leave enough time
+// for its completion callback before Jest's --forceExit fallback takes over.
+const FLUSH_TIMEOUT = 12_000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
@@ -110,7 +112,7 @@ const jestSessionState = (globalThis[JEST_SESSION_STATE] ||= {})
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 
 let skippableSuites = []
-let skippableSuitesCoverage = {}
+let skippableSuitesCoverage
 let skippedSuitesCoverage = {}
 let knownTests = {}
 let isCodeCoverageEnabled = false
@@ -131,7 +133,7 @@ let isTestManagementTestsEnabled = false
 let testManagementTests = {}
 let testManagementAttemptToFixRetries = 0
 let isImpactedTestsEnabled = false
-let modifiedFiles = {}
+let modifiedFiles
 let repositoryRoot
 let lastCoverageMap
 let lastCoverageMapRootDir
@@ -688,8 +690,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (this.isImpactedTestsEnabled) {
         try {
-          const hasImpactedTests = Object.keys(modifiedFiles).length > 0
-          this.modifiedFiles = hasImpactedTests ? modifiedFiles : this.testEnvironmentOptions._ddModifiedFiles
+          this.modifiedFiles = modifiedFiles ?? this.testEnvironmentOptions._ddModifiedFiles
         } catch (e) {
           log.error('Error parsing impacted tests', e)
           this.isImpactedTestsEnabled = false
@@ -2489,12 +2490,6 @@ function getRepositoryRootFromTest (test, fallbackRootDir) {
   return getRepositoryRootFromConfig(test?.context?.config, fallbackRootDir)
 }
 
-function hasSkippableSuitesCoverage () {
-  return skippableSuitesCoverage &&
-    typeof skippableSuitesCoverage === 'object' &&
-    Object.keys(skippableSuitesCoverage).length > 0
-}
-
 function shouldCollectJestCoverageForTia () {
   return shouldReportJestSuiteCoverageForTia() ||
     (isJestCoverageBackfillSupported && isItrEnabled && isCoverageReportUploadEnabled)
@@ -2605,7 +2600,7 @@ function resetLibraryConfiguration () {
   testManagementTests = {}
   testManagementAttemptToFixRetries = 0
   isImpactedTestsEnabled = false
-  modifiedFiles = {}
+  modifiedFiles = undefined
   repositoryRoot = undefined
 }
 
@@ -2627,13 +2622,14 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
 
   isSuitesSkipped ||= jestSuitesToRun.suitesToRun.length !== originalTests.length
   numSkippedSuites += jestSuitesToRun.skippedSuites.length
-  skippedSuitesCoverage = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+  const hasSkippableSuitesCoverage = skippableSuitesCoverage !== undefined
+  skippedSuitesCoverage = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage
     ? skippableSuitesCoverage
     : {}
   coverageBackfillContexts = isSuitesSkipped && isTiaCoverageBackfillEnabled()
     ? getTestContexts(originalTests)
     : undefined
-  coverageBackfillFiles = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+  coverageBackfillFiles = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage
     ? getCoverageBackfillFiles(skippableSuitesCoverage, repositoryRoot, getTestSuitePath)
     : undefined
 
@@ -3022,10 +3018,10 @@ function getCliWrapper (isNewJestVersion) {
             skippableSuitesCoverage: receivedSkippableSuitesCoverage,
           } = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
           if (err) {
-            skippableSuitesCoverage = {}
+            skippableSuitesCoverage = undefined
           } else {
             skippableSuites = receivedSkippableSuites
-            skippableSuitesCoverage = receivedSkippableSuitesCoverage || {}
+            skippableSuitesCoverage = receivedSkippableSuitesCoverage
           }
           skippedSuitesCoverage = {}
         } catch (err) {
@@ -3066,7 +3062,19 @@ function getCliWrapper (isNewJestVersion) {
         frameworkVersion: jestVersion,
       })
 
-      const result = await runCLI.apply(this, arguments)
+      let result
+      try {
+        result = await runCLI.apply(this, arguments)
+      } catch (error) {
+        try {
+          await waitForTestSessionFinish(getTestSessionFinishPayload('fail', error, {
+            isTestSessionFinalizationError: true,
+          }))
+        } catch (finalizationError) {
+          log.error('Jest test session finalization error: %s', finalizationError)
+        }
+        throw error
+      }
 
       const {
         results: {

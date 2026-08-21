@@ -78,6 +78,10 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     }
 
     // handleEvent('configure')
+    // No handoff for `openfeature` yet: an application that calls into the tracer
+    // exclusively through the `dd-trace-api` shim (instead of `require('dd-trace')`) cannot
+    // reach `tracer.openfeature` through that shim. This does not affect SSI itself --
+    // auto-injection and vendored-provider resolution work regardless of this gap.
     handleEvent('startSpan')
     handleEvent('wrap')
     handleEvent('trace')

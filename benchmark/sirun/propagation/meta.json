@@ -23,6 +23,12 @@
         "VARIANT": "extract-baggage-percent",
         "OPERATIONS": "300000"
       }
+    },
+    "extract-datadog": {
+      "env": {
+        "VARIANT": "extract-datadog",
+        "OPERATIONS": "1200000"
+      }
     }
   }
 }

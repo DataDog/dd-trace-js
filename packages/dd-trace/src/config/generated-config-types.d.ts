@@ -209,6 +209,7 @@ export interface GeneratedConfig {
   DD_TRACE_BEAUTIFUL_LOGS: boolean;
   DD_TRACE_BLUEBIRD_ENABLED: boolean;
   DD_TRACE_BODY_PARSER_ENABLED: boolean;
+  DD_TRACE_BROWSER_BUNYAN_ENABLED: boolean;
   DD_TRACE_BSON_ENABLED: boolean;
   DD_TRACE_BULLMQ_ENABLED: boolean;
   DD_TRACE_BUNYAN_ENABLED: boolean;
@@ -340,6 +341,7 @@ export interface GeneratedConfig {
   DD_TRACE_OPENSEARCH_PROJECT_OPENSEARCH_ENABLED: boolean;
   DD_TRACE_OPENTELEMETRY_SDK_TRACE_NODE_ENABLED: boolean;
   DD_TRACE_ORACLEDB_ENABLED: boolean;
+  DD_TRACE_OTEL_CTX_ENABLED: boolean;
   DD_TRACE_OTEL_ENABLED: boolean;
   DD_TRACE_OTEL_SEMANTICS_ENABLED: boolean;
   DD_TRACE_PASSPORT_ENABLED: boolean;
@@ -416,6 +418,7 @@ export interface GeneratedConfig {
       endpoint: string | undefined;
       maxContentSize: number;
       maxMessagesLength: number;
+      redactionEnabled: boolean;
       timeout: number;
     };
     appsec: {
@@ -612,6 +615,7 @@ export interface GeneratedEnvVarConfig {
   DD_AI_GUARD_ENDPOINT: string | undefined;
   DD_AI_GUARD_MAX_CONTENT_SIZE: number;
   DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
+  DD_AI_GUARD_REDACTION_ENABLED: boolean;
   DD_AI_GUARD_TIMEOUT: number;
   DD_API_KEY: string | undefined;
   DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
@@ -894,6 +898,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_BEAUTIFUL_LOGS: boolean;
   DD_TRACE_BLUEBIRD_ENABLED: boolean;
   DD_TRACE_BODY_PARSER_ENABLED: boolean;
+  DD_TRACE_BROWSER_BUNYAN_ENABLED: boolean;
   DD_TRACE_BSON_ENABLED: boolean;
   DD_TRACE_BULLMQ_ENABLED: boolean;
   DD_TRACE_BUNYAN_ENABLED: boolean;
@@ -1040,6 +1045,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_OPENSEARCH_PROJECT_OPENSEARCH_ENABLED: boolean;
   DD_TRACE_OPENTELEMETRY_SDK_TRACE_NODE_ENABLED: boolean;
   DD_TRACE_ORACLEDB_ENABLED: boolean;
+  DD_TRACE_OTEL_CTX_ENABLED: boolean;
   DD_TRACE_OTEL_ENABLED: boolean;
   DD_TRACE_OTEL_SEMANTICS_ENABLED: boolean;
   DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: number;

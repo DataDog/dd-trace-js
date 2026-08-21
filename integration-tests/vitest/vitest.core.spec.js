@@ -75,7 +75,7 @@ const FLAKY_UNNECESSARY_RETRY_RESOURCE =
   'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
-function assertCompleteEventHierarchy (events, testOutput) {
+function assertCompleteTestSessionTrace (events, testOutput) {
   const testSessionEvent = events.find(event => event.type === 'test_session_end')
   const testModuleEvent = events.find(event => event.type === 'test_module_end')
   const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
@@ -146,6 +146,90 @@ versions.forEach((version) => {
     })
 
     const poolConfig = ['forks', 'threads']
+
+    newerVitestIt('reports a failed session when a custom reporter rejects onTestRunEnd', async function () {
+      this.timeout(20_000)
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
+            VITEST_THROWING_REPORTER: '1',
+          },
+        }
+      )
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const { testSession, testModule, testSuite, tests } = assertCompleteTestSessionTrace(events, testOutput)
+
+          assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+          for (const event of [testSession, testModule, testSuite]) {
+            assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.error, 1)
+            assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
+          }
+          assert.deepStrictEqual(
+            [...new Set(tests.map(test => test.meta[TEST_STATUS]))].sort(),
+            ['pass', 'skip']
+          )
+        },
+        { hardTimeout: 20_000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
+    })
+
+    typecheckIt('reports a failed typecheck suite when a custom reporter rejects onTestRunEnd', async function () {
+      this.timeout(20_000)
+      childProcess = exec(
+        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+          'ci-visibility/vitest-tests/typecheck.test-d.ts --reporter=verbose ' +
+          '--reporter=./ci-visibility/vitest-reporter-throws.mjs',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+          },
+        }
+      )
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const { testSession, testModule, testSuite } = assertCompleteTestSessionTrace(events, testOutput)
+
+          assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+          for (const event of [testSession, testModule, testSuite]) {
+            assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.error, 1)
+            assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
+          }
+        },
+        { hardTimeout: 20_000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
+    })
 
     poolConfig.forEach((poolConfig) => {
       it(`can run and report tests with pool=${poolConfig}`, async () => {
@@ -418,7 +502,7 @@ versions.forEach((version) => {
             testModule,
             testSuite,
             tests,
-          } = assertCompleteEventHierarchy(events, testOutput)
+          } = assertCompleteTestSessionTrace(events, testOutput)
           const passedTest = tests.find(test =>
             test.meta[TEST_NAME] === 'typecheck can report type assertion'
           )
@@ -1052,7 +1136,7 @@ versions.forEach((version) => {
             testModule,
             testSuite,
             tests,
-          } = assertCompleteEventHierarchy(events, testOutput)
+          } = assertCompleteTestSessionTrace(events, testOutput)
           const test = tests.find(test =>
             test.meta[TEST_NAME] === 'typecheck can report failing assertion'
           )
@@ -1619,11 +1703,12 @@ versions.forEach((version) => {
     // v4 dropped support for Node 18. Every test but this once passes, so we'll leave them
     // for now. The breaking change is in https://github.com/vitest-dev/vitest/commit/9a0bf2254
     // shipped in https://github.com/vitest-dev/vitest/releases/tag/v4.0.0-beta.12
-    if (version === 'latest' && NODE_MAJOR >= 20) {
+    {
+      const coverageTest = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
       const coverageProviders = ['v8', 'istanbul']
 
       coverageProviders.forEach((coverageProvider) => {
-        it(`reports code coverage for ${coverageProvider} provider`, async () => {
+        coverageTest(`reports code coverage for ${coverageProvider} provider`, async () => {
           let codeCoverageExtracted
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1670,7 +1755,7 @@ versions.forEach((version) => {
         })
       })
 
-      it('reports zero code coverage for instanbul provider', async () => {
+      coverageTest('reports zero code coverage for instanbul provider', async () => {
         let codeCoverageExtracted
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2672,8 +2757,10 @@ versions.forEach((version) => {
     })
 
     // dynamic instrumentation only supported from >=2.0.0
-    if (version === 'latest') {
-      context('dynamic instrumentation', () => {
+    {
+      const dynamicInstrumentationContext = version === 'latest' ? context : context.skip
+
+      dynamicInstrumentationContext('dynamic instrumentation', () => {
         it('does not activate it if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,

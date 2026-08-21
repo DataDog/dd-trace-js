@@ -9,6 +9,23 @@ const FIELD_HAS = 4
 const FIELD_DELETE = 8
 const FIELD_NAME_LENGTH = 16
 
+const b3FlagsHeader = 'x-b3-flags'
+const b3Header = 'b3'
+const b3SampledHeader = 'x-b3-sampled'
+const b3SpanIdHeader = 'x-b3-spanid'
+const b3TraceIdHeader = 'x-b3-traceid'
+const baggageHeader = 'baggage'
+const datadogOriginHeader = 'x-datadog-origin'
+const datadogParentIdHeader = 'x-datadog-parent-id'
+const datadogSamplingPriorityHeader = 'x-datadog-sampling-priority'
+const datadogTagsHeader = 'x-datadog-tags'
+const datadogTraceIdHeader = 'x-datadog-trace-id'
+const dsmBase64Header = 'dd-pathway-ctx-base64'
+const dsmBinaryHeader = 'dd-pathway-ctx'
+const sqsdHeader = 'x-aws-sqsd-attr-_datadog'
+const traceparentHeader = 'traceparent'
+const tracestateHeader = 'tracestate'
+
 /** @type {Record<string, unknown>} */
 const carrierOperations = {}
 
@@ -24,7 +41,7 @@ const carrierOperations = {}
 /**
  * @template Value
  * @typedef {object} CarrierField
- * @property {(carrier: Carrier) => Value | undefined} read
+ * @property {((carrier: Carrier) => Value | undefined) | undefined} read
  * @property {(carrier: Carrier, value: Value) => void} write
  * @property {(carrier: Carrier) => boolean} has
  * @property {(carrier: Carrier) => void} delete
@@ -53,19 +70,13 @@ function defineCapability (name, operations, capability) {
  * @template Value
  * @param {string} fieldName
  * @param {string} headerName
- * @param {(value: unknown) => Value | undefined} resolve
+ * @param {((carrier: Carrier) => Value | undefined) | undefined} read
  * @param {number} operations
  * @returns {CarrierField<Value>}
  */
-function defineField (fieldName, headerName, resolve, operations) {
+function defineField (fieldName, headerName, read, operations) {
   return defineCapability(fieldName, operations, {
-    /**
-     * @param {Carrier} carrier
-     * @returns {Value | undefined}
-     */
-    read (carrier) {
-      return resolve(carrier[headerName])
-    },
+    read,
 
     /**
      * @param {Carrier} carrier
@@ -183,48 +194,96 @@ function readLastPathway (value) {
   return result
 }
 
+/** @param {Carrier} carrier */
+function readB3Flags (carrier) { return readLastText(carrier[b3FlagsHeader]) }
+
+/** @param {Carrier} carrier */
+function readB3 (carrier) { return readLastText(carrier[b3Header]) }
+
+/** @param {Carrier} carrier */
+function readB3Sampled (carrier) { return readLastText(carrier[b3SampledHeader]) }
+
+/** @param {Carrier} carrier */
+function readB3SpanId (carrier) { return readLastText(carrier[b3SpanIdHeader]) }
+
+/** @param {Carrier} carrier */
+function readB3TraceId (carrier) { return readLastText(carrier[b3TraceIdHeader]) }
+
+/** @param {Carrier} carrier */
+function readBaggage (carrier) { return readListText(carrier[baggageHeader]) }
+
+/** @param {Carrier} carrier */
+function readDatadogOrigin (carrier) { return readLastText(carrier[datadogOriginHeader]) }
+
+/** @param {Carrier} carrier */
+function readDatadogParentId (carrier) { return readLastText(carrier[datadogParentIdHeader]) }
+
+/** @param {Carrier} carrier */
+function readDatadogSamplingPriority (carrier) { return readLastText(carrier[datadogSamplingPriorityHeader]) }
+
+/** @param {Carrier} carrier */
+function readDatadogTags (carrier) { return readListText(carrier[datadogTagsHeader]) }
+
+/** @param {Carrier} carrier */
+function readDatadogTraceId (carrier) { return readLastText(carrier[datadogTraceIdHeader]) }
+
+/** @param {Carrier} carrier */
+function readDsmBase64 (carrier) { return readLastPathway(carrier[dsmBase64Header]) }
+
+/** @param {Carrier} carrier */
+function readDsmBinary (carrier) { return readLastPathway(carrier[dsmBinaryHeader]) }
+
+/** @param {Carrier} carrier */
+function readSqsd (carrier) { return readLastText(carrier[sqsdHeader]) }
+
+/** @param {Carrier} carrier */
+function readTraceparent (carrier) { return readUniqueText(carrier[traceparentHeader]) }
+
+/** @param {Carrier} carrier */
+function readTracestate (carrier) { return readListText(carrier[tracestateHeader]) }
+
 const datadogTraceId = defineField(
   'datadogTraceId',
-  'x-datadog-trace-id',
-  readLastText,
+  datadogTraceIdHeader,
+  readDatadogTraceId,
   FIELD_READ | FIELD_WRITE
 )
 const datadogParentId = defineField(
   'datadogParentId',
-  'x-datadog-parent-id',
-  readLastText,
+  datadogParentIdHeader,
+  readDatadogParentId,
   FIELD_READ | FIELD_WRITE | FIELD_DELETE
 )
 const datadogOrigin = defineField(
   'datadogOrigin',
-  'x-datadog-origin',
-  readLastText,
+  datadogOriginHeader,
+  readDatadogOrigin,
   FIELD_READ | FIELD_WRITE
 )
 const datadogSamplingPriority = defineField(
   'datadogSamplingPriority',
-  'x-datadog-sampling-priority',
-  readLastText,
+  datadogSamplingPriorityHeader,
+  readDatadogSamplingPriority,
   FIELD_READ | FIELD_WRITE
 )
-defineField('datadogTags', 'x-datadog-tags', readListText, FIELD_READ | FIELD_WRITE)
-defineField('baggage', 'baggage', readListText, FIELD_READ | FIELD_WRITE)
-const b3TraceId = defineField('b3TraceId', 'x-b3-traceid', readLastText, FIELD_READ | FIELD_WRITE)
-const b3SpanId = defineField('b3SpanId', 'x-b3-spanid', readLastText, FIELD_READ | FIELD_WRITE)
-const b3ParentId = defineField('b3ParentId', 'x-b3-parentspanid', readLastText, FIELD_WRITE)
-const b3Sampled = defineField('b3Sampled', 'x-b3-sampled', readLastText, FIELD_READ | FIELD_WRITE)
-const b3Flags = defineField('b3Flags', 'x-b3-flags', readLastText, FIELD_READ | FIELD_WRITE)
-const b3 = defineField('b3', 'b3', readLastText, FIELD_READ | FIELD_WRITE)
-defineField('sqsd', 'x-aws-sqsd-attr-_datadog', readLastText, FIELD_READ)
-const traceparent = defineField('traceparent', 'traceparent', readUniqueText, FIELD_READ | FIELD_WRITE)
-const tracestate = defineField('tracestate', 'tracestate', readListText, FIELD_READ | FIELD_WRITE)
+defineField('datadogTags', datadogTagsHeader, readDatadogTags, FIELD_READ | FIELD_WRITE)
+defineField('baggage', baggageHeader, readBaggage, FIELD_READ | FIELD_WRITE)
+const b3TraceId = defineField('b3TraceId', b3TraceIdHeader, readB3TraceId, FIELD_READ | FIELD_WRITE)
+const b3SpanId = defineField('b3SpanId', b3SpanIdHeader, readB3SpanId, FIELD_READ | FIELD_WRITE)
+const b3ParentId = defineField('b3ParentId', 'x-b3-parentspanid', undefined, FIELD_WRITE)
+const b3Sampled = defineField('b3Sampled', b3SampledHeader, readB3Sampled, FIELD_READ | FIELD_WRITE)
+const b3Flags = defineField('b3Flags', b3FlagsHeader, readB3Flags, FIELD_READ | FIELD_WRITE)
+const b3 = defineField('b3', b3Header, readB3, FIELD_READ | FIELD_WRITE)
+defineField('sqsd', sqsdHeader, readSqsd, FIELD_READ)
+const traceparent = defineField('traceparent', traceparentHeader, readTraceparent, FIELD_READ | FIELD_WRITE)
+const tracestate = defineField('tracestate', tracestateHeader, readTracestate, FIELD_READ | FIELD_WRITE)
 const dsmBase64 = defineField(
   'dsmBase64',
-  'dd-pathway-ctx-base64',
-  readLastPathway,
+  dsmBase64Header,
+  readDsmBase64,
   FIELD_READ | FIELD_WRITE | FIELD_HAS | FIELD_NAME_LENGTH
 )
-const dsmBinary = defineField('dsmBinary', 'dd-pathway-ctx', readLastPathway, FIELD_READ | FIELD_HAS)
+const dsmBinary = defineField('dsmBinary', dsmBinaryHeader, readDsmBinary, FIELD_READ | FIELD_HAS)
 
 const legacyBaggagePrefix = 'ot-baggage-'
 // RFC 7230 `token`, compatible with Node.js header-name validation.
@@ -314,23 +373,23 @@ function pickDsm (carrier) {
  * @property {typeof dsmBinary.has} hasDsmBinary
  * @property {typeof pickDsm} pickDsm
  * @property {typeof pickTextMap} pickTextMap
- * @property {(carrier: Carrier) => string | undefined} readBaggage
- * @property {typeof b3.read} readB3
- * @property {typeof b3Flags.read} readB3Flags
- * @property {typeof b3Sampled.read} readB3Sampled
- * @property {typeof b3SpanId.read} readB3SpanId
- * @property {typeof b3TraceId.read} readB3TraceId
- * @property {typeof datadogOrigin.read} readDatadogOrigin
- * @property {typeof datadogParentId.read} readDatadogParentId
- * @property {typeof datadogSamplingPriority.read} readDatadogSamplingPriority
- * @property {(carrier: Carrier) => string | undefined} readDatadogTags
- * @property {typeof datadogTraceId.read} readDatadogTraceId
- * @property {typeof dsmBase64.read} readDsmBase64
- * @property {typeof dsmBinary.read} readDsmBinary
+ * @property {typeof readBaggage} readBaggage
+ * @property {typeof readB3} readB3
+ * @property {typeof readB3Flags} readB3Flags
+ * @property {typeof readB3Sampled} readB3Sampled
+ * @property {typeof readB3SpanId} readB3SpanId
+ * @property {typeof readB3TraceId} readB3TraceId
+ * @property {typeof readDatadogOrigin} readDatadogOrigin
+ * @property {typeof readDatadogParentId} readDatadogParentId
+ * @property {typeof readDatadogSamplingPriority} readDatadogSamplingPriority
+ * @property {typeof readDatadogTags} readDatadogTags
+ * @property {typeof readDatadogTraceId} readDatadogTraceId
+ * @property {typeof readDsmBase64} readDsmBase64
+ * @property {typeof readDsmBinary} readDsmBinary
  * @property {(carrier: Carrier, target: Record<string, string>) => void} readLegacyBaggage
- * @property {(carrier: Carrier) => string | undefined} readSqsd
- * @property {typeof traceparent.read} readTraceparent
- * @property {typeof tracestate.read} readTracestate
+ * @property {typeof readSqsd} readSqsd
+ * @property {typeof readTraceparent} readTraceparent
+ * @property {typeof readTracestate} readTracestate
  * @property {(carrier: Carrier, value: string) => void} writeBaggage
  * @property {typeof b3.write} writeB3
  * @property {typeof b3Flags.write} writeB3Flags

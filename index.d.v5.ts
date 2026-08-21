@@ -243,6 +243,7 @@ interface Plugins {
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
   "azure-durable-functions": tracer.plugins.azure_durable_functions
+  "browser-bunyan": tracer.plugins.browser_bunyan;
   "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
@@ -858,6 +859,13 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         maxMessagesLength?: number,
+        /**
+         * Whether AI Guard applies backend-provided sensitive-data redaction replacements.
+         * @default true
+         * @env DD_AI_GUARD_REDACTION_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        redactionEnabled?: boolean,
         /**
          * Max size of the content property set in the meta-struct
          * @env DD_AI_GUARD_MAX_CONTENT_SIZE
@@ -1818,6 +1826,25 @@ declare namespace tracer {
     }
 
     /**
+     * A structured content part in an AI Guard message.
+     */
+    export interface ContentPart {
+      type: string;
+      text?: string;
+      image_url?: { url: string };
+    }
+
+    /**
+     * A conversational message whose content is represented by structured parts.
+     */
+    export interface ContentPartsMessage {
+      role: string;
+      content: ContentPart[];
+      tool_call_id?: string;
+      tool_calls?: ToolCall[];
+    }
+
+    /**
      * A standard conversational message exchanged with a Large Language Model (LLM).
      */
     export interface TextMessage {
@@ -1888,9 +1915,24 @@ declare namespace tracer {
 
     export type Message =
       | TextMessage
+      | ContentPartsMessage
       | AssistantTextMessage
       | AssistantToolCallMessage
       | ToolMessage;
+
+    /**
+     * A sensitive data replacement the AI Guard service determined for the evaluated conversation.
+     */
+    export interface RedactionReplacement {
+      /**
+       * Location of the replaced value within the evaluated conversation (e.g. `messages[0].content`).
+       */
+      path: string;
+      /**
+       * The value that replaces the sensitive data found at `path`.
+       */
+      replacement: string;
+    }
 
     /**
      * The result returned by AI Guard after evaluating a conversation.
@@ -1919,6 +1961,16 @@ declare namespace tracer {
        * Sensitive Data Scanner findings from the evaluation.
        */
       sds: Object[];
+      /**
+       * The evaluated conversation, redacted when required by the AI Guard service.
+       * This may contain sensitive data when redaction is disabled or no replacement was applied.
+       */
+      messages: Message[];
+      /**
+       * The replacements the AI Guard service determined for the evaluated conversation, reported whether or not
+       * the tracer applied them. Empty when the service determined no replacement.
+       */
+      redactionReplacements: RedactionReplacement[];
     }
 
     /**
@@ -2473,11 +2525,13 @@ declare namespace tracer {
       interface azure_durable_functions extends Integration {}
 
     /**
-     * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
+     * This plugin patches the [browser-bunyan](https://github.com/philmander/browser-bunyan)
      * to automatically inject trace identifiers in log records when the
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
+    interface browser_bunyan extends Integration {}
+
     /**
      * This plugin automatically instruments the
      * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
@@ -2498,6 +2552,12 @@ declare namespace tracer {
       producerFilter?: (job: { name?: string; data?: unknown; opts?: unknown; queueName?: string }) => boolean;
     }
 
+    /**
+     * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
+     * to automatically inject trace identifiers in log records when the
+     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * on the tracer.
+     */
     interface bunyan extends Integration {}
 
     /**
@@ -3992,7 +4052,8 @@ declare namespace tracer {
         id?: string,
         inputData: JSONType,
         expectedOutput?: JSONType,
-        metadata?: Record<string, JSONType>
+        metadata?: Record<string, JSONType>,
+        tags?: string[]
       }>
     }
 
@@ -4025,6 +4086,8 @@ declare namespace tracer {
       expectedRecordCount?: number
       /** Maximum total time to wait, in ms. Default 30000. */
       maxWaitMs?: number
+      /** Filter records by these tags. */
+      tags?: string[]
     }
 
     interface ExperimentResultRow {
@@ -4061,6 +4124,79 @@ declare namespace tracer {
       url: string
     }
 
+    type ExternalExperimentTimestamp = number | string | Date
+
+    interface StartExperimentDatasetOptions {
+      /** Existing dataset id. When omitted, a placeholder dataset is created. */
+      id?: string
+      /** Dataset version to associate with the experiment. */
+      version?: number
+      /** Placeholder dataset name. Defaults to `<experiment name> dataset`. */
+      name?: string
+      /** Placeholder dataset description. */
+      description?: string
+    }
+
+    interface StartExperimentOptions {
+      name: string
+      description?: string
+      /** Override the configured project name for this external experiment. */
+      projectName?: string
+      dataset?: StartExperimentDatasetOptions
+      config?: Record<string, JSONType>
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, string>
+    }
+
+    interface ExternalExperimentSpanInput {
+      name?: string
+      input?: JSONType
+      output?: JSONType
+      expectedOutput?: JSONType
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, string>
+      startedAt?: ExternalExperimentTimestamp
+      completedAt?: ExternalExperimentTimestamp
+      durationMs?: number
+      error?: string | Error | { type?: string, name?: string, message?: string, stack?: string }
+      datasetRecordId?: string
+      runId?: string
+      runIteration?: number
+    }
+
+    interface ExternalExperimentSpan {
+      experimentId: string
+      spanId: string
+      traceId: string
+      url: string | null
+    }
+
+    interface ExternalExperimentMetric {
+      label: string
+      value?: JSONType
+      error?: string | Error
+      timestamp?: ExternalExperimentTimestamp
+      tags?: Record<string, string>
+      source?: string
+    }
+
+    interface ExternalExperimentCloseOptions {
+      status?: string
+      error?: string | Error
+    }
+
+    interface ExternalExperiment {
+      experimentId (): string
+      name (): string
+      url (): string | null
+      submitSpan (input?: ExternalExperimentSpanInput): Promise<ExternalExperimentSpan>
+      submitEvaluationMetrics (
+        span: { experimentId?: string, spanId: string, traceId: string },
+        metrics: ExternalExperimentMetric[]
+      ): Promise<void>
+      close (options?: ExternalExperimentCloseOptions): Promise<void>
+    }
+
     interface DatasetPushResult {
       /** Number of records from this push that were confirmed with a record id. */
       pushedCount: number
@@ -4069,7 +4205,26 @@ declare namespace tracer {
     }
 
     interface Dataset {
-      addRecord (input: JSONType, expectedOutput?: JSONType, metadata?: Record<string, JSONType>): Dataset
+      addRecord (
+        input: JSONType,
+        expectedOutput?: JSONType,
+        metadata?: Record<string, JSONType>,
+        tags?: string[]
+      ): Dataset
+      /** Update fields on an existing dataset record. */
+      update (index: number, fields: {
+        input?: JSONType
+        expectedOutput?: JSONType
+        metadata?: Record<string, JSONType>
+      }): Dataset
+      /** Delete an existing dataset record. */
+      delete (index: number): Dataset
+      /** Add tags to a dataset record. */
+      addTags (index: number, tags: string[]): Dataset
+      /** Remove tags from a dataset record. */
+      removeTags (index: number, tags: string[]): Dataset
+      /** Replace all tags on a dataset record. */
+      replaceTags (index: number, tags: string[]): Dataset
       /** Creates the dataset remotely if needed and pushes any unpushed records. */
       push (): Promise<DatasetPushResult>
       name (): string
@@ -4082,8 +4237,11 @@ declare namespace tracer {
         id: string | null,
         input: JSONType,
         expectedOutput: JSONType,
-        metadata: Record<string, JSONType>
+        metadata: Record<string, JSONType>,
+        tags: string[]
       }>
+      /** Return the tags used to filter this dataset. */
+      filterTags (): string[]
       /** Dashboard URL for the dataset, or null until pushed. */
       url (): string | null
     }
@@ -4103,6 +4261,8 @@ declare namespace tracer {
       pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
       /** Build an experiment to run over a dataset. */
       experiment (options: ExperimentOptions): Experiment
+      /** Start an externally-driven experiment. */
+      startExperiment (options: StartExperimentOptions): Promise<ExternalExperiment>
     }
 
     interface LLMObservabilitySpan {

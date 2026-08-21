@@ -340,6 +340,30 @@ describe('CiPlugin', () => {
     sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
   })
 
+  it('defers worker suite events when the exporter supports late test suite updates', () => {
+    const plugin = createPlugin('vitest_worker')
+    const exportTraceWithDeferredTestSuite = sinon.spy()
+    const exportTrace = sinon.spy()
+    const trace = [{ type: 'test_suite_end', meta: {} }]
+    plugin.tracer._exporter = { export: exportTrace, exportTraceWithDeferredTestSuite }
+
+    plugin._exportWorkerTraceOrBuffer(trace)
+
+    sinon.assert.calledOnceWithExactly(exportTraceWithDeferredTestSuite, trace)
+    sinon.assert.notCalled(exportTrace)
+  })
+
+  it('exports worker traces normally when late test suite updates are unsupported', () => {
+    const plugin = createPlugin('vitest_worker')
+    const exportTrace = sinon.spy()
+    const trace = [{ type: 'test', meta: {} }]
+    plugin.tracer._exporter = { export: exportTrace }
+
+    plugin._exportWorkerTraceOrBuffer(trace)
+
+    sinon.assert.calledOnceWithExactly(exportTrace, trace)
+  })
+
   it('uploads regular coverage reports from canonical paths', () => {
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
     const coverageDir = path.join(rootDir, 'coverage')
@@ -561,7 +585,10 @@ describe('CiPlugin', () => {
   }
 
   it('excludes symlinked coverage report files', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the symbolic-link behavior exercised here.
+      this.skip()
+    }
 
     const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
     const rootDir = path.join(fixtureDir, 'root')
