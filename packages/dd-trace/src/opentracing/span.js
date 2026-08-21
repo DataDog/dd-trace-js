@@ -181,7 +181,9 @@ class DatadogSpan {
   }
 
   setBaggageItem (key, value) {
-    this._spanContext._baggageItems[key] = value
+    const sc = this._spanContext
+    unshareBaggage(sc)
+    sc._baggageItems[key] = value
     return this
   }
 
@@ -194,11 +196,14 @@ class DatadogSpan {
   }
 
   removeBaggageItem (key) {
-    delete this._spanContext._baggageItems[key]
+    const sc = this._spanContext
+    unshareBaggage(sc)
+    delete sc._baggageItems[key]
   }
 
   removeAllBaggageItems () {
     this._spanContext._baggageItems = {}
+    this._spanContext._baggageItemsShared = false
   }
 
   setTag (key, value) {
@@ -395,9 +400,12 @@ class DatadogSpan {
     let startTime
 
     let baggage
+    let baggageShared
     const propagationBehavior = this.#parentTracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
     if (parent && parent._isRemote && propagationBehavior !== 'continue') {
       baggage = parent._baggageItems
+      baggageShared = propagationBehavior === 'restart' && baggage !== undefined && baggage !== null
+      if (baggageShared) parent._baggageItemsShared = true
       parent = null
     }
 
@@ -407,12 +415,14 @@ class DatadogSpan {
         startTime = dateNow()
       }
     } else if (parent) {
+      parent._baggageItemsShared = true
       spanContext = new SpanContext({
         traceId: parent._traceId,
         spanId: id(),
         parentId: parent._spanId,
         sampling: parent._sampling,
-        baggageItems: { ...parent._baggageItems },
+        baggageItems: parent._baggageItems,
+        baggageItemsShared: true,
         trace: parent._trace,
         tracestate: parent._tracestate,
       })
@@ -437,6 +447,7 @@ class DatadogSpan {
 
       if (propagationBehavior === 'restart') {
         spanContext._baggageItems = baggage ?? {}
+        spanContext._baggageItemsShared = baggageShared ?? false
       }
     }
 
@@ -466,6 +477,16 @@ function createRegistry (type) {
 
 function isSamplingPriorityTag (key) {
   return key === MANUAL_KEEP || key === MANUAL_DROP || key === SAMPLING_PRIORITY
+}
+
+/**
+ * @param {import('./span_context')} spanContext
+ */
+function unshareBaggage (spanContext) {
+  if (spanContext._baggageItemsShared) {
+    spanContext._baggageItems = { ...spanContext._baggageItems }
+    spanContext._baggageItemsShared = false
+  }
 }
 
 module.exports = DatadogSpan
