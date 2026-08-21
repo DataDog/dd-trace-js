@@ -21,7 +21,7 @@ module.exports = function wrapLogger (Logger, id, logSubmissionCh) {
       }
 
       const line = emit.apply(this, arguments)
-      if (logSubmissionCh?.hasSubscribers && !arguments[1]) {
+      if (logSubmissionCh?.hasSubscribers && logCh.hasSubscribers && !arguments[1]) {
         logSubmissionCh.publish({ source: id, message: line ?? rec })
       }
       return line

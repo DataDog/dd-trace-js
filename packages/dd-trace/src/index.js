@@ -11,8 +11,7 @@ const ddTraceEnabled = getValueFromEnvSources('DD_TRACE_ENABLED', true)
 const ddTraceDisabled = ddTraceEnabled === undefined
   ? getValueFromEnvSources('OTEL_TRACES_EXPORTER') === 'none'
   : ddTraceEnabled === false
-const automaticLogSubmissionEnabled = getValueFromEnvSources('DD_AGENTLESS_LOG_SUBMISSION_ENABLED')
 
-module.exports = (ddTraceDisabled && !automaticLogSubmissionEnabled) || inJestWorker
+module.exports = ddTraceDisabled || inJestWorker
   ? require('./noop/proxy')
   : require('./proxy')

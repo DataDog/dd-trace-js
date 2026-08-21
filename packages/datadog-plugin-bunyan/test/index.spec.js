@@ -74,11 +74,8 @@ describe('Plugin', () => {
           setupTest(version)
         })
 
-        it('should publish records for automatic submission', () => {
-          let submission
-          const onLog = payload => {
-            submission = payload
-          }
+        it('should not publish uncorrelated records for automatic submission', () => {
+          const onLog = sinon.spy()
           logSubmissionCh.subscribe(onLog)
 
           try {
@@ -87,8 +84,7 @@ describe('Plugin', () => {
             logSubmissionCh.unsubscribe(onLog)
           }
 
-          assert.strictEqual(submission.source, 'bunyan')
-          assert.strictEqual(JSON.parse(submission.message).msg, 'message')
+          sinon.assert.notCalled(onLog)
         })
       })
 
