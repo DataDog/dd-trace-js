@@ -963,6 +963,36 @@ class TextMapPropagator {
 
     return samplingPriority
   }
+
+  /**
+   * Restore datadog tracestate keep on an extracted context whose traceparent
+   * sampled flag was cleared. Standard extraction keeps the drop decision.
+   *
+   * @param {import('../span_context')} spanContext
+   * @param {string|undefined} tracestateHeader
+   */
+  applyTracestateKeepOverClearedFlag (spanContext, tracestateHeader) {
+    if (!spanContext || spanContext._sampling.priority !== AUTO_REJECT) return
+
+    const priority = TextMapPropagator._datadogSamplingPriorityFromTracestate(tracestateHeader)
+    if (priority >= AUTO_KEEP) {
+      spanContext._sampling.priority = priority
+    }
+  }
+
+  /**
+   * @param {string|undefined} tracestateHeader
+   * @returns {number|undefined}
+   */
+  static _datadogSamplingPriorityFromTracestate (tracestateHeader) {
+    if (typeof tracestateHeader !== 'string' || !tracestateHeader) return
+    let priority
+    TraceState.fromString(tracestateHeader).forVendor('dd', state => {
+      const parsed = Number.parseInt(state.get('s'), 10)
+      if (Number.isInteger(parsed)) priority = parsed
+    })
+    return priority
+  }
 }
 
 module.exports = TextMapPropagator
