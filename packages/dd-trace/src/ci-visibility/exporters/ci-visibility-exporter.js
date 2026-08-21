@@ -680,6 +680,7 @@ class CiVisibilityExporter extends BufferingExporter {
     const deadline = isFinalFlush ? Date.now() + FINAL_FLUSH_TIMEOUT : undefined
     let hasCompleted = false
     let initializationTimeoutId
+    let mediaTimeoutId
 
     const fallbackTimeoutId = isFinalFlush
       ? setTimeout(() => {
@@ -692,6 +693,7 @@ class CiVisibilityExporter extends BufferingExporter {
       hasCompleted = true
       clearTimeout(fallbackTimeoutId)
       clearTimeout(initializationTimeoutId)
+      clearTimeout(mediaTimeoutId)
       this.#mediaFlushWaiters.delete(flushWriters)
       if (error) log.error('Error flushing Test Optimization data', error)
       if (!isFinalFlush) {
@@ -745,6 +747,14 @@ class CiVisibilityExporter extends BufferingExporter {
       }
 
       for (const writer of writers) writer.flush(onFlushComplete, options)
+    }
+
+    if (isFinalFlush && this.#pendingMediaUploads.size !== 0) {
+      mediaTimeoutId = setTimeout(() => {
+        const error = createFinalFlushTimeoutError()
+        for (const controller of this.#pendingMediaUploads) controller.abort(error)
+      }, Math.max(0, deadline - Date.now()))
+      mediaTimeoutId.unref?.()
     }
 
     if (isFinalFlush && this._initializationRequest) {
@@ -865,7 +875,7 @@ class CiVisibilityExporter extends BufferingExporter {
    * @returns {boolean}
    */
   canUploadTestVideos () {
-    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideosEnabled
+    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideosEnabled && !this._isUsingEvpProxy
   }
 
   /**
@@ -948,12 +958,10 @@ class CiVisibilityExporter extends BufferingExporter {
 
     this.#resetFinalFlush()
     const controller = new AbortController()
-    const deadline = Date.now() + FINAL_FLUSH_TIMEOUT
     let settled = false
     const complete = (error) => {
       if (settled) return
       settled = true
-      clearTimeout(timeoutId)
       signal?.removeEventListener('abort', onAbort)
 
       try {
@@ -975,12 +983,6 @@ class CiVisibilityExporter extends BufferingExporter {
 
     this.#pendingMediaUploads.add(controller)
     signal?.addEventListener('abort', onAbort, { once: true })
-    const timeoutId = setTimeout(() => {
-      const error = createFinalFlushTimeoutError()
-      controller.abort(error)
-      complete(error)
-    }, FINAL_FLUSH_TIMEOUT)
-    timeoutId.unref?.()
 
     if (signal?.aborted) {
       onAbort()
@@ -992,7 +994,6 @@ class CiVisibilityExporter extends BufferingExporter {
       url: this._testScreenshotUploadUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,
-      deadline,
       signal: controller.signal,
     }, complete)
   }
