@@ -1,13 +1,15 @@
-# How IntegrationPipeline works
+# How the integration lifecycle frameworks work
 
-This is a mechanical walkthrough of the current `IntegrationPipeline` experiment, using BullMQ as the concrete
-example. It is not public documentation or a stable API promise. For the adoption argument and trade-offs, see
+This is a mechanical walkthrough of the current integration-lifecycle experiment. BullMQ demonstrates the
+compatibility `IntegrationPipeline`; Azure Cosmos demonstrates the fixed processor/adapter framework. Neither is a
+public API or stable API promise. For the adoption argument and trade-offs, see
 [INTEGRATION_PIPELINE_RATIONALE.md](./INTEGRATION_PIPELINE_RATIONALE.md).
 
 ## The mental model
 
-Instrumentation still publishes diagnostic-channel events. The pipeline compiles an integration definition into a
-plugin class that subscribes to those events and executes a standard operation lifecycle.
+Instrumentation still publishes diagnostic-channel events. The compatibility pipeline compiles a flexible
+integration definition into a plugin class that subscribes to those events and executes a standard operation
+lifecycle.
 
 ```text
 instrumented library call
@@ -24,8 +26,17 @@ instrumented library call
   -> optional span finishes and async stores are restored
 ```
 
-Pub/sub is therefore still the transport. The pipeline is the orchestration layer between an instrumentation event
-and the products that act on that event.
+Pub/sub is therefore still the transport. For same-domain integrations with a fixed contract, the processor/adapter
+path narrows that flow further:
+
+```text
+raw source -> process-wide bridge -> package facts
+                                      +-> product contributors
+                                      +-> per-tracer processor -> lifecycle adapter -> trace manager
+```
+
+The source bridge owns physical subscription cardinality. Package modules own package facts, product contributors own
+their stores, domain processors own APM policy, and trace managers privately own per-tracer spans.
 
 ## The relevant files
 
@@ -36,13 +47,18 @@ and the products that act on that event.
 | `packages/dd-trace/src/opentracing/span_context_factory.js` | Creates a real `DatadogSpanContext` without creating a span and lets a later span adopt it once. |
 | `packages/dd-trace/src/opentracing/tracer.js` | Exposes internal context reservation and accepts an already reserved context when starting a span. |
 | `packages/dd-trace/src/plugins/plugin.js` | Supports binding named stores and subscribing inside a legacy no-op scope when requested. |
+| `packages/dd-trace/src/events/source-registry.js` | Process-wide raw-source ownership and product contributor activation. |
+| `packages/dd-trace/src/events/registry.js` | Per-tracer processor and immutable package-source configuration ownership. |
+| `packages/dd-trace/src/events/database` | Shared database factory, processor, fixed query adapter, and source bridge. |
+| `packages/dd-trace/src/events/trace-manager.js` | Opaque per-tracer span correlation and exactly-once terminal operations. |
 | `packages/datadog-plugin-bullmq/src/index.js` | Compiles the BullMQ integration definition into the plugin-manager class. |
 | `packages/datadog-plugin-bullmq/src/producer.js` | Producer operation declarations and propagation/DSM stages. |
 | `packages/datadog-plugin-bullmq/src/consumer.js` | Consumer declaration, carrier extraction, parent selection, and DSM stage. |
-| `packages/datadog-plugin-azure-cosmos/src/index.js` | Declares an async database operation and selects `DatabasePlugin` as its compatibility base. |
+| `packages/datadog-plugin-azure-cosmos/src/index.js` | Thin declaration using the shared database factory. |
+| `packages/datadog-plugin-azure-cosmos/src/query-source.js` | Cosmos-only argument, result, skip, and source-writeback facts. |
 | `benchmark/sirun/plugin-azure-cosmos-pipeline` | Baseline/candidate hot-path benchmark for accepted, rejected, and inherited no-op calls. |
 
-## 1. An integration is a definition
+## 1. A compatibility integration is a definition
 
 BullMQ exports the result of `createIntegrationPlugin`:
 
@@ -54,10 +70,10 @@ module.exports = createIntegrationPlugin({
 })
 ```
 
-The result is a class named `IntegrationPipeline` that extends `TracingPlugin` by default. A definition can select a
-`TracingPlugin` subclass with `base`; Azure Cosmos uses `DatabasePlugin` so existing storage service naming,
-peer-service finalization, and code-origin behavior remain in force. The generated class has the static `id` and
-`operation` fields expected by the current plugin manager, so loading and configuration do not need a separate path.
+The result is a class named `IntegrationPipeline` that extends `TracingPlugin` by default. A compatibility definition
+can select a `TracingPlugin` subclass with `base` when its complete semantic contract is required. The generated class
+has the static `id` and `operation` fields expected by the current plugin manager, so loading and configuration do not
+need a separate path.
 
 The definition is validated before subscriptions are registered. It rejects missing IDs, empty operation lists,
 invalid targets or lifecycles, duplicate targets, spans without names, unknown capabilities, and tracing-dependent
@@ -299,26 +315,36 @@ Producer and consumer differences are declarations and stages; subscription and 
 
 ## 13. Azure Cosmos database flow
 
-`executePlugins` declares one async database operation:
+`createDatabaseIntegration()` registers one Cosmos package source for the fixed `db.query` operation:
 
-1. Extract the SDK request context and whether the invocation represents an operation or an individual request.
-2. Reject request-level hooks already represented by an enclosing operation span while inheriting that parent scope.
-3. Reject empty-path account reads with a no-op scope so their nested HTTP request is suppressed as before.
-4. Extract the low-cardinality resource, database, container, connection mode, endpoint, and user agent.
-5. Materialize a `cosmosdb.query` span through `DatabasePlugin`, preserving its storage service and peer-service rules.
-6. Add status and substatus fields from either the response or the SDK error before the span finishes.
+1. The process-wide source registry activates one raw Orchestrion bridge while any tracer or product contributor
+   consumes Cosmos queries.
+2. `query-source.js` extracts the SDK request context and whether the invocation is an operation or individual
+   request. It returns package facts only; it never receives a tracer or span.
+3. Duplicate request-level hooks return `{ skip: 'parent' }`. Empty-path account reads return `{ skip: 'noop' }` so
+   their nested HTTP request remains suppressed.
+4. The bridge publishes one normalized event to eligible product contributors and each tracer's database processor.
+   Raw package arguments are not broadcast.
+5. Each processor applies common database policy, then its fixed query adapter starts a span through its private trace
+   manager. Multiple tracers correlate distinct spans to the same event identity.
+6. Status and substatus facts from either the response or SDK error are applied before an atomic completion or
+   failure releases that tracer's state exactly once.
 
-This migration added two source-independent contracts: definitions can select a compatible `TracingPlugin` base, and
-the skip mode can resolve from the extracted frame. The lifecycle engine still owns subscriptions and completion.
+The shared `DatabaseProcessor` extends `DatabasePlugin`, retaining storage service naming and outbound peer-service
+finalization. The narrow `finishSpan()` boundary lets the trace manager finalize the exact span it owns without
+exposing that span to the package source or a shared event.
 
 ## Current boundaries
 
-- The compiled class still extends `TracingPlugin`, directly or through a selected compatibility base; tracing is
-  private to the pipeline but not yet an independently loadable capability.
+- The compiled BullMQ class still extends `TracingPlugin`, directly or through a selected compatibility base;
+  tracing is private to the compatibility pipeline but not yet an independently loadable capability.
+- The database processor is still implemented through `DatabasePlugin`; its span is private to `TraceManager`, while
+  product contributors are independently registered and can keep a package source active without APM.
 - `storage('legacy')` remains necessary for compatibility with code outside the experiment.
 - BullMQ propagation cannot safely move before tracing until sampling decisions can be made from context alone.
 - `DD_TRACE_ENABLED=false` still selects a global no-op tracer that cannot reserve real unique correlation contexts.
-- Only the `tracing` stage requirement exists today. Other product capabilities still need formal contracts.
+- Only the `tracing` compatibility-stage requirement exists today. The contributor registry has a tested contract,
+  but no production non-APM contributor has migrated to it yet.
 
 Within those limits, the important property is already real: correlation context and default stages have their own
 lifecycle, and the existence of that lifecycle no longer implies that a span must be created.

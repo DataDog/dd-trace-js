@@ -7,11 +7,6 @@ const registries = new WeakMap()
  * @property {(config: {enabled: boolean}) => void} configure
  */
 
-/**
- * @typedef {new (tracer: object, tracerConfig: object, registry: EventDomainRegistry) => EventProcessor}
- *   EventProcessorConstructor
- */
-
 class EventDomainRegistry {
   #domains = new Map()
   #tracer
@@ -31,10 +26,12 @@ class EventDomainRegistry {
   /**
    * Register or resolve the single processor that owns a semantic operation.
    *
+   * @template {EventProcessor} ProcessorType
    * @param {object} definition Processor definition.
    * @param {string} definition.operation Stable semantic operation identifier.
-   * @param {EventProcessorConstructor} definition.Processor Processor constructor.
-   * @returns {EventProcessor} Processor instance owned by this registry.
+   * @param {new (tracer: object, tracerConfig: object, registry: EventDomainRegistry) => ProcessorType}
+   *   definition.Processor Processor constructor.
+   * @returns {ProcessorType} Processor instance owned by this registry.
    */
   registerProcessor ({ operation, Processor }) {
     const domain = this.#domains.get(operation)

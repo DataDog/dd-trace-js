@@ -16,7 +16,7 @@ describe('TraceManager', () => {
     }
     const context = {}
 
-    const operation = manager.start(plan, context)
+    const operation = manager.start(plan.name, plan.options, context)
 
     assert.deepStrictEqual(operation, {})
     assert.strictEqual(Object.isFrozen(operation), true)
@@ -26,64 +26,103 @@ describe('TraceManager', () => {
   })
 
   it('keeps concurrent operations isolated', () => {
-    const firstSpan = { addTags: sinon.stub() }
-    const secondSpan = { addTags: sinon.stub() }
+    const firstSpan = { addTags: sinon.stub(), finish: sinon.stub() }
+    const secondSpan = { addTags: sinon.stub(), finish: sinon.stub() }
     const plugin = createPlugin()
     plugin.startSpan.onFirstCall().returns(firstSpan)
     plugin.startSpan.onSecondCall().returns(secondSpan)
     const manager = new TraceManager(plugin)
-    const first = manager.start({ name: 'first', options: {} }, {})
-    const second = manager.start({ name: 'second', options: {} }, {})
+    const first = manager.start('first', {}, {})
+    const second = manager.start('second', {}, {})
 
-    manager.update(second, { status: 'second' })
-    manager.update(first, { status: 'first' })
+    manager.complete(second, { status: 'second' })
+    manager.complete(first, { status: 'first' })
 
     sinon.assert.calledOnceWithExactly(firstSpan.addTags, { status: 'first' })
     sinon.assert.calledOnceWithExactly(secondSpan.addTags, { status: 'second' })
+    assert.deepStrictEqual(plugin.finishSpan.args, [[secondSpan], [firstSpan]])
+  })
+
+  it('keeps thousands of concurrent operations isolated', () => {
+    const spans = []
+    const plugin = createPlugin()
+    plugin.startSpan.callsFake(() => {
+      const span = { addTags: sinon.stub(), finish: sinon.stub() }
+      spans.push(span)
+      return span
+    })
+    const manager = new TraceManager(plugin)
+    const operations = new Array(1000)
+
+    for (let i = 0; i < operations.length; i++) {
+      operations[i] = manager.start('database.query', {}, {})
+    }
+    for (let i = operations.length - 1; i >= 0; i--) {
+      manager.complete(operations[i], { index: i })
+    }
+
+    assert.strictEqual(plugin.finishSpan.callCount, operations.length)
+    for (let i = 0; i < spans.length; i++) {
+      sinon.assert.calledOnceWithExactly(spans[i].addTags, { index: i })
+      sinon.assert.calledOnce(spans[i].finish)
+    }
+  })
+
+  it('uses an existing lifecycle identity without exposing its span', () => {
+    const { manager, span } = createManager()
+    const context = {}
+
+    assert.strictEqual(manager.start('database.query', {}, context, context), context)
+    assert.strictEqual(Object.hasOwn(context, 'span'), false)
+
+    manager.complete(context, { status: 'complete' })
+
+    sinon.assert.calledOnceWithExactly(span.addTags, { status: 'complete' })
   })
 
   it('records errors against the operation span', () => {
     const { manager, plugin, span } = createManager()
     const error = new Error('query failed')
-    const operation = manager.start({ name: 'database.query', options: {} }, {})
+    const operation = manager.start('database.query', {}, {})
 
-    manager.error(operation, error)
+    manager.fail(operation, error)
 
     sinon.assert.calledOnceWithExactly(plugin.addError, error, span)
+    sinon.assert.calledOnceWithExactly(plugin.finishSpan, span)
   })
 
   it('finishes once and ignores terminal work after state is released', () => {
     const { manager, plugin, span } = createManager()
     const context = {}
-    const operation = manager.start({ name: 'database.query', options: {} }, context)
+    const operation = manager.start('database.query', {}, context)
 
-    manager.finish(operation)
-    manager.update(operation, { ignored: true })
-    manager.error(operation, new Error('ignored'))
-    manager.finish(operation)
+    manager.complete(operation)
+    manager.complete(operation, { ignored: true })
+    manager.fail(operation, new Error('ignored'))
 
-    sinon.assert.calledOnceWithExactly(plugin.finish, context)
+    sinon.assert.calledOnceWithExactly(plugin.finishSpan, span)
+    sinon.assert.calledOnce(span.finish)
     sinon.assert.notCalled(span.addTags)
     sinon.assert.notCalled(plugin.addError)
   })
 
-  it('ignores missing metadata and unknown operation tokens', () => {
+  it('finishes without metadata and ignores unknown operation tokens', () => {
     const { manager, plugin, span } = createManager()
-    const operation = manager.start({ name: 'database.query', options: {} }, {})
+    const operation = manager.start('database.query', {}, {})
 
-    manager.update(operation, undefined)
-    manager.update({}, { ignored: true })
-    manager.error({}, new Error('ignored'))
-    manager.finish({})
+    manager.complete(operation, undefined)
+    manager.complete({}, { ignored: true })
+    manager.fail({}, new Error('ignored'))
 
     sinon.assert.notCalled(span.addTags)
     sinon.assert.notCalled(plugin.addError)
-    sinon.assert.notCalled(plugin.finish)
+    sinon.assert.calledOnceWithExactly(plugin.finishSpan, span)
+    sinon.assert.calledOnce(span.finish)
   })
 })
 
 function createManager () {
-  const span = { addTags: sinon.stub() }
+  const span = { addTags: sinon.stub(), finish: sinon.stub() }
   const plugin = createPlugin()
   plugin.startSpan.callsFake((name, options, context) => {
     context.currentStore = { span }
@@ -96,7 +135,7 @@ function createManager () {
 function createPlugin () {
   return {
     addError: sinon.stub(),
-    finish: sinon.stub(),
+    finishSpan: sinon.stub().callsFake(span => span.finish()),
     startSpan: sinon.stub(),
   }
 }

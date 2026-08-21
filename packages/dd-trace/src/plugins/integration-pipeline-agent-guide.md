@@ -1,17 +1,31 @@
-# IntegrationPipeline agent guide
+# Integration pipeline and processor/adapter agent guide
 
-This is the implementation and migration guide for agents continuing the experimental `IntegrationPipeline` work.
-It is intentionally more prescriptive than the design notes: it documents the current executable contract, the
-invariants migrations must preserve, and the checks required before changing or adopting the pipeline.
+This is the implementation and migration guide for agents continuing the experimental integration-pipeline work.
+It covers both the compatibility `IntegrationPipeline` engine and the processor/adapter framework now used by Azure
+Cosmos. It documents the current executable contracts, the invariants migrations must preserve, and the checks
+required before changing or adopting either path.
 
-The pipeline is internal and experimental. It is not a public API, and its declaration shape may still change.
+Both frameworks are internal and experimental. They are not public APIs, and their declaration shapes may still
+change.
 
-## Current checkpoint (2026-08-17)
+## Current checkpoint (2026-08-21)
 
-At this checkpoint, branch `pabloerhard/feat-new-orchestrion-pipeline` has reached this implementation state:
+At this checkpoint, branch `crysmags/integration-processor-adapters`, based on
+`pabloerhard/feat-new-orchestrion-pipeline`, has reached this implementation state:
 
-- BullMQ is the first full pipeline migration and exercises producer, consumer, propagation, and DSM stages.
-- Azure Cosmos is migrated to one async pipeline operation while retaining `DatabasePlugin` as its semantic base.
+- BullMQ remains the first full compatibility-pipeline migration and exercises producer, consumer, propagation, and
+  DSM stages.
+- Azure Cosmos is the first database processor/adapter migration. Its package source extracts only Cosmos facts; one
+  process-wide bridge normalizes the raw Orchestrion lifecycle; one database processor per tracer owns APM policy.
+- The process-wide source registry maintains one physical raw binding per source operation and independently
+  reference-counts APM consumers, product contributors, and in-flight operations awaiting terminal cleanup.
+- The per-tracer domain registry maintains one processor per semantic operation and immutable configuration per
+  package source.
+- The query lifecycle adapter delegates span ownership to an opaque trace manager. Multi-tracer operations share
+  normalized facts but retain and finalize distinct spans.
+- Product contributors receive normalized, allowlisted source facts and lifecycle metadata, never raw argument,
+  credential, or header containers or package object graphs. They can keep a source active when APM is disabled.
+- Async package completion is owned by `asyncEnd`; duplicate terminal events are ignored.
 - The engine accepts a `TracingPlugin` subclass through `base`, evaluates `skip` as a literal or frame resolver, and
   completes materialized spans through the selected base class's `finish()` method.
 - Correlation context is reserved before optional span materialization. The materialized span adopts the same context,
@@ -21,17 +35,21 @@ At this checkpoint, branch `pabloerhard/feat-new-orchestrion-pipeline` has reach
 - Start/completion extraction and span tag records support coarse whole-record functions, letting integrations compute
   shared semantic facts once instead of assembling them through many resolver calls.
 - Azure Cosmos preserves request-level deduplication, empty-path account-read suppression, service naming, resource and
-  response tags, error handling, analytics, peer-service behavior, and CJS/ESM coverage.
+  response tags, error handling, analytics, peer-service behavior, and CJS/ESM coverage through the new framework.
 
 Verification completed at this checkpoint:
 
-- focused pipeline and Azure Cosmos tests: 21 passing;
-- Azure Cosmos CI-equivalent matrix against `@azure/cosmos` 4.4.1 and 4.10.0, including ESM: 22 passing;
+- focused source-registry, domain-registry, trace-manager, database-factory, processor, and adapter tests: passing;
+- Azure Cosmos focused source-boundary tests: 10 passing;
+- Azure Cosmos real SDK/emulator tests against `@azure/cosmos` 4.4.1 and 4.10.0: 8 passing;
+- Azure Cosmos ESM named and namespace imports against both boundary versions: 4 passing;
 - BullMQ regression matrix after shared compiler optimization: 126 passing;
-- Azure Cosmos changed production source: 100% line coverage;
+- changed event registries, trace manager, query processor/adapter, and Azure source: 100% line coverage; the database
+  integration factory is above 98% line coverage with all important lifecycle paths covered;
 - focused ESLint and `git diff --check`: passing.
-- optimized Azure microbenchmark: 1,368 ns accepted, 251 ns duplicate rejection, 295 ns empty-path rejection, and
-  74 ns inherited no-op; the respective exact legacy medians are 1,048, 231, 270, and 77 ns.
+- the persistent Azure microbenchmark retains a roughly 173 ns accepted-path cost versus the compatibility pipeline;
+  duplicate rejection is materially faster, and empty-path and inherited-noop paths remain near parity. See the
+  benchmark README for the final trial medians.
 - real SDK/emulator trials found no detectable request-level difference; the sub-microsecond delta was below the
   roughly 0.9-1.4 ms request-time variance.
 
@@ -45,10 +63,17 @@ Do not use that observation to waive focused lint or CI on subsequent changes.
 | --- | --- |
 | [`integration-pipeline.js`](./integration-pipeline.js) | Authoritative implementation, JSDoc types, validation, lifecycle, stores, and exported helpers. |
 | [`integration-pipeline.spec.js`](../../test/plugins/integration-pipeline.spec.js) | Executable contract for ordering, correlation, spanless operations, errors, no-op scopes, and validation. |
+| [`source-registry.js`](../events/source-registry.js) | Process-wide source ownership, raw binding cardinality, and product contributor lifecycle. |
+| [`registry.js`](../events/registry.js) | Per-tracer processor ownership and immutable package-source configuration. |
+| [`database/integration.js`](../events/database/integration.js) | Database factory and process-wide Orchestrion-to-semantic bridge. |
+| [`database/processor.js`](../events/database/processor.js) | Shared database APM policy and stable source-consumer compilation. |
+| [`database/query-lifecycle-adapter.js`](../events/database/query-lifecycle-adapter.js) | Fixed database-query-to-trace-manager lifecycle translation. |
+| [`trace-manager.js`](../events/trace-manager.js) | Opaque per-tracer span ownership and exactly-once terminal operations. |
 | [`INTEGRATION_PIPELINE_NOTES.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_NOTES.md) | Mechanical walkthrough using BullMQ and Azure Cosmos. |
 | [`INTEGRATION_PIPELINE_RATIONALE.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_RATIONALE.md) | Adoption argument, architecture score, risks, and rollout criteria. |
 | [BullMQ plugin](../../../datadog-plugin-bullmq/src/index.js) | Messaging integration using multiple operations and product stages. |
-| [Azure Cosmos plugin](../../../datadog-plugin-azure-cosmos/src/index.js) | Database integration using a compatibility base and a resolved skip mode. |
+| [Azure Cosmos plugin](../../../datadog-plugin-azure-cosmos/src/index.js) | Thin database-factory declaration. |
+| [Azure Cosmos query source](../../../datadog-plugin-azure-cosmos/src/query-source.js) | Package-only Cosmos argument/result extraction and skip decisions. |
 | [Orchestrion config index](../../../datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js) | Registration point for source-rewriter definitions. |
 | [Azure Cosmos benchmark](../../../../benchmark/sirun/plugin-azure-cosmos-pipeline/README.md) | Persistent baseline/candidate measurement for accepted, rejected, and inherited no-op paths. |
 
@@ -56,7 +81,37 @@ Before changing an integration or its Orchestrion match, read the relevant upstr
 newest supported versions. Inspect the matched function, its callers, its result and error shapes, and sibling paths
 that may publish the same logical operation.
 
-## What the pipeline owns
+## What the processor/adapter framework owns
+
+Use the processor/adapter path when integrations in one semantic domain share a fixed lifecycle contract. The package
+module extracts package facts; shared domain code owns tracing policy and span lifecycle:
+
+```text
+raw Orchestrion lifecycle
+  -> one process-wide package source bridge
+  -> normalized package facts
+  -> independent product contributors
+  -> one domain processor per tracer
+  -> fixed lifecycle adapter
+  -> opaque per-tracer trace manager
+```
+
+The process-wide source registry owns physical source cardinality. One bridge is active while any tracer consumer or
+eligible product contributor needs that source, or while an observed operation still awaits its terminal phase. The
+bridge publishes normalized event identity and package facts, never the raw argument list, to tracer consumers.
+Product contributors receive a bounded product event and are snapshotted at start, preventing registration changes
+from producing finish-without-start lifecycles.
+
+The per-tracer domain registry owns one processor for each semantic operation, plus immutable configuration for every
+package source consumed by that processor. The processor applies shared APM policy. Its lifecycle adapter translates
+the domain contract into atomic trace-manager operations, and the trace manager privately correlates the shared event
+identity with the span belonging to that tracer.
+
+The compatibility `IntegrationPipeline` remains appropriate for integrations with arbitrary stage composition. New
+same-domain migrations should prefer a fixed processor/adapter when the domain contract is stable; do not encode an
+open-ended stage engine inside a processor.
+
+## What the compatibility pipeline owns
 
 Instrumentation still observes library calls and publishes diagnostic-channel lifecycle events. The pipeline compiles
 an integration definition into a plugin class and owns the common work after publication:
@@ -88,7 +143,7 @@ The top-level definition passed to `createIntegrationPlugin` has this shape:
 ```js
 createIntegrationPlugin({
   id: 'integration-id',
-  base: DatabasePlugin, // optional; defaults to TracingPlugin
+  base: OutboundPlugin, // optional; defaults to TracingPlugin
   source,               // optional; defaults to the Orchestrion adapter
   configure,            // optional config transformation
   operations: [],       // required and non-empty
@@ -103,9 +158,9 @@ The existing integration ID used by the plugin manager, configuration, telemetry
 
 An optional `TracingPlugin` subclass. The default is `TracingPlugin` itself.
 
-Select the same semantic base as the legacy integration when that base has behavior the migration must retain. Azure
-Cosmos selects `DatabasePlugin`, which preserves storage service naming, peer-service computation, code-origin exit
-tags, database configuration, and base-class `finish()` behavior.
+Select the same semantic base as the legacy integration when that base has behavior the migration must retain. For
+example, an HTTP client compatibility migration may select `OutboundPlugin` to preserve peer-service computation and
+base-class `finish()` behavior.
 
 The generated class overrides automatic trace subscriptions because the pipeline registers its own source channels.
 Other constructor, `configure()`, `startSpan()`, and `finish()` behavior from the selected base still applies.
@@ -300,8 +355,10 @@ Controls the legacy store for a rejected operation:
 - `noop`: bind `{ noop: true }`, suppressing nested legacy tracing.
 - resolver: return either mode from the extracted frame.
 
-Azure Cosmos uses a resolver because duplicate request-level hooks should inherit their enclosing operation span,
-while empty-path account reads must suppress their nested HTTP span.
+The earlier Azure Cosmos compatibility-pipeline migration used a resolver because duplicate request-level hooks
+needed to inherit their enclosing operation span, while empty-path account reads had to suppress their nested HTTP
+span. The current package query source returns `{ skip: 'parent' }` or `{ skip: 'noop' }`; `DatabaseProcessor` maps
+those fixed decisions directly without evaluating a second resolver.
 
 `skip` is evaluated only for a rejected operation. Its frame has start-extracted data but no correlation context.
 
@@ -476,16 +533,18 @@ Read:
 
 Azure Cosmos demonstrates:
 
-- one async database operation;
-- selecting `DatabasePlugin` as a compatibility base;
-- response and error fields through `resultTags`;
-- a resolved skip mode;
-- preserving request-level dedupe and nested HTTP suppression;
+- a thin `createDatabaseIntegration()` declaration;
+- package-only argument, result, skip, and source-writeback logic in `query-source.js`;
+- one process-wide raw source bridge shared by independent product and APM consumers;
+- one `DatabaseProcessor` per tracer using the fixed query lifecycle adapter and opaque trace manager;
+- distinct span ownership and finalization when multiple tracers consume the same normalized event;
+- preserved request-level dedupe, nested HTTP suppression, status tags, service naming, and peer-service behavior;
 - source-boundary tests without exporting private helpers.
 
 Read:
 
 - [`src/index.js`](../../../datadog-plugin-azure-cosmos/src/index.js)
+- [`src/query-source.js`](../../../datadog-plugin-azure-cosmos/src/query-source.js)
 - [`test/get-resource.spec.js`](../../../datadog-plugin-azure-cosmos/test/get-resource.spec.js)
 - [`test/index.spec.js`](../../../datadog-plugin-azure-cosmos/test/index.spec.js)
 
@@ -520,15 +579,27 @@ or another product depends on argument identity for every invocation.
 Use one operation per observed source target. Keep Orchestrion as the default. If an existing source function can be
 matched statically, do not replace it with shimmer. When shimmer is unavoidable, document the concrete limitation.
 
-### 4. Separate semantic extraction from lifecycle
+### 4. Separate package facts, product work, and lifecycle
 
-Put argument/result interpretation in extractors and ordinary helper functions. Put product work in stages. Keep
-subscription, state, stores, errors, completion, and span finishing in the pipeline.
+For a compatibility-pipeline migration, put argument/result interpretation in extractors and ordinary helper
+functions, put product work in stages, and keep subscription, stores, errors, completion, and span finishing in the
+pipeline.
+
+For a processor/adapter migration:
+
+- keep package argument/result interpretation and source writeback in the package source;
+- register product work as independent contributors over normalized facts;
+- put shared semantic tracing policy in the domain processor;
+- use a fixed lifecycle adapter and opaque trace manager for start, failure, completion, and exactly-once cleanup.
 
 ### 5. Preserve the semantic base
 
 Select a compatibility base when the legacy plugin depends on its `configure`, `startSpan`, or `finish` behavior.
 Test the observable behavior supplied by that base; inheritance alone is not proof of compatibility.
+
+For a processor, retain that policy in the shared domain implementation. Database processors extend `DatabasePlugin`
+for naming and peer-service behavior, and the trace manager calls the narrow `finishSpan()` boundary on the processor
+that created the span. This preserves per-tracer finalization without exposing spans through package adapters.
 
 ### 6. Test the real boundary
 
@@ -626,23 +697,25 @@ a fake test path that cannot occur through instrumentation and the plugin manage
 
 ## Known limitations and open work
 
-- The generated plugin still extends `TracingPlugin`, directly or through a compatibility base. Tracing is not an
-  independently loadable pipeline capability.
-- `storage('legacy')` remains a compatibility bridge.
-- Only the `tracing` stage requirement exists.
-- No non-Orchestrion source adapter has been proven.
-- The operation model explicitly distinguishes only `sync` and `async`; unusual callback, iterator, or streaming
-  ownership may require source or lifecycle work.
-- `frame.data` is intentionally flexible but weakly typed across integration-specific fields.
-- `when` and resolved `skip` are separate and may repeat a gate computation.
+- The compatibility-generated BullMQ plugin still extends `TracingPlugin`, directly or through a compatibility base.
+  Tracing is not an independently loadable compatibility-pipeline capability.
+- `storage('legacy')` remains a compatibility bridge in both frameworks.
+- Only the `tracing` compatibility-stage requirement exists.
+- No non-Orchestrion package source has been proven.
+- The compatibility operation model explicitly distinguishes only `sync` and `async`; unusual callback, iterator, or
+  streaming ownership may require source or lifecycle work.
+- Compatibility `frame.data` is intentionally flexible but weakly typed across integration-specific fields.
+- Compatibility `when` and resolved `skip` are separate and may repeat a gate computation.
 - Priority sampling can still require a materialized span, so BullMQ propagation remains tracing-dependent.
 - Globally disabled tracing still selects a no-op tracer that cannot reserve normal unique correlation contexts.
-- The optimized Azure Cosmos benchmark still shows a 31% isolated accepted-path regression (about 320 ns), while
-  explicit rejections are 9-10% slower (20-25 ns) and inherited no-op is at parity. Real SDK/emulator trials cannot
-  resolve that delta against roughly millisecond requests. See `benchmark/sirun/plugin-azure-cosmos-pipeline` and
-  keep measuring before adopting the engine in much hotter integrations.
-- BullMQ and Azure Cosmos do not yet prove a shared product stage across integration types.
-- Compatibility removal criteria for the legacy store and base-class bridge are not defined.
+- The Azure Cosmos processor/adapter benchmark retains an isolated accepted-path cost of roughly 173 ns, about 14%,
+  versus the compatibility pipeline. Duplicate rejection is materially faster, while empty-path and inherited-noop
+  paths remain near parity. Real SDK/emulator trials cannot resolve that delta against roughly millisecond requests.
+  See `benchmark/sirun/plugin-azure-cosmos-pipeline` and keep measuring before adopting the framework in much hotter
+  integrations.
+- The contributor registry contract is tested, including contributor-only source activation and APM composition, but
+  no production non-APM contributor has migrated to it yet.
+- Compatibility removal criteria for the legacy store and compatibility pipeline are not defined.
 
 The Azure benchmark covers accepted, rejected, and inherited no-op paths plus a one-off real emulator comparison. Add
 equivalent persistent measurements for BullMQ, simple synchronous integrations, and globally disabled tracing before
@@ -656,6 +729,8 @@ An agent should not declare a migration complete until all of the following are 
 - one or two same-type reference integrations were read;
 - every source target and build format is instrumented;
 - channel subscriber cardinality was audited;
+- processor/adapter sources have one physical raw binding regardless of tracer count;
+- independent APM and product consumers compose correctly, including product-only source activation;
 - legacy span shape, errors, propagation, DSM, and configuration are preserved;
 - selected base-class behavior is asserted through observable output;
 - every gate includes accepted, rejected, and sibling cases;

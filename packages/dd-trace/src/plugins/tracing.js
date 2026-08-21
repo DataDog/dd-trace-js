@@ -79,6 +79,16 @@ class TracingPlugin extends Plugin {
    */
   finish (ctx) {
     const span = ctx?.currentStore?.span || this.activeSpan
+    this.finishSpan(span)
+  }
+
+  /**
+   * Apply final tracing policy to a span owned by an external lifecycle manager.
+   *
+   * @param {import('../../../..').Span | undefined} span Span to finish.
+   * @returns {void}
+   */
+  finishSpan (span) {
     span?.finish()
   }
 

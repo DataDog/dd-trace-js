@@ -19,6 +19,17 @@ const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
 describe('TracingPlugin', () => {
+  describe('finishSpan method', () => {
+    it('finishes a span supplied by an external lifecycle manager', () => {
+      const plugin = new TracingPlugin()
+      const span = { finish: sinon.stub() }
+
+      plugin.finishSpan(span)
+
+      sinon.assert.calledOnce(span.finish)
+    })
+  })
+
   describe('startSpan method', () => {
     let startSpanSpy
     let plugin

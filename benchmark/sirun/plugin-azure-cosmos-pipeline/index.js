@@ -9,7 +9,7 @@ const { storage } = require('../../../packages/datadog-core')
 const createSpanContext = require('../../../packages/dd-trace/src/opentracing/span_context_factory')
 
 const AzureCosmosPlugin = require('../../../packages/datadog-plugin-azure-cosmos/src')
-const DatabasePlugin = require('../../../packages/dd-trace/src/plugins/database')
+const Plugin = require('../../../packages/dd-trace/src/plugins/plugin')
 
 const { VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)
@@ -43,7 +43,7 @@ const SCENARIOS = {
 }
 
 assert.ok(SCENARIOS[VARIANT], `unknown VARIANT: ${VARIANT}`)
-assert.ok(AzureCosmosPlugin.prototype instanceof DatabasePlugin)
+assert.ok(AzureCosmosPlugin.prototype instanceof Plugin)
 
 let createdContexts = 0
 let startedSpans = 0
@@ -111,6 +111,8 @@ const tracerConfig = {
   spanComputePeerService: true,
 }
 const plugin = new AzureCosmosPlugin(tracer, tracerConfig)
+assert.strictEqual(plugin._bindings.length, 0)
+assert.strictEqual(plugin._subscriptions.length, 0)
 plugin.configure({
   dbmPropagationMode: 'disabled',
   enabled: true,
@@ -160,6 +162,13 @@ if (VARIANT === 'accepted') {
   assert.strictEqual(startedSpans, 0)
   assert.strictEqual(finishedSpans, 0)
 }
+
+const warmupStartedAt = process.hrtime.bigint()
+runInScenario(() => {
+  do {
+    runOperations(1024)
+  } while (process.hrtime.bigint() - warmupStartedAt < 1_000_000_000n)
+})
 
 createdContexts = 0
 startedSpans = 0

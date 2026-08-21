@@ -1,15 +1,11 @@
 'use strict'
 
-const { storage } = require('../../../../datadog-core')
-
 const { CLIENT_PORT_KEY } = require('../../constants')
 const log = require('../../log')
 const DatabasePlugin = require('../../plugins/database')
 const TraceManager = require('../trace-manager')
-const { queryError, queryFinish, queryStart } = require('./channels')
 const QueryLifecycleAdapter = require('./query-lifecycle-adapter')
 
-const legacyStorage = storage('legacy')
 const SQL_SYSTEMS = new Set(['mariadb', 'mssql', 'mysql', 'oracle', 'postgresql'])
 
 class DatabaseProcessor extends DatabasePlugin {
@@ -18,9 +14,7 @@ class DatabaseProcessor extends DatabasePlugin {
   static peerServicePrecursors = ['db.name']
   static traceConnect = false
 
-  #lifecycleAdapter = new QueryLifecycleAdapter()
-  #registry
-  #states = new WeakMap()
+  #lifecycleAdapter
   #traceManager
 
   /**
@@ -28,16 +22,39 @@ class DatabaseProcessor extends DatabasePlugin {
    *
    * @param {object} tracer Tracer instance.
    * @param {object} tracerConfig Global tracer configuration.
-   * @param {import('../registry').EventDomainRegistry} registry Event domain registry.
    */
-  constructor (tracer, tracerConfig, registry) {
+  constructor (tracer, tracerConfig) {
     super(tracer, tracerConfig)
 
-    this.#registry = registry
     this.#traceManager = new TraceManager(this)
-    this.addBind(queryStart.name, event => this.bindStart(event), { allowNoop: true })
-    this.addSub(queryError.name, event => this.fail(event), { allowNoop: true })
-    this.addSub(queryFinish.name, event => this.complete(event), { allowNoop: true })
+    this.#lifecycleAdapter = new QueryLifecycleAdapter(this.#traceManager)
+  }
+
+  /**
+   * Compile stable source policy and bind it to this processor.
+   *
+   * @param {object} runtime Per-tracer package source runtime.
+   * @returns {object} Stable source consumer used by the process-wide bridge.
+   */
+  createSourceConsumer (runtime) {
+    const { identity } = runtime.adapter
+    const integration = identity.integration || runtime.source
+    const system = identity.system || integration
+    const schema = identity.schema === undefined ? integration : identity.schema
+    const policy = Object.freeze({
+      component: identity.component || integration.replaceAll('-', '_'),
+      integration,
+      name: schema ? this.operationName({ id: schema }) : `${system}.query`,
+      schema,
+      system,
+      type: identity.spanType || (SQL_SYSTEMS.has(system) ? 'sql' : system),
+    })
+
+    return Object.freeze({
+      complete: event => this.#complete(event),
+      fail: event => this.#fail(event),
+      start: event => this.#bindStart(event, runtime, policy),
+    })
   }
 
   /**
@@ -53,45 +70,22 @@ class DatabaseProcessor extends DatabasePlugin {
    * Normalize and start one database query operation.
    *
    * @param {object} event Package source lifecycle context.
+   * @param {object} runtime Per-tracer package source runtime.
+   * @param {object} policy Stable database source policy.
    * @returns {object | undefined} Store active while the package operation runs.
    */
-  bindStart (event) {
-    if (!Object.hasOwn(event, 'parentStore')) event.parentStore = legacyStorage.getStore()
+  #bindStart (event, runtime, policy) {
+    const source = policy.integration
+    if (!runtime.enabled) return event.parentStore
 
-    const source = event.source?.integration
-    const runtime = this.#registry.getSource(this.constructor.eventOperation, source)
-    if (!runtime) return event.parentStore
-
-    let facts
-    try {
-      facts = runtime.adapter.start(event)
-    } catch (error) {
-      log.error('Database source "%s" failed during start: %s', source, error?.message || error)
-      return event.parentStore
-    }
-
+    const { facts } = event
     if (!facts || facts.skip) return facts?.skip === 'noop' ? { noop: true } : event.parentStore
 
-    let token
     try {
-      token = this.#lifecycleAdapter.start({
-        context: event,
-        facts,
-        plan: this.#createQueryPlan(runtime, facts),
-        traceManager: this.#traceManager,
-      })
+      this.#lifecycleAdapter.start(policy.name, this.#createQueryOptions(runtime, policy, facts), event)
     } catch (error) {
       log.error('Database source "%s" failed to start tracing: %s', source, error?.message || error)
       return event.parentStore
-    }
-
-    this.#states.set(event, { runtime, token })
-    if (runtime.adapter.updateSource) {
-      try {
-        runtime.adapter.updateSource(event, token.facts)
-      } catch (error) {
-        log.error('Database source "%s" failed during source update: %s', source, error?.message || error)
-      }
     }
 
     return event.currentStore
@@ -103,14 +97,9 @@ class DatabaseProcessor extends DatabasePlugin {
    * @param {object & {error?: unknown}} event Package source lifecycle context.
    * @returns {void}
    */
-  fail (event) {
-    const state = this.#states.get(event)
-    if (!state) return
-
-    this.#states.delete(event)
-    const metadata = this.#completeSource(state.runtime, event)
+  #fail (event) {
     try {
-      this.#lifecycleAdapter.error(state.token, event.error, metadata)
+      this.#lifecycleAdapter.error(event, event.error, event.metadata)
     } catch (error) {
       log.error('Database query adapter failed during error: %s', error?.message || error)
     }
@@ -122,34 +111,26 @@ class DatabaseProcessor extends DatabasePlugin {
    * @param {object} event Package source lifecycle context.
    * @returns {void}
    */
-  complete (event) {
-    const state = this.#states.get(event)
-    if (!state) return
-
-    this.#states.delete(event)
-    const metadata = this.#completeSource(state.runtime, event)
+  #complete (event) {
     try {
-      this.#lifecycleAdapter.complete(state.token, metadata)
+      this.#lifecycleAdapter.complete(event, event.metadata)
     } catch (error) {
       log.error('Database query adapter failed during completion: %s', error?.message || error)
     }
   }
 
   /**
-   * Build the shared database query telemetry plan from package facts.
+   * Build the dynamic database query tracing options from package facts and compiled source policy.
    *
    * @param {object} runtime Enabled package source runtime.
+   * @param {object} policy Stable database source policy.
    * @param {object} facts Normalized query facts.
-   * @returns {{name: string, options: object}} Resolved trace plan.
+   * @returns {object} Resolved tracing options.
    */
-  #createQueryPlan (runtime, facts) {
-    const { identity } = runtime.adapter
+  #createQueryOptions (runtime, policy, facts) {
     const config = runtime.config
-    const integration = identity.integration || runtime.source
-    const system = identity.system || integration
-    const component = identity.component || integration.replaceAll('-', '_')
+    const { component, integration, schema, system, type } = policy
     const connection = facts.connection || {}
-    const schema = identity.schema === undefined ? integration : identity.schema
     const service = schema
       ? this.serviceName({
         dbConfig: connection,
@@ -158,46 +139,23 @@ class DatabaseProcessor extends DatabasePlugin {
         system,
       })
       : resolveDefaultService(this.tracer, config, integration, connection)
-    const name = schema
-      ? this.operationName({ id: schema })
-      : `${system}.query`
-
     return {
-      name,
-      options: {
+      component,
+      config,
+      integrationName: integration,
+      kind: 'client',
+      meta: {
         component,
-        config,
-        integrationName: integration,
-        kind: 'client',
-        meta: {
-          component,
-          'db.system': system,
-          'db.user': connection.user,
-          'db.name': connection.database,
-          'out.host': connection.host,
-          [CLIENT_PORT_KEY]: connection.port,
-          ...facts.tags,
-        },
-        resource: facts.resource ?? facts.statement,
-        service,
-        type: identity.spanType || (SQL_SYSTEMS.has(system) ? 'sql' : system),
+        'db.system': system,
+        'db.user': connection.user,
+        'db.name': connection.database,
+        'out.host': connection.host,
+        [CLIENT_PORT_KEY]: connection.port,
+        ...facts.tags,
       },
-    }
-  }
-
-  /**
-   * Extract completion metadata without allowing package code to break finalization.
-   *
-   * @param {object} runtime Enabled package source runtime.
-   * @param {object} event Package source lifecycle context.
-   * @returns {Record<string, unknown> | undefined} Completion tags and metrics.
-   */
-  #completeSource (runtime, event) {
-    if (!runtime.adapter.complete) return
-    try {
-      return runtime.adapter.complete(event)
-    } catch (error) {
-      log.error('Database source "%s" failed during completion: %s', runtime.source, error?.message || error)
+      resource: facts.resource ?? facts.statement,
+      service,
+      type,
     }
   }
 }

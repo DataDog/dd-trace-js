@@ -1,7 +1,7 @@
 'use strict'
 
 module.exports = {
-  channels: require('./channels'),
+  createDatabaseIntegration: require('./integration'),
   DatabaseProcessor: require('./processor'),
   QueryLifecycleAdapter: require('./query-lifecycle-adapter'),
 }

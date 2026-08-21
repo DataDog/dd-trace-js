@@ -14,7 +14,8 @@ class EventSourceRegistry {
    * @param {string} definition.operation Stable semantic operation identifier.
    * @param {string} definition.source Stable package or platform source identifier.
    * @param {string} definition.owner Stable module owning the source key.
-   * @param {() => {configure: (config: {enabled: boolean}) => void}} definition.create Source bridge factory.
+   * @param {(runtime: object) => {configure: (config: {enabled: boolean}) => void}}
+   *   definition.create Source bridge factory.
    * @returns {object} Stable source bridge runtime.
    */
   registerSource ({ operation, source, owner, create }) {
@@ -33,11 +34,14 @@ class EventSourceRegistry {
 
     const runtime = {
       active: false,
+      activeOperations: 0,
+      contributors: operationRuntime.contributors,
       consumers: new Set(),
       create,
       instance: undefined,
       operation,
       owner,
+      primaryConsumer: undefined,
       source,
     }
     operationRuntime.sources.set(source, runtime)
@@ -61,6 +65,7 @@ class EventSourceRegistry {
     const runtime = this.#getSource(operationRuntime, operation, source)
 
     runtime.consumers.add(consumer)
+    if (runtime.consumers.size === 1) runtime.primaryConsumer = consumer
     this.#updateSource(operationRuntime, runtime)
   }
 
@@ -76,8 +81,36 @@ class EventSourceRegistry {
     const operationRuntime = this.#getOperation(operation)
     const runtime = this.#getSource(operationRuntime, operation, source)
 
-    runtime.consumers.delete(consumer)
+    if (runtime.consumers.delete(consumer) && runtime.primaryConsumer === consumer) {
+      runtime.primaryConsumer = runtime.consumers.values().next().value
+    }
     this.#updateSource(operationRuntime, runtime)
+  }
+
+  /**
+   * Keep a physical source bridge active until an observed operation reaches its terminal phase.
+   *
+   * @param {object} runtime Registered source runtime.
+   * @returns {void}
+   */
+  holdOperation (runtime) {
+    runtime.activeOperations++
+  }
+
+  /**
+   * Release an in-flight operation and disable its bridge when no consumer remains.
+   *
+   * @param {object} runtime Registered source runtime.
+   * @returns {void}
+   */
+  releaseOperation (runtime) {
+    if (runtime.activeOperations === 0) return
+
+    runtime.activeOperations--
+    if (runtime.activeOperations > 0 || runtime.consumers.size > 0) return
+
+    const operationRuntime = this.#operations.get(runtime.operation)
+    if (operationRuntime) this.#updateSource(operationRuntime, runtime)
   }
 
   /**
@@ -121,21 +154,58 @@ class EventSourceRegistry {
   }
 
   /**
-   * Run one product lifecycle phase and compose returned context stores.
+   * Snapshot eligible product contributors and run their start phase.
+   *
+   * The snapshot preserves lifecycle ownership when contributors register or unregister during an async operation.
    *
    * @param {string} operation Stable semantic operation identifier.
-   * @param {string} phase Product lifecycle phase.
-   * @param {object & {source?: {integration?: string}}} event Normalized source event.
-   * @param {object | undefined} store Current operation store.
-   * @returns {object | undefined} Store returned by the contributor pipeline.
+   * @param {object & {source?: {integration?: string}}} event Normalized product event.
+   * @param {object | undefined} store Parent operation store.
+   * @returns {object | undefined} Opaque contributor lifecycle, when at least one contributor is eligible.
    */
-  runContributors (operation, phase, event, store) {
+  startContributors (operation, event, store) {
     const contributors = this.#operations.get(operation)?.contributors
-    if (!contributors) return store
+    if (!contributors || contributors.size === 0) return
 
+    const registrations = []
     for (const [id, contributor] of contributors) {
       if (contributor.sources && !contributor.sources.has(event.source?.integration)) continue
+      registrations.push({ contributor, id })
+    }
+    if (registrations.length === 0) return
 
+    const lifecycle = { event, registrations, store }
+    this.#runContributors(lifecycle, 'start')
+
+    return lifecycle
+  }
+
+  /**
+   * Run a terminal product phase over the contributors captured at start.
+   *
+   * @param {object | undefined} lifecycle Opaque contributor lifecycle returned by `startContributors`.
+   * @param {string} phase Product lifecycle phase.
+   * @returns {object | undefined} Store returned by the contributor pipeline.
+   */
+  runContributorPhase (lifecycle, phase) {
+    if (!lifecycle) return
+
+    this.#runContributors(lifecycle, phase)
+    return lifecycle.store
+  }
+
+  /**
+   * Compose one phase without exposing registry lifecycle state to product contributors.
+   *
+   * @param {object} lifecycle Internal contributor lifecycle.
+   * @param {string} phase Product lifecycle phase.
+   * @returns {void}
+   */
+  #runContributors (lifecycle, phase) {
+    const { event, registrations } = lifecycle
+    let { store } = lifecycle
+
+    for (const { contributor, id } of registrations) {
       const handler = contributor[phase]
       if (!handler) continue
 
@@ -147,7 +217,7 @@ class EventSourceRegistry {
       }
     }
 
-    return store
+    lifecycle.store = store
   }
 
   /**
@@ -209,10 +279,11 @@ class EventSourceRegistry {
    * @returns {void}
    */
   #updateSource (operationRuntime, runtime) {
-    const active = runtime.consumers.size > 0 || this.#hasContributor(operationRuntime, runtime.source)
+    const active = runtime.activeOperations > 0 || runtime.consumers.size > 0 ||
+      this.#hasContributor(operationRuntime, runtime.source)
     if (runtime.active === active) return
 
-    runtime.instance ||= runtime.create()
+    runtime.instance ||= runtime.create(runtime)
     runtime.instance.configure({ enabled: active })
     runtime.active = active
   }

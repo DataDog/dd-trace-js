@@ -31,7 +31,7 @@ class DatabasePlugin extends StoragePlugin {
 
   /**
    * @override
-   * @param {boolean | import('../config/config-base') & {enabled: boolean}} config
+   * @param {boolean | Record<string, unknown> & {enabled: boolean}} config
    */
   configure (config) {
     super.configure(config)

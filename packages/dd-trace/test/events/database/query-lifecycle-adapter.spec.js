@@ -9,85 +9,67 @@ const QueryLifecycleAdapter = require('../../../src/events/database/query-lifecy
 
 describe('QueryLifecycleAdapter', () => {
   it('translates query completion into trace manager calls', () => {
-    const adapter = new QueryLifecycleAdapter()
     const operation = {}
     const traceManager = createTraceManager(operation)
-    const plan = { name: 'mysql.query', options: {} }
+    const adapter = new QueryLifecycleAdapter(traceManager)
+    const name = 'mysql.query'
+    const options = {}
     const context = {}
-    const facts = { statement: 'SELECT 1' }
     const metadata = { 'db.response.status_code': '200' }
 
-    const token = adapter.start({ traceManager, plan, context, facts })
+    const token = adapter.start(name, options, context)
     adapter.complete(token, metadata)
 
-    assert.strictEqual(token.facts, facts)
-    sinon.assert.calledOnceWithExactly(traceManager.start, plan, context)
-    sinon.assert.calledOnceWithExactly(traceManager.update, operation, metadata)
-    sinon.assert.calledOnceWithExactly(traceManager.finish, operation)
-    sinon.assert.notCalled(traceManager.error)
+    assert.strictEqual(token, operation)
+    sinon.assert.calledOnceWithExactly(traceManager.start, name, options, context, context)
+    sinon.assert.calledOnceWithExactly(traceManager.complete, operation, metadata)
+    sinon.assert.notCalled(traceManager.fail)
   })
 
-  it('translates query failure into update, error, and finish calls', () => {
-    const adapter = new QueryLifecycleAdapter()
+  it('translates query failure into one atomic trace-manager call', () => {
     const operation = {}
     const traceManager = createTraceManager(operation)
+    const adapter = new QueryLifecycleAdapter(traceManager)
     const error = new Error('query failed')
     const metadata = { 'db.response.status_code': '500' }
 
-    const token = adapter.start({
-      traceManager,
-      plan: { name: 'mysql.query', options: {} },
-      context: {},
-      facts: {},
-    })
+    const token = adapter.start('mysql.query', {}, {})
     adapter.error(token, error, metadata)
 
-    sinon.assert.callOrder(traceManager.update, traceManager.error, traceManager.finish)
-    sinon.assert.calledOnceWithExactly(traceManager.update, operation, metadata)
-    sinon.assert.calledOnceWithExactly(traceManager.error, operation, error)
-    sinon.assert.calledOnceWithExactly(traceManager.finish, operation)
+    sinon.assert.calledOnceWithExactly(traceManager.fail, operation, error, metadata)
+    sinon.assert.notCalled(traceManager.complete)
   })
 
-  it('finishes when completion metadata cannot be applied', () => {
-    const adapter = new QueryLifecycleAdapter()
+  it('propagates atomic completion failures', () => {
     const operation = {}
     const traceManager = createTraceManager(operation)
+    const adapter = new QueryLifecycleAdapter(traceManager)
     const error = new Error('update failed')
-    traceManager.update.throws(error)
-    const token = adapter.start({
-      traceManager,
-      plan: { name: 'mysql.query', options: {} },
-      context: {},
-      facts: {},
-    })
+    traceManager.complete.throws(error)
+    const token = adapter.start('mysql.query', {}, {})
 
     assert.throws(() => adapter.complete(token, {}), error)
-    sinon.assert.calledOnceWithExactly(traceManager.finish, operation)
+    sinon.assert.calledOnceWithExactly(traceManager.complete, operation, {})
   })
 
-  it('finishes when error recording fails', () => {
-    const adapter = new QueryLifecycleAdapter()
+  it('propagates atomic failure-recording failures', () => {
     const operation = {}
     const traceManager = createTraceManager(operation)
+    const adapter = new QueryLifecycleAdapter(traceManager)
     const error = new Error('error recording failed')
-    traceManager.error.throws(error)
-    const token = adapter.start({
-      traceManager,
-      plan: { name: 'mysql.query', options: {} },
-      context: {},
-      facts: {},
-    })
+    traceManager.fail.throws(error)
+    const token = adapter.start('mysql.query', {}, {})
 
-    assert.throws(() => adapter.error(token, new Error('query failed')), error)
-    sinon.assert.calledOnceWithExactly(traceManager.finish, operation)
+    const applicationError = new Error('query failed')
+    assert.throws(() => adapter.error(token, applicationError), error)
+    sinon.assert.calledOnceWithExactly(traceManager.fail, operation, applicationError, undefined)
   })
 })
 
 function createTraceManager (operation) {
   return {
-    error: sinon.stub(),
-    finish: sinon.stub(),
+    complete: sinon.stub(),
+    fail: sinon.stub(),
     start: sinon.stub().returns(operation),
-    update: sinon.stub(),
   }
 }

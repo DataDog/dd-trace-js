@@ -7,10 +7,7 @@ const sinon = require('sinon')
 
 const { storage } = require('../../../../datadog-core')
 const { CLIENT_PORT_KEY } = require('../../../src/constants')
-const {
-  channels: { queryError, queryFinish, queryStart },
-  DatabaseProcessor,
-} = require('../../../src/events/database')
+const { DatabaseProcessor } = require('../../../src/events/database')
 const { EventDomainRegistry } = require('../../../src/events/registry')
 const log = require('../../../src/log')
 
@@ -28,26 +25,20 @@ describe('DatabaseProcessor', () => {
     sinon.restore()
   })
 
-  it('owns only the fixed database query lifecycle phases', () => {
+  it('owns no package source subscriptions or bindings', () => {
     const harness = createHarness()
 
-    assert.strictEqual(harness.processor._bindings.length, 1)
-    assert.strictEqual(harness.processor._bindings[0]._channel, queryStart)
-    assert.deepStrictEqual(
-      harness.processor._subscriptions.map(subscription => subscription._channel),
-      [queryError, queryFinish]
-    )
+    assert.strictEqual(harness.processor._bindings.length, 0)
+    assert.strictEqual(harness.processor._subscriptions.length, 0)
   })
 
-  it('processes a query through the shared semantic lifecycle channels', () => {
+  it('processes a normalized query through the fixed lifecycle adapter', () => {
     const harness = createHarness()
     const parentStore = { parent: true }
     const event = createEvent(parentStore)
 
-    const activeStore = legacyStorage.run(parentStore, () => {
-      return queryStart.runStores(event, () => legacyStorage.getStore())
-    })
-    queryFinish.publish(event)
+    const activeStore = legacyStorage.run(parentStore, () => harness.consumer.start(event))
+    harness.consumer.complete(event)
 
     assert.strictEqual(activeStore, event.currentStore)
     assert.strictEqual(activeStore.span, harness.span)
@@ -59,7 +50,7 @@ describe('DatabaseProcessor', () => {
     const parentStore = { parent: true }
     const event = createEvent(parentStore)
 
-    assert.strictEqual(harness.processor.bindStart(event), event.currentStore)
+    assert.strictEqual(harness.consumer.start(event), event.currentStore)
 
     sinon.assert.calledOnceWithExactly(
       harness.processor.startSpan,
@@ -97,13 +88,12 @@ describe('DatabaseProcessor', () => {
     const harness = createHarness(adapter, 'mysql')
     const service = { name: 'mysql-service', source: 'mysql' }
     sinon.stub(harness.processor, 'serviceName').returns(service)
-    sinon.stub(harness.processor, 'operationName').returns('mysql.query')
     const event = createEvent({ parent: true }, 'mysql')
 
-    harness.processor.bindStart(event)
+    harness.consumer.start(event)
 
     sinon.assert.calledOnceWithExactly(harness.processor.serviceName, {
-      dbConfig: adapter.start.firstCall.returnValue.connection,
+      dbConfig: event.facts.connection,
       id: 'mysql',
       pluginConfig: harness.runtime.config,
       system: 'mysql',
@@ -120,28 +110,26 @@ describe('DatabaseProcessor', () => {
       'db.response.status_code': '201',
       'cosmosdb.response.sub_status_code': 1000,
     }
-    harness.adapter.complete.returns(metadata)
+    event.metadata = metadata
 
-    harness.processor.bindStart(event)
-    harness.processor.complete(event)
-    harness.processor.complete(event)
+    harness.consumer.start(event)
+    harness.consumer.complete(event)
+    harness.consumer.complete(event)
 
     sinon.assert.calledOnceWithExactly(harness.span.addTags, metadata)
     sinon.assert.calledOnce(harness.span.finish)
-    sinon.assert.calledOnceWithExactly(harness.adapter.complete, event)
   })
 
   it('applies error metadata and records an application error', () => {
     const harness = createHarness()
     const error = new Error('query failed')
-    const event = { ...createEvent({ parent: true }), error }
     const metadata = { 'db.response.status_code': '409' }
-    harness.adapter.complete.returns(metadata)
+    const event = { ...createEvent({ parent: true }), error, metadata }
     sinon.stub(harness.processor, 'addError')
 
-    harness.processor.bindStart(event)
-    harness.processor.fail(event)
-    harness.processor.fail(event)
+    harness.consumer.start(event)
+    harness.consumer.fail(event)
+    harness.consumer.fail(event)
 
     sinon.assert.calledOnceWithExactly(harness.span.addTags, metadata)
     sinon.assert.calledOnceWithExactly(harness.processor.addError, error, harness.span)
@@ -149,45 +137,24 @@ describe('DatabaseProcessor', () => {
   })
 
   it('returns parent and no-op stores for source skip decisions', () => {
-    const adapter = createAdapter()
-    const harness = createHarness(adapter)
+    const harness = createHarness()
     const parentStore = { parent: true }
-    const parentEvent = createEvent(parentStore)
-    const noopEvent = createEvent(parentStore)
-    adapter.start.onFirstCall().returns({ skip: 'parent' })
-    adapter.start.onSecondCall().returns({ skip: 'noop' })
+    const parentEvent = createEvent(parentStore, 'azure-cosmos', { skip: 'parent' })
+    const noopEvent = createEvent(parentStore, 'azure-cosmos', { skip: 'noop' })
 
-    assert.strictEqual(harness.processor.bindStart(parentEvent), parentStore)
-    assert.deepStrictEqual(harness.processor.bindStart(noopEvent), { noop: true })
+    assert.strictEqual(harness.consumer.start(parentEvent), parentStore)
+    assert.deepStrictEqual(harness.consumer.start(noopEvent), { noop: true })
     sinon.assert.notCalled(harness.processor.startSpan)
   })
 
-  it('returns the parent store for disabled or unknown sources', () => {
+  it('returns the parent store for a disabled source', () => {
     const harness = createHarness()
     harness.registry.configureSource('db.query', 'azure-cosmos', false)
     const parentStore = { parent: true }
     const event = createEvent(parentStore)
 
-    assert.strictEqual(harness.processor.bindStart(event), parentStore)
+    assert.strictEqual(harness.consumer.start(event), parentStore)
     sinon.assert.notCalled(harness.processor.startSpan)
-  })
-
-  it('isolates source start failures', () => {
-    const adapter = createAdapter()
-    const error = new Error('extractor failed')
-    adapter.start.throws(error)
-    const harness = createHarness(adapter)
-    const logError = sinon.stub(log, 'error')
-    const parentStore = { parent: true }
-
-    assert.strictEqual(harness.processor.bindStart(createEvent(parentStore)), parentStore)
-    sinon.assert.notCalled(harness.processor.startSpan)
-    sinon.assert.calledOnceWithExactly(
-      logError,
-      'Database source "%s" failed during start: %s',
-      'azure-cosmos',
-      error.message
-    )
   })
 
   it('isolates trace start failures', () => {
@@ -197,7 +164,7 @@ describe('DatabaseProcessor', () => {
     const logError = sinon.stub(log, 'error')
     const parentStore = { parent: true }
 
-    assert.strictEqual(harness.processor.bindStart(createEvent(parentStore)), parentStore)
+    assert.strictEqual(harness.consumer.start(createEvent(parentStore)), parentStore)
     sinon.assert.calledOnceWithExactly(
       logError,
       'Database source "%s" failed to start tracing: %s',
@@ -206,45 +173,16 @@ describe('DatabaseProcessor', () => {
     )
   })
 
-  it('isolates source update and completion failures while still finishing', () => {
-    const adapter = createAdapter()
-    const updateError = new Error('update failed')
-    const completeError = new Error('completion failed')
-    adapter.updateSource = sinon.stub().throws(updateError)
-    adapter.complete.throws(completeError)
-    const harness = createHarness(adapter)
-    const logError = sinon.stub(log, 'error')
-    const event = createEvent({ parent: true })
-
-    harness.processor.bindStart(event)
-    harness.processor.complete(event)
-
-    sinon.assert.calledTwice(logError)
-    sinon.assert.calledWithExactly(
-      logError.firstCall,
-      'Database source "%s" failed during source update: %s',
-      'azure-cosmos',
-      updateError.message
-    )
-    sinon.assert.calledWithExactly(
-      logError.secondCall,
-      'Database source "%s" failed during completion: %s',
-      'azure-cosmos',
-      completeError.message
-    )
-    sinon.assert.calledOnce(harness.span.finish)
-  })
-
   it('isolates adapter completion failures after finishing the span', () => {
     const harness = createHarness()
     const error = new Error('tagging failed')
     harness.span.addTags.throws(error)
-    harness.adapter.complete.returns({ status: 200 })
     const logError = sinon.stub(log, 'error')
     const event = createEvent({ parent: true })
+    event.metadata = { status: 200 }
 
-    harness.processor.bindStart(event)
-    harness.processor.complete(event)
+    harness.consumer.start(event)
+    harness.consumer.complete(event)
 
     sinon.assert.calledOnce(harness.span.finish)
     sinon.assert.calledOnceWithExactly(
@@ -261,8 +199,8 @@ describe('DatabaseProcessor', () => {
     const logError = sinon.stub(log, 'error')
     const event = { ...createEvent({ parent: true }), error: new Error('query failed') }
 
-    harness.processor.bindStart(event)
-    harness.processor.fail(event)
+    harness.consumer.start(event)
+    harness.consumer.fail(event)
 
     sinon.assert.calledOnce(harness.span.finish)
     sinon.assert.calledOnceWithExactly(
@@ -275,6 +213,9 @@ describe('DatabaseProcessor', () => {
   function createHarness (adapter = createAdapter(), source = 'azure-cosmos') {
     const tracer = {
       _env: 'test',
+      _nomenclature: {
+        opName: () => `${source}.query`,
+      },
       _service: 'test',
       _version: '1.0.0',
     }
@@ -295,37 +236,41 @@ describe('DatabaseProcessor', () => {
       return span
     })
     registry.configureSource('db.query', source, { enabled: true })
+    const consumer = processor.createSourceConsumer(runtime)
 
-    return { adapter, processor, registry, runtime, span }
+    return { adapter, consumer, processor, registry, runtime, span }
   }
 })
 
 function createAdapter (overrides = {}) {
   return {
-    complete: sinon.stub(),
     identity: {
       integration: 'azure-cosmos',
       schema: false,
       system: 'cosmosdb',
     },
-    start: sinon.stub().returns({
-      connection: {
-        database: 'database',
-        host: 'localhost',
-        port: 8081,
-        user: 'user',
-      },
-      resource: 'read /dbs/database/colls/container/docs/?',
-      tags: { 'cosmosdb.container': 'container' },
-    }),
     ...overrides,
   }
 }
 
-function createEvent (parentStore, integration = 'azure-cosmos') {
+function createEvent (parentStore, integration = 'azure-cosmos', facts = createFacts()) {
   return {
+    facts,
     parentStore,
     source: { integration },
+  }
+}
+
+function createFacts () {
+  return {
+    connection: {
+      database: 'database',
+      host: 'localhost',
+      port: 8081,
+      user: 'user',
+    },
+    resource: 'read /dbs/database/colls/container/docs/?',
+    tags: { 'cosmosdb.container': 'container' },
   }
 }
 

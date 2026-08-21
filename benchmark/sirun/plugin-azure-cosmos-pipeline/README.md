@@ -1,10 +1,10 @@
-This benchmark compares the Azure Cosmos plugin hot path across the legacy and
-`IntegrationPipeline` implementations. Sirun runs the same benchmark definition
+This benchmark compares the Azure Cosmos plugin hot path across its legacy,
+`IntegrationPipeline`, and shared database processor/adapter implementations. Sirun runs the benchmark definition
 against baseline and candidate source revisions, so `src/index.js` resolves to
 the implementation belonging to each revision.
 
 The timed loop drives the real Orchestrion diagnostic-channel start, end, and
-async-end events. Span export is stubbed, but accepted calls allocate one real
+async-end events through the process-wide source bridge. Span export is stubbed, but accepted calls allocate one real
 `DatadogSpanContext` and exercise resource/tag construction and base-class
 finalization in both implementations.
 
@@ -21,7 +21,8 @@ migration:
 The fixture ring keeps invocation shapes stable and prevents the benchmark from
 measuring per-iteration fixture construction. Preflight and post-loop assertions
 pin span/context cardinality so a source change cannot silently turn a variant
-into a no-op.
+into a no-op. Each process warms the selected path for at least one second before
+resetting counters and starting the timed loop.
 
 For a quick local sample without the sirun controller:
 
@@ -31,15 +32,17 @@ STARTUP_GUARD_REPORT=/tmp/ddtrace-pipeline-startup-share \
 VARIANT=accepted OPERATIONS=1000000 node index.js
 ```
 
-Seven-trial medians measured on 2026-08-17 with Node.js 25 on Apple Silicon:
+Five fresh-process trials per implementation, interleaved on 2026-08-21 with Node.js 25 on Apple Silicon. Each trial
+ran 1,000,000 timed operations after the one-second warmup:
 
-| Path | Legacy ns/op | Optimized pipeline ns/op | Delta |
+| Path | Compatibility pipeline ns/op | Processor/adapter ns/op | Delta |
 | --- | ---: | ---: | ---: |
-| accepted | 1,048 | 1,368 | +320 ns / +31% |
-| duplicate | 231 | 251 | +20 ns / +9% |
-| empty-path | 270 | 295 | +25 ns / +9% |
-| inherited-noop | 77 | 74 | parity |
+| accepted | 1,273.6 | 1,446.2 | +172.5 ns / +13.5% |
+| duplicate | 238.6 | 98.1 | -140.5 ns / -58.9% |
+| empty-path | 283.7 | 278.3 | -5.4 ns / -1.9% |
+| inherited-noop | 68.6 | 71.6 | +3.0 ns / +4.3% |
 
-The exact legacy implementation was loaded from the branch `HEAD`; the pipeline
-numbers used the working tree. Treat ratios as hot-path regression signals and
-absolute deltas as the input to application-level impact estimates.
+The compatibility implementation was loaded from commit `2301aab1d`; the processor/adapter numbers used the working
+tree. The accepted-path increase is a real isolated cost, but 173 ns is below request-level variance for this
+networked SDK. Treat ratios as hot-path regression signals and absolute deltas as the input to application-level
+impact estimates.

@@ -1,8 +1,9 @@
-# Why proceed with IntegrationPipeline
+# Why proceed with shared integration lifecycle frameworks
 
-This is the adoption case for the `IntegrationPipeline` experiment. It is intentionally separate from the mechanical
-walkthrough in [INTEGRATION_PIPELINE_NOTES.md](./INTEGRATION_PIPELINE_NOTES.md): this file explains why the change is
-worth pursuing, where the benefits are concrete, and where the design is still incomplete.
+This is the adoption case for the compatibility `IntegrationPipeline` and fixed processor/adapter experiments. It is
+intentionally separate from the mechanical walkthrough in
+[INTEGRATION_PIPELINE_NOTES.md](./INTEGRATION_PIPELINE_NOTES.md): this file explains why the change is worth pursuing,
+where the benefits are concrete, and where the design is still incomplete.
 
 ## Recommendation
 
@@ -11,6 +12,11 @@ Proceed with the approach, incrementally.
 BullMQ demonstrates that we can preserve the existing diagnostic-channel contract and tracing behavior while moving
 integration orchestration into one reusable engine. More importantly, it proves that correlation context can exist
 before, or entirely without, a recording span. That is a capability the current plugin model cannot express cleanly.
+
+Azure Cosmos demonstrates the safer shape for integrations sharing a stable semantic domain: one package-fact source,
+one process-wide bridge, independent product contributors, one processor per tracer, a fixed lifecycle adapter, and
+opaque per-tracer trace ownership. The compatibility pipeline remains useful for variable stage composition; it
+should not be the default when a narrower domain contract can express the integration.
 
 This is not a recommendation to rewrite every plugin immediately. The next useful step is to migrate a few
 representative integrations, measure the repeated code that disappears and the hot-path cost, and improve the
@@ -39,8 +45,9 @@ Base classes provide helpers, but the integration still owns many ordering and c
 have changed as instrumentation moved between manual channels, `tracingChannel`, shimmer, and Orchestrion. The result
 is not merely verbose code: behavior can drift because the same lifecycle policy is encoded in many plugins.
 
-`IntegrationPipeline` leaves pub/sub in place and gives the lifecycle one owner. Integrations declare the differences;
-the engine implements the common control flow.
+Both approaches leave pub/sub in place and give shared lifecycle policy an explicit owner. Compatibility-pipeline
+integrations declare variable operations and stages. Processor/adapter integrations extract package facts while a
+shared domain processor and fixed adapter implement common policy and control flow.
 
 ## What materially improves
 
@@ -114,10 +121,10 @@ instrumentation change should require replacing an adapter instead of reshaping 
 
 ### 6. The design supports incremental adoption
 
-The generated class still satisfies the current plugin-manager contract and extends `TracingPlugin`, directly or
-through a selected compatibility base. Azure Cosmos selects `DatabasePlugin`, retaining its storage service naming,
-peer-service finalization, and code-origin behavior. Existing plugin loading, configuration, span creation, and error
-tagging continue to work. `storage('legacy')` is mirrored during the migration.
+Both generated plugin shells still satisfy the current plugin-manager contract. BullMQ extends `TracingPlugin`
+through the compatibility pipeline. Azure Cosmos uses a thin `Plugin` shell while one shared `DatabaseProcessor` per
+tracer retains `DatabasePlugin` service naming, peer-service finalization, code-origin behavior, span creation, and
+error tagging. `storage('legacy')` is mirrored during the migration.
 
 That compatibility lets us validate the new model integration by integration. We do not need a flag day, and a plugin
 that does not fit the model can remain on the existing base classes while the missing abstraction is understood.
@@ -135,29 +142,34 @@ The current experiment establishes more than a smaller source file:
 - malformed customer metadata and stage failures do not break the BullMQ call;
 - store restoration, error hooks, reverse completion, and definition validation have direct tests;
 - the Redis-backed BullMQ plugin CI passes across the versions in the test matrix.
-- a database client uses the same lifecycle while retaining `DatabasePlugin` behavior;
-- one Cosmos source target resolves either parent inheritance or no-op suppression for rejected invocations;
-- Cosmos response and error fields are applied through the common completion path;
+- one physical Cosmos source bridge serves multiple tracers and product contributors;
+- in-flight operations retain that bridge and their start-time consumer ownership until terminal cleanup;
+- package extraction publishes normalized Cosmos facts without broadcasting raw arguments;
+- one Cosmos source target returns parent inheritance or no-op suppression as fixed source decisions;
+- each tracer owns and finalizes a distinct span for the same normalized event, including errors;
+- Cosmos response and error fields are applied through atomic trace-manager completion;
+- product-only activation and product/APM store composition have direct boundary tests;
 - the emulator-backed Cosmos plugin CI passes for the oldest and newest supported SDKs and for ESM loading.
 
 These properties are useful regardless of whether integration declarations eventually use this exact syntax.
 
-## Architecture score: current plugins versus the pipeline
+## Architecture score: current plugins, compatibility pipeline, and processor/adapter
 
 These are provisional engineering scores, not measurements. They make the trade-off explicit and identify what must
 still be proven. A higher number means the design better satisfies the dimension.
 
-| Dimension | Existing plugin model | IntegrationPipeline | Reason for the change |
-| --- | ---: | ---: | --- |
-| Drift prevention | 5/10 | 9/10 | Shared ordering, cleanup, stores, and terminal behavior move from each integration into one engine. |
-| Module coupling | 4/10 | 8/10 | Stages receive bounded capabilities rather than spans, tracer internals, or plugin internals; `TracingPlugin` inheritance remains a bridge. |
-| Explicit contracts | 5/10 | 8/10 | Operation validation, source normalization, stage requirements, and a bounded frame replace lifecycle conventions spread across handlers. |
-| Testability at boundaries | 6/10 | 9/10 | Context reservation/materialization, store separation, stage order, no-op behavior, and invalid definitions have direct contract tests. |
-| Extensibility | 5/10 | 8/10 | New operations primarily add declarations and stages; new sources have an adapter boundary. More product capabilities still need design. |
-| Hot-path fitness | 8/10 | 7/10 | Rejected paths are within 9-10%, inherited no-op is at parity, and accepted calls retain a 31% isolated overhead that is not measurable at Cosmos request scale. |
+| Dimension | Existing plugin | Compatibility pipeline | Processor/adapter | Reason for the processor/adapter score |
+| --- | ---: | ---: | ---: | --- |
+| Drift prevention | 5/10 | 9/10 | 9/10 | Database tracing policy and terminal behavior have one domain owner rather than one declaration per package. |
+| Module coupling | 4/10 | 8/10 | 9/10 | Package sources expose facts, contributors receive normalized events, and spans remain private to per-tracer trace managers. |
+| Explicit contracts | 5/10 | 8/10 | 9/10 | Registries enforce ownership and configuration; a fixed query adapter replaces open-ended lifecycle conventions. |
+| Testability at boundaries | 6/10 | 9/10 | 9/10 | Raw binding cardinality, contributor composition, multi-tracer ownership, and atomic terminal behavior have direct tests. |
+| Extensibility | 5/10 | 8/10 | 8/10 | A new database package supplies facts and identity while reusing the processor and lifecycle adapter. |
+| Hot-path fitness | 8/10 | 7/10 | 7/10 | Accepted calls add 173 ns over the compatibility pipeline; rejected/no-op paths range from 59% faster to 4% slower. |
 
-The proposal clears the architectural bar on five dimensions. Hot-path fitness remains below the direct plugin model,
-but the remaining cost is bounded and no longer a rollout blocker for network integrations like Azure Cosmos.
+The processor/adapter proposal clears the architectural bar on five dimensions. Hot-path fitness remains below the
+direct plugin model, but the remaining cost is bounded and is not a rollout blocker for network integrations like
+Azure Cosmos.
 
 ## What this approach does not yet prove
 
@@ -165,49 +177,45 @@ A credible adoption case needs to be clear about its gaps.
 
 ### Performance was optimized but is not free
 
-The first pipeline measurement was materially worse because every operation eagerly allocated every capability and
-entered all three async-context stores, even when its declaration used none of them. It also resolved declarations
-field-by-field and created per-invocation closures and argument arrays.
+The compatibility compiler already treats declarations as executable plans: it installs only stores needed by
+declared stages, lazily materializes correlation and capability blocks, precompiles extractors and resolvers, supports
+whole-record extraction and tag blocks, avoids rejected-operation state retention, and keeps the inherited no-op path
+ahead of frame allocation. The processor/adapter benchmark therefore compares against that optimized baseline, not an
+unoptimized prototype.
 
-The compiler now treats declarations as executable plans: it installs only stores needed by declared stages, lazily
-materializes correlation and capability blocks, precompiles extractors/resolvers, supports whole-record extraction and
-tag blocks, avoids rejected-operation state retention, and keeps the inherited no-op path ahead of frame allocation.
-These are reusable pipeline optimizations rather than Azure-specific shortcuts.
+On 2026-08-21, five fresh-process trials per implementation interleaved the exact compatibility-pipeline baseline at
+`2301aab1d` with the processor/adapter working tree. Each trial used Node.js 25 on Apple Silicon, warmed the selected
+path for one second, and timed 1,000,000 operations. The persistent benchmark drives real diagnostic-channel bindings
+and completion handlers, allocates real `DatadogSpanContext` instances, and stubs only span export.
 
-On 2026-08-17, seven fresh-process trials compared the exact pre-migration Azure Cosmos plugin from `HEAD` with the
-optimized working-tree pipeline. Values below are medians on Apple Silicon with Node.js 25. The persistent benchmark
-drives real diagnostic-channel bindings and completion handlers, allocates real `DatadogSpanContext` instances, and
-stubs only span export.
-
-| Azure Cosmos path | Legacy ns/op | Pipeline ns/op | Pipeline / legacy |
+| Azure Cosmos path | Compatibility pipeline ns/op | Processor/adapter ns/op | Delta |
 | --- | ---: | ---: | ---: |
-| Accepted and completed span | 1,048 | 1,368 | 1.31x |
-| Duplicate request rejected to parent | 231 | 251 | 1.09x |
-| Empty-path read rejected to no-op | 270 | 295 | 1.09x |
-| Accepted operation under inherited no-op | 77 | 74 | parity |
+| Accepted and completed span | 1,273.6 | 1,446.2 | +172.5 ns / +13.5% |
+| Duplicate request rejected to parent | 238.6 | 98.1 | -140.5 ns / -58.9% |
+| Empty-path read rejected to no-op | 283.7 | 278.3 | -5.4 ns / -1.9% |
+| Accepted operation under inherited no-op | 68.6 | 71.6 | +3.0 ns / +4.3% |
 
-Relative to the first pipeline implementation, this reduces accepted cost by 64%, the explicit rejection paths by
-about 49%, and inherited no-op cost by 96%. The remaining migration delta is about 320 ns for an accepted callback and
-20-25 ns for rejected callbacks.
+The accepted-path increase is reproducible and should remain a regression gate. The fixed source decision also makes
+duplicate rejection materially cheaper, while empty-path and inherited-noop behavior remains near parity.
 
-An end-to-end benchmark also ran the exact two plugin implementations with the real Cosmos SDK, tracer, mock-agent
-export path, and local Cosmos emulator. Across 32 fresh processes (1,000-5,000 timed item reads each), request times
-were roughly 0.9-1.4 ms and the legacy/pipeline distributions completely overlapped. In six simultaneous paired runs,
-the pipeline process was faster five times, which is not evidence that it is faster; it demonstrates that emulator and
-scheduler variance is much larger than the sub-microsecond instrumentation delta. No request-level slowdown was
-detectable.
+End-to-end trials also ran the baseline and candidate with the real Cosmos SDK, tracer, mock-agent export path, and
+local Cosmos emulator. Across 32 fresh processes with 1,000-5,000 timed item reads each, request times were roughly
+0.9-1.4 ms and the distributions completely overlapped. In six simultaneous paired runs, the candidate process was
+faster five times, which is not evidence that it is faster; it demonstrates that emulator and scheduler variance is
+much larger than the sub-microsecond instrumentation delta. No request-level slowdown was detectable.
 
-At a representative 1 ms request, one accepted pipeline callback adds about 0.032% request time versus legacy; even
-two accepted callbacks are about 0.064%. The CPU delta is roughly 0.032% of one core at 1,000 accepted callbacks/s,
-0.32% at 10,000/s, and 3.2% at 100,000/s. This cost applies only to matching integration callbacks, not to every tracer
-operation. Keep the persistent microbenchmark as the regression gate, and add BullMQ, synchronous, and globally
-disabled measurements before broad adoption into substantially hotter libraries.
+At a representative 1 ms request, one accepted processor callback adds about 0.017% request time versus the
+compatibility pipeline; even two accepted callbacks are about 0.035%. The CPU delta is roughly 0.017% of one core at
+1,000 accepted callbacks/s, 0.17% at 10,000/s, and 1.7% at 100,000/s. This cost applies only to matching integration
+callbacks, not to every tracer operation. Keep the persistent microbenchmark as the regression gate, and add BullMQ,
+simple synchronous, and globally disabled measurements before broad adoption into substantially hotter libraries.
 
-### Tracing is separated logically, not fully modularized
+### Tracing is separated at package and product boundaries, not fully modularized
 
-The generated plugin still extends `TracingPlugin`, either directly or through a selected compatibility base, and span
-construction still flows through existing tracer internals. The raw span is private to the engine, but tracing is not
-yet a separately loadable pipeline capability.
+The generated BullMQ plugin still extends `TracingPlugin`, and `DatabaseProcessor` still extends `DatabasePlugin`.
+Span construction flows through existing tracer internals. The raw span is private to the compatibility engine or
+per-tracer trace manager, and package sources and product contributors do not receive it, but tracing is not yet a
+separately loadable capability.
 
 This is enough to make stage dependencies honest and to support spanless operations. It is not yet the final product
 composition architecture.
@@ -226,8 +234,9 @@ is a broader lifecycle/configuration problem.
 
 ### The capability vocabulary is intentionally small
 
-Only the `tracing` requirement is currently validated. AppSec, IAST, DSM, and other capabilities need explicit
-contracts, configuration gates, ordering rules, and cardinality tests before they become general reusable stages.
+Only the `tracing` compatibility-stage requirement is currently validated. The process-wide contributor registry has
+explicit activation, source filtering, ordering, store composition, failure isolation, and cardinality tests, but no
+production AppSec, IAST, DSM, or other non-APM contributor has adopted it yet.
 
 ### Declarations will not fit every integration unchanged
 
@@ -239,24 +248,26 @@ they should not be forced into declarations that hide imperative behavior.
 
 | Risk | Control |
 | --- | --- |
-| A generic engine becomes a large conditional framework | Keep integration-specific decisions in extractors and stages; add engine concepts only after multiple consumers need them. |
+| A generic engine becomes a large conditional framework | Use the compatibility pipeline only for variable stage composition; prefer a fixed domain adapter when a stable contract exists. |
 | The declaration becomes a less readable programming language | Prefer ordinary functions for domain logic and reserve schema fields for stable lifecycle concepts. |
 | Central bugs affect several integrations | Pin engine boundary contracts directly and migrate gradually before expanding usage. |
 | Abstraction overhead hurts hot paths | Benchmark representative operations and preserve an early gate/skip fast path. |
 | Product stages silently receive fewer events | Preserve per-invocation source publication and test subscriber cardinality, especially for AppSec and IAST. |
+| One physical bridge accidentally shares one tracer's span | Broadcast only normalized facts and event identity; keep span maps inside each tracer's trace manager and test multi-tracer success/error paths. |
+| Package arguments leak to unrelated products | Contributors receive allowlisted facts and lifecycle metadata, never raw argument, credential, or header containers or package object graphs. |
 | Compatibility code becomes permanent | Track removal criteria for `storage('legacy')` and the `TracingPlugin` inheritance bridge. |
 
-## Proposed adoption criteria
+## Next adoption criteria
 
-Proceed beyond BullMQ if the next migrations demonstrate all of the following:
+Proceed beyond the Azure Cosmos slice if the next migrations demonstrate all of the following:
 
-1. A second integration type can use the lifecycle without BullMQ-specific engine changes.
-2. Shared stages remove real duplication across at least two integrations.
+1. A second database package can supply facts to `DatabaseProcessor` without changing the fixed query lifecycle.
+2. Shared processor policy removes real duplication across at least two database integrations.
 3. Hot-path benchmarks show acceptable overhead, including filtered and tracing-disabled calls.
 4. Existing span shapes, propagation headers, DSM behavior, errors, and configuration remain compatible.
-5. A non-tracing product can run from `storage('context')` without reaching through a span.
-6. Source adapters preserve the invocation cardinality required by every subscriber.
+5. A production non-tracing contributor can activate and consume a source without reaching through APM or a span.
+6. Package sources preserve the invocation cardinality required by every consumer without broadcasting raw arguments.
 
-If those conditions hold, the pipeline gives us a better foundation than continuing to add helpers to plugin classes:
-one explicit lifecycle, independently usable context, bounded product capabilities, and declarations focused on what
-makes an integration unique.
+If those conditions hold, the two paths give us a better foundation than continuing to add helpers to plugin classes:
+flexible composition where needed, fixed domain lifecycles where possible, independently usable product context, and
+package declarations focused on what makes an integration unique.

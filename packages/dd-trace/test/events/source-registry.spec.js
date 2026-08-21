@@ -30,10 +30,13 @@ describe('EventSourceRegistry', () => {
     sinon.assert.notCalled(create)
 
     registry.acquireSource('db.query', 'mysql', firstConsumer)
+    assert.strictEqual(runtime.primaryConsumer, firstConsumer)
     registry.acquireSource('db.query', 'mysql', secondConsumer)
+    assert.strictEqual(runtime.primaryConsumer, firstConsumer)
     registry.releaseSource('db.query', 'mysql', firstConsumer)
+    assert.strictEqual(runtime.primaryConsumer, secondConsumer)
 
-    sinon.assert.calledOnce(create)
+    sinon.assert.calledOnceWithExactly(create, runtime)
     sinon.assert.calledOnceWithExactly(bridge.configure, { enabled: true })
     assert.strictEqual(runtime.active, true)
 
@@ -42,6 +45,7 @@ describe('EventSourceRegistry', () => {
     sinon.assert.calledTwice(bridge.configure)
     sinon.assert.calledWithExactly(bridge.configure.secondCall, { enabled: false })
     assert.strictEqual(runtime.active, false)
+    assert.strictEqual(runtime.primaryConsumer, undefined)
   })
 
   it('keeps one physical binding for multiple consumers', () => {
@@ -148,9 +152,9 @@ describe('EventSourceRegistry', () => {
     registry.registerContributor('db.query', 'first', { start: first })
     registry.registerContributor('db.query', 'second', { start: second })
 
-    const store = registry.runContributors('db.query', 'start', event, parentStore)
+    const lifecycle = registry.startContributors('db.query', event, parentStore)
 
-    assert.strictEqual(store, secondStore)
+    assert.strictEqual(lifecycle.store, secondStore)
     sinon.assert.calledOnceWithExactly(first, event, parentStore)
     sinon.assert.calledOnceWithExactly(second, event, firstStore)
   })
@@ -171,7 +175,9 @@ describe('EventSourceRegistry', () => {
     registry.registerContributor('db.query', 'succeeding', { start: succeeding })
 
     try {
-      assert.strictEqual(registry.runContributors('db.query', 'start', event, parentStore), finalStore)
+      const lifecycle = registry.startContributors('db.query', event, parentStore)
+
+      assert.strictEqual(lifecycle.store, finalStore)
       sinon.assert.calledOnceWithExactly(succeeding, event, parentStore)
       sinon.assert.calledOnceWithExactly(
         logError,
@@ -234,11 +240,57 @@ describe('EventSourceRegistry', () => {
     sinon.assert.calledOnceWithExactly(mysqlBridge.configure, { enabled: true })
     sinon.assert.notCalled(mariadbCreate)
 
-    registry.runContributors('db.query', 'start', { source: { integration: 'mariadb' } })
+    const mariadbLifecycle = registry.startContributors(
+      'db.query',
+      { source: { integration: 'mariadb' } }
+    )
+    assert.strictEqual(mariadbLifecycle, undefined)
     sinon.assert.notCalled(start)
 
-    registry.runContributors('db.query', 'start', { source: { integration: 'mysql' } })
+    registry.startContributors('db.query', { source: { integration: 'mysql' } })
     sinon.assert.calledOnce(start)
+  })
+
+  it('keeps a source active until its final in-flight operation completes', () => {
+    const registry = new EventSourceRegistry()
+    const bridge = { configure: sinon.stub() }
+    const consumer = {}
+    const runtime = registry.registerSource({
+      operation: 'db.query',
+      source: 'mysql',
+      owner: 'datadog-plugin-mysql',
+      create: () => bridge,
+    })
+    registry.acquireSource('db.query', 'mysql', consumer)
+
+    registry.holdOperation(runtime)
+    registry.releaseSource('db.query', 'mysql', consumer)
+
+    assert.strictEqual(runtime.active, true)
+    assert.strictEqual(runtime.activeOperations, 1)
+    sinon.assert.calledOnceWithExactly(bridge.configure, { enabled: true })
+
+    registry.releaseOperation(runtime)
+
+    assert.strictEqual(runtime.active, false)
+    assert.strictEqual(runtime.activeOperations, 0)
+    sinon.assert.calledWithExactly(bridge.configure.secondCall, { enabled: false })
+  })
+
+  it('keeps contributor ownership stable for an in-flight lifecycle', () => {
+    const registry = new EventSourceRegistry()
+    const event = { source: { integration: 'mysql' } }
+    const firstFinish = sinon.stub()
+    const lateFinish = sinon.stub()
+    registry.registerContributor('db.query', 'first', { finish: firstFinish })
+
+    const lifecycle = registry.startContributors('db.query', event)
+    registry.unregisterContributor('db.query', 'first')
+    registry.registerContributor('db.query', 'late', { finish: lateFinish })
+    registry.runContributorPhase(lifecycle, 'finish')
+
+    sinon.assert.calledOnceWithExactly(firstFinish, event, undefined)
+    sinon.assert.notCalled(lateFinish)
   })
 
   it('rejects a second owner for an existing source key', () => {

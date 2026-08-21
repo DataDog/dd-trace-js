@@ -1,16 +1,10 @@
 'use strict'
 
 /**
- * @typedef {object} TracePlan
- * @property {string} name
- * @property {object} options
- */
-
-/**
  * @typedef {object} TracePlugin
  * @property {(name: string, options: object, context: object) => import('../../../../index').Span} startSpan
  * @property {(error: unknown, span: import('../../../../index').Span) => void} addError
- * @property {(context: object) => void} finish
+ * @property {(span: import('../../../../index').Span) => void} finishSpan
  */
 
 class TraceManager {
@@ -29,54 +23,57 @@ class TraceManager {
   /**
    * Start one trace operation and return an opaque lifecycle token.
    *
-   * @param {TracePlan} plan Resolved trace operation plan.
+   * @param {string} name Resolved trace operation name.
+   * @param {object} options Resolved trace operation options.
    * @param {object} context Lifecycle context used for store binding and finalization.
-   * @returns {object} Opaque trace operation token.
+   * @param {object} [operation] Existing lifecycle identity, when the source provides one.
+   * @returns {object} Trace operation token or supplied lifecycle identity.
    */
-  start (plan, context) {
-    const span = this.#plugin.startSpan(plan.name, plan.options, context)
-    const operation = Object.freeze({})
-    this.#operations.set(operation, { context, span })
+  start (name, options, context, operation = Object.freeze({})) {
+    const span = this.#plugin.startSpan(name, options, context)
+    this.#operations.set(operation, span)
 
     return operation
   }
 
   /**
-   * Add completion metadata to an active trace operation.
+   * Complete an active trace operation exactly once and release its state.
    *
    * @param {object} operation Opaque trace operation token.
    * @param {Record<string, unknown> | undefined} metadata Span tags or metrics resolved at completion.
    * @returns {void}
    */
-  update (operation, metadata) {
-    if (!metadata) return
-    this.#operations.get(operation)?.span.addTags(metadata)
+  complete (operation, metadata) {
+    const span = this.#operations.get(operation)
+    if (!span) return
+
+    try {
+      if (metadata) span.addTags(metadata)
+    } finally {
+      this.#operations.delete(operation)
+      this.#plugin.finishSpan(span)
+    }
   }
 
   /**
-   * Record an application error on an active trace operation.
+   * Fail an active trace operation exactly once and release its state.
    *
    * @param {object} operation Opaque trace operation token.
    * @param {unknown} error Application error or error sentinel.
+   * @param {Record<string, unknown> | undefined} metadata Error response tags and metrics.
    * @returns {void}
    */
-  error (operation, error) {
-    const state = this.#operations.get(operation)
-    if (state) this.#plugin.addError(error, state.span)
-  }
+  fail (operation, error, metadata) {
+    const span = this.#operations.get(operation)
+    if (!span) return
 
-  /**
-   * Finish an active trace operation exactly once and release its state.
-   *
-   * @param {object} operation Opaque trace operation token.
-   * @returns {void}
-   */
-  finish (operation) {
-    const state = this.#operations.get(operation)
-    if (!state) return
-
-    this.#operations.delete(operation)
-    this.#plugin.finish(state.context)
+    try {
+      if (metadata) span.addTags(metadata)
+      this.#plugin.addError(error, span)
+    } finally {
+      this.#operations.delete(operation)
+      this.#plugin.finishSpan(span)
+    }
   }
 }
 
