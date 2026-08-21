@@ -147,6 +147,7 @@ class LogSubmissionPlugin extends Plugin {
     if (this.#batch.length > 0 &&
         (this.#batchSource !== source || this.#batchBytes + messageBytes + 1 > MAX_BATCH_BYTES)) {
       this.#flushLogs()
+      if (!this.#logSubmissionUrl) return
     }
 
     this.#batchSource = source
