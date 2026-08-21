@@ -790,6 +790,13 @@ declare namespace tracer {
          */
         maxMessagesLength?: number,
         /**
+         * Whether AI Guard applies backend-provided sensitive-data redaction replacements.
+         * @default true
+         * @env DD_AI_GUARD_REDACTION_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        redactionEnabled?: boolean,
+        /**
          * Max size of the content property set in the meta-struct
          * @env DD_AI_GUARD_MAX_CONTENT_SIZE
          * Programmatic configuration takes precedence over the environment variables listed above.
@@ -1707,6 +1714,25 @@ declare namespace tracer {
     }
 
     /**
+     * A structured content part in an AI Guard message.
+     */
+    export interface ContentPart {
+      type: string;
+      text?: string;
+      image_url?: { url: string };
+    }
+
+    /**
+     * A conversational message whose content is represented by structured parts.
+     */
+    export interface ContentPartsMessage {
+      role: string;
+      content: ContentPart[];
+      tool_call_id?: string;
+      tool_calls?: ToolCall[];
+    }
+
+    /**
      * A standard conversational message exchanged with a Large Language Model (LLM).
      */
     export interface TextMessage {
@@ -1777,9 +1803,24 @@ declare namespace tracer {
 
     export type Message =
       | TextMessage
+      | ContentPartsMessage
       | AssistantTextMessage
       | AssistantToolCallMessage
       | ToolMessage;
+
+    /**
+     * A sensitive data replacement the AI Guard service determined for the evaluated conversation.
+     */
+    export interface RedactionReplacement {
+      /**
+       * Location of the replaced value within the evaluated conversation (e.g. `messages[0].content`).
+       */
+      path: string;
+      /**
+       * The value that replaces the sensitive data found at `path`.
+       */
+      replacement: string;
+    }
 
     /**
      * The result returned by AI Guard after evaluating a conversation.
@@ -1808,6 +1849,16 @@ declare namespace tracer {
        * Sensitive Data Scanner findings from the evaluation.
        */
       sds: Object[];
+      /**
+       * The evaluated conversation, redacted when required by the AI Guard service.
+       * This may contain sensitive data when redaction is disabled or no replacement was applied.
+       */
+      messages: Message[];
+      /**
+       * The replacements the AI Guard service determined for the evaluated conversation, reported whether or not
+       * the tracer applied them. Empty when the service determined no replacement.
+       */
+      redactionReplacements: RedactionReplacement[];
     }
 
     /**

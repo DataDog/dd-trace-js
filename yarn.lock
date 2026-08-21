@@ -286,19 +286,19 @@
   dependencies:
     "@datadog/flagging-core" "2.0.2"
 
-"@datadog/pprof@5.18.0":
-  version "5.18.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.18.0.tgz#fd522e2ba354aa979e51bec67539aaee0d73aeb3"
-  integrity sha512-KSXy+kD8Ofl7etRL42vHnKjFcHNMwOcC12Il+2HLbekHo3wy6RQ3CFoSTDFU/xqZw8PdcxCJURYF60BuWKegfw==
+"@datadog/pprof@5.18.1":
+  version "5.18.1"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.18.1.tgz#f37d7bbf4da338df9737b9620b61e5684dc4474c"
+  integrity sha512-p8RnantBXCrcsT4pHvcdRtQzhqllls/t6yYb2j8hJrnnFcFfWO+u5WSdqLNxGFNjTEhfaFPu6TOoLhNk9iW9Lw==
   dependencies:
     node-gyp-build "^4.8.4"
     pprof-format "^2.3.1"
     source-map "^0.8.0"
 
-"@datadog/wasm-js-rewriter@5.0.3":
-  version "5.0.3"
-  resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-5.0.3.tgz#815b0969595628b558b1aa8235965c351edc6adb"
-  integrity sha512-XfumKHD5RTTvqiwMmTEWqvix472tIofPDA78+wFLMWJ6xxJBlJRbJ//sMT9bNYlSgau9JYB9S38EeMdf4xFhGw==
+"@datadog/wasm-js-rewriter@5.0.4":
+  version "5.0.4"
+  resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-5.0.4.tgz#6d0973cefd82ee5bea30c3aa4e3bcfdb35ef169f"
+  integrity sha512-tSjbk51dkNzFMM3P/7y82tyrBj/9CWnPzcVb1JB8TUea/PIholdXSPuGC5F975YvvGB8KDujfmJIacN+EmuXMg==
   dependencies:
     js-yaml "^4.3.1"
     lru-cache "^7.14.0"
