@@ -1085,7 +1085,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
 
   const projects = getProjectsFromDispatcher(dispatcher)
   sessionProjects = projects
-  const automaticFailureScreenshotPathsByTestId = new Map()
+  const automaticFailureScreenshotsByTestId = new Map()
 
   if (disabledTestIds.size && !worker[kDdPlaywrightWorkerHostInstrumented] &&
       typeof worker.runTestGroup === 'function') {
@@ -1110,19 +1110,21 @@ function onDispatcherCreateWorker (dispatcher, worker) {
     const test = getTestByTestId(dispatcher, testId)
     if (!test) return
 
+    automaticFailureScreenshotsByTestId.clear()
     const browser = getBrowserNameFromProjects(projects, test)
     const shouldCreateTestSpan = test.expectedStatus === 'skipped'
     testBeginHandler(test, browser, shouldCreateTestSpan)
   })
-  worker.on('attach', ({ testId, path, _ddIsAutomaticFailureScreenshot }) => {
+  worker.on('attach', (attachment) => {
+    const { testId, _ddIsAutomaticFailureScreenshot } = attachment
     if (!_ddIsAutomaticFailureScreenshot) return
 
-    let screenshotPaths = automaticFailureScreenshotPathsByTestId.get(testId)
-    if (!screenshotPaths) {
-      screenshotPaths = new Set()
-      automaticFailureScreenshotPathsByTestId.set(testId, screenshotPaths)
+    let screenshots = automaticFailureScreenshotsByTestId.get(testId)
+    if (!screenshots) {
+      screenshots = []
+      automaticFailureScreenshotsByTestId.set(testId, screenshots)
     }
-    screenshotPaths.add(path)
+    screenshots.push(attachment)
   })
   worker.on('testEnd', ({ testId, status, errors, annotations }) => {
     const test = getTestByTestId(dispatcher, testId)
@@ -1146,19 +1148,20 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       }
     )
     const testResult = test.results.at(-1)
-    const automaticFailureScreenshotPaths = automaticFailureScreenshotPathsByTestId.get(testId)
-    automaticFailureScreenshotPathsByTestId.delete(testId)
-    if (testStatus === 'fail' && automaticFailureScreenshotPaths?.size && testResult?.attachments?.length) {
-      const screenshots = []
-      for (const attachment of testResult.attachments) {
-        if (automaticFailureScreenshotPaths.has(attachment.path)) {
-          screenshots.push(attachment)
+    if (isFailureScreenshotUploadEnabled &&
+        !shouldCreateTestSpan &&
+        !test._ddShouldSkipEfdRetry &&
+        !disabledTestIds.has(testId)) {
+      let screenshots
+      if (testStatus === 'fail') {
+        screenshots = automaticFailureScreenshotsByTestId.get(testId)
+        if (!screenshots) {
+          screenshots = []
+          automaticFailureScreenshotsByTestId.set(testId, screenshots)
         }
       }
-      if (screenshots.length) {
-        worker[kDdPlaywrightFailureScreenshots] ??= []
-        worker[kDdPlaywrightFailureScreenshots].push(screenshots)
-      }
+      worker[kDdPlaywrightFailureScreenshots] ??= []
+      worker[kDdPlaywrightFailureScreenshots].push(screenshots)
     }
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
@@ -2393,7 +2396,7 @@ function instrumentWorkerMainMethods (workerMain) {
   // We reproduce what happens in `Dispatcher#_onStepBegin` and `Dispatcher#_onStepEnd`,
   // since `startTime` and `duration` are not available directly in the worker process
   shimmer.wrap(workerMain, 'dispatchEvent', dispatchEvent => function (event, payload) {
-    if (event === 'testBegin' || event === 'testEnd') {
+    if (event === 'testBegin') {
       automaticFailureScreenshotPaths.clear()
     } else if (event === 'stepBegin') {
       stepInfoByStepId[payload.stepId] = {
