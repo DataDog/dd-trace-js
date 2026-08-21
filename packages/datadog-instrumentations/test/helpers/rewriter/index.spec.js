@@ -12,6 +12,17 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { tracingChannel } = require('dc-polyfill')
 
+/**
+ * @typedef {import('node:module').Module & {
+ *   _compile: (content: string, filename: string, format: string) => void
+ * }} CompilableModule
+ * @typedef {typeof Module & {
+ *   _nodeModulePaths: (path: string) => string[]
+ * }} InternalModuleConstructor
+ */
+
+const InternalModule = /** @type {InternalModuleConstructor} */ (Module)
+
 // TODO: Test actual functionality and not just the start channel.
 describe('check-require-cache', () => {
   let rewriter
@@ -22,7 +33,7 @@ describe('check-require-cache', () => {
   function compile (name, format = 'commonjs') {
     const folder = resolve(__dirname, 'node_modules', ...name.split('/'))
     const filename = name.includes('/') ? folder : join(folder, 'index.js')
-    const mod = new Module(filename, module.parent)
+    const mod = /** @type {CompilableModule} */ (new Module(filename, module.parent || undefined))
 
     content = readFileSync(filename, 'utf8')
     content = rewriter.rewrite(content, filename, format, {
@@ -31,7 +42,7 @@ describe('check-require-cache', () => {
     })
 
     mod.filename = filename
-    mod.paths = Module._nodeModulePaths(dirname(filename))
+    mod.paths = InternalModule._nodeModulePaths(dirname(filename))
     mod._compile(content, filename, format)
 
     return mod.exports
@@ -40,7 +51,7 @@ describe('check-require-cache', () => {
   // TODO: Move all test files to same folder and replace `compile` with this.
   function compileFile (name, format = 'commonjs') {
     const filename = resolve(__dirname, 'node_modules', 'test', `${name}.js`)
-    const mod = new Module(filename, module.parent)
+    const mod = /** @type {CompilableModule} */ (new Module(filename, module.parent || undefined))
 
     content = readFileSync(filename, 'utf8')
     content = rewriter.rewrite(content, filename, format, {
@@ -49,13 +60,15 @@ describe('check-require-cache', () => {
     })
 
     mod.filename = filename
-    mod.paths = Module._nodeModulePaths(dirname(filename))
+    mod.paths = InternalModule._nodeModulePaths(dirname(filename))
     mod._compile(content, filename, format)
 
     return mod.exports
   }
 
   beforeEach(() => {
+    ch = undefined
+    subs = undefined
     rewriter = proxyquire('../../../src/helpers/rewriter', {
       './instrumentations': [
         {
@@ -69,6 +82,37 @@ describe('check-require-cache', () => {
             kind: 'Sync',
           },
           channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test-trace-sync-fast-path',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          functionQuery: {
+            className: 'Client',
+            methodName: 'dispatch',
+            kind: 'Sync',
+          },
+          channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test-trace-sync-fast-path',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          astQuery: 'ClassBody > MethodDefinition[key.name="dispatch"] > FunctionExpression',
+          transform: 'undiciClientOrigin',
+        },
+        {
+          module: {
+            name: 'test-trace-sync-fast-path',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          astQuery: 'ClassBody > MethodDefinition[key.name="dispatch"] > FunctionExpression',
+          transform: 'syncNoSubscriberFastPath',
         },
         {
           module: {
@@ -424,7 +468,7 @@ describe('check-require-cache', () => {
   })
 
   afterEach(() => {
-    ch.unsubscribe(subs)
+    ch?.unsubscribe(subs)
   })
 
   it('should auto instrument sync functions', done => {
@@ -438,6 +482,30 @@ describe('check-require-cache', () => {
     ch.subscribe(subs)
 
     test()
+  })
+
+  it('should preserve mutable parameters on the allocation-free path without subscribers', () => {
+    const { Client } = compile('test-trace-sync-fast-path')
+    const client = new Client()
+
+    assert.ok(content.indexOf('if (!tr_ch_apm_hasSubscribers') < content.indexOf('const __apm$arguments'))
+    assert.strictEqual(client.dispatch(1), 2)
+    assert.strictEqual(client.calls, 1)
+  })
+
+  it('should expose the lexical client origin to sync subscribers', () => {
+    const { Client } = compile('test-trace-sync-fast-path')
+    const client = new Client()
+
+    subs = {
+      start (ctx) {
+        assert.strictEqual(ctx.origin, 'http://localhost:1234')
+      },
+    }
+    ch = tracingChannel('orchestrion:test-trace-sync-fast-path:test_invoke')
+    ch.subscribe(subs)
+
+    assert.strictEqual(client.dispatch(1), 2)
   })
 
   it('should auto instrument sync functions with super', done => {

@@ -5,9 +5,14 @@ const { join } = require('path')
 const { pathToFileURL } = require('url')
 const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+const {
+  awaitContextCallback,
+  syncNoSubscriberFastPath,
+  undiciClientOrigin,
+  waitForAsyncEnd,
+} = require('./transforms')
 const instrumentations = require('./instrumentations')
 const { getRewriteTarget } = require('./targets')
-const { awaitContextCallback, waitForAsyncEnd } = require('./transforms')
 
 // `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
 // (ESM) statements that the transformer splices into the rewritten module.
@@ -36,6 +41,8 @@ const matcherEsm = create(instrumentations, dcPolyfillEsm)
 
 for (const matcher of [matcherCjs, matcherEsm]) {
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
+  matcher.addTransform('syncNoSubscriberFastPath', syncNoSubscriberFastPath)
+  matcher.addTransform('undiciClientOrigin', undiciClientOrigin)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
 }
 
