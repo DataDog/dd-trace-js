@@ -93,6 +93,16 @@
         "default": "16"
       }
     ],
+    "DD_AI_GUARD_REDACTION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.aiguard.redactionEnabled"
+        ],
+        "default": "true"
+      }
+    ],
     "DD_AI_GUARD_TIMEOUT": [
       {
         "implementation": "A",
