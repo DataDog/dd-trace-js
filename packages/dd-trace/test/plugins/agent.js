@@ -70,6 +70,10 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'WEBSITE_SKU',
   // lambda RITM target path (computed once at module load)
   'LAMBDA_TASK_ROOT',
+  // lambda runtime handler env var (read by the lambda instrumentation)
+  '_HANDLER',
+  // lambda initialization type (read by the lambda plugin cold-start detection)
+  'AWS_LAMBDA_INITIALIZATION_TYPE',
   // serverless service-name fallbacks (Config singleton)
   'WEBSITE_SITE_NAME',
   // azure metadata payload (cached at first build)
