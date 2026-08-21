@@ -140,6 +140,118 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(typeof experiment.run, 'function')
     })
 
+    it('uses the configured project name and supports per-operation overrides', () => {
+      const constructedProjects = []
+      class CapturingExperimentsClient extends ExperimentsClient {
+        constructor (options) {
+          super(options)
+          constructedProjects.push(options.projectName)
+        }
+      }
+      const { createExperiments: createWithProjectCapture } = proxyquire('../../../src/llmobs/experiments', {
+        './client': { ExperimentsClient: CapturingExperimentsClient },
+      })
+
+      const exp = createWithProjectCapture(enabledConfig({
+        llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'ml-app', projectName: 'configured-project' },
+      }))
+      exp.createDataset('default')
+      exp.createDataset('override', { projectName: 'override-project' })
+
+      assert.deepEqual(constructedProjects, ['configured-project', 'override-project'])
+    })
+
+    it('preserves a dataset project and rejects mismatched experiment overrides', () => {
+      const constructedProjects = []
+      class CapturingExperimentsClient extends ExperimentsClient {
+        constructor (options) {
+          super(options)
+          constructedProjects.push(options.projectName)
+        }
+      }
+      const { createExperiments: createWithProjectCapture } = proxyquire('../../../src/llmobs/experiments', {
+        './client': { ExperimentsClient: CapturingExperimentsClient },
+      })
+
+      const exp = createWithProjectCapture(enabledConfig({
+        llmobs: { DD_LLMOBS_ENABLED: true, projectName: 'default-project' },
+      }))
+      const dataset = exp.createDataset('dataset', { projectName: 'dataset-project' })
+      exp.experiment({ name: 'dataset-exp', dataset, task: input => input })
+
+      assert.deepEqual(constructedProjects, ['default-project', 'dataset-project', 'dataset-project'])
+      assert.throws(
+        () => exp.experiment({
+          name: 'mismatched-exp',
+          projectName: 'other-project',
+          dataset,
+          task: input => input,
+        }),
+        /does not match dataset project 'dataset-project'/
+      )
+    })
+
+    it('supports project name overrides without a default project', () => {
+      const constructedProjects = []
+      class CapturingExperimentsClient extends ExperimentsClient {
+        constructor (options) {
+          super(options)
+          constructedProjects.push(options.projectName)
+        }
+      }
+      const { createExperiments: createWithProjectCapture } = proxyquire('../../../src/llmobs/experiments', {
+        './client': { ExperimentsClient: CapturingExperimentsClient },
+      })
+
+      const exp = createWithProjectCapture(enabledConfig({
+        service: undefined,
+        llmobs: { DD_LLMOBS_ENABLED: true },
+      }))
+      const dataset = exp.createDataset('override', { projectName: 'override-project' })
+      const experiment = exp.experiment({
+        name: 'override',
+        projectName: 'override-project',
+        dataset,
+        task: input => input,
+      })
+
+      assert.equal(typeof dataset.push, 'function')
+      assert.equal(typeof experiment.run, 'function')
+      assert.deepEqual(constructedProjects, ['override-project', 'override-project'])
+    })
+
+    it('runs an operation override without a default ML app', async () => {
+      sinon.stub(ExperimentsClient.prototype, 'ensureProjectId').resolves('proj')
+      sinon.stub(ExperimentsClient.prototype, 'createDataset').resolves({
+        id: () => 'ds',
+        version: () => 1,
+        latestVersion: () => 1,
+      })
+      sinon.stub(ExperimentsClient.prototype, 'batchUpdateDatasetRecords').resolves({ version: 1 })
+      sinon.stub(ExperimentsClient.prototype, 'createExperiment').resolves({
+        experimentId: 'exp',
+        rows: [],
+        url: 'https://app.datadoghq.com/llm/experiments/exp',
+      })
+      const postEvents = sinon.stub(ExperimentsClient.prototype, 'postExperimentEvents').resolves()
+      sinon.stub(ExperimentsClient.prototype, 'updateExperiment').resolves()
+
+      const exp = createExperiments(enabledConfig({
+        service: undefined,
+        llmobs: { DD_LLMOBS_ENABLED: true },
+      }))
+      const dataset = exp.createDataset('d', { projectName: 'override-project' }).addRecord('input')
+      const result = await exp.experiment({
+        name: 'override-exp',
+        projectName: 'override-project',
+        dataset,
+        task: input => input,
+      }).run()
+
+      assert.equal(result.rows[0].isError, false)
+      assert.equal(postEvents.firstCall.args[1].spans.length, 1)
+    })
+
     it('returns a working facade when service is used as the project name fallback', () => {
       const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
       const dataset = exp.createDataset('d')

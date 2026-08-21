@@ -58,7 +58,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       { q: 'apple' },
       'apple',
       { row: 0 },
-      ['topic:math', 'topic:logic']
+      ['topic:math', 'topic:logic', 'project_name:record-project']
     )
     const callsToLlmobs = []
     const llmobs = {
@@ -74,6 +74,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
     const result = await new Experiment(c, {
       name: 'exp-demo',
+      projectName: 'demo-project',
       dataset,
       task: (input) => input.q,
       evaluators: { ok: () => true },
@@ -85,6 +86,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[0][1].name, 'task')
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
+    assert.equal(callsToLlmobs[1][1].tags.project_name, 'demo-project')
     assert.deepEqual(callsToLlmobs[1][1].tags.topic, ['math', 'logic'])
     assert.equal(result.rows[0].spanId, '000000000000abcd')
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')

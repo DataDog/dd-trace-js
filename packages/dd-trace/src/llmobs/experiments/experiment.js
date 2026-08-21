@@ -46,6 +46,7 @@ function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
     dataset_record_id: ids.datasetRecordId,
     dataset_name: ids.datasetName,
     experiment_name: ids.experimentName,
+    project_name: ids.projectName,
   })
 
   return {
@@ -139,6 +140,7 @@ class Experiment {
   #config
   #tags
   #metadata
+  #projectName
   #projectId
   #experimentId
   #runId
@@ -163,7 +165,9 @@ class Experiment {
     this.#config = { ...options.config }
     const filterTags = this.#dataset.filterTags?.() ?? []
     if (filterTags.length > 0) this.#config.filtered_record_tags = filterTags
+    this.#projectName = options.projectName
     this.#tags = { ...options.tags }
+    if (this.#projectName !== undefined) this.#tags.project_name = this.#projectName
     this.#metadata = { ...options.metadata }
     this.#projectId = null
     this.#experimentId = null
@@ -281,6 +285,7 @@ class Experiment {
       projectId: this.#projectId,
       datasetId: this.#dataset.id,
       datasetRecordId: input.datasetRecordId,
+      projectName: this.#projectName,
       runId: input.runId ?? this.#runId,
       runIteration: input.runIteration ?? this.#runIteration,
     }, input.name ?? this.#name, mergeTags(this.#tags, input.tags))
@@ -467,6 +472,7 @@ class Experiment {
             datasetRecordId,
             datasetName: this.#dataset.name(),
             experimentName: this.#name,
+            projectName: this.#projectName,
             runId,
             runIteration,
           }, this.#task.name || this.#name, this.#tags, record.tags))
@@ -534,6 +540,7 @@ class Experiment {
       dataset_name: this.#dataset.name(),
       experiment_name: this.#name,
     }
+    if (this.#projectName !== undefined) autoTags.project_name = this.#projectName
     const tags = mergeTags(this.#tags, { ...recordTagsToObject(record.tags), ...autoTags })
 
     const execute = () => this.#runWithRetries(
