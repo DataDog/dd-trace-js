@@ -1,7 +1,8 @@
 'use strict'
-
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const log = require('../../dd-trace/src/log')
 const { addHook, getHooks } = require('./helpers/instrument')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
@@ -217,6 +218,8 @@ for (const hook of getHooks('ai')) {
   }
 
   addHook(hook, exports => {
+    log.debug('Vercel AI SDK integration loaded')
+
     const getTracerChannel = tracingChannel('orchestrion:ai:getTracer')
     getTracerChannel.subscribe({
       end (ctx) {
@@ -273,20 +276,25 @@ for (const hook of getHooks('ai')) {
 
 const aiSdkTelemetryChannel = tracingChannel('ai:telemetry')
 const aiSdkTelemetryStreamedChunkChannel = channel('dd-trace:vercel-ai:chunk')
+const instrumentationLoadChannel = channel('dd-trace:instrumentation:load')
 
-// for testing, and possibly actual instrumentation use, we want to
-// guard against double-subscribing to the asyncEnd channel of the
-// vercel ai-provided tracingChannel
-let subscribed = false
+const disabledInstrumentations = new Set(
+  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').map(name => name.trim())
+)
 
 // as of the v7 release, the ai sdk does not automatically aggregate streamed responses
 // we will handle emitting the chunks directly for products to handle
-addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
-  if (subscribed) return exports
+let subscribed = false
+
+/**
+ * Registers the AI SDK v7 diagnostics-channel subscriber once.
+ * @returns {void}
+ */
+function register () {
+  if (subscribed || disabledInstrumentations.has('ai')) return
   subscribed = true
 
   // ai sdk v7 only supported on node.js 22+
-  // inlining this import here so we only import in those cases
   // eslint-disable-next-line n/no-unsupported-features/node-builtins
   const { TransformStream } = require('node:stream/web')
 
@@ -313,7 +321,13 @@ addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
     },
   })
 
+  // Bundled AI SDK code does not trigger the normal module-load hook.
+  instrumentationLoadChannel.publish({ name: 'ai' })
+}
+
+addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
+  register()
   return exports
 })
 
-module.exports = { wrapModelWithLifecycle }
+module.exports = { register, wrapModelWithLifecycle }

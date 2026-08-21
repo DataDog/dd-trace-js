@@ -2,6 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
+const registerInstrumentation = require('../../datadog-instrumentations/src/helpers/register-instrumentation')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
@@ -115,6 +116,11 @@ module.exports = class PluginManager {
   // TODO: merge config instead of replacing
   configurePlugin (name, pluginConfig) {
     const enabled = this._isEnabled(pluginConfig)
+
+    if (enabled) {
+      registerInstrumentation(name)
+      maybeEnable(plugins[name])
+    }
 
     this._configsByName[name] = {
       ...pluginConfig,
