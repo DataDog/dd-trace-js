@@ -4,6 +4,8 @@ const fs = require('fs')
 const path = require('path')
 
 const getConfig = require('../../../config')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../../evp_proxy/path')
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
 
@@ -83,8 +85,8 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
   }
 
   if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/git/repository/search_commits`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/git/repository/search_commits')
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
     delete options.headers['dd-api-key']
   }
 
@@ -179,8 +181,8 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
   }
 
   if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/git/repository/packfile`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/git/repository/packfile')
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
     delete options.headers['dd-api-key']
   }
 
