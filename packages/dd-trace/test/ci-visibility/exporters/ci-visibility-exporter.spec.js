@@ -23,13 +23,18 @@ const ciVisibilityLog = require('../../../src/log')
 const actualSpanFormat = require('../../../src/span_format')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
   require('../../../src/ci-visibility/requests/upload-coverage-report')
-const { uploadTestScreenshot: actualUploadTestScreenshotRequest } =
-  require('../../../src/ci-visibility/requests/upload-test-screenshot')
+const {
+  uploadTestScreenshot: actualUploadTestScreenshotRequest,
+  uploadTestSuiteVideo: actualUploadTestSuiteVideoRequest,
+  uploadTestVideo: actualUploadTestVideoRequest,
+} = require('../../../src/ci-visibility/requests/upload-test-screenshot')
 
 const sketchesJsPath = require.resolve('../../../../../vendor/dist/@datadog/sketches-js')
 
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
 let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
+let uploadTestSuiteVideoRequest = actualUploadTestSuiteVideoRequest
+let uploadTestVideoRequest = actualUploadTestVideoRequest
 let formatSpan = actualSpanFormat
 let incrementCountMetric
 const formatSpanStub = (...args) => formatSpan(...args)
@@ -43,6 +48,12 @@ const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporter
   '../requests/upload-test-screenshot': {
     uploadTestScreenshot (...args) {
       return uploadTestScreenshotRequest(...args)
+    },
+    uploadTestSuiteVideo (...args) {
+      return uploadTestSuiteVideoRequest(...args)
+    },
+    uploadTestVideo (...args) {
+      return uploadTestVideoRequest(...args)
     },
   },
   '../telemetry': {
@@ -82,6 +93,8 @@ describe('CI Visibility Exporter', () => {
     nock.cleanAll()
     uploadCoverageReportRequest = actualUploadCoverageReportRequest
     uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
+    uploadTestSuiteVideoRequest = actualUploadTestSuiteVideoRequest
+    uploadTestVideoRequest = actualUploadTestVideoRequest
     formatSpan = actualSpanFormat
     incrementCountMetric = sinon.stub()
   })
@@ -2032,6 +2045,69 @@ describe('CI Visibility Exporter', () => {
     })
   })
 
+  describe('canUploadTestVideos', () => {
+    it('is default off and controlled independently from screenshots', () => {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: {
+          DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true,
+          DD_TEST_FAILURE_VIDEOS_ENABLED: false,
+        },
+      })
+      exporter._testScreenshotUploadUrl = url
+
+      assert.strictEqual(exporter.canUploadTestScreenshots(), true)
+      assert.strictEqual(exporter.canUploadTestVideos(), false)
+    })
+
+    it('returns true when the upload URL is set and videos are enabled', () => {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+
+      assert.strictEqual(exporter.canUploadTestVideos(), true)
+    })
+
+    it('returns false when videos would be sent through the Agent EVP proxy', () => {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+      exporter._isUsingEvpProxy = true
+
+      assert.strictEqual(exporter.canUploadTestVideos(), false)
+    })
+  })
+
+  describe('uploadTestSuiteVideo', () => {
+    it('forwards the suite identity to the media request', () => {
+      uploadTestSuiteVideoRequest = sinon.stub().yields(null)
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+      const callback = sinon.spy()
+
+      exporter.uploadTestSuiteVideo({
+        filePath: '/tmp/spec.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
+        idempotencyKey: '123:456:spec.mp4',
+        capturedAtMs: 1,
+      }, callback)
+
+      const options = uploadTestSuiteVideoRequest.firstCall.args[0]
+      assert.strictEqual(options.testSessionId, '123')
+      assert.strictEqual(options.testSuiteId, '456')
+      assert.strictEqual(options.url, url)
+      sinon.assert.calledOnceWithExactly(callback, null)
+    })
+  })
+
   describe('uploadTestScreenshot', () => {
     const screenshotOptions = {
       filePath: '/tmp/test-failed-1.png',
@@ -2052,19 +2128,25 @@ describe('CI Visibility Exporter', () => {
       return exporter
     }
 
-    it('bounds a pending screenshot and lets final flush complete', () => {
+    it('only bounds a pending media upload after final flush starts', () => {
       const clock = sinon.useFakeTimers()
       try {
-        uploadTestScreenshotRequest = sinon.stub()
+        uploadTestScreenshotRequest = sinon.stub().callsFake((options, callback) => {
+          options.signal.addEventListener('abort', () => callback(options.signal.reason), { once: true })
+        })
         const exporter = createScreenshotExporter()
         const screenshotCallback = sinon.spy()
         const flushCallback = sinon.spy()
 
         exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
-        exporter.flush(flushCallback)
         const requestOptions = uploadTestScreenshotRequest.firstCall.args[0]
-        assert.strictEqual(requestOptions.deadline, 10_000)
+        assert.strictEqual(requestOptions.deadline, undefined)
         assert.strictEqual(requestOptions.signal.aborted, false)
+        clock.tick(60_000)
+        assert.strictEqual(requestOptions.signal.aborted, false)
+        sinon.assert.notCalled(screenshotCallback)
+
+        exporter.flush(flushCallback)
         sinon.assert.notCalled(exporter._writer.flush)
         sinon.assert.notCalled(flushCallback)
 

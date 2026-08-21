@@ -70,7 +70,7 @@ function bufferReadable (data, signal, callback) {
  * Sends Test Optimization exporter data through the common single-attempt transport while
  * keeping retry and finalization policy scoped to Test Optimization.
  *
- * @param {Buffer|string|Readable|Array<Buffer|string>} data
+ * @param {Buffer|string|Readable|Array<Buffer|string>|(() => Readable)} data
  * @param {object} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
  *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
@@ -94,7 +94,7 @@ function request (data, options, callback) {
 /**
  * Applies the Test Optimization retry policy to replayable request data.
  *
- * @param {Buffer|string|Array<Buffer|string>} data
+ * @param {Buffer|string|Array<Buffer|string>|(() => Readable)} data
  * @param {object} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
  *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
@@ -145,7 +145,15 @@ function requestBuffered (data, options, callback) {
     }
     if (deadline !== undefined) attemptOptions.timeout = Math.max(1, Math.min(timeout, remaining))
 
-    commonRequest(data, attemptOptions, (error, result, statusCode, headers) => {
+    let attemptData
+    try {
+      attemptData = typeof data === 'function' ? data() : data
+    } catch (error) {
+      complete(error)
+      return
+    }
+
+    commonRequest(attemptData, attemptOptions, (error, result, statusCode, headers) => {
       if (settled) return
       if (!error) {
         complete(null, result, statusCode, headers)
@@ -153,7 +161,7 @@ function requestBuffered (data, options, callback) {
       }
 
       const responseStatus = statusCode ?? error.status
-      const isRetriableHttpError = options.deadline !== undefined &&
+      const isRetriableHttpError = (options.deadline !== undefined || options.retryHttpErrors === true) &&
         (responseStatus === 429 || responseStatus >= 500)
       if (options.retry === false || (attemptIndex >= getMaxAttempts(attemptOptions) &&
         (isRetriableNetworkError(error) || isRetriableHttpError))) {
@@ -170,7 +178,7 @@ function requestBuffered (data, options, callback) {
       if (responseStatus === 429) {
         const resetDelay = getRateLimitResetDelay(headers)
         if (Number.isFinite(resetDelay)) {
-          const retryRemaining = options.deadline - Date.now()
+          const retryRemaining = options.deadline === undefined ? Infinity : options.deadline - Date.now()
           if (resetDelay > RATE_LIMIT_MAX_WAIT_MS || resetDelay >= retryRemaining) {
             complete(error, result, statusCode, headers)
             return

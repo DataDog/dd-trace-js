@@ -23,6 +23,7 @@ const {
 const legacyStorage = storage('legacy')
 
 const maxActiveBufferSize = 1024 * 1024 * 64
+const noop = () => {}
 
 let activeBufferSize = 0
 
@@ -63,7 +64,9 @@ function request (data, options, callback) {
     delete options.headers['DD-API-KEY']
   }
 
-  if (data instanceof Readable) {
+  const isStreaming = data instanceof Readable && options.headers['Content-Length'] !== undefined
+
+  if (data instanceof Readable && !isStreaming) {
     const chunks = []
 
     data
@@ -86,10 +89,11 @@ function request (data, options, callback) {
   const client = isSecure ? https : http
   let dataArray = data
 
-  if (!Array.isArray(data)) {
+  if (!isStreaming && !Array.isArray(data)) {
     dataArray = [data]
   }
-  options.headers['Content-Length'] = byteLength(dataArray)
+  if (!isStreaming) options.headers['Content-Length'] = byteLength(dataArray)
+  const activeRequestBufferSize = isStreaming ? 0 : options.headers['Content-Length']
 
   docker.inject(options.headers)
 
@@ -177,15 +181,16 @@ function request (data, options, callback) {
       return callback(null)
     }
 
-    activeBufferSize += options.headers['Content-Length'] ?? 0
+    activeBufferSize += activeRequestBufferSize
 
     legacyStorage.run({ noop: true }, () => {
       let finished = false
       let settled = false
+      let stopStreaming = noop
       const finalize = () => {
         if (finished) return
         finished = true
-        activeBufferSize -= options.headers['Content-Length'] ?? 0
+        activeBufferSize -= activeRequestBufferSize
       }
 
       /**
@@ -197,6 +202,7 @@ function request (data, options, callback) {
       const complete = (error, result, statusCode, headers) => {
         if (settled) return
         settled = true
+        stopStreaming()
         finalize()
         callback(error, result, statusCode, headers)
       }
@@ -207,7 +213,7 @@ function request (data, options, callback) {
       const handleError = (error) => {
         if (settled) return
 
-        if (options.retry !== false &&
+        if (!isStreaming && options.retry !== false &&
             attemptIndex < getMaxAttempts(options) &&
             isRetriableNetworkError(error)) {
           settled = true
@@ -223,8 +229,22 @@ function request (data, options, callback) {
 
       const req = client.request(connectionOptions, (res) => onResponse(res, complete, handleError))
 
-      req.once('close', finalize)
-      req.once('timeout', finalize)
+      stopStreaming = () => {
+        if (!isStreaming) return
+        data.unpipe(req)
+        data.removeListener('error', handleStreamError)
+        if (!data.destroyed) data.destroy()
+      }
+      const handleStreamError = error => req.destroy(error)
+
+      req.once('close', () => {
+        stopStreaming()
+        finalize()
+      })
+      req.once('timeout', () => {
+        stopStreaming()
+        finalize()
+      })
       req.once('error', handleError)
 
       req.setTimeout(timeout, () => {
@@ -239,8 +259,13 @@ function request (data, options, callback) {
         }
       })
 
-      for (const buffer of dataArray) req.write(buffer)
-      req.end()
+      if (isStreaming) {
+        data.once('error', handleStreamError)
+        data.pipe(req)
+      } else {
+        for (const buffer of dataArray) req.write(buffer)
+        req.end()
+      }
     })
   }
 

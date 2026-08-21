@@ -1020,7 +1020,7 @@ moduleTypes.forEach(({
         // TODO: use over10It for evp proxy too once the Agent can forward the media endpoint.
         const onlyAgentlessIt = reportMethod === 'agentless' ? over10It : it.skip
 
-        function runCypressWithFailureScreenshots (specToRun) {
+        function runCypressWithFailureScreenshots (specToRun, additionalEnvironment = {}) {
           let testOutput = ''
           childProcess = exec(
             testCommand,
@@ -1032,6 +1032,7 @@ moduleTypes.forEach(({
                 SPEC_PATTERN: specToRun,
                 CYPRESS_ENABLE_FAILURE_SCREENSHOTS: 'true',
                 DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+                ...additionalEnvironment,
               },
             }
           )
@@ -1115,6 +1116,55 @@ moduleTypes.forEach(({
             once(childProcess, 'exit'),
             receiverPromise,
           ])
+        })
+
+        onlyAgentlessIt('uploads one Cypress video for a failed test suite', async function () {
+          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js', {
+            CYPRESS_ENABLE_FAILURE_SCREENSHOTS: undefined,
+            DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined,
+            CYPRESS_ENABLE_FAILURE_VIDEOS: 'true',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+          })
+
+          const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.startsWith('/api/v2/ci/test-suites/') || url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const testOutput = getTestOutput()
+              const failedTest = payloads
+                .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+              assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+
+              const suiteEvent = payloads
+                .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                .flatMap(({ payload }) => payload.events)
+                .find(event => event.type === 'test_suite_end')
+              assert.ok(suiteEvent, `test suite event should be reported\n${testOutput}`)
+
+              const videoPayloads = payloads.filter(({ media }) => media?.contentType === 'video/mp4')
+              assert.strictEqual(videoPayloads.length, 1, `one suite video should upload\n${testOutput}`)
+              const [videoPayload] = videoPayloads
+              const testSessionId = suiteEvent.content.test_session_id.toString()
+              const testSuiteId = suiteEvent.content.test_suite_id.toString()
+              assert.strictEqual(videoPayload.media.testSessionId, testSessionId)
+              assert.strictEqual(videoPayload.media.testSuiteId, testSuiteId)
+              assert.strictEqual(
+                videoPayload.url.split('?')[0],
+                `/api/v2/ci/test-suites/${testSessionId}/${testSuiteId}/media`
+              )
+              assert.ok(videoPayload.media.content.length > 0)
+            },
+            { hardTimeout: 60000 }
+          ).catch((error) => {
+            error.message += `\nCypress output:\n${getTestOutput()}`
+            throw error
+          })
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
+          assert.notStrictEqual(exitCode, 0)
         })
 
         onlyAgentlessIt('uploads only the auto failure frame, not a manual cy.screenshot()', async function () {
