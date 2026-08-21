@@ -656,6 +656,27 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(result.runs[0].hasError, true)
   })
 
+  it('marks an empty summary evaluator error as a run error', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('good'),
+      task: input => input,
+      summaryEvaluators: {
+        emptyError: () => { throw new Error() },
+      },
+    }).run()
+
+    assert.deepEqual(result.summaryEvaluations.emptyError, { value: null, error: '' })
+    assert.equal(result.runs[0].hasError, true)
+    assert.deepEqual(
+      requests.find(request => request.method === 'updateExperiment').attributes,
+      { status: 'failed', error: 'one or more rows failed' }
+    )
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    assert.deepEqual(metrics.find(metric => metric.label === 'emptyError').error, { message: '' })
+  })
+
   it('runs multiple iterations and aliases top-level results to the first run', async () => {
     const { client: c, requests } = clientWithMockBackend()
     const dataset = new Dataset(c, 'demo')

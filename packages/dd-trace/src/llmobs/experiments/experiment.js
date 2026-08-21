@@ -574,7 +574,7 @@ class Experiment {
     })
     if (hasEntries(summaryEvaluations)) {
       for (const value of Object.values(summaryEvaluations)) {
-        if (value?.error) hasRowError = true
+        if (value?.error !== null && value?.error !== undefined) hasRowError = true
       }
     }
 
