@@ -54,6 +54,7 @@ const transactionMethods = [
  * @property {object} options
  * @property {object} pool
  * @property {object} [queryCtx]
+ * @property {boolean} [queryStarted]
  * @property {boolean} [ready]
  * @property {number} [start]
  */
@@ -126,15 +127,16 @@ function normalizeOptions (defaultOptions, options) {
  * @param {object} pool
  * @param {object} options
  * @param {object} [queryCtx]
- * @param {boolean} [explicit]
+ * @param {'explicit' | 'measure' | 'observe'} mode
  * @returns {PoolAcquisition}
  */
-function createPoolAcquisition (pool, options, queryCtx, explicit) {
-  const measure = explicit === true || queryCtx !== undefined
-  const connectionCtx = measure ? {} : emptyConnectionContext
+function createPoolAcquisition (pool, options, queryCtx, mode) {
+  const explicit = mode === 'explicit'
+  const measure = explicit || mode === 'measure'
+  const connectionCtx = measure || queryCtx !== undefined ? {} : emptyConnectionContext
   const acquisition = { connectionCtx, measure, options, pool, queryCtx }
 
-  if (measure) connectionStartCh.publish(connectionCtx)
+  if (connectionCtx !== emptyConnectionContext) connectionStartCh.publish(connectionCtx)
   if (explicit) {
     acquisition.acquireCtx = { conf: options }
     acquireStartCh.publish(acquisition.acquireCtx)
@@ -244,12 +246,41 @@ function recordPoolAcquisition (pool) {
 
   acquisition.acquired = true
   prunePoolAcquisitions(pool)
-  if (!acquisition.measure) return
+  if (!acquisition.measure) {
+    startPoolCommand(acquisition)
+    return
+  }
 
   const poolWaitTime = acquireWait(acquisition.start)
 
   if (acquisition.queryCtx !== undefined) acquisition.queryCtx.poolWaitTime = poolWaitTime
   if (acquisition.acquireCtx !== undefined) acquisition.acquireCtx.poolWaitTime = poolWaitTime
+
+  startPoolCommand(acquisition)
+}
+
+/**
+ * Starts a pooled command after MariaDB has acquired the connection that will execute it.
+ *
+ * @param {PoolAcquisition} acquisition
+ * @returns {void}
+ */
+function startPoolCommand (acquisition) {
+  const queryCtx = acquisition.queryCtx
+  if (queryCtx === undefined || acquisition.queryStarted) return
+
+  acquisition.queryStarted = true
+  connectionFinishCh.runStores(acquisition.connectionCtx, runCommandStart, undefined, queryCtx)
+}
+
+/**
+ * Starts a command lifecycle without running connector work inside its span store.
+ *
+ * @param {object} ctx
+ * @returns {void}
+ */
+function runCommandStart (ctx) {
+  startCh.runStores(ctx, noop)
 }
 
 /**
@@ -569,9 +600,9 @@ function createWrapPromiseCommand (
 
       const owner = trackActiveCommands ? (commandOwner ?? this) : undefined
       const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
-      const acquisition = poolAcquisition !== undefined && acquireStartCh.hasSubscribers
-        ? createPoolAcquisition(this, options, poolAcquisition === 'measure' ? ctx : undefined)
-        : undefined
+      const acquisition = poolAcquisition === undefined
+        ? undefined
+        : createPoolAcquisition(this, options, ctx, poolAcquisition)
 
       startCommand(owner)
 
@@ -579,19 +610,20 @@ function createWrapPromiseCommand (
       try {
         result = acquisition === undefined
           ? startCh.runStores(ctx, command, this, ...arguments)
-          : startCh.runStores(ctx, runPoolAcquisition, undefined, acquisition, command, this, arguments)
+          : runPoolAcquisition(acquisition, command, this, arguments)
       } catch (error) {
-        finishCommand(ctx, owner, error)
+        finishPoolCommandAcquisition(acquisition, error)
+        if (acquisition === undefined || acquisition.queryStarted) finishCommand(ctx, owner, error)
         throw error
       }
 
       return result.then(result => {
         finishPoolCommandAcquisition(acquisition)
-        finishCommand(ctx, owner, undefined, result)
+        if (acquisition === undefined || acquisition.queryStarted) finishCommand(ctx, owner, undefined, result)
         return result
       }, error => {
         finishPoolCommandAcquisition(acquisition, error)
-        finishCommand(ctx, owner, error)
+        if (acquisition === undefined || acquisition.queryStarted) finishCommand(ctx, owner, error)
         throw error
       })
     }
@@ -626,11 +658,17 @@ function createWrapCallbackCommand (
       const owner = trackActiveCommands ? (commandOwner ?? this) : undefined
       const callback = arguments[arguments.length - 1]
       const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
-      const acquisition = poolAcquisition !== undefined && acquireStartCh.hasSubscribers
-        ? createPoolAcquisition(this, options, poolAcquisition === 'measure' ? ctx : undefined)
-        : undefined
+      const acquisition = poolAcquisition === undefined
+        ? undefined
+        : createPoolAcquisition(this, options, ctx, poolAcquisition)
       const wrapper = callback => function (error) {
         finishPoolCommandAcquisition(acquisition, error)
+        if (acquisition !== undefined && !acquisition.queryStarted) {
+          return typeof callback === 'function'
+            ? connectionFinishCh.runStores(acquisition.connectionCtx, callback, this, ...arguments)
+            : undefined
+        }
+
         finishCommandState(ctx, owner, error)
 
         return typeof callback === 'function'
@@ -645,9 +683,10 @@ function createWrapCallbackCommand (
       try {
         return acquisition === undefined
           ? startCh.runStores(ctx, command, this, ...arguments)
-          : startCh.runStores(ctx, runPoolAcquisition, undefined, acquisition, command, this, arguments)
+          : runPoolAcquisition(acquisition, command, this, arguments)
       } catch (error) {
-        finishCommand(ctx, owner, error)
+        finishPoolCommandAcquisition(acquisition, error)
+        if (acquisition === undefined || acquisition.queryStarted) finishCommand(ctx, owner, error)
         throw error
       }
     }
@@ -1007,7 +1046,7 @@ function createWrapPromiseGetConnection (options) {
         )
       }
 
-      const acquisition = createPoolAcquisition(this, options, undefined, true)
+      const acquisition = createPoolAcquisition(this, options, undefined, 'explicit')
       let result
 
       try {
@@ -1050,7 +1089,7 @@ function createWrapCallbackGetConnection (options) {
         return skipCh.runStores({}, getConnection, this, ...arguments)
       }
 
-      const acquisition = createPoolAcquisition(this, options, undefined, true)
+      const acquisition = createPoolAcquisition(this, options, undefined, 'explicit')
       arguments[arguments.length - 1] = function (error, connection) {
         if (connection) wrapCallbackConnection(connection, options)
         return connectionFinishCh.runStores(acquisition.connectionCtx, () => {

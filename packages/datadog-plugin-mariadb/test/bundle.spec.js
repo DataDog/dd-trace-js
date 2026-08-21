@@ -9,6 +9,7 @@ const { performance } = require('node:perf_hooks')
 const { setImmediate: nextImmediate } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
+const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -17,6 +18,8 @@ const { ANY_STRING } = require('../../../integration-tests/helpers')
 const { CLIENT_PORT_KEY, ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+
+const queryStartCh = dc.channel('apm:mariadb:query:start')
 
 const connectionOptions = {
   host: 'localhost',
@@ -318,6 +321,35 @@ describe('Plugin', () => {
           })
         }
 
+        it('starts a bundled pooled promise command only after acquiring its connection', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+          const connection = await pool.getConnection()
+          const sql = 'SELECT 38 AS bundle_delayed_pool_start'
+          let query
+          let queryStarts = 0
+          let released = false
+          const onStart = ctx => {
+            if (ctx.sql === sql) queryStarts++
+          }
+          queryStartCh.subscribe(onStart)
+
+          try {
+            query = pool.query(sql)
+            assert.strictEqual(queryStarts, 0)
+
+            await connection.release()
+            released = true
+            await query
+
+            assert.strictEqual(queryStarts, 1)
+          } finally {
+            queryStartCh.unsubscribe(onStart)
+            if (!released) await connection.release()
+            await query?.catch(noop)
+            await pool.end()
+          }
+        })
+
         it('uses zero wait without clock reads for a recent bundled pool connection', async () => {
           const pool = mariadb.createPool({
             ...connectionOptions,
@@ -477,6 +509,14 @@ describe('Plugin', () => {
             port: await getClosedPort(),
           })
           pool.on('error', noop)
+          const forbiddenResources = new Set([
+            'SELECT 29 AS bundle_query_acquire_failure',
+            'SELECT 30 AS bundle_execute_acquire_failure',
+          ])
+          const noQuerySpans = agent.assertNoTraces(traces => {
+            const span = traces.flat().find(span => forbiddenResources.has(span.resource))
+            assert.strictEqual(span, undefined, `unexpected query span for failed acquisition: ${span?.resource}`)
+          })
 
           try {
             for (const [method, args] of [
@@ -495,7 +535,9 @@ describe('Plugin', () => {
                 assert.rejects(pool[method](...args)),
               ])
             }
+            await noQuerySpans
           } finally {
+            noQuerySpans.cancel()
             await pool.end()
           }
         })
@@ -863,6 +905,35 @@ describe('Plugin', () => {
           }
         })
 
+        it('starts a bundled pooled callback command only after acquiring its connection', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+          const [connection] = await callbackResult(callback => pool.getConnection(callback))
+          const sql = 'SELECT 39 AS bundle_delayed_callback_pool_start'
+          let query
+          let queryStarts = 0
+          let released = false
+          const onStart = ctx => {
+            if (ctx.sql === sql) queryStarts++
+          }
+          queryStartCh.subscribe(onStart)
+
+          try {
+            query = callbackResult(callback => pool.query(sql, callback))
+            assert.strictEqual(queryStarts, 0)
+
+            await callbackResult(callback => connection.release(callback))
+            released = true
+            await query
+
+            assert.strictEqual(queryStarts, 1)
+          } finally {
+            queryStartCh.unsubscribe(onStart)
+            if (!released) await callbackResult(callback => connection.release(callback))
+            await query?.catch(noop)
+            await callbackResult(callback => pool.end(callback))
+          }
+        })
+
         it('forwards bundled callback pool operations without subscribers', async () => {
           const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
 
@@ -914,6 +985,14 @@ describe('Plugin', () => {
             port: await getClosedPort(),
           })
           pool.on('error', noop)
+          const forbiddenResources = new Set([
+            'SELECT 32 AS bundle_callback_query_acquire_failure',
+            'SELECT 33 AS bundle_callback_execute_acquire_failure',
+          ])
+          const noQuerySpans = agent.assertNoTraces(traces => {
+            const span = traces.flat().find(span => forbiddenResources.has(span.resource))
+            assert.strictEqual(span, undefined, `unexpected query span for failed acquisition: ${span?.resource}`)
+          })
 
           try {
             for (const [method, args] of [
@@ -932,7 +1011,9 @@ describe('Plugin', () => {
                 assert.rejects(callbackResult(callback => pool[method](...args, callback))),
               ])
             }
+            await noQuerySpans
           } finally {
+            noQuerySpans.cancel()
             await callbackResult(callback => pool.end(callback))
           }
         })
