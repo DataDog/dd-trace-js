@@ -20,6 +20,7 @@ const {
   TEST_FINAL_STATUS,
   TEST_IS_NEW,
   TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
@@ -1220,6 +1221,7 @@ versions.forEach((version) => {
         }
 
         const runEfdQuarantineTest = async (receiver, {
+          durationRetryCount = 3,
           shouldUseCustomReporter = false,
           shouldFailBeforeAll = false,
           shouldFailGlobalTeardown = false,
@@ -1237,9 +1239,9 @@ versions.forEach((version) => {
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': numRetries,
-                '10s': numRetries,
-                '30s': numRetries,
+                '5s': durationRetryCount,
+                '10s': durationRetryCount,
+                '30s': durationRetryCount,
                 '5m': numRetries,
               },
               faulty_session_threshold: 100,
@@ -1290,14 +1292,14 @@ versions.forEach((version) => {
                   assert.ok(tests.length >= 1 && tests.length <= numRetries + 1)
                   assert.ok(tests.some(test => test.meta[TEST_STATUS] === 'fail'))
                 } else {
-                  assert.strictEqual(tests.length, numRetries + 1)
+                  assert.strictEqual(tests.length, durationRetryCount + 1)
                   assert.strictEqual(
                     tests.filter(test => test.meta[TEST_STATUS] === 'fail').length,
-                    shouldPassRetries ? 1 : numRetries + 1
+                    shouldPassRetries ? 1 : durationRetryCount + 1
                   )
                   assert.strictEqual(
                     tests.filter(test => test.meta[TEST_STATUS] === 'pass').length,
-                    shouldPassRetries ? numRetries : 0
+                    shouldPassRetries ? durationRetryCount : 0
                   )
                 }
                 for (const test of tests) {
@@ -1319,9 +1321,13 @@ versions.forEach((version) => {
 
                 const finalTests = tests.filter(test => TEST_FINAL_STATUS in test.meta)
                 if (!shouldReachMaxFailures) {
-                  assert.strictEqual(retries.length, numRetries)
+                  assert.strictEqual(retries.length, durationRetryCount)
                   assert.strictEqual(finalTests.length, 1)
                   assert.strictEqual(finalTests[0].meta[TEST_FINAL_STATUS], 'skip')
+                  assert.strictEqual(
+                    finalTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON],
+                    durationRetryCount === 0 ? 'slow' : undefined
+                  )
                 }
               }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
 
@@ -1336,6 +1342,14 @@ versions.forEach((version) => {
 
         it('can quarantine a new test when all EFD attempts fail', async (receiver) => {
           await runEfdQuarantineTest(receiver)
+        })
+
+        it('ignores EFD clones outside a quarantined test retry budget', async (receiver) => {
+          await runEfdQuarantineTest(receiver, { durationRetryCount: 1 })
+        })
+
+        it('ignores EFD clones after a quarantined test aborts slow retries', async (receiver) => {
+          await runEfdQuarantineTest(receiver, { durationRetryCount: 0 })
         })
 
         it('can quarantine a new test with a custom reporter', async (receiver) => {

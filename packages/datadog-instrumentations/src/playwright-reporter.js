@@ -171,7 +171,8 @@ class DatadogPlaywrightReporter {
           if (outcome === 'unexpected' && hasFailed && test._ddIsQuarantined && !test._ddIsAttemptToFix) {
             quarantinedFailureCount += 1
           }
-        } else if (outcome === 'skipped' && (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
+        } else if (outcome === 'skipped' && !test._ddShouldSkipEfdRetry &&
+          (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
           const { results } = test
           hasIncompleteTests ||= results.some(result => result.status === 'interrupted') ||
             !results.length || test.expectedStatus !== 'skipped'
