@@ -37,8 +37,11 @@ esbuildVersions.forEach((version) => {
     })
 
     afterEach(async () => {
-      await stopProc(proc)
-      await agent.stop()
+      try {
+        await stopProc(proc)
+      } finally {
+        await agent.stop()
+      }
     })
 
     it('should build basic esm http server exporting esm and create web traces at runtime', async () => {
