@@ -26,6 +26,15 @@ const finishedRegistry = createRegistry('finished')
 let OTEL_ENABLED = false
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
+/**
+ * @typedef {object} RecordedException
+ * @property {string} message
+ * @property {string} [name]
+ * @property {string} [stack]
+ * @typedef {string | number | boolean} SpanEventAttributeScalar
+ * @typedef {SpanEventAttributeScalar | string[] | number[] | boolean[]} SpanEventAttributeValue
+ */
+
 const integrationCounters = {
   spans_created: {},
   spans_finished: {},
@@ -304,6 +313,19 @@ class DatadogSpan {
     }
     event.startTime = startTime || this._getTime()
     this._events.push(event)
+  }
+
+  /**
+   * @param {RecordedException} exception
+   * @param {Record<string, SpanEventAttributeValue>} [attributes]
+   */
+  recordException (exception, attributes) {
+    this.addEvent('exception', {
+      'exception.type': exception.name,
+      'exception.message': exception.message,
+      'exception.stacktrace': exception.stack,
+      ...attributes,
+    })
   }
 
   finish (finishTime) {
