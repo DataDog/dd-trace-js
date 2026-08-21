@@ -357,6 +357,58 @@ for (const version of versions) {
           })
         })
 
+        it('keeps quarantine metadata on EFD retries of a new test', async () => {
+          const numRetries = 2
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              faulty_session_threshold: 100,
+              slow_test_retries: { '5s': numRetries },
+            },
+            known_tests_enabled: true,
+            test_management: { enabled: true },
+          })
+          receiver.setKnownTests({ webdriverio: {} })
+          receiver.setTestManagementTests({
+            webdriverio: {
+              suites: {
+                'atr-always-fail.e2e.js': {
+                  tests: {
+                    'WebdriverIO ATR fails every retry': {
+                      properties: { quarantined: true },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          await runScenario('atrAlwaysFails', 1, payloads => {
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suite = events.find(event => event.type === 'test_suite_end').content
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(tests.length, numRetries + 1)
+            for (const test of tests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            }
+
+            const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, numRetries)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd))
+
+            const finalAttempt = tests.find(test => TEST_FINAL_STATUS in test.meta)
+            assert.ok(finalAttempt)
+            assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'skip')
+            assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          })
+        })
+
         {
           const jasmineTest = framework === 'jasmine' ? it : it.skip
           jasmineTest('keeps skipped tests and their suite and session successful with EFD', async () => {
