@@ -491,6 +491,7 @@ class CypressPlugin {
   attemptToFixExecutions = new Map()
   loggedAttemptToFixTests = new Set()
   uploadedScreenshotPaths = new Set()
+  uploadedVideoPaths = new Set()
   screenshotUploadPromisesByTraceId = new Map()
   screenshotUploadAbortControllers = new Set()
   afterScreenshotHandler = undefined
@@ -581,6 +582,7 @@ class CypressPlugin {
     this.attemptToFixExecutions = new Map()
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
+    this.uploadedVideoPaths = new Set()
     this.screenshotUploadPromisesByTraceId = new Map()
     this.screenshotUploadAbortControllers = new Set()
     this.lastFinishedTest = null
@@ -800,6 +802,35 @@ class CypressPlugin {
     }
   }
 
+  /**
+   * Warns when video upload is enabled but Cypress cannot produce or send videos.
+   *
+   * @param {object} cypressConfig - Cypress resolved config
+   * @param {object} tracer - dd-trace proxy tracer
+   * @param {object} testOptimizationConfig - Test Optimization config
+   * @returns {void}
+   */
+  warnIfMisconfiguredTestFailureVideos (cypressConfig, tracer, testOptimizationConfig) {
+    if (!testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED) return
+
+    if (cypressConfig.video === false) {
+      log.warn(
+        '%s %s',
+        'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Cypress video capture is disabled.',
+        'Datadog cannot upload failure videos unless Cypress is configured to record videos.'
+      )
+      return
+    }
+
+    if (!tracer?._tracer?._exporter?.canUploadTestVideos?.()) {
+      log.warn(
+        '%s %s',
+        'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Cypress failure video upload is not supported',
+        'by the active Test Optimization transport.'
+      )
+    }
+  }
+
   // Init function returns a promise that resolves with the Cypress configuration
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
@@ -826,6 +857,7 @@ class CypressPlugin {
     const testOptimizationConfig = getConfig().testOptimization
     this.rumFlushWaitMillis = testOptimizationConfig.DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
     this.warnIfMisconfiguredTestFailureScreenshots(cypressConfig, tracer, testOptimizationConfig)
+    this.warnIfMisconfiguredTestFailureVideos(cypressConfig, tracer, testOptimizationConfig)
 
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
@@ -1382,7 +1414,7 @@ class CypressPlugin {
   }
 
   afterSpec (spec, results, error) {
-    const { tests, stats, screenshots } = results || {}
+    const { tests, stats, screenshots, video } = results || {}
     const cypressTests = tests || []
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
@@ -1610,6 +1642,14 @@ class CypressPlugin {
       }
     }
 
+    const suiteVideoUploadPromise = !error && (latestError || getSuiteStatus(stats) === 'fail')
+      ? this.uploadTestSuiteVideo({
+        filePath: video,
+        testSessionId: this.testSessionSpan?.context().toTraceId(),
+        testSuiteId: this.testSuiteSpan?.context().toSpanId(),
+      })
+      : undefined
+
     const finishSuite = () => {
       if (this.testSuiteSpan) {
         const status = error ? 'fail' : getSuiteStatus(stats)
@@ -1624,11 +1664,14 @@ class CypressPlugin {
       }
     }
 
-    const waitForScreenshotUploads = () => {
-      if (screenshotUploadPromises.length > 0 || this.pendingScreenshotUploads.length > 0) {
+    const waitForMediaUploads = () => {
+      if (screenshotUploadPromises.length > 0 || this.pendingScreenshotUploads.length > 0 ||
+        suiteVideoUploadPromise) {
         const pendingScreenshotUploads = this.pendingScreenshotUploads
         this.pendingScreenshotUploads = []
-        return Promise.all([...pendingScreenshotUploads, ...screenshotUploadPromises]).then(() => null)
+        const mediaUploads = [...pendingScreenshotUploads, ...screenshotUploadPromises]
+        if (suiteVideoUploadPromise) mediaUploads.push(suiteVideoUploadPromise)
+        return Promise.all(mediaUploads).then(() => null)
       }
     }
 
@@ -1639,12 +1682,12 @@ class CypressPlugin {
       return this.afterRun(undefined, error)
     }
 
-    const screenshotUploadsPromise = waitForScreenshotUploads()
-    let afterSpecPromise = screenshotUploadsPromise
+    const mediaUploadsPromise = waitForMediaUploads()
+    let afterSpecPromise = mediaUploadsPromise
     if (testSpanFinishPromises.length > 0) {
       const testSpansPromise = Promise.all(testSpanFinishPromises).then(() => null)
-      if (screenshotUploadsPromise) {
-        afterSpecPromise = Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+      if (mediaUploadsPromise) {
+        afterSpecPromise = Promise.all([testSpansPromise, mediaUploadsPromise]).then(() => null)
       } else {
         afterSpecPromise = testSpansPromise
       }
@@ -1704,6 +1747,40 @@ class CypressPlugin {
       this.addScreenshotUploadPromise(traceId, uploadPromise)
       return uploadPromise
     }
+  }
+
+  /**
+   * Uploads the Cypress spec video for a failed test suite.
+   *
+   * @param {object} options - Upload options
+   * @param {string|undefined} options.filePath - Cypress video path
+   * @param {string|undefined} options.testSessionId - Test session id
+   * @param {string|undefined} options.testSuiteId - Test suite id
+   * @returns {Promise<void>|undefined}
+   */
+  uploadTestSuiteVideo ({ filePath, testSessionId, testSuiteId }) {
+    const exporter = this.tracer?._tracer?._exporter
+    if (!filePath || !testSessionId || !testSuiteId || this.uploadedVideoPaths.has(filePath) ||
+      !exporter?.canUploadTestVideos?.() || !exporter.uploadTestSuiteVideo) {
+      return
+    }
+
+    this.uploadedVideoPaths.add(filePath)
+    const abortController = new AbortController()
+    this.screenshotUploadAbortControllers.add(abortController)
+
+    return new Promise(resolve => {
+      exporter.uploadTestSuiteVideo({
+        filePath,
+        testSessionId,
+        testSuiteId,
+        idempotencyKey: `${testSessionId}:${testSuiteId}:${basename(filePath)}`,
+        capturedAtMs: Date.now(),
+        signal: abortController.signal,
+      }, () => resolve())
+    }).finally(() => {
+      this.screenshotUploadAbortControllers.delete(abortController)
+    })
   }
 
   getTasks () {

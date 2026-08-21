@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { mkdtempSync, writeFileSync } = require('node:fs')
+const { mkdtempSync, truncateSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 
@@ -16,10 +16,12 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
   let tmpDir
   let requestStub
   let uploadTestScreenshot
+  let uploadTestSuiteVideo
+  let uploadTestVideo
 
   // Runs an upload for a file with the given basename and returns the request stub's call args
-  // ({ path, headers, query }). The file is written with real non-empty bytes so readFileSync
-  // succeeds. `extra` merges into the upload options (e.g. isEvpProxy / evpProxyPrefix).
+  // ({ path, headers, query }). The file is written with real non-empty bytes so it can be streamed.
+  // `extra` merges into the upload options (e.g. isEvpProxy / evpProxyPrefix).
   function uploadForFile (basename, extra = {}) {
     const filePath = join(tmpDir, basename)
     writeFileSync(filePath, 'not-empty')
@@ -38,9 +40,9 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     )
 
     assert.ok(requestStub.calledOnce)
-    const { path, headers, deadline, retryUntilDeadline, signal } = requestStub.getCall(0).args[1]
+    const [bodyFactory, { path, headers, deadline, retryUntilDeadline, signal }] = requestStub.getCall(0).args
     const query = new URL(path, 'http://localhost:8126').searchParams
-    return { path, headers, query, deadline, retryUntilDeadline, signal }
+    return { bodyFactory, path, headers, query, deadline, retryUntilDeadline, signal }
   }
 
   before(() => {
@@ -49,14 +51,16 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
 
   beforeEach(() => {
     requestStub = sinon.stub().callsFake((_payload, _options, cb) => cb(null, 'ok', 200))
-    const { uploadTestScreenshot: upload } = proxyquire(
+    const uploadRequests = proxyquire(
       '../../../src/ci-visibility/requests/upload-test-screenshot',
       {
         '../../config': () => ({ DD_API_KEY: 'test-api-key' }),
         '../exporters/request': requestStub,
       }
     )
-    uploadTestScreenshot = upload
+    uploadTestScreenshot = uploadRequests.uploadTestScreenshot
+    uploadTestSuiteVideo = uploadRequests.uploadTestSuiteVideo
+    uploadTestVideo = uploadRequests.uploadTestVideo
   })
 
   describe('agentless', () => {
@@ -89,6 +93,16 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(requestOptions.deadline, deadline)
       assert.strictEqual(requestOptions.retryUntilDeadline, false)
       assert.strictEqual(requestOptions.signal, abortController.signal)
+    })
+
+    it('streams the file with its known content length instead of buffering it', () => {
+      const { bodyFactory, headers } = uploadForFile('screenshot.png')
+
+      assert.strictEqual(typeof bodyFactory, 'function')
+      const body = bodyFactory()
+      assert.strictEqual(body.constructor.name, 'ReadStream')
+      assert.strictEqual(headers['Content-Length'], 9)
+      body.destroy()
     })
 
     it('reports an error when the request helper drops the upload', () => {
@@ -157,5 +171,68 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(query.get('idempotency_key'), expectedKey)
       assert.strictEqual(query.get('captured_at_ms'), '1700000000000')
     })
+  })
+
+  describe('videos', () => {
+    it('uploads Playwright videos to the test-run endpoint', () => {
+      const filePath = join(tmpDir, 'video.webm')
+      writeFileSync(filePath, 'not-empty')
+
+      uploadTestVideo({
+        filePath,
+        traceId,
+        idempotencyKey: `${traceId}:video.webm`,
+        capturedAtMs: 1_700_000_000_000,
+        url: new URL('http://localhost:8126'),
+      }, () => {})
+
+      const [, { path, headers }] = requestStub.firstCall.args
+      assert.match(path, new RegExp(`^/api/v2/ci/test-runs/${traceId}/media\\?`))
+      assert.strictEqual(headers['Content-Type'], 'video/webm')
+    })
+
+    it('uploads Cypress videos to the test-suite endpoint', () => {
+      const testSessionId = '123'
+      const testSuiteId = '456'
+      const filePath = join(tmpDir, 'video.mp4')
+      writeFileSync(filePath, 'not-empty')
+
+      uploadTestSuiteVideo({
+        filePath,
+        testSessionId,
+        testSuiteId,
+        idempotencyKey: `${testSessionId}:${testSuiteId}:video.mp4`,
+        capturedAtMs: 1_700_000_000_000,
+        url: new URL('http://localhost:8126'),
+      }, () => {})
+
+      const [, { path, headers }] = requestStub.firstCall.args
+      assert.match(path, /^\/api\/v2\/ci\/test-suites\/123\/456\/media\?/)
+      assert.strictEqual(headers['Content-Type'], 'video/mp4')
+    })
+
+    for (const [size, shouldUpload] of [
+      [200 * 1024 * 1024, true],
+      [200 * 1024 * 1024 + 1, false],
+    ]) {
+      it(`${shouldUpload ? 'accepts' : 'rejects'} a ${size}-byte video`, () => {
+        const filePath = join(tmpDir, `video-${size}.webm`)
+        writeFileSync(filePath, 'x')
+        truncateSync(filePath, size)
+        let callbackError
+
+        uploadTestVideo({
+          filePath,
+          traceId,
+          idempotencyKey: `${traceId}:video-${size}.webm`,
+          capturedAtMs: 1_700_000_000_000,
+          url: new URL('http://localhost:8126'),
+        }, error => { callbackError = error })
+
+        assert.strictEqual(requestStub.called, shouldUpload)
+        if (shouldUpload) assert.strictEqual(callbackError, null)
+        else assert.match(callbackError.message, /is 209715201 bytes and exceeds the 209715200-byte upload limit/)
+      })
+    }
   })
 })

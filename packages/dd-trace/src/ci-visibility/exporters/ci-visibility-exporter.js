@@ -16,7 +16,11 @@ const { writeSettingsToCache } = require('../test-optimization-cache')
 const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
 const { MAX_RETRIES } = require('../test-optimization-http-cache-schema')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
-const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
+const {
+  uploadTestScreenshot: uploadTestScreenshotRequest,
+  uploadTestSuiteVideo: uploadTestSuiteVideoRequest,
+  uploadTestVideo: uploadTestVideoRequest,
+} = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
 const { getSegment } = require('../../util')
@@ -188,8 +192,9 @@ function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSh
 class CiVisibilityExporter extends BufferingExporter {
   #finalFlush
   #deferredTestSessionTraces = []
-  #pendingScreenshotUploads = new Set()
-  #screenshotFlushWaiters = new Set()
+  #pendingMediaUploads = new Set()
+  #mediaFlushWaiters = new Set()
+  #deferredTestSuiteSpans = new Map()
   #gitUploadTimeoutId
 
   constructor (config, options = {}) {
@@ -216,6 +221,8 @@ class CiVisibilityExporter extends BufferingExporter {
 
     this._isTestFailureScreenshotsEnabled =
       Boolean(config?.testOptimization?.DD_TEST_FAILURE_SCREENSHOTS_ENABLED)
+    this._isTestFailureVideosEnabled =
+      Boolean(config?.testOptimization?.DD_TEST_FAILURE_VIDEOS_ENABLED)
 
     const canUseCiVisProtocolTimeoutId = setTimeout(() => {
       this._resolveCanUseCiVisProtocol(false)
@@ -704,8 +711,8 @@ class CiVisibilityExporter extends BufferingExporter {
 
     if (isFinalFlush && !this._isInitialized &&
       this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
-      this.#deferredTestSessionTraces.length === 0 &&
-      this.#pendingScreenshotUploads.size === 0) {
+      this.#deferredTestSuiteSpans.size === 0 && this.#deferredTestSessionTraces.length === 0 &&
+      this.#pendingMediaUploads.size === 0) {
       onDone()
       return
     }
@@ -734,7 +741,7 @@ class CiVisibilityExporter extends BufferingExporter {
       hasCompleted = true
       clearTimeout(fallbackTimeoutId)
       clearTimeout(initializationTimeoutId)
-      this.#screenshotFlushWaiters.delete(flushWriters)
+      this.#mediaFlushWaiters.delete(flushWriters)
       if (error) log.error('Error flushing Test Optimization data', error)
       if (!isFinalFlush) {
         onDone(error)
@@ -755,8 +762,8 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     const flushWriters = () => {
-      if (isFinalFlush && this.#pendingScreenshotUploads.size !== 0) {
-        this.#screenshotFlushWaiters.add(flushWriters)
+      if (isFinalFlush && this.#pendingMediaUploads.size !== 0) {
+        this.#mediaFlushWaiters.add(flushWriters)
         return
       }
 
@@ -901,6 +908,15 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   /**
+   * Returns whether the exporter can upload test failure videos.
+   *
+   * @returns {boolean}
+   */
+  canUploadTestVideos () {
+    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideosEnabled
+  }
+
+  /**
    * Uploads a single test screenshot to the Test Optimization media intake.
    *
    * @param {object} options - Upload options
@@ -916,6 +932,68 @@ class CiVisibilityExporter extends BufferingExporter {
       return callback(new Error('Test screenshot upload URL not configured'))
     }
 
+    this.#uploadTestMedia(uploadTestScreenshotRequest, {
+      filePath,
+      traceId,
+      idempotencyKey,
+      capturedAtMs,
+      signal,
+    }, callback)
+  }
+
+  /**
+   * Uploads a test-scoped failure video to the Test Optimization media intake.
+   *
+   * @param {object} options - Upload options
+   * @param {string} options.filePath - Path to the video file
+   * @param {string} options.traceId - Test trace id used as the media key
+   * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
+   * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
+   * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
+   * @param {Function} callback - Callback function (err)
+   * @returns {void}
+   */
+  uploadTestVideo (options, callback) {
+    if (!this._testScreenshotUploadUrl) {
+      return callback(new Error('Test video upload URL not configured'))
+    }
+
+    this.#uploadTestMedia(uploadTestVideoRequest, options, callback)
+  }
+
+  /**
+   * Uploads a suite-scoped failure video to the Test Optimization media intake.
+   *
+   * @param {object} options - Upload options
+   * @param {string} options.filePath - Path to the video file
+   * @param {string} options.testSessionId - Test session id used as the media key
+   * @param {string} options.testSuiteId - Test suite id used as the media key
+   * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
+   * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
+   * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
+   * @param {Function} callback - Callback function (err)
+   * @returns {void}
+   */
+  uploadTestSuiteVideo (options, callback) {
+    if (!this._testScreenshotUploadUrl) {
+      return callback(new Error('Test suite video upload URL not configured'))
+    }
+
+    this.#uploadTestMedia(uploadTestSuiteVideoRequest, options, callback)
+  }
+
+  /**
+   * Starts and tracks one media upload so final flush waits for it.
+   *
+   * @param {Function} uploadRequest - Media request function
+   * @param {object} uploadOptions - Media request options
+   * @param {AbortSignal} [uploadOptions.signal] - Additional signal used to cancel the upload
+   * @param {Function} callback - Callback function (err)
+   * @returns {void}
+   */
+  #uploadTestMedia (uploadRequest, uploadOptions, callback) {
+    const { signal } = uploadOptions
+
     this.#resetFinalFlush()
     const controller = new AbortController()
     const deadline = Date.now() + FINAL_FLUSH_TIMEOUT
@@ -929,10 +1007,10 @@ class CiVisibilityExporter extends BufferingExporter {
       try {
         callback(error)
       } finally {
-        this.#pendingScreenshotUploads.delete(controller)
-        if (this.#pendingScreenshotUploads.size === 0) {
-          const waiters = [...this.#screenshotFlushWaiters]
-          this.#screenshotFlushWaiters.clear()
+        this.#pendingMediaUploads.delete(controller)
+        if (this.#pendingMediaUploads.size === 0) {
+          const waiters = [...this.#mediaFlushWaiters]
+          this.#mediaFlushWaiters.clear()
           for (const waiter of waiters) queueMicrotask(waiter)
         }
       }
@@ -943,7 +1021,7 @@ class CiVisibilityExporter extends BufferingExporter {
       complete(error)
     }
 
-    this.#pendingScreenshotUploads.add(controller)
+    this.#pendingMediaUploads.add(controller)
     signal?.addEventListener('abort', onAbort, { once: true })
     const timeoutId = setTimeout(() => {
       const error = createFinalFlushTimeoutError()
@@ -957,11 +1035,8 @@ class CiVisibilityExporter extends BufferingExporter {
       return
     }
 
-    uploadTestScreenshotRequest({
-      filePath,
-      traceId,
-      idempotencyKey,
-      capturedAtMs,
+    uploadRequest({
+      ...uploadOptions,
       url: this._testScreenshotUploadUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,

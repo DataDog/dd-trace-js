@@ -128,6 +128,28 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, error, null, 503, {})
   })
 
+  it('creates a fresh readable body for every retry attempt', () => {
+    const streams = []
+    const createBody = () => {
+      const body = Readable.from('payload')
+      streams.push(body)
+      return body
+    }
+    const done = sinon.spy()
+    request(createBody, { deadline: Date.now() + 10_000 }, done)
+
+    assert.strictEqual(pendingRequests[0].data, streams[0])
+    const error = Object.assign(new Error('unavailable'), { status: 503 })
+    pendingRequests[0].callback(error, null, 503, {})
+    clock.tick(6000)
+
+    assert.strictEqual(streams.length, 2)
+    assert.notStrictEqual(streams[0], streams[1])
+    assert.strictEqual(pendingRequests[1].data, streams[1])
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
   it('uses the remaining finalization budget for a late 5xx retry', () => {
     const done = sinon.spy()
     request('payload', { deadline: Date.now() + 1000, timeout: 2000 }, done)
