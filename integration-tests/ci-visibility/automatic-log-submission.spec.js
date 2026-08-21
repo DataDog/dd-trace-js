@@ -76,6 +76,7 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'cucumber',
       command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature',
+      loggerNames: ['winston', 'bunyan'],
     },
     {
       name: 'playwright',
