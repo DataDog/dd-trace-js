@@ -842,8 +842,9 @@ describe(`cucumber@${version} commonJS`, () => {
         })
       })
 
-      if (reportMethod === 'agentless' && version !== '7.0.0') {
-        it('keeps module tags when worker traces arrive before parallel suite start', async () => {
+      {
+        const delayedWorkerTest = reportMethod === 'agentless' && version !== '7.0.0' ? it : it.skip
+        delayedWorkerTest('keeps module tags when worker traces arrive before parallel suite start', async () => {
           childProcess = exec(
             parallelModeCommand,
             {
@@ -1420,8 +1421,9 @@ describe(`cucumber@${version} commonJS`, () => {
           })
         })
 
-        if (!isAgentless) {
-          context('if the agent is not event platform proxy compatible', () => {
+        {
+          const evpCompatibilityContext = isAgentless ? context.skip : context
+          evpCompatibilityContext('if the agent is not event platform proxy compatible', () => {
             it('does not do any intelligent test runner request', (done) => {
               receiver.setInfoResponse({ endpoints: [] })
 
