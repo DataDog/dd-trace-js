@@ -23,6 +23,10 @@ const {
 const UNPARSABLE_TOOL_RESULT = '[Unparsable Tool Result]'
 const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
 
+// A PNG magic-byte prefix is all the AI SDK needs to resolve the media type by sniffing.
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+const PNG_BASE64 = 'iVBORw0KGgo='
+
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
 const range = NODE_MAJOR < 22 ? '>=4.0.2 <7.0.0' : '>=4.0.0 <7.0.0'
 
@@ -1037,6 +1041,96 @@ describe('Plugin', () => {
         metadata: MOCK_OBJECT,
         tags: { ml_app: 'test', integration: 'ai' },
       })
+    })
+
+    const inlineImageTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
+
+    // Structured message content is only available from ai 5.0.0.
+    inlineImageTest('captures an inline image from a multimodal user message', async function () {
+      const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
+      const { createOpenAI } = OpenAIModule.get()
+      const mockOpenai = createOpenAI({
+        apiKey: 'test-api-key',
+        fetch: () => new Response(JSON.stringify({
+          id: 'chatcmpl-mock',
+          object: 'chat.completion',
+          created: 1234567890,
+          model: 'gpt-4o-mini',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'A logo.' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        compatibility: 'strict',
+      })
+
+      await ai.generateText({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'image', image: PNG_BYTES },
+          ],
+        }],
+        experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(2)
+
+      assertLlmObsSpanEvent(llmobsSpans[1], {
+        span: apmSpans[1],
+        parentId: llmobsSpans[0].span_id,
+        spanKind: 'llm',
+        modelName: 'gpt-4o-mini',
+        modelProvider: 'openai',
+        name: 'doGenerate',
+        inputMessages: [{
+          role: 'user',
+          content: 'What is in this image?',
+          image_parts: [{ mime_type: 'image/png', content: PNG_BASE64 }],
+        }],
+        outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
+        metadata: MOCK_OBJECT,
+        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
+    const remoteImageTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
+
+    // Structured message content is only available from ai 5.0.0.
+    remoteImageTest('marks a remote image URL that cannot be carried inline', async function () {
+      const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
+      const { createOpenAI } = OpenAIModule.get()
+      const mockOpenai = createOpenAI({
+        apiKey: 'test-api-key',
+        fetch: () => new Response(JSON.stringify({
+          id: 'chatcmpl-mock',
+          object: 'chat.completion',
+          created: 1234567890,
+          model: 'gpt-4o-mini',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'A logo.' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        compatibility: 'strict',
+      })
+
+      await ai.generateText({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe' },
+            { type: 'image', image: new URL('https://example.com/cat.png'), mediaType: 'image/png' },
+          ],
+        }],
+        experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
+      })
+
+      const { llmobsSpans } = await getEvents(2)
+
+      assert.deepStrictEqual(llmobsSpans[1].meta.input.messages, [
+        { role: 'user', content: 'Describe[Image]' },
+      ])
     })
 
     const toolLoopAgentDescribe = semifies(realVersion, '>=6.0.0') ? describe : describe.skip
