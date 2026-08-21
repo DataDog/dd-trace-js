@@ -2005,10 +2005,10 @@ eslint-plugin-import-x@^4.16.2:
     stable-hash-x "^0.2.0"
     unrs-resolver "^1.9.2"
 
-eslint-plugin-jsdoc@^64.1.0:
-  version "64.1.0"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-jsdoc/-/eslint-plugin-jsdoc-64.1.0.tgz#0f260eff7b0eb42737cee9c8536c0c3ad7961a51"
-  integrity sha512-UyAR/zVWn1jgIM/7eDMeLHuqLVtqKtamNVE0M7mdcZtFkWdYlNvDVDzyCCcURmLe66JpTZkMM3ZM3zjiVvIByA==
+eslint-plugin-jsdoc@^64.2.0:
+  version "64.2.0"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-jsdoc/-/eslint-plugin-jsdoc-64.2.0.tgz#90b4ef3d444f8dbfaa7d43f20570c2da08edf81f"
+  integrity sha512-z3zGmJoPhOdKnxzQ3R+8MZeJjW8vrRW8r7sYp/ErBp8K9+05RIa6vWXtbEGr7D1obBHk64LdKyLHoMLSzHFINA==
   dependencies:
     "@es-joy/jsdoccomment" "~0.95.0"
     "@es-joy/resolve.exports" "1.2.0"
