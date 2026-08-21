@@ -10,6 +10,7 @@ const {
   getChannelPromise,
   getRunStoresPromise,
   publishWithCompletion,
+  publishWithCompletionBarrier,
 } = require('../../src/helpers/channel')
 
 describe('packages/datadog-instrumentations/src/helpers/channel.js', () => {
@@ -45,6 +46,42 @@ describe('packages/datadog-instrumentations/src/helpers/channel.js', () => {
       await completedPromise
     } finally {
       finishCh.unsubscribe(onFinish)
+    }
+  })
+
+  it('completes a barrier without a subscriber', () => {
+    const finishCh = channel('ci:channel:test:barrier-no-subscriber')
+    let completionCount = 0
+
+    publishWithCompletionBarrier(finishCh, {}, () => {
+      completionCount++
+    })
+
+    assert.strictEqual(completionCount, 1)
+  })
+
+  it('waits for every registered completion', () => {
+    const finishCh = channel('ci:channel:test:completion-barrier')
+    const completions = []
+    const firstSubscriber = ({ registerCompletion }) => completions.push(registerCompletion())
+    const secondSubscriber = ({ registerCompletion }) => completions.push(registerCompletion())
+    finishCh.subscribe(firstSubscriber)
+    finishCh.subscribe(secondSubscriber)
+
+    try {
+      let completionCount = 0
+      publishWithCompletionBarrier(finishCh, {}, () => {
+        completionCount++
+      })
+
+      assert.strictEqual(completionCount, 0)
+      completions[0]()
+      assert.strictEqual(completionCount, 0)
+      completions[1]()
+      assert.strictEqual(completionCount, 1)
+    } finally {
+      finishCh.unsubscribe(firstSubscriber)
+      finishCh.unsubscribe(secondSubscriber)
     }
   })
 

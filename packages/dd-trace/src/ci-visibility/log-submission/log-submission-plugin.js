@@ -74,6 +74,17 @@ function getLogSubmissionPath (config, source) {
   return `/api/v2/logs?${new URLSearchParams({ ddsource: source, service: config.service })}`
 }
 
+/**
+ * @typedef {object} PendingLogRequest
+ * @property {string} source
+ */
+
+/**
+ * @typedef {object} LogRequestCompletion
+ * @property {() => void} complete
+ * @property {Set<PendingLogRequest>} pendingRequests
+ */
+
 class LogSubmissionPlugin extends Plugin {
   static id = 'log-submission'
 
@@ -82,6 +93,10 @@ class LogSubmissionPlugin extends Plugin {
   #batchBytes = 2
   #batchSource
   #logSubmissionUrl
+  /** @type {Set<PendingLogRequest>} */
+  #pendingRequests = new Set()
+  /** @type {LogRequestCompletion[]} */
+  #requestCompletions = []
   #timer
   #beforeExitHandler = () => this.#flushLogs()
 
@@ -98,6 +113,15 @@ class LogSubmissionPlugin extends Plugin {
 
     this.addSub('ci:log-submission:log', (payload) => {
       this.#enqueueLog(payload)
+    })
+    this.addSub('ci:agentless:flush', ({ registerCompletion } = {}) => {
+      this.#flushLogs()
+      if (!registerCompletion || this.#pendingRequests.size === 0) return
+
+      this.#requestCompletions.push({
+        complete: registerCompletion(),
+        pendingRequests: new Set(this.#pendingRequests),
+      })
     })
   }
 
@@ -186,14 +210,38 @@ class LogSubmissionPlugin extends Plugin {
       url: this.#logSubmissionUrl,
     }
 
+    const pendingRequest = { source }
+    this.#pendingRequests.add(pendingRequest)
     try {
-      request(data, options, error => {
-        if (error) log.error('Error submitting %s logs', source, error)
-      })
+      request(data, options, error => this.#finishRequest(pendingRequest, error))
     } catch (error) {
       this.#logSubmissionUrl = undefined
-      log.error('Error submitting %s logs', source, error)
+      this.#finishRequest(pendingRequest, error)
     }
+  }
+
+  /**
+   * Drops a finished intake request and releases flushes that were waiting for it.
+   *
+   * @param {PendingLogRequest} pendingRequest
+   * @param {Error | null | undefined} error
+   * @returns {void}
+   */
+  #finishRequest (pendingRequest, error) {
+    if (!this.#pendingRequests.delete(pendingRequest)) return
+
+    if (error) log.error('Error submitting %s logs', pendingRequest.source, error)
+
+    const remaining = []
+    for (const requestCompletion of this.#requestCompletions) {
+      requestCompletion.pendingRequests.delete(pendingRequest)
+      if (requestCompletion.pendingRequests.size === 0) {
+        requestCompletion.complete()
+      } else {
+        remaining.push(requestCompletion)
+      }
+    }
+    this.#requestCompletions = remaining
   }
 }
 
