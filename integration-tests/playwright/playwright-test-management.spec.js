@@ -117,7 +117,7 @@ const QUARANTINE_WITH_DISABLED_ATF_MANAGEMENT_TESTS = {
       ...QUARANTINE_MANAGEMENT_TESTS.playwright.suites,
       'zzz-passing-test.js': {
         tests: {
-          'should pass when max failures is not reached': {
+          'should run unless max failures is reached': {
             properties: {
               attempt_to_fix: true,
               disabled: true,
@@ -725,6 +725,7 @@ versions.forEach((version) => {
               for (const test of tests) {
                 assert.strictEqual(test.meta[TEST_STATUS], 'skip')
                 assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
               }
             }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
@@ -1205,16 +1206,18 @@ versions.forEach((version) => {
           })
         })
 
-        it('does not quarantine a failure caused by failOnFlakyTests', async (receiver) => {
-          await runQuarantineMustFailTest(receiver, {
-            cliArgs: 'quarantine-test.js attempt-to-fix-test.js --retries=1',
-            extraEnvVars: {
-              FAIL_ON_FLAKY_TESTS: '1',
-              SHOULD_ALWAYS_PASS: '1',
-              SHOULD_INCLUDE_FLAKY_TEST: '1',
-            },
+        if (version === 'latest' || satisfies(version, '>=1.52.0')) {
+          it('does not quarantine a failure caused by failOnFlakyTests', async (receiver) => {
+            await runQuarantineMustFailTest(receiver, {
+              cliArgs: 'quarantine-test.js attempt-to-fix-test.js --retries=1',
+              extraEnvVars: {
+                FAIL_ON_FLAKY_TESTS: '1',
+                SHOULD_ALWAYS_PASS: '1',
+                SHOULD_INCLUDE_FLAKY_TEST: '1',
+              },
+            })
           })
-        })
+        }
 
         const runEfdQuarantineTest = async (receiver, {
           shouldUseCustomReporter = false,
@@ -1273,9 +1276,10 @@ versions.forEach((version) => {
               .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
                 const testSession = events.find(event => event.type === 'test_session_end').content
-                const tests = events
+                const allTests = events
                   .filter(event => event.type === 'test')
                   .map(event => event.content)
+                const tests = allTests
                   .filter(test => test.meta[TEST_NAME] === 'quarantine should quarantine failed test')
 
                 assert.strictEqual(
@@ -1299,6 +1303,15 @@ versions.forEach((version) => {
                 for (const test of tests) {
                   assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+                }
+                if (shouldIncludeDisabledAttemptToFix) {
+                  const disabledAttemptToFixTests = allTests.filter(
+                    test => test.meta[TEST_NAME] === 'should run unless max failures is reached'
+                  )
+                  assert.strictEqual(disabledAttemptToFixTests.length, 1)
+                  assert.strictEqual(disabledAttemptToFixTests[0].meta[TEST_STATUS], 'skip')
+                  assert.strictEqual(disabledAttemptToFixTests[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+                  assert.strictEqual(disabledAttemptToFixTests[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
                 }
 
                 const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
