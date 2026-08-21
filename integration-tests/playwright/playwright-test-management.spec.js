@@ -31,6 +31,8 @@ const {
   TEST_NAME,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const { PLAYWRIGHT_VERSION } = process.env
@@ -974,6 +976,49 @@ versions.forEach((version) => {
 
             assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
             assert.strictEqual(exitCode, 0, testOutput)
+          })
+
+          it('keeps failure screenshots aligned after a disabled serial retry sibling', async (receiver, run) => {
+            receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            const proc = run(
+              './node_modules/.bin/playwright test -c playwright.config.js disabled-serial-test.js --retries=1',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+                  FAIL_AFTER_DISABLED: 'true',
+                  PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: 'only-on-failure',
+                  PW_BASE_URL: `http://localhost:${webAppPort}`,
+                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                },
+              }
+            )
+            const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+              proc,
+              ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+                const failedTest = payloads
+                  .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+                  .find(test => test.meta[TEST_NAME] ===
+                    'disabled serial retry uploads screenshot after disabled sibling')
+
+                assert.ok(failedTest)
+                assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+                assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+                assert.strictEqual(mediaPayloads.length, 1)
+              },
+              { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT }
+            )
+
+            const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+            assert.strictEqual(exitCode, 1)
           })
         }
 
