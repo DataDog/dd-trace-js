@@ -107,13 +107,26 @@ function valuesAreEqual (left, right) {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
+function snapshotPayload (payload) {
+  // Match the request body's JSON serialization, including custom toJSON methods.
+  // eslint-disable-next-line unicorn/prefer-structured-clone
+  return JSON.parse(JSON.stringify(payload))
+}
+
+function valuesAreEqualInRecordField (left, right, field) {
+  return valuesAreEqual({ [field]: left }, { [field]: right })
+}
+
 function updateFromInsertedRecord (recordId, record, payload) {
   const update = { id: recordId }
-  if (!valuesAreEqual(record.input, payload.input)) update.input = record.input
-  if (!valuesAreEqual(record.expectedOutput, payload.expected_output)) {
+  if (!valuesAreEqualInRecordField(record.input, payload.input, 'input')) update.input = record.input
+  if (!valuesAreEqualInRecordField(record.expectedOutput, payload.expected_output, 'expected_output')) {
     update.expectedOutput = record.expectedOutput
   }
-  if (!valuesAreEqual(record.metadata, payload.metadata)) update.metadata = record.metadata
+  if (!valuesAreEqualInRecordField(record.metadata, payload.metadata, 'metadata')) update.metadata = record.metadata
+  if (!valuesAreEqualInRecordField(record.tags, payload.tags ?? [], 'tags')) {
+    update.tagOperations = { replace: [...record.tags] }
+  }
   return update
 }
 
@@ -416,7 +429,7 @@ class Dataset {
     const insertRecords = []
     const insertPayloads = new Map()
     for (const [recordId, record] of this.#newRecordsById) {
-      const payload = serializedRecord(record)
+      const payload = snapshotPayload(serializedRecord(record))
       insertRecords.push(payload)
       insertPayloads.set(recordId, payload)
     }
@@ -427,7 +440,7 @@ class Dataset {
       const tagOperations = this.#pendingTagOperations.get(recordId)
       if (tagOperations) update.tagOperations = tagOperations
       else delete update.tagOperations
-      const payload = serializedRecordUpdate(update)
+      const payload = snapshotPayload(serializedRecordUpdate(update))
       updateRecords.push(payload)
       updatePayloads.set(recordId, payload)
     }
@@ -522,6 +535,9 @@ class Dataset {
         updateFromInsertedRecord(recordId, current, payload)
       const queuedOperations = this.#pendingTagOperations.get(recordId)
       if (queuedOperations) update.tagOperations = queuedOperations
+      if (update.tagOperations) {
+        this.#pendingTagOperations.set(recordId, copyTagOperations(update.tagOperations))
+      }
       this.#updatedRecordsById.set(recordId, update)
     }
 

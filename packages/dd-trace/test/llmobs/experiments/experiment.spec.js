@@ -456,6 +456,201 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     }])
   })
 
+  it('preserves in-place mutations to an inserted record while its push is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let blockPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (blockPush) {
+        blockPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = new Dataset(c, 'demo').addRecord({ values: ['before'] })
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.records()[0].input.values.push('during')
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.insert_records, [{
+      id: dataset.recordIds()[0],
+      input: { values: ['before'] },
+      expected_output: null,
+      metadata: {},
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: dataset.recordIds()[0],
+      input: { values: ['before', 'during'] },
+    }])
+  })
+
+  it('preserves in-place mutations to an updated record while its push is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let blockPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (blockPush) {
+        blockPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const metadata = { values: ['before'] }
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, metadata, 'record-0')],
+      1,
+      1
+    )
+    dataset.update(0, { metadata })
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.records()[0].metadata.values.push('during')
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.update_records, [{
+      id: 'record-0',
+      metadata: { values: ['before'] },
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: 'record-0',
+      metadata: { values: ['before', 'during'] },
+    }])
+  })
+
+  it('matches request JSON serialization when preserving in-flight mutations', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let blockPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (blockPush) {
+        blockPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const input = {
+      value: 'before',
+      toJSON () {
+        return this.value
+      },
+    }
+    const dataset = new Dataset(c, 'demo').addRecord(input)
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    input.value = 'during'
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.insert_records, [{
+      id: dataset.recordIds()[0],
+      input: 'before',
+      expected_output: null,
+      metadata: {},
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: dataset.recordIds()[0],
+      input: 'during',
+    }])
+  })
+
+  it('compares inserted fields using their serialized record keys', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let blockPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (blockPush) {
+        blockPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const input = {
+      toJSON (key) {
+        return key === 'input' ? 'serialized-input' : 'top-level-input'
+      },
+    }
+    const dataset = new Dataset(c, 'demo').addRecord(input, 'expected', { row: 0 })
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.records()[0].metadata.row = 1
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.insert_records, [{
+      id: dataset.recordIds()[0],
+      input: 'serialized-input',
+      expected_output: 'expected',
+      metadata: { row: 0 },
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: dataset.recordIds()[0],
+      metadata: { row: 1 },
+    }])
+  })
+
+  it('preserves direct tag mutations made while an insert is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let blockPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (blockPush) {
+        blockPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.records()[0].tags.push('topic:new')
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.insert_records, [{
+      id: dataset.recordIds()[0],
+      input: 'input',
+      expected_output: null,
+      metadata: {},
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: dataset.recordIds()[0],
+      tag_operations: { set: ['topic:new'] },
+    }])
+  })
+
   it('keeps deletes made while an insert is in flight', async () => {
     const { client: c, requests } = clientWithMockBackend()
     let resolvePush
