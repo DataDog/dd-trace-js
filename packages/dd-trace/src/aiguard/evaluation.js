@@ -8,11 +8,14 @@ const { keepTrace } = require('../priority_sampler')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { AI_GUARD } = require('../standalone/product')
 const telemetryMetrics = require('../telemetry/metrics')
+const { normalizeRedactionReplacements, redactMessages } = require('./redaction')
 const TAGS = require('./tags')
 
 const ALLOW = 'ALLOW'
 
+/** @typedef {import('../../../../index').aiguard.ContentPart} ContentPart */
 /** @typedef {import('../../../../index').aiguard.Message} Message */
+/** @typedef {import('../../../../index').aiguard.RedactionReplacement} RedactionReplacement */
 /** @typedef {import('../opentracing/span')} Span */
 
 /**
@@ -24,19 +27,22 @@ const ALLOW = 'ALLOW'
  * @property {Record<string, unknown>} tagProbabilities
  * @property {boolean} hasTagProbabilities
  * @property {boolean} blockingEnabled
+ * @property {unknown} redactionReplacements
  */
 
 /**
  * @typedef {object} EvaluationOutcome
  * @property {{ action: string, reason: string|undefined, tags: Array<unknown>,
- *   tagProbabilities: Record<string, unknown>, sds: Array<unknown> }} result
+ *   tagProbabilities: Record<string, unknown>, sds: Array<unknown>, messages: Message[],
+ *   redactionReplacements: RedactionReplacement[] }} result
  * @property {boolean} shouldBlock
  * @property {boolean} hasTagProbabilities
+ * @property {{ enabled: boolean, applied: boolean, failures: number }} redaction
  */
 
 /**
  * @typedef {object} EvaluationMetaStruct
- * @property {Message[]} messages
+ * @property {Message[]} [messages]
  * @property {Array<unknown>} [attack_categories]
  * @property {Array<unknown>} [sds]
  * @property {Record<string, unknown>} [tag_probs]
@@ -45,6 +51,7 @@ const ALLOW = 'ALLOW'
 /**
  * @typedef {object} EvaluationReport
  * @property {Span} span
+ * @property {Message[]} messages
  * @property {EvaluationMetaStruct} metaStruct
  * @property {{ source: string, integration: string }} telemetryTags
  */
@@ -79,6 +86,7 @@ function parseEvaluationResponse (body) {
     tagProbabilities: isRecord(attributes.tag_probs) ? attributes.tag_probs : {},
     hasTagProbabilities: isRecord(attributes.tag_probs),
     blockingEnabled: attributes.is_blocking_enabled === true,
+    redactionReplacements: attributes.redaction_replacements,
   }
 }
 
@@ -96,11 +104,16 @@ function shouldBlockEvaluation (block, evaluation) {
 /**
  * Applies local evaluation policy and creates the result returned to the caller.
  *
+ * @param {Message[]} messages
  * @param {EvaluationResponse} evaluation
- * @param {boolean} block
+ * @param {{ block: boolean, redactionEnabled: boolean }} options
  * @returns {EvaluationOutcome}
  */
-function createEvaluationOutcome (evaluation, block) {
+function createEvaluationOutcome (messages, evaluation, options) {
+  const redaction = options.redactionEnabled
+    ? redactMessages(messages, evaluation.redactionReplacements)
+    : { messages, redacted: false, failures: 0 }
+
   return {
     result: {
       action: evaluation.action,
@@ -108,9 +121,16 @@ function createEvaluationOutcome (evaluation, block) {
       tags: evaluation.tags,
       tagProbabilities: evaluation.tagProbabilities,
       sds: evaluation.sdsFindings,
+      messages: redaction.messages,
+      redactionReplacements: normalizeRedactionReplacements(evaluation.redactionReplacements),
     },
-    shouldBlock: shouldBlockEvaluation(block, evaluation),
+    shouldBlock: shouldBlockEvaluation(options.block, evaluation),
     hasTagProbabilities: evaluation.hasTagProbabilities,
+    redaction: {
+      enabled: options.redactionEnabled,
+      applied: redaction.redacted,
+      failures: redaction.failures,
+    },
   }
 }
 
@@ -130,6 +150,7 @@ class EvaluationReporter {
   #config
   #maxMessagesLength
   #maxContentSize
+  #redactionEnabled
 
   /**
    * @param {import('../config/config-base')} config
@@ -138,6 +159,7 @@ class EvaluationReporter {
     this.#config = config
     this.#maxMessagesLength = config.experimental.aiguard.maxMessagesLength
     this.#maxContentSize = config.experimental.aiguard.maxContentSize
+    this.#redactionEnabled = config.experimental.aiguard.redactionEnabled
   }
 
   /**
@@ -150,19 +172,18 @@ class EvaluationReporter {
    */
   start (span, messages, options) {
     const telemetryTags = { source: options.source, integration: options.integration }
-    const last = messages.at(-1)
+    const evaluatedMessages = this.#redactionEnabled ? clone(messages) : messages
+    const last = evaluatedMessages.at(-1)
     const target = this.#isToolCall(last) ? 'tool' : 'prompt'
     span.setTag(TAGS.TARGET_TAG_KEY, target)
     if (target === 'tool') {
-      const name = this.#getToolName(last, messages)
+      const name = this.#getToolName(last, evaluatedMessages)
       if (name) {
         span.setTag(TAGS.TOOL_NAME_TAG_KEY, name)
       }
     }
 
-    const metaStruct = {
-      messages: this.#buildMessagesForMetaStruct(messages, telemetryTags),
-    }
+    const metaStruct = {}
     span.meta_struct = {
       [TAGS.META_STRUCT_KEY]: metaStruct,
     }
@@ -178,6 +199,7 @@ class EvaluationReporter {
 
     return {
       span,
+      messages: evaluatedMessages,
       metaStruct,
       telemetryTags,
     }
@@ -191,6 +213,7 @@ class EvaluationReporter {
    * @returns {void}
    */
   fail (report, errorType) {
+    report.metaStruct.messages = this.#buildMessagesForMetaStruct(report.messages, report.telemetryTags)
     aiguardMetrics.count(TAGS.TELEMETRY_REQUESTS, { error: true, ...report.telemetryTags }).inc(1)
     aiguardMetrics.count(TAGS.TELEMETRY_ERROR, { type: errorType, ...report.telemetryTags }).inc(1)
   }
@@ -203,18 +226,38 @@ class EvaluationReporter {
    * @returns {void}
    */
   finish (report, outcome) {
-    const { result, shouldBlock } = outcome
+    const { result, redaction, shouldBlock } = outcome
 
     if (result.tags.length > 0) report.metaStruct.attack_categories = result.tags
     if (result.sds.length > 0) report.metaStruct.sds = result.sds
     if (outcome.hasTagProbabilities) report.metaStruct.tag_probs = result.tagProbabilities
 
-    const requestTelemetryTags = {
-      action: result.action,
-      error: false,
-      block: shouldBlock,
-      ...report.telemetryTags,
+    if (redaction.enabled) {
+      report.span.setTag(TAGS.REDACTED_TAG_KEY, redaction.applied ? 'true' : 'false')
+      if (redaction.failures > 0) {
+        aiguardMetrics.count(TAGS.TELEMETRY_ERROR, {
+          type: TAGS.ERROR_TYPE_REDACTION,
+          ...report.telemetryTags,
+        }).inc(redaction.failures)
+      }
     }
+
+    report.metaStruct.messages = this.#buildMessagesForMetaStruct(result.messages, report.telemetryTags)
+
+    const requestTelemetryTags = redaction.enabled
+      ? {
+          action: result.action,
+          error: false,
+          block: shouldBlock,
+          redacted: redaction.applied,
+          ...report.telemetryTags,
+        }
+      : {
+          action: result.action,
+          error: false,
+          block: shouldBlock,
+          ...report.telemetryTags,
+        }
     aiguardMetrics.count(TAGS.TELEMETRY_REQUESTS, requestTelemetryTags).inc(1)
 
     report.span.setTag(TAGS.ACTION_TAG_KEY, result.action)
@@ -242,16 +285,47 @@ class EvaluationReporter {
     let contentTruncated = false
     for (let i = messages.length - size; i < messages.length; i++) {
       const message = clone(messages[i])
-      if (message.content?.length > this.#maxContentSize) {
-        contentTruncated = true
-        message.content = message.content.slice(0, this.#maxContentSize)
-      }
+      if (this.#truncateMessageContent(message)) contentTruncated = true
       result.push(message)
     }
     if (contentTruncated) {
       aiguardMetrics.count(TAGS.TELEMETRY_TRUNCATED, { type: 'content', ...telemetryTags }).inc(1)
     }
     return result
+  }
+
+  /**
+   * Truncates text in a cloned message to one shared content-size limit.
+   *
+   * @param {{ content?: string|ContentPart[] }} message
+   * @returns {boolean}
+   */
+  #truncateMessageContent (message) {
+    const { content } = message
+    if (typeof content === 'string') {
+      if (content.length <= this.#maxContentSize) return false
+
+      message.content = content.slice(0, this.#maxContentSize)
+      return true
+    }
+
+    if (!Array.isArray(content)) return false
+
+    let remainingContentSize = this.#maxContentSize
+    let truncated = false
+    for (const part of content) {
+      const text = part?.text
+      if (typeof text !== 'string') continue
+
+      if (text.length > remainingContentSize) {
+        part.text = text.slice(0, remainingContentSize)
+        truncated = true
+        remainingContentSize = 0
+      } else {
+        remainingContentSize -= text.length
+      }
+    }
+    return truncated
   }
 
   /**
