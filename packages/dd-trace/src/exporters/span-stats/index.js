@@ -17,8 +17,8 @@ class SpanStatsExporter {
   }
 
   export (payload, done) {
-    this._writer.append(payload)
     try {
+      this._writer.append(payload)
       this._writer.flush(this.#serverlessDeliveryTracker ? undefined : done)
     } catch (error) {
       if (!done) throw error

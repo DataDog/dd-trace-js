@@ -12,8 +12,6 @@ const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
 
 const RESERVED_TRACER_TAGS = new Set(['service', 'env', 'version', 'runtime_id', 'runtime-id'])
-let unregisterTelemetryFlusher
-
 /**
  * @typedef {import('../../config')} Config
  */
@@ -80,10 +78,8 @@ function initializeOpenTelemetryMetrics (config) {
 
   const meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
-  // Remove the old provider callback so lifecycle retention flushes only this global provider.
-  unregisterTelemetryFlusher?.()
   // Include the final metric collection and export in lifecycle retention.
-  unregisterTelemetryFlusher = registerTelemetryFlusher(done => meterProvider.forceFlush(done))
+  registerTelemetryFlusher(done => meterProvider.forceFlush(done))
 }
 
 /**

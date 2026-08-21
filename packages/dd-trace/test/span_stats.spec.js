@@ -684,6 +684,24 @@ describe('SpanStatsProcessor', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('waits for a prior OTLP export when the boundary export throws', () => {
+    let priorDone
+    const exporter = {
+      flush: sinon.stub().callsFake(done => { priorDone = done }),
+      export: sinon.stub().throws(new Error('encode failed')),
+    }
+    const p = new SpanStatsProcessor(config, exporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    const done = sinon.spy()
+
+    p.forceFlush(done)
+
+    sinon.assert.notCalled(done)
+    priorDone()
+    sinon.assert.calledOnce(done)
+  })
+
   it('force flushes pending agent span statistics', () => {
     exporter.export.resetHistory()
     exporter.flush.resetHistory()

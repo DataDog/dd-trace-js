@@ -690,6 +690,24 @@ describe('OpenTelemetry Meter Provider', () => {
       reader.shutdown()
     })
 
+    it('waits for an earlier export when the boundary export throws', () => {
+      let priorDone
+      const reader = new PeriodicMetricReader({
+        export: sinon.stub().throws(new Error('encode failed')),
+        flush: done => { priorDone = done },
+      }, 60_000, 'DELTA', 1024)
+      const meter = new MeterProvider({ reader }).getMeter('test')
+      const done = sinon.spy()
+
+      meter.createCounter('boundary').add(1)
+      reader.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      priorDone()
+      sinon.assert.calledOnce(done)
+      reader.shutdown()
+    })
+
     it('handles shutdown gracefully', async () => {
       setupMetrics()
       const provider = metrics.getMeterProvider()

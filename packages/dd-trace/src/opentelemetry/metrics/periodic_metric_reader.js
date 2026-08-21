@@ -211,9 +211,19 @@ class PeriodicMetricReader {
     }
 
     // Snapshot requests already active before starting this flush's export.
-    if (typeof this.exporter.flush === 'function') this.exporter.flush(complete)
-    else complete()
-    this.#collectAndExport(complete)
+    try {
+      if (typeof this.exporter.flush === 'function') this.exporter.flush(complete)
+      else complete()
+    } catch (error) {
+      log.error('Error flushing OTLP metrics:', error)
+      complete()
+    }
+    try {
+      this.#collectAndExport(complete)
+    } catch (error) {
+      log.error('Error exporting OTLP metrics:', error)
+      complete()
+    }
   }
 
   /**

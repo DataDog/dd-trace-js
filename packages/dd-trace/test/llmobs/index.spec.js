@@ -536,6 +536,40 @@ describe('module', () => {
     sinon.assert.calledOnce(retiredUnregister)
   })
 
+  it('retires reinitialized writers until their destroy callbacks complete', () => {
+    process.env.VERCEL = '1'
+    const initialUnregister = sinon.stub()
+    const retiredUnregister = sinon.stub()
+    const replacementUnregister = sinon.stub()
+    registerTelemetryFlusher.onCall(0).returns(initialUnregister)
+    registerTelemetryFlusher.onCall(1).returns(retiredUnregister)
+    registerTelemetryFlusher.onCall(2).returns(replacementUnregister)
+    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
+    const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue
+    let destroySpan
+    let destroyEvaluation
+    spanWriter.destroy.callsFake(done => { destroySpan = done })
+    evalWriter.destroy.callsFake(done => { destroyEvaluation = done })
+
+    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+    sinon.assert.calledOnce(initialUnregister)
+    sinon.assert.calledThrice(registerTelemetryFlusher)
+    sinon.assert.notCalled(retiredUnregister)
+    spanWriter.flush.callsFake(done => done())
+    evalWriter.flush.callsFake(done => done())
+    const done = sinon.spy()
+    registerTelemetryFlusher.secondCall.args[0](done)
+    sinon.assert.calledOnce(spanWriter.flush)
+    sinon.assert.calledOnce(evalWriter.flush)
+    sinon.assert.calledOnce(done)
+    destroySpan()
+    sinon.assert.notCalled(retiredUnregister)
+    destroyEvaluation()
+    sinon.assert.calledOnce(retiredUnregister)
+  })
+
   it('completes transport selection for writers retired during initialization', () => {
     process.env.VERCEL = '1'
     llmobsModule.enable({ llmobs: { mlApp: 'test' } })

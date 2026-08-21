@@ -15,6 +15,7 @@ const {
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
 const id = require('./id')
+const log = require('./log')
 
 const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
 const ZERO_ID = id('0')
@@ -269,8 +270,18 @@ class SpanStatsProcessor {
         const complete = () => {
           if (--pending === 0) done()
         }
-        this.otlpExporter.flush(complete)
-        this.otlpExporter.export(drained, this.bucketSizeNs, complete)
+        try {
+          this.otlpExporter.flush(complete)
+        } catch (error) {
+          log.error('Failed to flush OTLP span stats:', error)
+          complete()
+        }
+        try {
+          this.otlpExporter.export(drained, this.bucketSizeNs, complete)
+        } catch (error) {
+          log.error('Failed to export OTLP span stats:', error)
+          complete()
+        }
       } else {
         this.otlpExporter.export(drained, this.bucketSizeNs, done)
       }

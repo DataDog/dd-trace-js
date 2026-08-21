@@ -132,6 +132,21 @@ describe('span-stats exporter', () => {
     sinon.assert.calledOnceWithExactly(log.error, 'Failed to flush span stats: %s', 'encode failed')
   })
 
+  it('waits for an in-flight export when boundary append fails', () => {
+    let inFlightDone
+    exporter = new Exporter({ url })
+    writerOptions.deliveryTracker.track(callback => { inFlightDone = callback })
+    writer.append = sinon.stub().throws(new Error('encode failed'))
+    const done = sinon.spy()
+
+    exporter.export('failed boundary', done)
+
+    sinon.assert.notCalled(done)
+    inFlightDone()
+    sinon.assert.calledOnce(done)
+    sinon.assert.calledOnceWithExactly(log.error, 'Failed to flush span stats: %s', 'encode failed')
+  })
+
   it('should set url from config', () => {
     const url = new URL('http://0.0.0.0:1234')
 

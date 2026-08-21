@@ -32,8 +32,6 @@ const LoggerProvider = require('./logger_provider')
 const BatchLogRecordProcessor = require('./batch_log_processor')
 const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
 
-let unregisterTelemetryFlusher
-
 /**
  * Initializes OpenTelemetry Logs support
  * @param {import('../../config/config-base')} config - Tracer configuration instance
@@ -82,10 +80,8 @@ function initializeOpenTelemetryLogs (config) {
 
   // Expose this provider to application calls through the OpenTelemetry Logs API.
   loggerProvider.register()
-  // Remove the old provider callback so lifecycle retention flushes only this global provider.
-  unregisterTelemetryFlusher?.()
   // Include final log batches in lifecycle retention with trace delivery.
-  unregisterTelemetryFlusher = registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
+  registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
 }
 
 module.exports = {

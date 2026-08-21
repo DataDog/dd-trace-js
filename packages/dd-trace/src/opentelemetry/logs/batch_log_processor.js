@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../../log')
 const { createServerlessDeliveryTracker } = require('../../serverless')
 
 /**
@@ -88,7 +89,12 @@ class BatchLogRecordProcessor {
 
         // Drain the boundary snapshot one batch at a time.
         const batch = logRecords.splice(0, this.#maxExportBatchSize)
-        this.exporter.export(batch, flushNext)
+        try {
+          this.exporter.export(batch, flushNext)
+        } catch (error) {
+          log.error('Error exporting OTLP logs:', error)
+          complete()
+        }
       }
       flushNext()
     })

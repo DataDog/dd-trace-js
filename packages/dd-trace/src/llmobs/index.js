@@ -70,6 +70,12 @@ let globalTracerConfig
 function enable (config) {
   globalTracerConfig = config
 
+  const retiredSpanWriter = spanWriter
+  const retiredEvalWriter = evalWriter
+  const isReinitializing = Boolean(retiredSpanWriter || retiredEvalWriter)
+  unregisterTelemetryFlusher?.()
+  retireWriters(retiredSpanWriter, retiredEvalWriter)
+
   const startTime = performance.now()
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
@@ -77,23 +83,23 @@ function enable (config) {
   spanWriter = new LLMObsSpanWriter(config)
   const currentEvalWriter = evalWriter
   const currentSpanWriter = spanWriter
-  // Replace the prior callback when LLMObs writers are reinitialized.
-  unregisterTelemetryFlusher?.()
   unregisterTelemetryFlusher = registerTelemetryFlusher(done => {
     flushWriters(done, currentSpanWriter, currentEvalWriter)
   })
 
-  evalMetricAppendCh.subscribe(handleEvalMetricAppend)
-  flushCh.subscribe(handleFlush)
-  registerUserSpanProcessorCh.subscribe(handleRegisterProcessor)
+  if (!isReinitializing) {
+    evalMetricAppendCh.subscribe(handleEvalMetricAppend)
+    flushCh.subscribe(handleFlush)
+    registerUserSpanProcessorCh.subscribe(handleRegisterProcessor)
+  }
 
   // span processing
   spanProcessor = new LLMObsSpanProcessor(config)
   spanProcessor.setWriter(spanWriter)
-  spanFinishCh.subscribe(handleSpanProcess)
+  if (!isReinitializing) spanFinishCh.subscribe(handleSpanProcess)
 
   // distributed tracing for llmobs
-  injectCh.subscribe(handleLLMObsInjection)
+  if (!isReinitializing) injectCh.subscribe(handleLLMObsInjection)
 
   setAgentStrategy(config, useAgentless => {
     if (useAgentless && !(config.DD_API_KEY && config.site)) {
@@ -131,12 +137,20 @@ function disable () {
   spanWriter = null
   evalWriter = null
 
-  // Keep destroy-triggered deliveries reachable until every writer has drained.
+  retireWriters(retiredSpanWriter, retiredEvalWriter)
+
+  log.debug('[LLMObs] Disabled LLM Observability')
+}
+
+/**
+ * Keeps retired writers reachable until their destroy-triggered deliveries complete.
+ * @param {LLMObsSpanWriter | null} retiredSpanWriter
+ * @param {LLMObsEvalMetricsWriter | null} retiredEvalWriter
+ * @returns {void}
+ */
+function retireWriters (retiredSpanWriter, retiredEvalWriter) {
   const retiredWriters = [retiredSpanWriter, retiredEvalWriter].filter(Boolean)
-  if (retiredWriters.length === 0) {
-    log.debug('[LLMObs] Disabled LLM Observability')
-    return
-  }
+  if (retiredWriters.length === 0) return
   let remainingWriters = retiredWriters.length
   const unregisterRetiredFlusher = registerTelemetryFlusher(done => {
     flushWriters(done, retiredSpanWriter, retiredEvalWriter)
@@ -145,8 +159,6 @@ function disable () {
     if (--remainingWriters === 0) unregisterRetiredFlusher?.()
   }
   for (const writer of retiredWriters) writer.destroy(onWriterDestroyed)
-
-  log.debug('[LLMObs] Disabled LLM Observability')
 }
 
 // since LLMObs traces can extend between services and be the same trace,

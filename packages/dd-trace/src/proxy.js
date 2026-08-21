@@ -42,8 +42,6 @@ const OPENFEATURE_STATE_NOOP = 0
 const OPENFEATURE_STATE_LAZY = 1
 const OPENFEATURE_STATE_ACTIVE = 2
 
-let unregisterRuntimeMetricsFlusher
-
 class LazyModule {
   constructor (provider) {
     this.provider = provider
@@ -265,14 +263,11 @@ class Tracer extends NoopProxy {
         initializeOpenTelemetryMetrics(config)
       }
 
-      unregisterRuntimeMetricsFlusher?.()
-      unregisterRuntimeMetricsFlusher = undefined
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
         // Agent trace response metrics are recorded asynchronously, so drain
         // runtime metrics after the trace export has completed.
-        unregisterRuntimeMetricsFlusher = registerTelemetryFlusher(
-          done => runtimeMetrics.flush(done), { afterTrace: true })
+        registerTelemetryFlusher(done => runtimeMetrics.flush(done), { afterTrace: true })
       }
 
       this.#updateTracing(config)

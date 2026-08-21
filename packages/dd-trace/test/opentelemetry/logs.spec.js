@@ -205,6 +205,27 @@ describe('OpenTelemetry Logs', () => {
       sinon.assert.calledOnce(done)
     })
 
+    it('waits for an earlier export when the boundary batch throws', () => {
+      process.env.VERCEL = '1'
+      let priorFlushDone
+      const processor = new BatchLogRecordProcessor({
+        export: sinon.stub()
+          .onFirstCall().callsFake(() => {})
+          .onSecondCall().throws(new Error('encode failed')),
+        flush: done => { priorFlushDone = done },
+      }, 60_000, 2)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'in flight' }, { name: 'test' })
+      processor.onEmit({ body: 'in flight' }, { name: 'test' })
+      processor.onEmit({ body: 'boundary' }, { name: 'test' })
+      processor.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      priorFlushDone()
+      sinon.assert.calledOnce(done)
+    })
+
     it('does not wait for records emitted after the flush boundary', () => {
       process.env.VERCEL = '1'
       const exports = []
