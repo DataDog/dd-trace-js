@@ -3,9 +3,10 @@
 const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
 
-const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
-const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
+const { USER_REJECT } = require('../../../ext/priority')
 const id = require('../../../packages/dd-trace/src/id')
+const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
+const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
 
 const { VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)
@@ -34,7 +35,7 @@ const CONFIGS = {
     rateLimit: 100,
   },
   // A keep-everything rule capped at 1/s: after the first token the limiter
-  // rejects, exercising the USER_REJECT + decision-maker-removal branch.
+  // rejects, exercising the rule-limited USER_REJECT branch.
   'rate-limited': { rules: [{ service: 'web-*', sampleRate: 1, maxPerSecond: 1 }], rateLimit: 1 },
 }
 
@@ -42,6 +43,11 @@ const config = CONFIGS[VARIANT]
 assert.ok(config, `unknown VARIANT: ${VARIANT}`)
 
 const sampler = new PrioritySampler('production', config)
+if (VARIANT === 'rate-limited') {
+  // Keep the first-token-accepted/rest-rejected workload independent of the
+  // wall-clock second in which a sample happens to run.
+  sampler._rules[0]._limiter._limiter.tokenBucket.interval = Number.POSITIVE_INFINITY
+}
 // The agent variant needs non-default per-service rates so the non-unit Knuth
 // path runs instead of the rate===1 short circuit.
 if (VARIANT === 'agent') {
@@ -82,6 +88,9 @@ function sampleOnce (span) {
 // that turns the bench into a no-op early return).
 const sampled = sampleOnce(spans[0])
 assert.ok(sampled !== undefined, 'sample() did not assign a sampling priority')
+if (VARIANT === 'rate-limited') {
+  assert.equal(sampleOnce(spans[1]), USER_REJECT, 'rate limiter did not reject after its initial token')
+}
 
 guard.loopStart()
 let sink = 0
