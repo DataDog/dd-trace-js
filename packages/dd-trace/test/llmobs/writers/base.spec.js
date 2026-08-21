@@ -259,6 +259,27 @@ describe('BaseLLMObsWriter', () => {
       sinon.assert.calledOnce(done)
     })
 
+    it('continues flushing after a request throws', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'default' })
+      writer.append({ foo: 'tenant' }, { apiKey: 'key-a', site: 'site-a.com' })
+      request.onFirstCall().throws(new Error('invalid header value'))
+      const done = sinon.spy()
+
+      writer.flush(done)
+
+      sinon.assert.calledTwice(request)
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledWith(
+        logger.error,
+        'Failed to send LLMObs %s events: %s',
+        undefined,
+        'invalid header value'
+      )
+    })
+
     it('waits for an export already in flight', () => {
       process.env.VERCEL = '1'
       writer = new BaseLLMObsWriter(options)
@@ -291,6 +312,31 @@ describe('BaseLLMObsWriter', () => {
       writer.flush(done)
 
       assert.strictEqual(callbacks.length, 2)
+      callbacks[0]()
+      sinon.assert.notCalled(done)
+      callbacks[1]()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('continues after a boundary request throws while waiting for earlier requests', () => {
+      process.env.VERCEL = '1'
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      const callbacks = []
+      request.onFirstCall().callsFake((payload, requestOptions, callback) => { callbacks.push(callback) })
+      writer.append({ foo: 'in flight' })
+      writer.flush()
+      writer.append({ foo: 'boundary' })
+      writer.append({ foo: 'tenant' }, { apiKey: 'key-a', site: 'site-a.com' })
+      request.onSecondCall().throws(new Error('invalid header value'))
+      request.onThirdCall().callsFake((payload, requestOptions, callback) => { callbacks.push(callback) })
+      const done = sinon.spy()
+
+      writer.flush(done)
+
+      sinon.assert.calledThrice(request)
+      sinon.assert.notCalled(done)
       callbacks[0]()
       sinon.assert.notCalled(done)
       callbacks[1]()

@@ -128,15 +128,25 @@ class BaseLLMObsWriter {
     const requests = this.#drainBuffers()
     if (!this.#serverlessDeliveryTracker) {
       // Only invocation-retaining platforms need completion-aware delivery.
-      for (const request of requests) this.#send(request)
+      for (const request of requests) this.#sendSafely(request)
       done?.()
       return
     }
 
-    for (const request of requests) {
-      this.#serverlessDeliveryTracker.track(done => this.#send(request, done))
-    }
+    for (const request of requests) this.#sendSafely(request)
     this.#serverlessDeliveryTracker.waitForIdle(done)
+  }
+
+  #sendSafely (requestToSend) {
+    try {
+      if (this.#serverlessDeliveryTracker) {
+        this.#serverlessDeliveryTracker.track(done => this.#send(requestToSend, done))
+      } else {
+        this.#send(requestToSend)
+      }
+    } catch (error) {
+      logger.error('Failed to send LLMObs %s events: %s', this._eventType, error.message)
+    }
   }
 
   #drainBuffers () {
