@@ -56,6 +56,8 @@ const SCREENSHOT_CAPTURE_DISABLED_WARNING =
   'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot capture is disabled.'
 const SCREENSHOT_UPLOAD_UNSUPPORTED_WARNING =
   'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot upload is not supported'
+const VIDEO_CAPTURE_DISABLED_WARNING =
+  'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video capture is disabled.'
 
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -841,6 +843,33 @@ versions.forEach((version) => {
 
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
         assert.strictEqual(exitCode, 1)
+      })
+
+      it('warns when Playwright only records video for the first retry', async (receiver, run) => {
+        let testOutput = ''
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+              PLAYWRIGHT_FAILURE_VIDEO_MODE: 'on-first-retry',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              DD_TRACE_DEBUG: 'true',
+              DD_TRACE_LOG_LEVEL: 'warn',
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        const [exitCode] = await once(proc, 'exit')
+
+        assert.strictEqual(exitCode, 1)
+        const warningCount = testOutput.split(VIDEO_CAPTURE_DISABLED_WARNING).length - 1
+        assert.strictEqual(warningCount, 1, testOutput)
       })
 
       // This race relies on Playwright 1.60 keeping the matching worker trace pending after testEnd.

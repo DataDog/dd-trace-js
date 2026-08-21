@@ -1892,6 +1892,17 @@ describe('CI Visibility Exporter', () => {
 
       assert.strictEqual(exporter.canUploadTestVideos(), true)
     })
+
+    it('returns false when videos would be sent through the Agent EVP proxy', () => {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+      exporter._isUsingEvpProxy = true
+
+      assert.strictEqual(exporter.canUploadTestVideos(), false)
+    })
   })
 
   describe('uploadTestSuiteVideo', () => {
@@ -1940,19 +1951,25 @@ describe('CI Visibility Exporter', () => {
       return exporter
     }
 
-    it('bounds a pending screenshot and lets final flush complete', () => {
+    it('only bounds a pending media upload after final flush starts', () => {
       const clock = sinon.useFakeTimers()
       try {
-        uploadTestScreenshotRequest = sinon.stub()
+        uploadTestScreenshotRequest = sinon.stub().callsFake((options, callback) => {
+          options.signal.addEventListener('abort', () => callback(options.signal.reason), { once: true })
+        })
         const exporter = createScreenshotExporter()
         const screenshotCallback = sinon.spy()
         const flushCallback = sinon.spy()
 
         exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
-        exporter.flush(flushCallback)
         const requestOptions = uploadTestScreenshotRequest.firstCall.args[0]
-        assert.strictEqual(requestOptions.deadline, FINAL_FLUSH_TIMEOUT)
+        assert.strictEqual(requestOptions.deadline, undefined)
         assert.strictEqual(requestOptions.signal.aborted, false)
+        clock.tick(60_000)
+        assert.strictEqual(requestOptions.signal.aborted, false)
+        sinon.assert.notCalled(screenshotCallback)
+
+        exporter.flush(flushCallback)
         sinon.assert.notCalled(exporter._writer.flush)
         sinon.assert.notCalled(flushCallback)
 

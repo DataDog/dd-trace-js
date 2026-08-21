@@ -578,7 +578,7 @@ function isFailureVideoCaptureEnabled (projects) {
   for (const project of projects) {
     const video = project.use?.video
     const mode = typeof video === 'object' && video !== null ? video.mode : video
-    if (mode === 'on' || mode === 'retain-on-failure' || mode === 'on-first-retry') return true
+    if (mode === 'on' || mode === 'retain-on-failure') return true
   }
   return false
 }
