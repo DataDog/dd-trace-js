@@ -12,8 +12,11 @@ const {
   encodeUnicode,
   findGenAIAncestorSpanId,
   generateLlmObsTraceId,
+  imagePartFromDataUri,
+  isDataUri,
   llmObsTraceIdToWire,
   formatAudioPart,
+  formatImagePart,
   getFunctionArguments,
   normalizeLlmObsTraceId,
   stripTagsetEntry,
@@ -530,6 +533,132 @@ describe('util', () => {
     it('passes through non-binary, non-string input unchanged (tagger soft-skips it)', () => {
       const result = formatAudioPart(5, 'audio/wav')
       assert.deepStrictEqual(result, { mimeType: 'audio/wav', content: 5 })
+    })
+  })
+
+  describe('formatImagePart', () => {
+    it('passes through an existing base64 string', () => {
+      assert.deepStrictEqual(
+        formatImagePart('iVBORw0KGgo=', 'image/png'),
+        { mimeType: 'image/png', content: 'iVBORw0KGgo=' }
+      )
+    })
+
+    it('base64-encodes Buffer and Uint8Array input', () => {
+      const expected = Buffer.from('hello').toString('base64')
+      assert.deepStrictEqual(
+        formatImagePart(Buffer.from('hello'), 'image/png'),
+        { mimeType: 'image/png', content: expected }
+      )
+      assert.deepStrictEqual(
+        formatImagePart(new Uint8Array([104, 101, 108, 108, 111]), 'image/png'),
+        { mimeType: 'image/png', content: expected }
+      )
+    })
+
+    it('passes through non-binary, non-string input unchanged (tagger soft-skips it)', () => {
+      assert.deepStrictEqual(formatImagePart(5, 'image/png'), { mimeType: 'image/png', content: 5 })
+    })
+  })
+
+  describe('imagePartFromDataUri', () => {
+    it('parses a base64 image data URI into an image part', () => {
+      assert.deepStrictEqual(
+        imagePartFromDataUri('data:image/png;base64,iVBORw0KGgo='),
+        { mimeType: 'image/png', content: 'iVBORw0KGgo=' }
+      )
+    })
+
+    it('lowercases the mime type and drops media-type parameters', () => {
+      assert.deepStrictEqual(
+        imagePartFromDataUri('data:IMAGE/JPEG;charset=utf-8;base64,/9j/4AAQ'),
+        { mimeType: 'image/jpeg', content: '/9j/4AAQ' }
+      )
+    })
+
+    it('keeps the payload verbatim, including base64 padding and whitespace', () => {
+      // Whitespace is deliberately not stripped; see the note on imagePartFromDataUri.
+      assert.deepStrictEqual(
+        imagePartFromDataUri('data:image/gif;base64,R0lG\nODdh'),
+        { mimeType: 'image/gif', content: 'R0lG\nODdh' }
+      )
+    })
+
+    it('returns undefined for a remote URL rather than fetching it', () => {
+      assert.strictEqual(imagePartFromDataUri('https://example.com/cat.png'), undefined)
+      assert.strictEqual(imagePartFromDataUri('http://example.com/cat.png'), undefined)
+    })
+
+    it('returns undefined for a percent-encoded (non-base64) data URI', () => {
+      assert.strictEqual(imagePartFromDataUri('data:image/svg+xml,%3Csvg%2F%3E'), undefined)
+    })
+
+    it('returns undefined for a non-image media type', () => {
+      assert.strictEqual(imagePartFromDataUri('data:text/plain;base64,aGVsbG8='), undefined)
+      assert.strictEqual(imagePartFromDataUri('data:audio/wav;base64,aGVsbG8='), undefined)
+    })
+
+    it('returns undefined for a data URI with no media type', () => {
+      assert.strictEqual(imagePartFromDataUri('data:;base64,aGVsbG8='), undefined)
+      assert.strictEqual(imagePartFromDataUri('data:image/;base64,aGVsbG8='), undefined)
+    })
+
+    it('returns undefined for a malformed data URI', () => {
+      assert.strictEqual(imagePartFromDataUri('data:image/png;base64'), undefined)
+      assert.strictEqual(imagePartFromDataUri('data:'), undefined)
+      assert.strictEqual(imagePartFromDataUri(''), undefined)
+    })
+
+    it('returns undefined for an empty payload', () => {
+      assert.strictEqual(imagePartFromDataUri('data:image/png;base64,'), undefined)
+    })
+
+    it('returns undefined when leading whitespace defeats the prefix', () => {
+      // Guards against a mega-payload being emitted by a near-miss parse.
+      assert.strictEqual(imagePartFromDataUri('  data:image/png;base64,iVBORw0KGgo='), undefined)
+    })
+
+    it('returns undefined for a non-string input', () => {
+      assert.strictEqual(imagePartFromDataUri(undefined), undefined)
+      assert.strictEqual(imagePartFromDataUri(5), undefined)
+      assert.strictEqual(imagePartFromDataUri({ url: 'data:image/png;base64,iVBORw0KGgo=' }), undefined)
+    })
+
+    it('returns undefined for an oversized media type rather than emitting it as mime_type', () => {
+      // Without a bound this parses, and the huge media type lands on the wire as `mime_type`,
+      // bypassing the content cap entirely.
+      const crafted = `data:image/${'a'.repeat(4096)};base64,iVBORw0KGgo=`
+      assert.strictEqual(imagePartFromDataUri(crafted), undefined)
+    })
+
+    it('matches the scheme, base64 marker and media type case-insensitively', () => {
+      // dd-trace-py's equivalent regex is re.IGNORECASE; a case-sensitive parse would reject these
+      // and, on the Responses path, splice the whole payload into the message text instead.
+      const expected = { mimeType: 'image/png', content: 'iVBORw0KGgo=' }
+      assert.deepStrictEqual(imagePartFromDataUri('DATA:image/png;base64,iVBORw0KGgo='), expected)
+      assert.deepStrictEqual(imagePartFromDataUri('data:image/png;BASE64,iVBORw0KGgo='), expected)
+      assert.deepStrictEqual(imagePartFromDataUri('DATA:IMAGE/PNG;BASE64,iVBORw0KGgo='), expected)
+    })
+  })
+
+  describe('isDataUri', () => {
+    it('recognizes a data URI regardless of scheme case', () => {
+      assert.strictEqual(isDataUri('data:image/png;base64,AAAA'), true)
+      assert.strictEqual(isDataUri('DATA:image/png;base64,AAAA'), true)
+      // Unparseable but still inline: the caller must emit a marker, never the raw payload.
+      assert.strictEqual(isDataUri('data:image/svg+xml,%3Csvg%2F%3E'), true)
+      assert.strictEqual(isDataUri('data:'), true)
+    })
+
+    it('rejects a remote reference, so its text is kept as-is', () => {
+      assert.strictEqual(isDataUri('https://example.com/cat.png'), false)
+      assert.strictEqual(isDataUri('file-abc123'), false)
+      assert.strictEqual(isDataUri('  data:image/png;base64,AAAA'), false)
+    })
+
+    it('rejects non-strings', () => {
+      assert.strictEqual(isDataUri(undefined), false)
+      assert.strictEqual(isDataUri(5), false)
     })
   })
 })

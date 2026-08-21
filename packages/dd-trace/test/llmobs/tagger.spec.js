@@ -7,6 +7,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
 const { writeBridgeTags, findGenAIAncestorSpanId, normalizeLlmObsTraceId } = require('../../src/llmobs/util')
+const { extractContentParts } = require('../../src/llmobs/plugins/openai/utils')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 function unserializableObject () {
@@ -1113,6 +1114,27 @@ describe('tagger', () => {
               role: 'user',
               content: 'both',
               audio_parts: [{ mime_type: 'audio/wav', content: 'aGVsbG8=' }],
+              image_parts: [{ mime_type: 'image/png', content: 'iVBORw0KGgo=' }],
+            },
+          ])
+        })
+
+        // Pins the contract between the OpenAI integration and the tagger: the parts an
+        // auto-instrumented request produces must be accepted verbatim and renamed to the wire
+        // shape. A camelCase/snake_case drift on either side fails here rather than silently
+        // dropping every auto-captured image.
+        it('accepts the image parts the OpenAI integration extracts from a request', () => {
+          const { content, imageParts } = extractContentParts([
+            { type: 'text', text: 'what is in this image?' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgo=' } },
+          ])
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, [{ role: 'user', content, imageParts }], undefined)
+          assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.input.messages'], [
+            {
+              role: 'user',
+              content: 'what is in this image?',
               image_parts: [{ mime_type: 'image/png', content: 'iVBORw0KGgo=' }],
             },
           ])

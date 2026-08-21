@@ -1,11 +1,14 @@
 'use strict'
 
 const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
-const { audioMimeTypeFromFormat, formatAudioPart } = require('../../util')
+const { audioMimeTypeFromFormat, formatAudioPart, imagePartFromDataUri, isDataUri } = require('../../util')
 const {
   INPUT_TYPE_IMAGE,
   INPUT_TYPE_FILE,
   IMAGE_FALLBACK,
+  IMAGE_TOO_LARGE_FALLBACK,
+  MAX_IMAGE_CONTENT_BYTES,
+  MAX_IMAGE_REFERENCE_LENGTH,
   FILE_FALLBACK,
   AUDIO_FALLBACK,
   AUDIO_MIME_TYPES,
@@ -123,26 +126,67 @@ function hasMultimodalInputs (variables) {
 }
 
 /**
- * Flattens an array of OpenAI chat message content parts into readable text plus structured audio.
+ * Decides how one OpenAI image reference is recorded.
  *
- * Text parts are concatenated (newline-joined),
- * images collapse to an `[image]` marker, and `input_audio` parts with data are captured as audio
- * parts (rendered as a player). The `[audio]` marker is only emitted as a fallback when an audio
- * part carries no data.
+ * Returns `{ imagePart }` for an inline base64 image small enough to ship, `{ marker }` for a data
+ * URI that cannot be attached — either too large, or one we could not parse — and `undefined` only
+ * when the reference is not inline at all (a remote `https://` URL or a `file_id`), in which case the
+ * caller keeps whatever text reference it already recorded.
+ *
+ * An unparseable data URI must return a marker rather than `undefined`: it still carries its entire
+ * payload, so letting the caller fall back to the raw reference would splice megabytes of base64
+ * into the message text, uncapped. dd-trace-py guards the same case the same way.
+ *
+ * Exactly one of the two fields is ever set; this is the only function that builds the result.
+ *
+ * @param {string | undefined} imageUrl
+ * @returns {{ imagePart?: { mimeType: string, content: string }, marker?: string } | undefined}
+ */
+function captureInlineImage (imageUrl) {
+  const imagePart = imagePartFromDataUri(imageUrl)
+  if (!imagePart) return isDataUri(imageUrl) ? { marker: IMAGE_FALLBACK } : undefined
+
+  // Measured in bytes, not UTF-16 units: valid base64 is ASCII so the two agree, but a payload with
+  // multi-byte characters would otherwise pass a byte-named cap at twice the size.
+  return Buffer.byteLength(imagePart.content) > MAX_IMAGE_CONTENT_BYTES
+    ? { marker: IMAGE_TOO_LARGE_FALLBACK }
+    : { imagePart }
+}
+
+/**
+ * Flattens an array of OpenAI chat message content parts into readable text plus structured media.
+ *
+ * Text parts are concatenated (newline-joined). `input_audio` parts with data are captured as audio
+ * parts (rendered as a player), and `image_url` parts carrying an inline base64 data URI are
+ * captured as image parts (rendered inline). A remote image URL still collapses to an `[image]`
+ * marker, since only the reference is available and fetching it is not the tracer's job. The
+ * `[audio]` marker is only emitted as a fallback when an audio part carries no data.
  *
  * @param {Array<object>} parts - Array of content parts from a chat message `content`
- * @returns {{ content: string, audioParts: Array<{ mimeType: string, content: string }> }}
+ * @returns {{
+ *   content: string,
+ *   audioParts: Array<{ mimeType: string, content: string }>,
+ *   imageParts: Array<{ mimeType: string, content: string }>,
+ * }}
  */
 function extractContentParts (parts) {
   const extracted = []
   const audioParts = []
+  const imageParts = []
 
   for (const part of parts) {
     const partType = part?.type ?? ''
     if (partType === 'text') {
       extracted.push(part.text ?? '')
     } else if (partType === 'image_url') {
-      extracted.push(IMAGE_FALLBACK)
+      // `{ url }` is the documented shape; a bare string is tolerated as the SDK accepts it.
+      const captured = captureInlineImage(part.image_url?.url ?? part.image_url)
+      if (captured?.imagePart) {
+        // Captured as a structured image part, so no text marker is needed.
+        imageParts.push(captured.imagePart)
+      } else {
+        extracted.push(captured?.marker ?? IMAGE_FALLBACK)
+      }
     } else if (partType === 'input_audio') {
       const inputAudio = part.input_audio ?? {}
       const data = inputAudio.data
@@ -158,7 +202,53 @@ function extractContentParts (parts) {
     }
   }
 
-  return { content: extracted.join('\n'), audioParts }
+  return { content: extracted.join('\n'), audioParts, imageParts }
+}
+
+/**
+ * Splits a Responses-API input content array into text plus structured image parts.
+ *
+ * Text handling matches `extractTextFromContentItem` joined with no separator, which is what this
+ * replaced. The only behavioural change is that an `input_image` carrying an inline base64 data URI
+ * becomes a structured image part instead of having its entire payload spliced into the text.
+ *
+ * @param {Array<object>} parts - Array of content items from a Responses-API input message
+ * @returns {{ content: string, imageParts: Array<{ mimeType: string, content: string }> }}
+ */
+function extractResponseInputContent (parts) {
+  const texts = []
+  const imageParts = []
+
+  for (const part of parts) {
+    if (part?.type === INPUT_TYPE_IMAGE) {
+      // An `input_image` carrying alt text is off-schema but reaches us; keep the text, and capture
+      // the image alongside it rather than letting one silently replace the other.
+      if (part.text) texts.push(part.text)
+
+      const captured = captureInlineImage(part.image_url)
+      if (captured?.imagePart) {
+        imageParts.push(captured.imagePart)
+      } else if (captured?.marker) {
+        texts.push(captured.marker)
+      } else if (!part.text) {
+        // Not inline, so record the reference itself — bounded. `captureInlineImage` only recognises
+        // a well-formed `data:` URI; a payload that merely *fails* to look like one (a leading space,
+        // an array that string-coerces, raw base64 with no scheme at all) would otherwise be spliced
+        // in whole and uncapped. The length bound is what actually makes "a payload is never emitted
+        // as text" hold, instead of relying on recognising every malformed spelling of a data URI.
+        const reference = part.image_url || part.file_id
+        texts.push(typeof reference === 'string' && reference.length <= MAX_IMAGE_REFERENCE_LENGTH
+          ? reference
+          : IMAGE_FALLBACK)
+      }
+      continue
+    }
+
+    const text = extractTextFromContentItem(part)
+    if (text) texts.push(text)
+  }
+
+  return { content: texts.join(''), imageParts }
 }
 
 /**
@@ -184,6 +274,7 @@ module.exports = {
   normalizePromptVariables,
   extractTextFromContentItem,
   extractContentParts,
+  extractResponseInputContent,
   hasMultimodalInputs,
   getOpenAIModelProvider,
 }
