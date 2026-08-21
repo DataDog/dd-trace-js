@@ -46,6 +46,8 @@ const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionConfigurationCh = channel('ci:playwright:session:configuration')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
 const reporterErrorCh = channel('ci:playwright:reporter:error')
+const reporterRunSummaryCh = channel('ci:playwright:reporter:run-summary')
+const reporterSuiteHookErrorCh = channel('ci:playwright:reporter:suite-hook-error')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
@@ -111,7 +113,7 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
-let quarantinedButNotAttemptToFixFqns = new Set()
+let playwrightRunSummary
 let recordedTestOptimizationExecutions = new Set()
 let testsReportedInGenerateSummary = new Set()
 const newTestsWithDynamicNames = new Set()
@@ -785,6 +787,7 @@ function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
       testSourceLine: test.location.line,
       browserName,
       isNew: test._ddIsNew,
+      isAttemptToFix: test._ddIsAttemptToFix,
       isDisabled: test._ddIsDisabled,
       isModified: test._ddIsModified,
       isQuarantined: test._ddIsQuarantined,
@@ -832,6 +835,7 @@ function testEndHandler ({
 
     if (hookError) {
       addErrorToTestSuite(testSuiteAbsolutePath, hookError)
+      reporterSuiteHookErrorCh.publish(testSuiteAbsolutePath)
     }
     return
   }
@@ -917,9 +921,7 @@ function testEndHandler ({
 
   // Check if all EFD retries failed
   const efdRetryCount = getEfdRetryCountForTest(test)
-  if (efdRetryCount > 0 && testStatuses.length === efdRetryCount + 1 &&
-    (test._ddIsNew || test._ddIsModified) &&
-    isEarlyFlakeDetectionEnabled &&
+  if (isEfdManagedTest && efdRetryCount > 0 && testStatuses.length === efdRetryCount + 1 &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
   }
@@ -1259,6 +1261,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
   return async function (config) {
     reporterError = undefined
     hasReporterError = false
+    playwrightRunSummary = undefined
     let restoreReporterConsoleError
     if (satisfies(playwrightVersion, '>=1.60.0') && config?.config) {
       const DatadogPlaywrightReporter = require('./playwright-reporter')
@@ -1433,23 +1436,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
     if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
-      let totalFailedTestCount = 0
-      let totalPureQuarantinedFailedTestCount = 0
-
-      for (const [fqn, testStatuses] of testsToTestStatuses) {
-        // Only count as failed if the final status (after retries) is 'fail'
-        const lastStatus = testStatuses.at(-1)
-        if (lastStatus === 'fail') {
-          totalFailedTestCount += 1
-          if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
-            totalPureQuarantinedFailedTestCount += 1
-          }
-        }
-      }
-
-      const totalIgnorableFailures = totalPureQuarantinedFailedTestCount
-
-      if (totalFailedTestCount > 0 && totalFailedTestCount === totalIgnorableFailures) {
+      const { failureCount, quarantinedFailureCount, hasIncompleteTests } = playwrightRunSummary || {}
+      if (!hasIncompleteTests && quarantinedFailureCount > 0 && quarantinedFailureCount === failureCount) {
         runAllTestsReturn = 'passed'
         preventedToFail = true
       }
@@ -1476,7 +1464,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     startedSuites = []
     remainingTestsByFile = {}
-    quarantinedButNotAttemptToFixFqns = new Set()
+    playwrightRunSummary = undefined
     recordedTestOptimizationExecutions = new Set()
     testsReportedInGenerateSummary = new Set()
     efdManagedTestKeys.clear()
@@ -1507,6 +1495,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 function reportersHook (reportersPackage) {
   return shimmer.wrap(reportersPackage, 'createReporters', createReporters => async function () {
     const reporters = await createReporters.apply(this, arguments)
+    const DatadogPlaywrightReporter = require('./playwright-reporter')
+    reporters.unshift(new DatadogPlaywrightReporter({ captureReporterErrors: false }))
     for (const reporter of reporters) {
       if (instrumentedPlaywrightReporters.has(reporter)) continue
 
@@ -1661,6 +1651,10 @@ pageGotoCh.subscribe({
 
 reporterErrorCh.subscribe((error) => {
   recordReporterError(error)
+})
+
+reporterRunSummaryCh.subscribe((runSummary) => {
+  playwrightRunSummary = runSummary
 })
 
 /**
@@ -1894,11 +1888,6 @@ function processRootSuite (createRootSuiteReturnValue) {
       }
       if (testProperties.quarantined) {
         test._ddIsQuarantined = true
-        if (!testProperties.attemptToFix) {
-          // Do not skip quarantined tests, let them run and overwrite results post-run if they fail
-          const testFqn = getTestFullyQualifiedName(test)
-          quarantinedButNotAttemptToFixFqns.add(testFqn)
-        }
       }
       if (testProperties.attemptToFix) {
         test._ddIsAttemptToFix = true
@@ -1938,7 +1927,10 @@ function processRootSuite (createRootSuiteReturnValue) {
     const fileSuitesWithImpactedTestsToProjects = new Map()
     for (const impactedTest of impactedTests) {
       impactedTest._ddIsModified = true
-      if (shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped') {
+      if (shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped' &&
+        !impactedTest._ddIsAttemptToFix) {
+        // Prevent ATR or `--retries` from retrying tests that EFD manages.
+        impactedTest.retries = 0
         markEfdManagedTest(impactedTest)
         const fileSuite = getSuiteType(impactedTest, 'file')
         if (!fileSuitesWithImpactedTestsToProjects.has(fileSuite)) {
@@ -1946,14 +1938,15 @@ function processRootSuite (createRootSuiteReturnValue) {
         }
       }
     }
-    // If something change in the file, all tests in the file are impacted, hence the () => true filter
+    // If something changes in the file, all tests in the file are impacted, except attempt-to-fix tests managed above.
     applyRetriesToTests(
       fileSuitesWithImpactedTestsToProjects,
-      () => true,
+      (test) => !test._ddIsAttemptToFix,
       [
         '_ddIsModified',
         '_ddIsEfdRetry',
         (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null),
+        (test) => test._ddIsQuarantined && '_ddIsQuarantined',
       ],
       earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
       (copiedTest, originalTest, retryIndex) => {
@@ -1981,7 +1974,8 @@ function processRootSuite (createRootSuiteReturnValue) {
       const fileSuitesWithNewTestsToProjects = new Map()
       for (const newTest of newTests) {
         newTest._ddIsNew = true
-        if (shouldRunEarlyFlakeDetection() && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
+        if (shouldRunEarlyFlakeDetection() && newTest.expectedStatus !== 'skipped' &&
+          !newTest._ddIsModified && !newTest._ddIsAttemptToFix) {
           // Prevent ATR or `--retries` from retrying tests that EFD manages.
           newTest.retries = 0
           markEfdManagedTest(newTest)
@@ -1994,8 +1988,12 @@ function processRootSuite (createRootSuiteReturnValue) {
 
       applyRetriesToTests(
         fileSuitesWithNewTestsToProjects,
-        isNewTest,
-        ['_ddIsNew', '_ddIsEfdRetry'],
+        (test) => !test._ddIsAttemptToFix && isNewTest(test),
+        [
+          '_ddIsNew',
+          '_ddIsEfdRetry',
+          (test) => test._ddIsQuarantined && '_ddIsQuarantined',
+        ],
         earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
         (copiedTest, originalTest, retryIndex) => {
           markEfdRetryTest(copiedTest, retryIndex, originalTest)
@@ -2447,6 +2445,7 @@ function generateSummaryWrapper (generateSummary) {
             line: testSourceLine,
           },
           _ddIsNew: isNew,
+          _ddIsAttemptToFix: isAttemptToFix,
           _ddIsDisabled: isDisabled,
           _ddIsModified: isModified,
           _ddIsQuarantined: isQuarantined,
@@ -2461,6 +2460,7 @@ function generateSummaryWrapper (generateSummary) {
           testSourceLine,
           browserName,
           isNew,
+          isAttemptToFix,
           isDisabled,
           isModified,
           isQuarantined,

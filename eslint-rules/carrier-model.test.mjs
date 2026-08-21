@@ -17,6 +17,13 @@ const model = parseCarrierModel(`${prefix}
 assert.strictEqual(model.legacyBaggagePrefix, 'ot-baggage-')
 assert.deepStrictEqual([...model.propagationHeaders], ['traceparent', 'baggage'])
 
+const constantModel = parseCarrierModel(`${prefix}
+  const traceparentHeader = 'traceparent'
+  const traceparent = defineField('traceparent', traceparentHeader, resolve, operations)
+`)
+
+assert.deepStrictEqual([...constantModel.propagationHeaders], ['traceparent'])
+
 assert.throws(() => parseCarrierModel('const ='), /Unable to parse/)
 
 assert.throws(
@@ -40,6 +47,14 @@ assert.throws(
 assert.throws(
   () => parseCarrierModel(`${prefix}function register () { defineField('traceparent', 'traceparent') }`),
   /top-level statement/
+)
+
+assert.throws(
+  () => parseCarrierModel(`${prefix}
+    let traceparentHeader = 'traceparent'
+    const traceparent = defineField('traceparent', traceparentHeader)
+  `),
+  /top-level string constants/
 )
 
 assert.throws(
