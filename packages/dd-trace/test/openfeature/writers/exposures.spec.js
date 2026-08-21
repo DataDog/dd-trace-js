@@ -268,6 +268,38 @@ describe('OpenFeature Exposures Writer', () => {
       })
     })
 
+    it('should include serial_id when present', () => {
+      const payload = writer.makePayload([{ ...exposureEvent, serial_id: 340132 }])
+
+      assert.deepStrictEqual(payload.exposures[0], {
+        timestamp: 1672531200000,
+        allocation: { key: 'allocation_123' },
+        flag: { key: 'test_flag' },
+        variant: { key: 'A' },
+        serial_id: 340132,
+        subject: {
+          id: 'user_123',
+          type: 'user',
+          attributes: { plan: 'premium' },
+        },
+      })
+    })
+
+    it('should include a serial_id of zero', () => {
+      const payload = writer.makePayload([{ ...exposureEvent, serial_id: 0 }])
+
+      assert.strictEqual(payload.exposures[0].serial_id, 0)
+    })
+
+    it('should omit serial_id when absent', () => {
+      const payload = writer.makePayload([exposureEvent])
+
+      assert.ok(
+        !Object.hasOwn(payload.exposures[0], 'serial_id'),
+        `Available keys: ${inspect(Object.keys(payload.exposures[0]))}`
+      )
+    })
+
     it('should handle optional config values', () => {
       const writerWithoutOptionals = new ExposuresWriter({
         ...config,

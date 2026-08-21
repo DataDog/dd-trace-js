@@ -37,6 +37,7 @@ const PENDING_MAX_EVENTS = 1000
  * @property {string} flag.key - Flag key
  * @property {object} variant - Variant information
  * @property {string} variant.key - Variant key
+ * @property {number} [serial_id] - Serial id of the split the subject landed in
  * @property {object} subject - Subject (user/entity) information
  * @property {string} subject.id - Subject identifier
  * @property {string} [subject.type] - Subject type
@@ -215,6 +216,7 @@ class ExposuresWriter extends BaseFFEWriter {
         variant: {
           key: event.variant?.key || event['variant.key'],
         },
+        ...(typeof event.serial_id === 'number' ? { serial_id: event.serial_id } : {}),
         subject: {
           id: event.subject?.id || event['subject.id'],
           type: event.subject?.type,
