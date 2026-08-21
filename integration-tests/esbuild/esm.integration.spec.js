@@ -6,7 +6,7 @@ const { execSync } = require('node:child_process')
 
 const axios = require('axios')
 
-const { FakeAgent, spawnProc, sandboxCwd, useSandbox } = require('../helpers')
+const { FakeAgent, spawnProc, stopProc, sandboxCwd, useSandbox } = require('../helpers')
 
 const { ESBUILD_VERSION } = process.env
 const esbuildVersions = ESBUILD_VERSION ? [ESBUILD_VERSION] : ['latest', '0.16.12']
@@ -24,7 +24,7 @@ function findWebSpan (payload) {
 
 esbuildVersions.forEach((version) => {
   describe('ESM is built and runs as expected in a sandbox', () => {
-    let agent, cwd
+    let agent, cwd, proc
 
     useSandbox([`esbuild@${version}`, 'hono', '@hono/node-server'], false, [__dirname])
 
@@ -36,8 +36,12 @@ esbuildVersions.forEach((version) => {
       agent = await new FakeAgent().start()
     })
 
-    afterEach(() => {
-      agent.stop()
+    afterEach(async () => {
+      try {
+        await stopProc(proc)
+      } finally {
+        await agent.stop()
+      }
     })
 
     it('should build basic esm http server exporting esm and create web traces at runtime', async () => {
@@ -45,7 +49,7 @@ esbuildVersions.forEach((version) => {
       execSync(`node ${builder}`, { cwd })
 
       const appFile = path.join(cwd, 'esbuild', 'esm-http-test-out.mjs')
-      const proc = await spawnProc(appFile, {
+      proc = await spawnProc(appFile, {
         cwd,
         env: {
           DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
@@ -68,7 +72,7 @@ esbuildVersions.forEach((version) => {
       execSync(`node ${builder}`, { cwd })
 
       const appFile = path.join(cwd, 'esbuild', 'esm-http-test-out.cjs')
-      const proc = await spawnProc(appFile, {
+      proc = await spawnProc(appFile, {
         cwd,
         env: {
           DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
@@ -91,7 +95,7 @@ esbuildVersions.forEach((version) => {
       execSync(`node ${builder}`, { cwd })
 
       const appFile = path.join(cwd, 'esbuild', 'hono-out.mjs')
-      const proc = await spawnProc(appFile, {
+      proc = await spawnProc(appFile, {
         cwd,
         env: {
           DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
@@ -114,7 +118,7 @@ esbuildVersions.forEach((version) => {
       execSync(`node ${builder}`, { cwd })
 
       const appFile = path.join(cwd, 'esbuild', 'hono-out.cjs')
-      const proc = await spawnProc(appFile, {
+      proc = await spawnProc(appFile, {
         cwd,
         env: {
           DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
