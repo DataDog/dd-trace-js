@@ -1146,7 +1146,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       }
     )
     const testResult = test.results.at(-1)
-    if (isFailureScreenshotUploadEnabled && !shouldCreateTestSpan) {
+    if (isFailureScreenshotUploadEnabled && !shouldCreateTestSpan && !test._ddShouldSkipEfdRetry) {
       let screenshots
       if (testStatus === 'fail') {
         screenshots = automaticFailureScreenshotsByTestId.get(testId)

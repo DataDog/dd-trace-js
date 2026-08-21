@@ -10,7 +10,7 @@ const test = base.extend({
       return
     }
 
-    const originalAttachmentsPush = testInfo.attachments.push
+    const originalAttachmentsPush = testInfo.attachments.push.bind(testInfo.attachments)
     testInfo.attachments.push = (...attachments) => {
       const hasFailureScreenshot = attachments.some(({ name, path }) =>
         name === 'screenshot' && /test-failed-1\.png$/.test(path ?? ''))
@@ -22,9 +22,11 @@ const test = base.extend({
     }
     await use()
   }, { auto: true }],
-  releaseDeferredFailureScreenshot: [async ({ screenshot }, use) => {
+  // The worker fixture must not depend on Playwright's test-scoped screenshot fixture.
+  // eslint-disable-next-line no-empty-pattern
+  releaseDeferredFailureScreenshot: [async ({}, use) => {
     await use()
-    if (screenshot !== 'off' && releaseDeferredFailureScreenshot) {
+    if (releaseDeferredFailureScreenshot) {
       setImmediate(releaseDeferredFailureScreenshot)
     }
   }, { auto: true, scope: 'worker' }],
