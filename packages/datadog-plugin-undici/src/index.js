@@ -5,10 +5,15 @@ const { storage } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
-const log = require('../../dd-trace/src/log')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const { CLIENT } = require('../../../ext/kinds')
+const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 
 const {
   HTTP_STATUS_CODE,
@@ -76,6 +81,7 @@ class UndiciPlugin extends HttpClientPlugin {
         'span.kind': 'client',
         'http.method': method,
         'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
+        ...(otelSemantics && { [INSTRUMENTATION_HTTP_RESOURCE]: method }),
         'out.host': hostname,
       },
       metrics: {
@@ -150,6 +156,9 @@ class UndiciPlugin extends HttpClientPlugin {
 
       if (!this.config.validateStatus(statusCode)) {
         span.setTag('error', 1)
+        if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+          span.setTag(HTTP_STATUS_ERROR, String(statusCode))
+        }
       }
     }
 
@@ -302,7 +311,7 @@ function normalizeHeaders (headers) {
 }
 
 function normalizeConfig (config) {
-  const validateStatus = getStatusValidator(config)
+  const validateStatus = getStatusValidator(config, CLIENT)
   const hooks = getHooks(config)
 
   return {
@@ -310,19 +319,6 @@ function normalizeConfig (config) {
     validateStatus,
     hooks,
   }
-}
-
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return config.validateStatus
-  } else if (Object.hasOwn(config, 'validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-  return defaultValidateStatus
-}
-
-function defaultValidateStatus (code) {
-  return code < 400 || code >= 500
 }
 
 function getHooks (config) {

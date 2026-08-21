@@ -8,8 +8,13 @@ const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { CLIENT } = require('../../../ext/kinds')
+const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
-const log = require('../../dd-trace/src/log')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
@@ -50,6 +55,7 @@ class HttpClientPlugin extends ClientPlugin {
         [COMPONENT]: this.component,
         'span.kind': 'client',
         'resource.name': method,
+        ...(otelSemantics && { [INSTRUMENTATION_HTTP_RESOURCE]: method }),
         'span.type': 'http',
         'http.method': method,
         'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, pathname, uri) : uri,
@@ -99,6 +105,9 @@ class HttpClientPlugin extends ClientPlugin {
 
       if (!this.config.validateStatus(status)) {
         span.setTag('error', 1)
+        if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+          span.setTag(HTTP_STATUS_ERROR, String(status))
+        }
       }
 
       addResponseHeaders(res, span, this.config)
@@ -167,7 +176,7 @@ function addRequestHeaders (req, span, config) {
 }
 
 function normalizeClientConfig (config) {
-  const validateStatus = getStatusValidator(config)
+  const validateStatus = getStatusValidator(config, CLIENT)
   const filter = getFilter(config)
   const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
   const headers = getHeaders(config)
@@ -181,19 +190,6 @@ function normalizeClientConfig (config) {
     headers,
     hooks,
   }
-}
-
-function is400ErrorCode (code) {
-  return code < 400 || code >= 500
-}
-
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-  return is400ErrorCode
 }
 
 function getFilter (config) {

@@ -4,8 +4,14 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  setInstrumentationHttpResource,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
+const addOtelRequestTags = require('./request-tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 const reusedNextRequestStores = new WeakSet()
@@ -40,6 +46,9 @@ class NextPlugin extends ServerPlugin {
         [COMPONENT]: this.constructor.id,
         'service.name': serviceName,
         'resource.name': req.method,
+        ...(this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && {
+          [INSTRUMENTATION_HTTP_RESOURCE]: req.method,
+        }),
         'span.type': 'web',
         'span.kind': 'server',
         'http.method': req.method,
@@ -47,6 +56,10 @@ class NextPlugin extends ServerPlugin {
       },
       integrationName: this.constructor.id,
     })
+
+    // Next.js does not publish these through `web.addRequestTags`, so the shared conversion
+    // has nothing to derive `url.*`, `server.*` and `network.peer.address` from.
+    addOtelRequestTags(span, this.config, req)
 
     this.stampIntegrationService(span, serviceName)
 
@@ -90,6 +103,9 @@ class NextPlugin extends ServerPlugin {
     } else if (!this.config.validateStatus(res.statusCode)) {
       // where there's no error, we still need to validate status
       span.setTag('error', true)
+      if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        span.setTag(HTTP_STATUS_ERROR, String(res.statusCode))
+      }
       web.addError(req, true)
     }
 
@@ -133,14 +149,24 @@ class NextPlugin extends ServerPlugin {
         : '/public/*'
     }
 
-    span.addTags({
-      [COMPONENT]: this.constructor.id,
-      'resource.name': `${req.method} ${page}`.trim(),
-      'next.page': page,
-    })
+    const resource = `${req.method} ${page}`.trim()
+    span.setTag(COMPONENT, this.constructor.id)
+    span.setTag('next.page', page)
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      span.setTag(HTTP_ROUTE, page)
+      setInstrumentationHttpResource(span, resource)
+    } else {
+      span.setTag(RESOURCE_NAME, resource)
+    }
     const routeRequest = httpParentReq || req
     web.setRouteOrEndpointTag(routeRequest)
-    setHttpParentRoute(httpParentSpan, req.method, page, isStatic)
+    setHttpParentRoute(
+      httpParentSpan,
+      req.method,
+      page,
+      isStatic,
+      this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    )
     web.setRoute(routeRequest, page)
   }
 
@@ -167,7 +193,7 @@ function normalizeAppPath (page) {
   return page
 }
 
-function setHttpParentRoute (span, method, page, isStatic) {
+function setHttpParentRoute (span, method, page, isStatic, otelSemanticsEnabled) {
   if (!span) return
   const currentRoute = span.context().getTag(HTTP_ROUTE)
 
@@ -175,7 +201,12 @@ function setHttpParentRoute (span, method, page, isStatic) {
   if (currentRoute && (nextParentRoutes.get(span) !== currentRoute || isStatic)) return
 
   span.setTag(HTTP_ROUTE, page)
-  span.setTag(RESOURCE_NAME, `${method} ${page}`.trim())
+  const resource = `${method} ${page}`.trim()
+  if (otelSemanticsEnabled) {
+    setInstrumentationHttpResource(span, resource)
+  } else {
+    span.setTag(RESOURCE_NAME, resource)
+  }
   nextParentRoutes.set(span, page)
 }
 module.exports = NextPlugin

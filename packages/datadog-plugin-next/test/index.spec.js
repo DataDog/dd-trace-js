@@ -21,6 +21,7 @@ require('../../datadog-instrumentations/src/next')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
+const addOtelRequestTags = require('../src/request-tags')
 const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
@@ -60,6 +61,29 @@ function getDisabledRuntimeHooks () {
 }
 
 describe('Plugin', function () {
+  it('captures the URL and socket peer needed by OTel server attributes', () => {
+    const tags = {}
+    const span = { setTag: (key, value) => { tags[key] = value } }
+    const req = {
+      headers: { host: 'example.com:8080', 'user-agent': 'test-agent/1.0' },
+      method: 'GET',
+      socket: { encrypted: false, remoteAddress: '192.0.2.1' },
+      url: '/products/42?token=secret',
+    }
+
+    addOtelRequestTags(
+      span,
+      { DD_TRACE_OTEL_SEMANTICS_ENABLED: true, queryStringObfuscation: false },
+      req
+    )
+
+    assert.strictEqual(tags['http.url'], 'http://example.com:8080/products/42?token=secret')
+    assert.strictEqual(tags['network.peer.address'], '192.0.2.1')
+    // The shared `web.addRequestTags` path records this, so the Next path has to as well or the
+    // conversion emits no `user_agent.original`.
+    assert.strictEqual(tags['http.useragent'], 'test-agent/1.0')
+  })
+
   let server
   let port
   let downstreamServer

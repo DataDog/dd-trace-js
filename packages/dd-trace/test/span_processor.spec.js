@@ -326,11 +326,13 @@ describe('SpanProcessor', () => {
 
       const exported = exporter.export.firstCall.args[0][0]
       assert.strictEqual(exported.meta['http.request.method'], 'GET')
-      assert.strictEqual(exported.metrics['http.response.status_code'], 200)
+      assert.strictEqual(exported.meta['http.response.status_code'], '200')
       assert.ok(!('http.method' in exported.meta))
+      // Datadog-only, no OTel equivalent, read by ASM and endpoint aggregation.
+      assert.strictEqual(exported.meta['http.endpoint'], '/u')
     })
 
-    it('records span stats from the Datadog tag names, before the export-only rename', () => {
+    it('records span stats from the OTel span shape used for export', () => {
       spanFormat.returns(formattedHttpSpan())
       const otelConfig = {
         flushMinSpans: 3,
@@ -342,8 +344,9 @@ describe('SpanProcessor', () => {
       const statsView = {}
       processor._stats = {
         onSpanFinished: sinon.spy(span => {
-          statsView.method = span.meta['http.method']
-          statsView.statusCode = span.meta['http.status_code']
+          statsView.resource = span.resource
+          statsView.method = span.meta['http.request.method']
+          statsView.statusCode = span.meta['http.response.status_code']
           statsView.endpoint = span.meta['http.endpoint']
         }),
       }
@@ -352,7 +355,7 @@ describe('SpanProcessor', () => {
 
       processor.process(finishedSpan)
 
-      assert.deepStrictEqual(statsView, { method: 'GET', statusCode: '200', endpoint: '/u' })
+      assert.deepStrictEqual(statsView, { resource: 'GET', method: 'GET', statusCode: '200', endpoint: '/u' })
     })
   })
 })

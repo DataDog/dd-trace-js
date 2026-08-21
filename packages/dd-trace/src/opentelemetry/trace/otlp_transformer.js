@@ -5,6 +5,11 @@ const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { VERSION } = require('../../../../../version')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
+const { SAMPLING_PRIORITY_KEY } = require('../../constants')
+const {
+  INT_VALUED_OTEL_ATTRIBUTES,
+  isCanonicalIntegerAttribute,
+} = require('../../plugins/util/http-otel-semantics')
 
 const { protoSpanKind } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
@@ -77,6 +82,9 @@ const EXCLUDED_META_KEYS = new Set([
 // DD-only error tags that should not appear as attributes when OTel trace semantics are enabled.
 const DD_ERROR_META_KEYS = new Set(['error.message'])
 
+// Typed as ints by the semantic conventions but carried in `meta`, since the agent protocol is
+// all strings. Promoted back here rather than duplicated into `metrics`, which would emit the
+// attribute twice with two types. Same approach as DataDog/dd-trace-go#4888.
 /**
  * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
  *
@@ -129,6 +137,17 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   #transformScopeSpans (spans) {
     let traceKey
     let traceIdHigh
+    const samplingByTrace = new Map()
+    for (const span of spans) {
+      const priority = span.metrics?.[SAMPLING_PRIORITY_KEY]
+      if (!Number.isFinite(priority)) continue
+      const key = span.trace_id.toString(16)
+      const isRoot = !span.parent_id || span.parent_id.equals(ZERO_ID)
+      const current = samplingByTrace.get(key)
+      if (current === undefined || (isRoot && !current.isRoot)) {
+        samplingByTrace.set(key, { priority, isRoot })
+      }
+    }
     const otlpSpans = spans.map((span) => {
       // `_dd.p.tid` lives only on the first-in-chunk span of each trace.
       // Reset at each trace boundary for batching of multiple traces.
@@ -137,7 +156,9 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         traceKey = key
         traceIdHigh = span.meta?.[TRACE_ID_128]?.toLowerCase()
       }
-      return this.#transformSpan(span, traceIdHigh)
+      const priority = samplingByTrace.get(key)?.priority
+      const flags = priority !== undefined && priority > 0 ? 1 : 0
+      return this.#transformSpan(span, traceIdHigh, flags)
     })
     return [{
       scope: {
@@ -156,9 +177,10 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    *
    * @param {DDFormattedSpan} span - DD-formatted span to transform
    * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits of the trace ID
+   * @param {number} flags - Trace-level OTLP sampled flag
    * @returns {object} OTLP Span object
    */
-  #transformSpan (span, traceIdHigh) {
+  #transformSpan (span, traceIdHigh, flags) {
     const parentId = span.parent_id
     const links = this.#extractLinks(span.meta?.['_dd.span_links'])
 
@@ -177,6 +199,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       links: links.length ? links : undefined,
       droppedLinksCount: 0,
       status: this.#mapStatus(span),
+      flags,
     }
   }
 
@@ -215,6 +238,12 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       for (const [key, value] of Object.entries(span.meta)) {
         if (EXCLUDED_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
+        if (this.#otelTraceSemanticsEnabled && INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
+          if (isCanonicalIntegerAttribute(value)) {
+            attributes.push({ key, value: { intValue: Number(value) } })
+          }
+          continue
+        }
         attributes.push({ key, value: { stringValue: value } })
       }
     }
@@ -222,6 +251,13 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     // Add metrics as numeric attributes
     if (span.metrics) {
       for (const [key, value] of Object.entries(span.metrics)) {
+        if (
+          this.#otelTraceSemanticsEnabled &&
+          INT_VALUED_OTEL_ATTRIBUTES.has(key) &&
+          !isCanonicalIntegerAttribute(value)
+        ) {
+          continue
+        }
         if (Number.isInteger(value)) {
           attributes.push({ key, value: { intValue: value } })
         } else {

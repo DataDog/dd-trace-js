@@ -14,7 +14,14 @@ const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
-const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
+const { getStatusValidator } = require('./http-error-statuses')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  isInstrumentationOwnedResource,
+  NETWORK_PEER_ADDRESS,
+  setInstrumentationHttpResource,
+} = require('./http-otel-semantics')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -35,11 +42,6 @@ const MANUAL_DROP = tags.MANUAL_DROP
 
 const contexts = new WeakMap()
 const requests = new WeakMap()
-const statusCodeRangesPattern = /^[1-5]\d{2}(?:-[1-5]\d{2})?(?:,[1-5]\d{2}(?:-[1-5]\d{2})?)*$/
-const whitespacePattern = /\s/g
-const MAX_HTTP_STATUS_CODE = 599
-
-/** @typedef {(code: number) => boolean} StatusValidator */
 
 // TODO: change this to no longer rely on creating a dummy plugin to be able to access startSpan
 function createWebPlugin (tracer, config = {}) {
@@ -65,7 +67,7 @@ const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
-    const validateStatus = getStatusValidator(config)
+    const validateStatus = getStatusValidator(config, SERVER)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
@@ -150,9 +152,22 @@ const web = {
   setRoute (req, path) {
     const context = contexts.get(req)
 
-    if (!context) return
+    if (!context?.span) return
 
+    const spanContext = context.span.context()
+    const currentRoute = spanContext.getTag(HTTP_ROUTE)
+    const publishedRoute = context.paths.length > 1 ? context.paths.join('') : context.paths[0]
     context.paths = [path]
+    // Flag-only: this mutates the live span, which the default path must not do. A downstream
+    // request can sample from inside the route handler, so the route has to be readable before
+    // finish. Overwrite only what this context published, so an upstream route still wins.
+    if (
+      path &&
+      context.config?.DD_TRACE_OTEL_SEMANTICS_ENABLED &&
+      (currentRoute === undefined || currentRoute === publishedRoute)
+    ) {
+      context.span.setTag(HTTP_ROUTE, path)
+    }
   },
 
   // Remove the current route segment.
@@ -258,10 +273,16 @@ const web = {
 
     if (!spanHasExistingError && !isValidStatusCode) {
       span.setTag(ERROR, error || true)
+      if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        span.setTag(HTTP_STATUS_ERROR, String(statusCode))
+      }
     }
 
     if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
       inferredProxySpan.setTag(ERROR, error || true)
+      if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        inferredProxySpan.setTag(HTTP_STATUS_ERROR, String(statusCode))
+      }
     }
   },
 
@@ -437,6 +458,12 @@ function addRequestTags (context, spanType) {
   // other HTTP attributes, which are renamed centrally in span_format) it is set
   // here directly when OTel semantics are enabled.
   if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    // Establish ownership before propagation can sample; the sampler replaces this method-only
+    // value once a route resolves. Serverless callers reach this from `web.finishSpan`, after
+    // the handler ran, so a resource already present belongs to the application.
+    if (ownsResource(spanContext)) {
+      setInstrumentationHttpResource(span, req.method)
+    }
     const peerAddress = req.socket?.remoteAddress
     if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
   }
@@ -509,17 +536,36 @@ function applyRouteOrEndpointTag (context) {
   span.setTag(HTTP_ENDPOINT, endpoint)
 }
 
-function addResourceTag (context) {
-  const { req, span } = context
-  const spanContext = span.context()
+/**
+ * @param {import('../../opentracing/span_context')} spanContext
+ * @returns {boolean}
+ */
+function ownsResource (spanContext) {
+  return isInstrumentationOwnedResource(
+    spanContext.getTag(RESOURCE_NAME),
+    spanContext.getTag(INSTRUMENTATION_HTTP_RESOURCE)
+  )
+}
 
-  if (spanContext.getTag(RESOURCE_NAME)) return
+function addResourceTag (context) {
+  const { req, span, config } = context
+  const spanContext = span.context()
+  const currentResource = spanContext.getTag(RESOURCE_NAME)
+
+  if (currentResource) {
+    if (!config.DD_TRACE_OTEL_SEMANTICS_ENABLED) return
+    if (!ownsResource(spanContext)) return
+  }
 
   const resource = [req.method, spanContext.getTag(HTTP_ROUTE)]
     .filter(Boolean)
     .join(' ')
 
-  span.setTag(RESOURCE_NAME, resource)
+  if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    setInstrumentationHttpResource(span, resource)
+  } else {
+    span.setTag(RESOURCE_NAME, resource)
+  }
 }
 
 function addRequestHeaders (context) {
@@ -561,65 +607,6 @@ function getHeadersToRecord (config) {
     log.error('Expected `headers` to be an array of strings.')
   }
   return []
-}
-
-function isNot500ErrorCode (code) {
-  return code < 500
-}
-
-/**
- * @param {{ validateStatus?: unknown, DD_TRACE_HTTP_SERVER_ERROR_STATUSES?: unknown }} config
- * @returns {StatusValidator}
- */
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return /** @type {StatusValidator} */ (config.validateStatus)
-  } else if (config.hasOwnProperty('validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-
-  const { DD_TRACE_HTTP_SERVER_ERROR_STATUSES } = config
-  if (DD_TRACE_HTTP_SERVER_ERROR_STATUSES === undefined) return isNot500ErrorCode
-  if (typeof DD_TRACE_HTTP_SERVER_ERROR_STATUSES !== 'string') {
-    log.error('Expected `DD_TRACE_HTTP_SERVER_ERROR_STATUSES` to be a string.')
-    return isNot500ErrorCode
-  }
-  if (DD_TRACE_HTTP_SERVER_ERROR_STATUSES === '500-599') return isNot500ErrorCode
-
-  const normalized = DD_TRACE_HTTP_SERVER_ERROR_STATUSES.replaceAll(whitespacePattern, '')
-  if (normalized === '500-599') return isNot500ErrorCode
-  if (!statusCodeRangesPattern.test(normalized)) {
-    log.error(
-      '`DD_TRACE_HTTP_SERVER_ERROR_STATUSES` must contain comma-separated status codes or ranges from 100 to 599.'
-    )
-    return isNot500ErrorCode
-  }
-
-  const errorStatusCodes = new Uint8Array(MAX_HTTP_STATUS_CODE + 1)
-  const ranges = normalized.split(',')
-  for (const range of ranges) {
-    const separator = range.indexOf('-')
-    if (separator === -1) {
-      errorStatusCodes[Number(range)] = 1
-      continue
-    }
-
-    const first = Number(range.slice(0, separator))
-    const second = Number(range.slice(separator + 1))
-    const start = Math.min(first, second)
-    const end = Math.max(first, second)
-    errorStatusCodes.fill(1, start, end + 1)
-  }
-
-  /**
-   * @param {number} code
-   * @returns {boolean}
-   */
-  function isValidStatusCode (code) {
-    return errorStatusCodes[code] !== 1
-  }
-
-  return isValidStatusCode
 }
 
 const noop = () => {}

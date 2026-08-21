@@ -7,6 +7,10 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 const tagsExt = require('../../../../../ext/tags')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+} = require('../../../src/plugins/util/http-otel-semantics')
 
 const ERROR = tagsExt.ERROR
 const HTTP_CLIENT_IP = tagsExt.HTTP_CLIENT_IP
@@ -298,7 +302,7 @@ describe('plugins/util/web', () => {
     })
   })
 
-  describe('OTel semantics network.peer.address', () => {
+  describe('OTel semantics request-start tags', () => {
     // The HTTP tag renames happen centrally in span_format; only network.peer.address
     // is set here (the socket isn't available at serialization).
     it('sets network.peer.address from the socket when OTel semantics are enabled', () => {
@@ -308,6 +312,8 @@ describe('plugins/util/web', () => {
       const span = web.startSpan(tracer, otelConfig, req, res, 'test.request')
 
       assert.strictEqual(span.context().getTag('network.peer.address'), '10.0.0.1')
+      assert.strictEqual(span.context().getTag('resource.name'), req.method)
+      assert.strictEqual(span.context().getTag(INSTRUMENTATION_HTTP_RESOURCE), req.method)
     })
 
     it('does not set network.peer.address when OTel semantics are disabled', () => {
@@ -328,6 +334,27 @@ describe('plugins/util/web', () => {
   describe('active', () => {
     it('should return null when not yet instrumented', () => {
       assert.strictEqual(web.active(req), null)
+    })
+  })
+
+  describe('setRoute', () => {
+    it('should ignore a patched request without a span', () => {
+      const context = web.patch(req)
+
+      web.setRoute(req, '/users/:id')
+      assert.deepStrictEqual(context.paths, [])
+    })
+
+    it('should preserve an upstream-established route', () => {
+      const context = web.patch(req)
+      span = tracer.startSpan('test.request')
+      context.span = span
+      span.setTag(HTTP_ROUTE, '/upstream/:id')
+
+      web.setRoute(req, '/users/:id')
+
+      assert.strictEqual(span.context().getTag(HTTP_ROUTE), '/upstream/:id')
+      assert.deepStrictEqual(context.paths, ['/users/:id'])
     })
   })
 
@@ -389,6 +416,27 @@ describe('plugins/util/web', () => {
       web.addStatusError(req, 500)
 
       assert.ok(!(ERROR in tags))
+    })
+
+    it('should record when a custom validator causes a successful status error', () => {
+      config.DD_TRACE_OTEL_SEMANTICS_ENABLED = true
+      config.validateStatus = () => false
+
+      web.addStatusError(req, 200)
+
+      assert.strictEqual(tags[ERROR], true)
+      // The marker carries the rejected status, so a later rewrite cannot be blamed for it.
+      assert.strictEqual(tags[HTTP_STATUS_ERROR], '200')
+    })
+
+    it('should not assign status provenance to an existing manual error', () => {
+      config.DD_TRACE_OTEL_SEMANTICS_ENABLED = true
+      config.validateStatus = () => false
+      span.setTag(ERROR, true)
+
+      web.addStatusError(req, 200)
+
+      assert.strictEqual(tags[HTTP_STATUS_ERROR], undefined)
     })
   })
 
@@ -732,6 +780,59 @@ describe('plugins/util/web', () => {
       assert.strictEqual(tags[HTTP_ENDPOINT], endpoint)
       assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
       assert.strictEqual(tags[RESOURCE_NAME], 'GET')
+    })
+
+    it('updates the OTel instrumentation resource when the route resolves', () => {
+      config = web.normalizeConfig({
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+        resourceRenamingEnabled: true,
+      })
+      span = web.startSpan(tracer, config, req, res, 'test.request')
+      tags = span.context().getTags()
+      context = web.getContext(req)
+
+      web.setRoute(req, '/users/:id')
+      web.finishAll(context)
+
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET /users/:id')
+      assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'GET /users/:id')
+    })
+
+    it('preserves a user resource when the route resolves under OTel semantics', () => {
+      config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      span = web.startSpan(tracer, config, req, res, 'test.request')
+      tags = span.context().getTags()
+      context = web.getContext(req)
+      span.setTag(INSTRUMENTATION_HTTP_RESOURCE, 'GET')
+      span.setTag(RESOURCE_NAME, 'user-resource')
+
+      web.setRoute(req, '/users/:id')
+      web.finishAll(context)
+
+      assert.strictEqual(tags[RESOURCE_NAME], 'user-resource')
+      assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'GET')
+    })
+
+    it('preserves an application resource when request tags first run at finish', () => {
+      // Serverless callers (Azure Functions) build the web context themselves and never call
+      // `web.startSpan`, so `addRequestTags` first runs from `web.finishAll`, after the handler
+      // returned. A resource already on the span there belongs to the application.
+      config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      const serverlessContext = web.patch(req)
+      serverlessContext.config = config
+      serverlessContext.tracer = tracer
+      serverlessContext.paths = ['/users']
+      serverlessContext.res = res
+      span = tracer.startSpan('azure.functions.invoke')
+      serverlessContext.span = span
+      tags = span.context().getTags()
+
+      span.setTag(RESOURCE_NAME, 'user-resource')
+
+      web.finishAll(serverlessContext, 'serverless')
+
+      assert.strictEqual(tags[RESOURCE_NAME], 'user-resource')
+      assert.ok(!Object.hasOwn(tags, INSTRUMENTATION_HTTP_RESOURCE))
     })
   })
 
