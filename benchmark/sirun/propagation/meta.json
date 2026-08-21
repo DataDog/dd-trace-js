@@ -12,12 +12,6 @@
         "OPERATIONS": "300000"
       }
     },
-    "extract-no-context": {
-      "env": {
-        "VARIANT": "extract-no-context",
-        "OPERATIONS": "120000000"
-      }
-    },
     "inject": {
       "env": {
         "VARIANT": "inject",
