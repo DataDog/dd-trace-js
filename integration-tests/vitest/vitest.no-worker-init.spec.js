@@ -1759,6 +1759,84 @@ describe('impacted test', () => {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
+    it('preserves quarantine final status for a new test retried by EFD', async () => {
+      const testSuite = 'ci-visibility/vitest-tests/test-quarantine.mjs'
+      const testName = 'quarantine tests can quarantine a test'
+      const numRetries = 2
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': numRetries,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+        test_management: { enabled: true },
+      })
+      receiver.setKnownTests({
+        vitest: {
+          [testSuite]: [
+            'quarantine tests can pass normally',
+            'quarantine tests can quarantine a passing test',
+          ],
+        },
+      })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            [testSuite]: {
+              tests: {
+                [testName]: {
+                  properties: {
+                    quarantined: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const runPromise = runVitest({
+        TEST_DIR: testSuite,
+        POOL_CONFIG: 'forks',
+      })
+      const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = getEvents(payloads)
+          const tests = getTestsByName(getEventContents(events, 'test'), testName)
+          const [testSession] = getEventContents(events, 'test_session_end')
+
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(tests.length, numRetries + 1)
+          for (const test of tests) {
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          }
+
+          assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+          for (const retry of tests.slice(1)) {
+            assert.strictEqual(retry.meta[TEST_IS_RETRY], 'true')
+            assert.strictEqual(retry.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          }
+          assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'skip')
+          assert.strictEqual(tests.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+        },
+        { hardTimeout: 60_000 }
+      )
+
+      const exitCode = await Promise.all([
+        runPromise,
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
     latestVitestIt('uses legacy EFD faultiness detection in no-worker mode', async () => {
       receiver.setSettings({
         early_flake_detection: {
