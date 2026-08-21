@@ -99,6 +99,7 @@ module.exports = {
   'jest-config': () => require('../jest'),
   'jest-environment-node': () => require('../jest'),
   'jest-environment-jsdom': () => require('../jest'),
+  'jest-runner': () => require('../jest'),
   'jest-runtime': () => require('../jest'),
   'jest-worker': () => require('../jest'),
   knex: () => require('../knex'),

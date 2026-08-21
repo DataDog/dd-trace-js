@@ -285,6 +285,10 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
+      - if: matrix.version == 'latest' && matrix.jest-version == 'latest' && matrix.spec == 'jest.core'
+        run: npm run test:instrumentations:ci
+        env:
+          PLUGINS: jest
       - name: Simulate the v5 release line for Jest 25 compatibility
         if: matrix.jest-version == '25.5.1'
         run: npm pkg set version=5.0.0

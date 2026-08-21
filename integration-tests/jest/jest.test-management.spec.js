@@ -78,7 +78,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
     ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
+    'bunyan',
     'office-addin-mock',
+    'pino',
     'winston',
     'jest-image-snapshot',
   ].filter(Boolean), true)
@@ -3556,24 +3558,337 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  context('winston mocking', () => {
-    it('should allow winston to be mocked and verify createLogger is called', async () => {
+  for (const loggerName of ['winston', 'pino', 'bunyan']) {
+    context(`${loggerName} mocking`, () => {
+      it(`should allow ${loggerName} to be mocked`, async () => {
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: `jest-mock-bypass-require/${loggerName}-mock-test`,
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        const [code] = await once(childProcess, 'exit')
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
+      })
+    })
+  }
+
+  for (const loggerName of ['pino', 'bunyan']) {
+    it(`should preserve Jest's post-teardown import failure for ${loggerName}`, async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuite = events.find(event =>
+            event.type === 'test_suite_end' &&
+            event.content.meta[TEST_SUITE] === 'ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'
+          )
+
+          assert.ok(testSuite)
+          assert.match(testSuite.content.meta[ERROR_MESSAGE], /a file after the Jest environment has been torn down/)
+        })
+
       childProcess = exec(
         runTestsCommand,
         {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'jest-mock-bypass-require/winston-mock-test',
-            SHOULD_CHECK_RESULTS: '1',
+            RUN_IN_PARALLEL: 'true',
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-bad-import-torn-down/jest-bad-import-test',
           },
         }
       )
 
-      const [code] = await once(childProcess, 'exit')
-      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
     })
-  })
+
+    it(`should load suite-local ${loggerName}`, async () => {
+      let testOutput = ''
+      const loggerDirectory = path.join(
+        cwd,
+        'ci-visibility/jest-mock-bypass-require/workspace/node_modules',
+        loggerName
+      )
+      fs.mkdirSync(loggerDirectory, { recursive: true })
+      fs.writeFileSync(path.join(loggerDirectory, 'package.json'), JSON.stringify({
+        name: loggerName,
+        version: '0.0.0',
+        main: 'index.js',
+      }))
+      fs.writeFileSync(
+        path.join(loggerDirectory, 'index.js'),
+        `'use strict'\n\nmodule.exports = { suiteLocalLogger: '${loggerName}' }\n`
+      )
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-mock-bypass-require/workspace/suite-local-logger-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
+    it(`should respect Jest module lifecycle for ${loggerName}`, async () => {
+      let testOutput = ''
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-mock-bypass-require/module-lifecycle-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
+    it(`should isolate transitive native modules for ${loggerName}`, async () => {
+      let testOutput = ''
+      const workspaceDirectory = path.join(
+        cwd,
+        'ci-visibility/jest-mock-bypass-require/transitive-workspace'
+      )
+      const loggerDirectory = path.join(workspaceDirectory, 'node_modules', loggerName)
+      const loggerLibDirectory = path.join(loggerDirectory, 'lib')
+      fs.mkdirSync(loggerLibDirectory, { recursive: true })
+      fs.writeFileSync(path.join(loggerDirectory, 'package.json'), JSON.stringify({
+        name: loggerName,
+        version: '0.0.0',
+        main: 'index.js',
+      }))
+      fs.writeFileSync(
+        path.join(loggerDirectory, 'index.js'),
+        "'use strict'\n\nmodule.exports = { state: require('./lib/state') }\n"
+      )
+      fs.writeFileSync(path.join(loggerLibDirectory, 'state.js'), "'use strict'\n\nmodule.exports = {}\n")
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-mock-bypass-require/transitive-workspace/module-lifecycle-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
+    onlyLatestIt(`should preserve Jest transforms for ${loggerName}`, async () => {
+      let testOutput = ''
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            CONFIG_TRANSFORM: JSON.stringify({
+              '\\.[jt]s$': '<rootDir>/ci-visibility/jest-mock-bypass-require/logger-transformer.js',
+            }),
+            CONFIG_TRANSFORM_IGNORE_PATTERNS: '[]',
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-mock-bypass-require/transformed-logger-test',
+            USE_CONFIG_FILE: '1',
+            USE_JEST_RUN: '1',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
+    for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
+      it(`should respect Jest ${resolutionType} for ${loggerName}`, async () => {
+        let testOutput = ''
+        const resolutionConfig = resolutionType === 'moduleNameMapper'
+          ? {
+              CONFIG_MODULE_NAME_MAPPER: JSON.stringify({
+                [`^${loggerName}$`]: '<rootDir>/ci-visibility/jest-mock-bypass-require/mapped-logger.js',
+              }),
+            }
+          : {
+              CONFIG_RESOLVER: '<rootDir>/ci-visibility/jest-mock-bypass-require/logger-resolver.js',
+            }
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              ...resolutionConfig,
+              TEST_LOGGER: loggerName,
+              TESTS_TO_RUN: 'jest-mock-bypass-require/mapped-logger-test',
+              USE_CONFIG_FILE: '1',
+              USE_JEST_RUN: '1',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+        childProcess.stdout.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+
+        const [code] = await once(childProcess, 'exit')
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+      })
+    }
+
+    it(`should respect Jest automocking for ${loggerName}`, async () => {
+      let testOutput = ''
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-mock-bypass-require/automock-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
+    for (const mockMethod of ['doMock', 'setMock']) {
+      it(`should allow ${loggerName} to be mocked with jest.${mockMethod}`, async () => {
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_LOGGER: loggerName,
+              TEST_MOCK_METHOD: mockMethod,
+              TESTS_TO_RUN: 'jest-mock-bypass-require/runtime-mock-test',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        const [code] = await once(childProcess, 'exit')
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
+      })
+    }
+
+    it(`should instrument ${loggerName} after another suite mocks it`, async () => {
+      let testOutput = ''
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), (payloads) => {
+          assert.strictEqual(payloads.length, 1, testOutput)
+
+          const [{ headers, logMessage, url }] = payloads
+          assert.strictEqual(headers['content-type'], 'application/json')
+          assert.strictEqual(headers['dd-api-key'], 'api-key')
+          assert.strictEqual(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`)
+          assert.strictEqual(logMessage.length, 1)
+
+          const [{ dd, msg }] = logMessage
+          assert.strictEqual(msg, 'real logger after mock')
+          assert.strictEqual(dd.service, 'my-service')
+          assert.match(dd.trace_id, /^\d+$/)
+          assert.match(dd.span_id, /^\d+$/)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+            DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+            DD_API_KEY: 'api-key',
+            DD_SERVICE: 'my-service',
+            TEST_LOGGER: loggerName,
+            TEST_MOCK_METHOD: 'doMock',
+            TEST_SEQUENCER: './ci-visibility/jest-mock-bypass-require/test-sequencer.js',
+            TESTS_TO_RUN: 'jest-mock-bypass-require/(runtime-mock|z-real-logger)-test',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        logsPromise,
+      ])
+
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+  }
 
   context('seed suffix normalization', () => {
     onlyLatestIt('should remove seed suffix from reported test names', async () => {

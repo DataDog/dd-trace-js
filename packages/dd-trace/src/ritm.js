@@ -210,6 +210,14 @@ Hook.reset = function () {
   hookedModuleCount = 0
 }
 
+/**
+ * @param {string} moduleId
+ * @returns {void}
+ */
+Hook.invalidateCache = function (moduleId) {
+  delete cache[moduleId]
+}
+
 function findProjectRoot (startDir) {
   let dir = startDir
 

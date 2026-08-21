@@ -13,6 +13,7 @@ const { DD_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
+const RitmHook = require('../../dd-trace/src/ritm')
 const {
   EMPTY_EFD_RETRY_POLICY,
   getEfdRetryCountForDuration,
@@ -55,6 +56,7 @@ const {
   getCoverageBackfillFiles,
 } = require('./jest/coverage-backfill')
 const {
+  getChannelBarrierPromise,
   getChannelPromise,
   publishWithCompletion,
 } = require('./helpers/channel')
@@ -89,6 +91,7 @@ const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
 const testManagementTestsCh = channel('ci:jest:test-management-tests')
 const modifiedFilesCh = channel('ci:jest:modified-files')
+const agentlessFlushCh = channel('ci:agentless:flush')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -177,6 +180,7 @@ const wrappedJestGlobals = new WeakSet()
 const wrappedJestObjects = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
+const nativeModuleGraphsByRuntime = new WeakMap()
 const wrappedCoverageReporters = new WeakSet()
 const coverageReporterRequires = new WeakMap()
 const handledJestEvents = new WeakSet()
@@ -3288,6 +3292,14 @@ function shouldWaitForTestSuiteFinish (environment) {
 }
 
 /**
+ * @param {object} runtime
+ * @returns {boolean}
+ */
+function isJestEnvironmentTornDown (runtime) {
+  return runtime.isTornDown === true || runtime.testState?.isTornDown?.() === true
+}
+
+/**
  * @param {Record<string, unknown>} payload
  * @param {boolean} waitForFinish
  */
@@ -3474,18 +3486,15 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         errorMessage,
         testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
       }
-      if (waitForFinish) {
-        const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
-        if (finishPromise) {
-          return finishPromise.then(() => {
-            // Cleanup per-suite state to avoid memory leaks
-            cleanupTestSuiteState(environment.testSuiteAbsolutePath)
+      const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
+      if (finishPromise) {
+        return finishPromise.then(() => {
+          // Cleanup per-suite state to avoid memory leaks
+          cleanupTestSuiteState(environment.testSuiteAbsolutePath)
 
-            return suiteResults
-          })
-        }
+          return suiteResults
+        })
       }
-      publishTestSuiteFinish(finishPayload, waitForFinish)
 
       // Cleanup per-suite state to avoid memory leaks
       cleanupTestSuiteState(environment.testSuiteAbsolutePath)
@@ -3498,18 +3507,15 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         error,
         testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
       }
-      if (waitForFinish) {
-        const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
-        if (finishPromise) {
-          return finishPromise.then(() => {
-            // Cleanup per-suite state to avoid memory leaks
-            cleanupTestSuiteState(environment.testSuiteAbsolutePath)
+      const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
+      if (finishPromise) {
+        return finishPromise.then(() => {
+          // Cleanup per-suite state to avoid memory leaks
+          cleanupTestSuiteState(environment.testSuiteAbsolutePath)
 
-            throw error
-          })
-        }
+          throw error
+        })
       }
-      publishTestSuiteFinish(finishPayload, waitForFinish)
 
       // Cleanup per-suite state to avoid memory leaks
       cleanupTestSuiteState(environment.testSuiteAbsolutePath)
@@ -3525,6 +3531,27 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
 
   return jestAdapter
 }
+
+/**
+ * @param {{ teardown?: (...args: unknown[]) => unknown }} testWorker
+ * @returns {{ teardown?: (...args: unknown[]) => unknown }}
+ */
+function testWorkerWrapper (testWorker) {
+  const teardown = testWorker.teardown
+  testWorker.teardown = function () {
+    const result = teardown?.apply(this, arguments)
+    if (!isJestWorker || !agentlessFlushCh.hasSubscribers) return result
+
+    return Promise.resolve(result).then(() => getChannelBarrierPromise(agentlessFlushCh))
+  }
+  return testWorker
+}
+
+addHook({
+  name: 'jest-runner',
+  file: 'build/testWorker.js',
+  versions: [MINIMUM_JEST_VERSION],
+}, testWorkerWrapper)
 
 addHook({
   name: 'jest-circus',
@@ -3729,6 +3756,8 @@ if (DD_MAJOR < 6) {
 }
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
+  'bunyan',
+  'pino',
   'selenium-webdriver',
   'selenium-webdriver/chrome',
   'selenium-webdriver/edge',
@@ -3743,13 +3772,13 @@ function recordMockedFile (suiteFilePath, moduleName) {
   if (!suiteFilePath || typeof moduleName !== 'string') return
 
   const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
-  const suiteDir = path.dirname(suiteFilePath)
-  const mockPath = path.resolve(suiteDir, moduleName)
+  const mockPath = path.resolve(path.dirname(suiteFilePath), moduleName)
   existingMockedFiles.push(mockPath)
   testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
 }
 
-const JEST_STATIC_MOCK_CALL_RE = /\bjest\.(?:mock|doMock|unstable_mockModule)\(\s*(['"`])([^'"`]+)\1/g
+const JEST_STATIC_MOCK_CALL_RE = /\bjest\.(?:mock|doMock|setMock|unstable_mockModule)\(\s*(['"`])([^'"`]+)\1/g
+const JEST_CJS_MOCK_METHODS = ['mock', 'doMock', 'setMock']
 
 function getStaticMockedFiles (suiteFilePath) {
   if (!suiteFilePath) return []
@@ -3785,12 +3814,12 @@ function wrapJestObject (jestObject, suiteFilePath) {
   testSuiteJestObjects.set(suiteFilePath, jestObject)
   wrappedJestObjects.add(jestObject)
 
-  shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
-    // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
-    recordMockedFile(suiteFilePath, moduleName)
-    return mock.apply(this, arguments)
-  })
+  for (const methodName of JEST_CJS_MOCK_METHODS) {
+    shimmer.wrap(jestObject, methodName, mockMethod => function (moduleName) {
+      recordMockedFile(suiteFilePath, moduleName)
+      return mockMethod.apply(this, arguments)
+    })
+  }
 }
 
 function wrapJestGlobalsForRuntime (runtime) {
@@ -3820,8 +3849,10 @@ function cacheJestEachBind (jestEach) {
 
 function getLastLoggedReferenceError (runtime) {
   const loggedReferenceErrors = runtime?.loggedReferenceErrors
-  if (!loggedReferenceErrors?.size) return
-  return [...loggedReferenceErrors].pop()
+  if (loggedReferenceErrors?.size) return [...loggedReferenceErrors].pop()
+
+  const publishedReferenceErrors = publishedRuntimeReferenceErrors.get(runtime)
+  if (publishedReferenceErrors?.size) return [...publishedReferenceErrors].pop()
 }
 
 function publishRuntimeReferenceError (runtime, errorMessage) {
@@ -3863,11 +3894,119 @@ function reportBetweenTestsReferenceError (runtime, moduleName, originalErrorMes
   return true
 }
 
-function requireOutsideJestRequireEngine (runtime, moduleName) {
-  if (typeof runtime._requireCoreModule === 'function') {
-    return runtime._requireCoreModule(moduleName)
+/**
+ * @param {object} runtime
+ * @returns {Map<string, object> | undefined}
+ */
+function getActiveJestModuleRegistry (runtime) {
+  if (typeof runtime.registries?.getActiveCjsRegistry === 'function') {
+    return runtime.registries.getActiveCjsRegistry()
   }
-  return require(moduleName)
+  return runtime._isolatedModuleRegistry || runtime._moduleRegistry
+}
+
+/**
+ * @param {import('node:module').Module} rootModule
+ * @returns {Set<string>}
+ */
+function collectNativeModuleGraph (rootModule) {
+  const moduleGraph = new Set()
+  const pendingModules = [rootModule]
+
+  while (pendingModules.length > 0) {
+    const loadedModule = pendingModules.pop()
+    if (!loadedModule?.filename || moduleGraph.has(loadedModule.filename)) continue
+
+    moduleGraph.add(loadedModule.filename)
+    for (const childModule of loadedModule.children) {
+      pendingModules.push(childModule)
+    }
+  }
+
+  return moduleGraph
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} modulePath
+ * @param {ReturnType<typeof createRequire>} nativeRequire
+ * @returns {void}
+ */
+function evictNativeModuleGraph (runtime, modulePath, nativeRequire) {
+  let moduleGraphs = nativeModuleGraphsByRuntime.get(runtime)
+  if (!moduleGraphs) {
+    moduleGraphs = new Map()
+    nativeModuleGraphsByRuntime.set(runtime, moduleGraphs)
+  }
+
+  const cachedRootModule = nativeRequire.cache[modulePath]
+  const moduleGraph = cachedRootModule
+    ? collectNativeModuleGraph(cachedRootModule)
+    : moduleGraphs.get(modulePath) || [modulePath]
+
+  for (const moduleFilename of moduleGraph) {
+    delete nativeRequire.cache[moduleFilename]
+    RitmHook.invalidateCache(moduleFilename)
+  }
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} modulePath
+ * @param {import('node:module').Module | undefined} rootModule
+ * @returns {void}
+ */
+function recordNativeModuleGraph (runtime, modulePath, rootModule) {
+  if (!rootModule) return
+
+  const moduleGraphs = nativeModuleGraphsByRuntime.get(runtime)
+  moduleGraphs?.set(modulePath, collectNativeModuleGraph(rootModule))
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} modulePath
+ * @returns {unknown}
+ */
+function requireOutsideJestRequireEngine (runtime, from, modulePath) {
+  const moduleRegistry = getActiveJestModuleRegistry(runtime)
+  const cachedModule = moduleRegistry?.get(modulePath)
+  if (cachedModule) return cachedModule.exports
+
+  const nativeRequire = createRequire(from)
+  evictNativeModuleGraph(runtime, modulePath, nativeRequire)
+  const moduleExports = nativeRequire(modulePath)
+  const nativeModule = nativeRequire.cache[modulePath]
+  recordNativeModuleGraph(runtime, modulePath, nativeModule)
+  moduleRegistry?.set(modulePath, { exports: moduleExports })
+
+  return moduleExports
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} moduleName
+ * @returns {string | undefined}
+ */
+function getJestBypassModulePath (runtime, from, moduleName) {
+  if (!LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) return
+
+  try {
+    let jestModulePath
+    if (typeof runtime._resolveCjsModule === 'function') {
+      jestModulePath = runtime._resolveCjsModule(from, moduleName)
+    } else if (typeof runtime.cjsLoader?.resolution?.resolveCjs === 'function') {
+      jestModulePath = runtime.cjsLoader.resolution.resolveCjs(from, moduleName)
+    } else {
+      // Jest 24-27 uses this name for its synchronous CommonJS resolver.
+      jestModulePath = runtime._resolveModule(from, moduleName)
+    }
+    if (jestModulePath === createRequire(from).resolve(moduleName)) return jestModulePath
+  } catch {
+    // Let Jest produce its own resolution error or load a resolver-only module.
+  }
 }
 
 function formatDefaultStackTrace (error, structuredStackTrace) {
@@ -3896,7 +4035,15 @@ addHook({
   shimmer.wrap(Runtime.prototype, 'requireModule', requireModule => function (from, moduleName) {
     wrapJestGlobalsForRuntime(this)
     try {
-      const returnedValue = requireModule.apply(this, arguments)
+      // Jest calls requireModule only after deciding that the module should not be mocked.
+      const bypassModulePath = getJestBypassModulePath(this, from, moduleName)
+      if (bypassModulePath && isJestEnvironmentTornDown(this)) {
+        reportBetweenTestsReferenceError(this, moduleName)
+        return
+      }
+      const returnedValue = bypassModulePath
+        ? requireOutsideJestRequireEngine(this, from, bypassModulePath)
+        : requireModule.apply(this, arguments)
       if (moduleName === '@jest/globals') {
         wrapConcurrentJestGlobalsForRuntime(this, returnedValue)
       }
@@ -3925,11 +4072,6 @@ addHook({
       return formatDefaultStackTrace(error, filteredStackTrace)
     }
     try {
-      // TODO: do this for every library that we instrument
-      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-        // To bypass jest's own require engine
-        return requireOutsideJestRequireEngine(this, moduleName)
-      }
       let returnedValue
       try {
         returnedValue = requireModuleOrMock.apply(this, arguments)

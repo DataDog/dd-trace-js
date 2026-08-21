@@ -27,6 +27,18 @@ if (process.env.CONFIG_TRANSFORM) {
   config.transform = JSON.parse(process.env.CONFIG_TRANSFORM)
 }
 
+if (process.env.CONFIG_TRANSFORM_IGNORE_PATTERNS) {
+  config.transformIgnorePatterns = JSON.parse(process.env.CONFIG_TRANSFORM_IGNORE_PATTERNS)
+}
+
+if (process.env.CONFIG_MODULE_NAME_MAPPER) {
+  config.moduleNameMapper = JSON.parse(process.env.CONFIG_MODULE_NAME_MAPPER)
+}
+
+if (process.env.CONFIG_RESOLVER) {
+  config.resolver = process.env.CONFIG_RESOLVER
+}
+
 if (process.env.JEST_THROWING_REPORTER) {
   config.reporters = ['<rootDir>/ci-visibility/jest-reporter-throws.js']
 }
