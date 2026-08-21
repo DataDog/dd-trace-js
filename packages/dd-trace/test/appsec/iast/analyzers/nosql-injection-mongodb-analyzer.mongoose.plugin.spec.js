@@ -174,8 +174,9 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             }, 'NOSQL_MONGODB_INJECTION')
           })
 
-          if (semver.satisfies(specificMongooseVersion, '<7')) {
-            describe('using callbacks', () => {
+          {
+            const callbackSuite = semver.satisfies(specificMongooseVersion, '<7') ? describe : describe.skip
+            callbackSuite('using callbacks', () => {
               testThatRequestHasNoVulnerability(async (req, res) => {
                 try {
                   Test.find({
