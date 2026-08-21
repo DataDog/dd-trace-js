@@ -75,6 +75,9 @@ versions.forEach((version) => {
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
+    const deferredFailureScreenshotTest = satisfies(version, '>=1.60.0') || version === 'latest'
+      ? it
+      : global.it.skip
 
     let cwd, webAppPort, webAppServer
 
@@ -790,8 +793,9 @@ versions.forEach((version) => {
       }
 
       // This race relies on Playwright 1.60 keeping the matching worker trace pending after testEnd.
-      if (satisfies(version, '>=1.60.0') || version === 'latest') {
-        it('uploads a failure screenshot deferred by test code', async (receiver, run) => {
+      deferredFailureScreenshotTest(
+        'uploads a failure screenshot deferred by test code',
+        async (receiver, run) => {
           const { proc, getTestOutput } = runWithFailureScreenshots(
             receiver,
             run,
@@ -821,8 +825,8 @@ versions.forEach((version) => {
 
           const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
           assert.strictEqual(exitCode, 1)
-        })
-      }
+        }
+      )
 
       for (const isScreenshotUploadEnabled of [true, false]) {
         const testName = isScreenshotUploadEnabled

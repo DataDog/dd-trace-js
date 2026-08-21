@@ -46,6 +46,9 @@ versions.forEach((version) => {
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
+    const failureScreenshotHandoffTest = satisfies(version, '>=1.60.0') || version === 'latest'
+      ? it
+      : global.it.skip
 
     let cwd, webAppPort, webAppServer
 
@@ -237,8 +240,9 @@ versions.forEach((version) => {
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      if (satisfies(version, '>=1.60.0') || version === 'latest') {
-        it('keeps failure screenshots aligned when EFD skips a scheduled retry', async (receiver, run) => {
+      failureScreenshotHandoffTest(
+        'keeps failure screenshots aligned when EFD skips a scheduled retry',
+        async (receiver, run) => {
           receiver.setSettings({
             early_flake_detection: {
               enabled: true,
@@ -290,8 +294,8 @@ versions.forEach((version) => {
 
           const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
           assert.strictEqual(exitCode, 1)
-        })
-      }
+        }
+      )
 
       it('overrides slow test retries with the EFD retry count environment variable', async (receiver, run) => {
         receiver.setSettings({
