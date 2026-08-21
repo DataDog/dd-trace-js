@@ -6,7 +6,9 @@ const logger = require('./logger')
 const sum = require('./sum')
 describe('test', () => {
   it('should return true', () => {
-    logger.log('info', 'Hello simple log!')
+    const circular = {}
+    circular.self = circular
+    logger.log('info', 'Hello simple log!', { circular })
 
     assert.strictEqual(true, true)
     assert.strictEqual(sum(1, 2), 3)
