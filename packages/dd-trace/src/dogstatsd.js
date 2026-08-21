@@ -3,6 +3,7 @@
 const dgram = require('dgram')
 const isIP = require('net').isIP
 
+const { channel } = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const request = require('./exporters/common/request')
 const log = require('./log')
@@ -17,6 +18,8 @@ const TYPE_COUNTER = 'c'
 const TYPE_GAUGE = 'g'
 const TYPE_DISTRIBUTION = 'd'
 const TYPE_HISTOGRAM = 'h'
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 /**
  * @import { DogStatsD } from "../../../index.d.ts"
@@ -39,12 +42,37 @@ class DogStatsDClient {
     this._family = isIP(this._host)
     this._port = options.port
     this._tags = options.tags
-    this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
+    this.#tagsPrefix = this._tags.length ? `|#${this._tags.join(',')}` : ''
     this._queue = []
     this._buffer = ''
     this._offset = 0
     this._udp4 = this._socket('udp4')
     this._udp6 = this._socket('udp6')
+  }
+
+  /**
+   * Recomputes the cached tags and tag-prefix (mirrors the constructor) after a `config.tags`
+   * change, e.g. a MicroVM clone resume.
+   *
+   * Buffered lines have the old prefix baked in, and on a clone resume they were produced during
+   * the image build, so every clone holds the same bytes — flushing them would submit one identical
+   * copy per clone. Dropping is right here for that reason only: for a tag change on a live process
+   * the buffer holds unique data whose old tags are still correct, so that case wants a flush
+   * before the swap.
+   *
+   * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
+   */
+  updateTags (tags) {
+    const tagsPrefix = tags.length ? `|#${tags.join(',')}` : ''
+
+    this._tags = tags
+
+    if (tagsPrefix === this.#tagsPrefix) return
+
+    this.#tagsPrefix = tagsPrefix
+    this._queue = []
+    this._buffer = ''
+    this._offset = 0
   }
 
   increment (stat, value, tags) {
@@ -212,6 +240,14 @@ class MetricsAggregationClient {
     this.reset()
   }
 
+  /**
+   * Recomputes the wrapped client's cached tags (e.g. after a MicroVM clone resume).
+   * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
+   */
+  updateTags (tags) {
+    this._client.updateTags(tags)
+  }
+
   flush () {
     this._captureCounters()
     this._captureGauges()
@@ -363,6 +399,11 @@ class CustomMetrics {
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
     this.#client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+
+    // CustomMetrics has process-lifetime flush handlers and no stop hook, so this shares that lifetime.
+    identityRefreshChannel.subscribe(() => {
+      this.#client.updateTags(DogStatsDClient.generateClientConfig(config).tags)
+    })
 
     const flush = this.flush.bind(this)
 

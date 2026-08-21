@@ -8,10 +8,13 @@ const os = require('node:os')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 const datadogCore = require('../../datadog-core')
 
 require('./setup/core')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 describe('dogstatsd', () => {
   let client
@@ -723,6 +726,58 @@ describe('dogstatsd', () => {
 
       sinon.assert.called(udp4.send)
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar|c:ci-1234\n')
+    })
+
+    it('should refresh its tags when the identity-refresh channel fires', () => {
+      const config = {
+        dogstatsd: {
+          hostname: '127.0.0.1',
+          port: 8125,
+        },
+        lookup: dns.lookup,
+        runtimeMetricsRuntimeId: true,
+        tags: { 'runtime-id': 'initial-id' },
+      }
+
+      client = new CustomMetrics(config)
+      client.distribution('test.stale', 1)
+
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+
+      client.gauge('test.avg', 10)
+      client.flush()
+
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#runtime-id:refreshed-id\n')
+
+      udp4.send.resetHistory()
+      config.tags = {}
+      identityRefreshChannel.publish(config)
+
+      client.gauge('test.avg', 20)
+      client.flush()
+
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:20|g\n')
+    })
+
+    it('should preserve buffered metrics when an identity refresh does not change its tags', () => {
+      const config = {
+        dogstatsd: {
+          hostname: '127.0.0.1',
+          port: 8125,
+        },
+        lookup: dns.lookup,
+        runtimeMetricsRuntimeId: true,
+        tags: { 'runtime-id': 'initial-id' },
+      }
+
+      client = new CustomMetrics(config)
+      client.distribution('test.buffered', 1)
+
+      identityRefreshChannel.publish(config)
+      client.flush()
+
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.buffered:1|d|#runtime-id:initial-id\n')
     })
   })
 

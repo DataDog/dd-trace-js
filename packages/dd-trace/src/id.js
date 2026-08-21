@@ -2,12 +2,16 @@
 
 const { randomFillSync } = require('crypto')
 
+const { channel } = require('dc-polyfill')
+
 const UINT_MAX = 4_294_967_296
 
 const data = new Uint8Array(8 * 8192)
 const zeroId = new Uint8Array(8)
 
 let batch = 0
+
+channel('datadog:identity:update').subscribe(reseed)
 
 // Internal representation of a trace or span ID.
 class Identifier {
@@ -252,6 +256,16 @@ function writeUInt32BE (buffer, value, offset) {
   buffer[1 + offset] = value & 255
   value >>= 8
   buffer[0 + offset] = value & 255
+}
+
+/**
+ * Resets the batch cursor, forcing the next ID batch to draw a fresh
+ * randomFillSync() call on MicroVM clone resume. Node's crypto RNG is
+ * re-seeded from the kernel CSPRNG on snapshot resume, so re-invoking it
+ * is sufficient — no need to read /dev/urandom directly.
+ */
+function reseed () {
+  batch = 0
 }
 
 /**

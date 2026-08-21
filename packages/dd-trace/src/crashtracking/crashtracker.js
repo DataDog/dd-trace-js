@@ -6,9 +6,12 @@ const { EOL, platform } = require('node:os')
 const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
+const { channel } = require('dc-polyfill')
 const log = require('../log')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 class Crashtracker {
   #started = false
@@ -38,6 +41,7 @@ class Crashtracker {
       )
       this.#started = true
       this.#trackUnhandledExceptions()
+      identityRefreshChannel.subscribe((config) => this.configure(config))
     } catch (e) {
       log.error('Error initializing crashtracker', e)
     }

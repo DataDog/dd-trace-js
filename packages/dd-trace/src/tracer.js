@@ -12,7 +12,7 @@ const Scope = require('./scope')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
-const { IS_SERVERLESS } = require('./serverless')
+const { IS_AWS_LAMBDA_MICROVM, IS_SERVERLESS } = require('./serverless')
 const log = require('./log')
 // Always-on writer (console.warn), not the channel-gated `log`: these surface regardless of
 // DD_TRACE_DEBUG.
@@ -40,15 +40,11 @@ class DatadogTracer extends Tracer {
       flushLoadOrderWarnings(logDiagnostic)
     }
 
-    if (!IS_SERVERLESS) {
-      const storeConfig = require('./tracer_metadata')
-      // Keep a reference to the handle, to keep the memfd alive in memory.
-      // It is read by the service discovery feature.
-      const metadata = storeConfig(config)
+    if (!IS_SERVERLESS && !IS_AWS_LAMBDA_MICROVM) {
+      const metadata = require('./tracer_metadata')(config)
       if (metadata === undefined) {
         log.warn('Could not store tracer configuration for service discovery')
       }
-      this._inmem_cfg = metadata
     }
   }
 

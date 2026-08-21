@@ -6,6 +6,7 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const Capabilities = require('../../src/remote_config/capabilities')
@@ -818,6 +819,163 @@ describe('RemoteConfig', () => {
 
       sinon.assert.calledOnceWithExactly(handler, 'unapply', { asm: { enabled: true } }, 'asm_data')
       assert.strictEqual(rc.appliedConfigs.size, 0)
+    })
+  })
+
+  describe('identity state refresh', () => {
+    it('should replace state.client.id when identity is updated', () => {
+      const originalId = rc.state.client.id
+
+      uuid.returns('refreshed-client-id')
+      channel('datadog:identity:update').publish(config)
+
+      assert.strictEqual(rc.state.client.id, 'refreshed-client-id')
+      assert.notStrictEqual(rc.state.client.id, originalId)
+    })
+
+    it('should replace client_tracer.runtime_id when identity is updated', () => {
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'runtimeId')
+
+      config.tags['runtime-id'] = 'refreshed-runtime-id'
+      channel('datadog:identity:update').publish(config)
+
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'refreshed-runtime-id')
+
+      config.tags['runtime-id'] = 'runtimeId' // restore for other tests
+    })
+
+    it('should include refreshed runtime_id and id in the JSON payload', () => {
+      uuid.returns('refreshed-client-id')
+      config.tags['runtime-id'] = 'live-runtime-id'
+      channel('datadog:identity:update').publish(config)
+      const payload = JSON.parse(rc.getPayload())
+
+      assert.strictEqual(payload.client.client_tracer.runtime_id, 'live-runtime-id')
+      assert.strictEqual(payload.client.id, 'refreshed-client-id')
+
+      config.tags['runtime-id'] = 'runtimeId'
+    })
+
+    it('should cache client_tracer.tags and only refresh it on datadog:identity:update', () => {
+      const originalTags = rc.state.client.client_tracer.tags
+
+      config.tags['new-tag'] = 'new-value'
+
+      // unlike runtime_id, tags is a cached string, so a direct config mutation isn't picked up
+      assert.strictEqual(rc.state.client.client_tracer.tags, originalTags)
+
+      channel('datadog:identity:update').publish(config)
+
+      assert.notStrictEqual(rc.state.client.client_tracer.tags, originalTags)
+      assert.ok(rc.state.client.client_tracer.tags.includes('new-tag:new-value'))
+
+      delete config.tags['new-tag']
+    })
+  })
+
+  describe('refreshClientId', () => {
+    let refreshIdentity
+    let uuidStub
+    let RemoteConfigWithId
+
+    beforeEach(() => {
+      uuidStub = sinon.stub()
+      // first call is the module-load-time `let clientId = uuid()`, second is the refresh
+      uuidStub.onFirstCall().returns('1234-5678')
+      uuidStub.onSecondCall().returns('new-client-id-uuid')
+
+      RemoteConfigWithId = proxyquire('../../src/remote_config', {
+        'dc-polyfill': {
+          channel: sinon.stub().returns({
+            subscribe: (listener) => { refreshIdentity = listener },
+          }),
+        },
+        '../../../../vendor/dist/crypto-randomuuid': uuidStub,
+        './scheduler': Scheduler,
+        '../../../../package.json': { version: '3.0.0' },
+        '../exporters/common/request': request,
+        '../log': log,
+        '../tagger': tagger,
+        '../git_metadata': getGitMetadata,
+        '../service-naming/extra-services': {
+          getExtraServices: () => extraServices,
+        },
+      })
+    })
+
+    it('should update state.client.id on the existing instance after refresh', () => {
+      const rcInstance = new RemoteConfigWithId(config)
+      assert.strictEqual(rcInstance.state.client.id, '1234-5678')
+
+      refreshIdentity(config)
+
+      assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
+    })
+
+    it('should rebuild client_tracer.tags to reflect the refreshed _dd.rc.client_id', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old-client-id' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      const rcInstance = new RemoteConfigWithId(rcConfig)
+      assert.deepStrictEqual(rcInstance.state.client.client_tracer.tags, [
+        'runtime-id:runtimeId',
+        '_dd.rc.client_id:old-client-id',
+      ])
+
+      delete rcConfig.tags['_dd.rc.client_id']
+      refreshIdentity(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
+      const refreshedTags = rcInstance.state.client.client_tracer.tags
+      assert.deepStrictEqual(refreshedTags, [
+        'runtime-id:runtimeId',
+        '_dd.rc.client_id:new-client-id-uuid',
+      ])
+    })
+
+    it('should set clientId to the value returned by uuid after a client exists', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      const rcInstance = new RemoteConfigWithId(rcConfig)
+      assert.strictEqual(rcInstance.state.client.id, '1234-5678')
+
+      refreshIdentity(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
+    })
+
+    it('should not add config.tags[_dd.rc.client_id] before a client exists', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      refreshIdentity(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], undefined)
+    })
+
+    it('should call uuid again to generate the new ID', () => {
+      refreshIdentity(config)
+
+      // once at module load for the initial clientId, once on refresh
+      sinon.assert.calledTwice(uuidStub)
+      // the buffered pool is drained by the publisher, so the refresh must not opt out of it
+      assert.deepStrictEqual(uuidStub.secondCall.args, [])
     })
   })
 })

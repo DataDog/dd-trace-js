@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
 
 require('../../setup/core')
 
@@ -12,6 +13,8 @@ const { buildResourceAttributes, createOtlpSpanStatsExporter } = require('../../
 const { SpanBuckets } = require('../../../src/span_stats')
 const { HTTP_STATUS_CODE } = require('../../../../../ext/tags')
 const processTags = require('../../../src/process-tags')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 const RESOURCE_ATTRS = { 'service.name': 'svc' }
 const BUCKET_SIZE_NS = 10 * 1e9
@@ -117,6 +120,34 @@ describe('createOtlpSpanStatsExporter', () => {
       tags: {},
     })
     assert.ok(exporter instanceof OtlpStatsExporter)
+  })
+
+  it('exports resource attributes rebuilt after identity refresh', () => {
+    const config = {
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+      service: 'svc',
+      version: '1.0.0',
+      env: 'prod',
+      tags: { 'runtime-id': 'initial-id' },
+    }
+    const exporter = createOtlpSpanStatsExporter(config)
+
+    config.tags['runtime-id'] = 'refreshed-id'
+    identityRefreshChannel.publish(config)
+    exporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
+
+    const request = httpStub.firstCall.returnValue
+    const payload = JSON.parse(request.write.firstCall.args[0].toString())
+    const resourceAttributes = Object.fromEntries(
+      payload.resourceMetrics[0].resource.attributes.map(attribute => [attribute.key, attribute.value.stringValue])
+    )
+    assert.strictEqual(resourceAttributes['telemetry.sdk.name'], 'datadog')
+    assert.strictEqual(resourceAttributes['telemetry.sdk.language'], 'nodejs')
+    assert.strictEqual(typeof resourceAttributes['telemetry.sdk.version'], 'string')
+    assert.strictEqual(resourceAttributes['service.name'], 'svc')
+    assert.strictEqual(resourceAttributes['service.version'], '1.0.0')
+    assert.strictEqual(resourceAttributes['deployment.environment.name'], 'prod')
+    assert.strictEqual(resourceAttributes['datadog.runtime_id'], 'refreshed-id')
   })
 })
 
