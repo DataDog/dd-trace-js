@@ -81,6 +81,17 @@ const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
  *   mimeType?: string
  * }} UserContentPart
  *
+ * The payload an image arrives in, spelled `image` on a v4-v6 `image` part and `data` on a v7
+ * `file` part. Named once so helpers can take it without indexing a single arm of the union above.
+ *
+ * Optional on every arm that declares it, so `undefined` is part of the type rather than a case
+ * each caller has to exclude.
+ *
+ * @typedef {Uint8Array | ArrayBuffer | string | URL | undefined | {
+ *   type: 'data' | 'url' | 'reference' | 'text',
+ *   data?: Uint8Array | string
+ * }} ImagePayload
+ *
  * @typedef {{ mimeType: string, content: string }} LlmObsImagePart
  */
 
@@ -456,10 +467,17 @@ function isImageMediaType (mediaType) {
   return typeof mediaType === 'string' && (mediaType === 'image' || mediaType.startsWith('image/'))
 }
 
+// A base64 data URL, whose payload we can carry inline once the prefix is stripped.
+const BASE64_DATA_URL = /^data:[^,]*;base64,(.*)$/is
+// A reference we cannot inline: an absolute URL's scheme, or a protocol-relative `//host/path`.
+const URL_REFERENCE = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i
+// Base64's alphabet. Separates a payload from a bare relative path once schemes are excluded.
+const BASE64_ALPHABET = /^[a-z\d+/]+={0,2}$/i
+
 /**
  * Base64-encodes an image payload, or returns undefined when there are no inline bytes to encode.
  *
- * @param {UserContentPart['data'] | UserContentPart['image']} data
+ * @param {ImagePayload} data
  * @returns {string | undefined}
  */
 function base64FromImageData (data) {
@@ -474,15 +492,19 @@ function base64FromImageData (data) {
   }
   if (typeof data !== 'string') return
 
-  // v4-v6 arrive as JSON, where a URL has already been stringified into this same field. Every
-  // absolute URL carries a scheme and base64 has no ':' in its alphabet, so this separates them.
-  if (!data.includes(':')) return data
+  // v4-v6 arrive as JSON, so both inline data URLs and remote URLs reach this field as strings.
+  // A data URL still carries its bytes, so unwrap it rather than treating it as a reference.
+  const inline = BASE64_DATA_URL.exec(data)
+  if (inline) data = inline[1]
+  else if (URL_REFERENCE.test(data)) return
+
+  if (BASE64_ALPHABET.test(data)) return data
 }
 
 /**
  * Builds a wire image part, or returns undefined when the image cannot be carried inline.
  *
- * @param {UserContentPart['data'] | UserContentPart['image']} data
+ * @param {ImagePayload} data
  * @param {unknown} mediaType
  * @returns {LlmObsImagePart | undefined}
  */
@@ -517,19 +539,21 @@ function extractUserContentParts (parts) {
   const imageParts = []
 
   for (const part of parts) {
-    const type = part?.type
-    if (type === 'text') {
+    if (!part || typeof part !== 'object') continue
+    if (part.type === 'text') {
       content += part.text ?? ''
       continue
     }
 
-    const isImage = type === 'image'
-    if (!isImage && type !== 'file') continue
+    // Narrowed on the literal type rather than a boolean, so `image` and `data` are each read only
+    // from the arm that declares them.
+    if (part.type !== 'image' && part.type !== 'file') continue
 
-    const mediaType = part.mediaType ?? part.mimeType
-    if (!isImage && !isImageMediaType(mediaType)) continue
+    const payload = part.type === 'image' ? part.image : part.data
+    const mediaType = part.type === 'image' ? part.mimeType : part.mediaType ?? part.mimeType
+    if (part.type === 'file' && !isImageMediaType(mediaType)) continue
 
-    const imagePart = formatImagePart(isImage ? part.image : part.data, mediaType)
+    const imagePart = formatImagePart(payload, mediaType)
     if (imagePart) {
       imageParts.push(imagePart)
     } else {

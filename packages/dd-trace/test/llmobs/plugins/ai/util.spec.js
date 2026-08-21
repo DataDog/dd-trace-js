@@ -93,6 +93,27 @@ describe('ai llmobs util', () => {
       )
     })
 
+    it('captures an inline data URL that arrived as a stringified field', () => {
+      // The SDK stringifies a data URL into the same field a remote URL uses, and the repo's own
+      // aiguard conversion covers this shape (test/aiguard/messages/vercel-ai.spec.js). The bytes
+      // are inline, so this is a capture rather than a reference.
+      assert.deepStrictEqual(
+        extractUserContentParts([
+          { type: 'file', data: `data:image/png;base64,${PNG_BASE64}`, mediaType: 'image/png' },
+        ]),
+        { content: '', imageParts: [{ mimeType: 'image/png', content: PNG_BASE64 }] }
+      )
+    })
+
+    it('marks a protocol-relative URL rather than treating it as base64', () => {
+      // No scheme, and every character is in base64's alphabet, so a colon check alone would
+      // record the URL itself as the image payload.
+      assert.deepStrictEqual(
+        extractUserContentParts([{ type: 'file', data: '//cdn.example.com/cat.png', mediaType: 'image/png' }]),
+        { content: '[Image]', imageParts: [] }
+      )
+    })
+
     it('marks a URL instance', () => {
       assert.deepStrictEqual(
         extractUserContentParts([
