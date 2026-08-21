@@ -8,8 +8,6 @@ const { match } = sinon
 
 require('../../setup/core')
 
-const { Log } = require('../../../src/log/log')
-
 describe('telemetry logs', () => {
   let defaultConfig
   let telemetryLog
@@ -149,40 +147,60 @@ describe('telemetry logs', () => {
       it('should be called when an Error object is published to datadog:log:error', () => {
         const error = new Error('message')
         const stack = error.stack
-        errorLog.publish({ cause: error, sendViaTelemetry: true })
+        errorLog.publish(error)
 
         sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
-          message: 'Generic Error',
+          message: 'message',
           level: 'ERROR',
           errorType: 'Error',
           stack_trace: stack,
         }))
       })
 
-      it('should be called when an error string is published to datadog:log:error', () => {
-        errorLog.publish({ message: 'custom error message', sendViaTelemetry: true })
+      it('should use the outer message and the cause stack', () => {
+        const cause = new Error('cause')
+        const error = new Error('custom error message', { cause })
+        errorLog.publish(error)
 
         sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
           message: 'custom error message',
           level: 'ERROR',
-          stack_trace: undefined,
+          stack_trace: cause.stack,
         }))
       })
 
       it('should not be called when an invalid object is published to datadog:log:error', () => {
-        errorLog.publish({ invalid: 'field', sendViaTelemetry: true })
-
-        sinon.assert.notCalled(logCollectorAdd)
-      })
-
-      it('should not be called when an object without message and stack is published to datadog:log:error', () => {
-        errorLog.publish(Log.parse(() => new Error('error')))
+        errorLog.publish()
 
         sinon.assert.notCalled(logCollectorAdd)
       })
 
       it('should not be called when an error contains sendViaTelemetry:false', () => {
-        errorLog.publish({ message: 'custom error message', sendViaTelemetry: false })
+        const error = new Error('custom error message')
+        error.sendViaTelemetry = false
+        errorLog.publish(error)
+
+        sinon.assert.notCalled(logCollectorAdd)
+      })
+
+      it('should collect an actual log.error call once', () => {
+        const cause = new Error('cause')
+        const log = require('../../../src/log')
+
+        log.error('custom error message', cause)
+
+        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
+          message: 'custom error message',
+          level: 'ERROR',
+          errorType: 'Error',
+          stack_trace: cause.stack,
+        }))
+      })
+
+      it('should not collect an actual log.errorWithoutTelemetry call', () => {
+        const log = require('../../../src/log')
+
+        log.errorWithoutTelemetry('custom error message', new Error('cause'))
 
         sinon.assert.notCalled(logCollectorAdd)
       })

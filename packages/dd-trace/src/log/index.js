@@ -56,20 +56,13 @@ const log = {
   },
 
   error (...args) {
-    publishFormatted(errorChannel, formatted => {
-      const stackTraceLimitBackup = Error.stackTraceLimit
-      Error.stackTraceLimit = 0
-      const newError = new Error(formatted)
-      Error.stackTraceLimit = stackTraceLimitBackup
-      Error.captureStackTrace(newError, log.error)
-      return newError
-    }, ...args)
+    publishError(...args)
     return log
   },
 
   errorWithoutTelemetry (...args) {
     args.push(NO_TRANSMIT)
-    publishFormatted(errorChannel, null, ...args)
+    publishError(...args)
     return log
   },
 
@@ -97,6 +90,21 @@ function publishFormatted (ch, formatter, ...args) {
     // TODO: replace it with Error(message, { cause }) when cause has broad support
     if (formatted) ch.publish(formatter?.(formatted) || formatted)
     if (cause) ch.publish(cause)
+  }
+}
+
+function publishError (...args) {
+  if (!errorChannel.hasSubscribers) return
+
+  const { formatted, cause, sendViaTelemetry } = getErrorLog(Log.parse(...args))
+  if (formatted) {
+    const error = new Error(formatted, { cause })
+    error.sendViaTelemetry = sendViaTelemetry
+    Error.captureStackTrace(error, log.error)
+    errorChannel.publish(error)
+  } else if (cause) {
+    if (!sendViaTelemetry) cause.sendViaTelemetry = false
+    errorChannel.publish(cause)
   }
 }
 

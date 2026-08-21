@@ -8,6 +8,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../../../../dd-trace/test/setup/core')
+const log = require('../../../../src/log')
 const TestWorkerCiVisibilityExporter = proxyquire('../../../../src/ci-visibility/exporters/test-worker', {
   '../../../config': () => proxyquire.noPreserveCache()('../../../../src/config', {})(),
 })
@@ -15,6 +16,7 @@ const TestWorkerCiVisibilityExporter = proxyquire('../../../../src/ci-visibility
 const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
@@ -29,6 +31,25 @@ const {
 
 describe('CI Visibility Test Worker Exporter', () => {
   let send, originalSend
+
+  function exportErrorLog (telemetryCode) {
+    const cause = new Error('worker cause')
+    const workerExporter = new TestWorkerCiVisibilityExporter()
+
+    log.error('worker error', cause)
+    workerExporter.flush()
+
+    sinon.assert.calledWith(send, [telemetryCode, JSON.stringify([{
+      type: 'log',
+      log: {
+        level: 'ERROR',
+        count: 1,
+        message: 'worker error',
+        stack_trace: cause.stack,
+        errorType: 'Error',
+      },
+    }])])
+  }
 
   beforeEach(() => {
     send = sinon.spy()
@@ -68,6 +89,21 @@ describe('CI Visibility Test Worker Exporter', () => {
       sinon.assert.calledWith(send,
         [JEST_WORKER_COVERAGE_PAYLOAD_CODE, JSON.stringify([coverage, coverageSecond])]
       )
+    })
+
+    it('can export error logs', () => {
+      exportErrorLog(JEST_WORKER_TELEMETRY_PAYLOAD_CODE)
+    })
+
+    it('does not export error logs when telemetry log collection is disabled', () => {
+      const workerExporter = new TestWorkerCiVisibilityExporter({
+        telemetry: { DD_TELEMETRY_LOG_COLLECTION_ENABLED: false },
+      })
+
+      log.error('worker error', new Error('worker cause'))
+      workerExporter.flush()
+
+      sinon.assert.notCalled(send)
     })
 
     it('signals completion after all queued payloads flush', () => {
@@ -164,6 +200,10 @@ describe('CI Visibility Test Worker Exporter', () => {
       )
     })
 
+    it('can export error logs', () => {
+      exportErrorLog(CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE)
+    })
+
     it('signals completion after traces flush', () => {
       const callbacks = []
       send = sinon.stub().callsFake((payload, callback) => {
@@ -217,6 +257,10 @@ describe('CI Visibility Test Worker Exporter', () => {
       sinon.assert.calledWith(send, [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])])
     })
 
+    it('can export error logs', () => {
+      exportErrorLog(MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE)
+    })
+
     it('can export DI logs', () => {
       process.env.MOCHA_WORKER_ID = 'webdriverio'
       const testEnvironmentMetadata = { testFramework: 'webdriverio' }
@@ -243,6 +287,11 @@ describe('CI Visibility Test Worker Exporter', () => {
   })
 
   context('when writing from a WebdriverIO worker', () => {
+    afterEach(() => {
+      delete process.env.MOCHA_WORKER_ID
+      delete process.env._DD_TEST_OPTIMIZATION_WEBDRIVERIO_WORKER
+    })
+
     it('wraps traces in a filtered WebdriverIO worker event', () => {
       const trace = [{ type: 'test' }]
       const WebdriverioWriter = proxyquire('../../../../src/ci-visibility/exporters/test-worker/writer', {
@@ -260,6 +309,53 @@ describe('CI Visibility Test Worker Exporter', () => {
         name: 'workerEvent',
         args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])],
       })
+    })
+
+    it('wraps error logs in a filtered WebdriverIO worker event', () => {
+      process.env.MOCHA_WORKER_ID = 'webdriverio'
+      process.env._DD_TEST_OPTIMIZATION_WEBDRIVERIO_WORKER = 'true'
+      const cause = new Error('worker cause')
+      const workerExporter = new TestWorkerCiVisibilityExporter()
+
+      log.error('worker error', cause)
+      workerExporter.flush()
+
+      sinon.assert.calledWith(send, {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([{
+          type: 'log',
+          log: {
+            level: 'ERROR',
+            count: 1,
+            message: 'worker error',
+            stack_trace: cause.stack,
+            errorType: 'Error',
+          },
+        }])],
+      })
+    })
+  })
+
+  context('when writing through a worker thread parent port', () => {
+    it('reports a parent port error', () => {
+      delete process.send
+      const error = new Error('parent port closed')
+      const onDone = sinon.spy()
+      const ParentPortWriter = proxyquire('../../../../src/ci-visibility/exporters/test-worker/writer', {
+        'node:worker_threads': {
+          isMainThread: false,
+          parentPort: {
+            postMessage: () => { throw error },
+          },
+        },
+      })
+      const writer = new ParentPortWriter(MOCHA_WORKER_TRACE_PAYLOAD_CODE)
+
+      writer.append([{ type: 'test' }])
+      writer.flush(onDone)
+
+      sinon.assert.calledOnceWithExactly(onDone, error)
     })
   })
 
@@ -287,6 +383,10 @@ describe('CI Visibility Test Worker Exporter', () => {
       playwrightWorkerExporter.exportTelemetry(telemetry)
       playwrightWorkerExporter.flush()
       sinon.assert.calledWith(send, [PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])])
+    })
+
+    it('can export error logs', () => {
+      exportErrorLog(PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE)
     })
 
     it('does not break if process.send is undefined', () => {
@@ -342,6 +442,11 @@ describe('CI Visibility Test Worker Exporter', () => {
       )
     })
 
+    it('can export error logs', () => {
+      process.env.DD_VITEST_WORKER = '1'
+      exportErrorLog(VITEST_WORKER_TELEMETRY_PAYLOAD_CODE)
+    })
+
     it('wraps the payload for legacy tinypool workers (vitest <4)', () => {
       process.env.TINYPOOL_WORKER_ID = '1'
       const trace = [{ type: 'test' }]
@@ -372,6 +477,26 @@ describe('CI Visibility Test Worker Exporter', () => {
       vitestWorkerExporter.flush()
       sinon.assert.calledWith(postMessage, [VITEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])])
       sinon.assert.notCalled(send)
+    })
+
+    it('completes a flush when the worker port rejects the payload', () => {
+      process.env.DD_VITEST_WORKER = '1'
+      delete process.send
+      const error = new Error('worker port closed')
+      const onDone = sinon.spy()
+      globalThis.__vitest_worker__ = {
+        ctx: {
+          port: {
+            postMessage: () => { throw error },
+          },
+        },
+      }
+      const vitestWorkerExporter = new TestWorkerCiVisibilityExporter()
+
+      vitestWorkerExporter.export([{ type: 'test' }])
+      vitestWorkerExporter.flush(onDone)
+
+      sinon.assert.calledOnceWithExactly(onDone, undefined)
     })
 
     it('does not break if process.send is undefined', () => {

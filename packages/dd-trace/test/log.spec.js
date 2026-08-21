@@ -367,13 +367,14 @@ describe('log', () => {
       })
 
       it('should allow a message + Error', () => {
-        log.error('this is an error', new Error('cause'))
+        const cause = new Error('cause')
 
-        sinon.assert.called(console.error)
+        log.error('this is an error', cause)
+
+        sinon.assert.calledOnce(console.error)
         assert.ok(console.error.firstCall.args[0] instanceof Error)
         assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
-        assert.ok(console.error.secondCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
+        assert.strictEqual(console.error.firstCall.args[0].cause, cause)
       })
 
       it('should allow a templated message', () => {
@@ -385,13 +386,14 @@ describe('log', () => {
       })
 
       it('should allow a templated message + Error', () => {
-        log.error('this is an error of type: %s code: %i', 'ERR', 42, new Error('cause'))
+        const cause = new Error('cause')
 
-        sinon.assert.called(console.error)
+        log.error('this is an error of type: %s code: %i', 'ERR', 42, cause)
+
+        sinon.assert.calledOnce(console.error)
         assert.ok(console.error.firstCall.args[0] instanceof Error)
         assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error of type: ERR code: 42')
-        assert.ok(console.error.secondCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
+        assert.strictEqual(console.error.firstCall.args[0].cause, cause)
       })
 
       it('should allow a message + Error + LogConfig', () => {
@@ -400,16 +402,19 @@ describe('log', () => {
         sinon.assert.called(console.error)
         assert.ok(console.error.firstCall.args[0] instanceof Error)
         assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error with a log config')
+        assert.strictEqual(console.error.firstCall.args[0].sendViaTelemetry, false)
       })
 
       it('should allow a message + NoTransmitError', () => {
-        log.error('this is an error without a log config', new log.NoTransmitError('bad underlying thing'))
+        const cause = new log.NoTransmitError('bad underlying thing')
 
-        sinon.assert.called(console.error)
+        log.error('this is an error without a log config', cause)
+
+        sinon.assert.calledOnce(console.error)
         assert.ok(console.error.firstCall.args[0] instanceof Error)
         assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error without a log config')
-        assert.ok(console.error.secondCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.secondCall.args[0].message, 'bad underlying thing')
+        assert.strictEqual(console.error.firstCall.args[0].cause, cause)
+        assert.strictEqual(console.error.firstCall.args[0].sendViaTelemetry, false)
       })
     })
 

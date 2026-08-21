@@ -2,6 +2,7 @@
 
 const dc = require('dc-polyfill')
 const { sendData } = require('../send-data')
+const formatError = require('./format-error')
 const logCollector = require('./log-collector')
 
 const telemetryLog = dc.channel('datadog:telemetry:log')
@@ -37,24 +38,9 @@ function onLog (log) {
   }
 }
 
-function onErrorLog (msg) {
-  const { message, cause, sendViaTelemetry } = msg
-  if (!sendViaTelemetry || (!message && !cause)) return
-
-  const telLog = {
-    level: 'ERROR',
-    count: 1,
-
-    // existing log.error(err) without message will be reported as 'Generic Error'
-    message: message ?? 'Generic Error',
-  }
-
-  if (cause) {
-    telLog.stack_trace = cause.stack
-    telLog.errorType = cause.constructor.name
-  }
-
-  onLog(telLog)
+function onErrorLog (error) {
+  const telemetryLog = formatError(error)
+  if (telemetryLog) onLog(telemetryLog)
 }
 
 function start (config) {
