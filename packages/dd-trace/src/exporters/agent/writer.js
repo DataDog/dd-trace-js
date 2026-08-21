@@ -38,16 +38,19 @@ class AgentWriter extends BaseWriter {
     }
   }
 
-  flush (done, options) {
-    return this._flushWithDeliveryTracker(done, callback => this.flushDirect(callback, options))
-  }
-
+  /**
+   * Performs the writer flush without registering a serverless delivery.
+   * Test Optimization owns its own request lifecycle tracking.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
   flushDirect (done, options) {
     if (this.#requestTracker) {
       this.#requestTracker.flush(done, options)
       return
     }
-    super._flush(done, options)
+    super.flushDirect(done, options)
   }
 
   _sendPayload (data, count, done, flushOptions) {

@@ -4,7 +4,7 @@ const log = require('./log')
 const { supportsServerlessTelemetryRetention } = require('./serverless')
 
 /**
- * @typedef {(done: () => void) => void | Promise<void>} TelemetryFlusher
+ * @typedef {(done: () => void) => void} TelemetryFlusher
  */
 
 /** @type {Set<TelemetryFlusher>} */
@@ -80,8 +80,7 @@ function flushServerlessTelemetry (done, options, traceFlushers = {}) {
       complete()
     }
     try {
-      const result = flusher(onFlushed)
-      if (typeof result?.then === 'function') result.then(onFlushed, error => onFlushed(error))
+      flusher(onFlushed)
     } catch (error) {
       onFlushed(error)
     }

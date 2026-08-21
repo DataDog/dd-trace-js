@@ -20,16 +20,26 @@ class Writer {
 
   #isFirstFlush = true
 
+  /**
+   * Flushes queued telemetry, retaining delivery on supported serverless platforms.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
   flush (done, options) {
-    return this._flushWithDeliveryTracker(done, callback => this._flush(callback, options))
+    if (this.#deliveryTracker) {
+      return this.#deliveryTracker.track(callback => this.flushDirect(callback, options), done)
+    }
+    this.flushDirect(done, options)
   }
 
-  _flushWithDeliveryTracker (done, flush) {
-    if (this.#deliveryTracker) return this.#deliveryTracker.track(flush, done)
-    flush(done)
-  }
-
-  _flush (done = () => {}, options) {
+  /**
+   * Flushes queued telemetry without registering serverless delivery retention.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flushDirect (done = () => {}, options) {
     const count = this._encoder.count()
 
     if (!request.writable && options?.deadline === undefined) {

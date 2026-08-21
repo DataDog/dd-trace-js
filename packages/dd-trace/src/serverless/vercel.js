@@ -5,7 +5,6 @@ const { channel } = require('dc-polyfill')
 const { getEnvironmentVariable } = require('../config/helper')
 const log = require('../log')
 
-const httpRequestStartChannel = channel('apm:http:server:request:start')
 const httpRequestFinishChannel = channel('apm:http:server:request:finish')
 const http2RequestStartChannel = channel('apm:http2:server:request:start')
 const http2ResponseEmitChannel = channel('apm:http2:server:response:emit')
@@ -56,8 +55,8 @@ function getVercelRequestContext () {
   return globalThis[VERCEL_REQUEST_CONTEXT]?.get?.()
 }
 
-// Keeps core response wrappers active without creating an HTTP tracing span.
-function activateHttpLifecycle () {}
+// HTTP/2 binds response lifecycle events while handling its request-start channel.
+function activateHttp2Lifecycle () {}
 
 /**
  * Retains a Vercel Node Function until configured telemetry exporters complete.
@@ -70,20 +69,19 @@ function registerVercelTelemetryRetention (tracer) {
   if (existing) return existing
 
   if (typeof tracer?.flushAll !== 'function') return
-  // Keep the core response wrappers active even when the HTTP tracing plugins are disabled.
+  // The HTTP finish channel activates its response wrapper directly. HTTP/2 needs
+  // a passive request-start subscriber before it can bind response emit events.
   const flushRequest = () => registerVercelRequestFlush(tracer)
   const flushHttp2Response = ({ eventName }) => {
     if (eventName === 'close') flushRequest()
   }
-  httpRequestStartChannel.subscribe(activateHttpLifecycle)
   httpRequestFinishChannel.subscribe(flushRequest)
-  http2RequestStartChannel.subscribe(activateHttpLifecycle)
+  http2RequestStartChannel.subscribe(activateHttp2Lifecycle)
   http2ResponseEmitChannel.subscribe(flushHttp2Response)
 
   const unregister = () => {
-    httpRequestStartChannel.unsubscribe(activateHttpLifecycle)
     httpRequestFinishChannel.unsubscribe(flushRequest)
-    http2RequestStartChannel.unsubscribe(activateHttpLifecycle)
+    http2RequestStartChannel.unsubscribe(activateHttp2Lifecycle)
     http2ResponseEmitChannel.unsubscribe(flushHttp2Response)
     vercelRetentionHandlers.delete(tracer)
   }
