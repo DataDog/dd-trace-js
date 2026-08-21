@@ -409,6 +409,7 @@ beforeEach(function () {
       rumCookiePromise = setRumCorrelationCookie(traceId)
     }
     if (shouldSkip) {
+      // Test Optimization requested this runtime skip through the Cypress support hook.
       this.skip()
     }
     if (rumCookiePromise) {
