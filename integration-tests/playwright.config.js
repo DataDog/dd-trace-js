@@ -9,6 +9,7 @@ const projects = [
     use: {
       ...devices['Desktop Chrome'],
       screenshot: process.env.PLAYWRIGHT_FAILURE_SCREENSHOT_MODE || 'off',
+      video: process.env.PLAYWRIGHT_FAILURE_VIDEO_MODE || 'off',
     },
   },
 ]

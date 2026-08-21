@@ -111,6 +111,88 @@ describe('request', function () {
       })
   })
 
+  it('should stream a readable when content length is known', (done) => {
+    const body = Buffer.from('streamed')
+    const readable = stream.Readable.from(body)
+    nock('http://test:123', {
+      reqheaders: {
+        'content-type': 'application/octet-stream',
+        'content-length': String(body.length),
+      },
+    })
+      .put('/path', body)
+      .reply(200, 'OK')
+
+    request(readable, {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'PUT',
+      headers: {
+        'Content-Length': body.length,
+        'Content-Type': 'application/octet-stream',
+      },
+      retry: false,
+    }, (error, response) => {
+      assert.strictEqual(response, 'OK')
+      assert.strictEqual(readable.destroyed, true)
+      done(error)
+    })
+  })
+
+  it('should destroy a streamed readable when reading fails', (done) => {
+    const readError = new Error('could not read media')
+    const readable = new stream.Readable({
+      read () {
+        setImmediate(() => this.destroy(readError))
+      },
+    })
+    nock('http://test:123').put('/path').reply(200, 'OK')
+
+    request(readable, {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'PUT',
+      headers: {
+        'Content-Length': 1,
+        'Content-Type': 'application/octet-stream',
+      },
+      retry: false,
+    }, (error) => {
+      assert.strictEqual(error, readError)
+      assert.strictEqual(readable.destroyed, true)
+      done()
+    })
+  })
+
+  it('should destroy a streamed readable when the request is aborted', (done) => {
+    const controller = new AbortController()
+    const readable = new stream.Readable({ read () {} })
+    nock('http://test:123').put('/path').reply(200, 'OK')
+
+    request(readable, {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'PUT',
+      headers: {
+        'Content-Length': 1,
+        'Content-Type': 'application/octet-stream',
+      },
+      retry: false,
+      signal: controller.signal,
+    }, (error) => {
+      assert.strictEqual(error.code, 'ABORT_ERR')
+      assert.strictEqual(readable.destroyed, true)
+      done()
+    })
+    controller.abort()
+  })
+
   it('preserves a caller-supplied connection agent', (done) => {
     const customAgent = new http.Agent()
     const sandbox = sinon.createSandbox()

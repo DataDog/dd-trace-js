@@ -23,13 +23,18 @@ const ciVisibilityLog = require('../../../src/log')
 const actualSpanFormat = require('../../../src/span_format')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
   require('../../../src/ci-visibility/requests/upload-coverage-report')
-const { uploadTestScreenshot: actualUploadTestScreenshotRequest } =
-  require('../../../src/ci-visibility/requests/upload-test-screenshot')
+const {
+  uploadTestScreenshot: actualUploadTestScreenshotRequest,
+  uploadTestSuiteVideo: actualUploadTestSuiteVideoRequest,
+  uploadTestVideo: actualUploadTestVideoRequest,
+} = require('../../../src/ci-visibility/requests/upload-test-screenshot')
 
 const sketchesJsPath = require.resolve('../../../../../vendor/dist/@datadog/sketches-js')
 
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
 let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
+let uploadTestSuiteVideoRequest = actualUploadTestSuiteVideoRequest
+let uploadTestVideoRequest = actualUploadTestVideoRequest
 let formatSpan = actualSpanFormat
 let incrementCountMetric
 const formatSpanStub = (...args) => formatSpan(...args)
@@ -43,6 +48,12 @@ const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporter
   '../requests/upload-test-screenshot': {
     uploadTestScreenshot (...args) {
       return uploadTestScreenshotRequest(...args)
+    },
+    uploadTestSuiteVideo (...args) {
+      return uploadTestSuiteVideoRequest(...args)
+    },
+    uploadTestVideo (...args) {
+      return uploadTestVideoRequest(...args)
     },
   },
   '../telemetry': {
@@ -82,6 +93,8 @@ describe('CI Visibility Exporter', () => {
     nock.cleanAll()
     uploadCoverageReportRequest = actualUploadCoverageReportRequest
     uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
+    uploadTestSuiteVideoRequest = actualUploadTestSuiteVideoRequest
+    uploadTestVideoRequest = actualUploadTestVideoRequest
     formatSpan = actualSpanFormat
     incrementCountMetric = sinon.stub()
   })
@@ -2029,6 +2042,58 @@ describe('CI Visibility Exporter', () => {
       })
       ciVisibilityExporter._testScreenshotUploadUrl = url
       assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), true)
+    })
+  })
+
+  describe('canUploadTestVideos', () => {
+    it('is default off and controlled independently from screenshots', () => {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: {
+          DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true,
+          DD_TEST_FAILURE_VIDEOS_ENABLED: false,
+        },
+      })
+      exporter._testScreenshotUploadUrl = url
+
+      assert.strictEqual(exporter.canUploadTestScreenshots(), true)
+      assert.strictEqual(exporter.canUploadTestVideos(), false)
+    })
+
+    it('returns true when the upload URL is set and videos are enabled', () => {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+
+      assert.strictEqual(exporter.canUploadTestVideos(), true)
+    })
+  })
+
+  describe('uploadTestSuiteVideo', () => {
+    it('forwards the suite identity to the media request', () => {
+      uploadTestSuiteVideoRequest = sinon.stub().yields(null)
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+      const callback = sinon.spy()
+
+      exporter.uploadTestSuiteVideo({
+        filePath: '/tmp/spec.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
+        idempotencyKey: '123:456:spec.mp4',
+        capturedAtMs: 1,
+      }, callback)
+
+      const options = uploadTestSuiteVideoRequest.firstCall.args[0]
+      assert.strictEqual(options.testSessionId, '123')
+      assert.strictEqual(options.testSuiteId, '456')
+      assert.strictEqual(options.url, url)
+      sinon.assert.calledOnceWithExactly(callback, null)
     })
   })
 
