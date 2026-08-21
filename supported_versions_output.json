@@ -528,7 +528,7 @@
     "dependency": "mariadb",
     "integration": "mariadb",
     "minimum_tracer_supported": "2.0.4",
-    "max_tracer_supported": "3.5.2",
+    "max_tracer_supported": "3.5.3",
     "auto-instrumented": "True"
   },
   {

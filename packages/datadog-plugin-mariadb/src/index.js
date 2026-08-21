@@ -16,6 +16,19 @@ class MariadbPlugin extends MySQLPlugin {
       ctx.parentStore = storage('legacy').getStore()
     })
   }
+
+  /**
+   * Adds pool wait time discovered after a bundled query starts, then finishes its span.
+   *
+   * @param {{ currentStore?: { span?: import('../../../..').Span }, poolWaitTime?: number }} ctx
+   * @returns {void}
+   */
+  finish (ctx) {
+    if (ctx.poolWaitTime !== undefined) {
+      ctx.currentStore?.span?.setTag(`${this.component}.pool.wait_time`, ctx.poolWaitTime)
+    }
+    super.finish(ctx)
+  }
 }
 
 module.exports = MariadbPlugin
