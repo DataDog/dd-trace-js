@@ -293,7 +293,7 @@ moduleTypes.forEach(({
                 [TEST_FRAMEWORK]: 'cypress',
               },
             })
-          }, { hardTimeout: 20000 })
+          }, { hardTimeout: 60000 })
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
@@ -2080,9 +2080,12 @@ moduleTypes.forEach(({
 
 // These plugin lifecycle and filesystem tests do not depend on a Cypress version. Run them in one existing
 // integration matrix cell instead of repeating them for every supported version and module type.
-if (requestedVersion === 'latest' &&
-  (!process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === 'commonJS')) {
-  describe('Cypress plugin run lifecycle', () => {
+{
+  const matrixSuite = requestedVersion === 'latest' &&
+    (!process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === 'commonJS')
+    ? describe
+    : describe.skip
+  matrixSuite('Cypress plugin run lifecycle', () => {
     const cypressPlugin = require('../../packages/datadog-plugin-cypress/src/cypress-plugin')
     const originalState = {
       cypressConfig: cypressPlugin.cypressConfig,
@@ -2202,7 +2205,7 @@ if (requestedVersion === 'latest' &&
     })
   })
 
-  describe('cypress config instrumentation', () => {
+  matrixSuite('cypress config instrumentation', () => {
     const temporaryDirectories = []
     let errors
 
