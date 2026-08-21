@@ -254,6 +254,12 @@ function onWebTagsResolved (span) {
   cached.webTags = webTags
   const endpoint = finalEndpoint(webTags)
   if (endpoint === undefined) {
+    // A record that already shows the outer request's endpoint goes on showing
+    // it until the nearer one settles: the record buffer is append-only, so
+    // there is no way to take the attribute back, and rebuilding the
+    // ThreadContext would strand every async-context frame holding this one.
+    // The work is still nested in the outer request, which makes that the least
+    // wrong of the values available.
     awaitEndpoint(webTags, cached)
   } else {
     appendEndpoint(cached.context, endpoint)

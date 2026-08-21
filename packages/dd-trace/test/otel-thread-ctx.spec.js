@@ -107,7 +107,14 @@ describe('otel-thread-ctx', () => {
         constructedContexts.push(this)
       }
 
-      appendAttributes () {}
+      // Applied to `attributes` with the record's last-wins handling of duplicate
+      // keys, so a test can assert the endpoint an out-of-process reader would
+      // read out of the record, not merely the calls the writer made.
+      appendAttributes (appended) {
+        for (const [index, value] of appended.entries()) {
+          if (value !== undefined) this.attributes[index] = value
+        }
+      }
 
       invalidate () {}
 
@@ -663,12 +670,36 @@ describe('otel-thread-ctx', () => {
 
       cachedWebTags.set(activeSpan, innerTags)
       webTagsResolvedCh.publish(activeSpan)
-      sinon.assert.calledOnce(context.appendAttributes)
-      assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /inner')
+      assert.equal(context.attributes[1], 'GET /inner')
 
       outerTags['http.route'] = '/outer'
       endpointResolvedCh.publish(outerSpan)
       sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.attributes[1], 'GET /inner')
+    })
+
+    it('keeps showing the outer endpoint until a nearer request settles its own', () => {
+      // The unavoidable window: the record already carries the outer request's
+      // settled endpoint, and the nearer web-server span that supersedes it has
+      // no route yet. The record buffer is append-only — there is no way to take
+      // an attribute back — and rebuilding the ThreadContext would strand every
+      // async-context frame already holding this one. So the outer endpoint, the
+      // request this work is still nested in, stands until the inner one settles.
+      const outerTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/outer' }
+      const innerTags = { 'span.type': 'web', 'http.method': 'GET' }
+      activeSpan = makeSpan({ spanId: '2122232425262728', parentId: SPAN_ID_HEX, tags: {} })
+      cachedWebTags.set(activeSpan, outerTags)
+      enterCh.publish()
+      const context = constructedContexts[0]
+      assert.equal(context.attributes[1], 'GET /outer')
+
+      cachedWebTags.set(activeSpan, innerTags)
+      webTagsResolvedCh.publish(activeSpan)
+      assert.equal(context.attributes[1], 'GET /outer')
+
+      innerTags['http.route'] = '/inner'
+      endpointResolvedCh.publish(makeSpan({ tags: innerTags }))
+      assert.equal(context.attributes[1], 'GET /inner')
     })
 
     it('does not query the cache again on re-entry', () => {
