@@ -46,8 +46,14 @@ function filterTags (tags) {
 }
 
 function processTagValue (tags) {
-  return tags.map(tag => tag.includes(':') ? getSegment(tag, ':', 1) : tag)
-    .join('_').replaceAll('.', '_')
+  let processedTags = ''
+  let isFirstTag = true
+  for (const tag of tags) {
+    if (!isFirstTag) processedTags += '_'
+    processedTags += (tag.includes(':') ? getSegment(tag, ':', 1) : tag) ?? ''
+    isFirstTag = false
+  }
+  return processedTags.replaceAll('.', '_')
 }
 
 module.exports = {
