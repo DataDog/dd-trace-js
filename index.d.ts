@@ -3610,7 +3610,7 @@ declare namespace tracer {
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
        */
-      enable (options: LLMObsEnableOptions): void,
+      enable (options: LLMObsRuntimeEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
@@ -3989,6 +3989,8 @@ declare namespace tracer {
       description (): string
       id (): string | null
       projectId (): string | null
+      /** Project associated with the client used to create or pull this dataset. */
+      projectName (): string | undefined
       version (): number | null
       latestVersion (): number | null
       records (): Array<{
@@ -4543,6 +4545,9 @@ declare namespace tracer {
        */
       sampleRate?: number,
     }
+
+    /** Options accepted by the deprecated runtime `llmobs.enable()` method. */
+    type LLMObsRuntimeEnableOptions = Omit<LLMObsEnableOptions, 'projectName'>
 
     /** @hidden */
     type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm'

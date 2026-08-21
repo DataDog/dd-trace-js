@@ -33,7 +33,7 @@ class Experiments {
 
   constructor (config, llmobs) {
     this.#config = config
-    this.#llmobs = llmobs
+    this.#llmobs = config.llmobs?.mlApp || config.service ? llmobs : undefined
     this.#projectName = config.llmobs?.projectName || config.llmobs?.mlApp || config.service
     this.#client = this.#projectName === undefined ? undefined : this.#clientForProject(this.#projectName)
   }
@@ -180,9 +180,19 @@ class Experiments {
 
   // Build an experiment with a dataset, task, evaluators, and optional project/config/tags.
   experiment (options) {
-    const client = this.#clientForOperation(options?.projectName)
-    const experimentOptions = options?.projectName === undefined && this.#config.llmobs?.projectName !== undefined
-      ? { ...options, projectName: this.#config.llmobs.projectName }
+    const datasetProjectName = options?.dataset?.projectName?.()
+    if (options?.projectName !== undefined &&
+        datasetProjectName !== undefined &&
+        options.projectName !== datasetProjectName) {
+      throw new Error(
+        `Experiment project '${options.projectName}' does not match dataset project '${datasetProjectName}'`
+      )
+    }
+    const projectName = options?.projectName ?? datasetProjectName
+    const client = this.#clientForOperation(projectName)
+    const resolvedProjectName = projectName ?? this.#config.llmobs?.projectName
+    const experimentOptions = options?.projectName === undefined && resolvedProjectName !== undefined
+      ? { ...options, projectName: resolvedProjectName }
       : options
     return new Experiment(client, experimentOptions, this.#llmobs)
   }
@@ -217,7 +227,7 @@ function createExperiments (config, llmobs) {
   }
   if (!config.llmobs?.projectName && !config.llmobs?.mlApp && !config.service) {
     const reason = 'no project name configured; set DD_LLMOBS_PROJECT_NAME (or llmobs.projectName in tracer.init()), ' +
-      'DD_LLMOBS_ML_APP (or llmobs.mlApp), or DD_SERVICE (or service in tracer.init()), then retry'
+      'DD_LLMOBS_ML_APP (or llmobs.mlApp in tracer.init()), or DD_SERVICE (or service in tracer.init()), then retry'
     const experiments = new Experiments(config, llmobs)
     return new NoopExperiments(reason, {
       createDataset: (name, options) => experiments.createDataset(name, options),

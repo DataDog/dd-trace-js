@@ -540,6 +540,7 @@ class Experiment {
       dataset_name: this.#dataset.name(),
       experiment_name: this.#name,
     }
+    if (this.#projectName !== undefined) autoTags.project_name = this.#projectName
     const tags = mergeTags(this.#tags, { ...recordTagsToObject(record.tags), ...autoTags })
 
     const execute = () => this.#runWithRetries(

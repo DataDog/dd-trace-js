@@ -58,7 +58,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       { q: 'apple' },
       'apple',
       { row: 0 },
-      ['topic:math', 'topic:logic']
+      ['topic:math', 'topic:logic', 'project_name:record-project']
     )
     const callsToLlmobs = []
     const llmobs = {
