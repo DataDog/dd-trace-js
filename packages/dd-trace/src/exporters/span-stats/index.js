@@ -2,7 +2,7 @@
 
 const log = require('../../log')
 const { createServerlessDeliveryTracker } = require('../../serverless')
-const { flushWriter, trackDelivery } = require('../common/flush')
+const { flushWriter, trackDelivery } = require('../../serverless/telemetry-delivery-tracker')
 const { Writer } = require('./writer')
 
 class SpanStatsExporter {

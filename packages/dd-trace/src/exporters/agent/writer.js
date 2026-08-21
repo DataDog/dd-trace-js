@@ -38,12 +38,16 @@ class AgentWriter extends BaseWriter {
     }
   }
 
+  flush (done, options) {
+    return this._flushWithLifecycle(done, callback => this.flushDirect(callback, options))
+  }
+
   flushDirect (done, options) {
     if (this.#requestTracker) {
       this.#requestTracker.flush(done, options)
       return
     }
-    super.flushDirect(done, options)
+    super._flush(done, options)
   }
 
   _sendPayload (data, count, done, flushOptions) {

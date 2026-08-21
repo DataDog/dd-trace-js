@@ -21,12 +21,15 @@ class Writer {
   #isFirstFlush = true
 
   flush (done, options) {
-    const flush = callback => this.flushDirect(callback, options)
+    return this._flushWithLifecycle(done, callback => this._flush(callback, options))
+  }
+
+  _flushWithLifecycle (done, flush) {
     if (this.#onFlush) return this.#onFlush(flush, done)
     flush(done)
   }
 
-  flushDirect (done = () => {}, options) {
+  _flush (done = () => {}, options) {
     const count = this._encoder.count()
 
     if (!request.writable && options?.deadline === undefined) {
