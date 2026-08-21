@@ -8,6 +8,7 @@
   },
   "files": [
     "../index.d.ts",
+    "span-tags.ts",
     "test.ts"
   ]
 }

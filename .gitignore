@@ -122,6 +122,7 @@ out
 build
 prebuilds
 prebuilds.*
+docs/span-tags.js
 docs/test.js
 docs/superpowers/
 dist

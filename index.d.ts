@@ -29,7 +29,10 @@ interface Tracer extends opentracing.Tracer {
    * @param {tracer.SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
    */
-  startSpan (name: string, options?: tracer.SpanOptions): tracer.Span;
+  startSpan<Tags extends object = object> (
+    name: string,
+    options?: SpanOptionsWithTags<Tags>
+  ): tracer.Span;
 
   /**
    * Injects the given SpanContext instance for cross-process propagation
@@ -57,7 +60,7 @@ interface Tracer extends opentracing.Tracer {
   /**
    * Initializes the tracer. This should be called before importing other libraries.
    */
-  init (options?: tracer.TracerOptions): this;
+  init<Tags extends object = object> (options?: TracerOptionsWithTags<Tags>): this;
 
   /**
    * Sets the URL for the trace agent. This should only be called _after_
@@ -94,7 +97,11 @@ interface Tracer extends opentracing.Tracer {
    */
   trace<T> (name: string, fn: (span: tracer.Span) => T): T;
   trace<T> (name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
-  trace<T> (name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T;
+  trace<T, Tags extends object = object> (
+    name: string,
+    options: tracer.TraceOptions & SpanOptionsWithTags<Tags>,
+    fn: (span?: tracer.Span, done?: (error?: Error) => void) => T
+  ): T;
 
   /**
    * Wrap a function to automatically create a span activated on its
@@ -111,8 +118,16 @@ interface Tracer extends opentracing.Tracer {
    * which case the span will finish at the end of the function execution.
    */
   wrap<T = (...args: any[]) => any> (name: string, fn: T): T;
-  wrap<T = (...args: any[]) => any> (name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: T): T;
-  wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => tracer.TraceOptions & tracer.SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any, Tags extends object = object> (
+    name: string,
+    options: tracer.TraceOptions & SpanOptionsWithTags<Tags>,
+    fn: T
+  ): T;
+  wrap<T = (...args: any[]) => any, Tags extends object = object> (
+    name: string,
+    options: (...args: any[]) => tracer.TraceOptions & SpanOptionsWithTags<Tags>,
+    fn: T
+  ): T;
 
   /**
    * Returns an HTML string containing <meta> tags that should be included in
@@ -314,11 +329,49 @@ interface Plugins {
   "ws": tracer.plugins.ws;
 }
 
+type SpanTagScalar = string | number | boolean | Buffer | URL
+type ErrorMetaTag = 'error.type' | 'error.message' | 'error.stack'
+type StringOnlySpanTag = 'service.name' | 'span.type' | 'resource.name'
+type ValidatedSpanTagObject<Value extends object> =
+  keyof Value extends never ? never :
+  Extract<keyof Value, symbol> extends never ? Value extends {
+    [Key in keyof Value]:
+      [Exclude<Value[Key], undefined>] extends [never] ? never :
+      Exclude<Value[Key], undefined> extends SpanTagScalar ? Value[Key] : never
+  } ? Value : never :
+  never
+type ValidatedSpanTagValue<Value> =
+  Value extends SpanTagScalar ? Value :
+  Value extends readonly unknown[] ? never :
+  Value extends (...args: never[]) => unknown ? never :
+  Value extends object ? ValidatedSpanTagObject<Value> :
+  never
+type SpanTagValueForKey<Key, Value> =
+  [Key] extends ['error']
+    ? Value extends Error ? Value : ValidatedSpanTagValue<Value>
+    : [Key] extends [ErrorMetaTag]
+      ? NonNullable<Value>
+      : [Key] extends [StringOnlySpanTag]
+        ? Value extends string ? Value : never
+        : ValidatedSpanTagValue<Value>
+type ValidatedSpanTags<Tags extends object> =
+  Tags extends readonly unknown[] ? never :
+  Tags extends (...args: never[]) => unknown ? never :
+  keyof Tags extends never ? Tags :
+  Extract<keyof Tags, symbol> extends never ? {
+    [Key in keyof Tags]: SpanTagValueForKey<Key, Tags[Key]>
+  } : never
+type SpanTagsOption<Tags extends object> =
+  { tags?: Tags } &
+  (object extends Tags ? object : { tags?: ValidatedSpanTags<Tags> })
+type SpanOptionsWithTags<Tags extends object> = Omit<tracer.SpanOptions, 'tags'> & SpanTagsOption<Tags>
+type TracerOptionsWithTags<Tags extends object> = Omit<tracer.TracerOptions, 'tags'> & SpanTagsOption<Tags>
+
 declare namespace tracer {
   export interface PluginOptions extends Plugins {}
   export type PluginName = keyof PluginOptions;
 
-  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
+  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf' | 'tags'> & {
   /**
    * Set childOf to 'null' to create a root span without a parent, even when a parent span
    * exists in the current async context. If 'undefined' the parent will be inferred from the
@@ -329,6 +382,10 @@ declare namespace tracer {
      * Optional name of the integration that crated this span.
      */
     integrationName?: string;
+    /**
+     * Tags for the newly created span.
+     */
+    tags?: object;
   };
   export { Tracer };
 
@@ -365,6 +422,21 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
+
+    /**
+     * Adds a tag to the span.
+     *
+     * @param key The tag name.
+     * @param value The tag value.
+     */
+    setTag<Key extends string, Value> (key: Key, value: Value & SpanTagValueForKey<Key, Value>): this;
+
+    /**
+     * Adds tags to the span.
+     *
+     * @param keyValueMap The tags to add.
+     */
+    addTags<Tags extends object> (keyValueMap: Tags & ValidatedSpanTags<Tags>): this;
 
     /**
      * Adds a single link to the span.
@@ -872,7 +944,7 @@ declare namespace tracer {
      * @env DD_TAGS, OTEL_RESOURCE_ATTRIBUTES
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    tags?: { [key: string]: any };
+    tags?: object;
 
     /**
      * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
