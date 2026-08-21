@@ -585,7 +585,10 @@ describe('CiPlugin', () => {
   }
 
   it('excludes symlinked coverage report files', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the symbolic-link behavior exercised here.
+      this.skip()
+    }
 
     const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
     const rootDir = path.join(fixtureDir, 'root')

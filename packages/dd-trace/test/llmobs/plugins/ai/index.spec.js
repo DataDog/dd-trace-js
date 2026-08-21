@@ -954,9 +954,10 @@ describe('Plugin', () => {
       })
     })
 
-    it('extracts last user message content from messages in generateText', async function () {
-      if (semifies(realVersion, '<5.0.0')) this.skip()
+    const generateTextMessageTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
 
+    // Structured message content is only available from ai 5.0.0.
+    generateTextMessageTest('extracts last user message content from messages in generateText', async function () {
       const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       const { createOpenAI } = OpenAIModule.get()
       const mockOpenai = createOpenAI({
@@ -995,9 +996,10 @@ describe('Plugin', () => {
       })
     })
 
-    it('extracts last user message content from messages in generateObject', async function () {
-      if (semifies(realVersion, '<5.0.0')) this.skip()
+    const generateObjectMessageTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
 
+    // Structured message content is only available from ai 5.0.0.
+    generateObjectMessageTest('extracts last user message content from messages in generateObject', async function () {
       const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       const { createOpenAI } = OpenAIModule.get()
       const mockOpenai = createOpenAI({
@@ -1037,13 +1039,10 @@ describe('Plugin', () => {
       })
     })
 
-    describe('ToolLoopAgent', function () {
-      beforeEach(function () {
-        if (semifies(realVersion, '<6.0.0')) {
-          this.skip()
-        }
-      })
+    const toolLoopAgentDescribe = semifies(realVersion, '>=6.0.0') ? describe : describe.skip
 
+    // The cache-token metrics exercised here are only available from ai 6.0.0.
+    toolLoopAgentDescribe('ToolLoopAgent', function () {
       it('creates a text generation root span for ToolLoopAgent.generate', async () => {
         const agent = new ai.ToolLoopAgent({
           model: openai('gpt-4o-mini'),
@@ -1600,8 +1599,11 @@ describe('Plugin', () => {
             // because the SDK never exposes the attribute there.
             const cacheReadOnDoGenerate = semifies(realVersion, '>=6.0.184')
 
-            if (scenarios.includes('cache-read')) {
-              it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
+            {
+              const cacheReadTest = scenarios.includes('cache-read') ? it : it.skip
+              const cacheReadTitle = `surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`
+
+              cacheReadTest(cacheReadTitle, async () => {
                 const model = buildModel(PackageModule, 'cache-read')
                 await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
 
@@ -1618,10 +1620,12 @@ describe('Plugin', () => {
                 assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
                 assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
               })
-            }
 
-            if (scenarios.includes('cache-write')) {
-              it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
+              const cacheWriteTest = scenarios.includes('cache-write') ? it : it.skip
+              const cacheWriteTitle = `surfaces cache_write_input_tokens when ${providerName} ` +
+                'returns cache write tokens'
+
+              cacheWriteTest(cacheWriteTitle, async () => {
                 const model = buildModel(PackageModule, 'cache-write')
                 await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
 
