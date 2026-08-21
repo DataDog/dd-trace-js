@@ -1703,11 +1703,12 @@ versions.forEach((version) => {
     // v4 dropped support for Node 18. Every test but this once passes, so we'll leave them
     // for now. The breaking change is in https://github.com/vitest-dev/vitest/commit/9a0bf2254
     // shipped in https://github.com/vitest-dev/vitest/releases/tag/v4.0.0-beta.12
-    if (version === 'latest' && NODE_MAJOR >= 20) {
+    {
+      const coverageTest = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
       const coverageProviders = ['v8', 'istanbul']
 
       coverageProviders.forEach((coverageProvider) => {
-        it(`reports code coverage for ${coverageProvider} provider`, async () => {
+        coverageTest(`reports code coverage for ${coverageProvider} provider`, async () => {
           let codeCoverageExtracted
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1754,7 +1755,7 @@ versions.forEach((version) => {
         })
       })
 
-      it('reports zero code coverage for instanbul provider', async () => {
+      coverageTest('reports zero code coverage for instanbul provider', async () => {
         let codeCoverageExtracted
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2756,8 +2757,10 @@ versions.forEach((version) => {
     })
 
     // dynamic instrumentation only supported from >=2.0.0
-    if (version === 'latest') {
-      context('dynamic instrumentation', () => {
+    {
+      const dynamicInstrumentationContext = version === 'latest' ? context : context.skip
+
+      dynamicInstrumentationContext('dynamic instrumentation', () => {
         it('does not activate it if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
