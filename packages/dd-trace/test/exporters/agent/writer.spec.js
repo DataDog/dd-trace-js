@@ -109,13 +109,13 @@ function describeWriter (protocolVersion) {
       writer.flush(done)
     })
 
-    it('routes flushes through the configured lifecycle hook', (done) => {
-      const onFlush = sinon.spy((flush, done) => flush(done))
-      writer = new Writer({ url, prioritySampler, protocolVersion, onFlush })
+    it('routes flushes through the configured delivery tracker', (done) => {
+      const deliveryTracker = { track: sinon.spy((flush, done) => flush(done)) }
+      writer = new Writer({ url, prioritySampler, protocolVersion, deliveryTracker })
 
       writer.flush(() => {
         try {
-          sinon.assert.calledOnce(onFlush)
+          sinon.assert.calledOnce(deliveryTracker.track)
           done()
         } catch (error) {
           done(error)

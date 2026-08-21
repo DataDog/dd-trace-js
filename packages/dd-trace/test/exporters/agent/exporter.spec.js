@@ -127,7 +127,9 @@ describe('Exporter', () => {
 
     it('waits for trace exports already in flight', () => {
       const callbacks = []
-      writer.flush = sinon.spy(done => callbacks.push(done))
+      writer.flush = sinon.spy(done => {
+        writerOptions.deliveryTracker.track(callback => callbacks.push(callback), done)
+      })
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
       const flushed = sinon.spy()
 
@@ -144,7 +146,7 @@ describe('Exporter', () => {
       const callbacks = []
       const flushDirect = sinon.spy(done => callbacks.push(done))
       writer.flushDirect = flushDirect
-      writer.flush = sinon.spy(done => writerOptions.onFlush(flushDirect, done))
+      writer.flush = sinon.spy(done => writerOptions.deliveryTracker.track(flushDirect, done))
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
       const flushed = sinon.spy()
 
@@ -174,7 +176,9 @@ describe('Exporter', () => {
     it('waits for an earlier export when the boundary flush fails', () => {
       let inFlightDone
       writer.flush = sinon.stub()
-      writer.flush.onFirstCall().callsFake(done => { inFlightDone = done })
+      writer.flush.onFirstCall().callsFake(done => {
+        writerOptions.deliveryTracker.track(callback => { inFlightDone = callback }, done)
+      })
       writer.flush.onSecondCall().throws(new Error('encode failed'))
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
       const flushed = sinon.spy()

@@ -3,7 +3,6 @@
 const { URL } = require('url')
 const log = require('../../log')
 const { createServerlessDeliveryTracker } = require('../../serverless')
-const { flushWriter, trackDelivery } = require('../../serverless/telemetry-delivery-tracker')
 const Writer = require('./writer')
 
 class AgentExporter {
@@ -27,7 +26,7 @@ class AgentExporter {
       lookup,
       protocolVersion,
       headers,
-      onFlush: (flush, done) => trackDelivery(this.#serverlessDeliveryTracker, flush, done),
+      deliveryTracker: this.#serverlessDeliveryTracker,
     })
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
@@ -49,10 +48,10 @@ class AgentExporter {
     const { flushInterval } = this._config
 
     if (flushInterval === 0) {
-      flushWriter(this._writer, this.#serverlessDeliveryTracker)
+      this._writer.flush()
     } else if (this.#timer === undefined) {
       this.#timer = setTimeout(() => {
-        flushWriter(this._writer, this.#serverlessDeliveryTracker)
+        this._writer.flush()
         this.#timer = undefined
       }, flushInterval)
       this.#timer.unref?.()
@@ -65,7 +64,7 @@ class AgentExporter {
 
     if (!this.#serverlessDeliveryTracker) {
       try {
-        return flushWriter(this._writer, this.#serverlessDeliveryTracker, done)
+        return this._writer.flush(done)
       } catch (error) {
         log.error('Failed to flush traces: %s', error.message)
         done?.()
@@ -74,7 +73,7 @@ class AgentExporter {
     }
 
     try {
-      flushWriter(this._writer, this.#serverlessDeliveryTracker)
+      this._writer.flush()
     } catch (error) {
       log.error('Failed to flush traces: %s', error.message)
     }

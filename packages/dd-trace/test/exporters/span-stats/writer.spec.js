@@ -77,15 +77,15 @@ describe('span-stats writer', () => {
       writer.flush(done)
     })
 
-    it('routes encoder-triggered flushes through the configured lifecycle hook', () => {
-      const onFlush = sinon.stub().callsFake((flush, done) => flush(done))
-      writer = new Writer({ url, onFlush })
+    it('routes encoder-triggered flushes through the configured delivery tracker', () => {
+      const deliveryTracker = { track: sinon.stub().callsFake((flush, done) => flush(done)) }
+      writer = new Writer({ url, deliveryTracker })
       encoder.count.returns(1)
       encoder.encode.callsFake(() => writer.flush())
 
       writer.append([span])
 
-      sinon.assert.calledOnce(onFlush)
+      sinon.assert.calledOnce(deliveryTracker.track)
     })
 
     it('should flush to the agent, and call callback', (done) => {

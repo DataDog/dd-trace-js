@@ -39,7 +39,7 @@ class AgentWriter extends BaseWriter {
   }
 
   flush (done, options) {
-    return this._flushWithLifecycle(done, callback => this.flushDirect(callback, options))
+    return this._flushWithDeliveryTracker(done, callback => this.flushDirect(callback, options))
   }
 
   flushDirect (done, options) {

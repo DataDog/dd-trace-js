@@ -75,15 +75,15 @@ describe('common Writer', () => {
     sinon.assert.calledOnceWithExactly(writer._sendPayload, payload, 2, done)
   })
 
-  it('routes automatic flushes through the configured lifecycle hook', () => {
-    const onFlush = sinon.stub().callsFake((flush, done) => flush(done))
-    writer = new Writer({ url: 'http://localhost:8126', onFlush })
+  it('routes automatic flushes through the configured delivery tracker', () => {
+    const deliveryTracker = { track: sinon.stub().callsFake((flush, done) => flush(done)) }
+    writer = new Writer({ url: 'http://localhost:8126', deliveryTracker })
     writer._encoder = encoder
     writer._sendPayload = sinon.stub()
 
     writer.flush()
 
-    sinon.assert.calledOnce(onFlush)
+    sinon.assert.calledOnce(deliveryTracker.track)
     sinon.assert.calledOnce(writer._sendPayload)
   })
 
