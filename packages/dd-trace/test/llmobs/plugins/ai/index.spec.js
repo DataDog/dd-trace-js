@@ -1043,9 +1043,10 @@ describe('Plugin', () => {
       })
     })
 
-    it('captures an inline image from a multimodal user message', async function () {
-      if (semifies(realVersion, '<5.0.0')) this.skip()
+    const inlineImageTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
 
+    // Structured message content is only available from ai 5.0.0.
+    inlineImageTest('captures an inline image from a multimodal user message', async function () {
       const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       const { createOpenAI } = OpenAIModule.get()
       const mockOpenai = createOpenAI({
@@ -1094,9 +1095,10 @@ describe('Plugin', () => {
       })
     })
 
-    it('marks a remote image URL that cannot be carried inline', async function () {
-      if (semifies(realVersion, '<5.0.0')) this.skip()
+    const remoteImageTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
 
+    // Structured message content is only available from ai 5.0.0.
+    remoteImageTest('marks a remote image URL that cannot be carried inline', async function () {
       const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       const { createOpenAI } = OpenAIModule.get()
       const mockOpenai = createOpenAI({
