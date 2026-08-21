@@ -51,6 +51,14 @@ function clientWithMockBackend ({ createDatasetError } = {}) {
   return { client: c, requests }
 }
 
+async function waitFor (condition) {
+  for (let i = 0; i < 20; i++) {
+    if (condition()) return
+    await Promise.resolve()
+  }
+  assert.equal(condition(), true)
+}
+
 describe('LLMObs Experiments — dataset + experiment run', () => {
   it('runs task inside an LLMObs experiment span', async () => {
     const { client: c, requests } = clientWithMockBackend()
@@ -86,6 +94,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
     assert.deepEqual(callsToLlmobs[1][1].tags.topic, ['math', 'logic'])
+    assert.equal(callsToLlmobs[1][1].tags.run_iteration, 1)
     assert.equal(result.rows[0].spanId, '000000000000abcd')
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
     assert.deepEqual(requests.find(request => request.method === 'createExperiment').attributes.config, {
@@ -644,6 +653,257 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(summaryOutputs, ['good', 'eval-bad', null])
     assert.deepEqual(summaryEvaluatorResults.exactMatch, [true, null, null])
     assert.equal(result.summaryEvaluations.passRate.value, 1 / 3)
+    assert.equal(result.runs[0].hasError, true)
+  })
+
+  it('marks an empty summary evaluator error as a run error', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('good'),
+      task: input => input,
+      summaryEvaluators: {
+        emptyError: () => { throw new Error() },
+      },
+    }).run()
+
+    assert.deepEqual(result.summaryEvaluations.emptyError, { value: null, error: '' })
+    assert.equal(result.runs[0].hasError, true)
+    assert.deepEqual(
+      requests.find(request => request.method === 'updateExperiment').attributes,
+      { status: 'failed', error: 'one or more rows failed' }
+    )
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    assert.deepEqual(metrics.find(metric => metric.label === 'emptyError').error, { message: '' })
+  })
+
+  it('runs multiple iterations and aliases top-level results to the first run', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo')
+      .addRecord('a', 'a')
+      .addRecord('b', 'b')
+    let taskCalls = 0
+    let summaryCalls = 0
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      runs: 2,
+      task: (input) => {
+        taskCalls++
+        return input
+      },
+      evaluators: { exactMatch: (_input, output, expectedOutput) => output === expectedOutput },
+      summaryEvaluators: {
+        rowCount: (inputs) => {
+          summaryCalls++
+          return inputs.length
+        },
+      },
+      tags: { suite: 'multi-run' },
+    }).run()
+
+    const createExperiment = requests.find(request => request.method === 'createExperiment')
+    assert.equal(createExperiment.attributes.run_count, 2)
+    assert.equal(taskCalls, 4)
+    assert.equal(summaryCalls, 2)
+    assert.equal(result.runs.length, 2)
+    assert.equal(result.rows, result.runs[0].rows)
+    assert.equal(result.summaryEvaluations, result.runs[0].summaryEvaluations)
+    assert.deepEqual(result.runs.map(run => run.runIteration), [1, 2])
+    assert.deepEqual(result.runs.map(run => run.hasError), [false, false])
+    assert.notEqual(result.runs[0].runId, result.runs[1].runId)
+    assert.deepEqual(result.runs.map(run => run.rows.map(row => row.output)), [['a', 'b'], ['a', 'b']])
+    assert.deepEqual(result.runs.map(run => run.summaryEvaluations.rowCount.value), [2, 2])
+
+    const events = requests.filter(request => request.method === 'postExperimentEvents')
+    assert.equal(events.length, 2)
+    assert.equal(events[0].attributes.spans.length, 2)
+    assert.equal(events[0].attributes.metrics.length, 3)
+    assert.equal(events[1].attributes.spans.length, 2)
+    assert.equal(events[1].attributes.metrics.length, 3)
+    assert.equal(events[0].attributes.spans[0].tags.includes('run_iteration:1'), true)
+    assert.equal(events[1].attributes.spans[0].tags.includes('run_iteration:2'), true)
+    assert.equal(events[0].attributes.metrics[0].tags.includes('run_iteration:1'), true)
+    assert.equal(events[1].attributes.metrics[0].tags.includes('run_iteration:2'), true)
+    assert.equal(events[0].attributes.metrics[0].tags.includes(`run_id:${result.runs[0].runId}`), true)
+    assert.equal(events[1].attributes.metrics[0].tags.includes(`run_id:${result.runs[1].runId}`), true)
+  })
+
+  it('uploads each run before starting the next iteration', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let releaseFirstUpload
+    const firstUpload = new Promise(resolve => { releaseFirstUpload = resolve })
+    let uploadCalls = 0
+    let taskCalls = 0
+    c.postExperimentEvents = async (experimentId, attributes) => {
+      requests.push({ method: 'postExperimentEvents', experimentId, attributes })
+      uploadCalls++
+      if (uploadCalls === 1) await firstUpload
+    }
+
+    const pendingResult = new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('a').addRecord('b'),
+      runs: 2,
+      task: input => {
+        taskCalls++
+        return input
+      },
+    }).run()
+
+    await waitFor(() => uploadCalls === 1)
+    assert.equal(taskCalls, 2)
+    assert.equal(uploadCalls, 1)
+
+    releaseFirstUpload()
+    const result = await pendingResult
+    assert.equal(result.runs.length, 2)
+    assert.equal(uploadCalls, 2)
+  })
+
+  it('records errors on the individual run that failed', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let taskCalls = 0
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('a'),
+      runs: 2,
+      task: input => {
+        taskCalls++
+        if (taskCalls === 2) throw new Error('second run failed')
+        return input
+      },
+    }).run()
+
+    assert.deepEqual(result.runs.map(run => run.hasError), [false, true])
+    assert.equal(requests.filter(request => request.method === 'postExperimentEvents').length, 2)
+    assert.deepEqual(
+      requests.find(request => request.method === 'updateExperiment').attributes,
+      { status: 'failed', error: 'one or more rows failed' }
+    )
+  })
+
+  it('processes records concurrently while preserving row order', async () => {
+    const { client: c } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo')
+      .addRecord('a')
+      .addRecord('b')
+      .addRecord('c')
+      .addRecord('d')
+    const releases = []
+    let active = 0
+    let maxActive = 0
+
+    const pendingResult = new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: async (input) => {
+        active++
+        maxActive = Math.max(maxActive, active)
+        await new Promise(resolve => releases.push(resolve))
+        active--
+        return `out-${input}`
+      },
+    }).run({ concurrency: 2 })
+
+    await waitFor(() => releases.length === 2)
+    assert.equal(maxActive, 2)
+    releases[0]()
+    await waitFor(() => releases.length === 3)
+    assert.equal(maxActive, 2)
+    releases[1]()
+    releases[2]()
+    await waitFor(() => releases.length === 4)
+    releases[3]()
+
+    const result = await pendingResult
+    assert.equal(maxActive, 2)
+    assert.equal(active, 0)
+    assert.deepEqual(result.rows.map(row => row.output), ['out-a', 'out-b', 'out-c', 'out-d'])
+    assert.deepEqual(result.rows.map(row => row.index), [0, 1, 2, 3])
+  })
+
+  it('processes evaluators concurrently while preserving labels', async () => {
+    const { client: c } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('a')
+    const releases = []
+    let active = 0
+    let maxActive = 0
+
+    function evaluator (value) {
+      return async () => {
+        active++
+        maxActive = Math.max(maxActive, active)
+        await new Promise(resolve => releases.push(resolve))
+        active--
+        return value
+      }
+    }
+
+    const pendingResult = new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: (input) => `out-${input}`,
+      evaluators: {
+        first: evaluator('first'),
+        second: evaluator('second'),
+        third: evaluator('third'),
+      },
+    }).run({ concurrency: 2 })
+
+    await waitFor(() => releases.length === 2)
+    assert.equal(maxActive, 2)
+    releases[0]()
+    await waitFor(() => releases.length === 3)
+    assert.equal(maxActive, 2)
+    releases[1]()
+    releases[2]()
+
+    const result = await pendingResult
+    assert.equal(maxActive, 2)
+    assert.equal(active, 0)
+    assert.deepEqual(result.rows[0].evaluations, {
+      first: 'first',
+      second: 'second',
+      third: 'third',
+    })
+  })
+
+  it('defaults concurrency to ten task or evaluator executions', async () => {
+    const { client: c } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('a')
+    const evaluators = {}
+    const releases = []
+    let active = 0
+    let maxActive = 0
+
+    for (let i = 0; i < 11; i++) {
+      evaluators[`eval${i}`] = async () => {
+        active++
+        maxActive = Math.max(maxActive, active)
+        await new Promise(resolve => releases.push(resolve))
+        active--
+        return i
+      }
+    }
+
+    const pendingResult = new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: (input) => `out-${input}`,
+      evaluators,
+    }).run()
+
+    await waitFor(() => releases.length === 10)
+    assert.equal(maxActive, 10)
+    releases[0]()
+    await waitFor(() => releases.length === 11)
+    for (let i = 1; i < releases.length; i++) releases[i]()
+
+    const result = await pendingResult
+    assert.equal(maxActive, 10)
+    assert.equal(Object.keys(result.rows[0].evaluations).length, 11)
   })
 
   it('throws task and evaluator errors when throwOnErrors is true', async () => {
@@ -667,6 +927,48 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       }).run({ throwOnErrors: true }),
       /eval-fail/
     )
+  })
+
+  it('does not start queued task work after a throw-on-error failure', async () => {
+    const { client: c } = clientWithMockBackend()
+    const inputs = ['bad', 'later-1', 'later-2']
+    let taskCalls = 0
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'exp-demo',
+        dataset: new Dataset(c, 'demo').addRecord(inputs[0]).addRecord(inputs[1]).addRecord(inputs[2]),
+        task: (input) => {
+          taskCalls++
+          if (input === 'bad') throw new Error('task-fail')
+          return input
+        },
+      }).run({ concurrency: 1, throwOnErrors: true }),
+      /task-fail/
+    )
+    assert.equal(taskCalls, 1)
+  })
+
+  it('does not start queued evaluator work after a throw-on-error failure', async () => {
+    const { client: c } = clientWithMockBackend()
+    const evaluatorInputs = []
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'exp-demo',
+        dataset: new Dataset(c, 'demo').addRecord('bad').addRecord('later'),
+        task: input => input,
+        evaluators: {
+          failing: (input) => {
+            evaluatorInputs.push(input)
+            if (input === 'bad') throw new Error('eval-fail')
+            return true
+          },
+        },
+      }).run({ concurrency: 1, throwOnErrors: true }),
+      /eval-fail/
+    )
+    assert.deepEqual(evaluatorInputs, ['bad'])
   })
 
   it('normalizes fallback JSON evaluator metrics', async () => {
@@ -719,6 +1021,29 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.throws(
       () => new Experiment(c, { name: 'n', dataset, task: (input) => input, summaryEvaluators: [true] }),
       /summary evaluator must be a function/
+    )
+    assert.throws(
+      () => new Experiment(c, { name: 'n', dataset, task: (input) => input, runs: 0 }),
+      /runs must be a positive integer/
+    )
+    assert.throws(
+      () => new Experiment(c, { name: 'n', dataset, task: (input) => input, runs: 1.5 }),
+      /runs must be a positive integer/
+    )
+  })
+
+  it('validates run options', async () => {
+    const c = client()
+    const dataset = new Dataset(c, 'demo').addRecord('a')
+    const experiment = new Experiment(c, { name: 'n', dataset, task: (input) => input })
+
+    await assert.rejects(
+      () => experiment.run({ concurrency: 0 }),
+      /concurrency must be a positive integer/
+    )
+    await assert.rejects(
+      () => experiment.run({ concurrency: 1.5 }),
+      /concurrency must be a positive integer/
     )
   })
 

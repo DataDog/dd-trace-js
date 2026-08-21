@@ -165,7 +165,13 @@ class NoopExperiment {
   }
 
   run () {
-    return Promise.resolve({ experimentId: null, rows: [], url: null })
+    return Promise.resolve({
+      experimentId: null,
+      rows: [],
+      summaryEvaluations: {},
+      runs: [],
+      url: null,
+    })
   }
 
   /**
