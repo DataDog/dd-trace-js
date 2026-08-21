@@ -5,9 +5,17 @@ const { join } = require('path')
 const { pathToFileURL } = require('url')
 const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+const {
+  awaitContextCallback,
+  configureGraphqlJitCompileObject,
+  configureGraphqlJitDeferredField,
+  configureGraphqlJitExecute,
+  configureGraphqlJitRuntime,
+  configureMercuriusRequest,
+  waitForAsyncEnd,
+} = require('./transforms')
 const instrumentations = require('./instrumentations')
 const { getRewriteTarget } = require('./targets')
-const { awaitContextCallback, waitForAsyncEnd } = require('./transforms')
 
 // `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
 // (ESM) statements that the transformer splices into the rewritten module.
@@ -28,7 +36,9 @@ try {
   // which works for most Node versions.
 }
 
-/** @type {Record<string, string>} map of module base name to version */
+/**
+ * @type {Record<string, string>} map of module base name to version
+ */
 const moduleVersions = {}
 const disabled = new Set()
 const matcherCjs = create(instrumentations, dcPolyfillCjs)
@@ -37,6 +47,11 @@ const matcherEsm = create(instrumentations, dcPolyfillEsm)
 for (const matcher of [matcherCjs, matcherEsm]) {
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
+  matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
+  matcher.addTransform('configureGraphqlJitDeferredField', configureGraphqlJitDeferredField)
+  matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
+  matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
+  matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
 }
 
 // Keep the marker split: source-map scanners can read a contiguous token in

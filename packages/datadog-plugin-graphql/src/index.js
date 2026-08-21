@@ -5,6 +5,7 @@ const { DD_MAJOR } = require('../../../version')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
+const GraphQLJitExecutePlugin = require('./jit')
 const GraphQLParsePlugin = require('./parse')
 const GraphQLRequestPlugin = require('./request')
 const GraphQLValidatePlugin = require('./validate')
@@ -14,6 +15,7 @@ class GraphQLPlugin extends CompositePlugin {
   static get plugins () {
     return {
       execute: GraphQLExecutePlugin,
+      jit: GraphQLJitExecutePlugin,
       parse: GraphQLParsePlugin,
       // Top-level request span for drivers (mercurius) that funnel through a
       // single entry point and parse/execute internally. graphql-js, apollo,
@@ -21,9 +23,8 @@ class GraphQLPlugin extends CompositePlugin {
       // them.
       request: GraphQLRequestPlugin,
       validate: GraphQLValidatePlugin,
-      // resolve plugin is absorbed into execute: per-field data is recorded
-      // synchronously in wrapResolve, and all graphql.resolve spans are
-      // materialized at execute end.
+      // Resolve handling is absorbed into execute. Spans start inline for
+      // correct parenting; collapsed spans finish when execute completes.
     }
   }
 
@@ -93,13 +94,31 @@ const noopHooks = { execute: noop, parse: noop, validate: noop, resolve: undefin
 function getHooks ({ hooks }) {
   if (!hooks) return noopHooks
   return {
-    execute: hooks.execute ?? noop,
-    parse: hooks.parse ?? noop,
-    validate: hooks.validate ?? noop,
+    execute: guardHook('execute', hooks.execute) ?? noop,
+    parse: guardHook('parse', hooks.parse) ?? noop,
+    validate: guardHook('validate', hooks.validate) ?? noop,
     // No noop fallback: `resolve` runs per-field (hot path); the plugin
     // gates with `if (this.config.hooks.resolve)` so the absent-hook case
     // skips both the call and the payload-object allocation.
-    resolve: hooks.resolve,
+    resolve: guardHook('resolve', hooks.resolve),
+  }
+}
+
+/**
+ * @param {'execute' | 'parse' | 'resolve' | 'validate'} name
+ * @param {((...args: unknown[]) => unknown) | undefined} hook
+ * @returns {((...args: unknown[]) => unknown) | undefined}
+ */
+function guardHook (name, hook) {
+  if (typeof hook !== 'function') return
+
+  const errorMessage = `Error in the graphql ${name} hook`
+  return function () {
+    try {
+      return hook.apply(this, arguments)
+    } catch (error) {
+      log.error(errorMessage, error)
+    }
   }
 }
 
