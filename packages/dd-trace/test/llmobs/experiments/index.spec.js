@@ -153,7 +153,7 @@ describe('LLMObs Experiments facade', () => {
       })
 
       const exp = createWithProjectCapture(enabledConfig({
-        llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'configured-project' },
+        llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'ml-app', projectName: 'configured-project' },
       }))
       exp.createDataset('default')
       exp.createDataset('override', { projectName: 'override-project' })

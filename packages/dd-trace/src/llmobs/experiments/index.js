@@ -34,7 +34,7 @@ class Experiments {
   constructor (config, llmobs) {
     this.#config = config
     this.#llmobs = llmobs
-    this.#projectName = config.llmobs?.mlApp || config.service
+    this.#projectName = config.llmobs?.projectName || config.llmobs?.mlApp || config.service
     this.#client = this.#projectName === undefined ? undefined : this.#clientForProject(this.#projectName)
   }
 
@@ -181,7 +181,10 @@ class Experiments {
   // Build an experiment with a dataset, task, evaluators, and optional project/config/tags.
   experiment (options) {
     const client = this.#clientForOperation(options?.projectName)
-    return new Experiment(client, options, this.#llmobs)
+    const experimentOptions = options?.projectName === undefined && this.#config.llmobs?.projectName !== undefined
+      ? { ...options, projectName: this.#config.llmobs.projectName }
+      : options
+    return new Experiment(client, experimentOptions, this.#llmobs)
   }
 
   /**
@@ -194,7 +197,10 @@ class Experiments {
    */
   startExperiment (options) {
     const client = this.#clientForOperation(options?.projectName)
-    return new Experiment(client, { ...options, external: true }).start()
+    const experimentOptions = options?.projectName === undefined && this.#config.llmobs?.projectName !== undefined
+      ? { ...options, projectName: this.#config.llmobs.projectName }
+      : options
+    return new Experiment(client, { ...experimentOptions, external: true }).start()
       .then(experiment => new ExternalExperiment(experiment))
   }
 }
@@ -209,9 +215,9 @@ function createExperiments (config, llmobs) {
     log.warn('LLMObs experiments: missing api and/or app keys, set DD_API_KEY and DD_APP_KEY')
     return new NoopExperiments('DD_API_KEY and DD_APP_KEY are required for experiments')
   }
-  if (!config.llmobs?.mlApp && !config.service) {
-    const reason = 'no project name configured; set DD_LLMOBS_ML_APP (or llmobs.mlApp) or ' +
-      'DD_SERVICE (or service in tracer.init()), then retry'
+  if (!config.llmobs?.projectName && !config.llmobs?.mlApp && !config.service) {
+    const reason = 'no project name configured; set DD_LLMOBS_PROJECT_NAME (or llmobs.projectName in tracer.init()), ' +
+      'DD_LLMOBS_ML_APP (or llmobs.mlApp), or DD_SERVICE (or service in tracer.init()), then retry'
     const experiments = new Experiments(config, llmobs)
     return new NoopExperiments(reason, {
       createDataset: (name, options) => experiments.createDataset(name, options),

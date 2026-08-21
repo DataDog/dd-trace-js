@@ -4713,6 +4713,13 @@ declare namespace tracer {
      */
     interface LLMObsEnableOptions {
       /**
+       * The name of the LLM Observability project used for experiments.
+       * @env DD_LLMOBS_PROJECT_NAME
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      projectName?: string,
+
+      /**
        * The name of your ML application.
        * @env DD_LLMOBS_ML_APP
        * Programmatic configuration takes precedence over the environment variables listed above.
