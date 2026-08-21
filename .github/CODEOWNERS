@@ -517,3 +517,5 @@
 **/package.json @DataDog/dd-trace-js @dd-octo-sts
 **/package-lock.json @DataDog/dd-trace-js @dd-octo-sts
 **/yarn.lock @DataDog/dd-trace-js @dd-octo-sts
+**/bun.lock @DataDog/dd-trace-js @dd-octo-sts
+**/bun.lockb @DataDog/dd-trace-js @dd-octo-sts
