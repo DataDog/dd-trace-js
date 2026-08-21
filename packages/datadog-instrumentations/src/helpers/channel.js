@@ -55,6 +55,27 @@ function getChannelPromise (channel, payload = {}) {
 }
 
 /**
+ * @param {import('node:diagnostics_channel').Channel} channel
+ * @param {Record<string, unknown>} payload
+ * @param {() => void} onDone
+ * @returns {void}
+ */
+function publishWithCompletionBarrier (channel, payload, onDone) {
+  let pendingCompletions = 1
+  const registerCompletion = () => {
+    pendingCompletions++
+    return getCompletion(() => {
+      pendingCompletions--
+      if (pendingCompletions === 0) onDone()
+    })
+  }
+
+  channel.publish({ ...payload, registerCompletion })
+  pendingCompletions--
+  if (pendingCompletions === 0) onDone()
+}
+
+/**
  * @template T
  * @param {import('node:diagnostics_channel').Channel} channel
  * @param {Record<string, unknown>} [payload]
@@ -70,5 +91,6 @@ module.exports = {
   getChannelPromise,
   getRunStoresPromise,
   publishWithCompletion,
+  publishWithCompletionBarrier,
   runStoresWithCompletion,
 }

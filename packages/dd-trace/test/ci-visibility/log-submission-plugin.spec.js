@@ -8,7 +8,10 @@ const sinon = require('sinon')
 
 require('../setup/core')
 
+const agentlessFlushCh = channel('ci:agentless:flush')
 const logSubmissionCh = channel('ci:log-submission:log')
+const winstonAddTransportCh = channel('ci:log-submission:winston:add-transport')
+const winstonConfigureCh = channel('ci:log-submission:winston:configure')
 const request = sinon.stub()
 const log = {
   error: sinon.stub(),
@@ -74,6 +77,75 @@ describe('LogSubmissionPlugin', () => {
       'DD-API-KEY': 'secret',
       'Content-Type': 'application/json',
     })
+  })
+
+  it('batches Winston-formatted logs through the shared sender', () => {
+    const format = {}
+    const createJsonFormat = sinon.stub().returns(format)
+    class StreamTransport {
+      constructor (options) {
+        this.options = options
+      }
+    }
+    const logger = { add: sinon.stub() }
+
+    winstonAddTransportCh.publish(logger)
+    sinon.assert.notCalled(logger.add)
+
+    winstonConfigureCh.publish({ createJsonFormat, StreamTransport })
+
+    sinon.assert.calledOnce(logger.add)
+    const transport = logger.add.firstCall.args[0]
+    assert.ok(transport instanceof StreamTransport)
+    assert.strictEqual(transport.options.format, format)
+
+    transport.options.stream.write('{"level":"info","message":"hello"}')
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(request)
+    const [data, options] = request.firstCall.args
+    assert.deepStrictEqual(JSON.parse(data), [{ level: 'info', message: 'hello' }])
+    assert.strictEqual(options.path, '/api/v2/logs?ddsource=winston&service=my+service')
+  })
+
+  it('waits for in-flight and final Winston requests before completing an agentless flush', () => {
+    const finishRequests = []
+    let hasCompleted = false
+    request.callsFake((data, options, callback) => {
+      finishRequests.push(callback)
+    })
+    publishLog('{"level":"info","message":"first"}', 'winston')
+    clock.tick(1000)
+    publishLog('{"level":"info","message":"last"}', 'winston')
+
+    agentlessFlushCh.publish({
+      registerCompletion: () => () => {
+        hasCompleted = true
+      },
+    })
+
+    sinon.assert.calledTwice(request)
+    finishRequests[0]()
+    assert.strictEqual(hasCompleted, false)
+
+    finishRequests[1]()
+    assert.strictEqual(hasCompleted, true)
+  })
+
+  it('completes an agentless flush when a Winston request fails', () => {
+    const failure = new Error('boom')
+    let hasCompleted = false
+    request.callsFake((data, options, callback) => callback(failure))
+    publishLog('{"level":"info","message":"hello"}', 'winston')
+
+    agentlessFlushCh.publish({
+      registerCompletion: () => () => {
+        hasCompleted = true
+      },
+    })
+
+    assert.strictEqual(hasCompleted, true)
+    sinon.assert.calledWith(log.error, 'Error submitting %s logs', 'winston', failure)
   })
 
   it('flushes pending Bunyan logs before exit', () => {
