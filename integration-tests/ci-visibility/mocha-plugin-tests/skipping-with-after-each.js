@@ -6,5 +6,6 @@ describe('mocha-reporter-pending-after-each', () => {
     console.log('MOCHA AFTER EACH EXECUTED')
   })
 
+  // This skip is fixture input for reporter hook-order coverage.
   it.skip('can skip', () => {})
 })

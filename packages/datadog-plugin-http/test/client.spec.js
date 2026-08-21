@@ -387,8 +387,12 @@ describe('Plugin', () => {
         })
 
         // Merging no longer happens since Node 20
-        if (NODE_MAJOR < 20) {
-          it('should support a string URL and an options object, which merges and takes precedence', done => {
+        {
+          const mergedUrlOptionsTest = NODE_MAJOR < 20 ? it : it.skip
+          const mergedUrlOptionsTitle = 'should support a string URL and an options object, ' +
+            'which merges and takes precedence'
+
+          mergedUrlOptionsTest(mergedUrlOptionsTitle, done => {
             const app = express()
 
             app.get('/user', (req, res) => {
@@ -803,8 +807,10 @@ describe('Plugin', () => {
           })
         })
 
-        if (satisfies(process.version, '>=20')) {
-          it('should not record default HTTP agent timeout as error with Node 20', done => {
+        {
+          const node20Test = satisfies(process.version, '>=20') ? it : it.skip
+
+          node20Test('should not record default HTTP agent timeout as error with Node 20', done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -832,7 +838,7 @@ describe('Plugin', () => {
             })
           }).timeout(10000)
 
-          it('should record error if custom Agent timeout is used with Node 20', done => {
+          node20Test('should record error if custom Agent timeout is used with Node 20', done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -864,7 +870,7 @@ describe('Plugin', () => {
             })
           }).timeout(10000)
 
-          it('should record error if req.setTimeout is used with Node 20', done => {
+          node20Test('should record error if req.setTimeout is used with Node 20', done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -1023,8 +1029,10 @@ describe('Plugin', () => {
           })
         })
 
-        if (protocol === 'http') {
-          it('should skip requests marked as noop', done => {
+        {
+          const noopRequestTest = protocol === 'http' ? it : it.skip
+
+          noopRequestTest('should skip requests marked as noop', done => {
             const app = express()
 
             app.get('/user', (req, res) => {
