@@ -499,6 +499,8 @@
 /packages/dd-trace/test/tracer.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 
+/.agents/skills/flaky-test-fixer/ @DataDog/lang-platform-js
+
 # Multiple teams
 /devdocs/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-idm-js
 /docs/ @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/lang-platform-js
