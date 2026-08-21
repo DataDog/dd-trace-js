@@ -4,6 +4,7 @@ const { randomUUID } = require('crypto')
 const { workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
+const { INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('../constants')
 const {
   MAX_SAMPLED_PROBES_PER_PAUSE,
   SAMPLED_PROBE_COUNT_INDEX,
@@ -23,16 +24,8 @@ require('./remote_config')
 
 /** @typedef {import('node:inspector').Debugger.EvaluateOnCallFrameReturnType} EvaluateOnCallFrameResult */
 
-const templateExpressionSetupCode = `
-  const $dd_inspect = global.require('node:util').inspect;
-  const $dd_segmentInspectOptions = {
-    depth: 0,
-    customInspect: false,
-    maxArrayLength: 3,
-    maxStringLength: 8 * 1024,
-    breakLength: Infinity
-  };
-`
+const templateExpressionSetupCode = 'const $dd_inspectSegment = ' +
+  `globalThis[Symbol.for('dd-trace')][${JSON.stringify(INSPECT_SEGMENT_GLOBAL_PROPERTY)}];`
 
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
 const getDDTagsExpression = `(() => {

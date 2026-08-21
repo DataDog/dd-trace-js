@@ -180,6 +180,18 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(request.secondCall.args[1].path, '/api/v2/logs?ddsource=pino&service=my+service')
   })
 
+  it('does not retain a log after a source-change pre-flush fails synchronously', () => {
+    request.throws(new Error('boom'))
+    publishLog('{"msg":"bunyan"}')
+
+    publishLog('{"msg":"pino"}', 'pino')
+
+    sinon.assert.calledOnce(request)
+    plugin.configure(pluginConfig)
+    beforeExitHandler()
+    sinon.assert.calledOnce(request)
+  })
+
   it('accepts the byte limit and rejects the first byte over it', () => {
     const maximumBatchBytes = 5 * 1024 * 1024
     const acceptedMessage = `"${'a'.repeat(maximumBatchBytes - 4)}"`
@@ -213,6 +225,20 @@ describe('LogSubmissionPlugin', () => {
     clock.tick(1000)
     sinon.assert.calledTwice(request)
     assert.deepStrictEqual(JSON.parse(request.secondCall.args[0]), [0])
+  })
+
+  it('does not retain a log after a byte-limit pre-flush fails synchronously', () => {
+    const maximumBatchBytes = 5 * 1024 * 1024
+    const firstMessage = `"${'a'.repeat(maximumBatchBytes - 5)}"`
+    request.throws(new Error('boom'))
+    publishLog(firstMessage)
+
+    publishLog('0')
+
+    sinon.assert.calledOnce(request)
+    plugin.configure(pluginConfig)
+    beforeExitHandler()
+    sinon.assert.calledOnce(request)
   })
 
   it('does not throw when a raw Bunyan record cannot be serialized', () => {
