@@ -135,6 +135,41 @@ describe('web-tags-cache', () => {
       assert.equal(webTagsCache.getCachedWebTags(child), parent.tags)
     })
 
+    it('does not scan the started-spans list for a parent a span cannot have', () => {
+      const trace = makeTrace()
+      const other = makeSpan(trace, { spanId: 'a', tags: {} })
+      const root = makeSpan(trace, { spanId: 'b' })
+      const context = sinon.spy(other, 'context')
+
+      assert.equal(webTagsCache.getCachedWebTags(root), undefined)
+      assert.equal(context.callCount, 0)
+    })
+
+    it('does not look at spans created before the promoted one', () => {
+      // Creation order rules them out as descendants, so the sweep must not pay
+      // a context() call for each of them. Worth pinning: a long-lived trace can
+      // hold a large prefix, and every web-server span promoted in it would walk
+      // that prefix again.
+      const trace = makeTrace()
+      const older = makeSpan(trace, { spanId: 'a', tags: {} })
+      const promoted = makeSpan(trace, { spanId: 'b', tags: {} })
+      const child = makeSpan(trace, { spanId: 'c', parentId: 'b' })
+      // Created after the promoted span but under the older one: visited by the
+      // sweep, and left alone because the promotion is not in its ancestry.
+      const unrelated = makeSpan(trace, { spanId: 'd', parentId: 'a' })
+      webTagsCache.getCachedWebTags(older)
+      webTagsCache.getCachedWebTags(child)
+      webTagsCache.getCachedWebTags(unrelated)
+
+      const context = sinon.spy(older, 'context')
+      Object.assign(promoted.tags, WEB)
+      tagsUpdateCh.publish(promoted)
+
+      assert.equal(context.callCount, 0)
+      assert.equal(webTagsCache.getCachedWebTags(child), promoted.tags)
+      assert.equal(webTagsCache.getCachedWebTags(unrelated), undefined)
+    })
+
     it('leaves another trace alone when a span is promoted', () => {
       // Promotions are per trace: the walk never leaves its own _trace.started, so
       // another trace's request span cannot be this span's ancestor.

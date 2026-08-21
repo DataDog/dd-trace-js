@@ -73,11 +73,13 @@ function getCachedWebTags (span) {
   if (cached.resolved) return cached.webTags
   const spanContext = span.context()
   const tags = spanContext.getTags()
+  const parentId = spanContext._parentId
   let webTags
   if (isWebServerSpan(tags)) {
     webTags = tags
-  } else {
-    const parentId = spanContext._parentId
+  // A span with no parent has nothing to inherit from, and looking for one
+  // anyway means scanning the entire started-spans list to conclude that.
+  } else if (parentId != null) {
     const startedSpans = getStartedSpans(spanContext)
     for (let i = startedSpans.length; --i >= 0;) {
       const ispan = startedSpans[i]
@@ -111,7 +113,7 @@ function onTagsUpdate (span) {
   if (cached.webTags !== tags && isWebServerSpan(tags)) {
     cached.webTags = tags
     resolvedCh.publish(span)
-    resolveDescendants(spanContext, tags)
+    resolveDescendants(span, spanContext, tags)
   }
   // Endpoint finality is a property of the web-server span itself: for a
   // descendant, cached.webTags is an ancestor's bag rather than these tags, and
@@ -137,20 +139,32 @@ function onTagsUpdate (span) {
 // inherits its parent's unless it is a web-server span itself, in which case its
 // own bag shadows the promotion for its own subtree. Spans outside the subtree
 // are never in `answers`, so they cost one map lookup and nothing else.
-function resolveDescendants (spanContext, webTags) {
+//
+// That same creation order means nothing before the promoted span can be a
+// descendant of it, so the pass starts just past it. Locating it from the end
+// costs one comparison in the common case, where a request span is promoted as
+// it is created and is still the newest entry — leaving nothing to visit and
+// nothing to allocate. A span the list no longer holds (finished, and dropped by
+// a partial flush) ends that scan at -1, which visits the whole list.
+function resolveDescendants (span, spanContext, webTags) {
   const startedSpans = getStartedSpans(spanContext)
+  let index = startedSpans.length - 1
+  while (index >= 0 && startedSpans[index] !== span) index--
+  index++
+  if (index === startedSpans.length) return
   const answers = new Map([[spanContext._spanId, webTags]])
-  for (const span of startedSpans) {
-    const context = span.context()
+  for (; index < startedSpans.length; index++) {
+    const descendant = startedSpans[index]
+    const context = descendant.context()
     const inherited = answers.get(context._parentId)
     if (inherited === undefined) continue
     const tags = context.getTags()
     const answer = isWebServerSpan(tags) ? tags : inherited
     answers.set(context._spanId, answer)
-    const cached = span[CachedSym]
+    const cached = descendant[CachedSym]
     if (cached === undefined || !cached.resolved || cached.webTags === answer) continue
     cached.webTags = answer
-    resolvedCh.publish(span)
+    resolvedCh.publish(descendant)
   }
 }
 
