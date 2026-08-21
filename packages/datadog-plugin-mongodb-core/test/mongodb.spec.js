@@ -17,6 +17,10 @@ const traceTimeoutMs = 2_000
 
 const withTopologies = fn => {
   withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName, resolvedVersion) => {
+    const getBSON = () => semver.satisfies(resolvedVersion, '>=5')
+      ? require(`../../../versions/${moduleName}@${version}`).get()
+      : require('../../../versions/bson@4.0.0').get()
+
     describe('using the default topology', () => {
       fn(async () => {
         // Different warnings for different versions of mongodb-core
@@ -42,7 +46,7 @@ const withTopologies = fn => {
         await client.connect()
 
         return client
-      }, version)
+      }, version, getBSON)
     })
 
     // unified topology is now the only topology and thus the default since 4.x
@@ -56,7 +60,7 @@ const withTopologies = fn => {
           await client.connect()
 
           return client
-        })
+        }, version, getBSON)
       })
     }
   })
@@ -74,14 +78,14 @@ describe('Plugin', () => {
   let usesDelete
 
   describe('mongodb-core', () => {
-    withTopologies((createClient, version) => {
+    withTopologies((createClient, version, getBSON) => {
       beforeEach(() => {
         id = require('../../dd-trace/src/id')
         tracer = require('../../dd-trace')
         usesDelete = version ? semver.intersects(version, '>=4') : false
         collectionName = id().toString()
 
-        BSON = require('../../../versions/bson@4.0.0').get()
+        BSON = getBSON()
       })
 
       afterEach(() => {
@@ -391,134 +395,139 @@ describe('Plugin', () => {
             }, { spanResourceMatch: usesDelete ? /^delete test\./ : /^remove test\./ })
           })
 
-          it('should use the correct resource name for arbitrary commands', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = 'planCacheListPlans test.$cmd'
-                const query = '{}'
+          it('should use the correct resource name for arbitrary commands', async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = 'planCacheListPlans test.$cmd'
+              const query = '{}'
 
-                assert.strictEqual(span.resource, resource)
-                assert.strictEqual(span.meta['mongodb.query'], query)
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(span.resource, resource)
+              assert.strictEqual(span.meta['mongodb.query'], query)
+            }, { timeoutMs: traceTimeoutMs })
 
-            db.command({
-              planCacheListPlans: `test.${collectionName}`,
-              query: {},
-            }, () => {})
+            const operationPromise = new Promise((resolve, reject) => {
+              const promise = db.command({
+                planCacheListPlans: `test.${collectionName}`,
+                query: {},
+              }, error => error ? reject(error) : resolve())
+              promise?.then(resolve, reject)
+            })
+
+            await Promise.all([
+              tracePromise,
+              assert.rejects(operationPromise),
+            ])
           })
 
-          it('should sanitize buffers as values and not as objects', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = `find test.${collectionName}`
-                const query = '{"_id":"?"}'
+          it('should sanitize buffers as values and not as objects', async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `find test.${collectionName}`
+              const query = '{"_id":"?"}'
 
-                assert.strictEqual(span.resource, resource)
-                assert.strictEqual(span.meta['mongodb.query'], query)
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(span.resource, resource)
+              assert.strictEqual(span.meta['mongodb.query'], query)
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.find({
-              _id: Buffer.from('1234'),
-            }).toArray()
+            await Promise.all([
+              tracePromise,
+              collection.find({
+                _id: Buffer.from('1234'),
+              }).toArray(),
+            ])
           })
 
-          it('should sanitize BSON binary', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = `find test.${collectionName}`
-                const query = '{"_bin":"?"}'
+          it('should sanitize BSON binary', async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `find test.${collectionName}`
+              const query = '{"_bin":"?"}'
 
-                assert.strictEqual(span.resource, resource)
-                assert.strictEqual(span.meta['mongodb.query'], query)
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(span.resource, resource)
+              assert.strictEqual(span.meta['mongodb.query'], query)
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.find({
-              _bin: new BSON.Binary(),
-            }).toArray()
+            await Promise.all([
+              tracePromise,
+              collection.find({
+                _bin: new BSON.Binary(),
+              }).toArray(),
+            ])
           })
 
-          it('should stringify BSON primitives', done => {
+          it('should stringify BSON primitives', async () => {
             const id = '123456781234567812345678'
 
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = `find test.${collectionName}`
-                const query = `{"_id":"${id}"}`
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `find test.${collectionName}`
+              const query = `{"_id":"${id}"}`
 
-                assert.strictEqual(span.resource, resource)
-                assert.strictEqual(span.meta['mongodb.query'], query)
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(span.resource, resource)
+              assert.strictEqual(span.meta['mongodb.query'], query)
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.find({
-              _id: new BSON.ObjectID(id),
-            }).toArray()
+            await Promise.all([
+              tracePromise,
+              collection.find({
+                _id: new BSON.ObjectId(id),
+              }).toArray(),
+            ])
           })
 
-          it('should stringify BSON objects', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = `find test.${collectionName}`
-                const query = '{"_time":{"$timestamp":"0"}}'
+          it('should stringify BSON objects', async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `find test.${collectionName}`
+              const query = '{"_time":{"$timestamp":"0"}}'
 
-                assert.strictEqual(span.resource, resource)
-                assert.strictEqual(span.meta['mongodb.query'], query)
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(span.resource, resource)
+              assert.strictEqual(span.meta['mongodb.query'], query)
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.find({
-              _time: new BSON.Timestamp(),
-            }).toArray()
+            await Promise.all([
+              tracePromise,
+              collection.find({
+                _time: new BSON.Timestamp(),
+              }).toArray(),
+            ])
           })
 
-          it('should stringify BSON internal types', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = `find test.${collectionName}`
-                const query = '{"_id":"?"}'
+          it('should stringify BSON internal types', async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `find test.${collectionName}`
+              const query = '{"_id":"?"}'
 
-                assert.strictEqual(span.resource, resource)
-                assert.strictEqual(span.meta['mongodb.query'], query)
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(span.resource, resource)
+              assert.strictEqual(span.meta['mongodb.query'], query)
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.find({
-              _id: new BSON.MinKey(),
-            }).toArray()
+            await Promise.all([
+              tracePromise,
+              collection.find({
+                _id: new BSON.MinKey(),
+              }).toArray(),
+            ])
           })
 
-          it('should collapse beyond max depth', done => {
+          it('should collapse beyond max depth', async () => {
             let nested = { a: 1 }
             for (let i = 0; i < 12; i++) {
               nested = { a: nested }
             }
 
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assert.strictEqual(span.resource, `find test.${collectionName}`)
-                // 10 levels of `{"a":` then `"?"`, then 10 closing braces.
-                assert.strictEqual(span.meta['mongodb.query'], `${'{"a":'.repeat(10)}"?"${'}'.repeat(10)}`)
-              })
-              .then(done)
-              .catch(done)
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              assert.strictEqual(span.resource, `find test.${collectionName}`)
+              // 10 levels of `{"a":` then `"?"`, then 10 closing braces.
+              assert.strictEqual(span.meta['mongodb.query'], `${'{"a":'.repeat(10)}"?"${'}'.repeat(10)}`)
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.find(nested).toArray().catch(() => {})
+            await Promise.all([
+              tracePromise,
+              collection.find(nested).toArray(),
+            ])
           })
 
           it('should collapse cyclic queries to ?', done => {
@@ -538,62 +547,62 @@ describe('Plugin', () => {
             collection.find(cyclic).toArray().catch(() => {})
           })
 
-          it('should skip functions when sanitizing', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = `find test.${collectionName}`
-                const query = '{"_id":"1234"}'
+          it('should skip functions when sanitizing', async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `find test.${collectionName}`
+              const query = '{"_id":"1234"}'
 
-                assert.strictEqual(span.resource, resource)
-                assert.strictEqual(span.meta['mongodb.query'], query)
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(span.resource, resource)
+              assert.strictEqual(span.meta['mongodb.query'], query)
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.find({
-              _id: '1234',
-              foo: () => {},
-            }).toArray()
+            await Promise.all([
+              tracePromise,
+              collection.find({
+                _id: '1234',
+                foo: () => {},
+              }).toArray(),
+            ])
           })
 
-          it('should log the aggregate pipeline in mongodb.query', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = 'aggregate test.$cmd'
-                const query = '[{"$match":{"_id":"1234"}},{"$project":{"_id":1}}]'
+          it('should log the aggregate pipeline in mongodb.query', async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = 'aggregate test.$cmd'
+              const query = '[{"$match":{"_id":"1234"}},{"$project":{"_id":1}}]'
 
-                assert.strictEqual(span.resource, resource)
-                assert.strictEqual(span.meta['mongodb.query'], query)
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(span.resource, resource)
+              assert.strictEqual(span.meta['mongodb.query'], query)
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.aggregate([
-              { $match: { _id: '1234' } },
-              { $project: { _id: 1 } },
-            ]).toArray()
+            await Promise.all([
+              tracePromise,
+              collection.aggregate([
+                { $match: { _id: '1234' } },
+                { $project: { _id: 1 } },
+              ]).toArray(),
+            ])
           })
 
-          it('should use the toJSON method of objects if it exists', done => {
+          it('should use the toJSON method of objects if it exists', async () => {
             const id = '123456781234567812345678'
 
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = `find test.${collectionName}`
-                const query = `{"_id":"${id}"}`
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `find test.${collectionName}`
+              const query = `{"_id":"${id}"}`
 
-                assert.strictEqual(span.resource, resource)
-                assert.strictEqual(span.meta['mongodb.query'], query)
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(span.resource, resource)
+              assert.strictEqual(span.meta['mongodb.query'], query)
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.find({
-              _id: { toJSON: () => id },
-            }).toArray()
+            await Promise.all([
+              tracePromise,
+              collection.find({
+                _id: { toJSON: () => id },
+              }).toArray(),
+            ])
           })
 
           it('should run the callback in the parent context', done => {
@@ -646,20 +655,20 @@ describe('Plugin', () => {
           collection.insertOne({ a: 1 }, {}, () => {})
         })
 
-        it('should include sanitized query in resource when configured', done => {
-          agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
-              const resource = `find test.${collectionName} {"_bin":"?"}`
+        it('should include sanitized query in resource when configured', async () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+            const resource = `find test.${collectionName} {"_bin":"?"}`
 
-              assert.strictEqual(span.resource, resource)
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(span.resource, resource)
+          }, { timeoutMs: traceTimeoutMs })
 
-          collection.find({
-            _bin: new BSON.Binary(),
-          }).toArray()
+          await Promise.all([
+            tracePromise,
+            collection.find({
+              _bin: new BSON.Binary(),
+            }).toArray(),
+          ])
         })
 
         it('should sanitize query in resource when configured and doing a multi statement update', async () => {
@@ -794,29 +803,29 @@ describe('Plugin', () => {
           injectCommentSpy?.restore()
         })
 
-        it('DBM propagation should inject service mode as comment', done => {
-          agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
+        it('DBM propagation should inject service mode as comment', async () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
 
-              assert.strictEqual(injectCommentSpy.called, true)
-              const comment = injectCommentSpy.getCall(0).returnValue
-              assert.strictEqual(comment,
-                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
-                'dddbs=\'test-mongodb\',' +
-                'dde=\'tester\',' +
-                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
-                `ddps='${encodeURIComponent(span.meta.service)}',` +
-                `ddpv='${ddpv}',` +
-                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
-              )
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(injectCommentSpy.called, true)
+            const comment = injectCommentSpy.getCall(0).returnValue
+            assert.strictEqual(comment,
+              `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+              'dddbs=\'test-mongodb\',' +
+              'dde=\'tester\',' +
+              `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+              `ddps='${encodeURIComponent(span.meta.service)}',` +
+              `ddpv='${ddpv}',` +
+              `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
+            )
+          }, { timeoutMs: traceTimeoutMs })
 
-          collection.find({
-            _id: Buffer.from('1234'),
-          }).toArray()
+          await Promise.all([
+            tracePromise,
+            collection.find({
+              _id: Buffer.from('1234'),
+            }).toArray(),
+          ])
         })
       })
 
@@ -841,31 +850,31 @@ describe('Plugin', () => {
           injectCommentSpy?.restore()
         })
 
-        it('DBM propagation should inject full mode with traceparent as comment', done => {
-          agent
-            .assertFirstTraceSpan(span => {
-              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
-              const spanId = span.span_id.toString(16).padStart(16, '0')
+        it('DBM propagation should inject full mode with traceparent as comment', async () => {
+          const tracePromise = agent.assertFirstTraceSpan(span => {
+            const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+            const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              assert.strictEqual(injectCommentSpy.called, true)
-              const comment = injectCommentSpy.getCall(0).returnValue
-              assert.strictEqual(comment,
-                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
-                'dddbs=\'test-mongodb\',' +
-                'dde=\'tester\',' +
-                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
-                `ddps='${encodeURIComponent(span.meta.service)}',` +
-                `ddpv='${ddpv}',` +
-                `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
-                `traceparent='00-${traceId}-${spanId}-01'`
-              )
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(injectCommentSpy.called, true)
+            const comment = injectCommentSpy.getCall(0).returnValue
+            assert.strictEqual(comment,
+              `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+              'dddbs=\'test-mongodb\',' +
+              'dde=\'tester\',' +
+              `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+              `ddps='${encodeURIComponent(span.meta.service)}',` +
+              `ddpv='${ddpv}',` +
+              `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
+              `traceparent='00-${traceId}-${spanId}-01'`
+            )
+          }, { timeoutMs: traceTimeoutMs })
 
-          collection.find({
-            _id: Buffer.from('1234'),
-          }).toArray()
+          await Promise.all([
+            tracePromise,
+            collection.find({
+              _id: Buffer.from('1234'),
+            }).toArray(),
+          ])
         })
       })
 
@@ -892,26 +901,26 @@ describe('Plugin', () => {
 
         it(
           'DBM propagation should inject full mode with traceparent as comment and the rejected sampling decision',
-          done => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
-                const spanId = span.span_id.toString(16).padStart(16, '0')
+          async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+              const spanId = span.span_id.toString(16).padStart(16, '0')
 
-                assert.strictEqual(injectCommentSpy.called, true)
-                const comment = injectCommentSpy.getCall(0).returnValue
-                assert.match(
-                  comment,
-                  new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
-                )
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
+              assert.match(
+                comment,
+                new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
+              )
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.find({
-              _id: Buffer.from('1234'),
-            }).toArray()
+            await Promise.all([
+              tracePromise,
+              collection.find({
+                _id: Buffer.from('1234'),
+              }).toArray(),
+            ])
           })
       })
 
