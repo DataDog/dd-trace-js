@@ -240,7 +240,7 @@ class Config extends ConfigBase {
 
   /**
    * @param {import('./helper').TracerEnv} envs
-   * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config'} source
+   * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config' | 'remote_config'} source
    */
   #applyEnvs (envs, source) {
     for (const [name, value] of Object.entries(envs)) {
@@ -314,21 +314,24 @@ class Config extends ConfigBase {
   }
 
   /**
-   * Set the configuration with remote config settings.
-   * Applies remote configuration, recalculates derived values, and merges all configuration sources.
+   * Set the configuration with SDK_CONFIGURATION remote config settings.
+   * Resolves env-var names via `configurationsTable`, since this payload is keyed by env var name.
+   * The caller (`RCClientManager`) is expected to have already filtered `options` to the
+   * SDK_CONFIGURATION allowlist.
    *
-   * @param {TracerOptions|null} options - Configurations received via Remote
-   *   Config or null to reset all remote configuration
+   * @param {Record<string, string>|null} options - Env-var-keyed configs received via the
+   *   SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
   setRemoteConfig (options) {
     // Clear all RC-managed fields to ensure previous values don't persist.
-    // State is instead managed by the `RCClientLibConfigManager` class
+    // State is instead managed by the `RCClientManager` class
     undo(this, 'remote_config')
 
     // Special case: if options is null, nothing to apply
     // This happens when all remote configs are removed
     if (options !== null) {
-      this.#applyOptions(options, 'remote_config')
+      // Resolve aliases and drop configs this tracer version doesn't recognize
+      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
     }
 
     this.#applyCalculated()

@@ -3303,49 +3303,12 @@ describe('Config', () => {
     updateConfig.resetHistory()
 
     config.setRemoteConfig({
-      sampleRate: 0,
+      DD_TRACE_SAMPLE_RATE: '0',
     })
 
     assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
       { name: 'DD_TRACE_SAMPLE_RATE', value: 0, origin: 'remote_config' },
     ])
-  })
-
-  it('should reformat tags from sampling rules when set through remote configuration', () => {
-    const config = getConfig()
-
-    config.setRemoteConfig({
-      samplingRules: [
-        {
-          resource: '*',
-          tags: { 'tag-a': 'tag-a-val*', 'tag-b': 'tag-b-val*' },
-          provenance: 'customer',
-        },
-      ],
-    })
-    assert.deepStrictEqual(config.sampler, {
-      spanSamplingRules: undefined,
-      rateLimit: 100,
-      rules: [
-        {
-          resource: '*',
-          tags: { 'tag-a': 'tag-a-val*', 'tag-b': 'tag-b-val*' },
-          provenance: 'customer',
-        },
-      ],
-      sampleRate: undefined,
-    })
-  })
-
-  it('should have consistent runtime-id after remote configuration updates tags', () => {
-    const config = getConfig()
-    const runtimeId = config.tags['runtime-id']
-    config.setRemoteConfig({
-      tags: { foo: 'bar' },
-    })
-
-    assert.strictEqual(config.tags.foo, 'bar')
-    assert.strictEqual(config.tags['runtime-id'], runtimeId)
   })
 
   it('should ignore invalid iast.requestSampling', () => {
@@ -4781,82 +4744,93 @@ rules:
     })
   })
 
-  describe('remote config field mapping', () => {
-    it('should map dynamic_instrumentation_enabled to dynamicInstrumentation.enabled', () => {
-      const config = getConfig()
-      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
-      config.setRemoteConfig({ 'dynamicInstrumentation.enabled': true })
-      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
-    })
-
-    it('should map code_origin_enabled to codeOriginForSpans.enabled', () => {
-      const config = getConfig()
-      assert.strictEqual(config.codeOriginForSpans.enabled, true)
-      config.setRemoteConfig({ 'codeOriginForSpans.enabled': false })
-      assert.strictEqual(config.codeOriginForSpans.enabled, false)
-    })
-
-    it('should map tracing_sampling_rate to sampleRate', () => {
+  describe('setRemoteConfig', () => {
+    it('should resolve env-var-keyed configs via configurationsTable', () => {
       const config = getConfig()
       assert.strictEqual(config.sampleRate, undefined)
-      config.setRemoteConfig({ sampleRate: 0.5 })
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
       assert.strictEqual(config.sampleRate, 0.5)
     })
 
-    it('should map log_injection_enabled to logInjection', () => {
-      const config = getConfig()
-      assert.strictEqual(config.logInjection, true)
-      config.setRemoteConfig({ logInjection: false })
-      assert.strictEqual(config.logInjection, false)
-    })
-
-    it('should map tracing_enabled to DD_TRACE_ENABLED', () => {
-      // Tracing is not exposed as programmatic option and will be ignored.
-      const config = getConfig({ tracing: false })
+    it('should resolve a boolean env-var-keyed config', () => {
+      const config = getConfig({ tracing: true })
       assert.strictEqual(config.DD_TRACE_ENABLED, true)
-      config.setRemoteConfig({ DD_TRACE_ENABLED: false })
+      config.setRemoteConfig({ DD_TRACE_ENABLED: 'false' })
       assert.strictEqual(config.DD_TRACE_ENABLED, false)
     })
 
-    it('should map tracing_sampling_rules to samplingRules', () => {
+    it('should resolve a structured (JSON) env-var-keyed config', () => {
       const config = getConfig()
       assert.deepStrictEqual(config.sampler.rules, [])
-      config.setRemoteConfig({ samplingRules: [{ sample_rate: 0.5 }] })
+      config.setRemoteConfig({ DD_TRACE_SAMPLING_RULES: '[{"sample_rate":0.5}]' })
       assert.deepStrictEqual(config.samplingRules, [{ sampleRate: 0.5 }])
       assert.deepStrictEqual(config.sampler.rules, [{ sampleRate: 0.5 }])
     })
 
-    it('should map tracing_header_tags to headerTags', () => {
-      const config = getConfig({ headerTags: ['foo :bar'] })
-      assert.deepStrictEqual(config.headerTags, ['foo:bar'])
-      config.setRemoteConfig({ headerTags: ['x-custom-header:custom.tag'] })
-      assert.deepStrictEqual(config.headerTags, [
-        // TODO: There's an unrelated bug in the tracer resulting in headerTags not being merged.
-        // 'foo:bar',
-        'x-custom-header:custom.tag',
-      ])
-    })
-
-    it('collapses only whitespace adjacent to a colon in header tags', () => {
-      const config = getConfig({ headerTags: ['  a : b  ', 'k : : v'] })
-      assert.deepStrictEqual(config.headerTags, ['  a:b  ', 'k::v'])
-    })
-
-    it('should map tracing_tags to tags', () => {
-      const config = getConfig({ tags: { foo: 'bar' } })
-      assertObjectContains(config.tags, { foo: 'bar' })
-      assert.strictEqual(config.tags.team, undefined)
-      config.setRemoteConfig({ tags: { team: 'backend' } })
-      assertObjectContains(config.tags, {
-        // TODO: There's an unrelated bug in the tracer resulting in tags not being merged.
-        // foo: 'bar',
-        team: 'backend',
+    it('should silently ignore keys this tracer version does not recognize', () => {
+      const config = getConfig()
+      assert.strictEqual(config.sampleRate, undefined)
+      config.setRemoteConfig({
+        DD_TRACE_SAMPLE_RATE: '0.5',
+        DD_SOME_FUTURE_UNRECOGNIZED_SETTING: 'value',
       })
+      assert.strictEqual(config.sampleRate, 0.5)
     })
-  })
 
-  describe('remote config application', () => {
-    it('should clear RC fields when setRemoteConfig is called with null', () => {
+    it('should clamp a sample rate outside the 0-1 range', () => {
+      const config = getConfig()
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '1.5' })
+      assert.strictEqual(config.sampleRate, 1)
+    })
+
+    it('should ignore an invalid sample rate and fall back to the previous source', () => {
+      const config = getConfig({ sampleRate: 0.5 })
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: 'not-a-number' })
+      assert.strictEqual(config.sampleRate, 0.5)
+      assert.strictEqual(config.getOrigin('sampleRate'), 'code')
+    })
+
+    it('should resolve dynamic instrumentation enablement to a nested property', () => {
+      const config = getConfig()
+      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
+    })
+
+    it('should resolve code origin for spans enablement to a nested property', () => {
+      const config = getConfig()
+      assert.strictEqual(config.codeOriginForSpans.enabled, true)
+      config.setRemoteConfig({ DD_CODE_ORIGIN_FOR_SPANS_ENABLED: 'false' })
+      assert.strictEqual(config.codeOriginForSpans.enabled, false)
+    })
+
+    it('should resolve logs injection enablement', () => {
+      const config = getConfig()
+      assert.strictEqual(config.logInjection, true)
+      config.setRemoteConfig({ DD_LOGS_INJECTION: 'false' })
+      assert.strictEqual(config.logInjection, false)
+    })
+
+    it('should resolve a comma-separated array env-var-keyed config, stripping colon whitespace', () => {
+      const config = getConfig({ headerTags: ['foo:bar'] })
+      config.setRemoteConfig({ DD_TRACE_HEADER_TAGS: 'x-custom-header : custom.tag,x-other-header' })
+      assert.deepStrictEqual(config.headerTags, ['x-custom-header:custom.tag', 'x-other-header'])
+    })
+
+    it('should resolve a map env-var-keyed config', () => {
+      const config = getConfig({ tags: { foo: 'bar' } })
+      config.setRemoteConfig({ DD_TAGS: 'team:backend,region:us' })
+      assertObjectContains(config.tags, { team: 'backend', region: 'us' })
+    })
+
+    it('should keep runtime-id stable after remote configuration updates tags', () => {
+      const config = getConfig()
+      const runtimeId = config.tags['runtime-id']
+      config.setRemoteConfig({ DD_TAGS: 'team:backend' })
+      assert.strictEqual(config.tags['runtime-id'], runtimeId)
+    })
+
+    it('should clear RC fields when called with null', () => {
       const config = getConfig({ logInjection: true, sampleRate: 0.5 })
 
       assertObjectContains(config, {
@@ -4865,7 +4839,7 @@ rules:
         sampleRate: 0.5,
       })
 
-      config.setRemoteConfig({ DD_TRACE_ENABLED: false })
+      config.setRemoteConfig({ DD_TRACE_ENABLED: 'false' })
 
       assertObjectContains(config, {
         DD_TRACE_ENABLED: false,
@@ -4881,42 +4855,24 @@ rules:
         sampleRate: 0.5,
       })
     })
+  })
 
-    it('should ignore null values', () => {
-      const config = getConfig({ sampleRate: 0.5 })
-      config.setRemoteConfig({ sampleRate: null })
-      assert.strictEqual(config.sampleRate, 0.5)
-    })
-
-    it('should treat null values as unset', () => {
-      const config = getConfig({ sampleRate: 0.5, tracing: true })
-      assert.strictEqual(config.sampleRate, 0.5)
-      assert.strictEqual(config.DD_TRACE_ENABLED, true)
-      config.setRemoteConfig({ sampleRate: 0.8, DD_TRACE_ENABLED: false })
-      assert.strictEqual(config.sampleRate, 0.8)
-      assert.strictEqual(config.DD_TRACE_ENABLED, false)
-      assert.strictEqual(config.logInjection, true)
-      config.setRemoteConfig({ logInjection: false })
-      assert.strictEqual(config.sampleRate, 0.5)
-      assert.strictEqual(config.DD_TRACE_ENABLED, true)
-      assert.strictEqual(config.logInjection, false)
-    })
-
+  describe('remote config application', () => {
     it('should restore tracked origins when an individual RC option falls back to code', () => {
       const config = getConfig({ sampleRate: 0.5, logInjection: true })
 
       updateConfig.resetHistory()
 
       config.setRemoteConfig({
-        sampleRate: 0.8,
-        logInjection: false,
+        DD_TRACE_SAMPLE_RATE: '0.8',
+        DD_LOGS_INJECTION: 'false',
       })
 
       assert.strictEqual(config.getOrigin('sampleRate'), 'remote_config')
       assert.strictEqual(config.getOrigin('logInjection'), 'remote_config')
 
       config.setRemoteConfig({
-        logInjection: false,
+        DD_LOGS_INJECTION: 'false',
       })
 
       assert.strictEqual(config.sampleRate, 0.5)
@@ -4930,11 +4886,11 @@ rules:
       updateConfig.resetHistory()
 
       config.setRemoteConfig({
-        sampleRate: 0.8,
-        logInjection: false,
+        DD_TRACE_SAMPLE_RATE: '0.8',
+        DD_LOGS_INJECTION: 'false',
       })
       config.setRemoteConfig({
-        logInjection: false,
+        DD_LOGS_INJECTION: 'false',
       })
 
       sinon.assert.calledTwice(updateConfig)
@@ -4955,15 +4911,15 @@ rules:
       updateConfig.resetHistory()
 
       config.setRemoteConfig({
-        DD_TRACE_ENABLED: false,
-        sampleRate: 0.8,
+        DD_TRACE_ENABLED: 'false',
+        DD_TRACE_SAMPLE_RATE: '0.8',
       })
 
       assert.strictEqual(config.getOrigin('DD_TRACE_ENABLED'), 'remote_config')
       assert.strictEqual(config.getOrigin('sampleRate'), 'remote_config')
 
       config.setRemoteConfig({
-        sampleRate: 0.8,
+        DD_TRACE_SAMPLE_RATE: '0.8',
       })
 
       assert.strictEqual(config.DD_TRACE_ENABLED, true)
@@ -4978,11 +4934,11 @@ rules:
       updateConfig.resetHistory()
 
       config.setRemoteConfig({
-        DD_TRACE_ENABLED: false,
-        sampleRate: 0.1,
+        DD_TRACE_ENABLED: 'false',
+        DD_TRACE_SAMPLE_RATE: '0.1',
       })
       config.setRemoteConfig({
-        sampleRate: 0.8,
+        DD_TRACE_SAMPLE_RATE: '0.8',
       })
 
       sinon.assert.calledTwice(updateConfig)
@@ -5008,9 +4964,9 @@ rules:
       assert.strictEqual(config.sampleRate, undefined)
 
       config.setRemoteConfig({
-        DD_TRACE_ENABLED: true,
-        logInjection: false,
-        sampleRate: 0.8,
+        DD_TRACE_ENABLED: 'true',
+        DD_LOGS_INJECTION: 'false',
+        DD_TRACE_SAMPLE_RATE: '0.8',
       })
 
       assertObjectContains(config, {
@@ -5020,7 +4976,7 @@ rules:
       })
 
       config.setRemoteConfig({
-        DD_TRACE_ENABLED: false,
+        DD_TRACE_ENABLED: 'false',
       })
 
       assertObjectContains(config, {

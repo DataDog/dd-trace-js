@@ -366,6 +366,8 @@ module.exports = {
   generateTelemetry,
 
   warnInvalidValue,
+
+  sensitiveConfigurations,
 }
 
 // `dns` is instrumented, so requiring it pulls in the dns plugin, which loads

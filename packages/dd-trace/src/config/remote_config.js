@@ -2,38 +2,26 @@
 
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
 const log = require('../log')
-const tagger = require('../tagger')
+const { sdkConfigAllowlist } = require('./sdk-config-allowlist')
 
 module.exports = {
   enable,
 }
 
 /**
- * @typedef {object} RemoteConfigOptions
- * @property {boolean} [dynamic_instrumentation_enabled] - Enable Dynamic Instrumentation
- * @property {boolean} [code_origin_enabled] - Enable code origin tagging for spans
- * @property {Array<{header: string, tag_name?: string}>} [tracing_header_tags] - HTTP headers to tag
- * @property {Array<string>} [tracing_tags] - Global tags (format: "key:value")
- * @property {number} [tracing_sampling_rate] - Global sampling rate (0.0-1.0)
- * @property {boolean} [log_injection_enabled] - Enable trace context log injection
- * @property {boolean} [tracing_enabled] - Enable/disable tracing globally
- * @property {Array<object>} [tracing_sampling_rules] - Trace sampling rules configuration
- */
-
-/**
  * @typedef {ReturnType<import('../config')>} Config
  */
 
 /**
- * Manages multiple APM_TRACING configurations with priority-based merging
+ * Manages multiple remote configurations with priority-based merging
  */
-class RCClientLibConfigManager {
+class RCClientManager {
   /**
    * @param {string} currentService - Current service name
    * @param {string} currentEnv - Current environment name
    */
   constructor (currentService, currentEnv) {
-    this.configs = new Map() // config_id -> { conf, priority }
+    this.configs = new Map() // config_id -> { priority, sdkConfig }
     this.currentService = currentService
     this.currentEnv = currentEnv
   }
@@ -108,8 +96,19 @@ class RCClientLibConfigManager {
       return
     }
 
+    // Filter to the allowlist here, at ingestion, so only a bounded (allowlist-sized) subset of
+    // an otherwise untrusted, potentially very large sdk_config payload is ever retained in memory.
+    const confPayload = conf.sdk_config
+    let sdkConfig
+    if (confPayload != null) {
+      sdkConfig = {}
+      for (const key of sdkConfigAllowlist) {
+        if (Object.hasOwn(confPayload, key)) sdkConfig[key] = confPayload[key]
+      }
+    }
+
     const priority = this.calculatePriority(conf)
-    this.configs.set(configId, { conf, priority })
+    this.configs.set(configId, { priority, sdkConfig })
 
     log.debug('[config/remote_config] Added config %s with priority %d', configId, priority)
   }
@@ -127,23 +126,24 @@ class RCClientLibConfigManager {
   }
 
   /**
-   * Get merged lib_config with higher priority configs overriding lower priority ones
+   * Get merged config with higher priority configs overriding lower priority ones
    *
-   * @returns {RemoteConfigOptions|null} Merged config object or null if no configs present
+   * @returns {Record<string, string>|null} Merged config object or null if no configs present
    */
-  getMergedLibConfig () {
+  getMergedConfig () {
     if (this.configs.size === 0) return null
 
-    let hasLibConfig = false
+    let hasConfig = false
 
     const merged = [...this.configs.values()]
       .sort((a, b) => a.priority - b.priority)
-      .reduce((merged, { conf }) => {
-        if (conf.lib_config != null) hasLibConfig = true
-        return Object.assign(merged, conf.lib_config)
+      .reduce((merged, { sdkConfig }) => {
+        if (sdkConfig == null) return merged
+        hasConfig = true
+        return Object.assign(merged, sdkConfig)
       }, {})
 
-    return hasLibConfig ? merged : null
+    return hasConfig ? merged : null
   }
 }
 
@@ -155,106 +155,33 @@ class RCClientLibConfigManager {
  * @param {() => void} onConfigUpdated - Function to call when config is updated
  */
 function enable (rc, config, onConfigUpdated) {
-  // This tracer supports receiving config subsets via the APM_TRACING product handler.
+  // This tracer supports receiving multiple simultaneous targeted sdk_config payloads under the
+  // APM_TRACING product (e.g. an org-level and a service-level config) and merges them by priority.
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
 
-  // Tracing
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
+  // This tracer supports receiving the full SDK_CONFIGURATION settings map, env-var-keyed.
+  rc.updateCapabilities(RemoteConfigCapabilities.SDK_CONFIGURATION, true)
 
-  // Log Management
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
+  const sdkConfigManager = new RCClientManager(config.service, config.env)
 
-  // Debugger
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
-
-  // Code Origin
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
-
-  const rcClientLibConfigManager = new RCClientLibConfigManager(config.service, config.env)
-
-  // Subscribe to APM_TRACING product (setBatchHandler used below doesn't automatically subscribe)
+  // SDK_CONFIGURATION is delivered as a flat sdk_config map under the APM_TRACING product.
   rc.subscribeProducts('APM_TRACING')
 
-  // Use a batch handler to process all changes before updating the config. This is important in case there's
-  // conflicting configs between, for example, the org and service level.
   rc.setBatchHandler(['APM_TRACING'], (transaction) => {
     const { toUnapply, toApply, toModify } = transaction
 
     for (const item of toUnapply) {
-      rcClientLibConfigManager.removeConfig(item.id)
+      sdkConfigManager.removeConfig(item.id)
       transaction.ack(item.path)
     }
 
     for (const item of [...toApply, ...toModify]) {
-      rcClientLibConfigManager.addConfig(item.id, item.file)
+      sdkConfigManager.addConfig(item.id, item.file)
       transaction.ack(item.path)
     }
 
-    /** @type {import('../config').TracerOptions|null|RemoteConfigOptions} */
-    let mergedLibConfig = rcClientLibConfigManager.getMergedLibConfig()
-
-    if (mergedLibConfig) {
-      mergedLibConfig = transformRemoteConfigToLocalOption(mergedLibConfig)
-    }
-
-    config.setRemoteConfig(mergedLibConfig)
+    config.setRemoteConfig(sdkConfigManager.getMergedConfig())
 
     onConfigUpdated()
   })
-}
-
-/**
- * @param {RemoteConfigOptions} libConfig
- * @returns {import('../config').TracerOptions}
- */
-function transformRemoteConfigToLocalOption (libConfig) {
-  const normalizedConfig = {}
-  for (const [name, value] of Object.entries(libConfig)) {
-    if (value !== null) {
-      normalizedConfig[optionLookupTable[name] ?? name] = transformers[name]?.(value) ?? value
-    }
-  }
-  return normalizedConfig
-}
-
-// This is intermediate solution until remote config is reworked to handle all known entries with proper names
-const optionLookupTable = {
-  dynamic_instrumentation_enabled: 'dynamicInstrumentation.enabled',
-  code_origin_enabled: 'codeOriginForSpans.enabled',
-  tracing_sampling_rate: 'sampleRate',
-  log_injection_enabled: 'logInjection',
-  tracing_enabled: 'DD_TRACE_ENABLED',
-  tracing_sampling_rules: 'samplingRules',
-  tracing_header_tags: 'headerTags',
-  tracing_tags: 'tags',
-}
-
-const transformers = {
-  tracing_sampling_rules (samplingRules) {
-    for (const rule of samplingRules) {
-      if (rule.tags) {
-        const reformattedTags = {}
-        for (const tag of rule.tags) {
-          reformattedTags[tag.key] = tag.value_glob
-        }
-        rule.tags = reformattedTags
-      }
-    }
-    return samplingRules
-  },
-  tracing_header_tags (headerTags) {
-    return headerTags?.map(tag => {
-      return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
-    })
-  },
-  tracing_tags (tags) {
-    const normalizedTags = {}
-    tagger.add(normalizedTags, tags)
-    return normalizedTags
-  },
 }
