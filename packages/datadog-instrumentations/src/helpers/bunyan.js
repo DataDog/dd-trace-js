@@ -20,6 +20,7 @@ module.exports = function wrapLogger (Logger, id, logSubmissionCh) {
         rec = arguments[0] = payload.message
       }
 
+      // Reuse Bunyan's cycle-safe serialization instead of serializing the record again.
       const line = emit.apply(this, arguments)
       if (logSubmissionCh?.hasSubscribers && logCh.hasSubscribers && !arguments[1]) {
         logSubmissionCh.publish({ source: id, message: line ?? rec })
