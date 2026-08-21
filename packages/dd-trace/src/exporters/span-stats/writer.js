@@ -9,23 +9,10 @@ const request = require('../common/request')
 const log = require('../../log')
 
 class Writer extends BaseWriter {
-  #onFlush
-
-  constructor ({ url, onFlush }) {
+  constructor ({ url }) {
     super(...arguments)
     this._url = url
-    this.#onFlush = onFlush
     this._encoder = new SpanStatsEncoder(this)
-  }
-
-  flush (done, options) {
-    const flush = callback => this.flushDirect(callback, options)
-    if (this.#onFlush) return this.#onFlush(flush, done)
-    flush(done)
-  }
-
-  flushDirect (done, options) {
-    super.flush(done, options)
   }
 
   _sendPayload (data, _, done) {

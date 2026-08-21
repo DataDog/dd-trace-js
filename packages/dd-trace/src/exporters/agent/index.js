@@ -3,6 +3,7 @@
 const { URL } = require('url')
 const log = require('../../log')
 const { createServerlessDeliveryTracker } = require('../../serverless')
+const { flushWriter, trackDelivery } = require('../common/flush')
 const Writer = require('./writer')
 
 class AgentExporter {
@@ -26,7 +27,7 @@ class AgentExporter {
       lookup,
       protocolVersion,
       headers,
-      onFlush: this.#trackWriterFlush.bind(this),
+      onFlush: (flush, done) => trackDelivery(this.#serverlessDeliveryTracker, flush, done),
     })
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
@@ -48,10 +49,10 @@ class AgentExporter {
     const { flushInterval } = this._config
 
     if (flushInterval === 0) {
-      this.#flush()
+      flushWriter(this._writer, this.#serverlessDeliveryTracker)
     } else if (this.#timer === undefined) {
       this.#timer = setTimeout(() => {
-        this.#flush()
+        flushWriter(this._writer, this.#serverlessDeliveryTracker)
         this.#timer = undefined
       }, flushInterval)
       this.#timer.unref?.()
@@ -64,7 +65,7 @@ class AgentExporter {
 
     if (!this.#serverlessDeliveryTracker) {
       try {
-        return this.#flush(done)
+        return flushWriter(this._writer, this.#serverlessDeliveryTracker, done)
       } catch (error) {
         log.error('Failed to flush traces: %s', error.message)
         done?.()
@@ -73,24 +74,11 @@ class AgentExporter {
     }
 
     try {
-      this.#flush()
+      flushWriter(this._writer, this.#serverlessDeliveryTracker)
     } catch (error) {
       log.error('Failed to flush traces: %s', error.message)
     }
     this.#serverlessDeliveryTracker.waitForIdle(done)
-  }
-
-  #flush (done) {
-    const flush = this._writer.flushDirect ?? this._writer.flush
-    if (this.#serverlessDeliveryTracker) {
-      return this.#serverlessDeliveryTracker.track(flush.bind(this._writer), done)
-    }
-    flush.call(this._writer, done)
-  }
-
-  #trackWriterFlush (flush, done) {
-    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.track(flush, done)
-    flush(done)
   }
 }
 

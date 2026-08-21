@@ -10,14 +10,23 @@ const { safeJSONStringify } = require('./util')
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
 class Writer {
-  constructor ({ url, beforeFirstFlush }) {
+  #onFlush
+
+  constructor ({ url, beforeFirstFlush, onFlush }) {
     this._url = url
     this._beforeFirstFlush = beforeFirstFlush
+    this.#onFlush = onFlush
   }
 
   #isFirstFlush = true
 
-  flush (done = () => {}, options) {
+  flush (done, options) {
+    const flush = callback => this.flushDirect(callback, options)
+    if (this.#onFlush) return this.#onFlush(flush, done)
+    flush(done)
+  }
+
+  flushDirect (done = () => {}, options) {
     const count = this._encoder.count()
 
     if (!request.writable && options?.deadline === undefined) {

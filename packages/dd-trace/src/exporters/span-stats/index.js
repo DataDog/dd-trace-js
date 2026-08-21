@@ -2,6 +2,7 @@
 
 const log = require('../../log')
 const { createServerlessDeliveryTracker } = require('../../serverless')
+const { flushWriter, trackDelivery } = require('../common/flush')
 const { Writer } = require('./writer')
 
 class SpanStatsExporter {
@@ -10,13 +11,20 @@ class SpanStatsExporter {
   constructor (config) {
     this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._url = config.url
-    this._writer = new Writer({ url: this._url, onFlush: this.#trackWriterFlush.bind(this) })
+    this._writer = new Writer({
+      url: this._url,
+      onFlush: (flush, done) => trackDelivery(this.#serverlessDeliveryTracker, flush, done),
+    })
   }
 
   export (payload, done) {
     this._writer.append(payload)
     try {
-      this.#flush(this.#serverlessDeliveryTracker ? undefined : done)
+      flushWriter(
+        this._writer,
+        this.#serverlessDeliveryTracker,
+        this.#serverlessDeliveryTracker ? undefined : done
+      )
     } catch (error) {
       if (!done) throw error
       log.error('Failed to flush span stats: %s', error.message)
@@ -25,21 +33,12 @@ class SpanStatsExporter {
   }
 
   flush (done) {
-    this.#flush(this.#serverlessDeliveryTracker ? undefined : done)
+    flushWriter(
+      this._writer,
+      this.#serverlessDeliveryTracker,
+      this.#serverlessDeliveryTracker ? undefined : done
+    )
     this.#serverlessDeliveryTracker?.waitForIdle(done)
-  }
-
-  #flush (done) {
-    const flushWriter = this._writer.flushDirect ?? this._writer.flush
-    if (this.#serverlessDeliveryTracker) {
-      return this.#serverlessDeliveryTracker.track(flushWriter.bind(this._writer), done)
-    }
-    flushWriter.call(this._writer, done)
-  }
-
-  #trackWriterFlush (flush, done) {
-    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.track(flush, done)
-    flush(done)
   }
 }
 
