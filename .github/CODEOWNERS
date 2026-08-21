@@ -512,3 +512,8 @@
 /ext/tags.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
 /ext/types.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-serverless
 /packages/dd-trace/src/plugin_manager.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-idm-js
+
+# Dependency manifests
+**/package.json @DataDog/dd-trace-js @dd-octo-sts
+**/package-lock.json @DataDog/dd-trace-js @dd-octo-sts
+**/yarn.lock @DataDog/dd-trace-js @dd-octo-sts
