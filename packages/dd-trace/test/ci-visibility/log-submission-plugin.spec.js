@@ -9,6 +9,7 @@ const sinon = require('sinon')
 require('../setup/core')
 
 const { publishWithCompletionBarrier } = require('../../../datadog-instrumentations/src/helpers/channel')
+const { FINAL_FLUSH_TIMEOUT } = require('../../src/ci-visibility/final-flush')
 
 const agentlessFlushCh = channel('ci:agentless:flush')
 const logSubmissionCh = channel('ci:log-submission:log')
@@ -143,6 +144,23 @@ describe('LogSubmissionPlugin', () => {
 
     sinon.assert.calledOnce(onDone)
     sinon.assert.calledWith(log.error, 'Error submitting %s logs', 'bunyan', error)
+  })
+
+  it('aborts pending requests and releases the Playwright worker at the final flush deadline', () => {
+    request.callsFake(() => {})
+    publishLog('{"msg":"hello"}')
+    const onDone = sinon.spy()
+
+    publishWithCompletionBarrier(agentlessFlushCh, {}, onDone)
+
+    const { signal } = request.firstCall.args[1]
+    clock.tick(FINAL_FLUSH_TIMEOUT - 1)
+    sinon.assert.notCalled(onDone)
+    assert.strictEqual(signal.aborted, false)
+    clock.tick(1)
+    sinon.assert.calledOnce(onDone)
+    assert.strictEqual(signal.aborted, true)
+    assert.strictEqual(signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
   })
 
   it('waits for every intake request in the flush snapshot', () => {

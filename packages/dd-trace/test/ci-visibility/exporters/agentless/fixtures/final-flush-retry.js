@@ -31,7 +31,9 @@ const TestOptimizationRequestTracker = require(
 )
 
 const writer = new BaseWriter({ url: 'http://localhost' })
-const requestTracker = new TestOptimizationRequestTracker(writer)
+const requestTracker = new TestOptimizationRequestTracker(
+  (done, options) => BaseWriter.prototype.flush.call(writer, done, options)
+)
 let hasPayload = true
 writer._encoder = {
   count: () => hasPayload ? 1 : 0,

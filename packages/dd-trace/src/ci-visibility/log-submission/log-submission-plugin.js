@@ -3,6 +3,8 @@
 const request = require('../../exporters/common/request')
 const log = require('../../log')
 const Plugin = require('../../plugins/plugin')
+const TestOptimizationRequestTracker = require('../exporters/agentless/request-tracker')
+const { FINAL_FLUSH_TIMEOUT } = require('../final-flush')
 
 const MAX_BATCH_BYTES = 5 * 1024 * 1024
 const MAX_BATCH_LOGS = 1000
@@ -74,17 +76,6 @@ function getLogSubmissionPath (config, source) {
   return `/api/v2/logs?${new URLSearchParams({ ddsource: source, service: config.service })}`
 }
 
-/**
- * @typedef {object} PendingLogRequest
- * @property {string} source
- */
-
-/**
- * @typedef {object} LogRequestCompletion
- * @property {() => void} complete
- * @property {Set<PendingLogRequest>} pendingRequests
- */
-
 class LogSubmissionPlugin extends Plugin {
   static id = 'log-submission'
 
@@ -93,15 +84,16 @@ class LogSubmissionPlugin extends Plugin {
   #batchBytes = 2
   #batchSource
   #logSubmissionUrl
-  /** @type {Set<PendingLogRequest>} */
-  #pendingRequests = new Set()
-  /** @type {LogRequestCompletion[]} */
-  #requestCompletions = []
+  #requestTracker
   #timer
   #beforeExitHandler = () => this.#flushLogs()
 
   constructor (...args) {
     super(...args)
+    this.#requestTracker = new TestOptimizationRequestTracker((done) => {
+      this.#flushLogs()
+      done?.()
+    })
 
     this.addSub('ci:log-submission:winston:configure', (httpClass) => {
       this.HttpClass = httpClass
@@ -115,12 +107,13 @@ class LogSubmissionPlugin extends Plugin {
       this.#enqueueLog(payload)
     })
     this.addSub('ci:agentless:flush', ({ registerCompletion } = {}) => {
-      this.#flushLogs()
-      if (!registerCompletion || this.#pendingRequests.size === 0) return
+      if (!registerCompletion) {
+        this.#flushLogs()
+        return
+      }
 
-      this.#requestCompletions.push({
-        complete: registerCompletion(),
-        pendingRequests: new Set(this.#pendingRequests),
+      this.#requestTracker.flush(registerCompletion(), {
+        deadline: Date.now() + FINAL_FLUSH_TIMEOUT,
       })
     })
   }
@@ -211,38 +204,14 @@ class LogSubmissionPlugin extends Plugin {
       url: this.#logSubmissionUrl,
     }
 
-    const pendingRequest = { source }
-    this.#pendingRequests.add(pendingRequest)
     try {
-      request(data, options, error => this.#finishRequest(pendingRequest, error))
+      this.#requestTracker.send(request, data, options, error => {
+        if (error) log.error('Error submitting %s logs', source, error)
+      })
     } catch (error) {
       this.#logSubmissionUrl = undefined
-      this.#finishRequest(pendingRequest, error)
+      log.error('Error submitting %s logs', source, error)
     }
-  }
-
-  /**
-   * Drops a finished intake request and releases flushes that were waiting for it.
-   *
-   * @param {PendingLogRequest} pendingRequest
-   * @param {Error | null | undefined} error
-   * @returns {void}
-   */
-  #finishRequest (pendingRequest, error) {
-    if (!this.#pendingRequests.delete(pendingRequest)) return
-
-    if (error) log.error('Error submitting %s logs', pendingRequest.source, error)
-
-    const remaining = []
-    for (const requestCompletion of this.#requestCompletions) {
-      requestCompletion.pendingRequests.delete(pendingRequest)
-      if (requestCompletion.pendingRequests.size === 0) {
-        requestCompletion.complete()
-      } else {
-        remaining.push(requestCompletion)
-      }
-    }
-    this.#requestCompletions = remaining
   }
 }
 

@@ -24,7 +24,9 @@ class Writer extends BaseWriter {
 
   constructor ({ url, evpProxyPrefix = '' }) {
     super(...arguments)
-    this.#requestTracker = new TestOptimizationRequestTracker(this)
+    this.#requestTracker = new TestOptimizationRequestTracker(
+      (done, options) => BaseWriter.prototype.flush.call(this, done, options)
+    )
     this._url = url
     this._encoder = new CoverageCIVisibilityEncoder(this)
     this._evpProxyPrefix = evpProxyPrefix

@@ -34,7 +34,9 @@ class AgentWriter extends BaseWriter {
     if (isTestOptimization) {
       this.#request = require('../../ci-visibility/exporters/request')
       const TestOptimizationRequestTracker = require('../../ci-visibility/exporters/agentless/request-tracker')
-      this.#requestTracker = new TestOptimizationRequestTracker(this)
+      this.#requestTracker = new TestOptimizationRequestTracker(
+        (done, options) => BaseWriter.prototype.flush.call(this, done, options)
+      )
     }
   }
 
