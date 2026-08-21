@@ -17,6 +17,15 @@ describe('ai llmobs util', () => {
       )
     })
 
+    it('captures an image part keyed off mediaType', () => {
+      // `ImagePart` spells the field `mimeType` on v4 and `mediaType` from v5 on
+      // (@ai-sdk/provider-utils ImagePart), so an image part carries either spelling.
+      assert.deepStrictEqual(
+        extractUserContentParts([{ type: 'image', image: PNG_BASE64, mediaType: 'image/png' }]),
+        { content: '', imageParts: [{ mimeType: 'image/png', content: PNG_BASE64 }] }
+      )
+    })
+
     it('captures a v5 and v6 file part keyed off mediaType', () => {
       assert.deepStrictEqual(
         extractUserContentParts([{ type: 'file', data: PNG_BASE64, mediaType: 'image/png' }]),

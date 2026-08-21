@@ -59,10 +59,10 @@ const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
  */
 
 /**
- * A user-message content part, across every AI SDK version we instrument. `image` parts only exist
- * on v4; v5+ rewrites them to `file` before the model call. The `data` payload is only tagged on
- * v7, and only reaches us as bytes on v7 too, since v4-v6 arrive through the stringified
- * `ai.prompt.messages` attribute.
+ * A user-message content part, across every AI SDK version we instrument. An `image` part spells its
+ * media type `mimeType` on v4 and `mediaType` from v5 on, so both reach us and either may be the
+ * only one set. The `data` payload is only tagged on v7, and only reaches us as bytes on v7 too,
+ * since v4-v6 arrive through the stringified `ai.prompt.messages` attribute.
  *
  * @typedef {{
  *   type: 'text',
@@ -70,6 +70,7 @@ const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
  * } | {
  *   type: 'image',
  *   image?: Uint8Array | ArrayBuffer | string | URL,
+ *   mediaType?: string,
  *   mimeType?: string
  * } | {
  *   type: 'file',
@@ -550,7 +551,7 @@ function extractUserContentParts (parts) {
     if (part.type !== 'image' && part.type !== 'file') continue
 
     const payload = part.type === 'image' ? part.image : part.data
-    const mediaType = part.type === 'image' ? part.mimeType : part.mediaType ?? part.mimeType
+    const mediaType = part.mediaType ?? part.mimeType
     if (part.type === 'file' && !isImageMediaType(mediaType)) continue
 
     const imagePart = formatImagePart(payload, mediaType)
