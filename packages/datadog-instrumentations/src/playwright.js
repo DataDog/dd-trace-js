@@ -47,6 +47,7 @@ const testSessionConfigurationCh = channel('ci:playwright:session:configuration'
 const testSessionFinishCh = channel('ci:playwright:session:finish')
 const reporterErrorCh = channel('ci:playwright:reporter:error')
 const reporterRunSummaryCh = channel('ci:playwright:reporter:run-summary')
+const reporterSuiteHookErrorCh = channel('ci:playwright:reporter:suite-hook-error')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
@@ -831,7 +832,10 @@ function testEndHandler ({
   if (_type === 'beforeAll' || _type === 'afterAll') {
     const hookError = formatTestHookError(error, _type, isTimeout)
 
-    if (hookError) addErrorToTestSuite(testSuiteAbsolutePath, hookError)
+    if (hookError) {
+      addErrorToTestSuite(testSuiteAbsolutePath, hookError)
+      reporterSuiteHookErrorCh.publish(testSuiteAbsolutePath)
+    }
     return
   }
 
@@ -916,9 +920,7 @@ function testEndHandler ({
 
   // Check if all EFD retries failed
   const efdRetryCount = getEfdRetryCountForTest(test)
-  if (efdRetryCount > 0 && testStatuses.length === efdRetryCount + 1 &&
-    (test._ddIsNew || test._ddIsModified) &&
-    isEarlyFlakeDetectionEnabled &&
+  if (isEfdManagedTest && efdRetryCount > 0 && testStatuses.length === efdRetryCount + 1 &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
   }
@@ -1924,7 +1926,8 @@ function processRootSuite (createRootSuiteReturnValue) {
     const fileSuitesWithImpactedTestsToProjects = new Map()
     for (const impactedTest of impactedTests) {
       impactedTest._ddIsModified = true
-      if (shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped') {
+      if (shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped' &&
+        !impactedTest._ddIsAttemptToFix) {
         // Prevent ATR or `--retries` from retrying tests that EFD manages.
         impactedTest.retries = 0
         markEfdManagedTest(impactedTest)
@@ -1934,10 +1937,10 @@ function processRootSuite (createRootSuiteReturnValue) {
         }
       }
     }
-    // If something change in the file, all tests in the file are impacted, hence the () => true filter
+    // If something changes in the file, all tests in the file are impacted, except attempt-to-fix tests managed above.
     applyRetriesToTests(
       fileSuitesWithImpactedTestsToProjects,
-      () => true,
+      (test) => !test._ddIsAttemptToFix,
       [
         '_ddIsModified',
         '_ddIsEfdRetry',
@@ -1970,7 +1973,8 @@ function processRootSuite (createRootSuiteReturnValue) {
       const fileSuitesWithNewTestsToProjects = new Map()
       for (const newTest of newTests) {
         newTest._ddIsNew = true
-        if (shouldRunEarlyFlakeDetection() && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
+        if (shouldRunEarlyFlakeDetection() && newTest.expectedStatus !== 'skipped' &&
+          !newTest._ddIsModified && !newTest._ddIsAttemptToFix) {
           // Prevent ATR or `--retries` from retrying tests that EFD manages.
           newTest.retries = 0
           markEfdManagedTest(newTest)
@@ -1983,7 +1987,7 @@ function processRootSuite (createRootSuiteReturnValue) {
 
       applyRetriesToTests(
         fileSuitesWithNewTestsToProjects,
-        isNewTest,
+        (test) => !test._ddIsAttemptToFix && isNewTest(test),
         [
           '_ddIsNew',
           '_ddIsEfdRetry',

@@ -4,6 +4,8 @@ const { channel } = require('dc-polyfill')
 
 const reporterErrorCh = channel('ci:playwright:reporter:error')
 const reporterRunSummaryCh = channel('ci:playwright:reporter:run-summary')
+const reporterSuiteHookErrorCh = channel('ci:playwright:reporter:suite-hook-error')
+const suitesWithHookErrors = new Set()
 const PLAYWRIGHT_REPORTER_ERROR_MESSAGE = 'Error in reporter'
 const PLAYWRIGHT_REPORTER_ERROR_CALLER_RE =
   /^\s*at wrapAsync .*?[\\/]playwright[\\/]lib[\\/]runner[\\/]index\.js:\d+:\d+\)?$/
@@ -26,6 +28,22 @@ function isPlaywrightReporterError (message) {
   } finally {
     Error.prepareStackTrace = originalPrepareStackTrace
   }
+}
+
+/**
+ * Returns whether a finalized Playwright result contains a failed suite hook.
+ *
+ * @param {Array<object>} steps
+ * @returns {boolean}
+ */
+function hasFailedSuiteHook (steps) {
+  if (!steps) return false
+
+  for (const step of steps) {
+    if (step.error && (step.title === 'beforeAll hook' || step.title === 'afterAll hook')) return true
+    if (hasFailedSuiteHook(step.steps)) return true
+  }
+  return false
 }
 
 class DatadogPlaywrightReporter {
@@ -52,9 +70,12 @@ class DatadogPlaywrightReporter {
   /**
    * Implements the reporter v2 lifecycle hook required by older Playwright versions.
    *
+   * @param {object} config
    * @returns {void}
    */
-  onConfigure () {}
+  onConfigure (config) {
+    this.failOnFlakyTests = config.failOnFlakyTests
+  }
 
   /**
    * Restores console error after Playwright completes the reporter lifecycle.
@@ -82,6 +103,8 @@ class DatadogPlaywrightReporter {
    */
   onBegin (configOrSuite, suite) {
     this.suite = suite || configOrSuite
+    if (suite) this.failOnFlakyTests = configOrSuite.failOnFlakyTests
+    suitesWithHookErrors.clear()
   }
 
   /**
@@ -134,15 +157,21 @@ class DatadogPlaywrightReporter {
   onEnd () {
     let failureCount = this.fatalErrorCount
     let quarantinedFailureCount = 0
-    let hasIncompleteTests = false
+    let hasIncompleteTests = suitesWithHookErrors.size > 0
     const tests = this.suite?.allTests?.()
     if (tests) {
       for (const test of tests) {
         const outcome = test.outcome()
-        if (outcome === 'unexpected') {
+        const finalResult = test.results.at(-1)
+        hasIncompleteTests ||= hasFailedSuiteHook(finalResult?.steps)
+        if (outcome === 'unexpected' || (outcome === 'flaky' && this.failOnFlakyTests)) {
           failureCount += 1
-          if (test._ddIsQuarantined && !test._ddIsAttemptToFix) quarantinedFailureCount += 1
-        } else if (outcome === 'skipped' && !test._ddIsDisabled) {
+          const finalResultStatus = finalResult?.status
+          const hasFailed = finalResultStatus === 'failed' || finalResultStatus === 'timedOut'
+          if (outcome === 'unexpected' && hasFailed && test._ddIsQuarantined && !test._ddIsAttemptToFix) {
+            quarantinedFailureCount += 1
+          }
+        } else if (outcome === 'skipped' && (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
           const { results } = test
           hasIncompleteTests ||= results.some(result => result.status === 'interrupted') ||
             !results.length || test.expectedStatus !== 'skipped'
@@ -150,6 +179,7 @@ class DatadogPlaywrightReporter {
       }
     }
     reporterRunSummaryCh.publish({ failureCount, quarantinedFailureCount, hasIncompleteTests })
+    suitesWithHookErrors.clear()
 
     if (!this.captureReporterErrors) return
 
@@ -208,5 +238,9 @@ class DatadogPlaywrightReporter {
     return false
   }
 }
+
+reporterSuiteHookErrorCh.subscribe((testSuiteAbsolutePath) => {
+  suitesWithHookErrors.add(testSuiteAbsolutePath)
+})
 
 module.exports = DatadogPlaywrightReporter

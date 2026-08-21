@@ -111,6 +111,24 @@ const QUARANTINE_MANAGEMENT_TESTS = {
   },
 }
 
+const QUARANTINE_WITH_DISABLED_ATF_MANAGEMENT_TESTS = {
+  playwright: {
+    suites: {
+      ...QUARANTINE_MANAGEMENT_TESTS.playwright.suites,
+      'zzz-passing-test.js': {
+        tests: {
+          'should pass when max failures is not reached': {
+            properties: {
+              attempt_to_fix: true,
+              disabled: true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
@@ -231,6 +249,7 @@ versions.forEach((version) => {
           isDisabled,
           isQuarantined,
           shouldIncludeFlakyTest,
+          shouldNotUseEfd,
         }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -249,6 +268,14 @@ versions.forEach((version) => {
               const attemptedToFixTests = tests.filter(
                 test => test.meta[TEST_NAME].startsWith('attempt to fix should attempt to fix')
               )
+
+              if (shouldNotUseEfd) {
+                const originalTests = attemptedToFixTests.filter(test => test.meta[TEST_IS_RETRY] !== 'true')
+                assert.ok(originalTests.every(test => test.meta[TEST_IS_NEW] === 'true'))
+                assert.ok(attemptedToFixTests.every(
+                  test => test.meta[TEST_RETRY_REASON] !== TEST_RETRY_REASON_TYPES.efd
+                ))
+              }
 
               if (isDisabled && !isAttemptingToFix) {
                 assert.strictEqual(attemptedToFixTests.length, 2)
@@ -393,6 +420,7 @@ versions.forEach((version) => {
          *   shouldFailSometimes?: boolean,
          *   isDisabled?: boolean,
          *   shouldIncludeFlakyTest?: boolean,
+         *   shouldNotUseEfd?: boolean,
          *   cliArgs?: string
          * }} [options]
          */
@@ -404,6 +432,7 @@ versions.forEach((version) => {
           shouldFailSometimes,
           isDisabled,
           shouldIncludeFlakyTest,
+          shouldNotUseEfd,
           cliArgs = 'attempt-to-fix-test.js',
         } = {}) => {
           const testAssertionsPromise = getTestAssertions(receiver, {
@@ -413,6 +442,7 @@ versions.forEach((version) => {
             isDisabled,
             isQuarantined,
             shouldIncludeFlakyTest,
+            shouldNotUseEfd,
           })
           let stdout = ''
           let proc
@@ -589,6 +619,47 @@ versions.forEach((version) => {
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
           await runAttemptToFixTest(receiver, { isAttemptingToFix: true, isQuarantined: true })
+        })
+
+        it('does not run EFD for a new attempt to fix test', async (receiver) => {
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'attempt-to-fix-test.js': {
+                  tests: {
+                    'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true,
+                      },
+                    },
+                    'attempt to fix should attempt to fix passed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+          receiver.setKnownTests({ playwright: {} })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 2 },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
+
+          await runAttemptToFixTest(receiver, {
+            isAttemptingToFix: true,
+            isQuarantined: true,
+            shouldNotUseEfd: true,
+          })
         })
 
         it('ignores disabled when attempting to fix a test', async (receiver) => {
@@ -1075,16 +1146,89 @@ versions.forEach((version) => {
           })
         })
 
+        const runQuarantineMustFailTest = async (receiver, {
+          cliArgs = 'quarantine-test.js',
+          extraEnvVars,
+        }) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          let testOutput = ''
+          let proc
+          try {
+            proc = exec(
+              `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  PW_BASE_URL: `http://localhost:${webAppPort}`,
+                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                  ...extraEnvVars,
+                },
+              }
+            )
+            proc.stdout?.on('data', data => { testOutput += data.toString() })
+            proc.stderr?.on('data', data => { testOutput += data.toString() })
+
+            const eventsPromise = receiver
+              .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'fail', testOutput)
+              }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
+
+            const [[exitCode]] = await Promise.all([
+              once(proc, 'exit'),
+              once(proc.stdout, 'end'),
+              once(proc.stderr, 'end'),
+              eventsPromise,
+            ])
+            assert.strictEqual(exitCode, 1, testOutput)
+          } finally {
+            proc?.kill()
+          }
+        }
+
+        for (const hook of ['BEFORE', 'AFTER']) {
+          it(`does not quarantine a ${hook.toLowerCase()}All failure in the quarantined suite`, async (receiver) => {
+            await runQuarantineMustFailTest(receiver, {
+              extraEnvVars: { [`FAIL_QUARANTINE_${hook}_ALL`]: '1' },
+            })
+          })
+        }
+
+        it('does not quarantine an expected failure that unexpectedly passes', async (receiver) => {
+          await runQuarantineMustFailTest(receiver, {
+            extraEnvVars: { EXPECTED_FAILURE_PASSES: '1' },
+          })
+        })
+
+        it('does not quarantine a failure caused by failOnFlakyTests', async (receiver) => {
+          await runQuarantineMustFailTest(receiver, {
+            cliArgs: 'quarantine-test.js attempt-to-fix-test.js --retries=1',
+            extraEnvVars: {
+              FAIL_ON_FLAKY_TESTS: '1',
+              SHOULD_ALWAYS_PASS: '1',
+              SHOULD_INCLUDE_FLAKY_TEST: '1',
+            },
+          })
+        })
+
         const runEfdQuarantineTest = async (receiver, {
           shouldUseCustomReporter = false,
           shouldFailBeforeAll = false,
           shouldFailGlobalTeardown = false,
           shouldReachMaxFailures = false,
           shouldPassRetries = false,
+          shouldIncludeDisabledAttemptToFix = false,
         } = {}) => {
           const numRetries = 3
           receiver.setKnownTests({ playwright: {} })
-          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+          receiver.setTestManagementTests(shouldIncludeDisabledAttemptToFix
+            ? QUARANTINE_WITH_DISABLED_ATF_MANAGEMENT_TESTS
+            : QUARANTINE_MANAGEMENT_TESTS)
           receiver.setSettings({
             known_tests_enabled: true,
             early_flake_detection: {
@@ -1097,7 +1241,10 @@ versions.forEach((version) => {
               },
               faulty_session_threshold: 100,
             },
-            test_management: { enabled: true },
+            test_management: {
+              enabled: true,
+              ...(shouldIncludeDisabledAttemptToFix ? { attempt_to_fix_retries: 0 } : {}),
+            },
           })
 
           let testOutput = ''
@@ -1196,6 +1343,13 @@ versions.forEach((version) => {
 
         it('does not quarantine tests skipped after max failures is reached', async (receiver) => {
           await runEfdQuarantineTest(receiver, { shouldReachMaxFailures: true })
+        })
+
+        it('does not quarantine disabled attempt to fix tests skipped after max failures', async (receiver) => {
+          await runEfdQuarantineTest(receiver, {
+            shouldReachMaxFailures: true,
+            shouldIncludeDisabledAttemptToFix: true,
+          })
         })
 
         it('quarantines failures when a hook passes on a native retry', async (receiver) => {
