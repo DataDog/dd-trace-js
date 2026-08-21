@@ -418,6 +418,7 @@ export interface GeneratedConfig {
       endpoint: string | undefined;
       maxContentSize: number;
       maxMessagesLength: number;
+      redactionEnabled: boolean;
       timeout: number;
     };
     appsec: {
@@ -614,6 +615,7 @@ export interface GeneratedEnvVarConfig {
   DD_AI_GUARD_ENDPOINT: string | undefined;
   DD_AI_GUARD_MAX_CONTENT_SIZE: number;
   DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
+  DD_AI_GUARD_REDACTION_ENABLED: boolean;
   DD_AI_GUARD_TIMEOUT: number;
   DD_API_KEY: string | undefined;
   DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;

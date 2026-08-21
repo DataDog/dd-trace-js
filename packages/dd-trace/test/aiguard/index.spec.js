@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { rejects } = require('node:assert/strict')
-const { inspect } = require('node:util')
+const { inspect, isDeepStrictEqual } = require('node:util')
 
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -29,6 +29,7 @@ const {
   ERROR_TYPE_CLIENT,
   ERROR_TYPE_STATUS,
   ERROR_TYPE_RESPONSE,
+  ERROR_TYPE_REDACTION,
 } = require('../../src/aiguard/tags')
 
 describe('AIGuard SDK', () => {
@@ -45,13 +46,14 @@ describe('AIGuard SDK', () => {
         endpoint: 'https://aiguard.com',
         maxMessagesLength: 16,
         maxContentSize: 512 * 1024,
+        redactionEnabled: true,
         timeout: 10_000,
       },
     },
   }
   let tracer
   let aiguard
-  let count, inc
+  let count
 
   const toolCall = [
     { role: 'system', content: 'You are a beautiful AI assistant' },
@@ -89,10 +91,7 @@ describe('AIGuard SDK', () => {
     originalFetch = global.fetch
     global.fetch = sinon.stub()
 
-    inc = sinon.spy()
-    count = sinon.stub(aiguardMetrics, 'count').returns({
-      inc,
-    })
+    count = sinon.stub(aiguardMetrics, 'count').callsFake(() => ({ inc: sinon.spy() }))
     aiguardMetrics.metrics.clear()
 
     aiguard = new AIGuard(tracer, config)
@@ -114,6 +113,18 @@ describe('AIGuard SDK', () => {
         json: sinon.stub().resolves(options.body),
       })
     }
+  }
+
+  const mockDeferredFetch = () => {
+    let resolveFetch
+    global.fetch.callsFake(() => new Promise(resolve => {
+      resolveFetch = resolve
+    }))
+
+    return options => resolveFetch({
+      status: options.status ?? 200,
+      json: sinon.stub().resolves(options.body),
+    })
   }
 
   const assertFetch = (messages, url) => {
@@ -152,8 +163,19 @@ describe('AIGuard SDK', () => {
 
   const sdkTags = { source: SOURCE_SDK, integration: INTEGRATION_NONE }
 
-  const assertTelemetry = (metric, tags) => {
-    sinon.assert.calledWith(count, metric, tags)
+  const assertTelemetry = (metric, tags, incAmount = 1) => {
+    if (metric === 'requests' && tags.error === false && !Object.hasOwn(tags, 'redacted')) {
+      tags = { ...tags, redacted: false }
+    }
+    const metricCalls = count.getCalls().filter(call =>
+      call.args[0] === metric && isDeepStrictEqual(call.args[1], tags)
+    )
+    assert.strictEqual(
+      metricCalls.length,
+      1,
+      `Expected one telemetry count(${inspect(metric)}, ${inspect(tags)}), got ${metricCalls.length}`
+    )
+    sinon.assert.calledOnceWithExactly(metricCalls[0].returnValue.inc, incAmount)
   }
 
   const testSuite = [
@@ -194,6 +216,8 @@ describe('AIGuard SDK', () => {
           assert.strictEqual(evaluation.tagProbabilities, attributes.tag_probs)
         }
         assert.deepStrictEqual(evaluation.sds, [])
+        assert.notStrictEqual(evaluation.messages, messages)
+        assert.deepStrictEqual(evaluation.messages, messages)
       }
 
       assertTelemetry('requests', { action, error: false, block: shouldBlock, ...sdkTags })
@@ -236,6 +260,8 @@ describe('AIGuard SDK', () => {
       } else {
         const evaluation = await aiguard.evaluate(prompt, opts)
         assert.strictEqual(evaluation.action, 'DENY')
+        assert.notStrictEqual(evaluation.messages, prompt)
+        assert.deepStrictEqual(evaluation.messages, prompt)
       }
 
       assertTelemetry('requests', { error: false, action: 'DENY', block: shouldBlock, ...sdkTags })
@@ -277,6 +303,8 @@ describe('AIGuard SDK', () => {
     const result = await aiguard.evaluate(messages)
 
     assert.deepStrictEqual(result.sds, sdsFindings)
+    assert.notStrictEqual(result.messages, messages)
+    assert.deepStrictEqual(result.messages, messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       { messages, sds: sdsFindings }
@@ -296,10 +324,355 @@ describe('AIGuard SDK', () => {
     const result = await aiguard.evaluate(messages)
 
     assert.deepStrictEqual(result.sds, [])
+    assert.notStrictEqual(result.messages, messages)
+    assert.deepStrictEqual(result.messages, messages)
+    assert.deepStrictEqual(result.redactionReplacements, [])
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       { messages }
     )
+  })
+
+  it('returns redacted messages and reports them in meta-struct without mutating the input', async () => {
+    const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
+    const redactionReplacements = [
+      { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
+    ]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            reason: 'Sensitive data redacted.',
+            redaction_replacements: redactionReplacements,
+            is_blocking_enabled: true,
+          },
+        },
+      },
+    })
+
+    const result = await aiguard.evaluate(messages)
+
+    assert.notStrictEqual(result.messages, messages)
+    assert.deepStrictEqual(result.messages, [{ role: 'user', content: 'My SSN is <REDACTED>' }])
+    assert.deepStrictEqual(result.redactionReplacements, redactionReplacements)
+    assert.strictEqual(messages[0].content, 'My SSN is 123-45-6789')
+    assertFetch(messages)
+    assertTelemetry('requests', {
+      action: 'ALLOW',
+      error: false,
+      block: false,
+      redacted: true,
+      ...sdkTags,
+    })
+    await assertAIGuardSpan(
+      { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW', 'ai_guard.redacted': 'true' },
+      { messages: [{ role: 'user', content: 'My SSN is <REDACTED>' }] }
+    )
+  })
+
+  it('uses one message snapshot when the caller mutates messages while evaluation is pending', async () => {
+    const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
+    const originalMessages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
+    const callerMutation = { role: 'system', content: 'Caller mutation' }
+    const resolveFetch = mockDeferredFetch()
+
+    const evaluation = aiguard.evaluate(messages)
+    messages.unshift(callerMutation)
+    resolveFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            redaction_replacements: [
+              { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
+            ],
+          },
+        },
+      },
+    })
+
+    const result = await evaluation
+
+    assertFetch(originalMessages)
+    assert.deepStrictEqual(result.messages, [{ role: 'user', content: 'My SSN is <REDACTED>' }])
+    assert.deepStrictEqual(messages, [callerMutation, ...originalMessages])
+    await assertAIGuardSpan(
+      { 'ai_guard.redacted': 'true' },
+      { messages: [{ role: 'user', content: 'My SSN is <REDACTED>' }] }
+    )
+  })
+
+  it('returns complete redacted messages while truncating only the meta-struct copy', async () => {
+    const maxContentSize = 12
+    const atLimit = 'A'.repeat(maxContentSize)
+    const limited = new AIGuard(tracer, {
+      ...config,
+      experimental: {
+        ...config.experimental,
+        aiguard: { ...config.experimental.aiguard, maxContentSize },
+      },
+    })
+    const messages = [{
+      role: 'user',
+      content: [
+        { type: 'input_text', text: 'My SSN is 123-45-6789' },
+        { type: 'input_text', text: atLimit },
+        { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
+      ],
+    }]
+    const replacement = 'My SSN is <REDACTED>'
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            redaction_replacements: [{ path: 'messages[0].content[0].text', replacement }],
+          },
+        },
+      },
+    })
+
+    const result = await limited.evaluate(messages)
+
+    assert.deepStrictEqual(result.messages, [{
+      role: 'user',
+      content: [
+        { type: 'input_text', text: replacement },
+        { type: 'input_text', text: atLimit },
+        { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
+      ],
+    }])
+    assertTelemetry('truncated', { type: 'content', ...sdkTags })
+    assert.strictEqual(count.getCalls().filter(call => call.args[0] === 'truncated').length, 1)
+    await assertAIGuardSpan(
+      { 'ai_guard.redacted': 'true' },
+      {
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'input_text', text: replacement.slice(0, maxContentSize) },
+            { type: 'input_text', text: '' },
+            { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
+          ],
+        }],
+      }
+    )
+  })
+
+  it('skips nullish structured content parts when reporting a successful evaluation', async () => {
+    const messages = [{
+      role: 'user',
+      content: [
+        null,
+        undefined,
+        { type: 'input_text', text: 'Describe this image' },
+        { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
+      ],
+    }]
+    mockFetch({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
+    })
+
+    const result = await aiguard.evaluate(messages)
+
+    assert.deepStrictEqual(result.messages, messages)
+    assertFetch(messages)
+    await assertAIGuardSpan(
+      { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
+      {
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'Describe this image' },
+            { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
+          ],
+        }],
+      }
+    )
+  })
+
+  it('redacts blocked payloads in meta-struct without adding messages to the abort error', async () => {
+    const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'DENY',
+            reason: 'Sensitive data blocked.',
+            redaction_replacements: [
+              { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
+            ],
+            is_blocking_enabled: true,
+          },
+        },
+      },
+    })
+
+    await rejects(
+      () => aiguard.evaluate(messages),
+      err => err.name === 'AIGuardAbortError' && !Object.hasOwn(err, 'messages')
+    )
+
+    await assertAIGuardSpan(
+      {
+        'ai_guard.action': 'DENY',
+        'ai_guard.blocked': 'true',
+        'ai_guard.redacted': 'true',
+        'error.type': 'AIGuardAbortError',
+      },
+      { messages: [{ role: 'user', content: 'My SSN is <REDACTED>' }] }
+    )
+  })
+
+  it('reports malformed replacements and applies valid siblings', async () => {
+    const messages = [
+      { role: 'system', content: 'ops@acme.io' },
+      { role: 'user', content: '123-45-6789' },
+    ]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            redaction_replacements: [
+              { path: 'messages[0].content', replacement: '<REDACTED>' },
+              { path: 'messages[8].content', replacement: 'missing' },
+              { path: 'messages.invalid.content', replacement: 'malformed' },
+            ],
+          },
+        },
+      },
+    })
+
+    const result = await aiguard.evaluate(messages)
+
+    assert.deepStrictEqual(result.messages, [
+      { role: 'system', content: '<REDACTED>' },
+      { role: 'user', content: '123-45-6789' },
+    ])
+    assertTelemetry('error', { type: ERROR_TYPE_REDACTION, ...sdkTags }, 2)
+    assertTelemetry('requests', {
+      action: 'ALLOW',
+      error: false,
+      block: false,
+      redacted: true,
+      ...sdkTags,
+    })
+    await assertAIGuardSpan(
+      { 'ai_guard.redacted': 'true' },
+      {
+        messages: [
+          { role: 'system', content: '<REDACTED>' },
+          { role: 'user', content: '123-45-6789' },
+        ],
+      }
+    )
+  })
+
+  it('reports originals when every replacement fails', async () => {
+    const messages = [{ role: 'user', content: '123-45-6789' }]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            tags: ['pii'],
+            sds_findings: [{ category: 'pii', matched_text: '123-45-6789' }],
+            redaction_replacements: [{ path: 'messages[8].content', replacement: '<REDACTED>' }],
+          },
+        },
+      },
+    })
+
+    const result = await aiguard.evaluate(messages)
+
+    assert.deepStrictEqual(result.messages, messages)
+    assert.deepStrictEqual(result.sds, [{ category: 'pii', matched_text: '123-45-6789' }])
+    assertTelemetry('error', { type: ERROR_TYPE_REDACTION, ...sdkTags })
+    assertTelemetry('requests', {
+      action: 'ALLOW',
+      error: false,
+      block: false,
+      redacted: false,
+      ...sdkTags,
+    })
+    await assertAIGuardSpan(
+      { 'ai_guard.redacted': 'false' },
+      {
+        messages,
+        attack_categories: ['pii'],
+        sds: [{ category: 'pii', matched_text: '123-45-6789' }],
+      }
+    )
+  })
+
+  it('reports a falsy non-array replacement collection as a redaction error', async () => {
+    const messages = [{ role: 'user', content: '123-45-6789' }]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            redaction_replacements: false,
+          },
+        },
+      },
+    })
+
+    const result = await aiguard.evaluate(messages)
+
+    assert.deepStrictEqual(result.messages, messages)
+    assert.deepStrictEqual(result.redactionReplacements, [])
+    assertTelemetry('error', { type: ERROR_TYPE_REDACTION, ...sdkTags })
+    assertTelemetry('requests', {
+      action: 'ALLOW',
+      error: false,
+      block: false,
+      redacted: false,
+      ...sdkTags,
+    })
+    await assertAIGuardSpan(
+      { 'ai_guard.redacted': 'false' },
+      { messages }
+    )
+  })
+
+  it('keeps originals and omits redaction tags when the kill-switch is off', async () => {
+    const disabled = new AIGuard(tracer, {
+      ...config,
+      experimental: {
+        ...config.experimental,
+        aiguard: { ...config.experimental.aiguard, redactionEnabled: false },
+      },
+    })
+    const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
+    const redactionReplacements = [
+      { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
+    ]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            redaction_replacements: redactionReplacements,
+          },
+        },
+      },
+    })
+
+    const result = await disabled.evaluate(messages)
+
+    assert.strictEqual(result.messages, messages)
+    assert.strictEqual(result.messages[0], messages[0])
+    assert.deepStrictEqual(result.messages, messages)
+    assert.deepStrictEqual(result.redactionReplacements, redactionReplacements)
+    const requestMetricCall = count.getCalls().find(call => call.args[0] === 'requests')
+    assert.ok(!Object.hasOwn(requestMetricCall.args[1], 'redacted'))
+    await agent.assertFirstTraceSpan(span => {
+      assert.ok(!Object.hasOwn(span.meta, 'ai_guard.redacted'))
+      assert.deepStrictEqual(msgpack.decode(span.meta_struct.ai_guard), { messages })
+    }, { rejectFirst: true })
   })
 
   it('test evaluate with sds_findings in abort error', async () => {
@@ -331,6 +704,14 @@ describe('AIGuard SDK', () => {
       () => aiguard.evaluate(messages, { block: true }),
       err => err.name === 'AIGuardAbortError' && JSON.stringify(err.sds) === JSON.stringify(sdsFindings)
     )
+    await assertAIGuardSpan(
+      { 'ai_guard.blocked': 'true', 'error.type': 'AIGuardAbortError' },
+      {
+        messages,
+        attack_categories: ['pii'],
+        sds: sdsFindings,
+      }
+    )
   })
 
   it('test evaluate with API error', async () => {
@@ -352,7 +733,30 @@ describe('AIGuard SDK', () => {
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError',
-    })
+    }, { messages: toolCall })
+  })
+
+  it('reports the message snapshot when a failed request settles after caller mutation', async () => {
+    const messages = [{ role: 'user', content: 'Original message' }]
+    const originalMessages = [{ role: 'user', content: 'Original message' }]
+    const callerMutation = { role: 'system', content: 'Caller mutation' }
+    const resolveFetch = mockDeferredFetch()
+
+    const evaluation = aiguard.evaluate(messages)
+    messages.unshift(callerMutation)
+    resolveFetch({ status: 503, body: { errors: [{ title: 'Unavailable' }] } })
+
+    await rejects(
+      () => evaluation,
+      err => err.name === 'AIGuardClientError' && err.message === 'AI Guard service call failed, status 503'
+    )
+
+    assertFetch(originalMessages)
+    assert.deepStrictEqual(messages, [callerMutation, ...originalMessages])
+    await assertAIGuardSpan(
+      { 'ai_guard.target': 'prompt', 'error.type': 'AIGuardClientError' },
+      { messages: originalMessages }
+    )
   })
 
   it('test evaluate with API exception', async () => {
@@ -372,7 +776,25 @@ describe('AIGuard SDK', () => {
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError',
-    })
+    }, { messages: toolCall })
+  })
+
+  it('does not mask a client error when structured content contains nullish parts', async () => {
+    const messages = [{ role: 'user', content: [null, { type: 'input_text', text: 'Are you sure?' }] }]
+    mockFetch({ error: new Error('Boom!!!') })
+
+    await rejects(
+      () => aiguard.evaluate(messages),
+      err => err.name === 'AIGuardClientError' && err.message === 'Unexpected error calling AI Guard service: Boom!!!'
+    )
+
+    assertTelemetry('requests', { error: true, ...sdkTags })
+    assertTelemetry('error', { type: ERROR_TYPE_CLIENT, ...sdkTags })
+    assertFetch(messages)
+    await assertAIGuardSpan(
+      { 'ai_guard.target': 'prompt', 'error.type': 'AIGuardClientError' },
+      { messages: [{ role: 'user', content: [{ type: 'input_text', text: 'Are you sure?' }] }] }
+    )
   })
 
   it('test evaluate with invalid JSON', async () => {
@@ -389,7 +811,7 @@ describe('AIGuard SDK', () => {
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError',
-    })
+    }, { messages: toolCall })
   })
 
   it('test evaluate with with missing action or response', async () => {
@@ -406,14 +828,16 @@ describe('AIGuard SDK', () => {
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError',
-    })
+    }, { messages: toolCall })
   })
 
   it('test noop implementation', async () => {
     const noop = new NoopAIGuard()
     const result = await noop.evaluate(prompt)
-    result.action === 'ALLOW'
-    result.reason === 'AI Guard is not enabled'
+    assert.strictEqual(result.action, 'ALLOW')
+    assert.strictEqual(result.reason, 'AI Guard is not enabled')
+    assert.strictEqual(result.messages, prompt)
+    assert.deepStrictEqual(result.redactionReplacements, [])
   })
 
   it('test message length truncation', async () => {
