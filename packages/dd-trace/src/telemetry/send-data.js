@@ -19,6 +19,7 @@ const log = require('../log')
  *   | 'app-endpoints'
  *   | 'generate-metrics'
  *   | 'distributions'
+ *   | 'sketches'
  *   | 'logs'
  *   | 'message-batch'} TelemetryRequestType
  */
