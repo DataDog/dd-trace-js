@@ -109,6 +109,20 @@ function describeWriter (protocolVersion) {
       writer.flush(done)
     })
 
+    it('routes flushes through the configured delivery tracker', (done) => {
+      const deliveryTracker = { track: sinon.spy((flush, done) => flush(done)) }
+      writer = new Writer({ url, prioritySampler, protocolVersion, deliveryTracker })
+
+      writer.flush(() => {
+        try {
+          sinon.assert.calledOnce(deliveryTracker.track)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
+    })
+
     it('should flush its traces to the agent, and call callback', (done) => {
       const expectedData = Buffer.from('prefixed')
 

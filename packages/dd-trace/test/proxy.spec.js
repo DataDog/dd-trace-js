@@ -47,6 +47,10 @@ describe('TracerProxy', () => {
   let NoopDogStatsDClient
   let OpenFeatureProvider
   let openfeatureProvider
+  let registerTelemetryFlusher
+  let initializeServerlessTelemetry
+  let supportsServerlessTelemetryRetention
+  let flushServerlessTelemetry
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -180,7 +184,13 @@ describe('TracerProxy', () => {
 
     runtimeMetrics = {
       start: sinon.spy(),
+      flush: sinon.spy(),
     }
+
+    registerTelemetryFlusher = sinon.stub().returns(() => {})
+    initializeServerlessTelemetry = sinon.spy()
+    supportsServerlessTelemetryRetention = sinon.stub().returns(true)
+    flushServerlessTelemetry = sinon.spy()
 
     profiler = {
       start: sinon.spy(),
@@ -269,6 +279,12 @@ describe('TracerProxy', () => {
       './flare': flare,
       './openfeature': openfeature,
       './openfeature/flagging_provider': OpenFeatureProvider,
+      './serverless': {
+        IS_SERVERLESS: false,
+        initializeServerlessTelemetry,
+        supportsServerlessTelemetryRetention,
+      },
+      './flush': { flushServerlessTelemetry, registerTelemetryFlusher },
     })
 
     proxy = new ProxyClass()
@@ -584,6 +600,39 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.called(runtimeMetrics.start)
+      })
+
+      it('registers the runtime metrics flush with the serverless lifecycle', () => {
+        config.runtimeMetrics.enabled = true
+        const done = sinon.spy()
+
+        proxy.init()
+        registerTelemetryFlusher.firstCall.args[0](done)
+
+        sinon.assert.calledOnceWithExactly(runtimeMetrics.flush, done)
+      })
+
+      it('registers Vercel telemetry retention when tracing is disabled', () => {
+        config.DD_TRACE_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.calledOnce(initializeServerlessTelemetry)
+        const telemetry = initializeServerlessTelemetry.firstCall.args[0]
+        assert.strictEqual(typeof telemetry.flushAll, 'function')
+        const done = sinon.spy()
+        telemetry.flushAll(done)
+        sinon.assert.calledOnceWithExactly(flushServerlessTelemetry, done, undefined)
+      })
+
+      it('does not create a lifecycle owner outside a retention platform', () => {
+        supportsServerlessTelemetryRetention.returns(false)
+        proxy = new ProxyClass()
+
+        proxy.init()
+
+        assert.strictEqual(proxy._serverlessTelemetry, undefined)
+        sinon.assert.calledWithExactly(initializeServerlessTelemetry, undefined)
       })
 
       it('should expose noop metrics methods prior to initialization', () => {

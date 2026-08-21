@@ -12,7 +12,8 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const { IS_SERVERLESS } = require('./serverless')
+const { IS_SERVERLESS, initializeServerlessTelemetry, supportsServerlessTelemetryRetention } = require('./serverless')
+const { flushServerlessTelemetry, registerTelemetryFlusher } = require('./flush')
 const processTags = require('./process-tags')
 const { isTrue } = require('./util')
 const {
@@ -100,6 +101,15 @@ class Tracer extends NoopProxy {
     this._pluginManager = new PluginManager(this)
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
+    // Logs and metrics can need retention even when tracing is disabled.
+    if (supportsServerlessTelemetryRetention()) {
+      this._serverlessTelemetry = {
+        flushAll: (done, options) => {
+          if (typeof this._tracer?.flushAll === 'function') this._tracer.flushAll(done, options)
+          else flushServerlessTelemetry(done, options)
+        },
+      }
+    }
     this._flare = new LazyModule(() => require('./flare'))
     this.setBaggageItem = setBaggageItem
     this.getBaggageItem = getBaggageItem
@@ -255,6 +265,9 @@ class Tracer extends NoopProxy {
 
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
+        // Agent trace response metrics are recorded asynchronously, so drain
+        // runtime metrics after the trace export has completed.
+        registerTelemetryFlusher(done => runtimeMetrics.flush(done), { afterTrace: true })
       }
 
       this.#updateTracing(config)
@@ -393,6 +406,8 @@ class Tracer extends NoopProxy {
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
     }
+
+    initializeServerlessTelemetry(this._serverlessTelemetry)
   }
 
   /**

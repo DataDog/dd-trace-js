@@ -4,6 +4,7 @@ const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config/helper')
+const { createServerlessDeliveryTracker } = require('../../serverless')
 
 const logger = require('../../log')
 
@@ -33,6 +34,9 @@ class LLMObsBuffer {
 
 class BaseLLMObsWriter {
   #destroyer
+  /** @type {Function[]} */
+  #pendingFlushes = []
+  #serverlessDeliveryTracker = createServerlessDeliveryTracker()
   /** @type {Map<string, LLMObsBuffer>} */
   #multiTenantBuffers = new Map()
 
@@ -111,35 +115,52 @@ class BaseLLMObsWriter {
     return true
   }
 
-  flush () {
+  /**
+   * Drains buffered events and joins requests active at this flush boundary.
+   * @param {Function} [done]
+   */
+  flush (done) {
     if (this._agentless == null) {
+      if (done) this.#pendingFlushes.push(done)
       return
     }
 
-    // Flush default buffer
+    const requests = this.#drainBuffers()
+    if (!this.#serverlessDeliveryTracker) {
+      // Only invocation-retaining platforms need completion-aware delivery.
+      for (const request of requests) this.#sendSafely(request)
+      done?.()
+      return
+    }
+
+    for (const request of requests) this.#sendSafely(request)
+    this.#serverlessDeliveryTracker.waitForIdle(done)
+  }
+
+  #sendSafely (requestToSend) {
+    try {
+      if (this.#serverlessDeliveryTracker) {
+        this.#serverlessDeliveryTracker.track(done => this.#send(requestToSend, done))
+      } else {
+        this.#send(requestToSend)
+      }
+    } catch (error) {
+      logger.error('Failed to send LLMObs %s events: %s', this._eventType, error.message)
+    }
+  }
+
+  #drainBuffers () {
+    const requests = []
     if (this._buffer.events.length > 0) {
       const events = this._buffer.events
       this._buffer.clear()
-
-      const payload = this._encode(this.makePayload(events))
-
-      log.debug('Encoded LLMObs payload: %s', payload)
-
-      const options = this._getOptions()
-
-      request(payload, options, (err, resp, code) => {
-        parseResponseAndLog(err, code, events.length, this.url, this._eventType)
-      })
+      requests.push({ events, options: this._getOptions(), url: this.url })
     }
 
-    // Flush multi-tenant buffers
     for (const [apiKey, buffer] of this.#multiTenantBuffers) {
       if (buffer.events.length === 0) continue
-
       const events = buffer.events
       buffer.clear()
-
-      const payload = this._encode(this.makePayload(events))
       const site = buffer.routing.site || this._config.site
       const options = {
         headers: {
@@ -156,16 +177,21 @@ class BaseLLMObsWriter {
       }
       const url = this.#buildUrl(options.url.href, options.path)
       const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
-
       log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
-      log.debug('Encoded LLMObs payload: %s', payload)
-
-      request(payload, options, (err, resp, code) => {
-        parseResponseAndLog(err, code, events.length, url, this._eventType)
-      })
+      requests.push({ events, options, url })
     }
 
     this.#cleanupEmptyBuffers()
+    return requests
+  }
+
+  #send ({ events, options, url }, done) {
+    const payload = this._encode(this.makePayload(events))
+    log.debug('Encoded LLMObs payload: %s', payload)
+    request(payload, options, (err, resp, code) => {
+      parseResponseAndLog(err, code, events.length, url, this._eventType)
+      done?.()
+    })
   }
 
   #cleanupEmptyBuffers () {
@@ -178,13 +204,19 @@ class BaseLLMObsWriter {
 
   makePayload (events) {}
 
-  destroy () {
+  /**
+   * Stops periodic flushing and drains buffered events.
+   * @param {Function} [done] Called after queued and active deliveries complete.
+   */
+  destroy (done) {
     if (this.#destroyer) {
       logger.debug(`Stopping ${this.constructor.name}`)
       clearInterval(this._periodic)
       globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
-      this.flush()
+      this.flush(done)
       this.#destroyer = undefined
+    } else {
+      done?.()
     }
   }
 
@@ -196,6 +228,10 @@ class BaseLLMObsWriter {
     this._endpoint = endpoint
 
     logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
+
+    const pendingFlushes = this.#pendingFlushes
+    this.#pendingFlushes = []
+    for (const done of pendingFlushes) this.flush(done)
   }
 
   _getUrlAndPath () {
