@@ -81,10 +81,10 @@ describe('Dynamic Instrumentation', function () {
         t.agent.addRemoteConfig(rcConfig1)
         t.agent.addRemoteConfig(rcConfig2)
 
-        function done (err) {
+        function done (error) {
           if (isDone) return
           isDone = true
-          _done(err)
+          _done(error)
         }
       })
     })

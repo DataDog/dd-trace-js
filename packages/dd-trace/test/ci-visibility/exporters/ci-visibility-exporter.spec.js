@@ -26,6 +26,8 @@ const { uploadCoverageReport: actualUploadCoverageReportRequest } =
 const { uploadTestScreenshot: actualUploadTestScreenshotRequest } =
   require('../../../src/ci-visibility/requests/upload-test-screenshot')
 
+const sketchesJsPath = require.resolve('../../../../../vendor/dist/@datadog/sketches-js')
+
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
 let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
 let formatSpan = actualSpanFormat
@@ -67,7 +69,13 @@ describe('CI Visibility Exporter', () => {
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
     sinon.stub(cp, 'execFileSync').returns('false')
-    sinon.stub(fs, 'readFileSync').returns('')
+    const readFileSync = fs.readFileSync
+    sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
+      if (filename === sketchesJsPath) {
+        return readFileSync.call(fs, filename, ...args)
+      }
+      return ''
+    })
     const config = getConfig()
     originalApiKey = config.DD_API_KEY
     config.DD_API_KEY = '1'

@@ -3,6 +3,7 @@
 const assert = require('assert')
 describe('mocha-test-skip-describe', () => {
   before(function () {
+    // This suite-level skip is fixture input for Test Optimization status reporting.
     this.skip()
   })
 
