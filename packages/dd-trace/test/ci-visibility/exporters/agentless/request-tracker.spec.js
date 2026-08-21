@@ -32,7 +32,9 @@ describe('Test Optimization request tracker', () => {
 
   function getWriter () {
     const writer = new BaseWriter({ url: 'http://localhost' })
-    const requestTracker = new TestOptimizationRequestTracker(writer)
+    const requestTracker = new TestOptimizationRequestTracker(
+      (done, options) => BaseWriter.prototype.flush.call(writer, done, options)
+    )
     writer._encoder = {
       count: sinon.stub(),
       makePayload: sinon.stub().returns(Buffer.from('payload')),

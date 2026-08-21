@@ -18,7 +18,9 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
   // TODO: what's a good value for timeout for the logs intake?
   constructor ({ url, timeout = 15_000, isAgentProxy = false }) {
     super(...arguments)
-    this.#requestTracker = new TestOptimizationRequestTracker(this)
+    this.#requestTracker = new TestOptimizationRequestTracker(
+      (done, options) => BaseWriter.prototype.flush.call(this, done, options)
+    )
     this._url = url
     this._encoder = new JSONEncoder()
     this._isAgentProxy = isAgentProxy

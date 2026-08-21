@@ -24,7 +24,9 @@ class Writer extends BaseWriter {
 
   constructor ({ url, tags, evpProxyPrefix = '' }) {
     super(...arguments)
-    this.#requestTracker = new TestOptimizationRequestTracker(this)
+    this.#requestTracker = new TestOptimizationRequestTracker(
+      (done, options) => BaseWriter.prototype.flush.call(this, done, options)
+    )
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
     this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
