@@ -28,7 +28,46 @@ ruleTester.run('eslint-carrier-fields', rule, {
       options: [{ strictCarrierIdentifiers: true }],
     },
     {
+      code: 'const { readDatadogTraceId } = require("../carrier"); ' +
+        'function extractDatadog (carrier) { return readDatadogTraceId(carrier) } extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
+      code: 'const { readDatadogTraceId } = require("../carrier"); ' +
+        'function extractDatadog (carrier) { function identity (carrier) { return carrier } ' +
+        'return readDatadogTraceId(carrier) } extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
       code: 'function extract (carrier) { if (carrier === null) return }',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
+      code: 'let value = carrier; value = input; readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
+      code: 'let value = carrier; if (condition) { value = input } else { value = {} } readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
+      code: 'let value = carrier; do { value = input } while (condition); readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
+      code: 'function extractDatadog (carrier) { let value = carrier; value = input; ' +
+        'return readSingleton(value, key) } extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
+      code: 'function extractDatadog (carrier) { let value = carrier; value = input; return value } ' +
+        'extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
+      code: 'let first = carrier; first += 1; let second = carrier; second++; ' +
+        'let third = carrier; third &&= input; ' +
+        'readSingleton(first, key); readSingleton(second, key); readSingleton(third, key)',
       options: [{ strictCarrierIdentifiers: true }],
     },
     { code: 'carrier ??= {}', options: [{ strictCarrierIdentifiers: true }] },
@@ -192,6 +231,99 @@ ruleTester.run('eslint-carrier-fields', rule, {
     },
     {
       code: 'readSingleton(carrier, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function extractDatadog (carrier) { return carrier[key] } extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function identity (carrier) { return carrier } const value = identity(carrier); readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function identity (carrier) { if (condition) return carrier } identity(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function extractDatadog (carrier) {} extractDatadog = readSingleton; extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function extractDatadog (value) { return value[key] } extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function extractDatadog (carrier) { const value = carrier; return readSingleton(value, key) } ' +
+        'extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function extractDatadog (carrier) { let value; value = carrier; return readSingleton(value, key) } ' +
+        'extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'let value = carrier; if (condition) value = input; readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'let value = carrier; while (condition) value = input; readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'let value = input; if (condition) value = carrier; readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'let value = carrier; value ??= input; readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function extract (carrier) { return; const value = carrier; readSingleton(value, key) }',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function identity (carrier) { let value = carrier; if (condition) value = input; return value } ' +
+        'identity(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'const value = input || carrier; readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'const value = condition ? carrier : input; readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'const value = condition ? input : carrier; readSingleton(value, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'const extractDatadog = () => {}; extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function extractDatadog (carrier) {} extractDatadog(...carrier)',
       options: [{ strictCarrierIdentifiers: true }],
       errors: [{ messageId: 'noDirectCarrierAccess' }],
     },

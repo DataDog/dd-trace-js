@@ -19,11 +19,11 @@ const propagator = new TextMapPropagator({
     extract: ['datadog', 'tracecontext', 'baggage'],
     inject: ['datadog', 'tracecontext', 'baggage'],
   },
-  legacyBaggageEnabled: false,
+  legacyBaggageEnabled: true,
   baggageMaxItems: 64,
   baggageMaxBytes: 8192,
   DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512,
-  tracePropagationExtractFirst: false,
+  DD_TRACE_PROPAGATION_EXTRACT_FIRST: false,
   DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
   baggageTagKeys: ['user.id', 'session.id', 'account.id'],
 })
