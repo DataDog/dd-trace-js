@@ -790,6 +790,49 @@ describe('request', function () {
     })
   })
 
+  it('tracks concurrent payload sizes independently when options are shared', () => {
+    const requests = []
+
+    /**
+     * @returns {EventEmitter} Pending request
+     */
+    function createRequest () {
+      const pending = new EventEmitter()
+      pending.setTimeout = sinon.stub()
+      pending.write = sinon.stub()
+      pending.end = sinon.stub()
+      requests.push(pending)
+
+      return pending
+    }
+
+    const accountingRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const large = Buffer.alloc(63 * 1024 * 1024)
+    const small = Buffer.alloc(1024 * 1024)
+    const options = { method: 'POST', headers: {} }
+
+    accountingRequest(large, options, sinon.stub())
+    accountingRequest(small, options, sinon.stub())
+    requests[0].emit('close')
+    requests[1].emit('close')
+
+    accountingRequest(large, options, sinon.stub())
+
+    assert.strictEqual(accountingRequest.writable, true)
+    requests[2].emit('close')
+  })
+
   it('should drop requests when too much data is buffered', (done) => {
     const bufferSize = 8 * 1024 * 1024
     const buffer = Buffer.alloc(bufferSize).fill(69)
@@ -820,14 +863,15 @@ describe('request', function () {
             'Content-Type': 'application/octet-stream',
           },
         },
-        (err, res) => {
-          if (err) return done(err)
-
-          if (res) {
-            assert.strictEqual(res, 'OK')
-            okCount++
-          } else {
+        (error, res, statusCode, headers, dropped) => {
+          if (error) {
+            assert.strictEqual(error.code, 'ERR_DD_REQUEST_BUFFER_FULL')
+            assert.strictEqual(dropped, true)
             koCount++
+          } else {
+            assert.strictEqual(res, 'OK')
+            assert.strictEqual(dropped, undefined)
+            okCount++
           }
 
           if (okCount + koCount === 10) {
