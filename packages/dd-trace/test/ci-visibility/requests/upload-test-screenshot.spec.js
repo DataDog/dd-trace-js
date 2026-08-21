@@ -40,9 +40,9 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     )
 
     assert.ok(requestStub.calledOnce)
-    const [bodyFactory, { path, headers, deadline, signal }] = requestStub.getCall(0).args
+    const [bodyFactory, { path, headers, deadline, retryHttpErrors, signal }] = requestStub.getCall(0).args
     const query = new URL(path, 'http://localhost:8126').searchParams
-    return { bodyFactory, path, headers, query, deadline, signal }
+    return { bodyFactory, path, headers, query, deadline, retryHttpErrors, signal }
   }
 
   before(() => {
@@ -92,6 +92,13 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
 
       assert.strictEqual(requestOptions.deadline, deadline)
       assert.strictEqual(requestOptions.signal, abortController.signal)
+    })
+
+    it('enables HTTP retries without requiring a finalization deadline', () => {
+      const { deadline, retryHttpErrors } = uploadForFile('screenshot.png')
+
+      assert.strictEqual(deadline, undefined)
+      assert.strictEqual(retryHttpErrors, true)
     })
 
     it('streams the file with its known content length instead of buffering it', () => {

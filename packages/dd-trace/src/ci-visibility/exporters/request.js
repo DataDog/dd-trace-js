@@ -161,7 +161,7 @@ function requestBuffered (data, options, callback) {
       }
 
       const responseStatus = statusCode ?? error.status
-      const isRetriableHttpError = options.deadline !== undefined &&
+      const isRetriableHttpError = (options.deadline !== undefined || options.retryHttpErrors === true) &&
         (responseStatus === 429 || responseStatus >= 500)
       if (options.retry === false || (attemptIndex >= getMaxAttempts(attemptOptions) &&
         (isRetriableNetworkError(error) || isRetriableHttpError))) {
@@ -178,7 +178,7 @@ function requestBuffered (data, options, callback) {
       if (responseStatus === 429) {
         const resetDelay = getRateLimitResetDelay(headers)
         if (Number.isFinite(resetDelay)) {
-          const retryRemaining = options.deadline - Date.now()
+          const retryRemaining = options.deadline === undefined ? Infinity : options.deadline - Date.now()
           if (resetDelay > RATE_LIMIT_MAX_WAIT_MS || resetDelay >= retryRemaining) {
             complete(error, result, statusCode, headers)
             return

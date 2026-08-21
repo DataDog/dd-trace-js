@@ -150,6 +150,7 @@ function uploadTestMedia (options, callback) {
       'Content-Type': contentType,
     },
     path: `${basePath}?${query}`,
+    retryHttpErrors: true,
     timeout: UPLOAD_TIMEOUT_MS,
     url,
     deadline,
