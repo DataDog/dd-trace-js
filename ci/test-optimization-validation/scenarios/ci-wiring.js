@@ -184,12 +184,13 @@ function runCiWiring ({ manifest, framework, projectFileSources }) {
   }
 
   if (resolution.status !== 'confirmed') {
-    const visibleFacts = []
+    let visibleFacts = ''
     if (initialization.status === 'missing') {
-      visibleFacts.push('The selected job has no visible dd-trace/ci/init preload.')
+      visibleFacts = 'The selected job has no visible dd-trace/ci/init preload.'
     }
     if (ciFacts.transport.status === 'missing') {
-      visibleFacts.push('The recorded review found no visible Datadog Agent or agentless reporting transport.')
+      if (visibleFacts) visibleFacts += ' '
+      visibleFacts += 'The recorded review found no visible Datadog Agent or agentless reporting transport.'
     }
     const recommendation = /working directory/i.test(resolution.reason)
       ? 'Keep the CI job\'s actual working directory. Resolve the repository-root wrapper to the selected test ' +
@@ -199,7 +200,7 @@ function runCiWiring ({ manifest, framework, projectFileSources }) {
     return getIncomplete(
       framework,
       'The CI audit remains incomplete because the selected command could not be resolved to the ' +
-        `${framework.framework} runner: ${resolution.reason}. ${visibleFacts.join(' ')}`.trim(),
+        `${framework.framework} runner: ${resolution.reason}. ${visibleFacts}`.trim(),
       {
         ...evidence,
         recommendation,

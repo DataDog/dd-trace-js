@@ -33,11 +33,12 @@ class ExternalLogger {
   }
 
   static tagString (tags) {
-    const tagArray = []
+    let tagString = ''
     for (const key in tags) {
-      tagArray.push(key + ':' + tags[key])
+      if (tagString) tagString += ','
+      tagString += key + ':' + tags[key]
     }
-    return tagArray.join(',')
+    return tagString
   }
 
   // Parses and enqueues a log

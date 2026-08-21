@@ -56,16 +56,17 @@ function strategiesToCallbackMode (strategies, callbackMode) {
 function buildExportCommand (exporters, tags) {
   const tagString = [...Object.entries(tags),
     ['snapshot', snapshotKinds.ON_OUT_OF_MEMORY]].map(([key, value]) => `${key}:${value}`).join(',')
-  const urls = []
+  let urls = ''
   for (const exporter of exporters) {
     const url = exporter.getExportUrl()
     if (url !== undefined) {
-      urls.push(url.toString())
+      if (urls) urls += ','
+      urls += url.toString()
     }
   }
   return [process.execPath,
     path.join(__dirname, 'exporter_cli.js'),
-    urls.join(','), tagString, 'space']
+    urls, tagString, 'space']
 }
 
 module.exports = { oomExportStrategies, ensureOOMExportStrategies, strategiesToCallbackMode, buildExportCommand }

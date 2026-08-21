@@ -1602,15 +1602,18 @@ function splitNodeOptions (nodeOptions) {
 }
 
 function serializeNodeOptions (tokens) {
-  const serializedTokens = []
+  let serializedTokens = ''
+  let hasSerializedToken = false
   for (const token of tokens) {
+    if (hasSerializedToken) serializedTokens += ' '
     if (NODE_OPTIONS_QUOTE_RE.test(token)) {
-      serializedTokens.push(JSON.stringify(token))
+      serializedTokens += JSON.stringify(token)
     } else {
-      serializedTokens.push(token)
+      serializedTokens += token
     }
+    hasSerializedToken = true
   }
-  return serializedTokens.join(' ')
+  return serializedTokens
 }
 
 function getTestSpecificationProject (testSpecification) {

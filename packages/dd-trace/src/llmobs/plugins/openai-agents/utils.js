@@ -11,23 +11,23 @@ const { safeJsonParse } = require('../../util')
  * @returns {{ content: string, audioParts: Array<{ mimeType: string, content: string }> }}
  */
 function extractMessageContent (parts) {
-  const contentParts = []
+  let content = ''
   const audioParts = []
 
   for (const part of parts) {
     if (!part) continue
     const text = extractTextFromContentItem(part)
     if (text) {
-      contentParts.push(text)
+      content += text
       continue
     }
 
     const extracted = extractContentParts([part])
-    if (extracted.content) contentParts.push(extracted.content)
+    if (extracted.content) content += extracted.content
     if (extracted.audioParts.length > 0) audioParts.push(...extracted.audioParts)
   }
 
-  return { content: contentParts.join(''), audioParts }
+  return { content, audioParts }
 }
 
 /**
@@ -167,13 +167,11 @@ function extractOutputMessages (result) {
       if (item.type === 'message') {
         let content = ''
         if (Array.isArray(item.content)) {
-          const textParts = []
           for (const contentItem of item.content) {
             if (contentItem?.type === 'output_text' && contentItem.text) {
-              textParts.push(contentItem.text)
+              content += contentItem.text
             }
           }
-          content = textParts.join('')
         } else if (typeof item.content === 'string') {
           content = item.content
         }
