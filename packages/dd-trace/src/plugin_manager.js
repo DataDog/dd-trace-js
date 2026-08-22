@@ -35,6 +35,24 @@ loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
+// Every other plugin activates reactively, off the `dd-trace:instrumentation:load` event
+// `datadog-instrumentations/src/helpers/register.js` publishes when one of its `require()`-
+// intercepted file paths matches a configured pattern. graphql-js >=17 ships ESM-first: on
+// Node's `module-sync` exports condition, a plain `require('graphql')` resolves straight to the
+// package's `.mjs` build, whose *internal* file loads then happen via native ESM `import` —
+// invisible to our `Module.prototype.require` patch. Only the single outer `require('graphql')`
+// call ever crosses that patch, and it resolves to a path (`graphql/index.mjs`) no instrumentation
+// file pattern matches, so the load event this whole mechanism depends on never fires. graphql-js's
+// own diagnostics_channel publishes are unaffected (they run from inside graphql's own code
+// regardless of module system — see packages/datadog-plugin-graphql/src/utils.js' `subscribeToPrefix`
+// doc comment), so resolve+construct the plugin eagerly instead of waiting for a signal that will
+// never come. Its subscriptions are inert, near-zero-cost `diagnostics_channel` listeners on apps
+// that never load graphql.
+const EAGERLY_ACTIVATED_PLUGINS = ['graphql']
+for (const name of EAGERLY_ACTIVATED_PLUGINS) {
+  maybeEnable(plugins[name])
+}
+
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
 if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {

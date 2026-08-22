@@ -264,8 +264,57 @@ function isApolloHealthCheck (operation) {
     selection.name?.value === '__typename' &&
     selection.alias === undefined &&
     selection.selectionSet === undefined &&
-    selection.arguments?.length === 0 &&
-    selection.directives?.length === 0
+    // graphql-js <17 always populates `arguments`/`directives` with an (possibly empty) array;
+    // >=17 leaves them `undefined` when absent instead — falsy-check rather than `.length === 0`
+    // so both shapes match.
+    !selection.arguments?.length &&
+    !selection.directives?.length
+}
+
+const TRACE_SUB_EVENTS = ['start', 'end', 'asyncStart', 'asyncEnd', 'error', 'finish']
+
+/**
+ * Subscribe a `TracingPlugin` to an extra diagnostics_channel prefix beyond its own
+ * `static prefix`, using the same start/end/asyncStart/asyncEnd/error/finish convention
+ * `TracingPlugin#addTraceSubs` already uses. Used to listen to graphql-js's own native
+ * `tracing:graphql:<op>` channels (graphql-js >=17, one `dc.tracingChannel()` per operation —
+ * see https://www.graphql-js.org/api-v17/graphql/#category-diagnostics) alongside the
+ * orchestrion-generated `tracing:orchestrion:graphql:...` ones: on graphql-js >=17, Node's
+ * package.json `exports` resolves a plain `require('graphql')` to the package's ESM build
+ * (the `module-sync` condition), which orchestrion's CJS source rewriter never sees, so the
+ * native channels are the only hook that still fires.
+ *
+ * @param {import('../../dd-trace/src/plugins/tracing')} plugin
+ * @param {string} prefix
+ */
+function subscribeToPrefix (plugin, prefix) {
+  for (const event of TRACE_SUB_EVENTS) {
+    const bindName = `bind${event.charAt(0).toUpperCase()}${event.slice(1)}`
+
+    if (plugin[event]) {
+      plugin.addSub(`${prefix}:${event}`, message => plugin[event](message))
+    }
+
+    if (plugin[bindName]) {
+      plugin.addBind(`${prefix}:${event}`, message => plugin[bindName](message))
+    }
+  }
+}
+
+/**
+ * graphql-js <17's `info.variableValues` (and the internal `variableValues` `execute()`
+ * computes) is a flat `{name: value}` map. >=17's `getVariableValues` returns
+ * `{sources: {name: {signature, value}}, coerced: {name: value}}` instead, and that whole
+ * object is what ends up on `info.variableValues` — so a plugin config's `variables` filter
+ * (which only ever saw the flat map) would silently start filtering the wrapper object
+ * instead. Normalize to the flat map either shape can produce.
+ *
+ * @param {Record<string, unknown> | { sources: unknown, coerced: Record<string, unknown> } | undefined} variableValues
+ * @returns {Record<string, unknown> | undefined}
+ */
+function normalizeVariableValues (variableValues) {
+  const wrapped = /** @type {{ sources?: unknown, coerced?: Record<string, unknown> }} */ (variableValues)
+  return wrapped?.sources !== undefined && wrapped?.coerced !== undefined ? wrapped.coerced : variableValues
 }
 
 let tools
@@ -303,5 +352,7 @@ module.exports = {
   getSignature,
   isApolloHealthCheck,
   isApolloHealthCheckSource,
+  normalizeVariableValues,
   refineRequestSpan,
+  subscribeToPrefix,
 }

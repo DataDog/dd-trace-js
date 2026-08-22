@@ -3,7 +3,7 @@
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent, isApolloHealthCheck, refineRequestSpan } = require('./utils')
+const { extractErrorIntoSpanEvent, isApolloHealthCheck, refineRequestSpan, subscribeToPrefix } = require('./utils')
 
 const legacyStorage = storage('legacy')
 
@@ -12,9 +12,27 @@ class GraphQLValidatePlugin extends TracingPlugin {
   static operation = 'validate'
   static prefix = 'tracing:orchestrion:graphql:apm:graphql:validate'
 
+  // graphql-js >=17's own native `graphql:validate` diagnostics_channel (see utils.js'
+  // `subscribeToPrefix` doc comment for why this is needed alongside orchestrion).
+  static extraPrefixes = ['tracing:graphql:validate']
+
+  addTraceSubs () {
+    super.addTraceSubs()
+
+    for (const prefix of this.constructor.extraPrefixes) {
+      subscribeToPrefix(this, prefix)
+    }
+  }
+
   bindStart (ctx) {
-    // validate(schema, documentAST, rules, options, typeInfo)
-    const document = ctx.arguments?.[1]
+    // The native channel's context has no `.arguments` and carries `document` directly
+    // instead of positional arguments (validate(schema, documentAST, rules, options, typeInfo)).
+    const native = ctx.arguments === undefined
+    const document = native ? ctx.document : ctx.arguments[1]
+
+    if (native) {
+      ctx.parentStore = ctx.currentStore = legacyStorage.getStore()
+    }
 
     // Verify the marked document in case the caller transformed its AST after parsing.
     if (document &&

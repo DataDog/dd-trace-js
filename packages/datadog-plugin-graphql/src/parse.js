@@ -1,7 +1,10 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { isApolloHealthCheckSource } = require('./utils')
+const { isApolloHealthCheckSource, subscribeToPrefix } = require('./utils')
+
+const legacyStorage = storage('legacy')
 
 const documentSources = new WeakMap()
 
@@ -15,8 +18,27 @@ class GraphQLParsePlugin extends TracingPlugin {
   static operation = 'parser'
   static prefix = 'tracing:orchestrion:graphql:apm:graphql:parser'
 
+  // graphql-js >=17's own native `graphql:parse` diagnostics_channel (see utils.js'
+  // `subscribeToPrefix` doc comment for why this is needed alongside orchestrion).
+  static extraPrefixes = ['tracing:graphql:parse']
+
+  addTraceSubs () {
+    super.addTraceSubs()
+
+    for (const prefix of this.constructor.extraPrefixes) {
+      subscribeToPrefix(this, prefix)
+    }
+  }
+
   bindStart (ctx) {
-    const source = ctx.arguments?.[0]
+    // The native channel's context has no `.arguments` (that's an orchestrion-only
+    // convention) and carries `source` directly instead of positional arguments.
+    const native = ctx.arguments === undefined
+    const source = native ? ctx.source : ctx.arguments[0]
+
+    if (native) {
+      ctx.parentStore = ctx.currentStore = legacyStorage.getStore()
+    }
 
     // Apollo Gateway polls every subgraph with a fixed health-check query.
     // Mark its document after parsing so validation can skip the same poll.
