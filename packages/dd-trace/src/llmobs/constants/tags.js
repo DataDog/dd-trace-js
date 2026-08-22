@@ -28,6 +28,10 @@ module.exports = {
   SAMPLING_DECISION_SAMPLED: '1',
   SAMPLING_DECISION_DROPPED: '0',
   TAGS: '_ml_obs.tags',
+  // Holds the version a user supplied, until the span kind is known at finish.
+  AGENT_VERSION: '_ml_obs.agent_version',
+  // Agent tracking tag. Set on agent spans only, at span finish.
+  AGENT_VERSION_TAG_KEY: 'agent_version',
   NAME: '_ml_obs.name',
   TRACE_ID: '_ml_obs.trace_id',
   PROPAGATED_TRACE_ID_KEY: '_dd.p.llmobs_trace_id',
