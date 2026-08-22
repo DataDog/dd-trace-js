@@ -3,14 +3,24 @@ import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
 import { downloadArtifacts } from './download-artifacts.mjs'
+import { logUploads, hasUploadFailed } from './run-upload.mjs'
+import { uploadAllJunit } from './upload-junit.mjs'
+import {
+  uploadAllCoverageToDatadog, uploadCoverage, sendCodecovNotifications, hasCodecovCommit,
+} from './upload-coverage.mjs'
 
 /* eslint-disable no-console */
 
 const {
+  BASE_REF,
   DELAY,
+  GITHUB_EVENT_NAME,
   GITHUB_SHA,
   GITHUB_TOKEN,
+  HEAD_BRANCH,
+  HEAD_SHA,
   POLLING_INTERVAL,
+  PR_NUMBER,
   RETRIES,
   RUN_ATTEMPT,
 } = process.env
@@ -94,8 +104,75 @@ async function getRuns () {
   }
 }
 
+// Runs already dispatched to `processRun`, so a run settling across more than one
+// `scheduleProcessing` call (e.g. after a retry) isn't downloaded/uploaded twice.
+const dispatchedRunIds = new Set()
+const processingPromises = []
+
+// Set when any run's artifact download exhausts its retries, or `processRun` throws outright (e.g.
+// the artifact listing or the lcov merge itself fails). Either way that run's report never fully
+// reached Codecov/Datadog, so this has to gate the Codecov notification the same way
+// `hasUploadFailed()` does — otherwise a transient GitHub outage or a processing error on an
+// otherwise-green run still reports a complete coverage status.
+let hasProcessingFailure = false
+
+/**
+ * Download a single finished workflow run's junit and coverage artifacts, merge them, and upload
+ * the coverage merge to Codecov.
+ *
+ * @param {{ id: number, name: string }} run
+ * @returns {Promise<void>}
+ */
+async function processRun (run) {
+  const { downloaded, failed } = await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs: [run] })
+  if (failed > 0) {
+    hasProcessingFailure = true
+    process.exitCode = 1
+  }
+
+  const coverageResults = await uploadCoverage(run, {
+    sha: HEAD_SHA,
+    branch: HEAD_BRANCH,
+    prNumber: PR_NUMBER,
+    eventName: GITHUB_EVENT_NAME,
+    baseRef: BASE_REF,
+  })
+  const downloadSummary = failed > 0 ? `${downloaded} artifact(s), ${failed} failed` : `${downloaded} artifact(s)`
+  logUploads(`${run.name} (${downloadSummary})`, coverageResults)
+}
+
+/**
+ * Kick off processing for any run that just reached a final state and hasn't been processed yet.
+ * A run is final once it's completed and either isn't retried (its conclusion isn't in
+ * `pollingRetryConclusions`) or already went through a retry attempt.
+ *
+ * @param {Array<{ id: number, name: string, status: string, conclusion: string }>} runs
+ */
+function scheduleProcessing (runs) {
+  if (!process.env.GITHUB_ACTIONS) return
+
+  const settled = runs.filter(r =>
+    r.status === 'completed' &&
+    (!pollingRetryConclusions.has(r.conclusion) || retriedRunIds.has(r.id)) &&
+    !dispatchedRunIds.has(r.id)
+  )
+
+  for (const run of settled) {
+    dispatchedRunIds.add(run.id)
+    processingPromises.push(
+      processRun(run).catch(err => {
+        console.error(`Failed to process workflow run ${run.id} (${run.name}): ${err.message}`)
+        hasProcessingFailure = true
+        process.exitCode = 1
+      })
+    )
+  }
+}
+
 async function pollUntilDone () {
   const runs = await getRuns()
+
+  scheduleProcessing(runs)
 
   // Check before modifying retriedRunIds to avoid false positives on freshly requeued runs.
   const retryFailed = runs.filter(r =>
@@ -198,9 +275,11 @@ async function checkAllGreen () {
 
   await printSummary(runs)
 
-  if (process.env.GITHUB_ACTIONS) {
-    await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs })
-  }
+  console.log(`Waiting for ${processingPromises.length} workflow run report upload(s) to finish.`)
+  await Promise.all(processingPromises)
+
+  const [junitResults, coverageResults] = await Promise.all([uploadAllJunit(), uploadAllCoverageToDatadog()])
+  logUploads('junit + coverage (every run)', [...junitResults, ...coverageResults])
 
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
@@ -212,6 +291,22 @@ async function checkAllGreen () {
   const failedRuns = runs.filter(r =>
     failureConclusions.has(r.conclusion) && !staleFailureRunIds.has(r.id)
   )
+
+  // Codecov's `manual_trigger` (`.codecov.yml`) holds off computing/posting the coverage status
+  // until this fires, since uploads land one sibling workflow at a time rather than all at once.
+  // Only notify when every sibling workflow passed — a failing suite's coverage is expected to be
+  // low, and posting it would report a misleadingly low status against an otherwise healthy commit.
+  // Also skip when no run ever registered a commit/report (e.g. Dependabot PRs, whose coverage
+  // artifacts are skipped) — notifying then would target a report that was never created. And skip
+  // when any report-upload call failed, or any run's processing did (both tracked separately from
+  // `failedRuns`, which only reflects GitHub's own workflow-run conclusions) — notifying then would
+  // post a status computed from a report Codecov never fully received.
+  if (
+    process.env.GITHUB_ACTIONS && failedRuns.length === 0 &&
+    !hasUploadFailed() && !hasProcessingFailure && hasCodecovCommit()
+  ) {
+    logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
+  }
 
   if (failedRuns.length === 0) {
     console.log('All jobs were successful.')

@@ -1,89 +1,38 @@
-import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { argv } from 'node:process'
-import { fileURLToPath } from 'node:url'
 
-/* eslint-disable no-console */
-
-// Sorts the per-cell `coverage-*` artifacts that `download-artifacts.mjs` placed under
-// `coverage-results/` into one directory per integration under `coverage-upload/<group>/`, so the
-// All Green upload steps send ~100 grouped reports to Codecov/Datadog instead of ~430. Codecov
-// silently parks uploads past its ~150-per-commit ceiling in `started` (never merged), so the
-// cell-per-upload model dropped coverage; one upload per integration stays under the ceiling.
+// Merges one workflow run's downloaded per-cell `coverage-*` artifacts into a single lcov file under
+// `coverage-upload/<run-id>/`, scoped to that run alone. All Green calls this as soon as a sibling
+// workflow finishes, instead of waiting for every workflow to complete before merging and uploading
+// anything — the goal is for each workflow's coverage to reach Datadog and Codecov shortly after that
+// workflow finishes, in parallel with the rest still running.
 //
-// The reports are not merged here — both backends merge same-flag uploads server-side, so this only
-// routes each cell's already-patched `lcov.info` into its group's directory. That keeps the harness
-// free of any istanbul dependency in All Green's sparse checkout and passes each report through
-// byte-for-byte, so the `getLineCoverage` patch the producers baked in survives untouched.
+// Both Datadog and Codecov ingest lcov only — istanbul JSON support (which Codecov used to read
+// branch/function coverage from) was dropped: it doubled the merge cost on runs with many cells
+// (`istanbul-lib-coverage`'s merge is far slower than `mergeLcov`) for coverage the lcov format
+// doesn't carry (branch/function hit counts) — an acceptable trade-off. Merging is still required,
+// not concatenation: every matrix cell in a workflow run (each Node.js version, each plugin
+// partition) writes its own complete report, so a shared source file's coverage shows up once per
+// cell. Concatenating lcov's `SF:` blocks produces a report with duplicate `SF:` sections per file,
+// which downstream lcov consumers resolve by keeping only the last block for that file rather than
+// summing across blocks — silently discarding most of the coverage every earlier cell had recorded.
+// Uploading unmerged across sessions has the same problem one level up: Codecov's own cross-session
+// merge has been observed overwriting rather than summing a shared file's coverage when more than one
+// session reports it, so lcov is merged down to one report per run before upload instead of relying
+// on the backend to reconcile per-session duplicates. `mergeLcov` sums `DA:`/`FNDA:`/`BRDA:` hit
+// counts per file across cells, the way `lcov --add-tracefile` does.
+//
+// Per-integration/per-area flags were dropped: `.codecov.yml` only gates the separate
+// `master-coverage` flag (attached to every upload regardless of grouping), so a finer-grained flag
+// carried no gating weight of its own — it only fed a "coverage by plugin" breakdown in the
+// Codecov/Datadog UI, which wasn't worth the extra upload round trips.
 
 const INPUT_DIR = 'coverage-results'
 const OUTPUT_DIR = 'coverage-upload'
 const ARTIFACT_PREFIX = 'coverage-'
-// `upload-coverage-artifact` names each cell `coverage-<flag>__<job>-<job-index>`; the `__` separates
-// the grouping flag from the per-cell uniqueness suffix so two matrix cells sharing a flag (cypress
-// varies `spec` outside its flag) still upload distinct artifacts instead of clobbering each other.
-const UNIQUE_SEPARATOR = '__'
 
-// Tokens that name a Node.js major, a library version, or a runtime/OS/module-format axis — all
-// noise for "which integration regressed". Stripping every noise token folds a flag like
-// `apm-integrations-next-oldest-14.2.6` down to its integration `apm-integrations-next`.
-const NOISE_TOKENS = new Set([
-  'latest', 'oldest', 'eol', 'active', 'maintenance', 'all', // Node.js / range_clean aliases
-  'ubuntu', 'macos', 'windows', // runner OS
-  'commonjs', 'esm', // module format
-])
-// A bare version (`14.2.6`, `18`) or a `range_clean` qualifier that packs the operator and version
-// into one dash-token (`gte.5.2.0`, `gte.6.16.0.and.lt.7.0.0`).
-const VERSION_RE = /^(?:gte|gt|lte|lt|eq)?\.?\d+(?:\.\d+)*(?:\.(?:and|or|gte|gt|lte|lt|eq)\b.*)?$/
-
-// Keep a busy area's one-cell libraries from each becoming their own upload: pack them into buckets
-// of at most this many libraries, named for their members so the flag still points at a library.
-const MAX_LIBS_PER_BUCKET = 3
-// Codecov validates flags against `^[\w\.\-]{1,45}$` and silently drops any that fail. `+` is out, so
-// members join with `_`; a name longer than this falls back to a numbered bucket that stays valid.
-const MAX_FLAG_LENGTH = 45
-
-/**
- * @param {string} token
- * @returns {boolean}
- */
-function isNoiseToken (token) {
-  return NOISE_TOKENS.has(token.toLowerCase()) || VERSION_RE.test(token)
-}
-
-/**
- * The integration a per-cell flag belongs to, with every version/OS/tier/format token removed
- * wherever it sits. Node.js tier and library version commonly land in the middle of a flag (e.g.
- * `serverless-aws-sdk-oldest-s3`, where `oldest` is the Node.js tier and `s3` a real sub-suite of
- * the one `aws-sdk` integration), so a tail-only strip would leave the tier stranded mid-flag.
- *
- * @param {string} flag
- * @returns {string}
- */
-function integrationOf (flag) {
-  const tokens = flag.split('-').filter(token => !isNoiseToken(token))
-  return tokens.length > 0 ? tokens.join('-') : flag
-}
-
-/**
- * The Codecov flag carried by an artifact name, dropping the `coverage-` prefix and the
- * `__<unique>` cell-uniqueness suffix.
- *
- * @param {string} artifact
- * @returns {string}
- */
-function flagOf (artifact) {
-  const withoutPrefix = artifact.slice(ARTIFACT_PREFIX.length)
-  const separator = withoutPrefix.indexOf(UNIQUE_SEPARATOR)
-  return separator === -1 ? withoutPrefix : withoutPrefix.slice(0, separator)
-}
-
-// Codecov reads branch/function coverage from istanbul's JSON; Datadog only ingests the lcov. Each
-// report is routed by format into its own subdirectory so the two upload steps search the one their
-// backend reads. The extension marks which.
 const REPORTS = new Map([
   ['lcov.info', 'lcov'],
-  ['coverage-final.json', 'json'],
 ])
 
 /**
@@ -119,60 +68,13 @@ function collectCoverageFiles (dir, out = [], context = {}) {
 }
 
 /**
- * Assign each integration to an upload group. Integrations exercised by more than one cell stay on
- * their own; the one-cell tail of a busy area is packed into buckets named for their libraries, or a
- * numbered bucket when those names would overrun Codecov's flag length limit.
- *
- * @param {Map<string, string[]>} cellsByIntegration  Integration → artifact names feeding it.
- * @returns {Map<string, string[]>}  Group flag → integrations it owns.
- */
-function planGroups (cellsByIntegration) {
-  const groups = new Map()
-  const singletonsByArea = new Map()
-
-  for (const [integration, cells] of cellsByIntegration) {
-    if (cells.length > 1) {
-      groups.set(integration, [integration])
-      continue
-    }
-    const area = integration.split('-')[0]
-    const list = singletonsByArea.get(area)
-    if (list) {
-      list.push(integration)
-    } else {
-      singletonsByArea.set(area, [integration])
-    }
-  }
-
-  for (const [area, integrations] of singletonsByArea) {
-    integrations.sort()
-    if (integrations.length <= 2) {
-      for (const integration of integrations) {
-        groups.set(integration, [integration])
-      }
-      continue
-    }
-    let bucket = 0
-    for (let i = 0; i < integrations.length; i += MAX_LIBS_PER_BUCKET) {
-      const chunk = integrations.slice(i, i + MAX_LIBS_PER_BUCKET)
-      const named = `${area}-${chunk.map(integration => integration.slice(area.length + 1)).join('_')}`
-      groups.set(named.length <= MAX_FLAG_LENGTH ? named : `${area}-bucket-${bucket}`, chunk)
-      bucket++
-    }
-  }
-
-  return groups
-}
-
-/**
- * Reduce discovered report files to one cell per artifact name and bucket the cells by integration.
- * All Green reruns failed workflows, so the same artifact name can arrive from more than one run;
- * the newest run reflects the cell's final state, so older reuploads are dropped.
+ * Reduce discovered report files to one cell per artifact name. All Green reruns failed workflows,
+ * so the same artifact name can arrive from more than one run; the newest run reflects the cell's
+ * final state, so older reuploads are dropped.
  *
  * @param {Array<{ runId: string, name: string, format: string, reportPath: string }>} files
- * @returns {{ groups: Map<string, string[]>,
- *   reportsByArtifact: Map<string, Array<{ format: string, reportPath: string }>>,
- *   cellsByIntegration: Map<string, string[]> }}
+ * @returns {{ reportsByArtifact: Map<string, Array<{ format: string, reportPath: string }>>,
+ *   artifacts: string[] }}
  */
 function planCoverageGroups (files) {
   const newestRunByArtifact = new Map()
@@ -184,7 +86,7 @@ function planCoverageGroups (files) {
   }
 
   const reportsByArtifact = new Map()
-  const cellsByIntegration = new Map()
+  const artifacts = []
   for (const { runId, name, format, reportPath } of files) {
     if (runId !== newestRunByArtifact.get(name)) continue
     const existing = reportsByArtifact.get(name)
@@ -193,52 +95,175 @@ function planCoverageGroups (files) {
       continue
     }
     reportsByArtifact.set(name, [{ format, reportPath }])
-    const integration = integrationOf(flagOf(name))
-    const owned = cellsByIntegration.get(integration)
-    if (owned) {
-      owned.push(name)
-    } else {
-      cellsByIntegration.set(integration, [name])
-    }
+    artifacts.push(name)
   }
 
-  return { groups: planGroups(cellsByIntegration), reportsByArtifact, cellsByIntegration }
+  return { reportsByArtifact, artifacts }
 }
 
-function main () {
-  rmSync(OUTPUT_DIR, { force: true, recursive: true })
+/**
+ * @typedef {object} LcovFileRecord
+ * @property {Map<string, number>} lines line number -> summed hit count
+ * @property {Map<string, { name: string, line: string, count: number }>} functions `line,name` ->
+ *   name, declaration line, and summed hit count — keyed by line as well as name because distinct
+ *   functions can share a name (e.g. two nested closures both named `shared`)
+ * @property {Map<string, { hits: number, reached: boolean }>} branches `line,block,branch` -> summed
+ *   hit count and whether any cell reported the enclosing block as reached (lcov uses `-` for a
+ *   branch whose block was never reached, distinct from a reached block whose branch was never taken)
+ */
 
-  const files = collectCoverageFiles(INPUT_DIR)
-  if (files.length === 0) {
-    console.log(`No coverage reports found under ${INPUT_DIR}/.`)
-    return
+/**
+ * Split an lcov record line into its tag and payload, e.g. `DA:1,1` -> `['DA', '1,1']`.
+ *
+ * @param {string} line
+ * @returns {[string, string]}
+ */
+function splitLcovLine (line) {
+  const index = line.indexOf(':')
+  return index === -1 ? [line, ''] : [line.slice(0, index), line.slice(index + 1)]
+}
+
+/**
+ * Fold one `SF:`-delimited record's `DA:`/`FN:`/`FNDA:`/`BRDA:` lines into the running per-file
+ * merge state, summing hit counts for lines/functions/branches already seen from earlier cells.
+ * `FNDA:` lines carry only a function name, not its declaration line, so a same-named function
+ * declared at two different lines can't be told apart by name alone; lcov writers emit `FNDA:` lines
+ * in the same order as their `FN:` declarations, so they're paired positionally instead.
+ *
+ * @param {string[]} recordLines
+ * @param {Map<string, LcovFileRecord>} files source file path -> merge state
+ * @param {string[]} order source file paths in first-seen order
+ * @returns {void}
+ */
+function mergeLcovRecord (recordLines, files, order) {
+  const sourceFileLine = recordLines.find(line => line.startsWith('SF:'))
+  if (!sourceFileLine) return
+
+  // istanbul-reports' lcov writer derives SF: from `path.relative()`, which uses backslashes on
+  // Windows; a workflow run mixing a Windows matrix cell with Linux/macOS cells (e.g. AppSec) would
+  // otherwise key the same source file under two different SF: strings and split its coverage
+  // across two records instead of summing it into one.
+  const path = splitLcovLine(sourceFileLine)[1].replaceAll('\\', '/')
+  if (!files.has(path)) {
+    files.set(path, { lines: new Map(), functions: new Map(), branches: new Map() })
+    order.push(path)
   }
+  const record = files.get(path)
 
-  const { groups, reportsByArtifact, cellsByIntegration } = planCoverageGroups(files)
-
-  console.log(`Routing ${reportsByArtifact.size} cell report set(s) into ${groups.size} group(s):`)
-  for (const [flag, integrations] of [...groups].sort()) {
-    const counts = new Map()
-    for (const integration of integrations) {
-      for (const artifact of cellsByIntegration.get(integration)) {
-        for (const { format, reportPath } of reportsByArtifact.get(artifact)) {
-          const index = counts.get(format) ?? 0
-          const formatDir = join(OUTPUT_DIR, flag, format)
-          mkdirSync(formatDir, { recursive: true })
-          copyFileSync(reportPath, join(formatDir, `${artifact}-${index}.${format}`))
-          counts.set(format, index + 1)
-        }
+  const declaredFunctionKeys = []
+  let functionDeclarationIndex = 0
+  for (const line of recordLines) {
+    const [tag, rest] = splitLcovLine(line)
+    if (tag === 'DA') {
+      const [lineNumber, count] = rest.split(',')
+      record.lines.set(lineNumber, (record.lines.get(lineNumber) ?? 0) + Number(count))
+    } else if (tag === 'FN') {
+      const [lineNumber, name] = rest.split(',')
+      const key = `${lineNumber},${name}`
+      declaredFunctionKeys.push(key)
+      if (!record.functions.has(key)) record.functions.set(key, { name, line: lineNumber, count: 0 })
+    } else if (tag === 'FNDA') {
+      const [count] = rest.split(',')
+      const key = declaredFunctionKeys[functionDeclarationIndex++]
+      if (key === undefined) continue
+      record.functions.get(key).count += Number(count)
+    } else if (tag === 'BRDA') {
+      const [lineNumber, block, branch, count] = rest.split(',')
+      const key = `${lineNumber},${block},${branch}`
+      const branchRecord = record.branches.get(key) ?? { hits: 0, reached: false }
+      if (count !== '-') {
+        branchRecord.hits += Number(count)
+        branchRecord.reached = true
       }
+      record.branches.set(key, branchRecord)
     }
-    const summary = [...counts].map(([format, count]) => `${count} ${format}`).join(', ')
-    console.log(`  ${flag} (${integrations.length} integration(s): ${summary})`)
+  }
+}
+
+/**
+ * Serialize one file's merged coverage state back into lcov record lines, recomputing the
+ * `LF`/`LH`/`FNF`/`FNH`/`BRF`/`BRH` summary lines from the merged data.
+ *
+ * @param {string} path
+ * @param {LcovFileRecord} record
+ * @returns {string}
+ */
+function serializeLcovRecord (path, record) {
+  const lines = [`SF:${path}`]
+
+  for (const fn of record.functions.values()) lines.push(`FN:${fn.line},${fn.name}`)
+  for (const fn of record.functions.values()) lines.push(`FNDA:${fn.count},${fn.name}`)
+  if (record.functions.size > 0) {
+    const hit = [...record.functions.values()].filter(fn => fn.count > 0).length
+    lines.push(`FNF:${record.functions.size}`, `FNH:${hit}`)
   }
 
-  writeFileSync(join(OUTPUT_DIR, 'groups.txt'), [...groups.keys()].sort().join('\n') + '\n')
+  for (const [key, branch] of record.branches) {
+    lines.push(`BRDA:${key},${branch.reached ? branch.hits : '-'}`)
+  }
+  if (record.branches.size > 0) {
+    const hit = [...record.branches.values()].filter(branch => branch.hits > 0).length
+    lines.push(`BRF:${record.branches.size}`, `BRH:${hit}`)
+  }
+
+  for (const [lineNumber, count] of record.lines) lines.push(`DA:${lineNumber},${count}`)
+  if (record.lines.size > 0) {
+    const hit = [...record.lines.values()].filter(count => count > 0).length
+    lines.push(`LF:${record.lines.size}`, `LH:${hit}`)
+  }
+
+  lines.push('end_of_record')
+  return `${lines.join('\n')}\n`
 }
 
-export { flagOf, integrationOf, planCoverageGroups, planGroups }
+/**
+ * Merge every cell's lcov report into a single lcov file, summing hit counts per source file
+ * instead of concatenating records — see the module comment for why concatenation silently drops
+ * coverage when the same file appears in more than one cell's report.
+ *
+ * @param {string[]} reportPaths
+ * @returns {string}
+ */
+function mergeLcov (reportPaths) {
+  const files = new Map()
+  const order = []
 
-if (argv[1] === fileURLToPath(import.meta.url)) {
-  main()
+  for (const reportPath of reportPaths) {
+    const contents = readFileSync(reportPath, 'utf8')
+    for (const record of contents.split('end_of_record')) {
+      const recordLines = record.split('\n').map(line => line.trim()).filter(Boolean)
+      if (recordLines.length > 0) mergeLcovRecord(recordLines, files, order)
+    }
+  }
+
+  return order.map(path => serializeLcovRecord(path, files.get(path))).join('')
 }
+
+/**
+ * Merge a single workflow run's downloaded coverage reports into one lcov file for upload.
+ *
+ * @param {string|number} runId
+ * @param {string} [inputDir]
+ * @param {string} [outputDir]
+ * @returns {{ lcovDir: string|null }} Directory containing the merged `lcov.info`, null if the run
+ *   produced no coverage report.
+ */
+function mergeRunCoverage (runId, inputDir = INPUT_DIR, outputDir = OUTPUT_DIR) {
+  const files = collectCoverageFiles(join(inputDir, String(runId)), [], { runId: String(runId) })
+  if (files.length === 0) return { lcovDir: null }
+
+  const { reportsByArtifact, artifacts } = planCoverageGroups(files)
+  const reports = artifacts.flatMap(artifact => reportsByArtifact.get(artifact))
+  const lcovReportPaths = reports.filter(r => r.format === 'lcov').map(r => r.reportPath)
+
+  let lcovDir = null
+  if (lcovReportPaths.length > 0) {
+    lcovDir = join(outputDir, String(runId), 'lcov')
+    mkdirSync(lcovDir, { recursive: true })
+    writeFileSync(join(lcovDir, 'lcov.info'), mergeLcov(lcovReportPaths))
+  }
+
+  return { lcovDir }
+}
+
+export { OUTPUT_DIR, mergeLcov, mergeRunCoverage, planCoverageGroups }
