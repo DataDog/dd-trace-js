@@ -105,6 +105,98 @@
       "on_match": [
         "block"
       ]
+    },
+    {
+      "id": "mixed-http2-context",
+      "name": "mixed HTTP/2 context continuity",
+      "tags": {
+        "type": "security_scanner3",
+        "category": "attack_attempt3"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "regex": "^/mixed-context$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        },
+        {
+          "operator": "phrase_match",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "list": [
+              "mixed-context-body"
+            ]
+          }
+        },
+        {
+          "operator": "phrase_match",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.cookies"
+              }
+            ],
+            "list": [
+              "mixed-context-cookie"
+            ]
+          }
+        },
+        {
+          "operator": "phrase_match",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              }
+            ],
+            "list": [
+              "mixed-context-query"
+            ]
+          }
+        },
+        {
+          "operator": "phrase_match",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.path_params"
+              }
+            ],
+            "list": [
+              "mixed-context-param"
+            ]
+          }
+        },
+        {
+          "operator": "phrase_match",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.body"
+              }
+            ],
+            "list": [
+              "mixed-context-response"
+            ]
+          }
+        }
+      ],
+      "transformers": [
+        "lowercase"
+      ]
     }
   ]
 }
