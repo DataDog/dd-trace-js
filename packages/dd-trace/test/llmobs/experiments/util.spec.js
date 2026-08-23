@@ -5,6 +5,7 @@ const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const log = require('../../../src/log')
+const { BaseEvaluator, BaseSummaryEvaluator } = require('../../../src/llmobs/experiments/evaluator')
 
 const {
   buildTags,
@@ -40,6 +41,19 @@ describe('LLMObs Experiments util', () => {
     assert.deepEqual(normalizeEvaluators([namedEvaluator], 'summary'), [['namedEvaluator', namedEvaluator]])
     assert.throws(() => normalizeEvaluators({ 'bad.name': namedEvaluator }, 'row'), /invalid/)
     assert.throws(() => normalizeEvaluators([true], 'summary'), /summary evaluator must be a function/)
+  })
+
+  it('normalizes class evaluator instances by their configured names', () => {
+    class RowEvaluator extends BaseEvaluator {}
+    class SummaryEvaluator extends BaseSummaryEvaluator {}
+
+    const row = new RowEvaluator('row-check')
+    const summary = new SummaryEvaluator()
+
+    assert.deepEqual(normalizeEvaluators([row], 'row'), [['row-check', row]])
+    assert.deepEqual(normalizeEvaluators([summary], 'summary'), [['SummaryEvaluator', summary]])
+    assert.throws(() => normalizeEvaluators([summary], 'row'), /row evaluator must be a function or a BaseEvaluator/)
+    assert.throws(() => normalizeEvaluators([row], 'summary'), /summary evaluator must be a function or a BaseSummaryEvaluator/)
   })
 
   it('warns and keeps the last array evaluator when inferred names collide', () => {

@@ -1,6 +1,14 @@
 'use strict'
 
 const NoopExperiments = require('./experiments/noop')
+const {
+  BaseEvaluator,
+  BaseSummaryEvaluator,
+  EvaluatorContext,
+  EvaluatorResult,
+  MultiEvaluatorResult,
+  SummaryEvaluatorContext,
+} = require('./experiments/evaluator')
 
 class NoopLLMObs {
   constructor (noopTracer) {
@@ -13,6 +21,30 @@ class NoopLLMObs {
 
   get experiments () {
     return new NoopExperiments('LLM Observability is not enabled')
+  }
+
+  get BaseEvaluator () {
+    return BaseEvaluator
+  }
+
+  get BaseSummaryEvaluator () {
+    return BaseSummaryEvaluator
+  }
+
+  get EvaluatorContext () {
+    return EvaluatorContext
+  }
+
+  get SummaryEvaluatorContext () {
+    return SummaryEvaluatorContext
+  }
+
+  get EvaluatorResult () {
+    return EvaluatorResult
+  }
+
+  get MultiEvaluatorResult () {
+    return MultiEvaluatorResult
   }
 
   enable (options) {}

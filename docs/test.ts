@@ -694,7 +694,14 @@ llmobs.wrap({ kind: 'llm' }, function myLLM() { })()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction() { })()
 
 // export a span
-llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
+llmobs.enable({ mlApp: 'myApp', projectName: 'my-project', agentlessEnabled: false })
+
+class ExampleEvaluator extends llmobs.BaseEvaluator {
+  evaluate (context: llmobs.EvaluatorContext) {
+    return context.outputData
+  }
+}
+
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
   const llmobsSpanCtx = llmobs.exportSpan(span)
   llmobsSpanCtx.traceId;
