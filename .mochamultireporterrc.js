@@ -1,8 +1,11 @@
 'use strict'
 
+/* eslint-disable eslint-rules/eslint-process-env */
+
+const { getJunitFile } = require('./scripts/junit-file')
+
 const reporterEnabled = ['spec']
 
-// eslint-disable-next-line eslint-rules/eslint-process-env
 if (process.env.CI) {
   reporterEnabled.push('./scripts/junit-reporter.js')
 }
@@ -10,6 +13,6 @@ if (process.env.CI) {
 module.exports = {
   reporterEnabled,
   scriptsJunitReporterJsReporterOptions: {
-    mochaFile: `./node-${process.versions.node}-junit.xml`,
+    mochaFile: getJunitFile(process.env.npm_lifecycle_event || 'mocha'),
   },
 }
