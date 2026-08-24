@@ -121,12 +121,14 @@ jobs:
             icon=:warning:
           fi
 
-          echo "warn=true" >> "$GITHUB_OUTPUT"
-          echo "days=$minimum_age" >> "$GITHUB_OUTPUT"
-          echo "icon=$icon" >> "$GITHUB_OUTPUT"
-          echo "release-noun=$release_noun" >> "$GITHUB_OUTPUT"
-          echo "release-subject=$release_subject" >> "$GITHUB_OUTPUT"
-          echo "release-verb=$release_verb" >> "$GITHUB_OUTPUT"
+          {
+            echo "warn=true"
+            echo "days=$minimum_age"
+            echo "icon=$icon"
+            echo "release-noun=$release_noun"
+            echo "release-subject=$release_subject"
+            echo "release-verb=$release_verb"
+          } >> "$GITHUB_OUTPUT"
       - uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v2.1.0
         if: steps.release-age.outputs.warn == 'true'
         with:
