@@ -34,6 +34,11 @@ ruleTester.run('eslint-carrier-fields', rule, {
     },
     {
       code: 'const { readDatadogTraceId } = require("../carrier"); ' +
+        'const extractDatadog = carrier => readDatadogTraceId(carrier); extractDatadog(carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
+      code: 'const { readDatadogTraceId } = require("../carrier"); ' +
         'function extractDatadog (carrier) { function identity (carrier) { return carrier } ' +
         'return readDatadogTraceId(carrier) } extractDatadog(carrier)',
       options: [{ strictCarrierIdentifiers: true }],
@@ -76,6 +81,15 @@ ruleTester.run('eslint-carrier-fields', rule, {
     },
     {
       code: 'const first = second; const second = first; readSingleton(first, key)',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
+      code: 'function outer () { function first () { return second() } ' +
+        'function second () { return first() } sink(first()) }',
+      options: [{ strictCarrierIdentifiers: true }],
+    },
+    {
+      code: 'function outer (carrier) { let get = () => carrier; get = () => input; sink(get()) }',
       options: [{ strictCarrierIdentifiers: true }],
     },
     {
@@ -256,19 +270,28 @@ ruleTester.run('eslint-carrier-fields', rule, {
     {
       code: 'function identity (carrier) { return carrier } const value = identity(carrier); readSingleton(value, key)',
       options: [{ strictCarrierIdentifiers: true }],
-      errors: [{ messageId: 'noDirectCarrierAccess' }],
+      errors: [
+        { messageId: 'noDirectCarrierAccess', line: 1, column: 71, endColumn: 78 },
+        { messageId: 'noDirectCarrierAccess', line: 1, column: 95, endColumn: 100 },
+      ],
     },
     {
       code: 'function caller (carrier) { sink(identity(carrier)) } ' +
         'function identity (carrier) { return carrier } caller(carrier)',
       options: [{ strictCarrierIdentifiers: true }],
-      errors: [{ messageId: 'noDirectCarrierAccess' }],
+      errors: [
+        { messageId: 'noDirectCarrierAccess', line: 1, column: 34, endColumn: 51 },
+        { messageId: 'noDirectCarrierAccess', line: 1, column: 43, endColumn: 50 },
+      ],
     },
     {
       code: 'function identity (carrier) { return carrier } ' +
         'function caller (carrier) { sink(identity(carrier)) } caller(carrier)',
       options: [{ strictCarrierIdentifiers: true }],
-      errors: [{ messageId: 'noDirectCarrierAccess' }],
+      errors: [
+        { messageId: 'noDirectCarrierAccess', line: 1, column: 81, endColumn: 98 },
+        { messageId: 'noDirectCarrierAccess', line: 1, column: 90, endColumn: 97 },
+      ],
     },
     {
       code: 'function identity (carrier) { if (condition) return carrier } identity(carrier)',
@@ -312,6 +335,56 @@ ruleTester.run('eslint-carrier-fields', rule, {
         'return () => readSingleton(second, key) }',
       options: [{ strictCarrierIdentifiers: true }],
       errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'function outer (carrier) { function get () { return carrier } sink(get()) }',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess', line: 1, column: 68, endColumn: 73 }],
+    },
+    {
+      code: 'function outer (carrier) { function get () { return carrier } ' +
+        'const value = get(); sink(value) }',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess', line: 1, column: 89, endColumn: 94 }],
+    },
+    {
+      code: 'function outer (carrier) { function first () { return second() } ' +
+        'function second () { return carrier } sink(first()) }',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess', line: 1, column: 109, endColumn: 116 }],
+    },
+    {
+      code: 'function outer (carrier) { function second () { return carrier } ' +
+        'function first () { return second() } sink(first()) }',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess', line: 1, column: 109, endColumn: 116 }],
+    },
+    {
+      code: 'function outer (carrier, condition) { function get () { return carrier } ' +
+        'let value = get(); if (condition) sink(value) }',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess', line: 1, column: 113, endColumn: 118 }],
+    },
+    {
+      code: 'function outer (carrier) { const get = () => carrier; sink(get()) }',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess', line: 1, column: 60, endColumn: 65 }],
+    },
+    {
+      code: 'function outer (carrier) { let get = () => carrier; sink(get()) }',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess', line: 1, column: 58, endColumn: 63 }],
+    },
+    {
+      code: 'function outer (carrier) { const get = function () { return carrier }; sink(get()) }',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess', line: 1, column: 77, endColumn: 82 }],
+    },
+    {
+      code: 'function outer (carrier, condition) { function first () { return condition ? carrier : second() } ' +
+        'function second () { return first() } sink(second()) }',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess', line: 1, column: 142, endColumn: 150 }],
     },
     {
       code: 'let value = carrier; if (condition) value = input; readSingleton(value, key)',

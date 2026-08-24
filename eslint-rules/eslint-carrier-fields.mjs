@@ -145,7 +145,7 @@ export default {
     const sourceCode = context.sourceCode
     const carrierFunctions = new Set()
     const carrierModuleIdentifiers = new Set()
-    const carrierReturningFunctions = new WeakSet()
+    const carrierReturningFunctions = new Set()
     const codePathFrames = []
     const completedCodePathFrames = []
     const strictCarrierIdentifiers = context.options[0]?.strictCarrierIdentifiers === true
@@ -190,6 +190,10 @@ export default {
       if (node.type === 'ConditionalExpression') {
         return isCarrierReference(node.consequent, taintedVariables, seenVariables) ||
           isCarrierReference(node.alternate, taintedVariables, seenVariables)
+      }
+      if (node.type === 'CallExpression') {
+        const localFunction = findLocalFunction(node.callee)
+        return localFunction !== undefined && carrierReturningFunctions.has(localFunction)
       }
       const variable = findVariable(node)
       if (variable === undefined) return false
@@ -306,6 +310,8 @@ export default {
      * @returns {void}
      */
     function recordCarrierReturningFunctions (frame) {
+      if (carrierReturningFunctions.has(frame.node)) return
+
       for (const segment of frame.segments) {
         const taintedVariables = getCodePathInput(segment, frame.outputs)
         for (const event of frame.events.get(segment) || []) {
@@ -313,6 +319,7 @@ export default {
             applyCarrierWrite(event, taintedVariables)
           } else if (event.type === 'return' && isCarrierReference(event.expression, taintedVariables)) {
             carrierReturningFunctions.add(frame.node)
+            return
           }
         }
       }
@@ -339,12 +346,40 @@ export default {
 
     function analyzeCodePaths () {
       for (const frame of completedCodePathFrames) computeCodePathOutputs(frame)
-      for (const frame of completedCodePathFrames) recordCarrierReturningFunctions(frame)
+
+      let returningFunctionCount
+      do {
+        returningFunctionCount = carrierReturningFunctions.size
+        for (const frame of completedCodePathFrames) recordCarrierReturningFunctions(frame)
+        if (carrierReturningFunctions.size !== returningFunctionCount) {
+          for (const frame of completedCodePathFrames) computeCodePathOutputs(frame)
+        }
+      } while (carrierReturningFunctions.size !== returningFunctionCount)
+
       for (const frame of completedCodePathFrames) checkCodePath(frame)
     }
 
     /**
-     * Local function declarations are checked by this same rule, so carriers can
+     * @param {import('estree').Node} node
+     * @returns {import('estree').FunctionDeclaration | import('estree').FunctionExpression |
+     *   import('estree').ArrowFunctionExpression | undefined}
+     */
+    function findLocalFunction (node) {
+      const variable = findVariable(node)
+      if (variable === undefined || variable.defs.length !== 1) return
+      for (const reference of variable.references) {
+        if (!reference.init && reference.isWrite()) return
+      }
+
+      const [definition] = variable.defs
+      if (definition.type === 'FunctionName') return definition.node
+
+      const { init } = definition.node
+      if (init?.type === 'FunctionExpression' || init?.type === 'ArrowFunctionExpression') return init
+    }
+
+    /**
+     * Local functions are checked by this same rule, so carriers can
      * safely pass through carrier-named parameters unless the binding is reassigned.
      *
      * @param {import('estree').Identifier} callee
@@ -353,30 +388,17 @@ export default {
      * @returns {boolean}
      */
     function isCheckedLocalCarrierFunction (callee, callArguments, taintedVariables) {
-      let scope = sourceCode.getScope(callee)
-      while (scope) {
-        const variable = scope.set.get(callee.name)
-        if (variable) {
-          if (variable.defs.length !== 1 || variable.defs[0].type !== 'FunctionName') return false
-          for (const reference of variable.references) {
-            if (reference.isWrite()) return false
-          }
+      const localFunction = findLocalFunction(callee)
+      if (localFunction === undefined || carrierReturningFunctions.has(localFunction)) return false
 
-          const localFunction = variable.defs[0].node
-          if (carrierReturningFunctions.has(localFunction)) return false
-
-          const parameters = localFunction.params
-          for (let index = 0; index < callArguments.length; index++) {
-            const argument = callArguments[index]
-            if (argument.type === 'SpreadElement' || !isCarrierReference(argument, taintedVariables)) continue
-            const parameter = parameters[index]
-            if (parameter?.type !== 'Identifier' || !isCarrierIdentifier(parameter)) return false
-          }
-          return true
-        }
-        scope = scope.upper
+      const parameters = localFunction.params
+      for (let index = 0; index < callArguments.length; index++) {
+        const argument = callArguments[index]
+        if (argument.type === 'SpreadElement' || !isCarrierReference(argument, taintedVariables)) continue
+        const parameter = parameters[index]
+        if (parameter?.type !== 'Identifier' || !isCarrierIdentifier(parameter)) return false
       }
-      return false
+      return true
     }
 
     /**
@@ -678,6 +700,16 @@ export default {
           if (variable) {
             recordCodePathEvent({ type: 'write', variable, expression: node.init, preserve: false })
           }
+        }
+      },
+
+      /**
+       * @param {import('estree').ArrowFunctionExpression} node
+       * @returns {void}
+       */
+      'ArrowFunctionExpression:exit' (node) {
+        if (node.body.type !== 'BlockStatement') {
+          recordCodePathEvent({ type: 'return', expression: node.body, node })
         }
       },
 
