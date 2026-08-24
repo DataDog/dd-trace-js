@@ -56,8 +56,13 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       options.path = DEBUGGER_INPUT_V1
     }
 
+    // Agents contain circular socket state while requests are active, so omit them from debug output.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Request to the logs intake: ${safeJSONStringify(options)}`)
+    log.debug(() => {
+      const logOptions = { ...options }
+      delete logOptions.agent
+      return `Request to the logs intake: ${safeJSONStringify(logOptions)}`
+    })
 
     this.#requestTracker.send(request, data, options, (err, res) => {
       if (err) {

@@ -29,12 +29,15 @@ describe('Test Visibility DI Writer', () => {
   context('agentless', () => {
     it('uses the dedicated Test Optimization agent', (done) => {
       const agent = {}
+      agent.sockets = { active: agent }
       const request = sinon.stub().yieldsAsync(null, 'OK', 202)
+      const debug = sinon.stub().callsFake(message => typeof message === 'function' ? message() : message)
       const TestOptimizationLogsWriter = proxyquire(
         '../../../../src/ci-visibility/exporters/agentless/di-logs-writer',
         {
           '../agents': { getAgent: sinon.stub().returns(agent) },
           '../request': request,
+          '../../../log': { debug, error: sinon.stub() },
         }
       )
       const logsWriter = new TestOptimizationLogsWriter({ url: 'http://www.example.com' })
@@ -42,6 +45,7 @@ describe('Test Visibility DI Writer', () => {
       logsWriter.append({ message: 'test' })
       logsWriter.flush(() => {
         sinon.assert.calledWithMatch(request, sinon.match.any, { agent })
+        assert.doesNotMatch(debug.firstCall.returnValue, /"agent"/)
         done()
       })
     })

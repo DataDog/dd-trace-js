@@ -204,6 +204,9 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         headers: backendHeader,
         path: '/api/v2/apmtelemetry',
       }
+      if (isCiVisibilityAgentlessMode) {
+        backendOptions.agent = getTestOptimizationAgent(backendUrl)
+      }
       request(data, backendOptions, (error) => {
         if (error) {
           log.error('Error sending telemetry data', error)

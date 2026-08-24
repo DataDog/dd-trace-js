@@ -63,8 +63,13 @@ class Writer extends BaseWriter {
       options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'citestcycle-intake'
     }
 
+    // Agents contain circular socket state while requests are active, so omit them from debug output.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
+    log.debug(() => {
+      const logOptions = { ...options }
+      delete logOptions.agent
+      return `Request to the intake: ${safeJSONStringify(logOptions)}`
+    })
 
     const startRequestTime = Date.now()
 

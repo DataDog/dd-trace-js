@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -36,10 +38,12 @@ describe('CI Visibility Coverage Writer', () => {
     }
 
     log = {
+      debug: sinon.stub().callsFake(message => typeof message === 'function' ? message() : message),
       error: sinon.spy(),
     }
     incrementCountMetric = sinon.stub()
     agent = {}
+    agent.sockets = { active: agent }
 
     const CoverageCIVisibilityEncoder = function () {
       return encoder
@@ -99,6 +103,17 @@ describe('CI Visibility Coverage Writer', () => {
           method: 'POST',
           agent,
         })
+        done()
+      })
+    })
+
+    it('should omit active agent state from debug logs', (done) => {
+      encoder.count.returns(1)
+
+      coverageWriter.flush(() => {
+        const debugMessage = log.debug.firstCall.returnValue
+        assert.match(debugMessage, /^Request to the intake: /)
+        assert.doesNotMatch(debugMessage, /"agent"/)
         done()
       })
     })
