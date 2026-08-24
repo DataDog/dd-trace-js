@@ -52,10 +52,24 @@ describe('Tracer', () => {
 
   describe('flushAll', () => {
     let originalVercel
+    let flushServerlessTelemetry
+    let registerTelemetryFlusher
 
     beforeEach(() => {
       originalVercel = process.env.VERCEL
       process.env.VERCEL = '1'
+      const serverless = proxyquire('../src/serverless', {})
+      const flush = proxyquire('../src/flush', { './serverless': serverless })
+      const VercelTracer = proxyquire('../src/tracer', {
+        './flush': flush,
+        './serverless': serverless,
+      })
+      tracer = new VercelTracer(config)
+      tracer._exporter.setUrl = sinon.stub()
+      tracer._exporter.export = sinon.stub()
+      tracer._prioritySampler.configure = sinon.stub()
+      flushServerlessTelemetry = flush.flushServerlessTelemetry
+      registerTelemetryFlusher = flush.registerTelemetryFlusher
     })
 
     afterEach(() => {
@@ -64,7 +78,6 @@ describe('Tracer', () => {
     })
 
     it('flushes registered telemetry pipelines with the configured trace exporter', () => {
-      const { registerTelemetryFlusher } = require('../src/flush')
       tracer._exporter.flush = sinon.stub().callsFake(done => done())
       const telemetryFlusher = sinon.stub().callsFake(done => done())
       const unregister = registerTelemetryFlusher(telemetryFlusher)
@@ -79,7 +92,6 @@ describe('Tracer', () => {
     })
 
     it('flushes post-trace telemetry after the trace exporter completes', () => {
-      const { registerTelemetryFlusher } = require('../src/flush')
       let traceDone
       tracer._exporter.flush = sinon.stub().callsFake(done => { traceDone = done })
       const runtimeMetricsFlusher = sinon.stub().callsFake(done => done())
@@ -96,7 +108,6 @@ describe('Tracer', () => {
     })
 
     it('flushes registered telemetry pipelines without a trace exporter', () => {
-      const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
       const telemetryFlusher = sinon.stub().callsFake(done => done())
       const unregister = registerTelemetryFlusher(telemetryFlusher)
       const done = sinon.spy()
@@ -109,7 +120,6 @@ describe('Tracer', () => {
     })
 
     it('waits for callback flushers that return a synchronous status', () => {
-      const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
       let flushDone
       const telemetryFlusher = sinon.stub().callsFake(done => {
         flushDone = done
@@ -130,7 +140,6 @@ describe('Tracer', () => {
     })
 
     it('bounds configured telemetry flushing', () => {
-      const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
       const timeout = sinon.stub(global, 'setTimeout')
       const clearTimeout = sinon.stub(global, 'clearTimeout')
       const done = sinon.spy()
@@ -151,12 +160,13 @@ describe('Tracer', () => {
     })
 
     it('does not retain telemetry flushers outside a supported platform', () => {
-      const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
       delete process.env.VERCEL
+      const serverless = proxyquire('../src/serverless', {})
+      const flush = proxyquire('../src/flush', { './serverless': serverless })
       const telemetryFlusher = sinon.stub()
-      const unregister = registerTelemetryFlusher(telemetryFlusher)
+      const unregister = flush.registerTelemetryFlusher(telemetryFlusher)
 
-      flushServerlessTelemetry(sinon.spy())
+      flush.flushServerlessTelemetry(sinon.spy())
 
       sinon.assert.notCalled(telemetryFlusher)
       unregister()

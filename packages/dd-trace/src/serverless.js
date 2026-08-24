@@ -71,7 +71,7 @@ function getServerlessPlatform () {
  * @returns {boolean}
  */
 function supportsServerlessTelemetryRetention () {
-  return isVercelAtStartup || getEnvironmentVariable('VERCEL') === '1'
+  return isVercelAtStartup
 }
 
 /**

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/core')
@@ -15,6 +16,18 @@ const processTags = require('../../../src/process-tags')
 
 const RESOURCE_ATTRS = { 'service.name': 'svc' }
 const BUCKET_SIZE_NS = 10 * 1e9
+
+function getVercelOtlpStatsExporter () {
+  process.env.VERCEL = '1'
+  const serverless = proxyquire.noPreserveCache()('../../../src/serverless', {})
+  const OtlpHttpExporterBase = proxyquire.noPreserveCache()(
+    '../../../src/opentelemetry/otlp/otlp_http_exporter_base',
+    { '../../serverless': serverless }
+  )
+  return proxyquire.noPreserveCache()('../../../src/opentelemetry/metrics/otlp_span_stats_exporter', {
+    '../otlp/otlp_http_exporter_base': OtlpHttpExporterBase,
+  }).OtlpStatsExporter
+}
 
 before(() => processTags.initialize())
 
@@ -237,8 +250,12 @@ describe('OtlpStatsExporter', () => {
       callback(mockRes)
       return mockReq
     })
-    process.env.VERCEL = '1'
-    const serverlessExporter = new OtlpStatsExporter('http://localhost:4318/v1/metrics', 'http/json', RESOURCE_ATTRS)
+    const VercelOtlpStatsExporter = getVercelOtlpStatsExporter()
+    const serverlessExporter = new VercelOtlpStatsExporter(
+      'http://localhost:4318/v1/metrics',
+      'http/json',
+      RESOURCE_ATTRS
+    )
     const flushed = sinon.spy()
 
     serverlessExporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
@@ -263,8 +280,12 @@ describe('OtlpStatsExporter', () => {
       callback(mockRes)
       return mockReq
     })
-    process.env.VERCEL = '1'
-    const serverlessExporter = new OtlpStatsExporter('http://localhost:4318/v1/metrics', 'http/json', RESOURCE_ATTRS)
+    const VercelOtlpStatsExporter = getVercelOtlpStatsExporter()
+    const serverlessExporter = new VercelOtlpStatsExporter(
+      'http://localhost:4318/v1/metrics',
+      'http/json',
+      RESOURCE_ATTRS
+    )
     const flushed = sinon.spy()
 
     serverlessExporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
