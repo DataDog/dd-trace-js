@@ -14,8 +14,9 @@ const agentsPath = path.join(
   ddTraceRoot,
   'packages/dd-trace/src/ci-visibility/exporters/agents'
 )
-const { httpAgent } = require(agentsPath)
+const { getAgent } = require(agentsPath)
 const intakeUrl = new URL(process.env.DD_CIVISIBILITY_AGENTLESS_URL)
+const httpAgent = getAgent(intakeUrl)
 const agentName = httpAgent.getName({
   host: intakeUrl.hostname,
   port: Number(intakeUrl.port),

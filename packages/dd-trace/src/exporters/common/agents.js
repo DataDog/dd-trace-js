@@ -2,41 +2,13 @@
 
 const http = require('http')
 const https = require('https')
-const { storage } = require('../../../../datadog-core')
 
-const legacyStorage = storage('legacy')
+const createAgentClass = require('./create-agent-class')
 
-const keepAlive = true
 const maxSockets = 1
 
-function createAgentClass (BaseAgent) {
-  class CustomAgent extends BaseAgent {
-    constructor () {
-      super({ keepAlive, maxSockets })
-    }
-
-    createConnection (...args) {
-      return this._noop(() => super.createConnection(...args))
-    }
-
-    keepSocketAlive (...args) {
-      return this._noop(() => super.keepSocketAlive(...args))
-    }
-
-    reuseSocket (...args) {
-      return this._noop(() => super.reuseSocket(...args))
-    }
-
-    _noop (callback) {
-      return legacyStorage.run({ noop: true }, callback)
-    }
-  }
-
-  return CustomAgent
-}
-
-const HttpAgent = createAgentClass(http.Agent)
-const HttpsAgent = createAgentClass(https.Agent)
+const HttpAgent = createAgentClass(http.Agent, maxSockets)
+const HttpsAgent = createAgentClass(https.Agent, maxSockets)
 
 module.exports = {
   httpAgent: new HttpAgent(),

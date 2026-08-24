@@ -15,13 +15,12 @@ const {
   httpAgent: commonHttpAgent,
   httpsAgent: commonHttpsAgent,
 } = require('../../../src/exporters/common/agents')
-const {
-  getAgent,
-  httpAgent,
-  httpsAgent,
-} = require('../../../src/ci-visibility/exporters/agents')
+const { getAgent } = require('../../../src/ci-visibility/exporters/agents')
 
 describe('Test Optimization exporter agents', () => {
+  const httpAgent = getAgent('http://localhost')
+  const httpsAgent = getAgent('https://localhost')
+
   it('keeps the common exporter agents serialized', () => {
     assert.strictEqual(commonHttpAgent.keepAlive, true)
     assert.strictEqual(commonHttpAgent.maxSockets, 1)
