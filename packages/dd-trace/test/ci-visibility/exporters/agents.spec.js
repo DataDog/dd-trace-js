@@ -1,13 +1,15 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { EventEmitter } = require('node:events')
 const http = require('node:http')
 const net = require('node:net')
 
 const { describe, it } = require('mocha')
 
 require('../../setup/core')
+
+// Other exporter specs install HTTP interceptors while Mocha loads the suite.
+const createRequest = http.request
 
 const {
   createAgent,
@@ -22,7 +24,9 @@ const {
 
 describe('Test Optimization exporter agents', () => {
   it('keeps the common exporter agents serialized', () => {
+    assert.strictEqual(commonHttpAgent.keepAlive, true)
     assert.strictEqual(commonHttpAgent.maxSockets, 1)
+    assert.strictEqual(commonHttpsAgent.keepAlive, true)
     assert.strictEqual(commonHttpsAgent.maxSockets, 1)
   })
 
@@ -40,17 +44,27 @@ describe('Test Optimization exporter agents', () => {
     assert.strictEqual(getAgent('https://localhost'), httpsAgent)
   })
 
+  it('manages the keep-alive socket lifecycle', () => {
+    const socket = new net.Socket()
+    const request = {}
+
+    assert.strictEqual(httpAgent.keepSocketAlive(socket), true)
+    httpAgent.reuseSocket(socket, request)
+    assert.strictEqual(request.reusedSocket, true)
+    socket.destroy()
+  })
+
   it('opens eight same-origin connections and queues the ninth', async () => {
     const testAgent = createAgent(http.Agent, { keepAlive: true, maxSockets: httpAgent.maxSockets })
+    const lookupCallbacks = []
+    const lookup = (hostname, options, callback) => lookupCallbacks.push(callback)
     const requests = new Array(9)
-    testAgent.createConnection = () => new net.Socket()
 
     for (let index = 0; index < requests.length; index++) {
-      const request = new EventEmitter()
-      request.getHeader = () => undefined
-      request.onSocket = socket => { request.socket = socket }
+      const request = createRequest({ agent: testAgent, hostname: 'test.local', lookup })
+      request.on('error', () => {})
+      request.end()
       requests[index] = request
-      testAgent.addRequest(request, { host: 'test.local', port: 80 })
     }
 
     await new Promise(resolve => setImmediate(resolve))
@@ -59,10 +73,11 @@ describe('Test Optimization exporter agents', () => {
       const activeSockets = Object.values(testAgent.sockets)
       const queuedRequests = Object.values(testAgent.requests)
 
+      assert.strictEqual(lookupCallbacks.length, 8)
       assert.deepStrictEqual(activeSockets.map(sockets => sockets.length), [8])
       assert.deepStrictEqual(queuedRequests.map(requests => requests.length), [1])
     } finally {
-      for (const request of requests) request.socket?.destroy()
+      for (const request of requests) request.destroy()
       testAgent.destroy()
     }
   })
