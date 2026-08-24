@@ -160,7 +160,7 @@ class BaseLLMObsWriter {
     for (const [apiKey, buffer] of this.#multiTenantBuffers) {
       if (buffer.events.length === 0) continue
       const site = buffer.routing.site || this._config.site
-      const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
+      const maskedApiKey = `****${apiKey.slice(-4)}`
       let options
       let url
       try {
