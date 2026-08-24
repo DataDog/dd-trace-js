@@ -1549,6 +1549,25 @@ describe('coverage utils', () => {
       assert.strictEqual(getTestCoverageLinesPercentage(coverage, skippedCoverage, rootDir), 75)
     })
 
+    it('merges coverage paths that normalize to the same file', () => {
+      const rootDir = path.join(path.sep, 'repo')
+      const filename = path.join(rootDir, 'file.js')
+      const alias = `${path.join(rootDir, 'sub')}${path.sep}..${path.sep}file.js`
+      const aliasedCoverage = getPartialCoverage(alias)
+      aliasedCoverage[alias].s[0] = 0
+
+      assert.deepStrictEqual(getTestCoverageLinesData({
+        ...getPartialCoverage(filename),
+        ...aliasedCoverage,
+      }, undefined, rootDir, true), {
+        percentage: 25,
+        executableFiles: [{
+          filename: 'file.js',
+          bitmap: Buffer.from('Hg==', 'base64'),
+        }],
+      })
+    })
+
     it('ignores skipped coverage for files outside the executable coverage map', () => {
       const partialCoverage = getPartialCoverage()
       const skippedCoverage = {

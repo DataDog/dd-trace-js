@@ -1469,9 +1469,8 @@ function addSkippedCoverageToMap (skippedCoverage, targetMap) {
 function getTestCoverageLinesData (coverage, skippedCoverage, rootDir, includeExecutableFiles = false) {
   const coverageMap = getCoverageMap(coverage)
   const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  const coverageByFilename = new Map()
   const executableFiles = includeExecutableFiles ? [] : undefined
-  let totalExecutableLines = 0
-  let totalCoveredLines = 0
 
   for (const filename of coverageMap.files()) {
     const fileCoverage = coverageMap.fileCoverageFor(filename)
@@ -1479,14 +1478,26 @@ function getTestCoverageLinesData (coverage, skippedCoverage, rootDir, includeEx
     if (!executableBitmap) continue
 
     const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
-    const skippedBitmap = skippedCoverageByFilename.get(relativeFilename)
+    const existingCoverage = coverageByFilename.get(relativeFilename)
+    if (existingCoverage) {
+      existingCoverage.coveredBitmap = mergeCoverageBitmaps(existingCoverage.coveredBitmap, coveredBitmap)
+      existingCoverage.executableBitmap = mergeCoverageBitmaps(existingCoverage.executableBitmap, executableBitmap)
+    } else {
+      coverageByFilename.set(relativeFilename, { coveredBitmap, executableBitmap })
+    }
+  }
+
+  let totalExecutableLines = 0
+  let totalCoveredLines = 0
+  for (const [filename, { coveredBitmap, executableBitmap }] of coverageByFilename) {
+    const skippedBitmap = skippedCoverageByFilename.get(filename)
     const combinedCoveredBitmap = skippedBitmap
       ? mergeCoverageBitmaps(coveredBitmap, skippedBitmap)
       : coveredBitmap
     totalExecutableLines += countBitmapBits(executableBitmap)
     totalCoveredLines += countCoveredExecutableBits(combinedCoveredBitmap, executableBitmap)
     if (executableFiles) {
-      executableFiles.push({ filename: relativeFilename, bitmap: executableBitmap })
+      executableFiles.push({ filename, bitmap: executableBitmap })
     }
   }
 
