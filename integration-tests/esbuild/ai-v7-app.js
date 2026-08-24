@@ -4,7 +4,8 @@ const tracer = require('dd-trace').init({ startupLogs: false })
 // eslint-disable-next-line n/no-unsupported-features/node-builtins
 const { tracingChannel } = require('node:diagnostics_channel')
 
-tracer.use('ai')
+const { register } = require('dd-trace/packages/datadog-instrumentations/src/ai')
+register()
 
 if (!tracingChannel('ai:telemetry').hasSubscribers) {
   throw new Error('AI SDK telemetry channel was not activated')

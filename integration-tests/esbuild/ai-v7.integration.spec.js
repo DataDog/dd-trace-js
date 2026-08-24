@@ -26,7 +26,7 @@ describe('esbuild bundling AI SDK v7', () => {
 
   afterEach(() => agent.stop())
 
-  it('activates explicit AI tracing for a fully bundled SDK', async () => {
+  it('activates AI tracing for a fully bundled SDK', async () => {
     const builder = path.join(cwd, 'esbuild', 'build-ai-v7.js')
     execFileSync(process.execPath, [builder], { cwd })
 

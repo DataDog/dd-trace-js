@@ -24,7 +24,6 @@ describe('Plugin Manager', () => {
   let Graphql
   let pm
   let registeredDefaults
-  let registerInstrumentation
 
   function makeTracerConfig (overrides = {}) {
     return {
@@ -99,11 +98,9 @@ describe('Plugin Manager', () => {
     // default is returned unless the caller passes skipDefault. registeredDefaults lets a test
     // model a plugin whose default-enabled flag is `false` (e.g. an opt-in plugin).
     registeredDefaults = {}
-    registerInstrumentation = sinon.stub()
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {},
-      '../../datadog-instrumentations/src/helpers/register-instrumentation': registerInstrumentation,
       '../../dd-trace/src/config/helper': {
         getEnvironmentVariable (name) {
           return process.env[name]
@@ -128,18 +125,6 @@ describe('Plugin Manager', () => {
   describe('configurePlugin', () => {
     it('does not throw for old-style plugins', () => {
       pm.configurePlugin('one', false)
-    })
-
-    it('registers enabled instrumentation before its package loads', () => {
-      pm.configurePlugin('two')
-
-      sinon.assert.calledOnceWithExactly(registerInstrumentation, 'two')
-    })
-
-    it('does not register disabled instrumentation', () => {
-      pm.configurePlugin('two', false)
-
-      sinon.assert.notCalled(registerInstrumentation)
     })
 
     describe('without configure', () => {
@@ -316,11 +301,11 @@ describe('Plugin Manager', () => {
 
   describe('configure', () => {
     describe('without the load event', () => {
-      it('should instantiate explicitly configured plugins', () => {
+      it('should not instantiate plugins', () => {
         pm.configure(makeTracerConfig())
         pm.configurePlugin('two')
-        assert.deepStrictEqual(instantiated, ['two'])
-        sinon.assert.calledOnceWithMatch(Two.prototype.configure, { enabled: true })
+        assert.strictEqual(instantiated.length, 0)
+        sinon.assert.notCalled(Two.prototype.configure)
       })
     })
 
