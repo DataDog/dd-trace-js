@@ -302,6 +302,24 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('waits for exporter backpressure before creating a readable body without a deadline', () => {
+    commonRequest.writable = false
+    const createBody = sinon.stub().returns(Readable.from('payload'))
+    const done = sinon.spy()
+    request(createBody, {}, done)
+
+    clock.tick(49)
+    sinon.assert.notCalled(createBody)
+    assert.strictEqual(pendingRequests.length, 0)
+    commonRequest.writable = true
+    clock.tick(1)
+    sinon.assert.calledOnce(createBody)
+    assert.strictEqual(pendingRequests.length, 1)
+
+    pendingRequests[0].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnce(done)
+  })
+
   it('fails at the deadline while exporter backpressure remains active', () => {
     commonRequest.writable = false
     const done = sinon.spy()

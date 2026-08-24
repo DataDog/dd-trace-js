@@ -140,7 +140,7 @@ function requestBuffered (data, options, callback) {
       return
     }
 
-    if (deadline !== undefined && !commonRequest.writable) {
+    if (!commonRequest.writable) {
       retryTimer = setTimeout(attempt, Math.min(50, remaining), attemptIndex)
       retryTimer.unref?.()
       return
