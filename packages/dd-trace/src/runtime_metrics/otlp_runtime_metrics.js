@@ -245,6 +245,11 @@ module.exports = {
   decrement (name, tag) {
     this.count(name, -1, tag)
   },
+
+  flush (done) {
+    if (client) return client.flush(done)
+    done?.()
+  },
 }
 
 /**
