@@ -7,6 +7,9 @@ const { fork, exec } = require('child_process')
 const fs = require('node:fs')
 const path = require('path')
 const { inspect } = require('node:util')
+
+const semver = require('semver')
+
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -55,7 +58,7 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR } = require('../../version')
-const { version: ddTraceVersion } = require('../../package.json')
+const { engines, nodeMaxMajor, version: ddTraceVersion } = require('../../package.json')
 const { getBabelDependencies } = require('./babel-dependencies')
 
 const testFile = 'ci-visibility/run-jest.js'
@@ -66,6 +69,11 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+const runtimeSupported = Boolean(process.env.DD_INJECT_FORCE) ||
+  semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
+const onlyLatestSupportedRuntimeIt = JEST_VERSION === 'latest' && runtimeSupported ? it : it.skip
+const requestPressureTestName =
+  'delivers payloads from sequential runCLI executions under request pressure'
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
 // TODO: add ESM tests
@@ -673,7 +681,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  onlyLatestIt('delivers payloads from sequential runCLI executions under request pressure', async function () {
+  onlyLatestSupportedRuntimeIt(requestPressureTestName, async function () {
     this.timeout(120_000)
 
     receiver.setSettings({
