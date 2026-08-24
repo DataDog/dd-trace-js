@@ -171,7 +171,9 @@ function getRouteOrEndpoint (context, statusCode) {
 
 function getSpanPriority (span) {
   const spanContext = span.context?.()
-  return spanContext._sampling?.priority
+  const priority = spanContext._sampling?.priority
+
+  return priority == null ? priority : Number(priority)
 }
 
 module.exports = {
