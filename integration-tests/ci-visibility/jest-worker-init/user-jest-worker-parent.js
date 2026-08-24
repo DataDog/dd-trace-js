@@ -1,21 +1,28 @@
 'use strict'
 
+const fs = require('node:fs')
 const path = require('node:path')
 
 const { Worker } = require('jest-worker')
 
 async function run () {
-  const forkOptions = process.env.JEST_WORKER_PRELOAD_SOURCE === 'environment'
+  const preloadSource = process.env.JEST_WORKER_PRELOAD_SOURCE
+  const forkOptions = preloadSource === 'environment'
     ? { env: {} }
-    : { execArgv: [] }
-  const worker = new Worker(path.join(__dirname, 'user-jest-worker.js'), {
+    : preloadSource === 'environment-null' ? { env: null } : { execArgv: [] }
+  let workerPath = path.join(__dirname, 'user-jest-worker.js')
+  if (preloadSource === 'environment-null') {
+    workerPath = path.join(path.dirname(require.resolve('@jest/reporters')), 'dd-test-worker.js')
+    fs.copyFileSync(path.join(__dirname, 'user-jest-worker.js'), workerPath)
+  }
+  const worker = new Worker(workerPath, {
     enableWorkerThreads: true,
     forkOptions,
     numWorkers: 1,
   })
 
   try {
-    process.send(await worker.getArguments())
+    process.send(await worker.getState())
   } finally {
     await worker.end()
   }

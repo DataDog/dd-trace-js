@@ -4086,17 +4086,18 @@ function inheritsTestOptimizationPreload (forkOptions) {
   if (!preload) return false
 
   const workerEnvironment = forkOptions?.env
+  const inheritsEnvironment = workerEnvironment === undefined ||
+    workerEnvironment === null ||
+    typeof workerEnvironment === 'symbol'
   if (
-    workerEnvironment !== undefined &&
-    typeof workerEnvironment !== 'symbol' &&
+    !inheritsEnvironment &&
     (typeof workerEnvironment !== 'object' ||
-      workerEnvironment === null ||
       workerEnvironment.NODE_OPTIONS !== preload.nodeOptions)
   ) {
     return false
   }
   if (
-    (workerEnvironment === undefined || typeof workerEnvironment === 'symbol') &&
+    inheritsEnvironment &&
     getEnvironmentVariable('NODE_OPTIONS') !== preload.nodeOptions
   ) {
     return false
