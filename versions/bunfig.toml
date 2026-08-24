@@ -1,6 +1,5 @@
 [install]
 linker = "isolated"
-hoist = false
 saveTextLockfile = true
 
 # Same three-day cooldown as the root bunfig: the plugin sandboxes pull deps
