@@ -702,7 +702,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           DD_ENABLE_LAGE_PACKAGE_NAME: 'true',
-          DD_REPRO_FINAL_TIMEOUT_MS: '105000',
           DD_REPRO_PARAMETER_BYTES: '6000',
           DD_REPRO_PAYLOAD_SOURCE: 'name',
           DD_REPRO_RUN_COUNT: '2',
@@ -731,12 +730,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     for (const { type } of receivedEvents) {
       eventCounts[type] = (eventCounts[type] || 0) + 1
     }
+    const settledAttempts = statistics.responses + Object.values(statistics.errors)
+      .reduce((total, count) => total + count, 0)
 
     assert.ok(statistics.attempts > statistics.maxSockets, output)
     assert.strictEqual(statistics.maxSockets, 8, output)
     assert.ok(statistics.maxActiveSockets > 1, output)
     assert.ok(statistics.maxActiveSockets <= statistics.maxSockets, output)
     assert.ok(statistics.maxQueuedRequests > 0, output)
+    assert.strictEqual(settledAttempts, statistics.attempts, output)
     assert.strictEqual(statistics.errors.ABORT_ERR, undefined, output)
     assert.strictEqual(eventCounts.test, 4_000, output)
     assert.strictEqual(eventCounts.test_suite_end, 2, output)

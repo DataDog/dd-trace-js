@@ -1,5 +1,6 @@
 'use strict'
 
+const tracer = require('dd-trace')
 const path = require('node:path')
 
 const jest = require('jest')
@@ -7,7 +8,6 @@ const jest = require('jest')
 const testCyclePath = '/api/v2/citestcycle'
 const runCount = Number(process.env.DD_REPRO_RUN_COUNT || 2)
 const payloadSource = process.env.DD_REPRO_PAYLOAD_SOURCE || 'name'
-const finalStatisticsTimeoutMs = Number(process.env.DD_REPRO_FINAL_TIMEOUT_MS || 105_000)
 const ddTraceRoot = path.dirname(require.resolve('dd-trace'))
 const { version: ddTraceVersion } = require(path.join(ddTraceRoot, 'package.json'))
 const agentsPath = path.join(
@@ -82,8 +82,16 @@ function printFinalStatistics () {
   process.stdout.write(`DD_REPRO_FINAL ${JSON.stringify(statistics)}\n`)
 }
 
-process.once('beforeExit', printFinalStatistics)
-setTimeout(printFinalStatistics, finalStatisticsTimeoutMs).unref()
+/**
+ * Emits statistics after the tracer's existing final flush settles.
+ *
+ * @returns {void}
+ */
+function printStatisticsAfterFinalization () {
+  tracer._tracer._exporter.flush(printFinalStatistics)
+}
+
+globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(printStatisticsAfterFinalization)
 
 async function runForPackage (runIndex) {
   process.env.LAGE_PACKAGE_NAME = `request-pressure-package-${runIndex}`
