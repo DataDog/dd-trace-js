@@ -20,6 +20,19 @@ const { getAgent } = require('../agents')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
 
+/**
+ * Removes URLs and filesystem paths from a diagnostic error message.
+ *
+ * @param {string} message
+ * @returns {string}
+ */
+function sanitizeErrorMessage (message) {
+  return message
+    .replaceAll(/\b[a-z][a-z\d+.-]*:\/\/\S+/gi, '[redacted]')
+    .replaceAll(/(^|\s)(?:\/[^/\s]+){2,}/g, '$1[redacted]')
+    .replaceAll(/[a-z]:\\(?:[^\\\s]+\\)+[^\\\s]*/gi, '[redacted]')
+}
+
 class Writer extends BaseWriter {
   #requestTracker
 
@@ -91,7 +104,13 @@ class Writer extends BaseWriter {
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
           { endpoint: 'test_cycle' }
         )
-        log.error('Error sending CI agentless payload', err)
+        const diagnostic = {
+          endpoint: 'test_cycle',
+          code: err.code || null,
+          statusCode: statusCode ?? err.status ?? null,
+          message: sanitizeErrorMessage(err.message),
+        }
+        log.error('Test Optimization payload dropped: %s', JSON.stringify(diagnostic))
         done(err)
         return
       }

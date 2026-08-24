@@ -129,14 +129,26 @@ describe('CI Visibility Writer', () => {
 
     describe('when request fails', function () {
       it('should log request errors', done => {
-        const error = new Error('boom')
+        const error = Object.assign(new Error('Error from https://example.invalid/path: unavailable'), {
+          code: 'ECONNRESET',
+          status: 503,
+        })
 
-        request.yields(error)
+        request.yields(error, null, 503)
 
         encoder.count.returns(1)
 
         writer.flush(() => {
-          sinon.assert.calledWith(log.error, 'Error sending CI agentless payload', error)
+          sinon.assert.calledWithExactly(
+            log.error,
+            'Test Optimization payload dropped: %s',
+            JSON.stringify({
+              endpoint: 'test_cycle',
+              code: 'ECONNRESET',
+              statusCode: 503,
+              message: 'Error from [redacted] unavailable',
+            })
+          )
           sinon.assert.calledWithExactly(
             incrementCountMetric,
             'endpoint_payload.dropped',

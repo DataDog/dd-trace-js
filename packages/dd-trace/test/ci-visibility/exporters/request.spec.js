@@ -14,6 +14,7 @@ const commonRetry = require('../../../src/exporters/common/retry')
 describe('Test Optimization exporter request', () => {
   let clock
   let commonRequest
+  let log
   let pendingRequests
   let request
 
@@ -24,6 +25,7 @@ describe('Test Optimization exporter request', () => {
       pendingRequests.push({ data, options, callback })
     }
     commonRequest.writable = true
+    log = { error: sinon.spy() }
     request = proxyquire('../../../src/ci-visibility/exporters/request', {
       '../../exporters/common/request': commonRequest,
       '../../exporters/common/retry': {
@@ -31,6 +33,7 @@ describe('Test Optimization exporter request', () => {
         getMaxAttempts: () => 2,
         getRetryDelay: () => 6000,
       },
+      '../../log': log,
     })
   })
 
@@ -44,6 +47,9 @@ describe('Test Optimization exporter request', () => {
 
     const error = Object.assign(new Error('unavailable'), { status: 503 })
     pendingRequests[0].callback(error, null, 503, {})
+    const diagnostic = JSON.parse(log.error.firstCall.args[1])
+    assert.strictEqual(diagnostic.code, null)
+    assert.strictEqual(diagnostic.statusCode, 503)
     clock.tick(5999)
     assert.strictEqual(pendingRequests.length, 1)
     clock.tick(1)
@@ -81,6 +87,41 @@ describe('Test Optimization exporter request', () => {
     assert.strictEqual(pendingRequests[1].options.timeout, 500)
     pendingRequests[1].callback(null, 'ok', 200, {})
     sinon.assert.calledOnce(done)
+  })
+
+  it('logs failed attempts with the submission socket pressure', () => {
+    const agent = {
+      getName: sinon.stub().returns('origin'),
+      maxSockets: 8,
+      requests: { origin: [{}] },
+      sockets: { origin: new Array(8) },
+    }
+    const done = sinon.spy()
+    request('payload', {
+      agent,
+      deadline: Date.now() + 10_000,
+      path: '/api/v2/citestcycle',
+      url: 'http://localhost:8126',
+    }, done)
+
+    const error = Object.assign(new Error('reset'), { code: 'ECONNRESET' })
+    pendingRequests[0].callback(error)
+
+    sinon.assert.calledWithExactly(
+      log.error,
+      'Test Optimization request attempt failed: %s',
+      JSON.stringify({
+        attemptNumber: 1,
+        code: 'ECONNRESET',
+        statusCode: null,
+        remainingDeadlineMs: 10_000,
+        queuedWhenSubmitted: true,
+        activeSockets: 8,
+        queuedRequests: 1,
+        maxSockets: 8,
+        endpoint: '/api/v2/citestcycle',
+      })
+    )
   })
 
   it('waits for a rate-limit reset inside the finalization deadline', () => {
@@ -127,13 +168,19 @@ describe('Test Optimization exporter request', () => {
 
     const requestError = Object.assign(new Error('reset'), { code: 'ECONNRESET' })
     pendingRequests[0].callback(requestError)
-    const abortError = Object.assign(new Error('finalization expired'), { code: 'ABORT_ERR' })
+    const abortError = Object.assign(new Error('finalization expired'), {
+      code: 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT',
+    })
     controller.abort(abortError)
     clock.tick(10_000)
 
     assert.strictEqual(pendingRequests.length, 1)
     sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0], abortError)
+    assert.deepStrictEqual(
+      log.error.getCalls().map(call => JSON.parse(call.args[1]).code),
+      ['ECONNRESET', 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT']
+    )
   })
 
   it('stops buffering a readable body when finalization aborts', () => {
@@ -174,5 +221,20 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
     assert.strictEqual(pendingRequests.length, 0)
+    sinon.assert.calledWithExactly(
+      log.error,
+      'Test Optimization request attempt failed: %s',
+      JSON.stringify({
+        attemptNumber: 1,
+        code: 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT',
+        statusCode: null,
+        remainingDeadlineMs: 0,
+        queuedWhenSubmitted: null,
+        activeSockets: null,
+        queuedRequests: null,
+        maxSockets: null,
+        endpoint: null,
+      })
+    )
   })
 })

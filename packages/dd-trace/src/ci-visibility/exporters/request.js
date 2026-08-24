@@ -3,13 +3,73 @@
 const { Readable } = require('node:stream')
 
 const commonRequest = require('../../exporters/common/request')
+const { parseUrl } = require('../../exporters/common/url')
 const {
   RATE_LIMIT_MAX_WAIT_MS,
   getMaxAttempts,
   getRetryDelay,
   isRetriableNetworkError,
 } = require('../../exporters/common/retry')
+const log = require('../../log')
 const { getRateLimitResetDelay } = require('../requests/rate-limit')
+
+/**
+ * Captures the dedicated agent pressure for the request origin.
+ *
+ * @param {object} options
+ * @returns {{ activeSockets: number|null, queuedRequests: number|null, maxSockets: number|string|null }}
+ */
+function getAgentPressure (options) {
+  const { agent } = options
+  if (!agent?.getName) {
+    return { activeSockets: null, queuedRequests: null, maxSockets: null }
+  }
+
+  try {
+    const connectionOptions = options.url ? { ...options, ...parseUrl(options.url) } : options
+    const name = agent.getName(connectionOptions)
+    const activeSockets = agent.sockets?.[name]?.length || 0
+    const queuedRequests = agent.requests?.[name]?.length || 0
+    const maxSockets = Number.isFinite(agent.maxSockets) ? agent.maxSockets : String(agent.maxSockets)
+
+    return { activeSockets, queuedRequests, maxSockets }
+  } catch {
+    return { activeSockets: null, queuedRequests: null, maxSockets: null }
+  }
+}
+
+/**
+ * Records a failed Test Optimization request attempt without exposing intake URLs or headers.
+ *
+ * @param {Error} error
+ * @param {number} attemptNumber
+ * @param {object} options
+ * @param {number} [statusCode]
+ * @param {{ activeSockets: number|null, queuedRequests: number|null, maxSockets: number|string|null,
+ *   queuedWhenSubmitted?: boolean|null }} [pressure]
+ * @returns {void}
+ */
+function logAttemptFailure (error, attemptNumber, options, statusCode, pressure = getAgentPressure(options)) {
+  const remainingDeadlineMs = options.deadline === undefined ? null : Math.max(0, options.deadline - Date.now())
+  const queuedWhenSubmitted = pressure.queuedWhenSubmitted ?? (
+    pressure.queuedRequests === null || pressure.activeSockets === null || pressure.maxSockets === null
+      ? null
+      : pressure.queuedRequests > 0 || pressure.activeSockets >= pressure.maxSockets
+  )
+  const diagnostic = {
+    attemptNumber,
+    code: error.code || null,
+    statusCode: statusCode ?? error.status ?? null,
+    remainingDeadlineMs,
+    queuedWhenSubmitted,
+    activeSockets: pressure.activeSockets,
+    queuedRequests: pressure.queuedRequests,
+    maxSockets: pressure.maxSockets,
+    endpoint: options.path || null,
+  }
+
+  log.error('Test Optimization request attempt failed: %s', JSON.stringify(diagnostic))
+}
 
 /**
  * @param {AbortSignal} signal
@@ -103,6 +163,8 @@ function request (data, options, callback) {
 function requestBuffered (data, options, callback) {
   const { signal } = options
   const timeout = options.timeout || 2000
+  let currentAttemptNumber = 1
+  let currentAttemptPressure
   let retryTimer
   let settled = false
 
@@ -113,7 +175,11 @@ function requestBuffered (data, options, callback) {
     signal?.removeEventListener('abort', onAbort)
     callback(error, result, statusCode, headers)
   }
-  const onAbort = () => complete(getAbortError(signal))
+  const onAbort = () => {
+    const error = getAbortError(signal)
+    logAttemptFailure(error, currentAttemptNumber, options, undefined, currentAttemptPressure)
+    complete(error)
+  }
 
   signal?.addEventListener('abort', onAbort, { once: true })
   if (signal?.aborted) return onAbort()
@@ -123,11 +189,15 @@ function requestBuffered (data, options, callback) {
     if (settled) return
     if (signal?.aborted) return onAbort()
 
+    currentAttemptNumber = attemptIndex
+    currentAttemptPressure = undefined
+
     const deadline = options.deadline
     const remaining = deadline === undefined ? Infinity : deadline - Date.now()
     if (remaining <= 0) {
       const error = new Error('Test Optimization request reached its finalization deadline')
       error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
+      logAttemptFailure(error, attemptIndex, options)
       complete(error)
       return
     }
@@ -145,6 +215,16 @@ function requestBuffered (data, options, callback) {
     }
     if (deadline !== undefined) attemptOptions.timeout = Math.max(1, Math.min(timeout, remaining))
 
+    const pressureBeforeSubmission = getAgentPressure(attemptOptions)
+    currentAttemptPressure = {
+      ...pressureBeforeSubmission,
+      queuedWhenSubmitted: pressureBeforeSubmission.queuedRequests === null ||
+        pressureBeforeSubmission.activeSockets === null || pressureBeforeSubmission.maxSockets === null
+        ? null
+        : pressureBeforeSubmission.queuedRequests > 0 ||
+          pressureBeforeSubmission.activeSockets >= pressureBeforeSubmission.maxSockets,
+    }
+
     commonRequest(data, attemptOptions, (error, result, statusCode, headers) => {
       if (settled) return
       if (!error) {
@@ -153,6 +233,7 @@ function requestBuffered (data, options, callback) {
       }
 
       const responseStatus = statusCode ?? error.status
+      logAttemptFailure(error, attemptIndex, options, responseStatus, currentAttemptPressure)
       const isRetriableHttpError = options.deadline !== undefined &&
         (responseStatus === 429 || responseStatus >= 500)
       if (options.retry === false || (attemptIndex >= getMaxAttempts(attemptOptions) &&
@@ -193,6 +274,14 @@ function requestBuffered (data, options, callback) {
       retryTimer = setTimeout(attempt, delay, attemptIndex + 1)
       retryTimer.unref?.()
     })
+
+    const pressureAfterSubmission = getAgentPressure(attemptOptions)
+    if (currentAttemptPressure.queuedRequests !== null && pressureAfterSubmission.queuedRequests !== null) {
+      currentAttemptPressure.queuedWhenSubmitted ||=
+        pressureAfterSubmission.queuedRequests > currentAttemptPressure.queuedRequests
+    }
+    currentAttemptPressure.activeSockets = pressureAfterSubmission.activeSockets
+    currentAttemptPressure.queuedRequests = pressureAfterSubmission.queuedRequests
   }
 
   attempt(1)
