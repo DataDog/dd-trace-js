@@ -35,6 +35,7 @@ describe('TracerProxy', () => {
   let aiguard
   let telemetry
   let iast
+  let rewriter
   let openfeature
   let PluginManager
   let pluginManager
@@ -205,6 +206,11 @@ describe('TracerProxy', () => {
       disable: sinon.spy(),
     }
 
+    rewriter = {
+      enable: sinon.spy(),
+      disable: sinon.spy(),
+    }
+
     openfeature = {
       enable: sinon.spy(),
       disable: sinon.spy(),
@@ -259,6 +265,7 @@ describe('TracerProxy', () => {
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
+      './appsec/iast/taint-tracking/rewriter': rewriter,
       './aiguard': aiguard,
       './telemetry': telemetry,
       './remote_config': RemoteConfig,
@@ -288,6 +295,15 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(Config, options)
         sinon.assert.calledWith(DatadogTracer, config)
         sinon.assert.calledOnceWithExactly(RemoteConfig, config)
+        sinon.assert.notCalled(rewriter.enable)
+      })
+
+      it('should enable the IAST rewriter when IAST is enabled', () => {
+        config.iast.enabled = true
+
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(rewriter.enable, config)
       })
 
       it('should not initialize twice', () => {
