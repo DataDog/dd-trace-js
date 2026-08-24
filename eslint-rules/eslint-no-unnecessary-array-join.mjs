@@ -61,7 +61,8 @@ export default {
             if (
               call.parent.type !== 'ExpressionStatement' ||
               call.arguments.length === 0 ||
-              call.arguments.some(argument => argument.type === 'SpreadElement')
+              call.arguments.some(argument =>
+                argument.type === 'SpreadElement' || isKnownNonStringExpression(argument, sourceCode))
             ) {
               return
             }
@@ -130,4 +131,68 @@ function isStaticSeparator (node) {
   if (node === undefined) return true
   if (node.type === 'Literal') return typeof node.value === 'string'
   return node.type === 'TemplateLiteral' && node.expressions.length === 0
+}
+
+/**
+ * @param {import('estree').Expression} node
+ * @param {import('eslint').SourceCode} sourceCode
+ * @param {Set<import('estree').Node>} [seen]
+ * @returns {boolean}
+ */
+function isKnownNonStringExpression (node, sourceCode, seen = new Set()) {
+  if (node.type === 'Literal') return typeof node.value !== 'string'
+
+  if (node.type === 'BinaryExpression') {
+    return node.operator !== '+'
+  }
+
+  if (node.type === 'ConditionalExpression') {
+    return isKnownNonStringExpression(node.consequent, sourceCode, seen) ||
+      isKnownNonStringExpression(node.alternate, sourceCode, seen)
+  }
+
+  if (node.type === 'LogicalExpression') {
+    return isKnownNonStringExpression(node.left, sourceCode, seen) ||
+      isKnownNonStringExpression(node.right, sourceCode, seen)
+  }
+
+  if (node.type === 'SequenceExpression') {
+    return isKnownNonStringExpression(node.expressions[node.expressions.length - 1], sourceCode, seen)
+  }
+
+  if (node.type === 'UnaryExpression') return node.operator !== 'typeof'
+  if (node.type === 'UpdateExpression') return true
+
+  if (
+    node.type === 'ArrayExpression' ||
+    node.type === 'ArrowFunctionExpression' ||
+    node.type === 'ClassExpression' ||
+    node.type === 'FunctionExpression' ||
+    node.type === 'NewExpression' ||
+    node.type === 'ObjectExpression'
+  ) {
+    return true
+  }
+
+  if (node.type === 'Identifier' && !seen.has(node)) {
+    seen.add(node)
+    let scope = sourceCode.getScope(node)
+
+    while (scope) {
+      const variable = scope.set.get(node.name)
+      const definition = variable?.defs.find(definition =>
+        definition.type === 'Variable' &&
+        definition.node.init &&
+        definition.node.parent.kind === 'const'
+      )
+
+      if (definition) return isKnownNonStringExpression(definition.node.init, sourceCode, seen)
+      if (variable) return node.name === 'undefined' && variable.defs.length === 0
+      scope = scope.upper
+    }
+
+    return node.name === 'undefined'
+  }
+
+  return false
 }
