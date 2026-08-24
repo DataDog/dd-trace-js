@@ -168,8 +168,8 @@ class NativeWallProfiler {
         spanFinishCh.subscribe(this.#boundSpanFinished)
         if (this.#endpointCollectionEnabled) {
           // Web-tags cache publishes once per span at the moment its
-          // walk-result transitions from undefined to a real value —
-          // exactly when we need to refresh the ProfilingContext snapshot.
+          // walk-result changes — exactly when we need to refresh the
+          // ProfilingContext snapshot.
           webTagsCache.resolvedCh.subscribe(this.#boundSpanTagsUpdated)
           // Turn on the cache's own tagsUpdate subscription — it's
           // ref-counted, so this composes with any other active consumer.
@@ -266,8 +266,8 @@ class NativeWallProfiler {
       }
 
       // webTags is snapshotted into the sample context at getProfilingContext
-      // time; if the answer turns out to be undefined and the span later gets
-      // web-server tags, #spanTagsUpdated refreshes this field via the shared
+      // time; if the answer changes later — the span or an ancestor becomes a
+      // web-server span — #spanTagsUpdated refreshes this field via the shared
       // cache (see web-tags-cache.js).
       const webTags = this.#endpointCollectionEnabled ? webTagsCache.getCachedWebTags(span) : undefined
 
@@ -291,9 +291,10 @@ class NativeWallProfiler {
   }
 
   // Invoked (via webTagsCache.resolvedCh) once per span at the moment the
-  // shared cache promotes a previously-undefined webTags answer into a
-  // real value. Refresh the ProfilingContext snapshot so future samples
-  // pick it up.
+  // shared cache changes its webTags answer: an empty one promoted into a real
+  // value, or an outer request's tag bag replaced by a nearer one. Refresh the
+  // ProfilingContext snapshot in place so samples already holding it — including
+  // those of a span that stays active across the promotion — pick it up.
   #spanTagsUpdated (span) {
     if (!this.#started) return
     const profilingContext = span[ProfilingContext]
