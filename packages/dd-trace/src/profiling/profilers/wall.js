@@ -138,7 +138,7 @@ class NativeWallProfiler {
 
     this.#pprof.time.start({
       collectCpuTime: this.#cpuProfilingEnabled,
-      columnNumbers: 'pack',
+      columnNumbers: 'emit',
       durationMillis: this.#flushIntervalMillis,
       intervalMicros: this.#samplingIntervalMicros,
       lineNumbers: false,
