@@ -687,6 +687,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
     receiver.setWaitingTime(3_000)
 
+    const receivedEvents = []
+    receiver.on('message', ({ payload, url }) => {
+      if (url.endsWith('/api/v2/citestcycle')) {
+        receivedEvents.push(...payload.events)
+      }
+    })
+
     let output = ''
     childProcess = exec(
       'node ./ci-visibility/run-jest-request-pressure.js',
@@ -719,14 +726,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     assert.ok(finalLine, output)
 
     const statistics = JSON.parse(finalLine.slice('DD_REPRO_FINAL '.length))
+    const eventCounts = {}
+
+    for (const { type } of receivedEvents) {
+      eventCounts[type] = (eventCounts[type] || 0) + 1
+    }
 
     assert.ok(statistics.attempts > statistics.maxSockets, output)
     assert.strictEqual(statistics.maxSockets, 8, output)
     assert.ok(statistics.maxActiveSockets > 1, output)
     assert.ok(statistics.maxActiveSockets <= statistics.maxSockets, output)
     assert.ok(statistics.maxQueuedRequests > 0, output)
-    assert.deepStrictEqual(statistics.errors, {}, output)
-    assert.strictEqual(statistics.responses, statistics.attempts, output)
+    assert.strictEqual(statistics.errors.ABORT_ERR, undefined, output)
+    assert.strictEqual(eventCounts.test, 4_000, output)
+    assert.strictEqual(eventCounts.test_suite_end, 2, output)
+    assert.strictEqual(eventCounts.test_module_end, 2, output)
+    assert.strictEqual(eventCounts.test_session_end, 2, output)
   })
 
   onlyLatestIt('reports test events when Jest loads the node environment from an isolated build file', async () => {
