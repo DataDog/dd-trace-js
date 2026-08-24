@@ -13,14 +13,14 @@ const sampler = require('./sampler')
  *   - MISSING_ROUTE: missing_route
  *   - SKIP: no metric emitted
  *
- * @param {import('http').IncomingMessage} req
+ * @param {object} rootSpan Span the sampling decision was attached to
  * @param {'sample' | 'missing_route' | 'skip'} samplingDecision Sampler decision
  * @param {{ attributes?: Record<string, unknown> } | undefined} wafResult WAF run result
  */
-function reportRequest (req, samplingDecision, wafResult) {
+function reportRootSpanRequest (rootSpan, samplingDecision, wafResult) {
   switch (samplingDecision) {
     case sampler.SamplingDecision.SAMPLE: {
-      const framework = getFramework(req)
+      const framework = getFramework(rootSpan)
       if (hasSchemaAttributes(wafResult?.attributes)) {
         appsecTelemetry.incrementApiSecRequestSchemaMetric(framework)
       } else {
@@ -29,13 +29,24 @@ function reportRequest (req, samplingDecision, wafResult) {
       break
     }
     case sampler.SamplingDecision.MISSING_ROUTE:
-      appsecTelemetry.incrementApiSecMissingRouteMetric(getFramework(req))
+      appsecTelemetry.incrementApiSecMissingRouteMetric(getFramework(rootSpan))
       break
   }
 }
 
-function getFramework (req) {
-  return web.root(req)?.context()?.getTag?.('component')
+/**
+ * Node HTTP adapter over {@link reportRootSpanRequest}.
+ *
+ * @param {import('http').IncomingMessage} req
+ * @param {'sample' | 'missing_route' | 'skip'} samplingDecision Sampler decision
+ * @param {{ attributes?: Record<string, unknown> } | undefined} wafResult WAF run result
+ */
+function reportRequest (req, samplingDecision, wafResult) {
+  reportRootSpanRequest(web.root(req), samplingDecision, wafResult)
+}
+
+function getFramework (rootSpan) {
+  return rootSpan?.context()?.getTag?.('component')
 }
 
 function hasSchemaAttributes (attributes) {
@@ -50,6 +61,8 @@ module.exports = {
   configure: sampler.configure,
   disable: sampler.disable,
   sampleRequest: sampler.sampleRequest,
+  sampleRootSpanRequest: sampler.sampleRootSpanRequest,
   reportRequest,
+  reportRootSpanRequest,
   SamplingDecision: sampler.SamplingDecision,
 }
