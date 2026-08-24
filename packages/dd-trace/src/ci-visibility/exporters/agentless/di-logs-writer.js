@@ -6,6 +6,7 @@ const { JSONEncoder } = require('../../encode/json-encoder')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 const BaseWriter = require('../../../exporters/common/writer')
 
+const { getAgent } = require('../agents')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
 
@@ -46,6 +47,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       },
       timeout: this.timeout,
       url: this._url,
+      agent: getAgent(this._url),
       deadline: flushOptions?.deadline,
     }
 
