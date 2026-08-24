@@ -534,6 +534,8 @@ function createMetricsAggregationClient (options) {
 }
 
 class MetricsAggregationClient {
+  #metricsByType
+
   /** @type {DogStatsDTelemetryState|undefined} */
   #telemetry
 
@@ -543,6 +545,7 @@ class MetricsAggregationClient {
   constructor (client) {
     this._client = client
     this.#telemetry = client.telemetry
+    this.#metricsByType = this.#telemetry?.metricsByType ?? [0, 0, 0, 0]
 
     this.reset()
   }
@@ -582,9 +585,7 @@ class MetricsAggregationClient {
   // TODO: Aggregate with a histogram and send the buckets to the client.
   distribution (name, value, tags) {
     this._client.distribution(name, value, tags)
-    const telemetry = this.#telemetry
-
-    if (telemetry) telemetry.metricsByType[TYPE_DISTRIBUTION_INDEX]++
+    this.#metricsByType[TYPE_DISTRIBUTION_INDEX]++
   }
 
   boolean (name, value, tags) {
@@ -599,9 +600,7 @@ class MetricsAggregationClient {
     }
 
     node.value.record(value)
-    const telemetry = this.#telemetry
-
-    if (telemetry) telemetry.metricsByType[TYPE_HISTOGRAM_INDEX]++
+    this.#metricsByType[TYPE_HISTOGRAM_INDEX]++
   }
 
   count (name, count, tags = [], monotonic = true) {
@@ -614,18 +613,14 @@ class MetricsAggregationClient {
     const node = this._ensureTree(container, name, tags, 0)
 
     node.value += count
-    const telemetry = this.#telemetry
-
-    if (telemetry) telemetry.metricsByType[monotonic ? TYPE_COUNTER_INDEX : TYPE_GAUGE_INDEX]++
+    this.#metricsByType[monotonic ? TYPE_COUNTER_INDEX : TYPE_GAUGE_INDEX]++
   }
 
   gauge (name, value, tags) {
     const node = this._ensureTree(this._gauges, name, tags, 0)
 
     node.value = value
-    const telemetry = this.#telemetry
-
-    if (telemetry) telemetry.metricsByType[TYPE_GAUGE_INDEX]++
+    this.#metricsByType[TYPE_GAUGE_INDEX]++
   }
 
   increment (name, count = 1, tags) {
