@@ -305,30 +305,41 @@ describe('CiPlugin', () => {
 
   it('consumes worker telemetry for every test framework', () => {
     const plugin = createPlugin('vitest_worker', true)
+    const onTelemetryLog = sinon.stub()
+    const telemetryLog = dc.channel('datadog:telemetry:log')
+    telemetryLog.subscribe(onTelemetryLog)
 
-    dc.channel('ci:vitest:worker-report:telemetry').publish(JSON.stringify([
-      {
-        type: 'ciVisEvent',
-        name: 'code_coverage_started',
-        testLevel: 'suite',
-        testFramework: 'vitest',
-        isUnsupportedCIProvider: false,
-        tags: { library: 'v8' },
-      },
-      {
-        type: 'count',
-        name: 'itr_unskippable',
-        tags: { testLevel: 'suite' },
-        value: 2,
-      },
-      {
-        type: 'distribution',
-        name: 'code_coverage.files',
-        tags: {},
-        measure: 3,
-      },
-    ]))
-    plugin.configure(false)
+    try {
+      dc.channel('ci:vitest:worker-report:telemetry').publish(JSON.stringify([
+        {
+          type: 'ciVisEvent',
+          name: 'code_coverage_started',
+          testLevel: 'suite',
+          testFramework: 'vitest',
+          isUnsupportedCIProvider: false,
+          tags: { library: 'v8' },
+        },
+        {
+          type: 'count',
+          name: 'itr_unskippable',
+          tags: { testLevel: 'suite' },
+          value: 2,
+        },
+        {
+          type: 'distribution',
+          name: 'code_coverage.files',
+          tags: {},
+          measure: 3,
+        },
+        {
+          type: 'log',
+          log: { level: 'ERROR', count: 1, message: 'worker error' },
+        },
+      ]))
+    } finally {
+      plugin.configure(false)
+      telemetryLog.unsubscribe(onTelemetryLog)
+    }
 
     sinon.assert.calledWith(incrementCountMetric, 'code_coverage_started', {
       testLevel: 'suite',
@@ -338,6 +349,11 @@ describe('CiPlugin', () => {
     })
     sinon.assert.calledWith(incrementCountMetric, 'itr_unskippable', { testLevel: 'suite' }, 2)
     sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
+    sinon.assert.calledOnceWithExactly(onTelemetryLog, {
+      level: 'ERROR',
+      count: 1,
+      message: 'worker error',
+    }, 'datadog:telemetry:log')
   })
 
   it('defers worker suite events when the exporter supports late test suite updates', () => {

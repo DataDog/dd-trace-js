@@ -60,7 +60,7 @@ class Writer {
       try {
         vitestWorkerPort.postMessage(payload)
       } catch (error) {
-        log.error('Error posting message to vitest worker port', error)
+        log.errorWithoutTelemetry('Error posting message to vitest worker port', error)
       } finally {
         onDone()
       }
@@ -70,7 +70,7 @@ class Writer {
     // child_process workers (jest default, cucumber)
     if (process.send) {
       process.send(payload, (error) => {
-        if (error) log.error('Error sending message to parent process', error)
+        if (error) log.errorWithoutTelemetry('Error sending message to parent process', error)
         onDone(error)
       })
       return
@@ -82,7 +82,7 @@ class Writer {
       try {
         parentPort.postMessage(payload)
       } catch (error) {
-        log.error('Error posting message to parent port', error)
+        log.errorWithoutTelemetry('Error posting message to parent port', error)
         onDone(error)
         return
       }

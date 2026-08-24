@@ -1,5 +1,7 @@
 'use strict'
 
+const dc = require('dc-polyfill')
+
 const {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -19,7 +21,16 @@ const {
 } = require('../../../plugins/util/test')
 const getConfig = require('../../../config')
 const { getEnvironmentVariable } = require('../../../config/helper')
+const formatError = require('../../../telemetry/logs/format-error')
 const Writer = require('./writer')
+
+const errorLog = dc.channel('datadog:log:error')
+let telemetryWriter
+
+errorLog.subscribe((error) => {
+  const log = formatError(error)
+  if (log) telemetryWriter?.append({ type: 'log', log })
+})
 
 function getInterprocessTraceCode () {
   const { DD_PLAYWRIGHT_WORKER, DD_VITEST_WORKER } = getConfig()
@@ -97,7 +108,8 @@ function getInterprocessTelemetryCode () {
  * Currently used by Jest, Cucumber and Mocha workers.
  */
 class TestWorkerCiVisibilityExporter {
-  constructor () {
+  /** @param {import('../../../config/config-base')} [config] */
+  constructor (config) {
     const interprocessTraceCode = getInterprocessTraceCode()
     const interprocessCoverageCode = getInterprocessCoverageCode()
     const interprocessLogsCode = getInterprocessLogsCode()
@@ -108,6 +120,9 @@ class TestWorkerCiVisibilityExporter {
     this._logsWriter = new Writer(interprocessLogsCode)
     if (interprocessTelemetryCode) {
       this._telemetryWriter = new Writer(interprocessTelemetryCode)
+      telemetryWriter = config?.telemetry?.DD_TELEMETRY_LOG_COLLECTION_ENABLED === false
+        ? undefined
+        : this._telemetryWriter
       this.exportTelemetry = function (telemetryEvent) {
         this._telemetryWriter.append(telemetryEvent)
       }

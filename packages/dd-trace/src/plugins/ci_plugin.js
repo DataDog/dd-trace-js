@@ -6,6 +6,8 @@ const realClearTimeout = clearTimeout
 
 const { threadId } = require('node:worker_threads')
 
+const dc = require('dc-polyfill')
+
 const { storage } = require('../../../datadog-core')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
@@ -96,6 +98,7 @@ const {
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('./util/test')
 
+const telemetryLog = dc.channel('datadog:telemetry:log')
 const legacyStorage = storage('legacy')
 const DI_OPERATION_TIMEOUT_MS = 2000
 const DI_LOGGER_THREAD_ID = threadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${threadId}`
@@ -475,6 +478,8 @@ module.exports = class CiPlugin extends Plugin {
           this.telemetry.count(event.name, event.tags, event.value)
         } else if (event.type === 'distribution') {
           this.telemetry.distribution(event.name, event.tags, event.measure)
+        } else if (event.type === 'log') {
+          telemetryLog.publish(event.log)
         }
       }
     })
