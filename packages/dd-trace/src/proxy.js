@@ -344,20 +344,25 @@ class Tracer extends NoopProxy {
       log.error(BUNDLED_OPENSSL_WARNING)
     }
 
+    const identityPropagation = require('./microvm-identity-propagation')
+    identityPropagation.start(() => {
+      drainUuidPool()
+      channel('datadog:identity:update').publish(config)
+      if (this._tracingInitialized) {
+        const metadata = require('./tracer_metadata')(config)
+        if (metadata === undefined) {
+          log.warn('Could not store tracer configuration for service discovery')
+        }
+      }
+      channel('datadog:identity:refresh').publish(config)
+    })
+
     const ch = channel('http.server.request.start')
 
     const onHttpRequest = ({ request }) => {
       if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
         ch.unsubscribe(onHttpRequest)
-        drainUuidPool()
-        channel('datadog:identity:update').publish(config)
-        if (this._tracingInitialized) {
-          const metadata = require('./tracer_metadata')(config)
-          if (metadata === undefined) {
-            log.warn('Could not store tracer configuration for service discovery')
-          }
-        }
-        channel('datadog:identity:refresh').publish(config)
+        identityPropagation.refresh()
       }
     }
 

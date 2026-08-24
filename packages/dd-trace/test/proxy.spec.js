@@ -1174,6 +1174,7 @@ describe('TracerProxy', () => {
   describe('MicroVM identity reset', () => {
     let channelMock
     let diagnosticsChannelMock
+    let identityPropagation
     let microProxy
     let storeConfig
     let uuidStub
@@ -1191,6 +1192,7 @@ describe('TracerProxy', () => {
       diagnosticsChannelMock = {
         channel: sinon.stub().returns(channelMock),
       }
+      identityPropagation = createIdentityPropagationStub()
       storeConfig = sinon.stub().returns({})
 
       buildProxy = (nodeBundlesOpenssl = false) => new (proxyquire('../src/proxy', {
@@ -1218,6 +1220,7 @@ describe('TracerProxy', () => {
         './flare': flare,
         './openfeature': openfeature,
         './openfeature/flagging_provider': OpenFeatureProvider,
+        './microvm-identity-propagation': identityPropagation,
         'dc-polyfill': diagnosticsChannelMock,
         '../../../vendor/dist/crypto-randomuuid': uuidStub,
       }))()
@@ -1230,6 +1233,7 @@ describe('TracerProxy', () => {
 
       sinon.assert.calledWith(diagnosticsChannelMock.channel, 'http.server.request.start')
       sinon.assert.calledOnce(channelMock.subscribe)
+      sinon.assert.calledOnce(identityPropagation.start)
     })
 
     it('should keep the MicroVM identity refresh when tracer initialization fails', () => {
@@ -1270,6 +1274,7 @@ describe('TracerProxy', () => {
       sinon.assert.calledWith(diagnosticsChannelMock.channel, 'datadog:identity:refresh')
       sinon.assert.calledTwice(channelMock.publish)
       sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
+      sinon.assert.calledOnce(identityPropagation.refresh)
     })
 
     it('should update identity, store metadata, and then refresh consumers', () => {
@@ -1375,6 +1380,7 @@ describe('TracerProxy', () => {
     let capturedConfig
     let storedRuntimeId
     let storeConfig
+    let identityPropagation
     let server
 
     beforeEach(async () => {
@@ -1395,6 +1401,7 @@ describe('TracerProxy', () => {
         storedRuntimeId = metadataConfig.tags['runtime-id']
         return {}
       })
+      identityPropagation = createIdentityPropagationStub()
 
       capturedConfig = null
       const CapturingConfig = (...args) => {
@@ -1431,6 +1438,7 @@ describe('TracerProxy', () => {
         './flare': flare,
         './openfeature': openfeature,
         './openfeature/flagging_provider': OpenFeatureProvider,
+        './microvm-identity-propagation': identityPropagation,
         // dc-polyfill intentionally NOT mocked — this test exercises the real shared channel.
       })
 
@@ -1514,6 +1522,26 @@ async function triggerMicroVmRun (server) {
     response.resume()
     await end
   })
+}
+
+function createIdentityPropagationStub () {
+  let refreshIdentity
+
+  /**
+   * @param {() => void} callback
+   */
+  function setRefreshIdentity (callback) {
+    refreshIdentity = callback
+  }
+
+  function refresh () {
+    refreshIdentity()
+  }
+
+  return {
+    refresh: sinon.stub().callsFake(refresh),
+    start: sinon.stub().callsFake(setRefreshIdentity),
+  }
 }
 
 // Helper function to create APM_TRACING batch transaction objects
