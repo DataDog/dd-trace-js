@@ -245,10 +245,10 @@
   resolved "https://registry.yarnpkg.com/@bcoe/v8-coverage/-/v8-coverage-1.0.2.tgz#bbe12dca5b4ef983a0d0af4b07b9bc90ea0ababa"
   integrity sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==
 
-"@datadog/flagging-core@2.0.2":
-  version "2.0.2"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-2.0.2.tgz#333d7a5701306f7311861c1c0a3ce0be6138cc38"
-  integrity sha512-2+oWyqz/EMNXtsgyW3NtueFgL0TciWInyMg/6bEUZhfr7UgPzCQ88Nag9FGoPCig19F/tHXE5hLiQccjkRUMWQ==
+"@datadog/flagging-core@2.1.0":
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-2.1.0.tgz#672854a2c057c90f31e1905a845bdf88cc81066f"
+  integrity sha512-d43cXWx5Uxzi8SMUgSelOr6u6akNS4Pu4EZlLXvnPkEAxSo+NY2OiStnGOh5Y6ZlROd2v741SOH97zHTML99iw==
   dependencies:
     spark-md5 "^3.0.2"
 
@@ -279,12 +279,12 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@2.1.0":
-  version "2.1.0"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.1.0.tgz#28a6eba85bfda1ad4c7564812a19364c255b14cf"
-  integrity sha512-6nzVv7d5budwJTqh/k52L7cUcl3bNsg/zYrWAniHVBlf2cyYH2dH20xwZ40kEkBVfhoaJRelQIg0qbNeoVmJlw==
+"@datadog/openfeature-node-server@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.2.0.tgz#e85964d06c23c7f64e39dd0e5e54a04c2048fcbc"
+  integrity sha512-4ttAHzM80mV3NnrANzcCYsA98LGgiXineLYvCcagwFKjAEvWfs3i/wDscEDXVedYbPjRJEcqIuF/Pvi+Zx6pdg==
   dependencies:
-    "@datadog/flagging-core" "2.0.2"
+    "@datadog/flagging-core" "2.1.0"
 
 "@datadog/pprof@5.18.1":
   version "5.18.1"

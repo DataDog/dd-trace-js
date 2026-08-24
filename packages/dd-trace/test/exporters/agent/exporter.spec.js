@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
+const TelemetryDeliveryTracker = require('../../../src/serverless/telemetry-delivery-tracker')
 
 describe('Exporter', () => {
   let url
@@ -18,6 +19,8 @@ describe('Exporter', () => {
   let writer
   let prioritySampler
   let span
+  let writerOptions
+  let createServerlessDeliveryTracker
 
   beforeEach(() => {
     url = 'http://www.example.com:8126'
@@ -29,10 +32,15 @@ describe('Exporter', () => {
       setUrl: sinon.spy(),
     }
     prioritySampler = {}
-    Writer = sinon.stub().returns(writer)
+    Writer = sinon.stub().callsFake(options => {
+      writerOptions = options
+      return writer
+    })
+    createServerlessDeliveryTracker = sinon.stub()
 
     Exporter = proxyquire('../../../src/exporters/agent', {
       './writer': Writer,
+      '../../serverless': { createServerlessDeliveryTracker },
     })
   })
 
@@ -109,6 +117,92 @@ describe('Exporter', () => {
     it('should flush right away when interval is set to 0', () => {
       exporter.export([span])
       sinon.assert.called(writer.flush)
+    })
+  })
+
+  describe('flush', () => {
+    beforeEach(() => {
+      createServerlessDeliveryTracker.returns(new TelemetryDeliveryTracker())
+    })
+
+    it('waits for trace exports already in flight', () => {
+      const callbacks = []
+      writer.flush = sinon.spy(done => {
+        writerOptions.deliveryTracker.track(callback => callbacks.push(callback), done)
+      })
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      exporter.export([span])
+      exporter.flush(flushed)
+
+      callbacks[1]()
+      sinon.assert.notCalled(flushed)
+      callbacks[0]()
+      sinon.assert.calledOnce(flushed)
+    })
+
+    it('waits for an encoder-triggered writer flush already in flight', () => {
+      const callbacks = []
+      const flushDirect = sinon.spy(done => callbacks.push(done))
+      writer.flushDirect = flushDirect
+      writer.flush = sinon.spy(done => writerOptions.deliveryTracker.track(flushDirect, done))
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      // This is the path the encoder uses when it crosses its soft limit.
+      exporter._writer.flush()
+      exporter.flush(flushed)
+
+      callbacks[1]()
+      sinon.assert.notCalled(flushed)
+      callbacks[0]()
+      sinon.assert.calledOnce(flushed)
+    })
+
+    it('does not retain a failed writer flush', () => {
+      writer.flush = sinon.stub()
+      writer.flush.onFirstCall().throws(new Error('encode failed'))
+      writer.flush.onSecondCall().callsFake(done => done())
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      assert.throws(() => exporter.export([span]), /encode failed/)
+      exporter.flush(flushed)
+
+      sinon.assert.calledOnce(flushed)
+    })
+
+    it('waits for an earlier export when the boundary flush fails', () => {
+      let inFlightDone
+      writer.flush = sinon.stub()
+      writer.flush.onFirstCall().callsFake(done => {
+        writerOptions.deliveryTracker.track(callback => { inFlightDone = callback }, done)
+      })
+      writer.flush.onSecondCall().throws(new Error('encode failed'))
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      exporter.export([span])
+      exporter.flush(flushed)
+
+      sinon.assert.notCalled(flushed)
+      inFlightDone()
+      sinon.assert.calledOnce(flushed)
+    })
+
+    it('waits for the boundary export without serverless retention', () => {
+      createServerlessDeliveryTracker.resetBehavior()
+      let complete
+      writer.flush = sinon.stub().callsFake(done => { complete = done })
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      exporter.flush(flushed)
+
+      sinon.assert.notCalled(flushed)
+      complete()
+      sinon.assert.calledOnce(flushed)
     })
   })
 

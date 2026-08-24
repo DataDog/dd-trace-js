@@ -15,6 +15,7 @@ require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const BatchLogRecordProcessor = require('../../src/opentelemetry/logs/batch_log_processor')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -142,6 +143,127 @@ describe('OpenTelemetry Logs', () => {
   })
 
   describe('Logs Export', () => {
+    it('waits for an in-flight export during forceFlush', () => {
+      process.env.VERCEL = '1'
+      let exportDone
+      let flushDone
+      const processor = new BatchLogRecordProcessor({
+        export: (records, done) => { exportDone = done },
+        flush: (done) => { flushDone = done },
+      }, 60_000, 1)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'in flight' }, { name: 'test' })
+      processor.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      exportDone({ code: 0 })
+      sinon.assert.notCalled(done)
+      flushDone()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('drains queued batches and waits for earlier size-triggered exports', () => {
+      process.env.VERCEL = '1'
+      const batches = []
+      const callbacks = []
+      const flushCallbacks = []
+      let activeExports = 0
+      const completeFlushes = () => {
+        if (activeExports !== 0) return
+        while (flushCallbacks.length > 0) flushCallbacks.shift()()
+      }
+      const processor = new BatchLogRecordProcessor({
+        export: (records, done) => {
+          batches.push(records)
+          activeExports++
+          callbacks.push(() => {
+            activeExports--
+            done({ code: 0 })
+            completeFlushes()
+          })
+        },
+        flush: (done) => {
+          if (activeExports === 0) done()
+          else flushCallbacks.push(done)
+        },
+      }, 60_000, 2)
+      const done = sinon.spy()
+
+      for (let index = 0; index < 5; index++) {
+        processor.onEmit({ body: index }, { name: 'test' })
+      }
+      processor.forceFlush(done)
+
+      assert.deepStrictEqual(batches.map(batch => batch.map(record => record.body)), [
+        [0, 1], [2, 3], [4],
+      ])
+      callbacks.shift()()
+      callbacks.shift()()
+      callbacks.shift()()
+
+      sinon.assert.calledOnce(done)
+    })
+
+    it('waits for an earlier export when the boundary batch throws', () => {
+      process.env.VERCEL = '1'
+      let priorFlushDone
+      const processor = new BatchLogRecordProcessor({
+        export: sinon.stub()
+          .onFirstCall().callsFake(() => {})
+          .onSecondCall().throws(new Error('encode failed')),
+        flush: done => { priorFlushDone = done },
+      }, 60_000, 2)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'in flight' }, { name: 'test' })
+      processor.onEmit({ body: 'in flight' }, { name: 'test' })
+      processor.onEmit({ body: 'boundary' }, { name: 'test' })
+      processor.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      priorFlushDone()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('does not wait for records emitted after the flush boundary', () => {
+      process.env.VERCEL = '1'
+      const exports = []
+      let firstExportDone
+      const processor = new BatchLogRecordProcessor({
+        export: (records, done) => {
+          exports.push(records.map(record => record.body))
+          if (records[0].body === 'before') firstExportDone = done
+        },
+        flush: done => done(),
+      }, 60_000, 2)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'before' }, { name: 'test' })
+      processor.forceFlush(done)
+      processor.onEmit({ body: 'after' }, { name: 'test' })
+      firstExportDone({ code: 0 })
+
+      assert.deepStrictEqual(exports, [['before']])
+      sinon.assert.calledOnce(done)
+    })
+
+    it('does not retain log delivery outside Vercel', () => {
+      let exportDone
+      const processor = new BatchLogRecordProcessor({
+        export: (records, done) => { exportDone = done },
+        flush: sinon.spy(),
+      }, 60_000, 1)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'outside Vercel' }, { name: 'test' })
+      processor.forceFlush(done)
+
+      sinon.assert.notCalled(processor.exporter.flush)
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(typeof exportDone, 'function')
+    })
+
     it('exports logs with complete OTLP structure, trace correlation, and instrumentation info', () => {
       mockOtlpExport((decoded, capturedHeaders) => {
         const { resource } = decoded.resourceLogs[0]
