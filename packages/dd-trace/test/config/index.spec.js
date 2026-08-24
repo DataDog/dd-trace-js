@@ -4814,13 +4814,23 @@ rules:
     it('should resolve a comma-separated array env-var-keyed config, stripping colon whitespace', () => {
       const config = getConfig({ headerTags: ['foo:bar'] })
       config.setRemoteConfig({ DD_TRACE_HEADER_TAGS: 'x-custom-header : custom.tag,x-other-header' })
-      assert.deepStrictEqual(config.headerTags, ['x-custom-header:custom.tag', 'x-other-header'])
+      assert.deepStrictEqual(config.headerTags, [
+        // TODO: There's an unrelated bug in the tracer resulting in headerTags not being merged.
+        // 'foo:bar',
+        'x-custom-header:custom.tag',
+        'x-other-header',
+      ])
     })
 
     it('should resolve a map env-var-keyed config', () => {
       const config = getConfig({ tags: { foo: 'bar' } })
       config.setRemoteConfig({ DD_TAGS: 'team:backend,region:us' })
-      assertObjectContains(config.tags, { team: 'backend', region: 'us' })
+      assertObjectContains(config.tags, {
+        // TODO: There's an unrelated bug in the tracer resulting in tags not being merged.
+        // foo: 'bar',
+        team: 'backend',
+        region: 'us',
+      })
     })
 
     it('should keep runtime-id stable after remote configuration updates tags', () => {
