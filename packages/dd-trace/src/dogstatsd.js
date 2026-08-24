@@ -8,6 +8,8 @@ const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
 const { entityId } = require('./exporters/common/docker')
+const { registerTelemetryFlusher } = require('./flush')
+const { createServerlessDeliveryTracker } = require('./serverless')
 
 const legacyStorage = storage('legacy')
 
@@ -25,6 +27,8 @@ const TYPE_HISTOGRAM = 'h'
 class DogStatsDClient {
   #lookup
   #tagsPrefix
+  #serverlessDeliveryTracker
+
   constructor (options) {
     this.#lookup = options.lookup
     if (options.metricsProxyUrl) {
@@ -41,6 +45,7 @@ class DogStatsDClient {
     this._tags = options.tags
     this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
     this._queue = []
+    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._buffer = ''
     this._offset = 0
     this._udp4 = this._socket('udp4')
@@ -67,23 +72,30 @@ class DogStatsDClient {
     this._add(stat, value, TYPE_HISTOGRAM, tags)
   }
 
-  flush () {
+  flush (done) {
     const queue = this._enqueue()
 
-    if (queue.length === 0) return
+    if (queue.length === 0) {
+      if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.waitForIdle(done)
+      return done?.()
+    }
 
     log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
     this._queue = []
 
-    if (this._httpOptions) {
-      this._sendHttp(queue)
-    } else {
-      this._sendUdp(queue)
+    const send = complete => {
+      if (this._httpOptions) this._sendHttp(queue, complete)
+      else this._sendUdp(queue, complete)
     }
+    if (this.#serverlessDeliveryTracker) {
+      this.#serverlessDeliveryTracker.track(send)
+      return this.#serverlessDeliveryTracker.waitForIdle(done)
+    }
+    send(done)
   }
 
-  _sendHttp (queue) {
+  _sendHttp (queue, done) {
     const buffer = Buffer.concat(queue)
     request(buffer, this._httpOptions, (err) => {
       if (err) {
@@ -95,32 +107,46 @@ class DogStatsDClient {
           // options. Either way, we can give UDP a try.
           this._httpOptions = undefined
         }
-        this._sendUdp(queue)
+        this._sendUdp(queue, done)
+      } else {
+        done?.()
       }
     })
   }
 
-  _sendUdp (queue) {
+  _sendUdp (queue, done) {
     // dgram resolves the local address via the instrumented dns.lookup when it
     // binds on first send; the noop store keeps that self-traffic off the trace.
     legacyStorage.run({ noop: true }, () => {
       if (this._family === 0) {
         this.#lookup(this._host, (error, address, family) => {
-          if (error) return log.error('DogStatsDClient: Host not found', error)
-          this._sendUdpFromQueue(queue, address, family)
+          if (error) {
+            log.error('DogStatsDClient: Host not found', error)
+            return done?.()
+          }
+          this._sendUdpFromQueue(queue, address, family, done)
         })
       } else {
-        this._sendUdpFromQueue(queue, this._host, this._family)
+        this._sendUdpFromQueue(queue, this._host, this._family, done)
       }
     })
   }
 
-  _sendUdpFromQueue (queue, address, family) {
+  _sendUdpFromQueue (queue, address, family, done) {
     const socket = family === 6 ? this._udp6 : this._udp4
+    let pending = queue.length
+    const complete = () => {
+      if (--pending === 0) done?.()
+    }
 
     for (const buffer of queue) {
       log.debug('Sending to DogStatsD: %s', buffer)
-      socket.send(buffer, 0, buffer.length, this._port, address)
+      try {
+        socket.send(buffer, 0, buffer.length, this._port, address, complete)
+      } catch (error) {
+        log.error('DogStatsDClient: UDP error sending metrics', error)
+        complete()
+      }
     }
   }
 
@@ -212,12 +238,12 @@ class MetricsAggregationClient {
     this.reset()
   }
 
-  flush () {
+  flush (done) {
     this._captureCounters()
     this._captureGauges()
     this._captureHistograms()
 
-    this._client.flush()
+    this._client.flush(done)
   }
 
   reset () {
@@ -370,6 +396,7 @@ class CustomMetrics {
     setInterval(flush, 10 * 1000).unref?.()
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush)
+    registerTelemetryFlusher(done => this.flush(done))
   }
 
   increment (stat, value = 1, tags) {
@@ -392,8 +419,8 @@ class CustomMetrics {
     this.#client.histogram(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
-  flush () {
-    return this.#client.flush()
+  flush (done) {
+    return this.#client.flush(done)
   }
 
   /**
