@@ -494,7 +494,45 @@ describe('createDatabaseIntegration', () => {
     sinon.assert.notCalled(start)
   })
 
-  it('validates the fixed database query contract', () => {
+  it('routes pool acquisition and connection context through fixed shared adapters', () => {
+    const id = 'test-database-pool-source'
+    const source = {
+      complete: sinon.stub().returns({ 'testdb.pool.wait_time': 7 }),
+      start: sinon.stub().returns({
+        connection: { database: 'database', host: 'localhost', port: 3306, user: 'user' },
+      }),
+    }
+    const Integration = createPoolIntegration(id, source)
+    const span = createSpan()
+    const plugin = new Integration(createTracer('pool', span), createTracerConfig())
+    plugins.push(plugin)
+    plugin.configure({ enabled: true })
+
+    const runtime = getEventSourceRegistry().getSource('db.pool.acquire', id)
+    assert.strictEqual(runtime.instance._bindings.length, 2)
+    assert.strictEqual(runtime.instance._subscriptions.length, 3)
+
+    const parentStore = { parent: true }
+    const connectionContext = {}
+    legacyStorage.run(parentStore, () => dc.channel(`test:${id}:connection:start`).publish(connectionContext))
+    dc.channel(`test:${id}:connection:finish`).runStores(connectionContext, () => {
+      assert.strictEqual(legacyStorage.getStore(), parentStore)
+    })
+    dc.channel(`test:${id}:skip`).runStores({}, () => {
+      assert.deepStrictEqual(legacyStorage.getStore(), { noop: true })
+    })
+
+    const acquireContext = { conf: {}, poolWaitTime: 7 }
+    legacyStorage.run(parentStore, () => dc.channel(`test:${id}:acquire:start`).publish(acquireContext))
+    dc.channel(`test:${id}:acquire:finish`).publish(acquireContext)
+
+    sinon.assert.calledOnceWithExactly(source.start, acquireContext)
+    sinon.assert.calledOnceWithExactly(source.complete, acquireContext)
+    sinon.assert.calledOnceWithExactly(span.addTags, { 'testdb.pool.wait_time': 7 })
+    sinon.assert.calledOnce(span.finish)
+  })
+
+  it('validates the fixed database lifecycle contract', () => {
     assert.throws(
       () => createDatabaseIntegration(),
       /Database integration requires a non-empty id/
@@ -505,7 +543,7 @@ describe('createDatabaseIntegration', () => {
     )
     assert.throws(
       () => createDatabaseIntegration({ id: 'invalid', operations: [], system: 'test' }),
-      /requires one query operation/
+      /requires database operations/
     )
     assert.throws(
       () => createDatabaseIntegration({ base: class {}, id: 'invalid', operations: [], system: 'test' }),
@@ -514,10 +552,10 @@ describe('createDatabaseIntegration', () => {
     assert.throws(
       () => createDatabaseIntegration({
         id: 'invalid',
-        operations: [{ adapter: 'pool.acquire', operation: 'db.pool.acquire', source: {} }],
+        operations: [{ adapter: 'pool.acquire', operation: 'db.query', source: {} }],
         system: 'test',
       }),
-      /requires the db\.query adapter/
+      /has an invalid lifecycle adapter/
     )
     assert.throws(
       () => createDatabaseIntegration({
@@ -625,6 +663,31 @@ function createChannelIntegration (id, source) {
     operations: [{
       adapter: 'query',
       operation: 'db.query',
+      source,
+    }],
+    schema: false,
+    system: 'testdb',
+  })
+}
+
+function createPoolIntegration (id, source) {
+  source.connection = {
+    finish: `test:${id}:connection:finish`,
+    skip: `test:${id}:skip`,
+    start: `test:${id}:connection:start`,
+  }
+  source.targets = [{
+    channels: {
+      finish: `test:${id}:acquire:finish`,
+      start: `test:${id}:acquire:start`,
+    },
+  }]
+
+  return createDatabaseIntegration({
+    id,
+    operations: [{
+      adapter: 'pool.acquire',
+      operation: 'db.pool.acquire',
       source,
     }],
     schema: false,

@@ -2,21 +2,21 @@
 
 const { storage } = require('../../../../datadog-core')
 
-const log = require('../../log')
 const Plugin = require('../../plugins/plugin')
 const { getEventDomainRegistry } = require('../registry')
 const { getEventSourceRegistry } = require('../source-registry')
+const ConnectionLifecycleAdapter = require('./connection-lifecycle-adapter')
 const DatabaseProcessor = require('./processor')
+const DatabaseSourceLifecycle = require('./source-lifecycle')
 
 const legacyStorage = storage('legacy')
+const DATABASE_DOMAIN = DatabaseProcessor.eventDomain
+const POOL_ACQUIRE_OPERATION = 'db.pool.acquire'
 const QUERY_OPERATION = DatabaseProcessor.eventOperation
-const queryEvent = Symbol('datadog.database.query.event')
 
 class DatabaseQueryBridge extends Plugin {
-  #identity
-  #runtime
-  #source
-  #sourceRegistry
+  #connectionLifecycleAdapter
+  #lifecycle
 
   /**
    * Create the single process-wide bridge for one package query source.
@@ -29,192 +29,100 @@ class DatabaseQueryBridge extends Plugin {
   constructor (source, identity, sourceRegistry, runtime) {
     super()
 
-    this.#identity = identity
-    this.#runtime = runtime
-    this.#source = source
-    this.#sourceRegistry = sourceRegistry
+    this.#connectionLifecycleAdapter = new ConnectionLifecycleAdapter()
+    this.#lifecycle = new DatabaseSourceLifecycle(
+      source,
+      identity,
+      QUERY_OPERATION,
+      sourceRegistry,
+      runtime
+    )
+
+    if (source.parentChannels) {
+      for (const channelName of source.parentChannels) {
+        this.addSub(channelName, context => this.#connectionLifecycleAdapter.captureParent(context))
+      }
+    }
 
     for (const target of source.targets) {
       const channels = getLifecycleChannels(target)
       const options = { allowNoop: true }
 
-      this.addBind(channels.start, context => this.#bindStart(context))
+      this.addBind(channels.start, context => {
+        const parentStore = context.parentStore ?? legacyStorage.getStore()
+        return this.#lifecycle.start(context, parentStore)
+      })
       if (channels.restoreParent) {
-        this.addBind(channels.finish, context => this.#bindFinish(context), options)
+        this.addBind(channels.finish, context => this.#lifecycle.sourceStore(context), options)
       }
-      this.addSub(channels.error, context => this.#publishError(context), options)
+      if (channels.error) {
+        this.addSub(channels.error, context => this.#lifecycle.fail(context), options)
+      }
       if (channels.errorEnd) {
         this.addSub(channels.errorEnd, context => {
-          if (hasError(context)) this.#publishFinish(context)
+          if (hasError(context)) this.#lifecycle.complete(context)
         }, options)
       }
-      this.addSub(channels.finish, context => this.#publishFinish(context), options)
+      this.addSub(channels.finish, context => this.#lifecycle.complete(context), options)
     }
   }
+}
+
+class DatabasePoolAcquireBridge extends Plugin {
+  #connectionLifecycleAdapter
+  #lifecycle
 
   /**
-   * Restore the source caller's store around a driver-owned completion callback.
+   * Create the single process-wide bridge for one package pool-acquire source.
    *
-   * @param {object} context Raw package lifecycle context.
-   * @returns {object | undefined} Store captured when the query started.
+   * @param {object} source Package pool-acquire source adapter.
+   * @param {object} identity Stable package and database identity.
+   * @param {import('../source-registry').EventSourceRegistry} sourceRegistry Process-wide source registry.
+   * @param {object} runtime Registered process-wide source runtime.
    */
-  #bindFinish (context) {
-    return context[queryEvent]?.sourceStore
-  }
+  constructor (source, identity, sourceRegistry, runtime) {
+    super()
 
-  /**
-   * Normalize a raw package invocation and compose product and APM stores.
-   *
-   * @param {object} context Raw package lifecycle context.
-   * @returns {object | undefined} Store active while the package operation runs.
-   */
-  #bindStart (context) {
-    const parentStore = legacyStorage.getStore()
-    let facts
-    try {
-      facts = this.#source.start(context)
-    } catch (error) {
-      log.error('Database source "%s" failed during start: %s', this.#identity.integration, error?.message || error)
-      return parentStore
-    }
+    this.#connectionLifecycleAdapter = new ConnectionLifecycleAdapter()
+    this.#lifecycle = new DatabaseSourceLifecycle(
+      source,
+      identity,
+      POOL_ACQUIRE_OPERATION,
+      sourceRegistry,
+      runtime
+    )
 
-    const runtime = this.#runtime
-    const hasContributors = runtime.contributors.size > 0
-    const singleConsumer = runtime.consumers.size === 1 ? runtime.primaryConsumer : undefined
-    const event = {
-      consumer: singleConsumer,
-      currentStore: undefined,
-      facts,
-      parentStore,
-      primaryConsumer: runtime.primaryConsumer,
-      source: this.#identity,
-      sourceStore: parentStore,
-    }
-    context[queryEvent] = event
-    this.#sourceRegistry.holdOperation(runtime)
-
-    let store = parentStore
-    if (hasContributors) {
-      const productEvent = {
-        facts,
-        source: this.#identity,
-      }
-      event.productLifecycle = this.#sourceRegistry.startContributors(
-        QUERY_OPERATION,
-        productEvent,
-        parentStore
-      )
-      store = event.productLifecycle?.store ?? store
-    }
-
-    if (singleConsumer) {
-      const consumer = singleConsumer
-      store = !hasContributors || store === legacyStorage.getStore()
-        ? consumer.start(event)
-        : legacyStorage.run(store, bindProcessorStart, consumer, event)
-    } else {
-      for (const consumer of runtime.consumers) {
-        store = store === legacyStorage.getStore()
-          ? consumer.start(event)
-          : legacyStorage.run(store, bindProcessorStart, consumer, event)
-        rememberConsumer(event, consumer)
+    const connection = source.connection
+    if (connection) {
+      this.addSub(connection.start, context => this.#connectionLifecycleAdapter.start(context))
+      this.addBind(connection.finish, context => this.#connectionLifecycleAdapter.finish(context))
+      if (connection.skip) {
+        this.addBind(connection.skip, () => this.#connectionLifecycleAdapter.skip())
       }
     }
 
-    if (this.#source.updateSource && event.updates) {
-      try {
-        this.#source.updateSource(context, facts, event.updates)
-      } catch (error) {
-        log.error(
-          'Database source "%s" failed during source update: %s',
-          this.#identity.integration,
-          error?.message || error
-        )
+    for (const target of source.targets) {
+      const channels = getLifecycleChannels(target)
+      const options = { allowNoop: true }
+
+      this.addSub(channels.start, context => {
+        this.#lifecycle.start(context, legacyStorage.getStore())
+      })
+      if (channels.error) {
+        this.addSub(channels.error, context => this.#lifecycle.fail(context), options)
       }
-    }
-
-    return store
-  }
-
-  /**
-   * Publish one normalized error phase and preserve state for the final completion phase.
-   *
-   * @param {object} context Raw Orchestrion invocation context.
-   * @returns {void}
-   */
-  #publishError (context) {
-    const event = context[queryEvent]
-    if (!event || Object.hasOwn(event, 'error')) return
-
-    event.error = context.error
-    this.#resolveMetadata(context, event)
-    const productLifecycle = event.productLifecycle
-    if (productLifecycle) {
-      productLifecycle.event.error = event.error
-      productLifecycle.event.metadata = event.metadata
-      this.#sourceRegistry.runContributorPhase(productLifecycle, 'error')
-    }
-    if (event.consumers) {
-      for (const consumer of event.consumers) consumer.fail(event)
-    } else {
-      event.consumer?.fail(event)
-    }
-  }
-
-  /**
-   * Publish one normalized finish phase and release all raw-context correlation state.
-   *
-   * @param {object} context Raw Orchestrion invocation context.
-   * @returns {void}
-   */
-  #publishFinish (context) {
-    const event = context[queryEvent]
-    if (!event) return
-
-    if (context.error !== undefined && !Object.hasOwn(event, 'error')) this.#publishError(context)
-    this.#resolveMetadata(context, event)
-    const productLifecycle = event.productLifecycle
-    if (productLifecycle) {
-      productLifecycle.event.metadata = event.metadata
-      this.#sourceRegistry.runContributorPhase(productLifecycle, 'finish')
-    }
-
-    try {
-      if (event.consumers) {
-        for (const consumer of event.consumers) consumer.complete(event)
-      } else {
-        event.consumer?.complete(event)
+      if (channels.errorEnd) {
+        this.addSub(channels.errorEnd, context => {
+          if (hasError(context)) this.#lifecycle.complete(context)
+        }, options)
       }
-    } finally {
-      context[queryEvent] = undefined
-      this.#sourceRegistry.releaseOperation(this.#runtime)
-    }
-  }
-
-  /**
-   * Extract completion metadata once while isolating package-specific failures.
-   *
-   * @param {object} context Raw Orchestrion invocation context.
-   * @param {object} event Normalized semantic query event.
-   * @returns {void}
-   */
-  #resolveMetadata (context, event) {
-    if (Object.hasOwn(event, 'metadata')) return
-
-    try {
-      event.metadata = this.#source.complete?.(context)
-    } catch (error) {
-      log.error(
-        'Database source "%s" failed during completion: %s',
-        this.#identity.integration,
-        error?.message || error
-      )
+      this.addSub(channels.finish, context => this.#lifecycle.complete(context), options)
     }
   }
 }
 
 /**
- * Compile package query extraction into the shared database processor contract.
+ * Compile package database extraction into the shared database processor contract.
  *
  * @param {object} definition Database integration definition.
  * @param {string} definition.id Stable integration identifier.
@@ -222,12 +130,12 @@ class DatabaseQueryBridge extends Plugin {
  * @param {boolean | string} [definition.schema] Database naming schema identifier, or false for storage defaults.
  * @param {string} [definition.component] Span component override.
  * @param {string} [definition.spanType] Span type override.
- * @param {typeof Plugin} [definition.base] Compatibility plugin base for non-query behavior.
+ * @param {typeof Plugin} [definition.base] Compatibility plugin base for behavior not yet migrated.
  * @param {Array<{operation: string, adapter: string, source: object}>} definition.operations Database operations.
  * @returns {typeof Plugin} Thin plugin-manager compatibility shell.
  */
 function createDatabaseIntegration (definition) {
-  const query = validateDefinition(definition)
+  const operations = validateDefinition(definition)
   const { id, system } = definition
   const Base = definition.base || Plugin
   const sourceRegistry = getEventSourceRegistry()
@@ -238,20 +146,29 @@ function createDatabaseIntegration (definition) {
     spanType: definition.spanType,
     system,
   })
-  sourceRegistry.registerSource({
-    operation: QUERY_OPERATION,
-    source: id,
-    owner: `datadog-plugin-${id}`,
-    create: runtime => new DatabaseQueryBridge(
-      query.source,
-      identity,
-      sourceRegistry,
-      runtime
-    ),
-  })
-  const adapter = Object.freeze({
-    identity,
-    supportsStatementUpdate: typeof query.source.updateSource === 'function',
+  const registrations = operations.map(operationDefinition => {
+    const { adapter: lifecycle, operation, source } = operationDefinition
+    sourceRegistry.registerSource({
+      operation,
+      source: id,
+      owner: `datadog-plugin-${id}`,
+      create: runtime => createSourceBridge(
+        lifecycle,
+        source,
+        identity,
+        sourceRegistry,
+        runtime
+      ),
+    })
+
+    return Object.freeze({
+      adapter: Object.freeze({
+        identity,
+        lifecycle,
+        supportsStatementUpdate: typeof source.updateSource === 'function',
+      }),
+      operation,
+    })
   })
 
   return class DatabaseIntegration extends Base {
@@ -259,11 +176,11 @@ function createDatabaseIntegration (definition) {
     static operation = 'query'
     static system = system
 
-    #consumer
     #registry
+    #sources
 
     /**
-     * Register this tracer as a consumer of the shared database query processor.
+     * Register this tracer as a consumer of the shared database processor.
      *
      * @param {object} tracer Tracer instance.
      * @param {object} tracerConfig Global tracer configuration.
@@ -272,22 +189,32 @@ function createDatabaseIntegration (definition) {
       super(tracer, tracerConfig)
 
       this.#registry = getEventDomainRegistry(tracer, tracerConfig)
-      const processor = this.#registry.registerProcessor({ operation: QUERY_OPERATION, Processor: DatabaseProcessor })
-      const runtime = this.#registry.registerSource({ operation: QUERY_OPERATION, source: id, adapter })
-      this.#consumer = processor.createSourceConsumer(runtime)
+      this.#sources = registrations.map(({ adapter, operation }) => {
+        const processor = this.#registry.registerProcessor({
+          domain: DATABASE_DOMAIN,
+          operation,
+          Processor: DatabaseProcessor,
+        })
+        const runtime = this.#registry.registerSource({ operation, source: id, adapter })
+
+        return {
+          consumer: processor.createSourceConsumer(runtime),
+          operation,
+        }
+      })
     }
 
     /**
-     * Suppress the compatibility base's automatic query subscriptions.
+     * Suppress a compatibility base's automatic tracing-channel subscriptions.
      *
-     * Non-query subscriptions registered explicitly by the selected base remain active.
+     * Explicit non-query subscriptions registered by a selected base remain active.
      *
      * @returns {void}
      */
     addTraceSubs () {}
 
     /**
-     * Reference-count the physical source bridge and configure this tracer's immutable source runtime.
+     * Reference-count physical source bridges and configure immutable per-operation source runtimes.
      *
      * @param {boolean | Record<string, unknown> & {enabled: boolean}} config Plugin configuration.
      * @returns {void}
@@ -295,12 +222,14 @@ function createDatabaseIntegration (definition) {
     configure (config) {
       const enabled = typeof config === 'boolean' ? config : config.enabled !== false
 
-      if (enabled) {
-        this.#registry.configureSource(QUERY_OPERATION, id, config)
-        sourceRegistry.acquireSource(QUERY_OPERATION, id, this.#consumer)
-      } else {
-        sourceRegistry.releaseSource(QUERY_OPERATION, id, this.#consumer)
-        this.#registry.configureSource(QUERY_OPERATION, id, config)
+      for (const { consumer, operation } of this.#sources) {
+        if (enabled) {
+          this.#registry.configureSource(operation, id, config)
+          sourceRegistry.acquireSource(operation, id, consumer)
+        } else {
+          sourceRegistry.releaseSource(operation, id, consumer)
+          this.#registry.configureSource(operation, id, config)
+        }
       }
 
       super.configure(config)
@@ -309,14 +238,32 @@ function createDatabaseIntegration (definition) {
 }
 
 /**
+ * Create the process-wide source bridge selected by a fixed database lifecycle adapter.
+ *
+ * @param {string} lifecycle Fixed lifecycle adapter identifier.
+ * @param {object} source Package source adapter.
+ * @param {object} identity Stable package and database identity.
+ * @param {import('../source-registry').EventSourceRegistry} sourceRegistry Process-wide source registry.
+ * @param {object} runtime Registered process-wide source runtime.
+ * @returns {Plugin} Configurable source bridge.
+ */
+function createSourceBridge (lifecycle, source, identity, sourceRegistry, runtime) {
+  if (lifecycle === 'query') {
+    return new DatabaseQueryBridge(source, identity, sourceRegistry, runtime)
+  }
+
+  return new DatabasePoolAcquireBridge(source, identity, sourceRegistry, runtime)
+}
+
+/**
  * Resolve raw lifecycle channel names for one package source target.
  *
  * @param {object} target Package source target descriptor.
- * @returns {{start: string, error: string, finish: string, errorEnd?: string, restoreParent?: boolean}}
+ * @returns {{start: string, error?: string, finish: string, errorEnd?: string, restoreParent?: boolean}}
  *   Lifecycle channel names.
  */
 function getLifecycleChannels (target) {
-  if (target.channels) return { ...target.channels, restoreParent: true }
+  if (target.channels) return { ...target.channels, restoreParent: target.channels.error !== undefined }
 
   const prefix = `tracing:orchestrion:${target.module}:${target.name}`
   return {
@@ -328,20 +275,10 @@ function getLifecycleChannels (target) {
 }
 
 /**
- * Check whether an Orchestrion terminal context carries an application error.
- *
- * @param {unknown} context Possible Orchestrion invocation context.
- * @returns {context is object} Whether the context has an error value.
- */
-function hasError (context) {
-  return context !== null && typeof context === 'object' && Reflect.get(context, 'error') !== undefined
-}
-
-/**
- * Validate and resolve the currently supported database query definition.
+ * Validate and resolve supported database operation definitions.
  *
  * @param {object} definition Database integration definition.
- * @returns {{operation: string, adapter: string, source: object}} Query operation definition.
+ * @returns {Array<{operation: string, adapter: string, source: object}>} Validated operation definitions.
  */
 function validateDefinition (definition) {
   if (!definition || typeof definition.id !== 'string' || definition.id.length === 0) {
@@ -354,33 +291,67 @@ function validateDefinition (definition) {
     (definition.base !== Plugin && !(definition.base.prototype instanceof Plugin)))) {
     throw new TypeError(`Database integration "${definition.id}" requires a Plugin base`)
   }
-  if (!Array.isArray(definition.operations) || definition.operations.length !== 1) {
-    throw new TypeError(`Database integration "${definition.id}" requires one query operation`)
+  if (!Array.isArray(definition.operations) || definition.operations.length === 0) {
+    throw new TypeError(`Database integration "${definition.id}" requires database operations`)
   }
 
-  const query = definition.operations[0]
-  if (query.operation !== QUERY_OPERATION || query.adapter !== 'query') {
-    throw new TypeError(`Database integration "${definition.id}" requires the db.query adapter`)
+  const operations = new Set()
+  for (const operationDefinition of definition.operations) {
+    validateOperation(definition.id, operationDefinition)
+    if (operations.has(operationDefinition.operation)) {
+      throw new TypeError(
+        `Database integration "${definition.id}" repeats operation "${operationDefinition.operation}"`
+      )
+    }
+    operations.add(operationDefinition.operation)
   }
-  if (!query.source || typeof query.source.start !== 'function' || !Array.isArray(query.source.targets) ||
-    query.source.targets.length === 0) {
-    throw new TypeError(`Database integration "${definition.id}" requires a query source with targets`)
+
+  return definition.operations
+}
+
+/**
+ * Validate one fixed database lifecycle operation.
+ *
+ * @param {string} id Database integration identifier.
+ * @param {object} operationDefinition Possible operation definition.
+ * @returns {void}
+ */
+function validateOperation (id, operationDefinition) {
+  const expectedOperation = operationDefinition?.adapter === 'query'
+    ? QUERY_OPERATION
+    : operationDefinition?.adapter === 'pool.acquire'
+      ? POOL_ACQUIRE_OPERATION
+      : undefined
+  if (!expectedOperation || operationDefinition.operation !== expectedOperation) {
+    throw new TypeError(`Database integration "${id}" has an invalid lifecycle adapter`)
+  }
+
+  const { source } = operationDefinition
+  if (!source || typeof source.start !== 'function' || !Array.isArray(source.targets) ||
+    source.targets.length === 0) {
+    throw new TypeError(`Database integration "${id}" requires a ${operationDefinition.adapter} source with targets`)
+  }
+  if (source.parentChannels !== undefined && (!Array.isArray(source.parentChannels) ||
+    source.parentChannels.some(channelName => typeof channelName !== 'string' || channelName.length === 0))) {
+    throw new TypeError(`Database integration "${id}" has invalid parent channels`)
+  }
+  if (source.connection !== undefined && !isConnectionLifecycle(source.connection)) {
+    throw new TypeError(`Database integration "${id}" has an invalid connection lifecycle`)
   }
 
   const targets = new Set()
-  for (const target of query.source.targets) {
-    if (!isOrchestrionTarget(target) && !isChannelTarget(target)) {
-      throw new TypeError(`Database integration "${definition.id}" has an invalid query target`)
+  for (const target of source.targets) {
+    const valid = isOrchestrionTarget(target) || isChannelTarget(target, operationDefinition.adapter)
+    if (!valid) {
+      throw new TypeError(`Database integration "${id}" has an invalid ${operationDefinition.adapter} target`)
     }
 
     const key = target.channels?.start || `${target.module}:${target.name}`
     if (targets.has(key)) {
-      throw new TypeError(`Database integration "${definition.id}" repeats query target "${key}"`)
+      throw new TypeError(`Database integration "${id}" repeats ${operationDefinition.adapter} target "${key}"`)
     }
     targets.add(key)
   }
-
-  return query
 }
 
 /**
@@ -401,43 +372,43 @@ function isOrchestrionTarget (target) {
  * Check whether a target describes an existing diagnostic-channel lifecycle.
  *
  * @param {unknown} target Possible target descriptor.
+ * @param {string} lifecycle Fixed lifecycle adapter identifier.
  * @returns {boolean} Whether the target is valid.
  */
-function isChannelTarget (target) {
+function isChannelTarget (target, lifecycle) {
   if (target === null || typeof target !== 'object') return false
 
   const channels = target.channels
-  return channels !== null && typeof channels === 'object' &&
-    typeof channels.start === 'string' && channels.start.length > 0 &&
-    typeof channels.error === 'string' && channels.error.length > 0 &&
-    typeof channels.finish === 'string' && channels.finish.length > 0
-}
-
-/**
- * Start one processor inside the store composed by earlier lifecycle consumers.
- *
- * @param {object} consumer Stable source consumer with a per-tracer database processor.
- * @param {object} event Normalized query event shared across lifecycle phases.
- * @returns {object | undefined} Store returned by the processor.
- */
-function bindProcessorStart (consumer, event) {
-  return consumer.start(event)
-}
-
-/**
- * Preserve the processors which started an operation so disablement cannot orphan its terminal phase.
- *
- * @param {object} event Normalized query event shared across lifecycle phases.
- * @param {object} consumer Stable source consumer which started tracing.
- * @returns {void}
- */
-function rememberConsumer (event, consumer) {
-  if (event.consumer) {
-    event.consumers ||= [event.consumer]
-    event.consumers.push(consumer)
-  } else {
-    event.consumer = consumer
+  if (channels === null || typeof channels !== 'object' ||
+    typeof channels.start !== 'string' || channels.start.length === 0 ||
+    typeof channels.finish !== 'string' || channels.finish.length === 0) {
+    return false
   }
+
+  return lifecycle !== 'query' || (typeof channels.error === 'string' && channels.error.length > 0)
+}
+
+/**
+ * Check whether source channels describe connection context restoration.
+ *
+ * @param {unknown} connection Possible connection lifecycle descriptor.
+ * @returns {boolean} Whether the descriptor is valid.
+ */
+function isConnectionLifecycle (connection) {
+  return connection !== null && typeof connection === 'object' &&
+    typeof connection.start === 'string' && connection.start.length > 0 &&
+    typeof connection.finish === 'string' && connection.finish.length > 0 &&
+    (connection.skip === undefined || (typeof connection.skip === 'string' && connection.skip.length > 0))
+}
+
+/**
+ * Check whether a terminal context carries an application error.
+ *
+ * @param {unknown} context Possible lifecycle context.
+ * @returns {context is object} Whether the context has an error value.
+ */
+function hasError (context) {
+  return context !== null && typeof context === 'object' && Reflect.get(context, 'error') !== undefined
 }
 
 module.exports = createDatabaseIntegration

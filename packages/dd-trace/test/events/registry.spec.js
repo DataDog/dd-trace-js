@@ -34,6 +34,69 @@ describe('EventDomainRegistry', () => {
     assert.strictEqual(first.registry, registry)
   })
 
+  it('shares one processor across semantic operations in the same domain', () => {
+    const registry = new EventDomainRegistry({}, {})
+
+    const query = registry.registerProcessor({
+      domain: 'database',
+      operation: 'db.query',
+      Processor: TestProcessor,
+    })
+    const acquire = registry.registerProcessor({
+      domain: 'database',
+      operation: 'db.pool.acquire',
+      Processor: TestProcessor,
+    })
+
+    assert.strictEqual(query, acquire)
+  })
+
+  it('rejects conflicting operation and domain ownership', () => {
+    class OtherProcessor {}
+
+    const registry = new EventDomainRegistry({}, {})
+    registry.registerProcessor({ domain: 'database', operation: 'db.query', Processor: TestProcessor })
+
+    assert.throws(
+      () => registry.registerProcessor({ domain: 'messaging', operation: 'db.query', Processor: TestProcessor }),
+      /Processor already registered for operation "db\.query"/
+    )
+    assert.throws(
+      () => registry.registerProcessor({ domain: 'database', operation: 'db.pool.acquire', Processor: OtherProcessor }),
+      /Processor already registered for domain "database"/
+    )
+  })
+
+  it('isolates source keys by operation while sharing domain enablement', () => {
+    const registry = new EventDomainRegistry({}, {})
+    const processor = registry.registerProcessor({
+      domain: 'database',
+      operation: 'db.query',
+      Processor: TestProcessor,
+    })
+    registry.registerProcessor({
+      domain: 'database',
+      operation: 'db.pool.acquire',
+      Processor: TestProcessor,
+    })
+    const query = registry.registerSource({ operation: 'db.query', source: 'mariadb', adapter: {} })
+    const acquire = registry.registerSource({ operation: 'db.pool.acquire', source: 'mariadb', adapter: {} })
+
+    registry.configureSource('db.query', 'mariadb', { enabled: true })
+    registry.configureSource('db.pool.acquire', 'mariadb', { enabled: true })
+    registry.configureSource('db.query', 'mariadb', { enabled: false })
+
+    assert.notStrictEqual(query, acquire)
+    assert.strictEqual(registry.getSource('db.query', 'mariadb'), undefined)
+    assert.strictEqual(registry.getSource('db.pool.acquire', 'mariadb'), acquire)
+    sinon.assert.calledOnceWithExactly(processor.configure, { enabled: true })
+
+    registry.configureSource('db.pool.acquire', 'mariadb', { enabled: false })
+
+    sinon.assert.calledTwice(processor.configure)
+    sinon.assert.calledWithExactly(processor.configure.secondCall, { enabled: false })
+  })
+
   it('rejects a second processor owner for the same operation', () => {
     class OtherProcessor {}
 

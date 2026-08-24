@@ -111,6 +111,57 @@ describe('DatabaseProcessor', () => {
     assert.strictEqual(harness.processor.startSpan.firstCall.args[1].meta['db.system'], undefined)
   })
 
+  it('processes pool acquisition through the shared database processor', () => {
+    const adapter = createAdapter({
+      identity: {
+        integration: 'mariadb',
+        system: 'mariadb',
+      },
+      lifecycle: 'pool.acquire',
+    })
+    const harness = createHarness(adapter, 'mariadb', 'db.pool.acquire')
+    const service = { name: 'mariadb-service', source: 'mariadb' }
+    sinon.stub(harness.processor, 'serviceName').returns(service)
+    const parentStore = { parent: true }
+    const event = createEvent(parentStore, 'mariadb', {
+      connection: {
+        database: 'database',
+        host: 'localhost',
+        port: 3306,
+        user: 'user',
+      },
+    })
+
+    assert.strictEqual(harness.consumer.start(event), event.currentStore)
+    event.metadata = { 'mariadb.pool.wait_time': 12.5 }
+    harness.consumer.complete(event)
+
+    sinon.assert.calledOnceWithExactly(
+      harness.processor.startSpan,
+      'mariadb.pool.acquire',
+      {
+        component: 'mariadb',
+        config: harness.runtime.config,
+        integrationName: 'mariadb',
+        kind: 'client',
+        meta: {
+          component: 'mariadb',
+          'db.type': 'mariadb',
+          'db.user': 'user',
+          'db.name': 'database',
+          'out.host': 'localhost',
+          [CLIENT_PORT_KEY]: 3306,
+        },
+        resource: 'mariadb.pool.acquire',
+        service,
+        type: 'sql',
+      },
+      event
+    )
+    sinon.assert.calledOnceWithExactly(harness.span.addTags, event.metadata)
+    sinon.assert.calledOnce(harness.span.finish)
+  })
+
   it('applies completion metadata and releases state exactly once', () => {
     const harness = createHarness()
     const event = createEvent({ parent: true })
@@ -218,7 +269,7 @@ describe('DatabaseProcessor', () => {
     )
   })
 
-  function createHarness (adapter = createAdapter(), source = 'azure-cosmos') {
+  function createHarness (adapter = createAdapter(), source = 'azure-cosmos', operation = 'db.query') {
     const tracer = {
       _env: 'test',
       _nomenclature: {
@@ -235,15 +286,15 @@ describe('DatabaseProcessor', () => {
       spanComputePeerService: false,
     }
     registry = new EventDomainRegistry(tracer, tracerConfig)
-    const processor = registry.registerProcessor({ operation: 'db.query', Processor: DatabaseProcessor })
-    const runtime = registry.registerSource({ operation: 'db.query', source, adapter })
+    const processor = registry.registerProcessor({ domain: 'database', operation, Processor: DatabaseProcessor })
+    const runtime = registry.registerSource({ operation, source, adapter })
     const span = createSpan()
     sinon.stub(processor, 'startSpan').callsFake((name, options, event) => {
       event.parentStore = legacyStorage.getStore()
       event.currentStore = { ...event.parentStore, span }
       return span
     })
-    registry.configureSource('db.query', source, { enabled: true })
+    registry.configureSource(operation, source, { enabled: true })
     const consumer = processor.createSourceConsumer(runtime)
 
     return { adapter, consumer, processor, registry, runtime, span }

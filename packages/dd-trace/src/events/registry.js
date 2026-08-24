@@ -9,6 +9,7 @@ const registries = new WeakMap()
 
 class EventDomainRegistry {
   #domains = new Map()
+  #operations = new Map()
   #tracer
   #tracerConfig
 
@@ -24,35 +25,49 @@ class EventDomainRegistry {
   }
 
   /**
-   * Register or resolve the single processor that owns a semantic operation.
+   * Register or resolve the single processor that owns a semantic operation within a domain.
    *
    * @template {EventProcessor} ProcessorType
    * @param {object} definition Processor definition.
+   * @param {string} [definition.domain] Stable processor domain identifier. Defaults to the operation.
    * @param {string} definition.operation Stable semantic operation identifier.
    * @param {new (tracer: object, tracerConfig: object, registry: EventDomainRegistry) => ProcessorType}
    *   definition.Processor Processor constructor.
    * @returns {ProcessorType} Processor instance owned by this registry.
    */
-  registerProcessor ({ operation, Processor }) {
-    const domain = this.#domains.get(operation)
-
-    if (domain) {
-      if (domain.Processor !== Processor) {
+  registerProcessor ({ domain: domainName, operation, Processor }) {
+    domainName ??= operation
+    const operationRuntime = this.#operations.get(operation)
+    if (operationRuntime) {
+      if (operationRuntime.name !== domainName || operationRuntime.domain.Processor !== Processor) {
         throw new Error(`Processor already registered for operation "${operation}"`)
       }
 
-      return domain.processor
+      return operationRuntime.domain.processor
     }
 
-    const processor = new Processor(this.#tracer, this.#tracerConfig, this)
-    this.#domains.set(operation, {
-      Processor,
-      processor,
-      enabledSourceCount: 0,
+    let domain = this.#domains.get(domainName)
+    if (domain) {
+      if (domain.Processor !== Processor) {
+        throw new Error(`Processor already registered for domain "${domainName}"`)
+      }
+    } else {
+      const processor = new Processor(this.#tracer, this.#tracerConfig, this)
+      domain = {
+        Processor,
+        processor,
+        enabledSourceCount: 0,
+      }
+      this.#domains.set(domainName, domain)
+    }
+
+    this.#operations.set(operation, {
+      domain,
+      name: domainName,
       sources: new Map(),
     })
 
-    return processor
+    return domain.processor
   }
 
   /**
@@ -65,9 +80,9 @@ class EventDomainRegistry {
    * @returns {object} Stable source runtime used by the processor hot path.
    */
   registerSource ({ operation, source, adapter }) {
-    const domain = this.#getDomain(operation)
+    const operationRuntime = this.#getOperation(operation)
 
-    const existing = domain.sources.get(source)
+    const existing = operationRuntime.sources.get(source)
     if (existing) {
       if (existing.adapter === adapter) return existing
 
@@ -81,7 +96,7 @@ class EventDomainRegistry {
       operation,
       source,
     }
-    domain.sources.set(source, runtime)
+    operationRuntime.sources.set(source, runtime)
 
     return runtime
   }
@@ -97,8 +112,9 @@ class EventDomainRegistry {
    * @returns {void}
    */
   configureSource (operation, source, config) {
-    const domain = this.#getDomain(operation)
-    const runtime = this.#getSource(domain, operation, source)
+    const operationRuntime = this.#getOperation(operation)
+    const { domain } = operationRuntime
+    const runtime = this.#getSource(operationRuntime, operation, source)
     const enabled = typeof config === 'boolean' ? config : config?.enabled !== false
 
     runtime.config = Object.freeze(typeof config === 'boolean' ? { enabled: config } : { ...config })
@@ -127,7 +143,7 @@ class EventDomainRegistry {
    * @returns {object | undefined} Enabled source runtime.
    */
   getSource (operation, source) {
-    const runtime = this.#domains.get(operation)?.sources.get(source)
+    const runtime = this.#operations.get(operation)?.sources.get(source)
 
     return runtime?.enabled ? runtime : undefined
   }
@@ -144,6 +160,7 @@ class EventDomainRegistry {
       }
     }
     this.#domains.clear()
+    this.#operations.clear()
   }
 
   /**
@@ -152,25 +169,25 @@ class EventDomainRegistry {
    * @param {string} operation Stable semantic operation identifier.
    * @returns {object} Registered operation domain.
    */
-  #getDomain (operation) {
-    const domain = this.#domains.get(operation)
-    if (!domain) {
+  #getOperation (operation) {
+    const operationRuntime = this.#operations.get(operation)
+    if (!operationRuntime) {
       throw new Error(`No processor registered for operation "${operation}"`)
     }
 
-    return domain
+    return operationRuntime
   }
 
   /**
    * Resolve a registered source from an operation domain.
    *
-   * @param {object} domain Registered operation domain.
+   * @param {object} operationRuntime Registered semantic operation.
    * @param {string} operation Stable semantic operation identifier.
    * @param {string} source Stable package or platform source identifier.
    * @returns {object} Stable source runtime.
    */
-  #getSource (domain, operation, source) {
-    const runtime = domain.sources.get(source)
+  #getSource (operationRuntime, operation, source) {
+    const runtime = operationRuntime.sources.get(source)
     if (!runtime) {
       throw new Error(`No source "${source}" registered for operation "${operation}"`)
     }

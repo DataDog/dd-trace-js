@@ -1,34 +1,19 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
 const { createDatabaseIntegration } = require('../../dd-trace/src/events/database')
-const MySQLPlugin = require('../../datadog-plugin-mysql/src')
+const poolAcquireSource = require('./pool-acquire-source')
 const querySource = require('./query-source')
 
-const DatabaseQueryIntegration = createDatabaseIntegration({
-  base: MySQLPlugin,
+module.exports = createDatabaseIntegration({
   id: 'mariadb',
   system: 'mariadb',
   operations: [{
     operation: 'db.query',
     adapter: 'query',
     source: querySource,
+  }, {
+    operation: 'db.pool.acquire',
+    adapter: 'pool.acquire',
+    source: poolAcquireSource,
   }],
 })
-
-class MariadbPlugin extends DatabaseQueryIntegration {
-  static id = 'mariadb'
-  static system = 'mariadb'
-
-  constructor (...args) {
-    super(...args)
-
-    this.addBind(`apm:${this.component}:pool:skip`, () => ({ noop: true }))
-
-    this.addSub(`apm:${this.component}:command:add`, ctx => {
-      ctx.parentStore = storage('legacy').getStore()
-    })
-  }
-}
-
-module.exports = MariadbPlugin

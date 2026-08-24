@@ -8,6 +8,7 @@
  */
 
 module.exports = {
+  parentChannels: ['apm:mariadb:command:add'],
   targets: [{
     channels: {
       error: 'apm:mariadb:query:error',
