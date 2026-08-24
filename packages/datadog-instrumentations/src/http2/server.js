@@ -16,11 +16,58 @@ const emitCh = channel('apm:http2:server:response:emit')
 // AppSec/IAST response-sink channels.
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 const startSetHeaderCh = channel('datadog:http:server:response:set-header:start')
+const startInformationalResponseCh = channel('datadog:http:server:informational-response:start')
 const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 
 const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
+const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+const ILLEGAL_CONNECTION_HEADERS = new Set([
+  'connection',
+  'http2-settings',
+  'keep-alive',
+  'proxy-connection',
+  'transfer-encoding',
+  'upgrade',
+])
+const SINGLE_VALUE_HEADERS = new Set([
+  ':status',
+  'access-control-allow-credentials',
+  'access-control-max-age',
+  'access-control-request-method',
+  'age',
+  'authorization',
+  'content-encoding',
+  'content-language',
+  'content-length',
+  'content-location',
+  'content-md5',
+  'content-range',
+  'content-type',
+  'date',
+  'dnt',
+  'etag',
+  'expires',
+  'from',
+  'host',
+  'if-match',
+  'if-modified-since',
+  'if-none-match',
+  'if-range',
+  'if-unmodified-since',
+  'last-modified',
+  'location',
+  'max-forwards',
+  'proxy-authorization',
+  'range',
+  'referer',
+  'retry-after',
+  'tk',
+  'upgrade-insecure-requests',
+  'user-agent',
+  'x-content-type-options',
+])
 // Node.js started preserving duplicate response header pairs in 20.12.0 and 21.7.0.
 const PRESERVES_DUPLICATE_HEADERS = NODE_MAJOR >= 22 ||
   (NODE_MAJOR === 21 && NODE_MINOR >= 7) ||
@@ -32,16 +79,24 @@ const tracedStreams = new WeakSet()
 const responseContexts = new WeakMap()
 const wrappedStreamPrototypes = new WeakSet()
 
+/** @type {symbol | undefined} */
+let sensitiveHeadersSymbol
+
+// Node core methods are not package source Orchestrion can rewrite, so these hooks require shimmer.
 addHook({ name: 'http2' }, http2 => {
+  sensitiveHeadersSymbol = http2.sensitiveHeaders
   shimmer.wrap(http2, 'createSecureServer', wrapCreateServer)
   shimmer.wrap(http2, 'createServer', wrapCreateServer)
 
   const responseProto = http2.Http2ServerResponse?.prototype
   if (responseProto) {
     shimmer.wrap(responseProto, 'end', wrapEnd)
+    shimmer.wrap(responseProto, 'removeHeader', wrapResponseOperation)
     shimmer.wrap(responseProto, 'setHeader', wrapSetHeader)
     if (responseProto.appendHeader) shimmer.wrap(responseProto, 'appendHeader', wrapSetHeader)
     shimmer.wrap(responseProto, 'write', wrapWrite)
+    if (responseProto.writeContinue) shimmer.wrap(responseProto, 'writeContinue', wrapInformationalResponse)
+    if (responseProto.writeEarlyHints) shimmer.wrap(responseProto, 'writeEarlyHints', wrapInformationalResponse)
     shimmer.wrap(responseProto, 'writeHead', wrapWriteHead)
   }
 
@@ -114,7 +169,9 @@ function wrapEmit (originalEmit) {
 
         shimmer.wrap(stream, 'emit', emit => wrapStreamEmit(emit, ctx))
         return traceServerRequest(ctx, () => {
-          if (finishSetHeaderCh.hasSubscribers || startWriteHeadCh.hasSubscribers) {
+          if (finishSetHeaderCh.hasSubscribers ||
+            startInformationalResponseCh.hasSubscribers ||
+            startWriteHeadCh.hasSubscribers) {
             instrumentStreamResponse(stream, ctx)
           }
           return Reflect.apply(originalEmit, this, args)
@@ -171,6 +228,40 @@ function wrapSetHeader (setHeader) {
     }
 
     return result
+  }
+}
+
+/**
+ * @param {Function} responseOperation
+ */
+function wrapResponseOperation (responseOperation) {
+  return function (...args) {
+    if (!startSetHeaderCh.hasSubscribers) {
+      return Reflect.apply(responseOperation, this, args)
+    }
+
+    const abortController = new AbortController()
+    startSetHeaderCh.publish({ res: this, abortController })
+    if (abortController.signal.aborted) return
+
+    return Reflect.apply(responseOperation, this, args)
+  }
+}
+
+/**
+ * @param {Function} informationalResponse
+ */
+function wrapInformationalResponse (informationalResponse) {
+  return function (...args) {
+    if (!startInformationalResponseCh.hasSubscribers) {
+      return Reflect.apply(informationalResponse, this, args)
+    }
+
+    const abortController = new AbortController()
+    startInformationalResponseCh.publish({ res: this, abortController })
+    if (abortController.signal.aborted) return
+
+    return Reflect.apply(informationalResponse, this, args)
   }
 }
 
@@ -264,6 +355,7 @@ function instrumentStreamResponse (stream, ctx) {
     shimmer.wrap(prototype, 'respond', wrapStreamRespond)
     shimmer.wrap(prototype, 'respondWithFD', wrapStreamRespondWithFD)
     shimmer.wrap(prototype, 'respondWithFile', wrapStreamRespondWithFile)
+    shimmer.wrap(prototype, 'additionalHeaders', wrapStreamAdditionalHeaders)
     shimmer.wrap(prototype, 'end', wrapStreamEnd)
     shimmer.wrap(prototype, 'write', wrapStreamWrite)
   }
@@ -282,8 +374,11 @@ function wrapStreamRespond (respond) {
       return Reflect.apply(respond, this, args)
     }
 
-    const responseHeaders = publishStreamResponseStart(ctx, args[0])
-    if (!responseHeaders) {
+    const responseHeaders = getValidatedResponseHeaders(args[0], args[1])
+    if (!responseHeaders) return Reflect.apply(respond, this, args)
+
+    const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
+    if (!responseAllowed) {
       ctx.responseBlocked = true
       return this
     }
@@ -307,20 +402,31 @@ function wrapStreamRespondWithFD (respond) {
     }
 
     const options = args[2]
-    if (options !== undefined && (options === null || typeof options !== 'object')) {
+    if (!hasValidResponseOptions(options, true)) {
       return Reflect.apply(respond, this, args)
     }
 
-    if (typeof options?.statCheck === 'function') {
+    const statCheck = getEnumerableDataProperty(options, 'statCheck')
+    if (typeof statCheck === 'function') {
       args[2] = {
         ...options,
-        statCheck: wrapStreamStatCheck(options.statCheck, ctx, this),
+        statCheck: wrapStreamStatCheck(statCheck, ctx, this),
       }
       return Reflect.apply(respond, this, args)
     }
 
-    const responseHeaders = publishStreamResponseStart(ctx, args[1])
-    if (!responseHeaders) {
+    if (typeof args[0] !== 'number') return Reflect.apply(respond, this, args)
+
+    const responseHeaders = getValidatedResponseHeaders(args[1])
+    if (!responseHeaders) return Reflect.apply(respond, this, args)
+
+    const statusCode = getResponseStatusCode(responseHeaders)
+    if (statusCode === 204 || statusCode === 205 || statusCode === 304 || ctx.req.method === 'HEAD') {
+      return Reflect.apply(respond, this, args)
+    }
+
+    const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
+    if (!responseAllowed) {
       ctx.responseBlocked = true
       return this
     }
@@ -344,15 +450,39 @@ function wrapStreamRespondWithFile (respond) {
     }
 
     const options = args[2]
-    if (options !== undefined && (options === null || typeof options !== 'object')) {
+    if (!hasValidResponseOptions(options, true)) {
       return Reflect.apply(respond, this, args)
     }
 
+    const statCheck = getEnumerableDataProperty(options, 'statCheck')
     args[2] = {
       ...options,
-      statCheck: wrapStreamStatCheck(options?.statCheck, ctx, this),
+      statCheck: wrapStreamStatCheck(statCheck, ctx, this),
     }
     return Reflect.apply(respond, this, args)
+  }
+}
+
+/**
+ * @param {Function} additionalHeaders
+ */
+function wrapStreamAdditionalHeaders (additionalHeaders) {
+  return function (...args) {
+    const ctx = responseContexts.get(this)
+    if (!ctx) return Reflect.apply(additionalHeaders, this, args)
+    if (ctx.responseBlocked) return
+    if (!startInformationalResponseCh.hasSubscribers) {
+      return Reflect.apply(additionalHeaders, this, args)
+    }
+
+    const abortController = new AbortController()
+    startInformationalResponseCh.publish({ res: ctx.res, abortController })
+    if (abortController.signal.aborted) {
+      ctx.responseBlocked = true
+      return
+    }
+
+    return Reflect.apply(additionalHeaders, this, args)
   }
 }
 
@@ -369,8 +499,11 @@ function wrapStreamStatCheck (statCheck, ctx, stream) {
       return result
     }
 
-    const responseHeaders = publishStreamResponseStart(ctx, args[1])
-    if (!responseHeaders) {
+    const responseHeaders = getValidatedResponseHeaders(args[1])
+    if (!responseHeaders) return result
+
+    const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
+    if (!responseAllowed) {
       ctx.responseBlocked = true
       return false
     }
@@ -413,13 +546,142 @@ function wrapStreamEnd (end) {
 }
 
 /**
- * @param {StreamRequestContext} ctx
- * @param {object | unknown[]} [headers]
+ * @param {object | undefined} options
+ * @param {boolean} [fileResponse]
+ * @returns {boolean}
+ */
+function hasValidResponseOptions (options, fileResponse = false) {
+  if (options === undefined) return true
+  if (!hasOnlyDataProperties(options)) return false
+  if (!fileResponse) return true
+
+  const offset = getEnumerableDataProperty(options, 'offset')
+  const length = getEnumerableDataProperty(options, 'length')
+  const statCheck = getEnumerableDataProperty(options, 'statCheck')
+  if (offset !== undefined && typeof offset !== 'number') return false
+  if (length !== undefined && typeof length !== 'number') return false
+  if (statCheck !== undefined && typeof statCheck !== 'function') return false
+
+  return true
+}
+
+/**
+ * @param {object | undefined} value
+ * @param {string} name
+ */
+function getEnumerableDataProperty (value, name) {
+  if (value === undefined) return
+  const descriptor = Object.getOwnPropertyDescriptor(value, name)
+  if (descriptor?.enumerable && Object.hasOwn(descriptor, 'value')) return descriptor.value
+}
+
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function hasOnlyDataProperties (value) {
+  if (value === null || typeof value !== 'object') return false
+
+  for (const name of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, name)
+    if (!descriptor || !Object.hasOwn(descriptor, 'value')) return false
+  }
+
+  return true
+}
+
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isStableHeaderValue (value) {
+  if (!Array.isArray(value)) {
+    return value === null || value === undefined ||
+      typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+  }
+
+  for (const item of value) {
+    if (item !== null && item !== undefined &&
+      typeof item !== 'string' && typeof item !== 'number' && typeof item !== 'boolean') {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * @param {Record<string, unknown>} responseHeaders
+ * @returns {number | undefined}
+ */
+function getResponseStatusCode (responseHeaders) {
+  const value = responseHeaders[HTTP2_HEADER_STATUS]
+  if (value !== null && value !== undefined &&
+    typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+    return
+  }
+
+  const statusCode = value | 0 || 200
+  if (statusCode >= 200 && statusCode <= 599) return statusCode
+}
+
+/**
+ * @param {object | unknown[] | undefined} headers
+ * @param {object | undefined} [options]
  * @returns {Record<string, unknown> | undefined}
  */
-function publishStreamResponseStart (ctx, headers) {
+function getValidatedResponseHeaders (headers, options) {
+  if (!hasValidResponseOptions(options)) return
+  if (headers !== undefined) {
+    if (!hasOnlyDataProperties(headers)) return
+
+    if (Array.isArray(headers)) return
+    const prototype = Object.getPrototypeOf(headers)
+    if (prototype !== Object.prototype && prototype !== null) return
+
+    const sensitiveDescriptor = sensitiveHeadersSymbol &&
+      Object.getOwnPropertyDescriptor(headers, sensitiveHeadersSymbol)
+    if (sensitiveDescriptor && !Object.hasOwn(sensitiveDescriptor, 'value')) return
+
+    const sensitiveHeaders = sensitiveHeadersSymbol && headers[sensitiveHeadersSymbol]
+    if (sensitiveHeaders !== undefined) {
+      if (!Array.isArray(sensitiveHeaders)) return
+      for (const name of sensitiveHeaders) {
+        if (typeof name !== 'string') return
+      }
+    }
+  }
+
   const responseHeaders = addResponseHeaders({}, headers, true)
-  if (!startWriteHeadCh.hasSubscribers) return responseHeaders
+  if (getResponseStatusCode(responseHeaders) === undefined) return
+
+  for (const name of Object.keys(responseHeaders)) {
+    const value = responseHeaders[name]
+    if (value === undefined || name === '' || (Array.isArray(value) && value.length === 0)) {
+      delete responseHeaders[name]
+      continue
+    }
+    if (!isStableHeaderValue(value)) return
+    if (name[0] === ':') {
+      if (name !== HTTP2_HEADER_STATUS) return
+      continue
+    }
+    if (!HTTP_HEADER_NAME_PATTERN.test(name) || ILLEGAL_CONNECTION_HEADERS.has(name)) return
+    if (Array.isArray(value) && value.length > 1 && SINGLE_VALUE_HEADERS.has(name)) return
+
+    const normalizedValue = Array.isArray(value) ? value[0] : value
+    if (name === 'te' && normalizedValue !== 'trailers') return
+  }
+
+  return responseHeaders
+}
+
+/**
+ * @param {StreamRequestContext} ctx
+ * @param {Record<string, unknown>} responseHeaders
+ * @returns {boolean}
+ */
+function publishStreamResponseStart (ctx, responseHeaders) {
+  if (!startWriteHeadCh.hasSubscribers) return true
 
   const abortController = new AbortController()
   startWriteHeadCh.publish({
@@ -429,7 +691,7 @@ function publishStreamResponseStart (ctx, headers) {
     statusCode: responseHeaders[HTTP2_HEADER_STATUS] ?? 200,
     responseHeaders,
   })
-  if (!abortController.signal.aborted) return responseHeaders
+  return !abortController.signal.aborted
 }
 
 /**

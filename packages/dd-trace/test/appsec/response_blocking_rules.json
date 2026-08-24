@@ -197,6 +197,47 @@
       "transformers": [
         "lowercase"
       ]
+    },
+    {
+      "id": "mixed-http2-session",
+      "name": "mixed HTTP/2 session context continuity",
+      "tags": {
+        "type": "security_scanner4",
+        "category": "attack_attempt4"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "regex": "^/mixed-session$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        },
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "usr.session_id"
+              }
+            ],
+            "regex": "^mixed-http2-session$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        }
+      ],
+      "on_match": [
+        "block"
+      ]
     }
   ]
 }

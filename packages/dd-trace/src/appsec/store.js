@@ -5,6 +5,7 @@ const { storage } = require('../../../datadog-core')
 const legacyStorage = storage('legacy')
 
 const kReq = Symbol('dd-trace.appsec.req')
+const canonicalRequests = new WeakMap()
 
 /**
  * Return a new legacy-storage clone that weakly references `req`.
@@ -43,8 +44,28 @@ function getActiveRequest () {
   return legacyStorage.getStore()?.[kReq]?.deref()
 }
 
+/**
+ * @param {{ req: object }} data
+ */
+function adoptRequest ({ req }) {
+  const canonicalRequest = getActiveRequest()
+  if (canonicalRequest && canonicalRequest !== req) {
+    canonicalRequests.set(req, canonicalRequest)
+  }
+}
+
+/**
+ * @param {object|undefined} req
+ * @returns {object|undefined}
+ */
+function getCanonicalRequest (req) {
+  return canonicalRequests.get(req) ?? req
+}
+
 module.exports = {
   withRequest,
   getRequest,
   getActiveRequest,
+  adoptRequest,
+  getCanonicalRequest,
 }

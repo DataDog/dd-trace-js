@@ -5,7 +5,9 @@ const { closeSync, openSync } = require('node:fs')
 const path = require('node:path')
 
 const { after, afterEach, before, describe, it } = require('mocha')
+const semver = require('semver')
 
+const { engines, nodeMaxMajor } = require('../../../../package.json')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
 const { FOREIGN_HTTP2_SERVER } = require('../../src/constants')
 const appsec = require('../../src/appsec')
@@ -23,14 +25,19 @@ const { blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 const PRESERVES_DUPLICATE_HEADERS = NODE_MAJOR >= 22 ||
   (NODE_MAJOR === 21 && NODE_MINOR >= 7) ||
   (NODE_MAJOR === 20 && NODE_MINOR >= 12)
+const runtimeSupported = Boolean(process.env.DD_INJECT_FORCE) ||
+  semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
+const describeSupported = runtimeSupported ? describe : describe.skip
 
-describe('AppSec HTTP/2 response blocking', () => {
+describeSupported('AppSec HTTP/2 response blocking', () => {
+  let expressSession
   let http2
   let server
   let port
 
   before(async () => {
     await agent.load(['http2', 'http'], { client: false })
+    expressSession = require('../../../../versions/express-session').get()
     http2 = require('node:http2')
     appsec.enable(getConfigFresh({
       appsec: {
@@ -87,15 +94,23 @@ describe('AppSec HTTP/2 response blocking', () => {
 
   /**
    * @param {string} [requestPath]
-   * @returns {Promise<{ body: string, headers: import('node:http2').IncomingHttpHeaders }>}
+   * @returns {Promise<{
+   *   body: string,
+   *   headers: import('node:http2').IncomingHttpHeaders,
+   *   informationalHeaders: import('node:http2').IncomingHttpHeaders[]
+   * }>}
    */
   function request (requestPath = '/') {
     return new Promise((resolve, reject) => {
       const client = http2.connect(`http://localhost:${port}`).once('error', reject)
       const stream = client.request({ ':path': requestPath })
       const chunks = []
+      const informationalHeaders = []
       let responseHeaders
 
+      stream.on('headers', headers => {
+        informationalHeaders.push(headers)
+      })
       stream.once('response', headers => {
         responseHeaders = headers
       })
@@ -108,16 +123,35 @@ describe('AppSec HTTP/2 response blocking', () => {
         resolve({
           body: Buffer.concat(chunks).toString(),
           headers: responseHeaders,
+          informationalHeaders,
         })
       })
       stream.end()
     })
   }
 
+  /**
+   * @param {import('node:http2').ServerHttp2Stream} stream
+   * @param {Record<string, string | number | string[]>} headers
+   * @param {object} options
+   * @param {Function | RegExp | Record<string, string | RegExp>} expected
+   */
+  function assertInvalidFileDescriptorResponse (stream, headers, options, expected) {
+    const fileDescriptor = openSync(__filename, 'r')
+    try {
+      assert.throws(() => stream.respondWithFD(fileDescriptor, headers, options), expected)
+    } finally {
+      closeSync(fileDescriptor)
+    }
+  }
+
   it('blocks compatibility responses and suppresses subsequent writes', async () => {
     await listen(() => http2.createServer((req, res) => {
       res.writeHead(404, { k: '404' })
+      res.removeHeader('k')
       res.setHeader('after-block', 'ignored')
+      res.writeContinue()
+      res.writeEarlyHints({ link: '</style.css>; rel=preload; as=style' })
       res.write('ignored')
       res.end('ignored')
     }))
@@ -127,6 +161,23 @@ describe('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(headers[':status'], 403)
     assert.strictEqual(headers['after-block'], undefined)
     assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('allows compatibility response operations before the final response', async () => {
+    await listen(() => http2.createServer((req, res) => {
+      res.setHeader('removed', 'value')
+      res.removeHeader('removed')
+      res.writeContinue()
+      res.writeEarlyHints({ link: '</style.css>; rel=preload; as=style' })
+      res.end('body')
+    }))
+
+    const { body, headers, informationalHeaders } = await request()
+
+    assert.strictEqual(headers[':status'], 200)
+    assert.strictEqual(headers.removed, undefined)
+    assert.strictEqual(body, 'body')
+    assert.deepStrictEqual(informationalHeaders.map(headers => headers[':status']), [100, 103])
   })
 
   it('keeps request-start data available when a mixed compatibility request ends', async () => {
@@ -152,11 +203,42 @@ describe('AppSec HTTP/2 response blocking', () => {
     await Promise.all([traceAsserted, request('/mixed-context')])
   })
 
+  it('uses one WAF context for mixed request-start and express-session data', async () => {
+    const sessionMiddleware = expressSession({
+      genid: () => 'mixed-http2-session',
+      resave: false,
+      saveUninitialized: true,
+      secret: 'secret',
+    })
+
+    await listen(() => {
+      const mixedServer = http2.createServer((req, res) => {
+        sessionMiddleware(req, res, () => {
+          req.session = null
+          res.end('unblocked')
+        })
+      })
+      mixedServer.on('stream', () => {})
+      return mixedServer
+    })
+
+    const traceAsserted = agent.assertFirstTraceSpan(span => {
+      const { triggers } = JSON.parse(span.meta['_dd.appsec.json'])
+      assert.ok(triggers.some(trigger => trigger.rule.id === 'mixed-http2-session'))
+    })
+
+    const [, { body, headers }] = await Promise.all([traceAsserted, request('/mixed-session')])
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
   it('blocks core stream responses and suppresses subsequent writes', async () => {
     await listenCore(stream => {
       const fileDescriptor = openSync(__filename, 'r')
       stream.once('close', () => closeSync(fileDescriptor))
       stream.respond({ ':status': 404, k: '404' })
+      stream.additionalHeaders({ ':status': 103, link: '</style.css>; rel=preload; as=style' })
       stream.respond({ ':status': 200 })
       stream.respondWithFD(fileDescriptor, { ':status': 200 })
       stream.respondWithFile(__filename, { ':status': 200 })
@@ -168,6 +250,21 @@ describe('AppSec HTTP/2 response blocking', () => {
 
     assert.strictEqual(headers[':status'], 403)
     assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('allows core informational responses before the final response', async () => {
+    await listenCore(stream => {
+      stream.additionalHeaders({ ':status': 103, link: '</style.css>; rel=preload; as=style' })
+      stream.respond({ ':status': 200 })
+      stream.end('body')
+    })
+
+    const { body, headers, informationalHeaders } = await request()
+
+    assert.strictEqual(headers[':status'], 200)
+    assert.strictEqual(body, 'body')
+    assert.strictEqual(informationalHeaders.length, 1)
+    assert.strictEqual(informationalHeaders[0][':status'], 103)
   })
 
   it('allows core stream writes before respond', async () => {
@@ -223,6 +320,14 @@ describe('AppSec HTTP/2 response blocking', () => {
 
       assert.throws(() => stream.respondWithFD(fileDescriptor, {}, null), TypeError)
       assert.throws(() => stream.respondWithFile(__filename, {}, null), TypeError)
+      assert.throws(
+        () => stream.respondWithFD(fileDescriptor, {}, { statCheck: true }),
+        { code: 'ERR_INVALID_ARG_VALUE' }
+      )
+      assert.throws(
+        () => stream.respondWithFile(__filename, {}, { statCheck: true }),
+        { code: 'ERR_INVALID_ARG_VALUE' }
+      )
 
       closeSync(fileDescriptor)
       stream.respond({ ':status': 200 })
@@ -233,6 +338,258 @@ describe('AppSec HTTP/2 response blocking', () => {
 
     assert.strictEqual(headers[':status'], 200)
     assert.strictEqual(body, 'body')
+  })
+
+  it('validates rejected core responses before analyzing their headers', async () => {
+    await listenCore((stream, headers) => {
+      const requestPath = headers[':path']
+
+      if (requestPath === '/status') {
+        assert.throws(
+          () => stream.respond({ ':status': 199, k: '404' }),
+          { code: 'ERR_HTTP2_STATUS_INVALID' }
+        )
+      } else if (requestPath === '/header') {
+        assert.throws(
+          () => stream.respond({ ':status': 404, connection: 'close', k: '404' }),
+          { code: 'ERR_HTTP2_INVALID_CONNECTION_HEADERS' }
+        )
+      } else if (requestPath === '/options') {
+        assert.throws(
+          () => stream.respond({ ':status': 200 }, null),
+          { code: 'ERR_INVALID_ARG_TYPE' }
+        )
+      } else if (requestPath === '/options-accessor') {
+        const options = {}
+        Object.defineProperty(options, 'sendDate', {
+          enumerable: true,
+          get () {
+            throw new Error('invalid options getter')
+          },
+        })
+        assert.throws(
+          () => stream.respond({ ':status': 404, k: '404' }, options),
+          { message: 'invalid options getter' }
+        )
+      } else if (requestPath === '/header-accessor') {
+        const responseHeaders = { ':status': 404, k: '404' }
+        Object.defineProperty(responseHeaders, 'getter', {
+          enumerable: true,
+          get () {
+            throw new Error('invalid header getter')
+          },
+        })
+        assert.throws(
+          () => stream.respond(responseHeaders),
+          { message: 'invalid header getter' }
+        )
+      } else if (requestPath === '/pseudo-header') {
+        assert.throws(
+          () => stream.respond({ ':status': 404, ':path': '/', k: '404' }),
+          { code: 'ERR_HTTP2_INVALID_PSEUDOHEADER' }
+        )
+      } else if (requestPath === '/header-name') {
+        assert.throws(
+          () => stream.respond({ ':status': 404, 'invalid header': 'value', k: '404' }),
+          { code: 'ERR_INVALID_HTTP_TOKEN' }
+        )
+      } else if (requestPath === '/te') {
+        assert.throws(
+          () => stream.respond({ ':status': 404, k: '404', te: 'gzip' }),
+          { code: 'ERR_HTTP2_INVALID_CONNECTION_HEADERS' }
+        )
+      } else if (requestPath === '/sensitive-headers') {
+        const responseHeaders = { ':status': 404, k: '404' }
+        responseHeaders[http2.sensitiveHeaders] = true
+        assert.throws(
+          () => stream.respond(responseHeaders),
+          { code: 'ERR_INVALID_ARG_VALUE' }
+        )
+      } else if (requestPath === '/sensitive-header-name') {
+        const responseHeaders = { ':status': 404, k: '404' }
+        responseHeaders[http2.sensitiveHeaders] = [1]
+        assert.throws(() => stream.respond(responseHeaders), TypeError)
+      } else if (requestPath === '/sensitive-header-accessor') {
+        const responseHeaders = { ':status': 404, k: '404' }
+        Object.defineProperty(responseHeaders, http2.sensitiveHeaders, {
+          get () {
+            throw new Error('invalid sensitive header getter')
+          },
+        })
+        assert.throws(
+          () => stream.respond(responseHeaders),
+          { message: 'invalid sensitive header getter' }
+        )
+      } else if (requestPath === '/header-value') {
+        const value = {
+          toString () {
+            throw new Error('invalid header value')
+          },
+        }
+        assert.throws(
+          () => stream.respond({ ':status': 404, k: '404', value }),
+          { message: 'invalid header value' }
+        )
+      } else if (requestPath === '/raw-headers') {
+        assert.throws(
+          () => stream.respond([[':status', 404], ['k', '404']]),
+          TypeError
+        )
+      } else if (requestPath === '/raw-header-name') {
+        assert.throws(
+          () => stream.respond([1, 'value', ':status', 404, 'k', '404']),
+          TypeError
+        )
+      } else if (requestPath === '/single-value-header') {
+        assert.throws(
+          () => stream.respond({ ':status': 404, k: '404', 'content-type': ['a', 'b'] }),
+          { code: 'ERR_HTTP2_HEADER_SINGLE_VALUE' }
+        )
+      } else if (requestPath === '/sensitive-empty') {
+        const responseHeaders = { ':status': 404, k: '404' }
+        responseHeaders[http2.sensitiveHeaders] = []
+        stream.respond(responseHeaders)
+      } else if (requestPath === '/ignored-headers') {
+        stream.respond({ ':status': 404, k: '404', '': 'ignored', empty: [], missing: undefined })
+      } else if (requestPath === '/fd-offset') {
+        assertInvalidFileDescriptorResponse(
+          stream,
+          { ':status': 404, k: '404' },
+          { offset: 'invalid' },
+          { code: 'ERR_INVALID_ARG_VALUE' }
+        )
+      } else if (requestPath === '/fd-length') {
+        assertInvalidFileDescriptorResponse(
+          stream,
+          { ':status': 404, k: '404' },
+          { length: 'invalid' },
+          { code: 'ERR_INVALID_ARG_VALUE' }
+        )
+      } else if (requestPath === '/fd-payload') {
+        assertInvalidFileDescriptorResponse(
+          stream,
+          { ':status': 204, k: '404' },
+          {},
+          { code: 'ERR_HTTP2_PAYLOAD_FORBIDDEN' }
+        )
+      } else if (requestPath === '/fd-type') {
+        assert.throws(
+          () => stream.respondWithFD('invalid', { ':status': 404, k: '404' }),
+          { code: 'ERR_INVALID_ARG_TYPE' }
+        )
+      } else if (requestPath === '/fd-ignored-options') {
+        const options = Object.create({
+          get statCheck () {
+            throw new Error('inherited statCheck getter')
+          },
+        })
+        Object.defineProperty(options, 'offset', {
+          get () {
+            throw new Error('non-enumerable offset getter')
+          },
+        })
+        const fileDescriptor = openSync(__filename, 'r')
+        try {
+          stream.respondWithFD(fileDescriptor, { ':status': 404, k: '404' }, options)
+        } finally {
+          closeSync(fileDescriptor)
+        }
+      } else {
+        assertInvalidFileDescriptorResponse(
+          stream,
+          { ':status': 199, k: '404' },
+          {},
+          { code: 'ERR_HTTP2_STATUS_INVALID' }
+        )
+      }
+
+      stream.respond({ ':status': 404, k: '404' })
+      stream.end('ignored')
+    })
+
+    const requestPaths = [
+      '/status',
+      '/header',
+      '/options',
+      '/options-accessor',
+      '/header-accessor',
+      '/pseudo-header',
+      '/header-name',
+      '/te',
+      '/sensitive-headers',
+      '/sensitive-header-name',
+      '/sensitive-header-accessor',
+      '/header-value',
+      '/raw-headers',
+      '/raw-header-name',
+      '/single-value-header',
+      '/sensitive-empty',
+      '/ignored-headers',
+      '/fd-offset',
+      '/fd-length',
+      '/fd-payload',
+      '/fd-type',
+      '/fd-ignored-options',
+      '/fd-status',
+    ]
+    for (const requestPath of requestPaths) {
+      const { body, headers } = await request(requestPath)
+      assert.strictEqual(headers[':status'], 403)
+      assert.strictEqual(body, blockedTemplateJson)
+    }
+  })
+
+  it('leaves exotic valid response values to Node without analyzing them', async () => {
+    await listenCore((stream, headers) => {
+      if (headers[':path'] === '/status') {
+        stream.respond({ ':status': {}, k: '404' })
+      } else if (headers[':path'] === '/value') {
+        stream.respond({ ':status': 404, k: '404', value: [{}] })
+      } else if (headers[':path'] === '/default') {
+        stream.respond({ k: '404' })
+      } else {
+        class ResponseHeaders {
+          constructor () {
+            this[':status'] = 404
+            this.k = '404'
+          }
+        }
+        stream.respond(new ResponseHeaders())
+      }
+      stream.end('body')
+    })
+
+    const [statusResponse, valueResponse, defaultResponse, prototypeResponse] = await Promise.all([
+      request('/status'),
+      request('/value'),
+      request('/default'),
+      request('/prototype'),
+    ])
+
+    assert.strictEqual(statusResponse.headers[':status'], 200)
+    assert.strictEqual(statusResponse.body, 'body')
+    assert.strictEqual(valueResponse.headers[':status'], 404)
+    assert.strictEqual(valueResponse.body, 'body')
+    assert.strictEqual(defaultResponse.headers[':status'], 200)
+    assert.strictEqual(defaultResponse.body, 'body')
+    assert.strictEqual(prototypeResponse.headers[':status'], 404)
+    assert.strictEqual(prototypeResponse.body, 'body')
+  })
+
+  it('leaves exotic statCheck headers to Node without analyzing them', async () => {
+    await listenCore(stream => {
+      stream.respondWithFile(__filename, { ':status': 404, k: '404' }, {
+        statCheck (stat, headers) {
+          Object.setPrototypeOf(headers, { inherited: true })
+          return true
+        },
+      })
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 404)
+    assert.notStrictEqual(body, blockedTemplateJson)
   })
 
   it('does not affect untracked core stream response methods after wrapping their prototype', async () => {
@@ -247,17 +604,22 @@ describe('AppSec HTTP/2 response blocking', () => {
           const fileDescriptor = openSync(__filename, 'r')
           stream.once('close', () => closeSync(fileDescriptor))
           stream.respondWithFD(fileDescriptor, { ':status': 200 })
-        } else {
+        } else if (headers[':path'] === '/file') {
           stream.respondWithFile(__filename, { ':status': 200 })
+        } else {
+          stream.additionalHeaders({ ':status': 103 })
+          stream.respond({ ':status': 200 })
+          stream.end('body')
         }
       })
       return coreServer
     })
 
-    const [respondResponse, fileDescriptorResponse, fileResponse] = await Promise.all([
+    const [respondResponse, fileDescriptorResponse, fileResponse, additionalHeadersResponse] = await Promise.all([
       request('/respond'),
       request('/fd'),
       request('/file'),
+      request('/additional-headers'),
     ])
 
     assert.strictEqual(respondResponse.headers[':status'], 200)
@@ -266,6 +628,9 @@ describe('AppSec HTTP/2 response blocking', () => {
     assert.notStrictEqual(fileDescriptorResponse.body, blockedTemplateJson)
     assert.strictEqual(fileResponse.headers[':status'], 200)
     assert.notStrictEqual(fileResponse.body, blockedTemplateJson)
+    assert.strictEqual(additionalHeadersResponse.headers[':status'], 200)
+    assert.strictEqual(additionalHeadersResponse.informationalHeaders.length, 1)
+    assert.strictEqual(additionalHeadersResponse.informationalHeaders[0][':status'], 103)
   })
 
   it('does not inspect respondWithFile headers when opening the file fails', async () => {
