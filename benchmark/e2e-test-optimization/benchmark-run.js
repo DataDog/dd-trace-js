@@ -9,7 +9,10 @@ const API_REPOSITORY_URL = 'https://api.github.com/repos/DataDog/test-environmen
 const DISPATCH_WORKFLOW_URL = `${API_REPOSITORY_URL}/actions/workflows/dd-trace-js-tests.yml/dispatches`
 const GET_WORKFLOWS_URL = `${API_REPOSITORY_URL}/actions/runs`
 
-const MAX_ATTEMPTS = 30 * 60 / 5 // 30 minutes, polling every 5 seconds = 360 attempts
+const POLL_INTERVAL_MS = 5000
+const MAX_WORKFLOW_POLLS = 30 * 60 / 5 // 30 minutes, polling every 5 seconds = 360 polls
+const RETRY_GRACE_PERIOD_POLLS = 60 / 5 // 1 minute, polling every 5 seconds
+const INITIAL_RUN_ATTEMPT = 1
 
 const getResponsePreview = (body) => {
   return body.replace(/\s+/g, ' ').slice(0, 200)
@@ -101,15 +104,22 @@ const triggerWorkflow = () => {
   })
 }
 
-const getCurrentWorkflowJobs = (runId) => {
+/**
+ * Gets the latest state for a workflow run.
+ *
+ * @param {number} runId
+ * @returns {Promise<{ conclusion: string, run_attempt: number, status: string }>}
+ */
+const getCurrentWorkflow = (runId) => {
   let body = ''
   return new Promise((resolve, reject) => {
     if (!runId) {
-      reject(new Error('No job run id specified'))
+      reject(new Error('No workflow run id specified'))
       return
     }
+    const endpoint = `${GET_WORKFLOWS_URL}/${runId}`
     const request = https.request(
-      `${GET_WORKFLOWS_URL}/${runId}/jobs`,
+      endpoint,
       {
         headers: getCommonHeaders(),
       },
@@ -121,7 +131,7 @@ const getCurrentWorkflowJobs = (runId) => {
           try {
             resolve(parseGitHubJsonResponse({
               body,
-              endpoint: `${GET_WORKFLOWS_URL}/${runId}/jobs`,
+              endpoint,
               res,
             }))
           } catch (e) {
@@ -134,6 +144,68 @@ const getCurrentWorkflowJobs = (runId) => {
     })
     request.end()
   })
+}
+
+/**
+ * Waits for the current workflow attempt to finish.
+ *
+ * @param {number} runId
+ * @param {string} workflowUrl
+ * @param {number} [minimumRunAttempt]
+ * @returns {Promise<{ conclusion: string, run_attempt: number }>}
+ */
+async function waitForWorkflowCompletion (runId, workflowUrl, minimumRunAttempt = INITIAL_RUN_ATTEMPT) {
+  for (let poll = 0; poll < MAX_WORKFLOW_POLLS; poll++) {
+    let currentWorkflow
+    try {
+      currentWorkflow = await getCurrentWorkflow(runId)
+    } catch (e) {
+      console.error('Workflow check failed (%s). Retry in 5 seconds.', e.message)
+    }
+
+    if (currentWorkflow) {
+      const { conclusion, run_attempt: runAttempt, status } = currentWorkflow
+      if (runAttempt >= minimumRunAttempt && status === 'completed') {
+        return { conclusion, run_attempt: runAttempt }
+      }
+
+      console.log(
+        `Workflow ${workflowUrl} is not finished yet. [Poll ${poll + 1}/${MAX_WORKFLOW_POLLS}]`
+      )
+    }
+
+    if (poll === MAX_WORKFLOW_POLLS - 1) {
+      throw new Error(
+        `Timeout: Workflow did not finish within 30 minutes. Check ${workflowUrl} for more details.`
+      )
+    }
+    await setTimeout(POLL_INTERVAL_MS)
+  }
+}
+
+/**
+ * Waits for GitHub to create the single automatic retry allowed for a failed workflow.
+ *
+ * @param {number} runId
+ * @param {number} failedRunAttempt
+ * @returns {Promise<number|undefined>}
+ */
+async function waitForWorkflowRetry (runId, failedRunAttempt) {
+  for (let poll = 0; poll <= RETRY_GRACE_PERIOD_POLLS; poll++) {
+    try {
+      const { run_attempt: currentRunAttempt } = await getCurrentWorkflow(runId)
+      if (currentRunAttempt > failedRunAttempt) {
+        return currentRunAttempt
+      }
+    } catch (e) {
+      console.error('Workflow retry check failed (%s). Retry in 5 seconds.', e.message)
+    }
+    if (poll < RETRY_GRACE_PERIOD_POLLS) {
+      await setTimeout(POLL_INTERVAL_MS)
+    }
+  }
+
+  return undefined
 }
 
 async function main () {
@@ -152,39 +224,21 @@ async function main () {
   // Wait an initial 1 minute, because we're sure it won't finish earlier
   await setTimeout(60000)
 
-  // Poll every 5 seconds until we have a finished status, up to 30 minutes
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    let currentWorkflow
-    try {
-      currentWorkflow = await getCurrentWorkflowJobs(runId)
-    } catch (e) {
-      console.error('Workflow check failed (%s). Retry in 5 seconds.', e.message)
-      await setTimeout(5000)
-      continue
+  let currentWorkflow = await waitForWorkflowCompletion(runId, workflowUrl)
+  if (currentWorkflow.conclusion !== 'success' && currentWorkflow.run_attempt === INITIAL_RUN_ATTEMPT) {
+    console.log('Workflow attempt %d failed. Waiting up to 1 minute for an automatic retry.',
+      currentWorkflow.run_attempt)
+    const retryRunAttempt = await waitForWorkflowRetry(runId, currentWorkflow.run_attempt)
+    if (retryRunAttempt !== undefined) {
+      currentWorkflow = await waitForWorkflowCompletion(runId, workflowUrl, retryRunAttempt)
     }
-    const { jobs } = currentWorkflow
-    if (!jobs) {
-      console.error('Workflow check returned unknown object %o. Retry in 5 seconds.', currentWorkflow)
-      await setTimeout(5000)
-      continue
-    }
-    const hasAnyJobFailed = jobs
-      .some(({ status, conclusion }) => status === 'completed' && conclusion !== 'success')
-    const hasEveryJobPassed = jobs.every(
-      ({ status, conclusion }) => status === 'completed' && conclusion === 'success'
-    )
-    if (hasAnyJobFailed) {
-      throw new Error(`Performance overhead test failed.\n  Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more details.`)
-    } else if (hasEveryJobPassed) {
-      console.log('Performance overhead test successful.')
-      break
-    } else {
-      console.log(`Workflow https://github.com/DataDog/test-environment/actions/runs/${runId} is not finished yet. [Attempt ${attempt + 1}/${MAX_ATTEMPTS}]`)
-    }
-    if (attempt === MAX_ATTEMPTS - 1) {
-      throw new Error(`Timeout: Workflow did not finish within 30 minutes. Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more details.`)
-    }
-    await setTimeout(5000)
+  }
+
+  if (currentWorkflow.conclusion === 'success') {
+    console.log('Performance overhead test successful.')
+  } else {
+    const workflowAttemptUrl = `${workflowUrl}/attempts/${currentWorkflow.run_attempt}`
+    throw new Error(`Performance overhead test failed.\n  Check ${workflowAttemptUrl} for more details.`)
   }
 }
 

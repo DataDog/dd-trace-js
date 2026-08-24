@@ -50,26 +50,15 @@ describe('test optimization end-to-end benchmark runner', () => {
     sinon.restore()
   })
 
-  it('polls the workflow run returned by the dispatch request', async () => {
+  it('polls the workflow run returned by the dispatch request until it succeeds', async () => {
     process.env.GITHUB_TOKEN = 'token'
     process.env.TEST_ENVIRONMENT_REF_NAME = 'feature-branch'
     process.env.TEST_ENVIRONMENT_REF_TO_TEST = 'abc123'
 
     const responses = [
-      {
-        body: JSON.stringify({
-          workflow_run_id: 12345,
-          run_url: 'https://api.github.com/repos/DataDog/test-environment/actions/runs/12345',
-          html_url: 'https://github.com/DataDog/test-environment/actions/runs/12345',
-        }),
-        statusCode: 200,
-      },
-      {
-        body: JSON.stringify({
-          jobs: [{ conclusion: 'success', status: 'completed' }],
-        }),
-        statusCode: 200,
-      },
+      createDispatchResponse(),
+      createWorkflowResponse(undefined, 1, 'in_progress'),
+      createWorkflowResponse('success', 1),
     ]
     const requests = []
     const completion = waitForSuccessfulCompletion()
@@ -85,7 +74,7 @@ describe('test optimization end-to-end benchmark runner', () => {
 
     await completion
 
-    assert.strictEqual(requests.length, 2)
+    assert.strictEqual(requests.length, 3)
     assert.strictEqual(requests[0].url,
       'https://api.github.com/repos/DataDog/test-environment/actions/workflows/dd-trace-js-tests.yml/dispatches')
     assert.strictEqual(requests[0].options.headers['X-GitHub-Api-Version'], '2026-03-10')
@@ -94,9 +83,193 @@ describe('test optimization end-to-end benchmark runner', () => {
       ref: 'main',
     })
     assert.strictEqual(requests[1].url,
-      'https://api.github.com/repos/DataDog/test-environment/actions/runs/12345/jobs')
+      'https://api.github.com/repos/DataDog/test-environment/actions/runs/12345')
+    assert.strictEqual(requests[2].url,
+      'https://api.github.com/repos/DataDog/test-environment/actions/runs/12345')
+  })
+
+  it('accepts a successful automatic retry after the first attempt fails', async () => {
+    process.env.GITHUB_TOKEN = 'token'
+    process.env.TEST_ENVIRONMENT_REF_TO_TEST = 'abc123'
+
+    const responses = [
+      createDispatchResponse(),
+      createWorkflowResponse('failure', 1),
+      createWorkflowResponse(undefined, 2, 'in_progress'),
+      createWorkflowResponse('failure', 1),
+      createWorkflowResponse('success', 2),
+    ]
+    const requests = []
+    const completion = waitForSuccessfulCompletion()
+
+    proxyquire('./benchmark-run', {
+      https: {
+        request: createRequestStub(responses, requests),
+      },
+      'timers/promises': {
+        setTimeout: () => Promise.resolve(),
+      },
+    })
+
+    await completion
+
+    assert.strictEqual(requests.length, 5)
+    assert.deepStrictEqual(requests.slice(1).map(({ url }) => url), [
+      'https://api.github.com/repos/DataDog/test-environment/actions/runs/12345',
+      'https://api.github.com/repos/DataDog/test-environment/actions/runs/12345',
+      'https://api.github.com/repos/DataDog/test-environment/actions/runs/12345',
+      'https://api.github.com/repos/DataDog/test-environment/actions/runs/12345',
+    ])
+  })
+
+  it('reports a failed retry using the retry-specific URL', async () => {
+    process.env.GITHUB_TOKEN = 'token'
+    process.env.TEST_ENVIRONMENT_REF_TO_TEST = 'abc123'
+
+    const responses = [
+      createDispatchResponse(),
+      createWorkflowResponse('failure', 1),
+      createWorkflowResponse(undefined, 2, 'in_progress'),
+      createWorkflowResponse('failure', 2),
+    ]
+    const requests = []
+    const completion = waitForFailedCompletion()
+
+    proxyquire('./benchmark-run', {
+      https: {
+        request: createRequestStub(responses, requests),
+      },
+      'timers/promises': {
+        setTimeout: () => Promise.resolve(),
+      },
+    })
+
+    const error = await completion
+
+    assert.strictEqual(error.message,
+      'Performance overhead test failed.\n' +
+      '  Check https://github.com/DataDog/test-environment/actions/runs/12345/attempts/2 for more details.')
+    assert.strictEqual(requests.length, 4)
+  })
+
+  it('does not wait for another retry when the second attempt already failed', async () => {
+    process.env.GITHUB_TOKEN = 'token'
+    process.env.TEST_ENVIRONMENT_REF_TO_TEST = 'abc123'
+
+    const responses = [
+      createDispatchResponse(),
+      createWorkflowResponse('failure', 2),
+    ]
+    const requests = []
+    const completion = waitForFailedCompletion()
+
+    proxyquire('./benchmark-run', {
+      https: {
+        request: createRequestStub(responses, requests),
+      },
+      'timers/promises': {
+        setTimeout: () => Promise.resolve(),
+      },
+    })
+
+    const error = await completion
+
+    assert.strictEqual(error.message,
+      'Performance overhead test failed.\n' +
+      '  Check https://github.com/DataDog/test-environment/actions/runs/12345/attempts/2 for more details.')
+    assert.strictEqual(requests.length, 2)
+  })
+
+  it('accepts a retry that starts at the end of the grace period', async () => {
+    process.env.GITHUB_TOKEN = 'token'
+    process.env.TEST_ENVIRONMENT_REF_TO_TEST = 'abc123'
+
+    const failedAttemptResponse = createWorkflowResponse('failure', 1)
+    const responses = [
+      createDispatchResponse(),
+      failedAttemptResponse,
+      ...Array.from({ length: 12 }, () => failedAttemptResponse),
+      createWorkflowResponse(undefined, 2, 'in_progress'),
+      createWorkflowResponse('success', 2),
+    ]
+    const requests = []
+    const completion = waitForSuccessfulCompletion()
+
+    proxyquire('./benchmark-run', {
+      https: {
+        request: createRequestStub(responses, requests),
+      },
+      'timers/promises': {
+        setTimeout: () => Promise.resolve(),
+      },
+    })
+
+    await completion
+
+    assert.strictEqual(requests.length, 16)
+  })
+
+  it('reports the first failure when no retry starts within the grace period', async () => {
+    process.env.GITHUB_TOKEN = 'token'
+    process.env.TEST_ENVIRONMENT_REF_TO_TEST = 'abc123'
+
+    const failedAttemptResponse = createWorkflowResponse('failure', 1)
+    const responses = [
+      createDispatchResponse(),
+      failedAttemptResponse,
+      ...Array.from({ length: 13 }, () => failedAttemptResponse),
+    ]
+    const requests = []
+    const completion = waitForFailedCompletion()
+
+    proxyquire('./benchmark-run', {
+      https: {
+        request: createRequestStub(responses, requests),
+      },
+      'timers/promises': {
+        setTimeout: () => Promise.resolve(),
+      },
+    })
+
+    const error = await completion
+
+    assert.strictEqual(error.message,
+      'Performance overhead test failed.\n' +
+      '  Check https://github.com/DataDog/test-environment/actions/runs/12345/attempts/1 for more details.')
+    assert.strictEqual(requests.length, 15)
   })
 })
+
+/**
+ * @returns {ResponseData}
+ */
+function createDispatchResponse () {
+  return {
+    body: JSON.stringify({
+      workflow_run_id: 12345,
+      run_url: 'https://api.github.com/repos/DataDog/test-environment/actions/runs/12345',
+      html_url: 'https://github.com/DataDog/test-environment/actions/runs/12345',
+    }),
+    statusCode: 200,
+  }
+}
+
+/**
+ * @param {string|undefined} conclusion
+ * @param {number} runAttempt
+ * @param {string} [status]
+ * @returns {ResponseData}
+ */
+function createWorkflowResponse (conclusion, runAttempt, status = 'completed') {
+  return {
+    body: JSON.stringify({
+      conclusion,
+      run_attempt: runAttempt,
+      status,
+    }),
+    statusCode: 200,
+  }
+}
 
 /**
  * @param {ResponseData[]} responses
@@ -139,6 +312,20 @@ function waitForSuccessfulCompletion () {
     })
     sinon.stub(console, 'error').callsFake(error => {
       reject(error)
+    })
+  })
+}
+
+/**
+ * @returns {Promise<Error>}
+ */
+function waitForFailedCompletion () {
+  return new Promise((resolve) => {
+    sinon.stub(console, 'log')
+    sinon.stub(console, 'error').callsFake(error => {
+      if (error instanceof Error) {
+        resolve(error)
+      }
     })
   })
 }
