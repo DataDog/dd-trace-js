@@ -3,14 +3,52 @@
 const { SQL_INJECTION } = require('../vulnerabilities')
 const { getRanges } = require('../taint-tracking/operations')
 const { storage } = require('../../../../../datadog-core')
+const { getEventSourceRegistry } = require('../../../events/source-registry')
 const { getNodeModulesPaths } = require('../path-line')
 const StoredInjectionAnalyzer = require('./stored-injection-analyzer')
 
-const EXCLUDED_PATHS = getNodeModulesPaths('mysql', 'mysql2', 'sequelize', 'pg-pool', 'knex')
+const DATABASE_QUERY_OPERATION = 'db.query'
+const DATABASE_SQL_DIALECTS = {
+  mariadb: 'MYSQL',
+}
+const EXCLUDED_PATHS = getNodeModulesPaths('mariadb', 'mysql', 'mysql2', 'sequelize', 'pg-pool', 'knex')
+const SQL_INJECTION_CONTRIBUTOR_ID = 'iast.sql-injection'
+const SQL_INJECTION_SOURCES = new Set(['mariadb'])
 
 class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
+  #databaseContributor
+  #sourceRegistry
+
   constructor () {
     super(SQL_INJECTION)
+
+    this.#sourceRegistry = getEventSourceRegistry()
+    this.#databaseContributor = Object.freeze({
+      sources: SQL_INJECTION_SOURCES,
+      start: (event, store) => this.#analyzeDatabaseQuery(event, store),
+    })
+  }
+
+  /**
+   * Enable or disable raw-channel subscriptions and the shared database contributor together.
+   *
+   * @param {boolean | Record<string, unknown> & {enabled: boolean}} config IAST analyzer configuration.
+   * @returns {void}
+   */
+  configure (config) {
+    const enabled = config !== null && typeof config === 'object' ? config.enabled : config
+
+    if (!enabled) {
+      this.#sourceRegistry.unregisterContributor(DATABASE_QUERY_OPERATION, SQL_INJECTION_CONTRIBUTOR_ID)
+    }
+    super.configure(config)
+    if (enabled) {
+      this.#sourceRegistry.registerContributor(
+        DATABASE_QUERY_OPERATION,
+        SQL_INJECTION_CONTRIBUTOR_ID,
+        this.#databaseContributor
+      )
+    }
   }
 
   onConfigure () {
@@ -43,6 +81,23 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
 
     this.addBind('datadog:knex:raw:subscribes', ({ currentStore }) => currentStore)
     this.addBind('datadog:knex:raw:finish', ({ currentStore }) => currentStore?.sqlParentStore)
+  }
+
+  /**
+   * Analyze one sanitized semantic database query and mark its composed product store.
+   *
+   * @param {object} event Normalized database query event.
+   * @param {object | undefined} store Current IAST request store.
+   * @returns {object | undefined} Store preventing duplicate analysis in nested database layers.
+   */
+  #analyzeDatabaseQuery (event, store) {
+    const dialect = DATABASE_SQL_DIALECTS[event.source?.system]
+    const statement = event.facts?.statement
+    if (!store || !dialect || typeof statement !== 'string') return
+
+    this.analyze(statement, store, dialect)
+
+    return { ...store, sqlAnalyzed: true, sqlParentStore: store }
   }
 
   setStoreAndAnalyze (query, dialect) {
