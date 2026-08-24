@@ -10,14 +10,36 @@ const { safeJSONStringify } = require('./util')
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
 class Writer {
-  constructor ({ url, beforeFirstFlush }) {
+  #deliveryTracker
+
+  constructor ({ url, beforeFirstFlush, deliveryTracker }) {
     this._url = url
     this._beforeFirstFlush = beforeFirstFlush
+    this.#deliveryTracker = deliveryTracker
   }
 
   #isFirstFlush = true
 
-  flush (done = () => {}, options) {
+  /**
+   * Flushes queued telemetry, retaining delivery on supported serverless platforms.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flush (done, options) {
+    if (this.#deliveryTracker) {
+      return this.#deliveryTracker.track(callback => this.flushDirect(callback, options), done)
+    }
+    this.flushDirect(done, options)
+  }
+
+  /**
+   * Flushes queued telemetry without registering serverless delivery retention.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flushDirect (done = () => {}, options) {
     const count = this._encoder.count()
 
     if (!request.writable && options?.deadline === undefined) {

@@ -13,6 +13,8 @@ require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
+const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
+const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -661,6 +663,51 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Lifecycle', () => {
+    it('waits for an in-flight export during forceFlush', () => {
+      const exports = []
+      const flushes = []
+      const reader = new PeriodicMetricReader({
+        export: (metrics, done) => { exports.push(done) },
+        flush: (done) => { flushes.push(done) },
+      }, 60_000, 'DELTA', 1024)
+      const meter = new MeterProvider({ reader }).getMeter('test')
+      const firstDone = sinon.spy()
+      const done = sinon.spy()
+
+      meter.createCounter('in-flight').add(1)
+      reader.forceFlush(firstDone)
+      flushes.shift()()
+      meter.createCounter('boundary').add(1)
+      reader.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      assert.strictEqual(exports.length, 2)
+      exports[1]({ code: 0 })
+      sinon.assert.notCalled(done)
+      flushes[0]()
+      sinon.assert.calledOnce(done)
+      exports[0]({ code: 0 })
+      reader.shutdown()
+    })
+
+    it('waits for an earlier export when the boundary export throws', () => {
+      let priorDone
+      const reader = new PeriodicMetricReader({
+        export: sinon.stub().throws(new Error('encode failed')),
+        flush: done => { priorDone = done },
+      }, 60_000, 'DELTA', 1024)
+      const meter = new MeterProvider({ reader }).getMeter('test')
+      const done = sinon.spy()
+
+      meter.createCounter('boundary').add(1)
+      reader.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      priorDone()
+      sinon.assert.calledOnce(done)
+      reader.shutdown()
+    })
+
     it('handles shutdown gracefully', async () => {
       setupMetrics()
       const provider = metrics.getMeterProvider()
