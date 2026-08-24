@@ -153,6 +153,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         MAX_WORKERS: '2',
         NODE_OPTIONS: `-r ${probePath} -r dd-trace/ci/init`,
         RUN_IN_PARALLEL: '1',
+        SHOULD_CHECK_RESULTS: '1',
         TESTS_TO_RUN: 'ci-visibility/jest-worker-init/test-',
       },
       silent: true,
@@ -160,11 +161,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     childProcess.stdout.on('data', chunk => { testOutput += chunk })
     childProcess.stderr.on('data', chunk => { testOutput += chunk })
 
-    const exitPromise = once(childProcess, 'exit')
+    const closePromise = once(childProcess, 'close')
     const [message] = await once(childProcess, 'message')
     assert.strictEqual(message, 'finished', testOutput)
-    childProcess.kill()
-    await exitPromise
+    const [exitCode] = await closePromise
+    assert.strictEqual(exitCode, 0, testOutput)
 
     const workerRecords = fs.readdirSync(outputDirectory).map(filename => {
       const record = JSON.parse(fs.readFileSync(path.join(outputDirectory, filename), 'utf8'))

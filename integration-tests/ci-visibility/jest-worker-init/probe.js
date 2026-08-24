@@ -20,4 +20,6 @@ function recordWorkerInitialization (message) {
   }))
 }
 
-process.on('message', recordWorkerInitialization)
+if (outputDirectory) {
+  process.on('message', recordWorkerInitialization)
+}

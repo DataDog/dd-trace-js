@@ -6,6 +6,7 @@ const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 5000
 const JEST_FLUSH_INTERVAL = 0
 const JEST_WORKER_INITIALIZE_MESSAGE = 0
+const JEST_WORKER_PACKAGE = 'jest-worker'
 const JEST_AUXILIARY_WORKER_PACKAGES = new Set(['@jest/reporters', 'jest-haste-map'])
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
@@ -18,7 +19,11 @@ function isPackageManager () {
   )
 }
 
-if (process.env.JEST_WORKER_ID && process.send) {
+if (
+  process.env.JEST_WORKER_ID &&
+  process.send &&
+  getPackageName(process.argv[1]) === JEST_WORKER_PACKAGE
+) {
   const initializeOnWorkerType = (message) => {
     if (!Array.isArray(message) || message[0] !== JEST_WORKER_INITIALIZE_MESSAGE) return
 
@@ -34,20 +39,28 @@ if (process.env.JEST_WORKER_ID && process.send) {
 }
 
 function isJestAuxiliaryWorker (workerPath) {
-  if (typeof workerPath !== 'string') return false
+  return JEST_AUXILIARY_WORKER_PACKAGES.has(getPackageName(workerPath))
+}
+
+/**
+ * Gets the name from the nearest package manifest containing a file.
+ * @param {string} filename
+ * @returns {string|undefined}
+ */
+function getPackageName (filename) {
+  if (typeof filename !== 'string') return
 
   const fs = require('node:fs')
   const path = require('node:path')
-  let directory = path.dirname(workerPath)
+  let directory = path.dirname(filename)
   while (directory !== path.dirname(directory)) {
     try {
       const { name } = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'))
-      return JEST_AUXILIARY_WORKER_PACKAGES.has(name)
+      return name
     } catch {
       directory = path.dirname(directory)
     }
   }
-  return false
 }
 
 function initializeTracer () {
