@@ -254,7 +254,7 @@ class Config extends ConfigBase {
 
   /**
    * @param {TracerOptions} options
-   * @param {'code' | 'remote_config'} source
+   * @param {'code'} source
    * @param {string} [root]
    */
   #applyOptions (options, source, root = '') {
@@ -262,13 +262,8 @@ class Config extends ConfigBase {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
       if (!entry) {
-        // TODO: Fix this by by changing remote config to use env styles.
-        if (name !== 'DD_TRACE_ENABLED' || source !== 'remote_config') {
-          log.warn('Unknown option %s with value %o', fullName, value)
-          continue
-        }
-        // @ts-expect-error - The entry is defined in the configurationsTable.
-        entry = configurationsTable.DD_TRACE_ENABLED
+        log.warn('Unknown option %s with value %o', fullName, value)
+        continue
       }
 
       if (entry.nestedProperties) {
@@ -319,8 +314,8 @@ class Config extends ConfigBase {
    * The caller (`RCClientManager`) is expected to have already filtered `options` to the
    * SDK_CONFIGURATION allowlist.
    *
-   * @param {Record<string, string>|null} options - Env-var-keyed configs received via the
-   *   SDK_CONFIGURATION remote config product, or null to reset all remote configuration
+   * @param {Partial<Record<import('./helper').SupportedEnvKey, string>>|null} options - Env-var-keyed
+   *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
   setRemoteConfig (options) {
     // Clear all RC-managed fields to ensure previous values don't persist.

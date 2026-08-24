@@ -128,7 +128,8 @@ class RCClientManager {
   /**
    * Get merged config with higher priority configs overriding lower priority ones
    *
-   * @returns {Record<string, string>|null} Merged config object or null if no configs present
+   * @returns {Partial<Record<import('./helper').SupportedEnvKey, string>>|null} Merged config object or
+   *   null if no configs present
    */
   getMergedConfig () {
     if (this.configs.size === 0) return null
