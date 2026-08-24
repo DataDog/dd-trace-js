@@ -495,6 +495,81 @@ describe('AppSec Rule Manager', () => {
 
         sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, [])
       })
+
+      it('should clear blocking actions when a modify drops the actions array', () => {
+        waf.updateConfig.returns({})
+
+        const asmWithActions = {
+          actions: [
+            {
+              id: 'block',
+              parameters: {
+                location: '/redirected',
+                status_code: 302,
+              },
+            },
+          ],
+        }
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asmWithActions,
+          },
+        ]
+
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply, toModify: [] }))
+
+        sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, asmWithActions.actions)
+        sinon.resetHistory()
+
+        // Same config id, new content that no longer carries an `actions` array
+        const toModify = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: {
+              exclusions: [{ ekey: 'eValue' }],
+            },
+          },
+        ]
+
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
+
+        sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, [])
+      })
+
+      it('should not touch blocking actions when an actionless config is modified', () => {
+        waf.updateConfig.returns({})
+
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: {
+              exclusions: [{ ekey: 'eValue' }],
+            },
+          },
+        ]
+
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply, toModify: [] }))
+
+        sinon.assert.notCalled(setDefaultBlockingActionParameters)
+
+        const toModify = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: {
+              exclusions: [{ ekey: 'newValue' }],
+            },
+          },
+        ]
+
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
+
+        sinon.assert.notCalled(setDefaultBlockingActionParameters)
+      })
     })
   })
 })
