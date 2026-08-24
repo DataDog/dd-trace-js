@@ -58,7 +58,8 @@ const getCommonHeaders = () => {
   return {
     'Content-Type': 'application/json',
     authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-    Accept: 'application/vnd.github.v3+json',
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2026-03-10',
     'user-agent': 'dd-trace benchmark tests',
   }
 }
@@ -66,7 +67,6 @@ const getCommonHeaders = () => {
 const triggerWorkflow = () => {
   console.log(`Commit SHA under test: ${getRefToTest()} in ${getRefName()}`)
   return new Promise((resolve, reject) => {
-    // eslint-disable-next-line
     let response = ''
     const body = JSON.stringify({
       ref: 'main',
@@ -82,34 +82,10 @@ const triggerWorkflow = () => {
           response += chunk
         })
         res.on('end', () => {
-          resolve(res.statusCode)
-        })
-      })
-    request.on('error', (error) => {
-      reject(error)
-    })
-    request.write(body)
-    request.end()
-  })
-}
-
-const getWorkflowRunsInProgress = () => {
-  return new Promise((resolve, reject) => {
-    let response = ''
-    const request = https.request(
-      `${GET_WORKFLOWS_URL}?event=workflow_dispatch`,
-      {
-        headers: getCommonHeaders(),
-      },
-      (res) => {
-        res.on('data', (chunk) => {
-          response += chunk
-        })
-        res.on('end', () => {
           try {
             resolve(parseGitHubJsonResponse({
               body: response,
-              endpoint: `${GET_WORKFLOWS_URL}?event=workflow_dispatch`,
+              endpoint: DISPATCH_WORKFLOW_URL,
               res,
             }))
           } catch (e) {
@@ -117,9 +93,10 @@ const getWorkflowRunsInProgress = () => {
           }
         })
       })
-    request.on('error', err => {
-      reject(err)
+    request.on('error', (error) => {
+      reject(error)
     })
+    request.write(body)
     request.end()
   })
 }
@@ -162,30 +139,15 @@ const getCurrentWorkflowJobs = (runId) => {
 async function main () {
   // Trigger JS GHA
   console.log('Triggering Test Optimization test environment workflow.')
-  const httpResponseCode = await triggerWorkflow()
-  console.log('GitHub API response code:', httpResponseCode)
-
-  if (httpResponseCode !== 204) {
-    throw new Error('Could not trigger workflow')
-  }
-
-  // Give some time for GH to process the request
-  await setTimeout(15000)
-
-  // Get the run ID from the workflow we just triggered
-  const workflowsInProgress = await getWorkflowRunsInProgress()
-  const { total_count: numWorkflows, workflow_runs: workflows } = workflowsInProgress
-  if (numWorkflows === 0) {
-    throw new Error('Could not find the triggered workflow')
-  }
-  // Pick the first one (most recently triggered one)
-  const [triggeredWorkflow] = workflows
-
+  const triggeredWorkflow = await triggerWorkflow()
   console.log('Triggered workflow:', triggeredWorkflow)
 
-  const { id: runId } = triggeredWorkflow || {}
+  const { workflow_run_id: runId, html_url: workflowUrl } = triggeredWorkflow
+  if (!runId) {
+    throw new Error('Triggered workflow response did not include a run id')
+  }
 
-  console.log(`Workflow URL: https://github.com/DataDog/test-environment/actions/runs/${runId}`)
+  console.log(`Workflow URL: ${workflowUrl}`)
 
   // Wait an initial 1 minute, because we're sure it won't finish earlier
   await setTimeout(60000)
