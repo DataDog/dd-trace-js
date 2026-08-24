@@ -280,6 +280,29 @@ describe('BaseLLMObsWriter', () => {
       )
     })
 
+    it('isolates an invalid route from valid buffers', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'default' })
+      writer.append({ foo: 'invalid' }, { apiKey: 'invalid', site: 'invalid site' })
+      writer.append({ foo: 'valid' }, { apiKey: 'valid', site: 'valid.site.com' })
+
+      writer.flush()
+      writer.flush()
+
+      sinon.assert.calledTwice(request)
+      const events = request.getCalls().map(call => JSON.parse(call.args[0]).events[0])
+      assert.deepStrictEqual(events, [{ foo: 'default' }, { foo: 'valid' }])
+      sinon.assert.calledWith(
+        logger.error,
+        'Failed to route LLMObs %s events for API key %s: %s',
+        undefined,
+        '****alid',
+        'Invalid URL'
+      )
+    })
+
     it('waits for an export already in flight', () => {
       process.env.VERCEL = '1'
       writer = new BaseLLMObsWriter(options)
