@@ -7,6 +7,8 @@ const { Experiment, ExternalExperiment } = require('./experiment')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
 
+const DEFAULT_PROJECT_NAME = 'default-project'
+
 // Poll `attempt` with exponential backoff until it returns true or the time
 // budget is spent. Used for eventually-consistent reads (pullDataset).
 async function retryWithBackoff (attempt, { maxTotalMs = 30_000, baseDelayMs = 250, maxDelayMs = 8000 } = {}) {
@@ -34,8 +36,8 @@ class Experiments {
   constructor (config, llmobs) {
     this.#config = config
     this.#llmobs = config.llmobs?.mlApp || config.service ? llmobs : undefined
-    this.#projectName = config.llmobs?.projectName || config.llmobs?.mlApp || config.service
-    this.#client = this.#projectName === undefined ? undefined : this.#clientForProject(this.#projectName)
+    this.#projectName = config.llmobs?.projectName || DEFAULT_PROJECT_NAME
+    this.#client = this.#clientForProject(this.#projectName)
   }
 
   /**
@@ -227,17 +229,6 @@ function createExperiments (config, llmobs) {
   if (!(config.DD_API_KEY) || !config.DD_APP_KEY) {
     log.warn('LLMObs experiments: missing api and/or app keys, set DD_API_KEY and DD_APP_KEY')
     return new NoopExperiments('DD_API_KEY and DD_APP_KEY are required for experiments')
-  }
-  if (!config.llmobs?.projectName && !config.llmobs?.mlApp && !config.service) {
-    const reason = 'no project name configured; set DD_LLMOBS_PROJECT_NAME (or llmobs.projectName in tracer.init()), ' +
-      'DD_LLMOBS_ML_APP (or llmobs.mlApp in tracer.init()), or DD_SERVICE (or service in tracer.init()), then retry'
-    const experiments = new Experiments(config, llmobs)
-    return new NoopExperiments(reason, {
-      createDataset: (name, options) => experiments.createDataset(name, options),
-      pullDataset: (name, options) => experiments.pullDataset(name, options),
-      experiment: (options) => experiments.experiment(options),
-      startExperiment: (options) => experiments.startExperiment(options),
-    })
   }
   return new Experiments(config, llmobs)
 }

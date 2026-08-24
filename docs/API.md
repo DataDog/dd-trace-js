@@ -18,7 +18,7 @@ const tracer = require('dd-trace').init({
 })
 ```
 
-The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. The default project precedence is `llmobs.projectName` / `DD_LLMOBS_PROJECT_NAME`, then `llmobs.mlApp` / `DD_LLMOBS_ML_APP`, then `service` / `DD_SERVICE`. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
+The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
 
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
