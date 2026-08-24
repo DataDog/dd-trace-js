@@ -294,7 +294,7 @@ describe('BaseLLMObsWriter', () => {
       sinon.assert.calledTwice(request)
       const events = request.getCalls().map(call => JSON.parse(call.args[0]).events[0])
       assert.deepStrictEqual(events, [{ foo: 'default' }, { foo: 'valid' }])
-      sinon.assert.calledWith(
+      sinon.assert.calledOnceWithExactly(
         logger.error,
         'Failed to route LLMObs %s events for API key %s: %s',
         undefined,
