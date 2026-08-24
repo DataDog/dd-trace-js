@@ -14,6 +14,7 @@ let encoder
 let url
 let log
 let incrementCountMetric
+let agent
 
 describe('CI Visibility Coverage Writer', () => {
   beforeEach(() => {
@@ -38,6 +39,7 @@ describe('CI Visibility Coverage Writer', () => {
       error: sinon.spy(),
     }
     incrementCountMetric = sinon.stub()
+    agent = {}
 
     const CoverageCIVisibilityEncoder = function () {
       return encoder
@@ -45,6 +47,7 @@ describe('CI Visibility Coverage Writer', () => {
 
     CoverageWriter = proxyquire('../../../../src/ci-visibility/exporters/agentless/coverage-writer.js', {
       '../request': request,
+      '../agents': { getAgent: sinon.stub().returns(agent) },
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
       '../../../ci-visibility/telemetry': { incrementCountMetric },
       '../../../log': log,
@@ -94,6 +97,7 @@ describe('CI Visibility Coverage Writer', () => {
           url,
           path: '/api/v2/citestcov',
           method: 'POST',
+          agent,
         })
         done()
       })
