@@ -148,12 +148,12 @@ such as [nvm](https://github.com/creationix/nvm) is recommended. If you're
 unsure which version of Node.js to use, just use the latest version, which
 should always work.
 
-We use [bun](https://bun.com/) (1.3.14, matching `devDependencies.bun` in `package.json`) for installing
+We use [bun](https://bun.com/) (1.4.0, matching `devDependencies.bun` in `package.json`) for installing
 dependencies and the per-plugin sandbox installs. Run-scripts (`test:*`, `lint`, …) go through
 `npm`. The easiest way to install bun:
 
 ```sh
-$ npm install -g bun@1.3.14
+$ npm install -g bun@1.4.0
 ```
 
 To install dependencies once you have Node and bun installed, run this in the project directory:
