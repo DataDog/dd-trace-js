@@ -1343,7 +1343,7 @@
     ],
     "DD_LLMOBS_PROJECT_NAME": [
       {
-        "implementation": "B",
+        "implementation": "A",
         "type": "string",
         "configurationNames": [
           "llmobs.projectName"
