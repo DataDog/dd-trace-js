@@ -17,11 +17,16 @@ describe('sendData', () => {
   const host = { hostname: 'test-host' }
 
   let sendDataModule
+  let getTestOptimizationAgent
   let request
+  let testOptimizationAgent
 
   beforeEach(() => {
     request = sinon.stub()
+    testOptimizationAgent = {}
+    getTestOptimizationAgent = sinon.stub().returns(testOptimizationAgent)
     sendDataModule = proxyquire('../../src/telemetry/send-data', {
+      '../ci-visibility/exporters/agents': { getAgent: getTestOptimizationAgent },
       '../exporters/common/request': request,
     })
   })
@@ -51,6 +56,8 @@ describe('sendData', () => {
       hostname: '',
       port: '12345',
     })
+    assert.strictEqual(options.agent, undefined)
+    sinon.assert.notCalled(getTestOptimizationAgent)
   })
 
   it('sends telemetry to the configured socket url', () => {
@@ -175,9 +182,11 @@ describe('sendData', () => {
     assertObjectContains(options, {
       method: 'POST',
       path: '/api/v2/apmtelemetry',
+      agent: testOptimizationAgent,
     })
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    sinon.assert.calledOnceWithExactly(getTestOptimizationAgent, url)
   })
 
   it('uses DD_CIVISIBILITY_AGENTLESS_URL for telemetry when the agentless intake is overridden', () => {
@@ -200,6 +209,8 @@ describe('sendData', () => {
     const options = request.getCall(0).args[1]
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://my-intake.example/'))
+    assert.strictEqual(options.agent, testOptimizationAgent)
+    sinon.assert.calledOnceWithExactly(getTestOptimizationAgent, url)
   })
 
   it('sends the agentless backend telemetry with a URL object when the agent request fails', () => {
