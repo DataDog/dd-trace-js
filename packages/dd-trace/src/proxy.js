@@ -259,7 +259,9 @@ class Tracer extends NoopProxy {
 
       this.#updateTracing(config)
 
-      this._modules.rewriter.enable(config)
+      if (config.iast.enabled) {
+        this._modules.rewriter.enable(config)
+      }
 
       if (config.DD_TRACE_ENABLED && config.testOptimization.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
