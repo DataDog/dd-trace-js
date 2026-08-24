@@ -4,167 +4,160 @@ const assert = require('node:assert/strict')
 const { promisify } = require('node:util')
 
 const dc = require('dc-polyfill')
-const { afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { storage } = require('../../datadog-core')
 const { ERROR_TYPE, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { startDnsServer } = require('./dns-server')
 
 const PLUGINS = ['dns', 'node:dns']
 
 describe('Plugin', () => {
   let dns
+  let dnsServer
+  let originalPromiseServers
+  let originalServers
   let tracer
+
+  before(async () => {
+    dnsServer = await startDnsServer()
+  })
+
+  after(() => dnsServer?.close())
+
+  /**
+   * @template T
+   * @param {T & { setServers: (servers: string[]) => void }} resolver
+   * @returns {T}
+   */
+  function useTestServer (resolver) {
+    resolver.setServers([dnsServer.address])
+    return resolver
+  }
+
   PLUGINS.forEach(plugin => {
     describe(plugin, () => {
-      afterEach(() => {
-        return agent.close()
+      afterEach(async () => {
+        dns.setServers(originalServers)
+        dns.promises.setServers(originalPromiseServers)
+        await agent.close()
       })
 
-      beforeEach(() => {
-        return agent.load('dns')
-          .then(() => {
-            dns = require(plugin)
-            tracer = require('../../dd-trace')
-          })
+      beforeEach(async () => {
+        await agent.load('dns')
+        dns = require(plugin)
+        originalServers = dns.getServers()
+        originalPromiseServers = dns.promises.getServers()
+        dns.setServers([dnsServer.address])
+        dns.promises.setServers([dnsServer.address])
+        tracer = require('../../dd-trace')
       })
 
-      it('should instrument lookup', done => {
-        agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.lookup',
-              service: 'test',
-              resource: 'localhost',
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'span.kind': 'client',
-              'dns.hostname': 'localhost',
-              'dns.address': '127.0.0.1',
-            })
+      it('should instrument lookup', () => {
+        return agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.lookup',
+            service: 'test',
+            resource: 'localhost',
           })
-          .then(done)
-          .catch(done)
-
-        dns.lookup('localhost', 4, (err, address, family) => err && done(err))
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'span.kind': 'client',
+            'dns.hostname': 'localhost',
+            'dns.address': '127.0.0.1',
+          })
+        }, { trigger: () => promisify(dns.lookup)('localhost', 4) })
       })
 
-      it('should instrument lookup with all addresses', done => {
-        agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.lookup',
-              service: 'test',
-              resource: 'localhost',
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'span.kind': 'client',
-              'dns.hostname': 'localhost',
-              'dns.address': '127.0.0.1',
-              'dns.addresses': '127.0.0.1,::1',
-            })
+      it('should instrument lookup with all addresses', () => {
+        return agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.lookup',
+            service: 'test',
+            resource: 'localhost',
           })
-          .then(done)
-          .catch(done)
-
-        dns.lookup('localhost', { all: true }, (err, address, family) => err && done(err))
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'span.kind': 'client',
+            'dns.hostname': 'localhost',
+            'dns.address': '127.0.0.1',
+            'dns.addresses': '127.0.0.1,::1',
+          })
+        }, { trigger: () => promisify(dns.lookup)('localhost', { all: true }) })
       })
 
-      it('should instrument errors correctly', done => {
-        agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.lookup',
-              service: 'test',
-              resource: 'fakedomain.faketld',
-              error: 1,
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'span.kind': 'client',
-              'dns.hostname': 'fakedomain.faketld',
-              [ERROR_TYPE]: 'Error',
-              [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND fakedomain.faketld',
-            })
+      it('should instrument errors correctly', () => {
+        return agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.lookup',
+            service: 'test',
+            resource: 'invalid..hostname',
+            error: 1,
           })
-          .then(done)
-          .catch(done)
-
-        dns.lookup('fakedomain.faketld', 4, (err, address, family) => {
-          assert.notStrictEqual(err, null)
-        })
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'span.kind': 'client',
+            'dns.hostname': 'invalid..hostname',
+            [ERROR_TYPE]: 'Error',
+            [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND invalid..hostname',
+          })
+        }, { trigger: () => assert.rejects(promisify(dns.lookup)('invalid..hostname', 4)) })
       })
 
-      it('should instrument lookupService', done => {
-        agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.lookup_service',
-              service: 'test',
-              resource: '127.0.0.1:22',
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'span.kind': 'client',
-              'dns.address': '127.0.0.1',
-            })
-            assertObjectContains(traces[0][0].metrics, {
-              'dns.port': 22,
-            })
+      it('should instrument lookupService', () => {
+        return agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.lookup_service',
+            service: 'test',
+            resource: '127.0.0.1:22',
           })
-          .then(done)
-          .catch(done)
-
-        dns.lookupService('127.0.0.1', 22, err => err && done(err))
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'span.kind': 'client',
+            'dns.address': '127.0.0.1',
+          })
+          assertObjectContains(traces[0][0].metrics, {
+            'dns.port': 22,
+          })
+        }, { trigger: () => promisify(dns.lookupService)('127.0.0.1', 22) })
       })
 
-      it('should instrument resolve', done => {
-        agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.resolve',
-              service: 'test',
-              resource: 'A lvh.me',
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'span.kind': 'client',
-              'dns.hostname': 'lvh.me',
-              'dns.rrtype': 'A',
-            })
+      it('should instrument resolve', () => {
+        return agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.resolve',
+            service: 'test',
+            resource: 'A trace.test',
           })
-          .then(done)
-          .catch(done)
-
-        dns.resolve('lvh.me', err => err && done(err))
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'span.kind': 'client',
+            'dns.hostname': 'trace.test',
+            'dns.rrtype': 'A',
+          })
+        }, { trigger: () => promisify(dns.resolve)('trace.test') })
       })
 
-      it('should instrument resolve shorthands', done => {
-        agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.resolve',
-              service: 'test',
-              resource: 'ANY localhost',
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'span.kind': 'client',
-              'dns.hostname': 'localhost',
-              'dns.rrtype': 'ANY',
-            })
+      it('should instrument resolve shorthands', () => {
+        return agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.resolve',
+            service: 'test',
+            resource: 'ANY trace.test',
           })
-          .then(done)
-          .catch(done)
-
-        dns.resolveAny('localhost', err => err && done(err))
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'span.kind': 'client',
+            'dns.hostname': 'trace.test',
+            'dns.rrtype': 'ANY',
+          })
+        }, { trigger: () => promisify(dns.resolveAny)('trace.test') })
       })
 
       it('should preserve the shorthand rrtype when callback options are passed', () => {
-        const tracePromise = agent.assertSomeTraces(traces => {
+        return agent.assertSomeTraces(traces => {
           assertObjectContains(traces[0][0], {
             name: 'dns.resolve',
             service: 'test',
@@ -176,16 +169,11 @@ describe('Plugin', () => {
             'dns.hostname': 'fakedomain.faketld',
             'dns.rrtype': 'AAAA',
           })
-        })
-
-        return Promise.all([
-          tracePromise,
-          assert.rejects(promisify(dns.resolve6)('fakedomain.faketld', { ttl: true })),
-        ])
+        }, { trigger: () => assert.rejects(promisify(dns.resolve6)('fakedomain.faketld', { ttl: true })) })
       })
 
       it('should instrument resolveCaa with options', () => {
-        const tracePromise = agent.assertSomeTraces(traces => {
+        return agent.assertSomeTraces(traces => {
           assertObjectContains(traces[0][0], {
             name: 'dns.resolve',
             service: 'test',
@@ -197,18 +185,13 @@ describe('Plugin', () => {
             'dns.hostname': 'fakedomain.faketld',
             'dns.rrtype': 'CAA',
           })
-        })
-
-        return Promise.all([
-          tracePromise,
-          assert.rejects(promisify(dns.resolveCaa)('fakedomain.faketld', { ttl: true })),
-        ])
+        }, { trigger: () => assert.rejects(promisify(dns.resolveCaa)('fakedomain.faketld', { ttl: true })) })
       })
 
       it('should preserve the shorthand rrtype on callback Resolver instances when options are passed', () => {
-        const resolver = new dns.Resolver()
+        const resolver = useTestServer(new dns.Resolver())
 
-        const tracePromise = agent.assertSomeTraces(traces => {
+        return agent.assertSomeTraces(traces => {
           assertObjectContains(traces[0][0], {
             name: 'dns.resolve',
             service: 'test',
@@ -220,96 +203,86 @@ describe('Plugin', () => {
             'dns.hostname': 'fakedomain.faketld',
             'dns.rrtype': 'AAAA',
           })
+        }, {
+          trigger: () => assert.rejects(
+            promisify(resolver.resolve6).call(resolver, 'fakedomain.faketld', { ttl: true })
+          ),
         })
-
-        return Promise.all([
-          tracePromise,
-          assert.rejects(promisify(resolver.resolve6).call(resolver, 'fakedomain.faketld', { ttl: true })),
-        ])
       })
 
-      it('should instrument reverse', done => {
-        agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.reverse',
-              service: 'test',
-              resource: '127.0.0.1',
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'span.kind': 'client',
-              'dns.ip': '127.0.0.1',
-            })
+      it('should instrument reverse', () => {
+        return agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.reverse',
+            service: 'test',
+            resource: '127.0.0.1',
           })
-          .then(done)
-          .catch(done)
-
-        dns.reverse('127.0.0.1', err => err && done(err))
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'span.kind': 'client',
+            'dns.ip': '127.0.0.1',
+          })
+        }, { trigger: () => promisify(dns.reverse)('127.0.0.1') })
       })
 
-      it('should preserve the parent scope in the callback', done => {
+      it('should preserve the parent scope in the callback', () => {
         const span = tracer.startSpan('dummySpan', {})
 
-        tracer.scope().activate(span, () => {
-          dns.lookup('localhost', 4, (err) => {
-            if (err) return done(err)
+        return new Promise((resolve, reject) => {
+          tracer.scope().activate(span, () => {
+            dns.lookup('localhost', 4, (error) => {
+              if (error) return reject(error)
 
-            assert.strictEqual(tracer.scope().active(), span)
+              assert.strictEqual(tracer.scope().active(), span)
 
-            done()
+              resolve()
+            })
           })
         })
       })
 
-      it('should work with promisify', () => {
+      it('should work with promisify', async () => {
         const lookup = promisify(dns.lookup)
+        const { address, family } = await lookup('localhost', 4)
 
-        return lookup('localhost', 4).then(({ address, family }) => {
-          assert.strictEqual(address, '127.0.0.1')
-          assert.strictEqual(family, 4)
-        })
+        assert.strictEqual(address, '127.0.0.1')
+        assert.strictEqual(family, 4)
       })
 
-      it('should instrument Resolver', done => {
-        const resolver = new dns.Resolver()
+      it('should instrument Resolver', () => {
+        const resolver = useTestServer(new dns.Resolver())
 
-        agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.resolve',
-              service: 'test',
-              resource: 'A lvh.me',
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'dns.hostname': 'lvh.me',
-              'dns.rrtype': 'A',
-            })
+        return agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.resolve',
+            service: 'test',
+            resource: 'A trace.test',
           })
-          .then(done)
-          .catch(done)
-
-        resolver.resolve('lvh.me', err => err && done(err))
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'dns.hostname': 'trace.test',
+            'dns.rrtype': 'A',
+          })
+        }, { trigger: () => promisify(resolver.resolve).call(resolver, 'trace.test') })
       })
 
-      it('should skip instrumentation for noop context', done => {
-        const resolver = new dns.Resolver()
+      it('should skip instrumentation for noop context', () => {
+        const resolver = useTestServer(new dns.Resolver())
 
-        agent
-          .assertNoTraces(() => {
-            throw new Error('Resolve was traced.')
-          }, { timeoutMs: 200 })
-          .then(done, done)
-
-        storage('legacy').run({ noop: true }, () => {
-          resolver.resolve('lvh.me', () => {})
+        return agent.assertNoTraces(() => {
+          throw new Error('Resolve was traced.')
+        }, {
+          timeoutMs: 200,
+          trigger: () => storage('legacy').run(
+            { noop: true },
+            () => promisify(resolver.resolve).call(resolver, 'trace.test')
+          ),
         })
       })
 
       describe('promises', () => {
         it('should instrument lookup', () => {
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.lookup',
               service: 'test',
@@ -321,19 +294,18 @@ describe('Plugin', () => {
               'dns.hostname': 'localhost',
               'dns.address': '127.0.0.1',
             })
-          })
+          }, {
+            trigger: async () => {
+              const { address, family } = await dns.promises.lookup('localhost', 4)
 
-          return Promise.all([
-            tracePromise,
-            dns.promises.lookup('localhost', 4).then(({ address, family }) => {
               assert.strictEqual(address, '127.0.0.1')
               assert.strictEqual(family, 4)
-            }),
-          ])
+            },
+          })
         })
 
         it('should instrument lookup with all addresses', () => {
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.lookup',
               service: 'test',
@@ -346,39 +318,29 @@ describe('Plugin', () => {
               'dns.address': '127.0.0.1',
               'dns.addresses': '127.0.0.1,::1',
             })
-          })
-
-          return Promise.all([
-            tracePromise,
-            dns.promises.lookup('localhost', { all: true }),
-          ])
+          }, { trigger: () => dns.promises.lookup('localhost', { all: true }) })
         })
 
         it('should instrument errors correctly', () => {
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.lookup',
               service: 'test',
-              resource: 'fakedomain.faketld',
+              resource: 'invalid..hostname',
               error: 1,
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
-              'dns.hostname': 'fakedomain.faketld',
+              'dns.hostname': 'invalid..hostname',
               [ERROR_TYPE]: 'Error',
-              [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND fakedomain.faketld',
+              [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND invalid..hostname',
             })
-          })
-
-          return Promise.all([
-            tracePromise,
-            assert.rejects(dns.promises.lookup('fakedomain.faketld', 4)),
-          ])
+          }, { trigger: () => assert.rejects(dns.promises.lookup('invalid..hostname', 4)) })
         })
 
         it('should instrument lookupService', () => {
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.lookup_service',
               service: 'test',
@@ -392,58 +354,43 @@ describe('Plugin', () => {
             assertObjectContains(traces[0][0].metrics, {
               'dns.port': 22,
             })
-          })
-
-          return Promise.all([
-            tracePromise,
-            dns.promises.lookupService('127.0.0.1', 22),
-          ])
+          }, { trigger: () => dns.promises.lookupService('127.0.0.1', 22) })
         })
 
         it('should instrument resolve', () => {
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
-              resource: 'A lvh.me',
+              resource: 'A trace.test',
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
-              'dns.hostname': 'lvh.me',
+              'dns.hostname': 'trace.test',
               'dns.rrtype': 'A',
             })
-          })
-
-          return Promise.all([
-            tracePromise,
-            dns.promises.resolve('lvh.me').catch(() => {}),
-          ])
+          }, { trigger: () => dns.promises.resolve('trace.test') })
         })
 
         it('should instrument resolve shorthands', () => {
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
-              resource: 'ANY localhost',
+              resource: 'ANY trace.test',
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
               'span.kind': 'client',
-              'dns.hostname': 'localhost',
+              'dns.hostname': 'trace.test',
               'dns.rrtype': 'ANY',
             })
-          })
-
-          return Promise.all([
-            tracePromise,
-            dns.promises.resolveAny('localhost').catch(() => {}),
-          ])
+          }, { trigger: () => dns.promises.resolveAny('trace.test') })
         })
 
         it('should preserve the shorthand rrtype when promise options are passed', () => {
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
@@ -455,12 +402,9 @@ describe('Plugin', () => {
               'dns.hostname': 'fakedomain.faketld',
               'dns.rrtype': 'AAAA',
             })
+          }, {
+            trigger: () => assert.rejects(dns.promises.resolve6('fakedomain.faketld', { ttl: true })),
           })
-
-          return Promise.all([
-            tracePromise,
-            assert.rejects(dns.promises.resolve6('fakedomain.faketld', { ttl: true })),
-          ])
         })
 
         it('should instrument resolveTlsa with options when supported', function () {
@@ -468,7 +412,7 @@ describe('Plugin', () => {
             this.skip()
           }
 
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
@@ -480,18 +424,15 @@ describe('Plugin', () => {
               'dns.hostname': 'fakedomain.faketld',
               'dns.rrtype': 'TLSA',
             })
+          }, {
+            trigger: () => assert.rejects(dns.promises.resolveTlsa('fakedomain.faketld', { ttl: true })),
           })
-
-          return Promise.all([
-            tracePromise,
-            assert.rejects(dns.promises.resolveTlsa('fakedomain.faketld', { ttl: true })),
-          ])
         })
 
         it('should preserve the shorthand rrtype on promise Resolver instances when options are passed', () => {
-          const resolver = new dns.promises.Resolver()
+          const resolver = useTestServer(new dns.promises.Resolver())
 
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
@@ -503,16 +444,13 @@ describe('Plugin', () => {
               'dns.hostname': 'fakedomain.faketld',
               'dns.rrtype': 'AAAA',
             })
+          }, {
+            trigger: () => assert.rejects(resolver.resolve6('fakedomain.faketld', { ttl: true })),
           })
-
-          return Promise.all([
-            tracePromise,
-            assert.rejects(resolver.resolve6('fakedomain.faketld', { ttl: true })),
-          ])
         })
 
         it('should instrument reverse', () => {
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.reverse',
               service: 'test',
@@ -523,12 +461,7 @@ describe('Plugin', () => {
               'span.kind': 'client',
               'dns.ip': '127.0.0.1',
             })
-          })
-
-          return Promise.all([
-            tracePromise,
-            dns.promises.reverse('127.0.0.1').catch(() => {}),
-          ])
+          }, { trigger: () => dns.promises.reverse('127.0.0.1') })
         })
 
         it('should preserve the parent scope across await', async () => {
@@ -546,25 +479,20 @@ describe('Plugin', () => {
         })
 
         it('should instrument Resolver instances', () => {
-          const resolver = new dns.promises.Resolver()
+          const resolver = useTestServer(new dns.promises.Resolver())
 
-          const tracePromise = agent.assertSomeTraces(traces => {
+          return agent.assertSomeTraces(traces => {
             assertObjectContains(traces[0][0], {
               name: 'dns.resolve',
               service: 'test',
-              resource: 'A lvh.me',
+              resource: 'A trace.test',
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'dns',
-              'dns.hostname': 'lvh.me',
+              'dns.hostname': 'trace.test',
               'dns.rrtype': 'A',
             })
-          })
-
-          return Promise.all([
-            tracePromise,
-            resolver.resolve('lvh.me').catch(() => {}),
-          ])
+          }, { trigger: () => resolver.resolve('trace.test') })
         })
 
         // Loading both `dns` and `dns/promises` reaches the same exports object through
