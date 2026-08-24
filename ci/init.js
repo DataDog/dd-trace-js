@@ -6,10 +6,7 @@ const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 5000
 const JEST_FLUSH_INTERVAL = 0
 const JEST_WORKER_INITIALIZE_MESSAGE = 0
-const JEST_AUXILIARY_WORKER_PATHS = [
-  '/@jest/reporters/build/CoverageWorker.js',
-  '/jest-haste-map/build/worker.js',
-]
+const JEST_AUXILIARY_WORKER_PACKAGES = new Set(['@jest/reporters', 'jest-haste-map'])
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
@@ -39,8 +36,18 @@ if (process.env.JEST_WORKER_ID && process.send) {
 function isJestAuxiliaryWorker (workerPath) {
   if (typeof workerPath !== 'string') return false
 
-  const normalizedWorkerPath = workerPath.replaceAll('\\', '/')
-  return JEST_AUXILIARY_WORKER_PATHS.some(auxiliaryPath => normalizedWorkerPath.endsWith(auxiliaryPath))
+  const fs = require('node:fs')
+  const path = require('node:path')
+  let directory = path.dirname(workerPath)
+  while (directory !== path.dirname(directory)) {
+    try {
+      const { name } = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'))
+      return JEST_AUXILIARY_WORKER_PACKAGES.has(name)
+    } catch {
+      directory = path.dirname(directory)
+    }
+  }
+  return false
 }
 
 function initializeTracer () {
