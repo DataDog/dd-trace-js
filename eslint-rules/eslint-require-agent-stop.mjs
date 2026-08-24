@@ -4,7 +4,11 @@ const PROMISE_AGGREGATES = new Set(['all', 'allSettled'])
 const PROMISE_CHAIN_METHODS = new Set(['catch', 'finally', 'then'])
 
 /**
- * @typedef {import('estree').FunctionExpression | import('estree').ArrowFunctionExpression} TeardownCallback
+ * @typedef {
+ *   import('estree').FunctionDeclaration |
+ *   import('estree').FunctionExpression |
+ *   import('estree').ArrowFunctionExpression
+ * } TeardownCallback
  */
 
 /**
@@ -14,7 +18,34 @@ const PROMISE_CHAIN_METHODS = new Set(['catch', 'finally', 'then'])
  */
 
 /** @typedef {Map<import('eslint').Scope.Variable, Set<string>>} ValueReferences */
-/** @typedef {Map<TeardownCallback, ValueReferences>} SettledValueReferences */
+
+/**
+ * @typedef {object} AssignedValueReference
+ * @property {ValueReference} valueReference
+ * @property {import('estree').VariableDeclarator | import('estree').AssignmentExpression} assignment
+ */
+
+/**
+ * @typedef {object} FlowEvent
+ * @property {'settle' | 'write'} type
+ * @property {ValueReference} valueReference
+ * @property {import('estree').Node} node
+ * @property {number} position
+ */
+
+/**
+ * @typedef {object} CodePathState
+ * @property {CodePathState | undefined} upper
+ * @property {Set<import('eslint').Rule.CodePathSegment>} currentSegments
+ */
+
+/**
+ * @typedef {object} StopCall
+ * @property {TeardownCallback} callback
+ * @property {import('estree').CallExpression} node
+ * @property {ValueReference} valueReference
+ * @property {Set<import('eslint').Rule.CodePathSegment>} segments
+ */
 
 /**
  * @param {import('estree').Identifier} node
@@ -80,17 +111,24 @@ function hasValueReference (references, reference) {
 }
 
 /**
- * @param {SettledValueReferences} references
- * @param {TeardownCallback} callback
- * @param {ValueReference} reference
+ * @param {ValueReference} left
+ * @param {ValueReference} right
+ * @returns {boolean}
  */
-function addSettledValueReference (references, callback, reference) {
-  let callbackReferences = references.get(callback)
-  if (!callbackReferences) {
-    callbackReferences = new Map()
-    references.set(callback, callbackReferences)
-  }
-  addValueReference(callbackReferences, reference)
+function isSameValueReference (left, right) {
+  return left.variable === right.variable && left.memberPath === right.memberPath
+}
+
+/**
+ * @param {ValueReference} write
+ * @param {ValueReference} value
+ * @returns {boolean}
+ */
+function writesValueReference (write, value) {
+  return write.variable === value.variable &&
+    (write.memberPath === value.memberPath ||
+      write.memberPath === '' ||
+      value.memberPath.startsWith(`${write.memberPath}.`))
 }
 
 /**
@@ -136,22 +174,47 @@ function isTeardownHook (node) {
 
 /**
  * @param {import('estree').Node} node
- * @returns {import('estree').FunctionExpression | import('estree').ArrowFunctionExpression | undefined}
+ * @returns {TeardownCallback | undefined}
  */
-function getTeardownCallback (node) {
+function getEnclosingCallback (node) {
   let currentNode = node
   while (currentNode.parent) {
     currentNode = currentNode.parent
     if (!isFunction(currentNode)) continue
 
-    if (
-      !isTeardownHook(currentNode.parent) ||
-      currentNode.parent.arguments[currentNode.parent.arguments.length - 1] !== currentNode
-    ) {
-      return undefined
-    }
+    return /** @type {TeardownCallback} */ (currentNode)
+  }
+}
 
-    return /** @type {import('estree').FunctionExpression | import('estree').ArrowFunctionExpression} */ (currentNode)
+/**
+ * @param {import('estree').Node} node
+ * @param {import('eslint').SourceCode} sourceCode
+ * @param {Set<import('eslint').Scope.Variable>} [seen]
+ * @returns {TeardownCallback | undefined}
+ */
+function resolveCallback (node, sourceCode, seen = new Set()) {
+  if (isFunction(node)) {
+    return /** @type {TeardownCallback} */ (node)
+  }
+
+  if (node.type !== 'Identifier') return undefined
+
+  const variable = getVariable(node, sourceCode)
+  if (!variable || seen.has(variable)) return undefined
+
+  for (const reference of variable.references) {
+    if (reference.isWrite() && !reference.init) return undefined
+  }
+
+  seen.add(variable)
+  if (variable.defs.length !== 1) return undefined
+
+  const [definition] = variable.defs
+  if (isFunction(definition.node)) {
+    return /** @type {TeardownCallback} */ (definition.node)
+  }
+  if (definition.node.type === 'VariableDeclarator' && definition.node.init) {
+    return resolveCallback(definition.node.init, sourceCode, seen)
   }
 }
 
@@ -262,7 +325,7 @@ function isSettled (node, callback) {
 /**
  * @param {import('estree').CallExpression} node
  * @param {import('eslint').SourceCode} sourceCode
- * @returns {ValueReference | undefined}
+ * @returns {AssignedValueReference | undefined}
  */
 function getAssignedValueReference (node, sourceCode) {
   let currentNode = node
@@ -270,11 +333,13 @@ function getAssignedValueReference (node, sourceCode) {
     const parentNode = currentNode.parent
 
     if (parentNode.type === 'VariableDeclarator' && parentNode.init === currentNode) {
-      return getValueReference(parentNode.id, sourceCode)
+      const valueReference = getValueReference(parentNode.id, sourceCode)
+      return valueReference && { valueReference, assignment: parentNode }
     }
 
     if (parentNode.type === 'AssignmentExpression' && parentNode.right === currentNode) {
-      return getValueReference(parentNode.left, sourceCode)
+      const valueReference = getValueReference(parentNode.left, sourceCode)
+      return valueReference && { valueReference, assignment: parentNode }
     }
 
     const resultParent = getResultParent(currentNode)
@@ -282,6 +347,90 @@ function getAssignedValueReference (node, sourceCode) {
 
     currentNode = resultParent
   }
+}
+
+/**
+ * @param {Map<import('eslint').Rule.CodePathSegment, FlowEvent[]>} events
+ * @param {import('eslint').Rule.CodePathSegment} segment
+ * @returns {FlowEvent[]}
+ */
+function getFlowEvents (events, segment) {
+  return events.get(segment) ?? []
+}
+
+/**
+ * @param {StopCall} stopCall
+ * @param {AssignedValueReference} assignedValue
+ * @param {Map<import('eslint').Rule.CodePathSegment, FlowEvent[]>} events
+ * @returns {boolean}
+ */
+function isAssignedValueSettled (stopCall, assignedValue, events) {
+  const { assignment, valueReference } = assignedValue
+
+  /**
+   * @param {import('eslint').Rule.CodePathSegment} segment
+   * @param {boolean} initial
+   * @param {boolean} skipSourceWrite
+   * @param {Map<import('eslint').Rule.CodePathSegment, number>} visiting
+   * @param {Map<import('eslint').Rule.CodePathSegment, Map<number, boolean>>} memo
+   * @returns {boolean}
+   */
+  function settlesOnEveryPath (segment, initial, skipSourceWrite, visiting, memo) {
+    const state = (initial ? 2 : 0) | (skipSourceWrite ? 1 : 0)
+    const segmentMemo = memo.get(segment)
+    if (segmentMemo?.has(state)) return segmentMemo.get(state)
+
+    const visitingState = visiting.get(segment) ?? 0
+    if ((visitingState & (1 << state)) !== 0) return true
+    visiting.set(segment, visitingState | (1 << state))
+
+    /** @type {boolean | undefined} */
+    let settled
+    for (const event of getFlowEvents(events, segment)) {
+      if (initial && event.position <= stopCall.node.range[1]) continue
+
+      if (event.type === 'settle' && isSameValueReference(event.valueReference, valueReference)) {
+        settled = true
+        break
+      }
+
+      if (event.type === 'write' && writesValueReference(event.valueReference, valueReference)) {
+        if (skipSourceWrite && event.node === assignment) {
+          skipSourceWrite = false
+          continue
+        }
+        settled = false
+        break
+      }
+    }
+
+    if (settled === undefined) {
+      let hasNextSegment = false
+      settled = true
+      for (const nextSegment of segment.nextSegments) {
+        hasNextSegment = true
+        if (!settlesOnEveryPath(nextSegment, false, skipSourceWrite, visiting, memo)) {
+          settled = false
+          break
+        }
+      }
+      if (!hasNextSegment) settled = false
+    }
+
+    visiting.set(segment, visiting.get(segment) & ~(1 << state))
+    let mutableSegmentMemo = segmentMemo
+    if (!mutableSegmentMemo) {
+      mutableSegmentMemo = new Map()
+      memo.set(segment, mutableSegmentMemo)
+    }
+    mutableSegmentMemo.set(state, settled)
+    return settled
+  }
+
+  for (const segment of stopCall.segments) {
+    if (!settlesOnEveryPath(segment, true, true, new Map(), new Map())) return false
+  }
+  return stopCall.segments.size > 0
 }
 
 export default {
@@ -303,35 +452,106 @@ export default {
   create (context) {
     const { sourceCode } = context
     const fakeAgentValues = new Map()
-    const settledValues = new Map()
+    const flowEvents = new Map()
     const stopCalls = []
+    const teardownCallbacks = new Set()
+    /** @type {CodePathState | undefined} */
+    let codePathState
+
+    /**
+     * @param {import('estree').Node} node
+     * @param {'settle' | 'write'} type
+     * @param {ValueReference} valueReference
+     */
+    function recordFlowEvent (node, type, valueReference) {
+      const currentSegments = /** @type {CodePathState} */ (codePathState).currentSegments
+
+      for (const segment of currentSegments) {
+        let events = flowEvents.get(segment)
+        if (!events) {
+          events = []
+          flowEvents.set(segment, events)
+        }
+        events.push({ type, valueReference, node, position: node.range[1] })
+      }
+    }
 
     /**
      * @param {import('estree').Node} node
      */
     function recordSettledValue (node) {
-      const callback = getTeardownCallback(node)
+      const callback = getEnclosingCallback(node)
       if (!callback || !isSettled(node, callback)) return
 
       const valueReference = getValueReference(node, sourceCode)
       if (valueReference) {
-        addSettledValueReference(settledValues, callback, valueReference)
+        recordFlowEvent(node, 'settle', valueReference)
       }
     }
 
     return {
+      onCodePathStart () {
+        codePathState = {
+          upper: codePathState,
+          currentSegments: new Set(),
+        }
+      },
+      onCodePathEnd () {
+        codePathState = codePathState?.upper
+      },
+      /**
+       * @param {import('eslint').Rule.CodePathSegment} segment
+       */
+      onCodePathSegmentStart (segment) {
+        codePathState?.currentSegments.add(segment)
+      },
+      /**
+       * @param {import('eslint').Rule.CodePathSegment} segment
+       */
+      onCodePathSegmentEnd (segment) {
+        codePathState?.currentSegments.delete(segment)
+      },
+      /**
+       * @param {import('estree').VariableDeclarator} node
+       */
       VariableDeclarator (node) {
         const valueReference = getValueReference(node.id, sourceCode)
         if (valueReference && node.init && isFakeAgent(node.init)) {
           addValueReference(fakeAgentValues, valueReference)
         }
       },
+      /**
+       * @param {import('estree').VariableDeclarator} node
+       */
+      'VariableDeclarator:exit' (node) {
+        if (!node.init) return
+
+        const valueReference = getValueReference(node.id, sourceCode)
+        if (valueReference) {
+          recordFlowEvent(node, 'write', valueReference)
+        }
+      },
+      /**
+       * @param {import('estree').AssignmentExpression} node
+       */
       AssignmentExpression (node) {
         const valueReference = getValueReference(node.left, sourceCode)
         if (valueReference && isFakeAgent(node.right)) {
           addValueReference(fakeAgentValues, valueReference)
         }
       },
+      /**
+       * @param {import('estree').AssignmentExpression} node
+       */
+      'AssignmentExpression:exit' (node) {
+        const valueReference = getValueReference(node.left, sourceCode)
+        if (valueReference) {
+          recordFlowEvent(node, 'write', valueReference)
+        }
+      },
+      /**
+       * @param {import('estree').Identifier} node
+       */
       Identifier (node) {
         if (
           node.parent.type === 'MemberExpression' &&
@@ -341,10 +561,24 @@ export default {
 
         recordSettledValue(node)
       },
+      /**
+       * @param {import('estree').MemberExpression} node
+       */
       MemberExpression (node) {
         recordSettledValue(node)
       },
-      CallExpression (node) {
+      /**
+       * @param {import('estree').CallExpression} node
+       */
+      'CallExpression:exit' (node) {
+        if (isTeardownHook(node)) {
+          const callbackNode = node.arguments[node.arguments.length - 1]
+          if (callbackNode?.type !== 'SpreadElement') {
+            const callback = resolveCallback(callbackNode, sourceCode)
+            if (callback) teardownCallbacks.add(callback)
+          }
+        }
+
         if (
           node.callee.type !== 'MemberExpression' ||
           node.callee.computed ||
@@ -354,23 +588,29 @@ export default {
           return
         }
 
-        const callback = getTeardownCallback(node)
+        const callback = getEnclosingCallback(node)
         const valueReference = getValueReference(node.callee.object, sourceCode)
-        if (callback && valueReference) {
-          stopCalls.push({ callback, node, valueReference })
+        if (callback && valueReference && codePathState) {
+          stopCalls.push({
+            callback,
+            node,
+            valueReference,
+            segments: new Set(codePathState.currentSegments),
+          })
         }
       },
       'Program:exit' () {
-        for (const { callback, node, valueReference } of stopCalls) {
+        for (const events of flowEvents.values()) {
+          events.sort((left, right) => left.position - right.position)
+        }
+
+        for (const stopCall of stopCalls) {
+          const { callback, node, valueReference } = stopCall
+          if (!teardownCallbacks.has(callback)) continue
           if (!hasValueReference(fakeAgentValues, valueReference) || isSettled(node, callback)) continue
 
-          const assignedValueReference = getAssignedValueReference(node, sourceCode)
-          const callbackReferences = settledValues.get(callback)
-          if (
-            assignedValueReference &&
-            callbackReferences &&
-            hasValueReference(callbackReferences, assignedValueReference)
-          ) continue
+          const assignedValue = getAssignedValueReference(node, sourceCode)
+          if (assignedValue && isAssignedValueSettled(stopCall, assignedValue, flowEvents)) continue
 
           context.report({
             node,
