@@ -394,84 +394,37 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @typedef {Promise<T> & { cancel: () => void }} CancelablePromise
  */
 /** @typedef {() => unknown | Promise<unknown>} TraceTrigger */
+/** @typedef {{ success: true, value: unknown } | { success: false, error: unknown }} TraceExpectationResult */
 
 /**
- * @template T
- * @param {TraceTrigger|undefined} trigger
- * @param {CancelablePromise<T>} expectation
- * @param {() => void} startTimeout
- * @returns {CancelablePromise<T>}
- */
-function runWithTrigger (trigger, expectation, startTimeout) {
-  if (trigger === undefined) {
-    startTimeout()
-    return expectation
-  }
-
-  const expectationResult = expectation.then(
-    value => ({ success: true, value }),
-    error => ({ success: false, error })
-  )
-  let triggerResult
-  try {
-    triggerResult = trigger()
-  } catch (error) {
-    expectation.cancel()
-    const rejection = /** @type {CancelablePromise<T>} */ (Promise.reject(error))
-    rejection.cancel = expectation.cancel
-    return rejection
-  }
-
-  const promise = /** @type {CancelablePromise<T>} */ (Promise.resolve(triggerResult).then(
-    () => {
-      startTimeout()
-      return expectationResult.then(result => {
-        if (!result.success) throw result.error
-        return result.value
-      })
-    },
-    error => {
-      expectation.cancel()
-      throw error
-    }
-  ))
-  promise.cancel = expectation.cancel
-  return promise
-}
-/**
- * Register a callback with expectations to be run on every tracing or stats payload sent to the agent depending
- * on the handlers inputted. If the callback does not throw, the returned promise resolves. If it does,
- * then the agent will wait for additional payloads up until the timeout
- * (default 1000 ms) and if any of them succeed, the promise will resolve.
- * Otherwise, it will reject.
- *
  * @param {RunCallbackAgainstTracesCallback} callback - A function that tests a payload as it's received.
- * @param {RunCallbackAgainstTracesOptions} options = {} - An options object
+ * @param {RunCallbackAgainstTracesOptions|RunCallbackAgainstNoTracesOptions} options - An options object.
  * @param {Set} handlers - Set of handlers to add the callback to.
- * @returns {Promise<void>} A promise resolving if expectations are met
+ * @param {boolean} expectNoTraces - Whether the callback throws on a forbidden trace.
+ * @returns {CancelablePromise<unknown>} A promise resolving if expectations are met.
  */
-function runCallbackAgainstTraces (callback, options = {}, handlers) {
-  /** @type {Error[]} */
-  const errors = []
+function runTraceExpectation (callback, options, handlers, expectNoTraces) {
+  /** @type {Error[]|undefined} */
+  let errors
   let resolve
   let reject
-  const promise = /** @type {CancelablePromise<unknown>} */ (new Promise((_resolve, _reject) => {
+  const expectation = /** @type {CancelablePromise<unknown>} */ (new Promise((_resolve, _reject) => {
     resolve = _resolve
     reject = _reject
   }))
 
-  let settled = false
-  let rejectionTimeout
+  let timeout
   const timeoutMs = options.timeoutMs || 1000
 
   function startTimeout () {
-    if (settled) return
-    rejectionTimeout = setTimeout(() => {
-      settled = true
-      // The promise settles here, so drop the handler from the set. Otherwise reset()'s leak guard
-      // would flag this already-rejected expectation as still armed at teardown.
-      handlers.delete(handlerPayload)
-      if (errors.length === 0) {
+    if (!handlers.has(handlerPayload)) return
+    timeout = setTimeout(() => {
+      handlerPayload.cancel()
+      if (expectNoTraces) {
+        resolve()
+        return
+      }
+      if (errors === undefined) {
         reject(new Error(`No matching trace received within ${timeoutMs}ms.`))
         return
       }
@@ -493,9 +446,8 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     handler,
     spanResourceMatch: options.spanResourceMatch,
     cancel () {
-      settled = true
       handlers.delete(handlerPayload)
-      clearTimeout(rejectionTimeout)
+      clearTimeout(timeout)
     },
   }
 
@@ -509,17 +461,15 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     try {
       // @ts-expect-error The number of arguments can either be one or two. TS expects it to be stricter typed.
       const result = callback(...args)
-      settled = true
-      handlers.delete(handlerPayload)
-      clearTimeout(rejectionTimeout)
+      if (expectNoTraces) return
+      handlerPayload.cancel()
       resolve(result)
     } catch (error) {
-      if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
-        settled = true
-        handlers.delete(handlerPayload)
-        clearTimeout(rejectionTimeout)
+      if (expectNoTraces || (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst)) {
+        handlerPayload.cancel()
         reject(error)
       } else {
+        errors ??= []
         errors.push(error)
       }
     }
@@ -527,9 +477,48 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 
   handlers.add(handlerPayload)
 
-  promise.cancel = handlerPayload.cancel
+  expectation.cancel = handlerPayload.cancel
 
-  return runWithTrigger(options.trigger, promise, startTimeout)
+  const trigger = options.trigger
+  if (trigger === undefined) {
+    startTimeout()
+    return expectation
+  }
+
+  const expectationResult = /** @type {Promise<TraceExpectationResult>} */ (expectation.then(
+    value => ({ success: true, value }),
+    error => ({ success: false, error })
+  ))
+  const promise = /** @type {CancelablePromise<unknown>} */ ((async () => {
+    try {
+      await trigger()
+    } catch (error) {
+      expectation.cancel()
+      throw error
+    }
+    startTimeout()
+    const result = await expectationResult
+    if (!result.success) throw result.error
+    return result.value
+  })())
+  promise.cancel = expectation.cancel
+  return promise
+}
+
+/**
+ * Register a callback with expectations to be run on every tracing or stats payload sent to the agent depending
+ * on the handlers inputted. If the callback does not throw, the returned promise resolves. If it does,
+ * then the agent will wait for additional payloads up until the timeout
+ * (default 1000 ms) and if any of them succeed, the promise will resolve.
+ * Otherwise, it will reject.
+ *
+ * @param {RunCallbackAgainstTracesCallback} callback - A function that tests a payload as it's received.
+ * @param {RunCallbackAgainstTracesOptions} options = {} - An options object
+ * @param {Set} handlers - Set of handlers to add the callback to.
+ * @returns {Promise<void>} A promise resolving if expectations are met
+ */
+function runCallbackAgainstTraces (callback, options = {}, handlers) {
+  return runTraceExpectation(callback, options, handlers, false)
 }
 
 /**
@@ -555,58 +544,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
  * @returns {Promise<void>} A promise resolving when no forbidden trace arrives before the timeout.
  */
 function runCallbackAgainstNoTraces (callback, options = {}, handlers) {
-  let resolve
-  let reject
-  const promise = /** @type {CancelablePromise<void>} */ (new Promise((_resolve, _reject) => {
-    resolve = _resolve
-    reject = _reject
-  }))
-
-  let settled = false
-  let resolveTimeout
-
-  function startTimeout () {
-    if (settled) return
-    resolveTimeout = setTimeout(() => {
-      settled = true
-      handlers.delete(handlerPayload)
-      resolve()
-    }, options.timeoutMs || 1000)
-  }
-
-  const handlerPayload = {
-    handler,
-    spanResourceMatch: options.spanResourceMatch,
-    cancel () {
-      settled = true
-      handlers.delete(handlerPayload)
-      clearTimeout(resolveTimeout)
-    },
-  }
-
-  /**
-   * @type {TracesCallback | AgentlessCallback}
-   */
-  function handler (...args) {
-    // we assert integration name being tagged on all spans (when running integration tests)
-    assertIntegrationName(args[0])
-
-    try {
-      // @ts-expect-error The number of arguments can either be one or two. TS expects it to be stricter typed.
-      callback(...args)
-    } catch (error) {
-      settled = true
-      handlers.delete(handlerPayload)
-      clearTimeout(resolveTimeout)
-      reject(error)
-    }
-  }
-
-  handlers.add(handlerPayload)
-
-  promise.cancel = handlerPayload.cancel
-
-  return runWithTrigger(options.trigger, promise, startTimeout)
+  return runTraceExpectation(callback, options, handlers, true)
 }
 
 /**
