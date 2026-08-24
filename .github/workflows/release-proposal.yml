@@ -56,11 +56,11 @@ jobs:
           RELEASE_LINES: ${{ needs.check-branches.outputs.release-lines }}
         run: |
           releases=$(gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" | jq -s 'add')
-          now=$(date -u +%s)
-          stale_lines=()
-          minimum_age=
-          maximum_age=
-          should_warn=false
+          today=$(date -u +%F)
+          today_epoch=$(date -u -d "$today" +%s)
+          warning_lines=()
+          minimum_calendar_age=
+          maximum_business_age=
 
           while IFS= read -r line; do
             published_at=$(jq -r --arg prefix "v${line}." '
@@ -73,49 +73,57 @@ jobs:
               exit 1
             fi
 
-            published=$(date -d "$published_at" +%s)
-            age=$(((now - published) / 86400))
+            release_date=${published_at%%T*}
+            release_epoch=$(date -u -d "$release_date" +%s)
+            calendar_age=$(((today_epoch - release_epoch) / 86400))
+            cursor=$release_date
+            business_age=0
 
-            if ((age < 7)); then
+            while [ "$cursor" != "$today" ]; do
+              cursor=$(date -u -d "$cursor + 1 day" +%F)
+              day_of_week=$(date -u -d "$cursor" +%u)
+              if ((day_of_week <= 5)); then
+                business_age=$((business_age + 1))
+              fi
+            done
+
+            if ((business_age != 5 && business_age < 8)); then
               continue
             fi
 
-            stale_lines+=("v${line}")
+            warning_lines+=("v${line}")
 
-            if [ -z "$minimum_age" ] || ((age < minimum_age)); then
-              minimum_age=$age
+            if [ -z "$minimum_calendar_age" ] || ((calendar_age < minimum_calendar_age)); then
+              minimum_calendar_age=$calendar_age
             fi
 
-            if [ -z "$maximum_age" ] || ((age > maximum_age)); then
-              maximum_age=$age
+            if [ -z "$maximum_business_age" ] || ((business_age > maximum_business_age)); then
+              maximum_business_age=$business_age
             fi
 
-            if (((age - 7) % 3 == 0)); then
-              should_warn=true
-            fi
           done < <(jq -r '.[]' <<< "$RELEASE_LINES")
 
-          if [ "$should_warn" != true ]; then
+          if ((${#warning_lines[@]} == 0)); then
             echo "warn=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if ((${#stale_lines[@]} == 1)); then
-            release_subject="Release line ${stale_lines[0]}"
+          if ((${#warning_lines[@]} == 1)); then
+            release_subject="Release line ${warning_lines[0]}"
             release_verb=has
             release_noun=release
           else
-            last_index=$((${#stale_lines[@]} - 1))
-            release_lines=${stale_lines[0]}
+            last_index=$((${#warning_lines[@]} - 1))
+            release_lines=${warning_lines[0]}
             for ((index = 1; index < last_index; index++)); do
-              release_lines+=", ${stale_lines[index]}"
+              release_lines+=", ${warning_lines[index]}"
             done
-            release_subject="Release lines ${release_lines} and ${stale_lines[last_index]}"
+            release_subject="Release lines ${release_lines} and ${warning_lines[last_index]}"
             release_verb=have
             release_noun=releases
           fi
 
-          if ((maximum_age >= 14)); then
+          if ((maximum_business_age >= 8)); then
             icon=:rotating_light:
           else
             icon=:warning:
@@ -123,7 +131,7 @@ jobs:
 
           {
             echo "warn=true"
-            echo "days=$minimum_age"
+            echo "days=$minimum_calendar_age"
             echo "icon=$icon"
             echo "release-noun=$release_noun"
             echo "release-subject=$release_subject"
