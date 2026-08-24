@@ -39,6 +39,7 @@ describe('Plugin', () => {
   let express
   let fetch
   let appListener
+  let tracer
 
   describe('undici-fetch', () => {
     withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version, moduleName, resolvedVersion) => {
@@ -118,7 +119,8 @@ describe('Plugin', () => {
           return agent.load('undici', {
             service: 'test',
           })
-            .then(() => {
+            .then(loadedTracer => {
+              tracer = loadedTracer
               express = require('express')
               fetch = require(`../../../versions/undici@${version}`, {}).get()
             })
@@ -537,6 +539,43 @@ describe('Plugin', () => {
                 .catch(() => {})
             })
           })
+
+          requestTest('should not leave the request span active after undici.request() with no parent span', done => {
+            const app = express()
+
+            app.get('/user', (req, res) => {
+              res.status(200).send('OK')
+            })
+
+            appListener = server(app, port => {
+              fetch.request(`http://localhost:${port}/user`)
+                .then(({ body }) => body.dump())
+                .then(() => {
+                  assert.strictEqual(tracer.scope().active(), null)
+
+                  const traceIds = new Set()
+                  for (let i = 0; i < 2; i++) {
+                    tracer.trace('independent-work', span => {
+                      traceIds.add(span.context().toTraceId())
+                    })
+                  }
+                  assert.strictEqual(traceIds.size, 2)
+
+                  done()
+                })
+                .catch(done)
+            })
+          })
+
+          requestTest('should not leave the request span active after a connection error in undici.request()', done => {
+            fetch.request('http://localhost:7357/user')
+              .catch(() => {})
+              .then(() => {
+                assert.strictEqual(tracer.scope().active(), null)
+                done()
+              })
+              .catch(done)
+          })
         }
       })
       describe('with service configuration', () => {
@@ -842,7 +881,8 @@ describe('Plugin', () => {
           return agent.load('undici', {
             service: 'test',
           })
-            .then(() => {
+            .then(loadedTracer => {
+              tracer = loadedTracer
               express = require('express')
               fetch = require(`../../../versions/undici@${version}`, {}).get()
             })
@@ -920,6 +960,8 @@ describe('Plugin', () => {
           })
           const { body } = await fetch.request(`http://localhost:${downstreamPort}/data`, { dispatcher })
           await Promise.all([body.text(), tracePromise])
+
+          assert.strictEqual(tracer.scope().active(), null)
         })
       })
     })

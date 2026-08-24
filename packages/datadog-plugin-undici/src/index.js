@@ -118,7 +118,10 @@ class UndiciPlugin extends HttpClientPlugin {
     })
 
     // Enter the span context
-    storage('legacy').enterWith({ ...store, span })
+    // Only when there is a surrounding store to return to.
+    if (store) {
+      storage('legacy').enterWith({ ...store, span })
+    }
   }
 
   #onNativeRequestBodySent ({ request }) {
