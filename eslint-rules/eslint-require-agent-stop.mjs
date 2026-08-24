@@ -573,7 +573,7 @@ export default {
       'CallExpression:exit' (node) {
         if (isTeardownHook(node)) {
           const callbackNode = node.arguments[node.arguments.length - 1]
-          if (callbackNode?.type !== 'SpreadElement') {
+          if (callbackNode && callbackNode.type !== 'SpreadElement') {
             const callback = resolveCallback(callbackNode, sourceCode)
             if (callback) teardownCallbacks.add(callback)
           }

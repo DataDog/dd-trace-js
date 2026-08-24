@@ -8,6 +8,8 @@ const ruleTester = new RuleTester({
 
 ruleTester.run('eslint-require-agent-stop', /** @type {import('eslint').Rule.RuleModule} */ (rule), {
   valid: [
+    'after()',
+    'afterEach()',
     `let agent
     beforeEach(async () => { agent = await new FakeAgent().start() })
     afterEach(() => agent.stop())`,
