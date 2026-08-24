@@ -52,6 +52,7 @@ packages/datadog-plugin-graphql/
 ```
 packages/datadog-plugin-winston/
 packages/datadog-plugin-bunyan/
+packages/datadog-plugin-browser-bunyan/
 packages/datadog-plugin-pino/
 ```
 
@@ -79,7 +80,7 @@ For instrumentation:
 |------|---------|
 | `datadog-instrumentations/src/<lib>.js` | Hook logic (shimmer) or hooks file (orchestrion) |
 | `datadog-instrumentations/src/helpers/hooks.js` | Registration (both shimmer and orchestrion) |
-| `rewriter/instrumentations/<lib>.js` | JSON config (orchestrion) |
+| `rewriter/instrumentations/<lib>.js` | JavaScript config (orchestrion) |
 
 ## How to Use References
 

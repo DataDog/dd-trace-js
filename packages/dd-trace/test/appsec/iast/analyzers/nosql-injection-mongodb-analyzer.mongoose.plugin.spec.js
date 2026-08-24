@@ -51,7 +51,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
         tmpFilePath = path.join(os.tmpdir(), vulnerableMethodFilename)
         try {
           fs.unlinkSync(tmpFilePath)
-        } catch (e) {
+        } catch {
           // ignore the error
         }
         fs.copyFileSync(src, tmpFilePath)
@@ -60,7 +60,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
       after(() => {
         try {
           fs.unlinkSync(tmpFilePath)
-        } catch (e) {
+        } catch {
           // ignore the error
         }
 
@@ -174,8 +174,9 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             }, 'NOSQL_MONGODB_INJECTION')
           })
 
-          if (semver.satisfies(specificMongooseVersion, '<7')) {
-            describe('using callbacks', () => {
+          {
+            const callbackSuite = semver.satisfies(specificMongooseVersion, '<7') ? describe : describe.skip
+            callbackSuite('using callbacks', () => {
               testThatRequestHasNoVulnerability(async (req, res) => {
                 try {
                   Test.find({
@@ -183,7 +184,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
                   }).exec(() => {
                     res.end()
                   })
-                } catch (e) {
+                } catch {
                   res.writeHead(500)
                   res.end()
                 }
@@ -201,7 +202,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
                     }).exec(() => {
                       res.end()
                     })
-                  } catch (e) {
+                  } catch {
                     res.writeHead(500)
                     res.end()
                   }
@@ -224,7 +225,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
                     }, () => {
                       res.end()
                     })
-                  } catch (e) {
+                  } catch {
                     res.writeHead(500)
                     res.end()
                   }

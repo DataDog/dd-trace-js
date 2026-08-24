@@ -11,19 +11,17 @@ const chatCompletionsBeforeChannel = channel('dd-trace:openai:chat.completions:b
 
 describe('AIGuard integration wiring', () => {
   const config = { experimental: { aiguard: { block: true } } }
+  let AIGuard
   let evaluate
   let aiguard
 
   beforeEach(() => {
     evaluate = sinon.stub().resolves()
-
-    function MockAIGuard () {
-      return { evaluate }
-    }
+    AIGuard = sinon.stub().returns({ evaluate })
 
     aiguard = proxyquire('../../../src/aiguard/index', {
       '../log': { error: sinon.stub() },
-      './sdk': MockAIGuard,
+      './sdk': AIGuard,
     })
   })
 
@@ -43,7 +41,7 @@ describe('AIGuard integration wiring', () => {
     return ctx
   }
 
-  it('subscribes and unsubscribes AI Guard integrations from enable and disable', async () => {
+  it('subscribes, unsubscribes, and resubscribes AI Guard integrations', async () => {
     aiguard.enable({}, config)
 
     const enabledCtx = publishChatBefore()
@@ -55,9 +53,21 @@ describe('AIGuard integration wiring', () => {
 
     const disabledCtx = publishChatBefore()
     assert.strictEqual(disabledCtx.pending.length, 0)
+
+    aiguard.enable({}, config)
+
+    const reenabledCtx = publishChatBefore()
+    assert.strictEqual(reenabledCtx.pending.length, 1)
+    await Promise.all(reenabledCtx.pending)
+    sinon.assert.calledTwice(AIGuard)
+    sinon.assert.calledTwice(evaluate)
   })
 
   it('enables and disables providers through the integrations index', () => {
+    const anthropicIntegration = {
+      enable: sinon.stub(),
+      disable: sinon.stub(),
+    }
     const openaiIntegration = {
       enable: sinon.stub(),
       disable: sinon.stub(),
@@ -67,6 +77,7 @@ describe('AIGuard integration wiring', () => {
       disable: sinon.stub(),
     }
     const integrations = proxyquire('../../../src/aiguard/integrations', {
+      './anthropic': anthropicIntegration,
       './openai': openaiIntegration,
       './vercel-ai': vercelAiIntegration,
     })
@@ -75,15 +86,19 @@ describe('AIGuard integration wiring', () => {
     integrations.enable(aiguard, true)
     integrations.disable()
 
+    sinon.assert.calledOnceWithExactly(anthropicIntegration.enable, aiguard, true)
     sinon.assert.calledOnceWithExactly(openaiIntegration.enable, aiguard, true)
     sinon.assert.calledOnceWithExactly(vercelAiIntegration.enable, aiguard, true)
+    sinon.assert.calledOnce(anthropicIntegration.disable)
     sinon.assert.calledOnce(openaiIntegration.disable)
     sinon.assert.calledOnce(vercelAiIntegration.disable)
     sinon.assert.callOrder(
+      anthropicIntegration.enable,
       openaiIntegration.enable,
       vercelAiIntegration.enable,
       vercelAiIntegration.disable,
       openaiIntegration.disable,
+      anthropicIntegration.disable,
     )
   })
 })

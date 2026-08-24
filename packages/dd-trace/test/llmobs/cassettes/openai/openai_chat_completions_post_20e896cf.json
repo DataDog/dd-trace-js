@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "276"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"temperature\":0,\"messages\":[{\"role\":\"user\",\"content\":\"Run the test tool\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"0\",\"description\":\"Run the test tool and return its result\",\"parameters\":{\"type\":\"object\",\"properties\":{}}}}],\"tool_choice\":\"auto\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 22 Jul 2026 20:13:15 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a1f51ad79af143d6-EWR",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "482",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "openai-version": "2020-10-01",
+      "x-openai-proxy-wasm": "v0.1",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999995",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_c6e1d1a71b1448c6a01a4789b68b96fd",
+      "set-cookie": "__cf_bm=Ku3aEuPaXwCuI._sg76.n2alVtPLJYj4dlULIw2dMIA-1784751194.8122158-1.0.1.1-GYu5iJGI26HhHwDQat1mTAET6_PHCXDmeTC6q7wh7uiy3224ETgLFTbSh0.tp4eyEYmmn5lQ9OvJrZ7QVxMwyV2mfqDLZDHhm.aYn6pmDo71ijhjD5rSEIkfG15Gk18d; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 22 Jul 2026 20:43:15 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"chatcmpl-E4XbXfTLgre8oEblfCmgvGvJmrwSK\",\n  \"object\": \"chat.completion\",\n  \"created\": 1784751195,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n            \"id\": \"call_q604yF7U7NC9ME4wbnaOfqHD\",\n            \"type\": \"function\",\n            \"function\": {\n              \"name\": \"0\",\n              \"arguments\": \"{}\"\n            }\n          }\n        ],\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 44,\n    \"completion_tokens\": 10,\n    \"total_tokens\": 54,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_176e862412\"\n}\n"
+  }
+}

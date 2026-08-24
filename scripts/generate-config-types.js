@@ -253,14 +253,16 @@ function generateEnvVarConfigTypes (supportedConfigurations) {
     const type = getEnvVarType(propertyName, entry)
 
     envVarTypes.set(canonicalName, type)
-    for (const alias of entry.aliases ?? []) {
-      if (!supportedConfigurations[alias] && !envVarTypes.has(alias)) {
-        envVarTypes.set(alias, type)
+    if ((entry.aliases) != null) {
+      for (const alias of entry.aliases) {
+        if (!supportedConfigurations[alias] && !envVarTypes.has(alias)) {
+          envVarTypes.set(alias, type)
+        }
       }
     }
   }
 
-  const body = [...envVarTypes.entries()]
+  const body = [...envVarTypes]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, type]) => `  ${renderPropertyName(name)}: ${type};`)
     .join('\n')

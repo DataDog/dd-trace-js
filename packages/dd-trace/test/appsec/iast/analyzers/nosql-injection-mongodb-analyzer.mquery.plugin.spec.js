@@ -7,26 +7,16 @@ const path = require('node:path')
 
 const axios = require('axios')
 const { after, before, describe } = require('mocha')
-const satisfies = require('semifies')
 
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
 const { prepareTestServerForIastInExpress } = require('../utils')
-const { NODE_MAJOR } = require('../../../../../../version')
 
 describe('nosql injection detection with mquery', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
   withVersions('mquery', 'express', '>4.18.0 <5.0.0', expressVersion => {
     withVersions('mquery', 'mongodb', mongodbVersion => {
       const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
-
-      // TODO: remove once Node.js 18 is no longer supported
-      if (satisfies(mongodb.version(), '>=7') && NODE_MAJOR < 20) {
-        describe.skip(
-          `Skipping the tests as mongodb@${mongodb.version()} requires Node.js >= 20 (current: ${NODE_MAJOR})`
-        )
-        return
-      }
 
       const vulnerableMethodFilename = 'mquery-vulnerable-method.js'
       let client, testCollection, tmpFilePath, dbName
@@ -52,7 +42,7 @@ describe('nosql injection detection with mquery', () => {
         tmpFilePath = path.join(os.tmpdir(), vulnerableMethodFilename)
         try {
           fs.unlinkSync(tmpFilePath)
-        } catch (e) {
+        } catch {
           // ignore the error
         }
         fs.copyFileSync(src, tmpFilePath)
@@ -94,7 +84,7 @@ describe('nosql injection detection with mquery', () => {
                   assert.notStrictEqual(result, undefined)
                   assert.strictEqual(result.length, 1)
                   assert.strictEqual(result[0].id, 1)
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
 
@@ -122,7 +112,7 @@ describe('nosql injection detection with mquery', () => {
 
                       res.end()
                     })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
               },
@@ -138,7 +128,7 @@ describe('nosql injection detection with mquery', () => {
               fn: async (req, res) => {
                 try {
                   await require(tmpFilePath).vulnerableFindExec(collection, { name: req.query.key })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -155,7 +145,7 @@ describe('nosql injection detection with mquery', () => {
                 try {
                   await require(tmpFilePath)
                     .vulnerableFindWhereExec(collection, { name: req.query.key }, { where: req.query.key2 })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -174,7 +164,7 @@ describe('nosql injection detection with mquery', () => {
                 try {
                   await require(tmpFilePath)
                     .vulnerableFindWhereExec(collection, { name: req.query.key }, { where: req.query.key2 })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -192,7 +182,7 @@ describe('nosql injection detection with mquery', () => {
                 try {
                   await require(tmpFilePath)
                     .vulnerableFindWhereExec(collection, { name: req.query.key }, { where: 'not_tainted' })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -211,7 +201,7 @@ describe('nosql injection detection with mquery', () => {
                   const filter = { name: req.query.key }
                   const where = { key2: req.query.key2 }
                   await require(tmpFilePath).vulnerableFindWhere(collection, filter, where)
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -230,7 +220,7 @@ describe('nosql injection detection with mquery', () => {
                 }
                 try {
                   await require(tmpFilePath).vulnerableFind(collection, filter)
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -256,7 +246,7 @@ describe('nosql injection detection with mquery', () => {
                 }
                 try {
                   await require(tmpFilePath).vulnerableFindOne(collection, filter)
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -282,7 +272,7 @@ describe('nosql injection detection with mquery', () => {
                 try {
                   require(tmpFilePath)
                     .vulnerableFind(collection, { name: req.query.key })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -299,7 +289,7 @@ describe('nosql injection detection with mquery', () => {
                   .find({
                     name: 'test',
                   })
-              } catch (e) {
+              } catch {
                 // do nothing
               }
               res.end()
@@ -309,7 +299,7 @@ describe('nosql injection detection with mquery', () => {
               try {
                 await collection
                   .find()
-              } catch (e) {
+              } catch {
                 // do nothing
               }
               res.end()
@@ -329,7 +319,7 @@ describe('nosql injection detection with mquery', () => {
                 }
                 try {
                   await require(tmpFilePath).vulnerableFindOne(collection, filter)
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()

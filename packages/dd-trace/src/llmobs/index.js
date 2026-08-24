@@ -2,19 +2,28 @@
 
 const { channel } = require('dc-polyfill')
 
+const { readDatadogTags, writeDatadogTags } = require('../carrier')
 const log = require('../log')
 const { DD_MAJOR } = require('../../../../version')
 const startupLogs = require('../startup-log')
 const {
   ML_APP,
+  SESSION_ID,
+  SESSION_ID_TRACE_DEFAULT_KEY,
   PROPAGATED_ML_APP_KEY,
   PROPAGATED_PARENT_ID_KEY,
+  PROPAGATED_SESSION_ID_KEY,
+  PROPAGATED_PARENT_AGENT_ID_KEY,
+  PROPAGATED_PARENT_AGENT_NAME_KEY,
   SAMPLE_RATE,
   SAMPLING_DECISION,
   PROPAGATED_SAMPLE_RATE_KEY,
   PROPAGATED_SAMPLING_DECISION_KEY,
+  TRACE_ID,
+  PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
+const { agentNameWireSafe, appendOptionalPropagatedTag, resolveAgentAttribution, stripTagsetEntry } = require('./util')
 const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
@@ -22,6 +31,7 @@ const LLMObsTagger = require('./tagger')
 const LLMObsSpanWriter = require('./writers/spans')
 const { setAgentStrategy } = require('./writers/util')
 const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
+const { llmObsTraceIdToWire } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -110,7 +120,7 @@ function disable () {
 }
 
 // since LLMObs traces can extend between services and be the same trace,
-// we need to propagate the parent id, mlApp, and sampling rate/decision.
+// we need to propagate the parent id, mlApp, session id, and sampling rate/decision.
 function handleLLMObsInjection ({ carrier }) {
   // Respect the standard propagator's gate: when trace tag propagation is
   // disabled, don't write `x-datadog-tags` for LLMObs either.
@@ -130,18 +140,56 @@ function handleLLMObsInjection ({ carrier }) {
     mlObsSpanTags?.[SAMPLE_RATE] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLE_RATE_KEY]
   const samplingDecision =
     mlObsSpanTags?.[SAMPLING_DECISION] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLING_DECISION_KEY]
+  const sessionId =
+    mlObsSpanTags?.[SESSION_ID] ??
+    parentContext?._trace?.tags?.[SESSION_ID_TRACE_DEFAULT_KEY] ??
+    parentContext?._trace?.tags?.[PROPAGATED_SESSION_ID_KEY]
+  const llmobsTraceId = mlObsSpanTags?.[TRACE_ID]
+  const propagatedTraceId = llmobsTraceId === undefined
+    ? parentContext?._trace?.tags?.[PROPAGATED_TRACE_ID_KEY]
+    : llmObsTraceIdToWire(llmobsTraceId)
 
-  if (!parentId && !mlApp && samplingDecision == null) return
+  if (!parentId && !mlApp && samplingDecision == null && !sessionId && !propagatedTraceId) return
+
+  // Propagate the nearest agent so spans in the downstream process attribute correctly. When the
+  // active span sits under a distributed agent, `resolveAgentAttribution` inherits the propagated
+  // id/name already on the parent's registry entry, so the chain survives multiple hops. Resolved
+  // after the bail-out above so we don't allocate when there is nothing to inject.
+  const { name: parentAgentName, spanId: parentAgentSpanId } = resolveAgentAttribution(
+    mlObsSpanTags, parent
+  )
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
-  const existing = carrier['x-datadog-tags']
+  const existing = readDatadogTags(carrier)
   let tags = existing || ''
   if (parentId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
   if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
+  if (sessionId) tags += `${tags ? ',' : ''}${PROPAGATED_SESSION_ID_KEY}=${sessionId}`
   if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
   if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
-  if (tags !== existing) carrier['x-datadog-tags'] = tags
+  if (propagatedTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${propagatedTraceId}`
+  // When a local agent attribution is resolved, strip any stale upstream pagent entries that
+  // `_injectTags` may have already written into the carrier (it propagates all `_dd.p.*` from
+  // `_trace.tags`). This ensures the downstream sees a consistent id-only or id+name pair
+  // rather than a mix from different hops. The id is always digit-safe; an unsafe name is wiped.
+  if (parentAgentSpanId) {
+    tags = stripTagsetEntry(tags, PROPAGATED_PARENT_AGENT_ID_KEY)
+    tags = stripTagsetEntry(tags, PROPAGATED_PARENT_AGENT_NAME_KEY)
+  }
+  const maxLength = globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
+  const tagsWithId = appendOptionalPropagatedTag(
+    tags, PROPAGATED_PARENT_AGENT_ID_KEY, parentAgentSpanId, null, maxLength
+  )
+  // Only append the name when the id fit: a name without an id is unresolvable by the backend.
+  if (tagsWithId === tags) {
+    tags = tagsWithId
+  } else {
+    tags = appendOptionalPropagatedTag(
+      tagsWithId, PROPAGATED_PARENT_AGENT_NAME_KEY, parentAgentName, agentNameWireSafe, maxLength
+    )
+  }
+  if (tags !== existing) writeDatadogTags(carrier, tags)
 }
 
 function handleFlush () {

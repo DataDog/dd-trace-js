@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const { once } = require('node:events')
 const http = require('http')
 const util = require('util')
 const { setTimeout: wait } = require('timers/promises')
@@ -12,6 +13,7 @@ const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
+const { httpAgent } = require('../../src/exporters/common/agents')
 
 // Modules that close over the previous `Config` / `TracerProxy` singletons.
 // Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
@@ -22,6 +24,7 @@ const RELOAD_EVICTION_IDS = [
   '../../../..', // root index.js → `module.exports = require('./packages/dd-trace')`
   '../..',
   '../../src',
+  '../../src/bootstrap',
   '../../src/proxy',
   '../../src/config',
   '../../src/config/defaults',
@@ -60,6 +63,10 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'FUNCTIONS_WORKER_RUNTIME',
   'GCP_PROJECT',
   'K_SERVICE',
+  'VERCEL',
+  'VERCEL_ENV',
+  'VERCEL_PROJECT_ID',
+  'VERCEL_REGION',
   'WEBSITE_SKU',
   // lambda RITM target path (computed once at module load)
   'LAMBDA_TASK_ROOT',
@@ -131,6 +138,31 @@ function envChangedSince (snapshot) {
     if (!seen.has(key)) return true
   }
   return false
+}
+
+/**
+ * @param {import('node:net').Socket} socket
+ */
+function waitForExporterTransition (socket) {
+  return new Promise(resolve => {
+    function done () {
+      socket.removeListener('close', done)
+      socket.removeListener('free', done)
+      resolve()
+    }
+
+    socket.once('close', done)
+    socket.once('free', done)
+  })
+}
+
+/**
+ * @param {string} origin
+ */
+async function waitForExporterIdle (origin) {
+  while (httpAgent.sockets[origin]) {
+    await waitForExporterTransition(httpAgent.sockets[origin][0])
+  }
 }
 
 // Captured at agent.js evaluation, before any `before` hook runs.
@@ -348,6 +380,10 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @typedef {TracesCallback | AgentlessCallback} RunCallbackAgainstTracesCallback
  */
 /**
+ * @template T
+ * @typedef {Promise<T> & { cancel: () => void }} CancelablePromise
+ */
+/**
  * Register a callback with expectations to be run on every tracing or stats payload sent to the agent depending
  * on the handlers inputted. If the callback does not throw, the returned promise resolves. If it does,
  * then the agent will wait for additional payloads up until the timeout
@@ -364,30 +400,40 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   const errors = []
   let resolve
   let reject
-  const promise = new Promise((_resolve, _reject) => {
+  const promise = /** @type {CancelablePromise<unknown>} */ (new Promise((_resolve, _reject) => {
     resolve = _resolve
     reject = _reject
-  })
+  }))
 
+  const timeoutMs = options.timeoutMs || 1000
   const rejectionTimeout = setTimeout(() => {
-    if (errors.length) {
-      let error = errors[0]
-      if (errors.length > 1) {
-        error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
-        // Mark errors enumerable for older Node.js versions to be visible.
-        Object.defineProperty(error, 'errors', {
-          enumerable: true,
-        })
-      }
-      // Hack for the information to be fully visible.
-      error.message = util.inspect(error, { depth: null })
-      reject(error)
+    // The promise settles here, so drop the handler from the set. Otherwise reset()'s leak guard
+    // would flag this already-rejected expectation as still armed at teardown.
+    handlers.delete(handlerPayload)
+    if (errors.length === 0) {
+      reject(new Error(`No matching trace received within ${timeoutMs}ms.`))
+      return
     }
-  }, options.timeoutMs || 1000)
+    let error = errors[0]
+    if (errors.length > 1) {
+      error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
+      // Mark errors enumerable for older Node.js versions to be visible.
+      Object.defineProperty(error, 'errors', {
+        enumerable: true,
+      })
+    }
+    // Hack for the information to be fully visible.
+    error.message = util.inspect(error, { depth: null })
+    reject(error)
+  }, timeoutMs)
 
   const handlerPayload = {
     handler,
     spanResourceMatch: options.spanResourceMatch,
+    cancel () {
+      handlers.delete(handlerPayload)
+      clearTimeout(rejectionTimeout)
+    },
   }
 
   /**
@@ -405,6 +451,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
       resolve(result)
     } catch (error) {
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
+        handlers.delete(handlerPayload)
         clearTimeout(rejectionTimeout)
         reject(error)
       } else {
@@ -413,10 +460,98 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     }
   }
 
-  handler.promise = promise
   handlers.add(handlerPayload)
 
+  promise.cancel = handlerPayload.cancel
+
   return promise
+}
+
+/**
+ * The options for the runCallbackAgainstNoTraces function.
+ *
+ * @typedef {object} RunCallbackAgainstNoTracesOptions
+ * @property {number} [timeoutMs=1000] - How long to wait for a forbidden payload before resolving.
+ * @property {RegExp} [spanResourceMatch] - A regex to match against the span resource.
+ */
+/**
+ * Register a callback that runs against every payload but expects none to match. The callback
+ * inspects each payload and throws when a forbidden trace arrives; the returned promise then
+ * rejects with that error. If no payload makes the callback throw within the timeout
+ * (default 1000 ms), the promise resolves — the absence of a matching trace is the success case.
+ *
+ * The mirror of {@link runCallbackAgainstTraces}: there a throw defers and a clean payload
+ * resolves; here a clean payload keeps waiting and a throw rejects.
+ *
+ * @param {RunCallbackAgainstTracesCallback} callback - Inspects a payload; throws on a forbidden trace.
+ * @param {RunCallbackAgainstNoTracesOptions} [options] - An options object.
+ * @param {Set} handlers - Set of handlers to add the callback to.
+ * @returns {Promise<void>} A promise resolving when no forbidden trace arrives before the timeout.
+ */
+function runCallbackAgainstNoTraces (callback, options = {}, handlers) {
+  let resolve
+  let reject
+  const promise = /** @type {CancelablePromise<void>} */ (new Promise((_resolve, _reject) => {
+    resolve = _resolve
+    reject = _reject
+  }))
+
+  const resolveTimeout = setTimeout(() => {
+    handlers.delete(handlerPayload)
+    resolve()
+  }, options.timeoutMs || 1000)
+
+  const handlerPayload = {
+    handler,
+    spanResourceMatch: options.spanResourceMatch,
+    cancel () {
+      handlers.delete(handlerPayload)
+      clearTimeout(resolveTimeout)
+    },
+  }
+
+  /**
+   * @type {TracesCallback | AgentlessCallback}
+   */
+  function handler (...args) {
+    // we assert integration name being tagged on all spans (when running integration tests)
+    assertIntegrationName(args[0])
+
+    try {
+      // @ts-expect-error The number of arguments can either be one or two. TS expects it to be stricter typed.
+      callback(...args)
+    } catch (error) {
+      handlers.delete(handlerPayload)
+      clearTimeout(resolveTimeout)
+      reject(error)
+    }
+  }
+
+  handlers.add(handlerPayload)
+
+  promise.cancel = handlerPayload.cancel
+
+  return promise
+}
+
+/**
+ * Cancel every still-pending timer-bearing expectation in a handler set and clear the set.
+ * Returns how many carried a timer, so the caller can treat a non-zero count as a leak. Bare
+ * `subscribe` handlers have no timer and no promise, so they are cleared but never counted.
+ *
+ * @param {Set<{ cancel?: () => void }>} handlers
+ * @returns {number}
+ */
+function disarmHandlers (handlers) {
+  let armed = 0
+  for (const handlerPayload of handlers) {
+    if (handlerPayload.cancel !== undefined) {
+      handlerPayload.cancel()
+      armed++
+    }
+  }
+  handlers.clear()
+  return armed
 }
 
 module.exports = {
@@ -560,7 +695,7 @@ module.exports = {
     server.on('connection', socket => sockets.push(socket))
 
     const promise = /** @type {Promise<import('../../..').default>} */ (new Promise((resolve, _reject) => {
-      listener = server.listen(0, () => {
+      listener = server.listen(0, '127.0.0.1', () => {
         const port = this.port = listener.address().port
 
         tracer.init({
@@ -638,10 +773,23 @@ module.exports = {
    *
    * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   assertSomeTraces (callback, options) {
     return runCallbackAgainstTraces(callback, options, traceHandlers)
+  },
+
+  /**
+   * Assert that no payload makes the callback throw before the timeout. Use for "should not be
+   * traced" cases: the callback throws on a forbidden trace (rejecting the promise), and the
+   * promise resolves once the timeout passes without one. Await or return the promise directly
+   * instead of pairing a bare `assertSomeTraces` with a separate `setTimeout(done, …)`.
+   *
+   * @param {RunCallbackAgainstTracesCallback} callback - Inspects a payload; throws on a forbidden trace.
+   * @param {RunCallbackAgainstNoTracesOptions} [options] - An options object.
+   * @returns {Promise<void>} A promise resolving when no forbidden trace arrives before the timeout.
+   */
+  assertNoTraces (callback, options) {
+    return runCallbackAgainstNoTraces(callback, options, traceHandlers)
   },
 
   /**
@@ -654,7 +802,6 @@ module.exports = {
    *
    * @param {testAssertionSpanCallback|Record<string|symbol, unknown>} callbackOrExpected - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   assertFirstTraceSpan (callbackOrExpected, options) {
     return runCallbackAgainstTraces(function (traces) {
@@ -681,7 +828,6 @@ module.exports = {
    *
    * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   expectPipelineStats (callback, options) {
     return runCallbackAgainstTraces(callback, options, statsHandlers)
@@ -721,12 +867,20 @@ module.exports = {
    * callbacks before the next test runs. Tests should never call this:
    * `agent.close` already covers per-suite teardown, and per-test
    * expectations are scoped to whichever assertion helper added them.
+   *
+   * This is the framework leak boundary: reset first disarms timers, then fails the test
+   * that left an expectation armed.
    */
   reset () {
-    traceHandlers.clear()
-    statsHandlers.clear()
+    const leaked = disarmHandlers(traceHandlers) + disarmHandlers(statsHandlers)
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
+    if (leaked !== 0) {
+      throw new Error(
+        `${leaked} trace expectation(s) were still armed at test teardown. Await or cancel ` +
+        'every assertSomeTraces/assertNoTraces promise before the test ends.'
+      )
+    }
   },
 
   /**
@@ -734,26 +888,27 @@ module.exports = {
    * The next `agent.load` decides for itself whether to reuse the cached
    * tracer or rebuild it; tests do not pass options here.
    */
-  close () {
+  async close () {
     if (listener === null) {
-      return Promise.resolve()
+      return
     }
 
-    listener.close()
+    const closingListener = listener
+    const closingServer = this.server
+    const origin = httpAgent.getName({ host: '127.0.0.1', port: this.port })
     listener = null
-    for (const socket of sockets) {
-      socket.end()
-    }
-    sockets = []
     agent = null
-    traceHandlers.clear()
-    statsHandlers.clear()
+    disarmHandlers(traceHandlers)
+    disarmHandlers(statsHandlers)
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
     loadedPlugins.clear()
+    // The propagation-hash singleton is not in `RELOAD_EVICTION_IDS`, so the
+    // `Config` this tracer installed would stay live for every later spec file.
+    require('../../src/propagation-hash').configure(null)
     // Force the next `agent.load` through the gate-fired rebuild path
     // so cross-file leaks (`code_origin` tags sticking across files,
     // `router`'s path-stack accumulating, …) cannot silently inherit
@@ -765,14 +920,22 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    return /** @type {Promise<void>} */ (new Promise(resolve => {
-      this.server.on('close', () => {
-        this.server = null
-        this.port = null
+    const serverClosed = once(closingServer, 'close')
 
-        resolve()
-      })
-    }))
+    closingListener.close()
+    for (const socket of sockets) {
+      socket.end()
+    }
+    sockets = []
+
+    await waitForExporterIdle(origin)
+
+    const exporterSockets = httpAgent.freeSockets[origin] ?? []
+    const exporterSocketsClosed = exporterSockets.map(socket => once(socket, 'close'))
+
+    await Promise.all([serverClosed, ...exporterSocketsClosed])
+    this.server = null
+    this.port = null
   },
 
   setAvailableEndpoints (newEndpoints) {

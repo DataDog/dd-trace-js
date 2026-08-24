@@ -24,21 +24,19 @@ describe('Dynamic Instrumentation', function () {
 
       t.agent.on('debugger-input', ({ payload }) => {
         payload.forEach(({ debugger: { snapshot: { timestamp } } }) => {
-          if (prev !== undefined) {
-            const duration = timestamp - prev
+          const previousTimestamp = prev
+          prev = timestamp
+          if (previousTimestamp !== undefined) {
+            const duration = timestamp - previousTimestamp
             clearTimeout(timer)
 
-            // The sampling check uses `process.hrtime.bigint()` (monotonic), but the snapshot `timestamp` is captured
-            // via `Date.now()` (wall clock). NTP slewing on CI runners can cause the wall clock to drift slightly
-            // relative to the monotonic clock during the >=1s sampling window, so we allow a 75ms tolerance on both
-            // sides of the expected 1000ms gap.
+            // Snapshot timestamps use wall-clock time while sampling uses monotonic time, so allow 75ms for drift.
             assert.ok(duration >= 925, `duration (${duration}) should be >= 925`)
             assert.ok(duration < 1075, `duration (${duration}) should be < 1075`)
 
             // Wait at least a full sampling period, to see if we get any more payloads
-            timer = setTimeout(done, 1250)
+            timer = setTimeout(() => done(), 1250)
           }
-          prev = timestamp
         })
       })
 
@@ -84,10 +82,7 @@ describe('Dynamic Instrumentation', function () {
             const duration = timestamp - _state.prev
             clearTimeout(_state.timer)
 
-            // The sampling check uses `process.hrtime.bigint()` (monotonic), but the snapshot `timestamp` is captured
-            // via `Date.now()` (wall clock). NTP slewing on CI runners can cause the wall clock to drift slightly
-            // relative to the monotonic clock during the >=1s sampling window, so we allow a 75ms tolerance on both
-            // sides of the expected 1000ms gap.
+            // Snapshot timestamps use wall-clock time while sampling uses monotonic time, so allow 75ms for drift.
             assert.ok(duration >= 925, `duration (${duration}) should be >= 925`)
             assert.ok(duration < 1075, `duration (${duration}) should be < 1075`)
 

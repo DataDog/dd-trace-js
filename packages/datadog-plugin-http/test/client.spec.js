@@ -17,7 +17,7 @@ const { rawExpectedSchema } = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
-const NODE_MAJOR = parseInt(process.versions.node.split('.')[0])
+const NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10)
 const SERVICE_NAME = 'test'
 
 describe('Plugin', () => {
@@ -387,8 +387,12 @@ describe('Plugin', () => {
         })
 
         // Merging no longer happens since Node 20
-        if (NODE_MAJOR < 20) {
-          it('should support a string URL and an options object, which merges and takes precedence', done => {
+        {
+          const mergedUrlOptionsTest = NODE_MAJOR < 20 ? it : it.skip
+          const mergedUrlOptionsTitle = 'should support a string URL and an options object, ' +
+            'which merges and takes precedence'
+
+          mergedUrlOptionsTest(mergedUrlOptionsTitle, done => {
             const app = express()
 
             app.get('/user', (req, res) => {
@@ -803,8 +807,10 @@ describe('Plugin', () => {
           })
         })
 
-        if (satisfies(process.version, '>=20')) {
-          it('should not record default HTTP agent timeout as error with Node 20', done => {
+        {
+          const node20Test = satisfies(process.version, '>=20') ? it : it.skip
+
+          node20Test('should not record default HTTP agent timeout as error with Node 20', done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -817,7 +823,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 0)
-              })
+              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
               .then(done)
               .catch(done)
 
@@ -832,7 +838,7 @@ describe('Plugin', () => {
             })
           }).timeout(10000)
 
-          it('should record error if custom Agent timeout is used with Node 20', done => {
+          node20Test('should record error if custom Agent timeout is used with Node 20', done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -845,7 +851,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 1)
-              })
+              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
               .then(done)
               .catch(done)
 
@@ -864,7 +870,7 @@ describe('Plugin', () => {
             })
           }).timeout(10000)
 
-          it('should record error if req.setTimeout is used with Node 20', done => {
+          node20Test('should record error if req.setTimeout is used with Node 20', done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -877,7 +883,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 1)
-              })
+              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
               .then(done)
               .catch(done)
 
@@ -1023,21 +1029,21 @@ describe('Plugin', () => {
           })
         })
 
-        if (protocol === 'http') {
-          it('should skip requests marked as noop', done => {
+        {
+          const noopRequestTest = protocol === 'http' ? it : it.skip
+
+          noopRequestTest('should skip requests marked as noop', done => {
             const app = express()
 
             app.get('/user', (req, res) => {
               res.status(200).send()
             })
 
-            const timer = setTimeout(done, 100)
-
             agent
-              .assertSomeTraces(() => {
-                clearTimeout(timer)
-                done(new Error('Noop request was traced.'))
-              })
+              .assertNoTraces(() => {
+                throw new Error('Noop request was traced.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             appListener = server(app, port => {
               const store = storage('legacy').getStore()
@@ -1489,14 +1495,11 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          const timer = setTimeout(done, 100)
-
           agent
-            .assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Blocklisted requests should not be recorded.'))
-            })
-            .catch(done)
+            .assertNoTraces(() => {
+              throw new Error('Blocklisted requests should not be recorded.')
+            }, { timeoutMs: 100 })
+            .then(done, done)
 
           appListener = server(app, port => {
             const req = http.request(`${protocol}://localhost:${port}/user`, res => {
@@ -1532,12 +1535,11 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            const timer = setTimeout(done, 100)
-
-            agent.assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Filtered requests should not be recorded.'))
-            })
+            agent
+              .assertNoTraces(() => {
+                throw new Error('Filtered requests should not be recorded.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             appListener = server(app, port => {
               const req = http.request(`${protocol}://localhost:${port}/health`, res => {

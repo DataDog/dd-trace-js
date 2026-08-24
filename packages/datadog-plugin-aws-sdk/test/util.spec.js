@@ -10,7 +10,6 @@ const {
   extractPrimaryKeys,
   extractQueueMetadata,
   generatePointerHash,
-  isEmpty,
 } = require('../src/util')
 
 describe('generatePointerHash', () => {
@@ -355,23 +354,5 @@ describe('extractQueueMetadata', () => {
         arn: 'arn:aws:sqs:us-west-2:123456789012:my-queue',
       })
     })
-  })
-})
-
-describe('isEmpty', () => {
-  it('returns true for an empty plain object', () => {
-    assert.strictEqual(isEmpty({}), true)
-  })
-
-  it('returns false when an own key exists', () => {
-    assert.strictEqual(isEmpty({ a: 1 }), false)
-  })
-
-  it('returns true for an empty null-prototype object', () => {
-    assert.strictEqual(isEmpty(Object.create(null)), true)
-  })
-
-  it('returns false when an own key sits on top of a non-empty prototype chain', () => {
-    assert.strictEqual(isEmpty(Object.assign(Object.create({ inherited: 1 }), { own: 2 })), false)
   })
 })

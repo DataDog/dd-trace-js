@@ -1,8 +1,7 @@
 'use strict'
-const { DsmPathwayCodec, getSizeOrZero } = require('../../../dd-trace/src/datastreams')
+const { DsmPathwayCodec, getSizeOrZero, PATHWAY_FIELD_BYTES } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { isEmpty } = require('../util')
 
 function recordDataAsString (data) {
   return Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.from(data).toString('utf8')
@@ -12,6 +11,10 @@ function recordDataAsString (data) {
 // (AWS expires them after 5 minutes) can't grow it without bound. Polling loops
 // delete on consume, so their working set is ~the active shard count.
 const MAX_TRACKED_SHARD_ITERATORS = 1000
+
+// The default Kinesis record limit is 1 MiB. Streams configured for larger records
+// conservatively skip propagation above this point because the request does not expose that limit.
+const KINESIS_DEFAULT_MAX_RECORD_BYTES = 1_048_576
 
 class Kinesis extends BaseAwsSdkPlugin {
   static id = 'kinesis'
@@ -187,14 +190,11 @@ class Kinesis extends BaseAwsSdkPlugin {
       try {
         parsedAttributes = JSON.parse(recordDataAsString(record.Data))
       } catch {
-        // Non-JSON record. Skip DSM context for this entry; the
-        // checkpoint payload size below is still reported.
+        // Non-JSON record: it carries no context, so the checkpoint below starts a new pathway.
       }
 
       const payloadSize = getSizeOrZero(record.Data)
-      if (parsedAttributes?._datadog) {
-        this.tracer.decodeDataStreamsContext(parsedAttributes._datadog)
-      }
+      this.tracer.decodeDataStreamsContext(parsedAttributes?._datadog)
       this.tracer.setCheckpoint(tags, span, payloadSize)
     }
   }
@@ -237,6 +237,12 @@ class Kinesis extends BaseAwsSdkPlugin {
     }
   }
 
+  /**
+   * @param {import('../../../dd-trace/src/opentracing/span') | null} span
+   * @param {{ Data: Buffer|string|Uint8Array, PartitionKey?: string } | undefined} params
+   * @param {string} stream
+   * @param {boolean} injectTraceContext
+   */
   injectToMessage (span, params, stream, injectTraceContext) {
     if (!params) {
       return
@@ -251,30 +257,40 @@ class Kinesis extends BaseAwsSdkPlugin {
       }
     }
 
-    const ddInfo = {}
+    let ddInfo
     // For now we only inject to the first message; batches may change later.
     if (injectTraceContext) {
-      this.tracer.inject(span, 'text_map', ddInfo)
+      ddInfo = this.tracer.inject(span, 'text_map')
     }
 
-    if (this.config.dsmEnabled) {
-      parsedData._datadog = ddInfo
-      const dataStreamsContext = this.setDSMCheckpoint(span, params, stream)
-      if (dataStreamsContext) {
-        DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
-      }
-    }
+    const dsmEnabled = this.config.dsmEnabled
+    if (!ddInfo && !dsmEnabled) return
 
-    if (isEmpty(ddInfo)) return
-
-    parsedData._datadog = ddInfo
-    const serialized = JSON.stringify(parsedData)
-    const byteSize = Buffer.byteLength(serialized, 'utf8')
-    // Kinesis max payload size is 1 MiB; bail if our context push tipped us over.
-    if (byteSize >= 1_048_576) {
+    parsedData._datadog = ddInfo ?? {}
+    // Gate before setDSMCheckpoint: a record we can't ship must not record a checkpoint.
+    // Reserve the pathway field that DSM appends after the gate.
+    let serialized = JSON.stringify(parsedData)
+    const reservedBytes = dsmEnabled ? PATHWAY_FIELD_BYTES : 0
+    const partitionKeyBytes = Buffer.byteLength(params.PartitionKey ?? '', 'utf8')
+    if (
+      Buffer.byteLength(serialized, 'utf8') + partitionKeyBytes + reservedBytes >
+      KINESIS_DEFAULT_MAX_RECORD_BYTES
+    ) {
       log.info('Payload size too large to pass context')
       return
     }
+
+    if (dsmEnabled) {
+      const dataStreamsContext = this.setDSMCheckpoint(span, params, stream)
+      ddInfo = DsmPathwayCodec.encode(dataStreamsContext, ddInfo) ?? ddInfo
+      if (ddInfo) {
+        parsedData._datadog = ddInfo
+        serialized = JSON.stringify(parsedData)
+      }
+    }
+
+    if (!ddInfo) return
+
     params.Data = Buffer.from(serialized, 'utf8')
   }
 

@@ -14,6 +14,7 @@ const context = describe
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
+const exporters = require('../../../../ext/exporters')
 const { defaults } = require('../../src/config/defaults')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -516,6 +517,8 @@ describe('Config', () => {
     const SENTINELS = {
       DD_API_KEY: 'SENTINEL_DD_API_KEY',
       DD_APP_KEY: 'SENTINEL_DD_APP_KEY',
+      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL:
+        'https://SENTINEL_FEATURE_FLAGS_BASE_URL.example',
       OTEL_EXPORTER_OTLP_HEADERS: 'dd-api-key=SENTINEL_OTLP_BASE',
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'dd-api-key=SENTINEL_OTLP_TRACES',
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'dd-api-key=SENTINEL_OTLP_METRICS',
@@ -610,6 +613,41 @@ describe('Config', () => {
           `Expected alias value to be excluded from telemetry, got ${entry.name}=${value}`
         )
       }
+    })
+  })
+
+  describe('DD_APPSEC_AGENTIC_ONBOARDING', () => {
+    // RFC-1113: reported verbatim in configuration telemetry, always emitted
+    // (empty value with origin=default when unset). No effect on tracer behavior.
+    it('should default to an empty string and report it with origin=default when unset', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, '')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: '', origin: 'default' },
+      ])
+    })
+
+    it('should report the value verbatim with origin=env_var when set to true', () => {
+      process.env.DD_APPSEC_AGENTIC_ONBOARDING = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, 'true')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: 'true', origin: 'env_var' },
+      ])
+    })
+
+    it('should report an arbitrary value verbatim rather than collapsing to a boolean', () => {
+      process.env.DD_APPSEC_AGENTIC_ONBOARDING = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, 'false')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: 'false', origin: 'env_var' },
+      ])
     })
   })
 
@@ -728,6 +766,19 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, undefined)
   })
 
+  it('should not default OTEL_TRACES_SAMPLER when OTEL_TRACES_EXPORTER is otlp but the exporter is electron', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    const config = getConfig({ experimental: { exporter: 'electron' } })
+    assert.strictEqual(config.sampleRate, undefined)
+  })
+
+  it('should still respect an explicit OTEL_TRACES_SAMPLER when the exporter is electron', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.OTEL_TRACES_SAMPLER = 'always_off'
+    const config = getConfig({ experimental: { exporter: 'electron' } })
+    assert.strictEqual(config.sampleRate, 0)
+  })
+
   it('should keep OTEL_TRACES_EXPORTER=otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
@@ -809,6 +860,42 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
   })
 
+  describe('HTTP server error statuses', () => {
+    it('should default to 500-599', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
+    })
+
+    it('should initialize from DD_TRACE_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '400-499'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '400-499')
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_SERVER_ERROR_STATUSES', value: '400-499', origin: 'env_var' },
+      ])
+    })
+
+    it('should fall back to DD_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_HTTP_SERVER_ERROR_STATUSES = '400-499'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '400-499')
+    })
+
+    it('should prefer DD_TRACE_HTTP_SERVER_ERROR_STATUSES over DD_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_HTTP_SERVER_ERROR_STATUSES = '400-499'
+      process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '500-599'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
+    })
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = getConfig()
 
@@ -877,6 +964,7 @@ describe('Config', () => {
           enabled: false,
           endpoint: undefined,
           maxMessagesLength: 16,
+          redactionEnabled: true,
           timeout: 10_000,
           maxContentSize: 512 * 1024,
         },
@@ -991,6 +1079,7 @@ describe('Config', () => {
       { name: 'DD_APPSEC_WAF_TIMEOUT', value: 5e3, origin: 'default' },
       { name: 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TEST_SESSION_NAME', value: null, origin: 'default' },
+      { name: 'DD_CODE_COVERAGE_FLAGS', value: null, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_HEADER', value: null, origin: 'default' },
       { name: 'DD_CODE_ORIGIN_FOR_SPANS_ENABLED', value: true, origin: 'default' },
@@ -1010,6 +1099,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 512 * 1024, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
+      { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 10_000, origin: 'default' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: '', origin: 'default' },
@@ -1036,6 +1126,7 @@ describe('Config', () => {
       { name: 'instrumentationSource', value: 'manual', origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED', value: true, origin: 'default' },
+      { name: 'DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT', value: null, origin: 'default' },
       { name: 'DD_CIVISIBILITY_FLAKY_RETRY_ENABLED', value: true, origin: 'default' },
       { name: 'DD_CIVISIBILITY_GIT_UPLOAD_ENABLED', value: true, origin: 'default' },
       { name: 'DD_CIVISIBILITY_ITR_ENABLED', value: true, origin: 'default' },
@@ -1165,6 +1256,7 @@ describe('Config', () => {
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(1024 * 1024)
     process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = '32'
+    process.env.DD_AI_GUARD_REDACTION_ENABLED = 'false'
     process.env.DD_AI_GUARD_TIMEOUT = '2000'
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
@@ -1356,6 +1448,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          redactionEnabled: false,
           timeout: 2000,
         },
         enableGetRumData: true,
@@ -1492,6 +1585,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 512 * 1024, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
+      { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 10_000, origin: 'default' },
       { name: 'DD_AI_GUARD_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'env_var' },
@@ -1499,6 +1593,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_TIMEOUT', value: 2000, origin: 'env_var' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 1024 * 1024, origin: 'env_var' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 32, origin: 'env_var' },
+      { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: false, origin: 'env_var' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: 'log', origin: 'env_var' },
       { name: 'DD_AGENT_HOST', value: 'agent', origin: 'env_var' },
@@ -1633,6 +1728,110 @@ describe('Config', () => {
     })
   })
 
+  it('should transform safe programmatic option types', () => {
+    const config = getConfig({
+      startupLogs: 'False',
+      flushInterval: '1234.9',
+      remoteConfig: {
+        pollInterval: '2.5',
+      },
+      profiling: true,
+      service: 1234,
+      baggageTagKeys: ['valid', 1, true],
+    })
+
+    assert.strictEqual(config.startupLogs, false)
+    assert.strictEqual(config.flushInterval, 1234)
+    assert.strictEqual(config.remoteConfig.pollInterval, 2.5)
+    assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+    assert.strictEqual(config.service, '1234')
+    assert.deepStrictEqual(config.baggageTagKeys, ['valid', 1, true])
+  })
+
+  it('should accept infinite numeric programmatic option values', () => {
+    const config = getConfig({
+      flushInterval: Infinity,
+      remoteConfig: {
+        pollInterval: '-Infinity',
+      },
+    })
+
+    assert.strictEqual(config.flushInterval, Infinity)
+    assert.strictEqual(config.remoteConfig.pollInterval, -Infinity)
+  })
+
+  it('should ignore undefined programmatic option values', () => {
+    const config = getConfig({ startupLogs: undefined })
+
+    assert.strictEqual(config.startupLogs, defaults.startupLogs)
+    sinon.assert.notCalled(log.warn)
+  })
+
+  it('should preserve environment tags when the programmatic tags type is invalid', () => {
+    process.env.DD_TRACE_GLOBAL_TAGS = 'team:checkout,tier:backend'
+
+    const config = getConfig({ tags: process.env.DD_TRACE_GLOBAL_TAGS })
+
+    assertObjectContains(config.tags, { team: 'checkout', tier: 'backend' })
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid MAP input: 'team:checkout,tier:backend' for tags (source: code), picked default",
+    )
+  })
+
+  it('should ignore invalid programmatic option types and report them to telemetry', () => {
+    const samplingRules = JSON.stringify([{ service: 'web', sample_rate: 1 }])
+    const config = getConfig({
+      startupLogs: 'yes',
+      flushInterval: {},
+      remoteConfig: {
+        pollInterval: [],
+      },
+      service: {},
+      baggageTagKeys: [null],
+      headerTags: 'valid:value',
+      serviceMapping: 'mysql:database',
+      samplingRules,
+    })
+
+    assert.strictEqual(config.startupLogs, defaults.startupLogs)
+    assert.strictEqual(config.flushInterval, defaults.flushInterval)
+    assert.strictEqual(config.remoteConfig.pollInterval, defaults['remoteConfig.pollInterval'])
+    assert.strictEqual(config.service, 'node')
+    assert.deepStrictEqual(config.baggageTagKeys, defaults.baggageTagKeys)
+    assert.deepStrictEqual(config.headerTags, defaults.headerTags)
+    assert.deepStrictEqual(config.serviceMapping, defaults.serviceMapping)
+    assert.deepStrictEqual(config.samplingRules, defaults.samplingRules)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid BOOLEAN input: 'yes' for startupLogs (source: code), picked default",
+    )
+    assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
+      name: 'DD_TRACE_STARTUP_LOGS',
+      value: 'yes',
+      origin: 'code',
+      error: {
+        message: "Invalid BOOLEAN input: 'yes' for startupLogs (source: code), picked default",
+      },
+    }])
+  })
+
+  it('should ignore invalid primitive programmatic option values', () => {
+    const config = getConfig({
+      startupLogs: 1,
+      flushInterval: ' ',
+      remoteConfig: {
+        pollInterval: NaN,
+      },
+      service: null,
+    })
+
+    assert.strictEqual(config.startupLogs, defaults.startupLogs)
+    assert.strictEqual(config.flushInterval, defaults.flushInterval)
+    assert.strictEqual(config.remoteConfig.pollInterval, defaults['remoteConfig.pollInterval'])
+    assert.strictEqual(config.service, 'node')
+  })
+
   it('should initialize from environment variables with url taking precedence', () => {
     process.env.DD_TRACE_AGENT_URL = 'https://agent2:7777'
     process.env.DD_SITE = 'datadoghq.eu'
@@ -1756,6 +1955,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          redactionEnabled: true,
           timeout: 2000,
         },
         exporter: 'log',
@@ -1847,7 +2047,7 @@ describe('Config', () => {
       },
       dogstatsd: {
         hostname: 'agent-dsd',
-        port: '5218',
+        port: 5218,
       },
       dynamicInstrumentation: {
         enabled: true,
@@ -1862,6 +2062,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          redactionEnabled: true,
           timeout: 2000,
         },
         enableGetRumData: true,
@@ -2007,6 +2208,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_ENDPOINT', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'code' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 1024 * 1024, origin: 'code' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 32, origin: 'code' },
+      { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'code' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 2_000, origin: 'code' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: true, origin: 'code' },
       { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: 'log', origin: 'code' },
@@ -2230,6 +2432,7 @@ describe('Config', () => {
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datadog.com/api/unstable/ai-guard'
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(512 * 1024)
     process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = '16'
+    process.env.DD_AI_GUARD_REDACTION_ENABLED = 'false'
     process.env.DD_AI_GUARD_TIMEOUT = '1000'
     process.env.DD_API_KEY = '123'
     process.env.DD_API_SECURITY_ENABLED = 'false'
@@ -2366,6 +2569,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          redactionEnabled: true,
           timeout: 2000,
         },
         b3: false,
@@ -2480,6 +2684,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          redactionEnabled: true,
           timeout: 2000,
         },
         enableGetRumData: false,
@@ -2661,6 +2866,7 @@ describe('Config', () => {
       },
       rateLimit: 42,
       rules: RULES_JSON_PATH,
+      DD_APPSEC_AGENTIC_ONBOARDING: '',
       DD_APPSEC_SCA_ENABLED: undefined,
       stackTrace: {
         enabled: true,
@@ -2881,6 +3087,34 @@ describe('Config', () => {
       },
     })
   })
+
+  for (const exporter of [
+    exporters.CUCUMBER_WORKER,
+    exporters.JEST_WORKER,
+    exporters.MOCHA_WORKER,
+    exporters.PLAYWRIGHT_WORKER,
+    exporters.VITEST_WORKER,
+  ]) {
+    it(`should disable telemetry by default for the ${exporter} Test Optimization worker`, () => {
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
+    })
+
+    it(`should ignore explicit telemetry enablement in the ${exporter} Test Optimization worker`, () => {
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
+    })
+  }
 
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
     const origTelemetryHeartbeatIntervalValue = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
@@ -3172,7 +3406,7 @@ describe('Config', () => {
       this.skip()
       return
     }
-    const tempDir = mkdtempSync(path.join(process.cwd(), 'dd-trace-span-sampling-rules-'))
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'dd-trace-span-sampling-rules-'))
     const rulesPath = path.join(tempDir, 'span-sampling-rules.json')
     writeFileSync(rulesPath, '{"sample_rate":')
 
@@ -3414,13 +3648,17 @@ describe('Config', () => {
   context('ci visibility config', () => {
     let options = {}
     beforeEach(() => {
+      delete process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED
+      delete process.env.DD_CODE_COVERAGE_FLAGS
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
+      delete process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+      delete process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
       delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
@@ -3439,6 +3677,27 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED, false)
+      })
+      it('should enable code coverage report upload by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED, true)
+      })
+      it('should disable code coverage report upload from the environment', () => {
+        process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED, false)
+      })
+      it('should leave code coverage flags unset by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CODE_COVERAGE_FLAGS, undefined)
+      })
+      it('should read code coverage flags from the environment as a string', () => {
+        process.env.DD_CODE_COVERAGE_FLAGS = ' type:unit-tests, ,jvm-21,type:unit-tests, '
+        const config = getConfig(options)
+        assert.strictEqual(
+          config.testOptimization.DD_CODE_COVERAGE_FLAGS,
+          ' type:unit-tests, ,jvm-21,type:unit-tests, '
+        )
       })
       it('should activate ITR by default', () => {
         const config = getConfig(options)
@@ -3480,6 +3739,30 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, false)
       })
+      it('should leave DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT unset by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
+      })
+      it('should read DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT if present', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '2'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 2)
+      })
+      it('should allow zero DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT retries', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '0'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 0)
+      })
+      it('should round DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT down to an integer', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '2.9'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 2)
+      })
+      it('should reject a negative DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '-1'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
+      })
       it('should enable flaky test retries by default', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true)
@@ -3502,6 +3785,15 @@ describe('Config', () => {
         process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
+      })
+      it('should leave the Test Management report setting unset by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_MANAGEMENT_REPORT_ENABLED, undefined)
+      })
+      it('should disable the Test Management report from the environment', () => {
+        process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_MANAGEMENT_REPORT_ENABLED, false)
       })
       it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'
@@ -3567,12 +3859,6 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER = provider
         assert.strictEqual(getConfig(options).testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, provider)
       }
-    })
-
-    it('disables telemetry if inside a jest worker', () => {
-      process.env.JEST_WORKER_ID = '1'
-      const config = getConfig(options)
-      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
     })
   })
 
@@ -4551,6 +4837,11 @@ rules:
       ])
     })
 
+    it('collapses only whitespace adjacent to a colon in header tags', () => {
+      const config = getConfig({ headerTags: ['  a : b  ', 'k : : v'] })
+      assert.deepStrictEqual(config.headerTags, ['  a:b  ', 'k::v'])
+    })
+
     it('should map tracing_tags to tags', () => {
       const config = getConfig({ tags: { foo: 'bar' } })
       assertObjectContains(config.tags, { foo: 'bar' })
@@ -4795,6 +5086,270 @@ rules:
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
+    })
+  })
+
+  context('Feature Flagging configuration source', () => {
+    it('uses agentless as the source default', () => {
+      assert.strictEqual(defaults['featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'], 'agentless')
+      assert.strictEqual(getConfig().featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
+    })
+
+    for (const {
+      name,
+      stableEnabled,
+      source,
+      legacyEnabled,
+      legacyOption,
+      expected,
+    } of [
+        {
+          name: 'defaults to lazy agentless delivery',
+          expected: { enabled: true, source: 'agentless' },
+        },
+        {
+          name: 'keeps the agentless default when the stable setting is explicitly enabled',
+          stableEnabled: 'true',
+          expected: { enabled: true, source: 'agentless' },
+        },
+        {
+          name: 'lets the stable kill switch override explicit and legacy settings',
+          stableEnabled: 'false',
+          source: 'remote_config',
+          legacyEnabled: 'true',
+          expected: { enabled: false },
+        },
+        {
+          name: 'grandfathers legacy environment enablement onto Remote Config',
+          legacyEnabled: 'true',
+          expected: { enabled: true, source: 'remote_config' },
+        },
+        {
+          name: 'preserves legacy environment disablement',
+          legacyEnabled: 'false',
+          expected: { enabled: false },
+        },
+        {
+          name: 'grandfathers legacy programmatic enablement onto Remote Config',
+          legacyOption: true,
+          expected: { enabled: true, source: 'remote_config' },
+        },
+        {
+          name: 'preserves legacy programmatic disablement',
+          legacyOption: false,
+          expected: { enabled: false },
+        },
+        {
+          name: 'treats an empty source as absent before applying legacy enablement',
+          source: '',
+          legacyEnabled: 'true',
+          expected: { enabled: true, source: 'remote_config' },
+        },
+        {
+          name: 'treats a whitespace source as absent before applying legacy disablement',
+          source: '   ',
+          legacyEnabled: 'false',
+          expected: { enabled: false },
+        },
+        {
+          name: 'defaults a blank source to agentless without a legacy setting',
+          source: '   ',
+          expected: { enabled: true, source: 'agentless' },
+        },
+        {
+          name: 'lets an explicit agentless source override legacy enablement',
+          source: 'AgEnTlEsS',
+          legacyEnabled: 'true',
+          expected: { enabled: true, source: 'agentless' },
+        },
+        {
+          name: 'lets an explicit Remote Config source override legacy disablement',
+          source: 'REMOTE_CONFIG',
+          legacyEnabled: 'false',
+          expected: { enabled: true, source: 'remote_config' },
+        },
+        {
+          name: 'disables the provider for an invalid source',
+          source: 'other',
+          expected: { enabled: false },
+        },
+        {
+          name: 'disables the provider for the reserved offline source',
+          source: 'offline',
+          expected: { enabled: false },
+        },
+        {
+          name: 'disables the provider for an invalid source despite legacy enablement',
+          source: 'other',
+          legacyEnabled: 'true',
+          expected: { enabled: false },
+        },
+        {
+          name: 'disables the provider for the reserved offline source despite legacy enablement',
+          source: 'offline',
+          legacyEnabled: 'true',
+          expected: { enabled: false },
+        },
+      ]) {
+      it(name, () => {
+        if (stableEnabled !== undefined) {
+          process.env.DD_FEATURE_FLAGS_ENABLED = stableEnabled
+        }
+        if (source !== undefined) {
+          process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = source
+        }
+        if (legacyEnabled !== undefined) {
+          process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = legacyEnabled
+        }
+        const options = legacyOption === undefined
+          ? undefined
+          : { experimental: { flaggingProvider: { enabled: legacyOption } } }
+
+        const config = getConfig(options)
+        const actual = config.featureFlags.DD_FEATURE_FLAGS_ENABLED
+          ? { enabled: true, source: config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE }
+          : { enabled: false }
+
+        assert.deepStrictEqual(actual, expected)
+      })
+    }
+
+    it('disables an explicit unsupported source while preserving diagnostic context', () => {
+      process.env.DD_FEATURE_FLAGS_ENABLED = 'true'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'offline'
+      process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = 'true'
+
+      const config = getConfig()
+      const warning = 'Unsupported Feature Flagging configuration source: ' +
+        "'offline' for DD_FEATURE_FLAGS_CONFIGURATION_SOURCE (source: env_var), provider disabled"
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, false)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'offline')
+      assert.strictEqual(config.experimental.flaggingProvider.enabled, true)
+      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_ENABLED'), 'calculated')
+      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'env_var')
+      assert.strictEqual(config.getOrigin('experimental.flaggingProvider.enabled'), 'env_var')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_FEATURE_FLAGS_ENABLED', value: false, origin: 'calculated' },
+        {
+          name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE',
+          value: 'offline',
+          origin: 'env_var',
+          error: { message: warning },
+        },
+        { name: 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED', value: true, origin: 'env_var' },
+      ])
+      sinon.assert.calledOnceWithExactly(log.warn, warning)
+
+      config.setRemoteConfig({})
+
+      sinon.assert.calledOnce(log.warn)
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('does not warn for an unsupported source when the stable kill switch disables the provider', () => {
+      process.env.DD_FEATURE_FLAGS_ENABLED = 'false'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'offline'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, false)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'offline')
+      sinon.assert.notCalled(log.warn)
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('defaults agentless delivery timings', () => {
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        featureFlags: {
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 5,
+        },
+      })
+    })
+
+    it('reads the configuration source environment variable', () => {
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+    })
+
+    it('reads the canonical agentless environment variables', () => {
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'https://example.com/ufc'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = '20'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS = '5'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        featureFlags: {
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: 'https://example.com/ufc',
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 20,
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 5,
+        },
+      })
+    })
+
+    it('uses registry defaults for non-positive agentless timings', () => {
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = '0'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS = '-1'
+
+      const config = getConfig()
+
+      assert.strictEqual(
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS,
+        30
+      )
+      assert.strictEqual(
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS,
+        5
+      )
+      sinon.assert.calledTwice(log.warn)
+    })
+
+    it('does not accept programmatic configuration-source options', () => {
+      const config = getConfig({
+        experimental: {
+          flaggingProvider: {
+            enabled: false,
+            configurationSource: 'remote_config',
+            agentlessBaseUrl: 'https://example.com/programmatic',
+            agentlessPollIntervalSeconds: 20,
+            agentlessRequestTimeoutSeconds: 5,
+          },
+        },
+      })
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, undefined)
+      assert.strictEqual(
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS,
+        30
+      )
+      assert.strictEqual(
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS,
+        5
+      )
+      for (const name of [
+        'configurationSource',
+        'agentlessBaseUrl',
+        'agentlessPollIntervalSeconds',
+        'agentlessRequestTimeoutSeconds',
+      ]) {
+        sinon.assert.calledWithExactly(
+          log.warn,
+          'Unknown option %s with value %o',
+          `experimental.flaggingProvider.${name}`,
+          sinon.match.defined
+        )
+      }
     })
   })
 

@@ -21,18 +21,27 @@ describe('Plugin', () => {
     let tracer
     let collection
 
-    withVersions('couchbase', 'couchbase', '>=3.0.0', version => {
+    /**
+     * @param {string} versionKey
+     * @param {string} _moduleName
+     * @param {string} resolvedVersion
+     */
+    function registerVersionTests (versionKey, _moduleName, resolvedVersion) {
       describe('without configuration', () => {
         beforeEach(async function () {
           this.timeout(10_000)
-          tracer = global.tracer = await agent.load('couchbase')
-          couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
+          tracer = global.tracer = await agent.load('couchbase', { enabled: false })
+          couchbase = proxyquire(`../../../versions/couchbase@${versionKey}`, {}).get()
           cluster = await couchbase.connect('couchbase://localhost', {
             username: 'Administrator',
             password: 'password',
           })
           bucket = cluster.bucket('datadog-test')
           collection = bucket.defaultCollection()
+          if (semver.gte(resolvedVersion, '4.0.0')) {
+            await waitForCollectionConnection(collection, couchbase)
+          }
+          agent.reload('couchbase', { enabled: true })
         })
 
         afterEach(async () => {
@@ -161,7 +170,7 @@ describe('Plugin', () => {
             })
 
             // due to bug in couchbase for these versions (see JSCBC-945)
-            if (!semver.intersects('3.2.0 - 3.2.1', version)) {
+            if (!semver.satisfies(resolvedVersion, '3.2.0 - 3.2.1')) {
               it('should catch errors in callback and report error in trace', done => {
                 const invalidQuery = 'SELECT'
                 const cb = sinon.spy()
@@ -178,6 +187,27 @@ describe('Plugin', () => {
           })
         })
       })
-    })
+    }
+
+    withVersions('couchbase', 'couchbase', '>=3.0.0', registerVersionTests)
   })
 })
+
+/**
+ * Couchbase 4.x resolves connect before its collection KV connection is usable.
+ *
+ * @param {{
+ *   exists(key: string): Promise<unknown>
+ * }} collection
+ * @param {{ TimeoutError: typeof Error }} couchbase
+ */
+async function waitForCollectionConnection (collection, couchbase) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await collection.exists('dd-trace-readiness')
+      return
+    } catch (error) {
+      if (!(error instanceof couchbase.TimeoutError) || attempt === 2) throw error
+    }
+  }
+}

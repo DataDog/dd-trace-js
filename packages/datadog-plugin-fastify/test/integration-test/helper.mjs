@@ -8,7 +8,9 @@ export async function createAndStartServer (app) {
     const address = app.server.address()
     const port = address.port
     process.send({ port })
-  } catch (err) {
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(error)
     process.exit(1)
   }
 }

@@ -2,15 +2,21 @@
 
 // Capture real timers at module load, before any test can install fake timers.
 const { performance } = require('perf_hooks')
-const { statSync } = require('node:fs')
 const { basename } = require('node:path')
 const dateNow = Date.now
 
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../vendor/dist/semifies')
+const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
+const {
+  EMPTY_EFD_RETRY_POLICY,
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+  shouldSkipEfdRetry,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
   TEST_STATUS,
-  TEST_IS_RUM_ACTIVE,
+  setRumTestTags,
   TEST_CODE_OWNERS,
   getTestEnvironmentMetadata,
   getTestLevelsMetadataTags,
@@ -72,21 +78,25 @@ const {
   TEST_HAS_DYNAMIC_NAME,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
+  isMarkedAsUnskippable,
   recordAttemptToFixExecution,
+  recordTestManagementExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
-  TEST_FAILURE_SCREENSHOT_UPLOADED,
-  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
-const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
+const {
+  SCREENSHOT_UPLOAD_RESULT_ERROR,
+  SCREENSHOT_UPLOAD_RESULT_UPLOADED,
+  getScreenshotCapturedAtMs,
+  getScreenshotUploadResult,
+  setScreenshotUploadTags,
+} = require('../../dd-trace/src/ci-visibility/test-screenshot')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
 
@@ -141,8 +151,6 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
 }
 
 const SCREENSHOT_ATTEMPT_RE = /\(attempt \d+\)/
-const SCREENSHOT_UPLOAD_RESULT_UPLOADED = 'uploaded'
-const SCREENSHOT_UPLOAD_RESULT_ERROR = 'error'
 
 function getScreenshotFilePath (screenshot) {
   return typeof screenshot === 'string' ? screenshot : screenshot?.path
@@ -153,31 +161,6 @@ function isFailureScreenshotByMetadata (screenshot, screenshotFilePath) {
     return screenshot.testFailure === true
   }
   return screenshotFilePath.includes('(failed)')
-}
-
-/**
- * Resolves a screenshot's capture time (epoch ms) for the media upload. Cypress
- * screenshot objects carry an ISO `takenAt`; falls back to the file's mtime, then
- * to the current time. Stamped once here and reused on retry via the idempotency
- * key, so the stored object is overwritten rather than duplicated.
- *
- * @param {object|string} screenshot - Cypress screenshot object or path
- * @param {string} filePath - Resolved screenshot file path
- * @returns {number} Capture time in epoch milliseconds
- */
-function getScreenshotCapturedAtMs (screenshot, filePath) {
-  const takenAt = screenshot !== null && typeof screenshot === 'object' ? screenshot.takenAt : undefined
-  if (takenAt) {
-    const parsedMs = new Date(takenAt).getTime()
-    if (Number.isInteger(parsedMs) && parsedMs > 0) {
-      return parsedMs
-    }
-  }
-  try {
-    return Math.floor(statSync(filePath).mtimeMs)
-  } catch {
-    return dateNow()
-  }
 }
 
 function isFailureScreenshotForUpload (screenshot) {
@@ -238,27 +221,6 @@ function getTestScreenshots (cypressTest, attemptIndex, specScreenshots) {
   }
   const titleParts = Array.isArray(cypressTest.title) ? cypressTest.title : []
   return specScreenshots.filter(screenshot => isScreenshotForTestAttempt(screenshot, titleParts, attemptIndex))
-}
-
-function getScreenshotUploadResult (uploadResults) {
-  let hasUploaded = false
-  for (const uploadResult of uploadResults) {
-    if (uploadResult === SCREENSHOT_UPLOAD_RESULT_ERROR) {
-      return SCREENSHOT_UPLOAD_RESULT_ERROR
-    }
-    if (uploadResult === SCREENSHOT_UPLOAD_RESULT_UPLOADED) {
-      hasUploaded = true
-    }
-  }
-  return hasUploaded ? SCREENSHOT_UPLOAD_RESULT_UPLOADED : undefined
-}
-
-function setScreenshotUploadTags (testSpan, uploadResult) {
-  if (uploadResult === SCREENSHOT_UPLOAD_RESULT_ERROR) {
-    testSpan.setTag(TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR, 'true')
-  } else if (uploadResult === SCREENSHOT_UPLOAD_RESULT_UPLOADED) {
-    testSpan.setTag(TEST_FAILURE_SCREENSHOT_UPLOADED, 'true')
-  }
 }
 
 function getSessionStatus (summary) {
@@ -508,15 +470,14 @@ class CypressPlugin {
   isEarlyFlakeDetectionEnabled = false
   isEarlyFlakeDetectionFaulty = false
   isKnownTestsEnabled = false
-  earlyFlakeDetectionNumRetries = 0
-  earlyFlakeDetectionSlowTestRetries = {}
+  earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
   efdRetryCountByTest = {}
   efdSlowAbortedTests = {}
   earlyFlakeDetectionFaultyThreshold = 0
   testsToSkip = []
   skippedTests = []
   skippedTestIds = new Set()
-  skippableTestsCoverage = {}
+  skippableTestsCoverage
   testSessionCoverageMap = createCoverageMap()
   hasForcedToRunSuites = false
   hasUnskippableSuites = false
@@ -531,6 +492,7 @@ class CypressPlugin {
   loggedAttemptToFixTests = new Set()
   uploadedScreenshotPaths = new Set()
   screenshotUploadPromisesByTraceId = new Map()
+  screenshotUploadAbortControllers = new Set()
   afterScreenshotHandler = undefined
   lastFinishedTest = null
   pendingScreenshotUploads = []
@@ -597,15 +559,14 @@ class CypressPlugin {
     this.isEarlyFlakeDetectionEnabled = false
     this.isEarlyFlakeDetectionFaulty = false
     this.isKnownTestsEnabled = false
-    this.earlyFlakeDetectionNumRetries = 0
-    this.earlyFlakeDetectionSlowTestRetries = {}
+    this.earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
     this.efdRetryCountByTest = {}
     this.efdSlowAbortedTests = {}
     this.earlyFlakeDetectionFaultyThreshold = 0
     this.testsToSkip = []
     this.skippedTests = []
     this.skippedTestIds = new Set()
-    this.skippableTestsCoverage = {}
+    this.skippableTestsCoverage = undefined
     this.testSessionCoverageMap = createCoverageMap()
     this.hasForcedToRunSuites = false
     this.hasUnskippableSuites = false
@@ -621,10 +582,12 @@ class CypressPlugin {
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
     this.screenshotUploadPromisesByTraceId = new Map()
+    this.screenshotUploadAbortControllers = new Set()
     this.lastFinishedTest = null
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
     this.testSuiteSpan = null
+    this.finishedTestSuiteSpans = []
     this.testModuleSpan = null
     this.testSessionSpan = null
     this.command = undefined
@@ -684,6 +647,19 @@ class CypressPlugin {
   }
 
   /**
+   * Cancels screenshot work that must not outlive an errored after:spec finalization boundary.
+   *
+   * @param {Error} error - Error that triggered finalization
+   * @returns {void}
+   */
+  abortPendingScreenshotUploads (error) {
+    for (const controller of this.screenshotUploadAbortControllers) controller.abort(error)
+    this.screenshotUploadAbortControllers.clear()
+    this.screenshotUploadPromisesByTraceId.clear()
+    this.pendingScreenshotUploads = []
+  }
+
+  /**
    * Returns the current time in the same coordinate system used by span
    * start/finish. Captured at session span creation so it shares the same
    * epoch as the trace without reaching into span internals.
@@ -704,17 +680,6 @@ class CypressPlugin {
   }
 
   /**
-   * Returns whether the backend supplied skipped-test coverage data.
-   *
-   * @returns {boolean}
-   */
-  hasSkippableTestsCoverage () {
-    return !!(this.skippableTestsCoverage &&
-      typeof this.skippableTestsCoverage === 'object' &&
-      Object.keys(this.skippableTestsCoverage).length > 0)
-  }
-
-  /**
    * Returns whether skipped test coverage should be backfilled into the session coverage map.
    *
    * @returns {boolean}
@@ -723,7 +688,7 @@ class CypressPlugin {
     return this.isItrEnabled &&
       this.isCoverageReportUploadEnabled &&
       this.isTestsSkipped &&
-      this.hasSkippableTestsCoverage()
+      this.skippableTestsCoverage !== undefined
   }
 
   /**
@@ -840,6 +805,17 @@ class CypressPlugin {
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
+    if (this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries) {
+      cypressConfig.retries = this.originalCypressRetries !== null &&
+        typeof this.originalCypressRetries === 'object'
+        ? { ...this.originalCypressRetries }
+        : this.originalCypressRetries
+    } else {
+      this.originalCypressRetries = cypressConfig.retries !== null && typeof cypressConfig.retries === 'object'
+        ? { ...cypressConfig.retries }
+        : cypressConfig.retries
+      this.hasOriginalCypressRetries = true
+    }
     this.resetRunState()
     this._isInit = true
     this.tracer = tracer
@@ -878,8 +854,7 @@ class CypressPlugin {
               isCodeCoverageEnabled,
               isCoverageReportUploadEnabled,
               isEarlyFlakeDetectionEnabled,
-              earlyFlakeDetectionNumRetries,
-              earlyFlakeDetectionSlowTestRetries,
+              earlyFlakeDetectionRetryPolicy,
               earlyFlakeDetectionFaultyThreshold,
               isFlakyTestRetriesEnabled,
               flakyTestRetriesCount,
@@ -894,13 +869,18 @@ class CypressPlugin {
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
           this.isCoverageReportUploadEnabled = isCoverageReportUploadEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-          this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          this.earlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries ?? {}
+          this.earlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
           this.earlyFlakeDetectionFaultyThreshold = earlyFlakeDetectionFaultyThreshold
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
             this.flakyTestRetriesCount = flakyTestRetriesCount ?? 0
+            if (typeof this.cypressConfig.retries === 'number') {
+              this.cypressConfig.retries = {
+                openMode: this.cypressConfig.retries,
+                runMode: this.cypressConfig.retries,
+              }
+            }
             this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
           } else {
             this.flakyTestRetriesCount = 0
@@ -938,34 +918,6 @@ class CypressPlugin {
   }
 
   /**
-   * Returns how many EFD retries must be scheduled before the first duration is known.
-   *
-   * @returns {number}
-   */
-  getConfiguredEfdRetryCount () {
-    const { earlyFlakeDetectionSlowTestRetries } = this
-    if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-      return this.earlyFlakeDetectionNumRetries
-    }
-    return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
-  }
-
-  /**
-   * Returns the selected EFD retry count for a test, or the scheduling count if it has not run yet.
-   *
-   * @param {string} testSuite
-   * @param {string} testName
-   * @returns {number}
-   */
-  getEfdRetryCountForTest (testSuite, testName) {
-    const testSuiteRetries = this.efdRetryCountByTest[testSuite]
-    if (!testSuiteRetries || testSuiteRetries[testName] === undefined) {
-      return this.getConfiguredEfdRetryCount()
-    }
-    return testSuiteRetries[testName]
-  }
-
-  /**
    * Stores the selected EFD retry count for a test after its first execution duration is known.
    *
    * @param {string} testSuite
@@ -977,7 +929,7 @@ class CypressPlugin {
     if (!this.efdRetryCountByTest[testSuite]) {
       this.efdRetryCountByTest[testSuite] = {}
     }
-    const retryCount = getEfdRetryCount(duration ?? 0, this.earlyFlakeDetectionSlowTestRetries)
+    const retryCount = getEfdRetryCountForDuration(duration ?? 0, this.earlyFlakeDetectionRetryPolicy)
     this.efdRetryCountByTest[testSuite][testName] = retryCount
     if (retryCount === 0) {
       if (!this.efdSlowAbortedTests[testSuite]) {
@@ -998,7 +950,7 @@ class CypressPlugin {
    */
   shouldSkipEfdRetry (testSuite, testName, efdRetryIndex) {
     const testSuiteRetries = this.efdRetryCountByTest[testSuite]
-    return testSuiteRetries?.[testName] !== undefined && efdRetryIndex > testSuiteRetries[testName]
+    return shouldSkipEfdRetry(efdRetryIndex, testSuiteRetries?.[testName])
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -1127,9 +1079,13 @@ class CypressPlugin {
   }
 
   async beforeRun (details) {
-    // We need to make sure that the plugin is initialized before running the tests
-    // This is for the case where the user has not returned the promise from the init function
-    await this.libraryConfigurationPromise
+    if (this._isInit) {
+      // The user may not have returned the promise from the init function.
+      await this.libraryConfigurationPromise
+    } else {
+      // Cypress open reuses the same plugin process for every interactive run.
+      await this.init(this.tracer, this.cypressConfig)
+    }
 
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
@@ -1195,7 +1151,7 @@ class CypressPlugin {
       } else {
         const { skippableTests, correlationId, skippableTestsCoverage } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
-        this.skippableTestsCoverage = skippableTestsCoverage || {}
+        this.skippableTestsCoverage = skippableTestsCoverage
         this.itrCorrelationId = correlationId
         incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
@@ -1316,18 +1272,29 @@ class CypressPlugin {
     return details
   }
 
-  afterRun (suiteStats) {
+  afterRun (suiteStats, error, shouldFailFinishedSuites = true) {
     if (!this._isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
       return
     }
     if (this.testSessionSpan && this.testModuleSpan) {
-      const testStatus = getSessionStatus(suiteStats)
+      const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
       const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
+      for (const span of this.finishedTestSuiteSpans) {
+        if (error && shouldFailFinishedSuites) {
+          span.setTag(TEST_STATUS, 'fail')
+          span.setTag('error', error)
+        }
+      }
+      this.finishedTestSuiteSpans = []
+      if (error) {
+        this.testModuleSpan.setTag('error', error)
+        this.testSessionSpan.setTag('error', error)
+      }
 
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
@@ -1365,6 +1332,7 @@ class CypressPlugin {
       })
 
       finishAllTraceSpans(this.testSessionSpan)
+      this.tracer._tracer._exporter?.exportDeferredTestSuiteSpans?.()
     }
 
     return new Promise(resolve => {
@@ -1422,7 +1390,7 @@ class CypressPlugin {
     }
   }
 
-  afterSpec (spec, results) {
+  afterSpec (spec, results, error) {
     const { tests, stats, screenshots } = results || {}
     const cypressTests = tests || []
     const specScreenshots = screenshots || []
@@ -1444,13 +1412,13 @@ class CypressPlugin {
     // and create a skipped test span for each of them
     for (const { title } of cypressTests) {
       const cypressTestName = title.join(' ')
-      const isTestFinished = finishedTests.find(({ testName }) => cypressTestName === testName)
+      const isTestFinished = finishedTests.some(({ testName }) => cypressTestName === testName)
 
       if (isTestFinished) {
         continue
       }
 
-      const isSkippedByItr = this.testsToSkip.find(test =>
+      const isSkippedByItr = this.testsToSkip.some(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
       const testSourceFile = spec.absolute && this.repositoryRoot
@@ -1468,12 +1436,31 @@ class CypressPlugin {
         skippedTestSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
       }
 
-      const { isDisabled, isQuarantined } = this.getTestProperties(spec.relative, cypressTestName)
+      const { isAttemptToFix, isDisabled, isQuarantined } =
+        this.getTestProperties(spec.relative, cypressTestName)
 
       if (isDisabled) {
         skippedTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       } else if (isQuarantined) {
         skippedTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+      }
+
+      recordTestManagementExecution({
+        testSuite: spec.relative,
+        testName: cypressTestName,
+        status: 'skip',
+        isAttemptToFix,
+        isDisabled,
+        isQuarantined,
+      })
+      if (isAttemptToFix) {
+        recordAttemptToFixExecution(this.attemptToFixExecutions, {
+          testSuite: spec.relative,
+          testName: cypressTestName,
+          status: 'skip',
+          isDisabled,
+          isQuarantined,
+        })
       }
 
       skippedTestSpan.finish()
@@ -1559,6 +1546,15 @@ class CypressPlugin {
             finishedTest.testSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
           }
         }
+        const testManagementTags = finishedTest.testSpan.context().getTags()
+        recordTestManagementExecution({
+          testSuite: spec.relative,
+          testName,
+          status: testManagementTags[TEST_STATUS] || cypressTestStatus,
+          isAttemptToFix: finishedTest.isAttemptToFix,
+          isDisabled: testManagementTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+          isQuarantined: testManagementTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+        })
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
@@ -1608,13 +1604,16 @@ class CypressPlugin {
         const screenshotUploadResultPromise = failedTestTraceId
           ? this.getScreenshotUploadResultPromise(failedTestTraceId)
           : undefined
-        if (screenshotUploadResultPromise) {
+        if (screenshotUploadResultPromise && !error) {
           testSpanFinishPromises.push(screenshotUploadResultPromise.then((uploadResult) => {
             setScreenshotUploadTags(finishedTest.testSpan, uploadResult)
             this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
             finishedTest.testSpan.finish(finishedTest.finishTime)
           }))
         } else {
+          if (screenshotUploadResultPromise) {
+            this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
+          }
           finishedTest.testSpan.finish(finishedTest.finishTime)
         }
       }
@@ -1622,13 +1621,18 @@ class CypressPlugin {
 
     const finishSuite = () => {
       if (this.testSuiteSpan) {
-        const status = getSuiteStatus(stats)
+        const status = error ? 'fail' : getSuiteStatus(stats)
         this.testSuiteSpan.setTag(TEST_STATUS, status)
 
-        if (latestError) {
-          this.testSuiteSpan.setTag('error', latestError)
+        if (error || latestError) {
+          this.testSuiteSpan.setTag('error', error || latestError)
         }
+        const canRunAfterRun = this.cypressConfig.isTextTerminal ||
+          this.cypressConfig.experimentalInteractiveRunEvents
+        const exporter = this.tracer._tracer._exporter
+        if (canRunAfterRun && exporter?.deferTestSuiteSpan) exporter.deferTestSuiteSpan(this.testSuiteSpan)
         this.testSuiteSpan.finish()
+        if (canRunAfterRun) this.finishedTestSuiteSpans.push(this.testSuiteSpan)
         this.testSuiteSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
@@ -1644,16 +1648,23 @@ class CypressPlugin {
 
     finishSuite()
 
+    if (error) {
+      this.abortPendingScreenshotUploads(error)
+      return this.afterRun(undefined, error, false)
+    }
+
     const screenshotUploadsPromise = waitForScreenshotUploads()
+    let afterSpecPromise = screenshotUploadsPromise
     if (testSpanFinishPromises.length > 0) {
       const testSpansPromise = Promise.all(testSpanFinishPromises).then(() => null)
       if (screenshotUploadsPromise) {
-        return Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+        afterSpecPromise = Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+      } else {
+        afterSpecPromise = testSpansPromise
       }
-      return testSpansPromise
     }
 
-    return screenshotUploadsPromise
+    return afterSpecPromise
   }
 
   /**
@@ -1673,6 +1684,7 @@ class CypressPlugin {
     }
 
     const uploadPromises = []
+    const abortController = new AbortController()
 
     for (const screenshot of screenshots) {
       const filePath = getScreenshotFilePath(screenshot)
@@ -1691,6 +1703,7 @@ class CypressPlugin {
           traceId,
           idempotencyKey,
           capturedAtMs,
+          signal: abortController.signal,
         }, (err) => {
           resolve(err ? SCREENSHOT_UPLOAD_RESULT_ERROR : SCREENSHOT_UPLOAD_RESULT_UPLOADED)
         })
@@ -1698,7 +1711,10 @@ class CypressPlugin {
     }
 
     if (uploadPromises.length > 0) {
-      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult)
+      this.screenshotUploadAbortControllers.add(abortController)
+      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult).finally(() => {
+        this.screenshotUploadAbortControllers.delete(abortController)
+      })
       this.addScreenshotUploadPromise(traceId, uploadPromise)
       return uploadPromise
     }
@@ -1708,10 +1724,10 @@ class CypressPlugin {
     return {
       'dd:testSuiteStart': ({ testSuite, testSuiteAbsolutePath }) => {
         const suitePayload = {
-          isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
+          isEarlyFlakeDetectionEnabled:
+            this.isEarlyFlakeDetectionEnabled && hasEfdRetries(this.earlyFlakeDetectionRetryPolicy),
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
-          earlyFlakeDetectionNumRetries: this.getConfiguredEfdRetryCount(),
-          earlyFlakeDetectionSlowTestRetries: this.earlyFlakeDetectionSlowTestRetries,
+          earlyFlakeDetectionSchedulingRetryCount: this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,
           testManagementAttemptToFixRetries: this.testManagementAttemptToFixRetries,
@@ -1721,6 +1737,7 @@ class CypressPlugin {
           repositoryRoot: this.repositoryRoot,
           isTestIsolationEnabled: this.isTestIsolationEnabled,
           rumFlushWaitMillis: this.rumFlushWaitMillis,
+          rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         }
 
         this.testSuiteSpan ||= this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
@@ -1820,7 +1837,10 @@ class CypressPlugin {
           }
           this.tracer._tracer._exporter.exportCoverage(formattedCoverage)
         }
-        const isEfdManagedTest = (isNew || isModified) && this.isEarlyFlakeDetectionEnabled && !isAttemptToFix
+        const isEfdManagedTest = (isNew || isModified) &&
+          this.isEarlyFlakeDetectionEnabled &&
+          hasEfdRetries(this.earlyFlakeDetectionRetryPolicy) &&
+          !isAttemptToFix
         let testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
         let didAbortSlowEfdRetries = false
         if (isEfdManagedTest && !isEfdRetry && this.efdRetryCountByTest[testSuite]?.[testName] === undefined) {
@@ -1835,21 +1855,19 @@ class CypressPlugin {
         }
         this.activeTestSpan.setTag(TEST_STATUS, testStatus)
 
-        // Save the test status to know if it has passed all retries
-        if (this.testStatuses[testName]) {
-          this.testStatuses[testName].push(testStatus)
+        const testIdentifier = `${testSuite}\0${testName}`
+        let testStatuses = this.testStatuses[testIdentifier]
+        if (testStatuses) {
+          testStatuses.push(testStatus)
         } else {
-          this.testStatuses[testName] = [testStatus]
+          testStatuses = this.testStatuses[testIdentifier] = [testStatus]
         }
-        const testStatuses = this.testStatuses[testName]
         const activeSpanTags = this.activeTestSpan.context().getTags()
 
         if (error) {
           this.activeTestSpan.setTag('error', error)
         }
-        if (isRUMActive) {
-          this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
-        }
+        setRumTestTags(this.activeTestSpan, isRUMActive)
         // Source-line resolution strategy:
         // 1. If plain JS and no source map, trust invocationDetails.line directly.
         // 2. Otherwise, try invocationDetails.stack line mapped through source map.
@@ -1896,7 +1914,7 @@ class CypressPlugin {
         }
         // Check if all EFD retries failed
         if (isEfdManagedTest) {
-          const efdRetryCount = this.getEfdRetryCountForTest(testSuite, testName)
+          const efdRetryCount = this.efdRetryCountByTest[testSuite]?.[testName]
           const isLastEfdAttempt = testStatuses.length === efdRetryCount + 1
           if (efdRetryCount > 0 && isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
             this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')

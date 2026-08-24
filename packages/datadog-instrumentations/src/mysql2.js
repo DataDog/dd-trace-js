@@ -5,9 +5,54 @@ const { errorMonitor } = require('node:events')
 const shimmer = require('../../datadog-shimmer')
 const satisfies = require('../../../vendor/dist/semifies')
 const { channel, addHook } = require('./helpers/instrument')
+const {
+  dispatchesAcquireSynchronously,
+  takePoolWaitTime,
+  wrapPoolClusterGetConnection,
+  wrapPoolClusterMethod,
+  wrapPoolGetConnection,
+  wrapPoolQueryMethod,
+} = require('./helpers/pool-acquire')
 
 /** @type {WeakMap<object, Function>} */
 const wrappedOnResult = new WeakMap()
+
+/** @type {WeakSet<object>} */
+const flagWrappedNamespaces = new WeakSet()
+
+const connectionStartCh = channel('apm:mysql2:connection:start')
+const connectionFinishCh = channel('apm:mysql2:connection:finish')
+const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
+const acquireFinishCh = channel('apm:mysql2:pool:acquire:finish')
+const poolAcquireChannels = {
+  connectionStartCh,
+  connectionFinishCh,
+  acquireStartCh,
+  acquireFinishCh,
+}
+
+/**
+ * Bracket a pool-cluster namespace's internal acquires and key retry state by its stable callback.
+ * @param {{ query?: Function, execute?: Function, getConnection?: Function }} poolNamespace
+ */
+function flagWrapNamespace (poolNamespace) {
+  if (poolNamespace == null || flagWrappedNamespaces.has(poolNamespace)) return
+  flagWrappedNamespaces.add(poolNamespace)
+
+  if (typeof poolNamespace.query === 'function') {
+    shimmer.wrap(poolNamespace, 'query', query => wrapPoolClusterMethod(query, connectionStartCh))
+  }
+  if (typeof poolNamespace.execute === 'function') {
+    shimmer.wrap(poolNamespace, 'execute', execute => wrapPoolClusterMethod(execute, connectionStartCh))
+  }
+  if (typeof poolNamespace.getConnection === 'function') {
+    shimmer.wrap(
+      poolNamespace,
+      'getConnection',
+      getConnection => wrapPoolClusterGetConnection(getConnection, poolAcquireChannels)
+    )
+  }
+}
 
 /**
  * @param {unknown} sql
@@ -43,6 +88,11 @@ function wrapConnection (Connection, version) {
     const ctx = {}
 
     if (isQuery) {
+      const waitTime = takePoolWaitTime(this)
+      if (waitTime !== undefined) {
+        ctx.poolWaitTime = waitTime
+      }
+
       command.execute = wrapExecute(command, command.execute, ctx, this.config)
 
       return commandAddCh.runStores(ctx, addCommand, this, ...arguments)
@@ -212,22 +262,41 @@ function wrapConnection (Connection, version) {
  * by the queued query attach to the caller rather than the previous query that freed the connection.
  *
  * @param {Function} Pool
+ * @param {boolean} deferredPoolAcquire
  * @returns {Function}
  */
-function wrapGetConnection (Pool) {
-  const connectionStartCh = channel('apm:mysql2:connection:start')
-  const connectionFinishCh = channel('apm:mysql2:connection:finish')
+function wrapGetConnection (Pool, deferredPoolAcquire) {
+  shimmer.wrap(
+    Pool.prototype,
+    'getConnection',
+    getConnection => wrapPoolGetConnection(getConnection, poolAcquireChannels, deferredPoolAcquire)
+  )
 
-  shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
-    const ctx = {}
-    arguments[0] = function (...args) {
-      return connectionFinishCh.runStores(ctx, cb, this, ...args)
-    }
+  return Pool
+}
 
-    connectionStartCh.publish(ctx)
+/**
+ * mysql2 >=3.11.5 keeps the outer-query abort at the connection level, so the pool only needs the
+ * acquire wrap plus the pool-query flag around `query` / `execute`.
+ *
+ * @param {Function} Pool
+ * @returns {Function}
+ */
+function wrapBasePool (Pool) {
+  const deferredQueryAcquire = defersPoolAcquire(Pool, 'query')
+  const deferredExecuteAcquire = defersPoolAcquire(Pool, 'execute')
+  wrapGetConnection(Pool, deferredQueryAcquire || deferredExecuteAcquire)
 
-    return getConnection.apply(this, arguments)
-  })
+  shimmer.wrap(
+    Pool.prototype,
+    'query',
+    query => wrapPoolQueryMethod(query, connectionStartCh, deferredQueryAcquire)
+  )
+  shimmer.wrap(
+    Pool.prototype,
+    'execute',
+    execute => wrapPoolQueryMethod(execute, connectionStartCh, deferredExecuteAcquire)
+  )
 
   return Pool
 }
@@ -240,10 +309,12 @@ function wrapGetConnection (Pool) {
 function wrapPool (Pool, version) {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
   const shouldEmitEndAfterQueryAbort = satisfies(version, '>=1.3.3')
+  const deferredQueryAcquire = defersPoolAcquire(Pool, 'query')
+  const deferredExecuteAcquire = defersPoolAcquire(Pool, 'execute')
 
-  wrapGetConnection(Pool)
+  wrapGetConnection(Pool, deferredQueryAcquire || deferredExecuteAcquire)
 
-  shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
+  shimmer.wrap(Pool.prototype, 'query', query => wrapPoolQueryMethod(function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
     const resolvedSql = resolveSqlString(sql)
@@ -279,9 +350,9 @@ function wrapPool (Pool, version) {
     }
 
     return query.apply(this, arguments)
-  })
+  }, connectionStartCh, deferredQueryAcquire))
 
-  shimmer.wrap(Pool.prototype, 'execute', execute => function (sql, values, cb) {
+  shimmer.wrap(Pool.prototype, 'execute', execute => wrapPoolQueryMethod(function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
     const resolvedSql = resolveSqlString(sql)
@@ -304,9 +375,23 @@ function wrapPool (Pool, version) {
     }
 
     return execute.apply(this, arguments)
-  })
+  }, connectionStartCh, deferredExecuteAcquire))
 
   return Pool
+}
+
+/**
+ * @param {Function} Pool
+ * @param {'query'|'execute'} method
+ * @returns {boolean}
+ */
+function defersPoolAcquire (Pool, method) {
+  return !dispatchesAcquireSynchronously(
+    Pool.prototype[method],
+    Object.assign(Object.create(Pool.prototype), { config: { connectionConfig: {} } }),
+    'getConnection',
+    ['SELECT 1', () => {}]
+  )
 }
 
 /**
@@ -319,6 +404,7 @@ function wrapPoolCluster (PoolCluster) {
 
   shimmer.wrap(PoolCluster.prototype, 'of', of => function (...args) {
     const poolNamespace = of.apply(this, args)
+    flagWrapNamespace(poolNamespace)
 
     if (startOuterQueryCh.hasSubscribers && !wrappedPoolNamespaces.has(poolNamespace)) {
       shimmer.wrap(poolNamespace, 'query', query => function (sql, values, cb) {
@@ -404,11 +490,26 @@ addHook(
 // mysql2 >=3.11.5 moved the pool onto BasePool in lib/base/pool.js.
 addHook(
   { name: 'mysql2', file: 'lib/base/pool.js', versions: ['>=3.11.5'] },
-  /** @type {(moduleExports: unknown, version: string) => unknown} */ (wrapGetConnection)
+  /** @type {(moduleExports: unknown, version: string) => unknown} */ (wrapBasePool)
 )
 
 // PoolNamespace.prototype.query does not exist in mysql2<2.3.0
 addHook(
   { name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['2.3.0 - 3.11.4'] },
   /** @type {(moduleExports: unknown, version: string) => unknown} */ (wrapPoolCluster)
+)
+
+// mysql2 >=3.11.5 keeps the outer-query abort at the connection level, so a cluster namespace only
+// needs the pool-query flag so its internal query/execute acquire does not open an acquire span.
+addHook(
+  { name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=3.11.5'] },
+  /** @type {(moduleExports: unknown, version: string) => unknown} */ (PoolCluster => {
+    shimmer.wrap(PoolCluster.prototype, 'of', of => function () {
+      const poolNamespace = of.apply(this, arguments)
+      flagWrapNamespace(poolNamespace)
+      return poolNamespace
+    })
+
+    return PoolCluster
+  })
 )

@@ -5,6 +5,7 @@ module.exports = {
   AGENTLESS: 'agentless',
   DATADOG: 'datadog',
   AGENT_PROXY: 'agent_proxy',
+  CI_VALIDATION: 'ci_validation',
   JEST_WORKER: 'jest_worker',
   CUCUMBER_WORKER: 'cucumber_worker',
   MOCHA_WORKER: 'mocha_worker',

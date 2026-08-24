@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const { inspect } = require('node:util')
 
 const Axios = require('axios')
@@ -29,17 +30,11 @@ withVersions('passport-local', 'passport-local', version => {
   describe('Attacker fingerprinting', () => {
     let port, server, axios
 
-    before(() => {
-      return agent.load(['express', 'http'], { client: false })
-    })
-
-    before(() => {
+    before(async () => {
+      await agent.load(['express', 'http'], { client: false })
       appsec.enable(getConfigFresh({
         appsec: true,
       }))
-    })
-
-    before((done) => {
       const express = require('../../../../versions/express').get()
       const bodyParser = require('../../../../versions/body-parser').get()
       const passport = require('../../../../versions/passport').get()
@@ -66,25 +61,24 @@ withVersions('passport-local', 'passport-local', version => {
         res.end()
       })
 
-      server = app.listen(port, () => {
-        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
-          baseURL: `http://localhost:${port}`,
-          headers: {
-            'User-Agent': 'test-user-agent',
-          },
-        })
-        done()
+      server = app.listen(port)
+      await once(server, 'listening')
+      port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({
+        baseURL: `http://localhost:${port}`,
+        headers: {
+          'User-Agent': 'test-user-agent',
+        },
       })
     })
 
-    after(() => {
-      server.close()
-      return agent.close()
-    })
-
-    after(() => {
-      appsec.disable()
+    after(async () => {
+      try {
+        server?.close()
+        await agent.close()
+      } finally {
+        appsec.disable()
+      }
     })
 
     it('should report http fingerprints on login fail', async () => {
@@ -96,7 +90,7 @@ withVersions('passport-local', 'passport-local', version => {
             password: '1234',
           }
         )
-      } catch (e) {}
+      } catch {}
 
       await agent.assertSomeTraces(assertFingerprintInTraces)
     })

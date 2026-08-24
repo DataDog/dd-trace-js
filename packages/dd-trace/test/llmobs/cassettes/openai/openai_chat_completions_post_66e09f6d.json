@@ -1,0 +1,57 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Content-Length": "383",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/JS 4.0.0",
+      "X-Stainless-Lang": "js",
+      "X-Stainless-Package-Version": "4.0.0",
+      "X-Stainless-OS": "MacOS",
+      "X-Stainless-Arch": "arm64",
+      "X-Stainless-Runtime": "node",
+      "X-Stainless-Runtime-Version": "v22.22.0",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"What is in this image?\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\"\n          }\n        }\n      ]\n    }\n  ]\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 01 Jul 2026 18:57:07 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a147a2693fc012f2-IAD",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "1451",
+      "openai-project": "proj_6cMiry5CHgK3zKotG0LtMb9H",
+      "openai-version": "2020-10-01",
+      "x-openai-proxy-wasm": "v0.1",
+      "x-ratelimit-limit-input-images": "250000",
+      "x-ratelimit-limit-requests": "10000",
+      "x-ratelimit-limit-tokens": "30000000",
+      "x-ratelimit-remaining-input-images": "249999",
+      "x-ratelimit-remaining-requests": "9999",
+      "x-ratelimit-remaining-tokens": "29999227",
+      "x-ratelimit-reset-input-images": "0s",
+      "x-ratelimit-reset-requests": "6ms",
+      "x-ratelimit-reset-tokens": "1ms",
+      "x-request-id": "req_e0dd872002b943239c9310d95b947bce",
+      "set-cookie": "__cf_bm=vTWZiPD02zsV8W2sjxNEPE3qOL4tAFNqakVpl2g9dmo-1782932225.48028-1.0.1.1-Tigf.jbQ3rTY.yCvLCk4mg9z6_abpS1uUcKQu_a56qb.v2ncIooDOesSmX5t1lBhh5YFlpM2ulh.KUDLNifO6b3ZQipKB74VyO5QKNjqnAFYVKOVMzCcB88NdOMS2X4j; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 01 Jul 2026 19:27:07 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"chatcmpl-DwuPJM9HAANc7Dr5w4Siq5vTy3Bek\",\n  \"object\": \"chat.completion\",\n  \"created\": 1782932225,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"This image is the logo of the Python programming language. The design features two interlocking snakes, one blue and one yellow, forming a stylized \\\"P\\\".\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 268,\n    \"completion_tokens\": 32,\n    \"total_tokens\": 300,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_e6c46296c9\"\n}\n"
+  }
+}

@@ -1,10 +1,10 @@
 'use strict'
 
 const getConfig = require('../../config')
-const request = require('../requests/request')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const id = require('../../id')
 const log = require('../../log')
-
 const {
   incrementCountMetric,
   distributionMetric,
@@ -14,7 +14,7 @@ const {
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
 } = require('../telemetry')
-
+const request = require('../requests/request')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
 const { validateTestManagementTestsResponse } = require('../test-optimization-http-cache-schema')
 
@@ -47,7 +47,7 @@ function parseJsonResponse (rawJson) {
 function parseTestManagementTestsResponse (rawJson, options = {}) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (options.validateRequiredFields) {
-    validateTestManagementTestsResponse(parsedResponse)
+    validateTestManagementTestsResponse(parsedResponse, options)
   }
   const { data: { attributes: { modules: testManagementTests } } } = parsedResponse
   return testManagementTests
@@ -132,8 +132,8 @@ function fetchFromApi ({
   }
 
   if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/test/libraries/test-management/tests`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/test/libraries/test-management/tests')
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
   } else {
     const { DD_API_KEY } = getConfig()
     if (!DD_API_KEY) {

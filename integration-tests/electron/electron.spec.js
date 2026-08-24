@@ -115,8 +115,11 @@ describe('Electron integration', function () {
   afterEach(done => {
     const proc = child
     child = null
-    proc.send({ name: 'quit' })
+    // Sending on a closed IPC channel emits an unhandled ERR_IPC_CHANNEL_CLOSED 'error' that masks the real
+    // failure, so only quit a still-connected child and let the send callback absorb a channel that races closed.
+    if (!proc?.connected) return done()
     proc.once('close', done)
+    proc.send({ name: 'quit' }, () => {})
   })
 
   it('should create an http.request span for net.fetch calls', done => {
@@ -155,23 +158,21 @@ describe('Electron integration', function () {
     child.send({ name: 'ipc' })
   })
 
-  it('should inject DatadogEventBridge in the renderer process', done => {
-    function handler (msg) {
-      if (!msg || msg.name !== 'bridge-result') return
-      child.removeListener('message', handler)
-      try {
-        assert.strictEqual(msg.result.exists, true, 'DatadogEventBridge should exist on window')
-        assert.strictEqual(msg.result.capabilities, '[]')
-        assert.ok(msg.result.privacyLevel, 'privacyLevel should be set')
-        assert.ok(msg.result.sendSuccess, 'bridge.send() should not throw')
-        done()
-      } catch (e) {
-        done(e)
-      }
-    }
-
-    child.on('message', handler)
+  it('should inject DatadogEventBridge in the renderer process', async () => {
+    const messagePromise = new Promise(resolve => {
+      child.on('message', function onMessage (message) {
+        if (!message || message.name !== 'bridge-result') return
+        child.removeListener('message', onMessage)
+        resolve(message)
+      })
+    })
     child.send({ name: 'bridge' })
+
+    const message = await messagePromise
+    assert.strictEqual(message.result.exists, true, 'DatadogEventBridge should exist on window')
+    assert.strictEqual(message.result.capabilities, '[]')
+    assert.ok(message.result.privacyLevel, 'privacyLevel should be set')
+    assert.ok(message.result.sendSuccess, 'bridge.send() should not throw')
   })
 
   it('should produce spans for both HTTP and IPC when both operations are triggered', done => {

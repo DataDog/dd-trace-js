@@ -19,5 +19,5 @@ app.get('/', (req, res) => {
 
 const server = app.listen(0, () => {
   const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-  process.send({ port })
+  globalThis.process.send({ port })
 })

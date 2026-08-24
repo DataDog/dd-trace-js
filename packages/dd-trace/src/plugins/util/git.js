@@ -13,6 +13,7 @@ const {
   TELEMETRY_GIT_COMMAND_ERRORS,
 } = require('../../ci-visibility/telemetry')
 const { storage } = require('../../../../datadog-core')
+const { getSegment } = require('../../util')
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -36,6 +37,8 @@ const {
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { cachedExec } = require('./git-cache')
+
+/** @typedef {NonNullable<ReturnType<string['match']>>} RegExpMatch */
 
 const legacyStorage = storage('legacy')
 
@@ -61,7 +64,7 @@ function sanitizedExec (
       let result = cachedExec(cmd, flags, { stdio: 'pipe' }).toString()
 
       if (shouldTrim) {
-        result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
+        result = result.replaceAll(/(\r\n|\n|\r)/g, '')
       }
 
       if (durationMetric) {
@@ -115,12 +118,12 @@ function isShallowRepository () {
 
 function getGitVersion () {
   const gitVersionString = sanitizedExec('git', ['version'])
-  const gitVersionMatches = /** @type {RegExpMatchArray} */ (gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/))
+  const gitVersionMatches = /** @type {RegExpMatch} */ (gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/))
   try {
     return {
-      major: Number.parseInt(gitVersionMatches[1]),
-      minor: Number.parseInt(gitVersionMatches[2]),
-      patch: Number.parseInt(gitVersionMatches[3]),
+      major: Number.parseInt(gitVersionMatches[1], 10),
+      minor: Number.parseInt(gitVersionMatches[2], 10),
+      patch: Number.parseInt(gitVersionMatches[3], 10),
     }
   } catch {
     return null
@@ -251,7 +254,7 @@ function getGitRemoteName () {
   )
 
   if (upstreamRemote) {
-    return upstreamRemote.split('/')[0]
+    return getSegment(upstreamRemote, '/', 0)
   }
 
   const remotes = sanitizedExec(
@@ -263,7 +266,7 @@ function getGitRemoteName () {
     false
   )
 
-  return remotes.split('\n')[0] || 'origin'
+  return getSegment(remotes, '\n', 0) || 'origin'
 }
 
 function getSourceBranch () {

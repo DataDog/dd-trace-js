@@ -1,6 +1,6 @@
 import { performance } from 'perf_hooks'
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
-import type { plugins } from '..';
+import type { PluginName, PluginOptions, plugins } from '..';
 import { opentelemetry } from '..';
 import { formats, kinds, priority, tags, types } from '../ext';
 import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
@@ -305,6 +305,7 @@ tracer.use('aws-sdk', awsSdkServiceFunctionOptions);
 tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
+tracer.use('browser-bunyan');
 tracer.use('bullmq');
 tracer.use('bullmq', bullmqOptions);
 tracer.use('bunyan');
@@ -372,6 +373,7 @@ tracer.use('kafkajs');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('langchain');
+tracer.use('langchain', { llmobs: false });
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('langgraph');
 tracer.use('memcached');
@@ -381,6 +383,7 @@ tracer.use('mocha');
 tracer.use('mocha', { service: 'mocha-service' });
 tracer.use('moleculer', moleculerOptions);
 tracer.use('modelcontextprotocol-sdk');
+tracer.use('modelcontextprotocol-sdk', { llmobs: false });
 tracer.use('mongodb-core');
 tracer.use('mongoose');
 tracer.use('mysql');
@@ -391,6 +394,7 @@ tracer.use('nats');
 tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
+tracer.use('openai-agents');
 tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
@@ -419,6 +423,14 @@ tracer.use('undici');
 tracer.use('vitest');
 tracer.use('vitest', { service: 'vitest-service' });
 tracer.use('winston');
+
+type PluginUse = <P extends PluginName>(plugin: P, config?: PluginOptions[P] | boolean) => Tracer
+const usePlugin: PluginUse = tracer.use.bind(tracer)
+usePlugin('express', { service: 'name' })
+// @ts-expect-error Only built-in plugin names are supported.
+usePlugin('unknown-plugin')
+// @ts-expect-error Redis options must not be accepted by the express plugin.
+usePlugin('express', { splitByInstance: true })
 
 tracer.use('express', false)
 tracer.use('express', { enabled: false })
@@ -652,6 +664,31 @@ llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
   cb(new Error('boom'))
 })
 
+// messages carrying image parts, inline and by attachment key
+llmobs.annotate({
+  inputData: [{
+    content: 'what is in this image',
+    imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=' }]
+  }],
+  outputData: [{
+    content: 'a pixel',
+    imageParts: [{ mimeType: 'image/jpeg', attachmentKey: 'key-123' }]
+  }]
+})
+
+// an image part carries exactly one of content or attachmentKey
+type ImagePart = import('..').llmobs.ImagePart
+const inlineImagePart: ImagePart = { mimeType: 'image/png', content: 'iVBORw0KGgo=' }
+const keyedImagePart: ImagePart = { mimeType: 'image/jpeg', attachmentKey: 'key-123' }
+// @ts-expect-error An image part must carry either content or attachmentKey.
+const emptyImagePart: ImagePart = { mimeType: 'image/png' }
+// @ts-expect-error An image part must not carry both content and attachmentKey.
+const overspecifiedImagePart: ImagePart = {
+  mimeType: 'image/png',
+  content: 'iVBORw0KGgo=',
+  attachmentKey: 'key-123'
+}
+
 // wrap a function
 llmobs.wrap({ kind: 'llm' }, function myLLM() { })()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction() { })()
@@ -678,6 +715,28 @@ llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
     label: 'toxicity',
     metricType: 'boolean',
     value: 'true'
+  })
+
+  // submit end-user feedback
+  llmobs.submitFeedback({
+    label: 'thumbs_up',
+    metricType: 'boolean',
+    value: true,
+    submitter: { id: 'user-123', type: 'user' },
+    span: llmobsSpanCtx
+  })
+
+  llmobs.submitFeedback({
+    label: 'comment',
+    metricType: 'text',
+    value: 'this answer was helpful',
+    submitter: { id: 'user-123' },
+    feedbackJoinKey: 'my-join-key',
+    mlApp: 'myApp',
+    tags: {},
+    timestampMs: Date.now(),
+    assessment: 'pass',
+    reasoning: 'the user was satisfied'
   })
 })
 
@@ -724,6 +783,7 @@ tracer.init({
       endpoint: 'http://localhost',
       maxMessagesLength: 22,
       maxContentSize: 1024,
+      redactionEnabled: true,
       timeout: 1000
     }
   }
@@ -737,6 +797,14 @@ aiguard.evaluate([
   result.action && result.reason && result.tags
 })
 
+aiguard.evaluate([{
+  role: 'user',
+  content: [
+    { type: 'input_text', text: 'Describe this image' },
+    { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
+  ],
+}])
+
 aiguard.evaluate([
   {
     role: 'assistant',
@@ -748,11 +816,18 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds && result.messages
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
   result.action && result.reason && result.tags && result.tagProbabilities && result.sds
+})
+
+aiguard.evaluate([
+  { role: 'user', content: 'My SSN is 123-45-6789' },
+]).then(result => {
+  const replacements: ddTrace.aiguard.RedactionReplacement[] = result.redactionReplacements
+  replacements.map(({ path, replacement }) => `${path}=${replacement}`)
 })

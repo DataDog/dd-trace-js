@@ -2,6 +2,7 @@
 
 # AppSec
 /benchmark/sirun/appsec/ @DataDog/asm-js
+/benchmark/sirun/appsec-waf/ @DataDog/asm-js
 /benchmark/sirun/appsec-iast/ @DataDog/asm-js
 /benchmark/sirun/iast/ @DataDog/asm-js
 /integration-tests/appsec/ @DataDog/asm-js

@@ -393,7 +393,7 @@ w.once('exit', code => process.exit(code))
       `  v8Dir: process.env.${V8_COVERAGE_ENV} || '',\n` +
       '}))\n')
 
-    /** @type {NodeJS.ProcessEnv} */
+    /** @type {typeof process.env} */
     const env = { ...process.env, [DISABLE_ENV]: '1' }
 
     await new Promise(/** @type {(resolve: (value?: void) => void, reject: (reason?: Error) => void) => void} */

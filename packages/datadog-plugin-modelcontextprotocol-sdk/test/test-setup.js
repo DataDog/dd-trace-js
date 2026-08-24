@@ -1,7 +1,13 @@
 'use strict'
 
 class ModelcontextprotocolSdkTestSetup {
+  #client
+  #server
+  #testTool
+  #versionMod
+
   async setup (clientModule, versionMod) {
+    this.#versionMod = versionMod
     const path = require('path')
     const { Client } = clientModule
     // Use versionMod.getPath to resolve the SDK root since the package exports map
@@ -11,11 +17,9 @@ class ModelcontextprotocolSdkTestSetup {
     const { McpServer } = require(path.join(sdkDir, 'dist/cjs/server/mcp.js'))
     const { InMemoryTransport } = versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
 
-    this._InMemoryTransport = InMemoryTransport
+    this.#server = new McpServer({ name: 'test-server', version: '1.0.0' })
 
-    this._server = new McpServer({ name: 'test-server', version: '1.0.0' })
-
-    this._server.registerTool(
+    this.#testTool = this.#server.registerTool(
       'test-tool',
       { description: 'A test tool', inputSchema: {} },
       async () => ({
@@ -23,7 +27,7 @@ class ModelcontextprotocolSdkTestSetup {
       })
     )
 
-    this._server.registerTool(
+    this.#server.registerTool(
       'error-tool',
       { description: 'A tool that errors', inputSchema: {} },
       async () => {
@@ -31,37 +35,99 @@ class ModelcontextprotocolSdkTestSetup {
       }
     )
 
-    const [clientTransport, serverTransport] = this._InMemoryTransport.createLinkedPair()
+    this.#server.registerResource(
+      'test-resource',
+      'file:///test-resource.txt',
+      { description: 'A test resource', mimeType: 'text/plain' },
+      async () => ({
+        contents: [{ uri: 'file:///test-resource.txt', text: 'resource content' }],
+      })
+    )
 
-    await this._server.connect(serverTransport)
+    this.#server.registerPrompt(
+      'test-prompt',
+      { description: 'A test prompt', argsSchema: {} },
+      async () => ({
+        messages: [{ role: 'user', content: { type: 'text', text: 'test prompt message' } }],
+      })
+    )
 
-    this._client = new Client(
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+
+    await this.#server.connect(serverTransport)
+
+    this.#client = new Client(
       { name: 'test-client', version: '1.0.0' }
     )
-    await this._client.connect(clientTransport)
+    await this.#client.connect(clientTransport)
   }
 
   async teardown () {
-    if (this._client) {
-      await this._client.close()
+    if (this.#client) {
+      await this.#client.close()
     }
-    if (this._server) {
-      await this._server.close()
+    if (this.#server) {
+      await this.#server.close()
     }
-    this._client = null
-    this._server = null
+    this.#client = undefined
+    this.#server = undefined
+    this.#testTool = undefined
   }
 
-  async clientCallTool () {
-    return this._client.callTool({ name: 'test-tool', arguments: {} })
+  async clientCallTool (name = 'test-tool') {
+    return this.#client.callTool({ name, arguments: { query: 'secret value' } })
   }
 
   async clientCallToolError () {
-    return this._client.callTool({ name: 'error-tool', arguments: {} })
+    return this.#client.callTool({ name: 'error-tool', arguments: {} })
   }
 
   async clientListTools () {
-    return this._client.listTools()
+    return this.#client.listTools()
+  }
+
+  async clientListResources () {
+    return this.#client.listResources()
+  }
+
+  async clientListResourceTemplates () {
+    return this.#client.listResourceTemplates()
+  }
+
+  async clientReadResource () {
+    return this.#client.readResource({ uri: 'file:///test-resource.txt' })
+  }
+
+  async clientListPrompts () {
+    return this.#client.listPrompts()
+  }
+
+  async clientGetPrompt () {
+    return this.#client.getPrompt({ name: 'test-prompt', arguments: {} })
+  }
+
+  async clientSendUnknownMethod () {
+    // Send a request for a method the server has no handler for (triggers MethodNotFound).
+    // The client rejects with an McpError; catch it so the test can assert on the server span.
+    const { EmptyResultSchema } = this.#versionMod.get('@modelcontextprotocol/sdk/types.js')
+    try {
+      await this.#client.request({ method: 'tools/unknown' }, EmptyResultSchema)
+    } catch {
+      // Expected — server returns MethodNotFound
+    }
+  }
+
+  clientCallMalformedTool () {
+    const { EmptyResultSchema } = this.#versionMod.get('@modelcontextprotocol/sdk/types.js')
+    return this.#client.request({ method: 'tools/call', params: { arguments: {} } }, EmptyResultSchema)
+  }
+
+  renameTestTool (name) {
+    this.#testTool.update({ name })
+  }
+
+  get server () {
+    return this.#server
   }
 }
 

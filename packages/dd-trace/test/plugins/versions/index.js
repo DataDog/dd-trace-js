@@ -218,40 +218,55 @@ function highestMajor (name, range, floorMajor) {
  *
  * @param {object} options
  * @param {string} options.name The module name, e.g. `fastify`.
- * @param {string[]} options.declaredVersions The declared version entries to expand.
- * @param {string} [options.nodeRange] The Node.js versions where these declarations apply.
+ * @param {Array<{ versions?: string[], node?: string }>} options.declarations
  * @param {string} [options.nodeVersion] The current Node.js version; injectable for testing.
  * @param {boolean} [options.honourEnvRange] Whether `PACKAGE_VERSION_RANGE` applies to this module. False for sibling
  *   externals that must stay on their declared versions while the matrix shards a different package.
  * @param {NodeJS.ProcessEnv} [options.env] Injectable for testing.
  * @returns {{ versionList: Array<{ versionKey: string, range: string }>, unversioned: string|undefined }} The ordered,
- *   `RANGE`-filtered key set, and the key the default `versions/<name>` folder resolves to (the newest in-scope entry,
- *   or `undefined` when nothing is in scope).
+ *   `RANGE`-filtered key set, and the range the default `versions/<name>` folder resolves from.
  */
 function resolvePluginVersions ({
   name,
-  declaredVersions,
-  nodeRange,
+  declarations,
   nodeVersion = process.versions.node,
   honourEnvRange = true,
   env = process.env,
 }) {
-  if (nodeRange !== undefined) {
-    if (!validRange(nodeRange)) throw new Error(`Invalid Node.js version range for '${name}': ${nodeRange}`)
-    if (!satisfies(nodeVersion, nodeRange)) return { versionList: [], unversioned: undefined }
+  const useEnvRange = Boolean(env.PACKAGE_VERSION_RANGE) && honourEnvRange
+  const versions = []
+  let hasActiveDeclaration = false
+
+  for (const declaration of declarations) {
+    if (declaration.node !== undefined) {
+      if (!validRange(declaration.node)) {
+        throw new Error(`Invalid Node.js version range for '${name}': ${declaration.node}`)
+      }
+      if (!satisfies(nodeVersion, declaration.node)) continue
+    }
+
+    hasActiveDeclaration = true
+    if (!useEnvRange) versions.push(...(declaration.versions ?? []))
   }
 
-  const useEnvRange = Boolean(env.PACKAGE_VERSION_RANGE) && honourEnvRange
-  const versions = useEnvRange ? [env.PACKAGE_VERSION_RANGE] : declaredVersions
+  if (!hasActiveDeclaration) return { versionList: [], unversioned: undefined }
+  if (useEnvRange) versions.push(env.PACKAGE_VERSION_RANGE)
 
   let versionList = getVersionList(name, versions)
   if (env.RANGE) {
     versionList = versionList.filter(({ versionKey }) => subset(versionKey, env.RANGE))
+    if (!useEnvRange) {
+      versions.length = 0
+      for (const { versionKey } of versionList) versions.push(versionKey)
+    }
   }
 
   // With `PACKAGE_VERSION_RANGE` the shard itself is the target, so the unversioned folder keeps the raw range even
-  // when `RANGE` narrows the installed keys; otherwise it follows the newest in-scope key.
-  const unversioned = useEnvRange ? env.PACKAGE_VERSION_RANGE : versionList.at(-1)?.versionKey
+  // when `RANGE` narrows the installed keys. Otherwise the package manager selects the newest version from every
+  // active range, independent of declaration order.
+  const unversioned = useEnvRange
+    ? env.PACKAGE_VERSION_RANGE
+    : versions.length > 0 ? versions.join(' || ') : undefined
 
   return { versionList, unversioned }
 }

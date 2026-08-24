@@ -8,8 +8,13 @@ class LogPropagator {
     this._config = config
   }
 
+  /**
+   * @param {DatadogSpanContext | null | undefined} spanContext
+   * @param {Record<string, unknown>} [carrier]
+   * @returns {Record<string, unknown> | undefined}
+   */
   inject (spanContext, carrier) {
-    if (!carrier) return
+    if (carrier === null) return
 
     const dd = {}
     let hasField = false
@@ -35,7 +40,11 @@ class LogPropagator {
       hasField = true
     }
 
-    if (hasField) carrier.dd = dd
+    if (!hasField) return
+
+    carrier ??= {}
+    carrier.dd = dd
+    return carrier
   }
 
   extract (carrier) {

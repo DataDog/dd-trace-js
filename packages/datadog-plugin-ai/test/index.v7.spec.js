@@ -1,16 +1,28 @@
 'use strict'
 
 const assert = require('node:assert')
+const semifies = require('semifies')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+
+/**
+ * @param {(version: string, openaiVersion: string) => void} callback
+ */
+function withAiSdkOpenAiVersions (callback) {
+  withVersions('ai', 'ai', '>=7.0.0', (version, _, resolvedVersion) => {
+    withVersions('ai', '@ai-sdk/openai', '^4.0.0', openaiVersion => {
+      callback(version, resolvedVersion, openaiVersion)
+    })
+  })
+}
 
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
   })
 
-  withVersions('ai', 'ai', '>=7.0.0', (version) => {
+  withAiSdkOpenAiVersions((version, resolvedVersion, openaiVersion) => {
     let ai
     let openai
 
@@ -21,7 +33,7 @@ describe('Plugin', () => {
     beforeEach(function () {
       ai = require(`../../../versions/ai@${version}`).get()
 
-      const OpenAI = require('../../../versions/@ai-sdk/openai').get()
+      const OpenAI = require(`../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict',
@@ -94,31 +106,35 @@ describe('Plugin', () => {
       await checkTraces
     })
 
-    // eslint-disable-next-line mocha/no-pending-tests
-    it.skip('creates a span for embedMany', async () => { // TODO: it seems this was omitted from the change?
-      const checkTraces = agent.assertSomeTraces(traces => {
-        const spans = traces[0]
-        const embedManySpan = spans.find(s => s.name === 'embedMany')
+    {
+      const embedManyTest = semifies(resolvedVersion, '>=7.0.23') ? it : it.skip
 
-        assertObjectContains(embedManySpan, {
-          name: 'embedMany',
-          resource: 'embedMany',
-          meta: {
-            'ai.request.model': 'text-embedding-ada-002',
-            'ai.request.model_provider': 'openai',
-          },
+      // embedMany is only available from ai 7.0.23.
+      embedManyTest('creates a span for embedMany', async function () {
+        const checkTraces = agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+          const embedManySpan = spans.find(s => s.name === 'embedMany')
+
+          assertObjectContains(embedManySpan, {
+            name: 'embedMany',
+            resource: 'embedMany',
+            meta: {
+              'ai.request.model': 'text-embedding-ada-002',
+              'ai.request.model_provider': 'openai',
+            },
+          })
         })
+
+        const result = await ai.embedMany({
+          model: openai.embedding('text-embedding-ada-002'),
+          values: ['hello world', 'goodbye world'],
+        })
+
+        assert.ok(result.embeddings, 'Expected result to be truthy')
+
+        await checkTraces
       })
-
-      const result = await ai.embedMany({
-        model: openai.embedding('text-embedding-ada-002'),
-        values: ['hello world', 'goodbye world'],
-      })
-
-      assert.ok(result.embeddings, 'Expected result to be truthy')
-
-      await checkTraces
-    })
+    }
 
     it('creates spans for streamText', async () => {
       const checkTraces = agent.assertSomeTraces(traces => {
