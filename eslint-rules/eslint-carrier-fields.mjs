@@ -35,6 +35,7 @@ const { legacyBaggagePrefix, propagationHeaders } = parseCarrierModel(carrierSou
  * @property {Set<import('eslint').CodePathSegment>} currentSegments
  * @property {Set<import('eslint').CodePathSegment>} segments
  * @property {Map<import('eslint').CodePathSegment, CarrierEvent[]>} events
+ * @property {Map<import('eslint').CodePathSegment, Set<import('eslint').Scope.Variable>>} outputs
  */
 
 /**
@@ -146,6 +147,7 @@ export default {
     const carrierModuleIdentifiers = new Set()
     const carrierReturningFunctions = new WeakSet()
     const codePathFrames = []
+    const completedCodePathFrames = []
     const strictCarrierIdentifiers = context.options[0]?.strictCarrierIdentifiers === true
 
     /**
@@ -175,21 +177,32 @@ export default {
     /**
      * @param {import('estree').Node} node
      * @param {Set<import('eslint').Scope.Variable>} taintedVariables
+     * @param {Set<import('eslint').Scope.Variable>} [seenVariables]
      * @returns {boolean}
      */
-    function isCarrierReference (node, taintedVariables) {
+    function isCarrierReference (node, taintedVariables, seenVariables) {
       if (isCarrierIdentifier(node)) return true
 
       if (node.type === 'LogicalExpression') {
-        return isCarrierReference(node.left, taintedVariables) ||
-          isCarrierReference(node.right, taintedVariables)
+        return isCarrierReference(node.left, taintedVariables, seenVariables) ||
+          isCarrierReference(node.right, taintedVariables, seenVariables)
       }
       if (node.type === 'ConditionalExpression') {
-        return isCarrierReference(node.consequent, taintedVariables) ||
-          isCarrierReference(node.alternate, taintedVariables)
+        return isCarrierReference(node.consequent, taintedVariables, seenVariables) ||
+          isCarrierReference(node.alternate, taintedVariables, seenVariables)
       }
       const variable = findVariable(node)
-      return variable !== undefined && taintedVariables.has(variable)
+      if (variable === undefined) return false
+      if (taintedVariables.has(variable)) return true
+      if (seenVariables?.has(variable) || variable.defs.length !== 1) return false
+
+      const [definition] = variable.defs
+      if (definition.type !== 'Variable' || definition.parent.kind !== 'const' ||
+          definition.node.id.type !== 'Identifier' || !definition.node.init) return false
+
+      seenVariables ??= new Set()
+      seenVariables.add(variable)
+      return isCarrierReference(definition.node.init, taintedVariables, seenVariables)
     }
 
     /**
@@ -269,8 +282,8 @@ export default {
      * @param {CodePathFrame} frame
      * @returns {void}
      */
-    function analyzeCodePath (frame) {
-      const outputs = new Map()
+    function computeCodePathOutputs (frame) {
+      const { outputs } = frame
       let changed
       do {
         changed = false
@@ -286,9 +299,15 @@ export default {
           }
         }
       } while (changed)
+    }
 
+    /**
+     * @param {CodePathFrame} frame
+     * @returns {void}
+     */
+    function recordCarrierReturningFunctions (frame) {
       for (const segment of frame.segments) {
-        const taintedVariables = getCodePathInput(segment, outputs)
+        const taintedVariables = getCodePathInput(segment, frame.outputs)
         for (const event of frame.events.get(segment) || []) {
           if (event.type === 'write') {
             applyCarrierWrite(event, taintedVariables)
@@ -297,9 +316,15 @@ export default {
           }
         }
       }
+    }
 
+    /**
+     * @param {CodePathFrame} frame
+     * @returns {void}
+     */
+    function checkCodePath (frame) {
       for (const segment of frame.segments) {
-        const taintedVariables = getCodePathInput(segment, outputs)
+        const taintedVariables = getCodePathInput(segment, frame.outputs)
         for (const event of frame.events.get(segment) || []) {
           if (event.type === 'write') {
             applyCarrierWrite(event, taintedVariables)
@@ -310,6 +335,12 @@ export default {
           }
         }
       }
+    }
+
+    function analyzeCodePaths () {
+      for (const frame of completedCodePathFrames) computeCodePathOutputs(frame)
+      for (const frame of completedCodePathFrames) recordCarrierReturningFunctions(frame)
+      for (const frame of completedCodePathFrames) checkCodePath(frame)
     }
 
     /**
@@ -475,11 +506,15 @@ export default {
           currentSegments: new Set(),
           segments: new Set([codePath.initialSegment]),
           events: new Map(),
+          outputs: new Map(),
         })
       },
 
       onCodePathEnd () {
-        analyzeCodePath(codePathFrames.pop())
+        const frame = codePathFrames.pop()
+        if (!strictCarrierIdentifiers) return
+        completedCodePathFrames.push(frame)
+        if (frame.node.type === 'Program') analyzeCodePaths()
       },
 
       /**
