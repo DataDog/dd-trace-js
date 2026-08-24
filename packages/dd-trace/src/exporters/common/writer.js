@@ -8,6 +8,7 @@ const request = require('./request')
 const { safeJSONStringify } = require('./util')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
+const noop = () => {}
 
 class Writer {
   #deliveryTracker
@@ -39,7 +40,7 @@ class Writer {
    * @param {{ deadline?: number }} [options]
    * @returns {void}
    */
-  flushDirect (done = () => {}, options) {
+  flushDirect (done = noop, options) {
     const count = this._encoder.count()
 
     if (!request.writable && options?.deadline === undefined) {

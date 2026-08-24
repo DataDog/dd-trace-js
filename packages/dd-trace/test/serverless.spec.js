@@ -8,15 +8,12 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const { logs } = require('@opentelemetry/api-logs')
 const { metrics } = require('@opentelemetry/api')
 const { channel } = require('dc-polyfill')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('./setup/core')
 
 const {
-  getServerlessPlatformTags,
-  getServerlessPlatform,
-  supportsServerlessTelemetryRetention,
-  createServerlessDeliveryTracker,
   enableGCPPubSubPushSubscription,
   initializeServerlessTelemetry,
 } = require('../src/serverless')
@@ -29,21 +26,36 @@ const TelemetryDeliveryTracker = require('../src/serverless/telemetry-delivery-t
 const agent = require('./plugins/agent')
 const { getConfigFresh } = require('./helpers/config')
 
+function getServerlessFresh () {
+  return proxyquire.noPreserveCache()('../src/serverless', {})
+}
+
 describe('TelemetryDeliveryTracker', () => {
   it('is created only for Vercel', () => {
     const originalVercel = process.env.VERCEL
     try {
       delete process.env.VERCEL
-      assert.strictEqual(createServerlessDeliveryTracker(), undefined)
-      assert.strictEqual(supportsServerlessTelemetryRetention(), false)
+      let serverless = getServerlessFresh()
+      assert.strictEqual(serverless.createServerlessDeliveryTracker(), undefined)
+      assert.strictEqual(serverless.supportsServerlessTelemetryRetention(), false)
 
       process.env.VERCEL = '1'
-      assert.ok(createServerlessDeliveryTracker() instanceof TelemetryDeliveryTracker)
-      assert.strictEqual(supportsServerlessTelemetryRetention(), true)
+      serverless = getServerlessFresh()
+      assert.ok(serverless.createServerlessDeliveryTracker() instanceof TelemetryDeliveryTracker)
+      assert.strictEqual(serverless.supportsServerlessTelemetryRetention(), true)
     } finally {
       if (originalVercel === undefined) delete process.env.VERCEL
       else process.env.VERCEL = originalVercel
     }
+  })
+
+  it('completes immediately without active deliveries', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    let done = 0
+
+    tracker.waitForIdle(() => { done++ })
+
+    assert.strictEqual(done, 1)
   })
 
   it('joins deliveries that were active at the retention boundary', () => {
@@ -73,6 +85,28 @@ describe('TelemetryDeliveryTracker', () => {
     complete.shift()()
     assert.strictEqual(done, 1)
     complete.shift()()
+    assert.strictEqual(done, 1)
+  })
+
+  it('completes a delivery only once', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    let complete
+    let done = 0
+
+    tracker.track(callback => { complete = callback }, () => { done++ })
+    complete()
+    complete()
+
+    assert.strictEqual(done, 1)
+  })
+})
+
+describe('flushServerlessTelemetry', () => {
+  it('completes immediately without configured pipelines', () => {
+    let done = 0
+
+    flushServerlessTelemetry(() => { done++ })
+
     assert.strictEqual(done, 1)
   })
 })
@@ -172,7 +206,7 @@ describe('Vercel span metadata', () => {
       VERCEL_PROJECT_ID: 'prj_123',
     }
 
-    assert.deepStrictEqual(getServerlessPlatformTags(), [
+    assert.deepStrictEqual(getServerlessFresh().getServerlessPlatformTags(), [
       'vercel.project_id', 'prj_123',
       'vercel.environment', 'preview',
     ])
@@ -185,7 +219,7 @@ describe('Vercel span metadata', () => {
       VERCEL_ENV: 'preview',
     }
 
-    assert.deepStrictEqual(getServerlessPlatformTags(), [
+    assert.deepStrictEqual(getServerlessFresh().getServerlessPlatformTags(), [
       'vercel.environment', 'preview',
     ])
   })
@@ -193,7 +227,7 @@ describe('Vercel span metadata', () => {
   it('records the Vercel environment in configuration', () => {
     process.env = { ...environment, VERCEL: '1' }
 
-    assert.strictEqual(getServerlessPlatform().isVercel, true)
+    assert.strictEqual(getServerlessFresh().getServerlessPlatform().isVercel, true)
   })
 })
 

@@ -43,12 +43,16 @@ function registerTelemetryFlusher (flusher, options) {
  * @param {{ timeout?: number }} [options]
  * @param {TraceFlushers} [traceFlushers]
  */
-function flushServerlessTelemetry (done, options, traceFlushers = {}) {
-  const { trace: traceFlusher, spanStats: spanStatsFlusher } = traceFlushers
+function flushServerlessTelemetry (done, options, traceFlushers) {
+  const traceFlusher = traceFlushers?.trace
+  const spanStatsFlusher = traceFlushers?.spanStats
   // TODO: Include DSM after DataStreamsProcessor exposes a completion-aware flush API.
   let pending = telemetryFlushers.size + postTraceTelemetryFlushers.size +
     (typeof traceFlusher === 'function' ? 1 : 0) +
     (typeof spanStatsFlusher === 'function' ? 1 : 0)
+
+  if (pending === 0) return done?.()
+
   let completed = false
   let timeout
 
@@ -62,7 +66,6 @@ function flushServerlessTelemetry (done, options, traceFlushers = {}) {
     if (--pending === 0) finish()
   }
 
-  if (pending === 0) return finish()
   if (options?.timeout) {
     timeout = setTimeout(() => {
       log.warn('Timed out waiting for telemetry flush after %dms', options.timeout)
