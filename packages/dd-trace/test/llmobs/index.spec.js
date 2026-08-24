@@ -52,6 +52,7 @@ describe('module', () => {
       '../../../dd-trace/src/serverless',
       {}
     )
+    proxyquire.preserveCache()
     loadLlmobsModule()
   }
 
