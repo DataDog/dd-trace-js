@@ -238,6 +238,43 @@ describe('test optimization end-to-end benchmark runner', () => {
       '  Check https://github.com/DataDog/test-environment/actions/runs/12345/attempts/1 for more details.')
     assert.strictEqual(requests.length, 15)
   })
+
+  it('uses the original workflow deadline while waiting for a retry', async () => {
+    process.env.GITHUB_TOKEN = 'token'
+    process.env.TEST_ENVIRONMENT_REF_TO_TEST = 'abc123'
+
+    const workflowTimeoutMs = 30 * 60 * 1000
+    sinon.stub(Date, 'now')
+      .onCall(0).returns(0)
+      .onCall(1).returns(0)
+      .onCall(2).returns(workflowTimeoutMs - 1000)
+      .onCall(3).returns(workflowTimeoutMs - 1000)
+      .onCall(4).returns(workflowTimeoutMs + 1)
+
+    const responses = [
+      createDispatchResponse(),
+      createWorkflowResponse('failure', 1),
+      createWorkflowResponse(undefined, 2, 'in_progress'),
+    ]
+    const requests = []
+    const completion = waitForFailedCompletion()
+
+    proxyquire('./benchmark-run', {
+      https: {
+        request: createRequestStub(responses, requests),
+      },
+      'timers/promises': {
+        setTimeout: () => Promise.resolve(),
+      },
+    })
+
+    const error = await completion
+
+    assert.strictEqual(error.message,
+      'Timeout: Workflow did not finish within 30 minutes. ' +
+      'Check https://github.com/DataDog/test-environment/actions/runs/12345 for more details.')
+    assert.strictEqual(requests.length, 3)
+  })
 })
 
 /**
@@ -247,8 +284,6 @@ function createDispatchResponse () {
   return {
     body: JSON.stringify({
       workflow_run_id: 12345,
-      run_url: 'https://api.github.com/repos/DataDog/test-environment/actions/runs/12345',
-      html_url: 'https://github.com/DataDog/test-environment/actions/runs/12345',
     }),
     statusCode: 200,
   }

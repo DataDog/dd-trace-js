@@ -10,8 +10,10 @@ const DISPATCH_WORKFLOW_URL = `${API_REPOSITORY_URL}/actions/workflows/dd-trace-
 const GET_WORKFLOWS_URL = `${API_REPOSITORY_URL}/actions/runs`
 
 const POLL_INTERVAL_MS = 5000
-const MAX_WORKFLOW_POLLS = 30 * 60 / 5 // 30 minutes, polling every 5 seconds = 360 polls
-const RETRY_GRACE_PERIOD_POLLS = 60 / 5 // 1 minute, polling every 5 seconds
+const MAX_WORKFLOW_WAIT_MS = 30 * 60 * 1000
+const MAX_WORKFLOW_POLLS = MAX_WORKFLOW_WAIT_MS / POLL_INTERVAL_MS
+const RETRY_GRACE_PERIOD_MS = 60 * 1000
+const RETRY_GRACE_PERIOD_POLLS = RETRY_GRACE_PERIOD_MS / POLL_INTERVAL_MS
 const INITIAL_RUN_ATTEMPT = 1
 
 const getResponsePreview = (body) => {
@@ -151,11 +153,21 @@ const getCurrentWorkflow = (runId) => {
  *
  * @param {number} runId
  * @param {string} workflowUrl
+ * @param {number} workflowDeadline
  * @param {number} [minimumRunAttempt]
  * @returns {Promise<{ conclusion: string, run_attempt: number }>}
  */
-async function waitForWorkflowCompletion (runId, workflowUrl, minimumRunAttempt = INITIAL_RUN_ATTEMPT) {
+async function waitForWorkflowCompletion (
+  runId,
+  workflowUrl,
+  workflowDeadline,
+  minimumRunAttempt = INITIAL_RUN_ATTEMPT
+) {
   for (let poll = 0; poll < MAX_WORKFLOW_POLLS; poll++) {
+    if (Date.now() > workflowDeadline) {
+      break
+    }
+
     let currentWorkflow
     try {
       currentWorkflow = await getCurrentWorkflow(runId)
@@ -174,13 +186,16 @@ async function waitForWorkflowCompletion (runId, workflowUrl, minimumRunAttempt 
       )
     }
 
-    if (poll === MAX_WORKFLOW_POLLS - 1) {
-      throw new Error(
-        `Timeout: Workflow did not finish within 30 minutes. Check ${workflowUrl} for more details.`
-      )
+    const waitMs = Math.min(POLL_INTERVAL_MS, workflowDeadline - Date.now())
+    if (waitMs <= 0) {
+      break
     }
-    await setTimeout(POLL_INTERVAL_MS)
+    await setTimeout(waitMs)
   }
+
+  throw new Error(
+    `Timeout: Workflow did not finish within 30 minutes. Check ${workflowUrl} for more details.`
+  )
 }
 
 /**
@@ -188,10 +203,16 @@ async function waitForWorkflowCompletion (runId, workflowUrl, minimumRunAttempt 
  *
  * @param {number} runId
  * @param {number} failedRunAttempt
+ * @param {number} workflowDeadline
  * @returns {Promise<number|undefined>}
  */
-async function waitForWorkflowRetry (runId, failedRunAttempt) {
+async function waitForWorkflowRetry (runId, failedRunAttempt, workflowDeadline) {
+  const retryDeadline = Math.min(Date.now() + RETRY_GRACE_PERIOD_MS, workflowDeadline)
   for (let poll = 0; poll <= RETRY_GRACE_PERIOD_POLLS; poll++) {
+    if (Date.now() > retryDeadline) {
+      break
+    }
+
     try {
       const { run_attempt: currentRunAttempt } = await getCurrentWorkflow(runId)
       if (currentRunAttempt > failedRunAttempt) {
@@ -200,8 +221,9 @@ async function waitForWorkflowRetry (runId, failedRunAttempt) {
     } catch (e) {
       console.error('Workflow retry check failed (%s). Retry in 5 seconds.', e.message)
     }
-    if (poll < RETRY_GRACE_PERIOD_POLLS) {
-      await setTimeout(POLL_INTERVAL_MS)
+    const waitMs = Math.min(POLL_INTERVAL_MS, retryDeadline - Date.now())
+    if (poll < RETRY_GRACE_PERIOD_POLLS && waitMs > 0) {
+      await setTimeout(waitMs)
     }
   }
 
@@ -214,23 +236,25 @@ async function main () {
   const triggeredWorkflow = await triggerWorkflow()
   console.log('Triggered workflow:', triggeredWorkflow)
 
-  const { workflow_run_id: runId, html_url: workflowUrl } = triggeredWorkflow
+  const { workflow_run_id: runId } = triggeredWorkflow
   if (!runId) {
     throw new Error('Triggered workflow response did not include a run id')
   }
 
+  const workflowUrl = `https://github.com/DataDog/test-environment/actions/runs/${runId}`
   console.log(`Workflow URL: ${workflowUrl}`)
 
   // Wait an initial 1 minute, because we're sure it won't finish earlier
   await setTimeout(60000)
 
-  let currentWorkflow = await waitForWorkflowCompletion(runId, workflowUrl)
+  const workflowDeadline = Date.now() + MAX_WORKFLOW_WAIT_MS
+  let currentWorkflow = await waitForWorkflowCompletion(runId, workflowUrl, workflowDeadline)
   if (currentWorkflow.conclusion !== 'success' && currentWorkflow.run_attempt === INITIAL_RUN_ATTEMPT) {
     console.log('Workflow attempt %d failed. Waiting up to 1 minute for an automatic retry.',
       currentWorkflow.run_attempt)
-    const retryRunAttempt = await waitForWorkflowRetry(runId, currentWorkflow.run_attempt)
+    const retryRunAttempt = await waitForWorkflowRetry(runId, currentWorkflow.run_attempt, workflowDeadline)
     if (retryRunAttempt !== undefined) {
-      currentWorkflow = await waitForWorkflowCompletion(runId, workflowUrl, retryRunAttempt)
+      currentWorkflow = await waitForWorkflowCompletion(runId, workflowUrl, workflowDeadline, retryRunAttempt)
     }
   }
 
