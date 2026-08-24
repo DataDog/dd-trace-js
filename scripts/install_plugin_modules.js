@@ -1,7 +1,7 @@
 'use strict'
 
 const { createHash } = require('crypto')
-const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require('fs')
+const { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } = require('fs')
 const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
@@ -548,8 +548,8 @@ async function assertWorkspaces () {
 
 function install () {
   try {
-    // versions/bunfig.toml pins the isolated linker with hidden hoisting disabled, which gives every sandbox its
-    // own node_modules resolution tree. Several plugin specs hard-code paths into
+    // versions/bunfig.toml pins `linker = "isolated"`, which gives every sandbox
+    // its own node_modules tree. Several plugin specs hard-code paths into
     // `versions/<plugin>@<ver>/node_modules/<plugin>/<internal>` (kafkajs reaches
     // into `src/broker`, next reads `package.json`, rhea pulls `lib/session.js`);
     // under isolated bun creates a symlink at that path that resolves to the
@@ -570,6 +570,69 @@ function install () {
       { cause: error }
     )
   }
+  pruneAmbiguousBunCentralSymlinks()
+}
+
+/**
+ * Bun's isolated linker keeps a central deduplicated
+ * `versions/node_modules/.bun/node_modules/` directory holding one symlink per
+ * package, pointing at whichever installed version is highest. The directory
+ * sits in Node's resolution path from inside `.bun/<pkg>@<ver>/node_modules/<pkg>/...`,
+ * so when several incompatible majors of a package are installed across
+ * sandboxes (e.g. `pino-pretty@1.0.1` for `pino@5` plus `pino-pretty@13.1.3`
+ * for `pino-pretty@>=3`), `pino@5`'s `require('pino-pretty')` picks up the
+ * central `13.1.3` symlink and crashes with `pretty is not a function` —
+ * which deadlocks the test process because the throw happens inside an
+ * internal pino write loop.
+ *
+ * The previous package manager's nohoist-everything per-workspace layout
+ * never had this leak: each sandbox's resolution stopped at the version its
+ * own devDependency declared. Mirror that here by removing the central
+ * symlink only for packages that have more than one major installed in the
+ * `.bun/` store. Single-version packages (e.g. `collections`, `sqlite3`,
+ * `@grpc/proto-loader`) keep their hoisted symlink so the legitimate
+ * transitive lookups every sandbox relies on still work.
+ */
+function pruneAmbiguousBunCentralSymlinks () {
+  const dotBun = join(__dirname, '..', 'versions', 'node_modules', '.bun')
+  const central = join(dotBun, 'node_modules')
+
+  const installedMajors = collectInstalledMajors(dotBun)
+  for (const [pkg, majors] of installedMajors) {
+    if (majors.size <= 1) continue
+    rmSync(join(central, pkg), { recursive: true, force: true })
+  }
+}
+
+/**
+ * Build `<package-name> -> Set<majorVersion>` from the names of
+ * `versions/node_modules/.bun/<name>@<version>/` directories. Scoped
+ * packages encode the slash as `+` in the central store
+ * (`@grpc+proto-loader@1.2.3`), so reverse that for the key lookup.
+ *
+ * @param {string} dotBun
+ * @returns {Map<string, Set<string>>}
+ */
+function collectInstalledMajors (dotBun) {
+  /** @type {Map<string, Set<string>>} */
+  const byName = new Map()
+  for (const entry of readdirSync(dotBun)) {
+    if (entry === 'node_modules') continue
+    const at = entry.lastIndexOf('@')
+    if (at <= 0) continue
+    const rawName = entry.slice(0, at)
+    const version = entry.slice(at + 1)
+    if (!version) continue
+    const major = version.split('.')[0]
+    const name = rawName.replace('+', '/')
+    let majors = byName.get(name)
+    if (!majors) {
+      majors = new Set()
+      byName.set(name, majors)
+    }
+    majors.add(major)
+  }
+  return byName
 }
 
 /**

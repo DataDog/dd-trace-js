@@ -176,6 +176,15 @@ externals.express.push({ name: 'axios', overrides: ${override} })
     runInstall('not-a-plugin')
   })
 
+  it('ignores malformed entries in Bun\'s central store', () => {
+    runInstall('pino')
+    const dotBun = path.join(versionsDir, 'node_modules', '.bun')
+    fs.mkdirSync(path.join(dotBun, 'malformed'), { recursive: true })
+    fs.mkdirSync(path.join(dotBun, 'package@'), { recursive: true })
+
+    runInstall('pino')
+  })
+
   it('does not require latest-version caps for forced transitive dependencies', () => {
     runInstall('google-cloud-vertexai')
 
