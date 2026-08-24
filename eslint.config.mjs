@@ -20,6 +20,7 @@ import eslintCarrierFields from './eslint-rules/eslint-carrier-fields.mjs'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintNoPendingAssertionBeforeAwait from './eslint-rules/eslint-no-pending-assertion-before-await.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
 import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
@@ -473,6 +474,7 @@ export default [
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-no-pending-assertion-before-await': eslintNoPendingAssertionBeforeAwait,
           'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
           'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
           'eslint-require-export-exists': eslintRequireExportExists,
@@ -968,6 +970,15 @@ export default [
   {
     ...eslintPluginMocha.configs.recommended,
     files: TEST_FILES,
+  },
+  {
+    name: 'dd-trace/tests/undici-pending-assertions',
+    files: [
+      'packages/datadog-plugin-undici/test/**/*.js',
+    ],
+    rules: {
+      'eslint-rules/eslint-no-pending-assertion-before-await': 'error',
+    },
   },
   {
     name: 'dd-trace/benchmarks',
