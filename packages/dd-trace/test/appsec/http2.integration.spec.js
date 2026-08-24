@@ -15,6 +15,7 @@ const {
   bodyParser,
   cookieParser,
   expressProcessParams,
+  expressSession,
   queryParser,
   responseBody,
 } = require('../../src/appsec/channels')
@@ -30,14 +31,12 @@ const runtimeSupported = Boolean(process.env.DD_INJECT_FORCE) ||
 const describeSupported = runtimeSupported ? describe : describe.skip
 
 describeSupported('AppSec HTTP/2 response blocking', () => {
-  let expressSession
   let http2
   let server
   let port
 
   before(async () => {
     await agent.load(['http2', 'http'], { client: false })
-    expressSession = require('../../../../versions/express-session').get()
     http2 = require('node:http2')
     appsec.enable(getConfigFresh({
       appsec: {
@@ -203,20 +202,16 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     await Promise.all([traceAsserted, request('/mixed-context')])
   })
 
-  it('uses one WAF context for mixed request-start and express-session data', async () => {
-    const sessionMiddleware = expressSession({
-      genid: () => 'mixed-http2-session',
-      resave: false,
-      saveUninitialized: true,
-      secret: 'secret',
-    })
-
+  it('uses one WAF context for mixed request-start and session data', async () => {
     await listen(() => {
       const mixedServer = http2.createServer((req, res) => {
-        sessionMiddleware(req, res, () => {
-          req.session = null
+        const abortController = new AbortController()
+        expressSession.publish({ req, res, sessionId: 'mixed-http2-session', abortController })
+        if (abortController.signal.aborted) return
+
+        if (!res.writableEnded) {
           res.end('unblocked')
-        })
+        }
       })
       mixedServer.on('stream', () => {})
       return mixedServer

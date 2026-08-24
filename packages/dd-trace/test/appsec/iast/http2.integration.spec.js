@@ -35,13 +35,14 @@ function sourceTypeOf (value) {
 
 /**
  * @param {number} [requestSampling]
+ * @param {number} [maxConcurrentRequests]
  */
-function enableIast (requestSampling = 100) {
+function enableIast (requestSampling = 100, maxConcurrentRequests = 100) {
   const config = getConfigFresh({
     iast: {
       enabled: true,
       requestSampling,
-      maxConcurrentRequests: 100,
+      maxConcurrentRequests,
       maxContextOperations: 100,
     },
   })
@@ -210,12 +211,12 @@ describeSupported('IAST HTTP/2 server', () => {
       await assertSource('/a-path', req => req.url, HTTP_REQUEST_URI)
     })
 
-    it('leaves the compatibility request untainted when IAST sampling skips it', async () => {
+    it('leaves the compatibility request untainted when IAST capacity is exhausted', async () => {
       iast.disable()
       rewriter.disable()
-      enableIast(0)
+      enableIast(100, 0)
 
-      await assertSource('/an-unsampled-path', req => req.url, undefined, {}, 0)
+      await assertSource('/an-unacquired-path', req => req.url, undefined, {}, 0)
     })
   })
 
