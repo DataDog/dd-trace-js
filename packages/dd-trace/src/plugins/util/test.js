@@ -541,6 +541,7 @@ module.exports = {
   getRelativeCoverageFiles,
   getLineCoverageBitmap,
   applySkippedCoverageToCoverage,
+  getTestCoverageLinesData,
   getTestCoverageLinesPercentage,
   resetCoverage,
   mergeCoverage,
@@ -1359,6 +1360,34 @@ function getLineCoverageBitmap (lineCoverage, onlyCoveredLines = false) {
   return bitmap
 }
 
+function getLineCoverageBitmaps (lineCoverage) {
+  let maxLine = 0
+  const entries = Object.entries(lineCoverage)
+
+  for (const [line] of entries) {
+    const lineNumber = Number(line)
+    if (Number.isSafeInteger(lineNumber) && lineNumber > maxLine) {
+      maxLine = lineNumber
+    }
+  }
+  if (maxLine === 0) return {}
+
+  const length = Math.ceil((maxLine + 1) / 8)
+  const coveredBitmap = Buffer.alloc(length)
+  const executableBitmap = Buffer.alloc(length)
+  for (const [line, hits] of entries) {
+    const lineNumber = Number(line)
+    if (!Number.isSafeInteger(lineNumber) || lineNumber <= 0) continue
+
+    const byteIndex = lineNumber >> 3
+    const bit = 1 << (lineNumber % 8)
+    executableBitmap[byteIndex] |= bit
+    if (hits) coveredBitmap[byteIndex] |= bit
+  }
+
+  return { coveredBitmap, executableBitmap }
+}
+
 function mergeCoverageBitmaps (targetBitmap, bitmap) {
   if (!targetBitmap) {
     return Buffer.from(bitmap)
@@ -1419,16 +1448,6 @@ function getCoverageFileBitmap (bitmap) {
   }
 }
 
-function addCoverageFilesToMap (files, targetMap, rootDir) {
-  for (const file of files) {
-    const bitmap = getCoverageFileBitmap(file.bitmap)
-    if (!bitmap) continue
-
-    const filename = rootDir ? getTestSuitePath(file.filename, rootDir) : file.filename
-    targetMap.set(filename, mergeCoverageBitmaps(targetMap.get(filename), bitmap))
-  }
-}
-
 function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   if (!skippedCoverage) return
 
@@ -1439,23 +1458,46 @@ function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   }
 }
 
-function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
-  const executableLinesByFile = new Map()
-  const coveredLinesByFile = new Map()
-
-  addCoverageFilesToMap(getExecutableFilesFromCoverage(coverage), executableLinesByFile, rootDir)
-  addCoverageFilesToMap(getCoveredFilesFromCoverage(coverage), coveredLinesByFile, rootDir)
-  addSkippedCoverageToMap(skippedCoverage, coveredLinesByFile)
-
+/**
+ * Calculates line coverage and optionally returns executable-line coverage files in the same traversal.
+ * @param {object} coverage
+ * @param {object} [skippedCoverage]
+ * @param {string} [rootDir]
+ * @param {boolean} [includeExecutableFiles]
+ * @returns {{ percentage: number, executableFiles?: Array<{ filename: string, bitmap: Buffer }> }}
+ */
+function getTestCoverageLinesData (coverage, skippedCoverage, rootDir, includeExecutableFiles = false) {
+  const coverageMap = getCoverageMap(coverage)
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  const executableFiles = includeExecutableFiles ? [] : undefined
   let totalExecutableLines = 0
   let totalCoveredLines = 0
 
-  for (const [filename, executableLines] of executableLinesByFile) {
-    totalExecutableLines += countBitmapBits(executableLines)
-    totalCoveredLines += countCoveredExecutableBits(coveredLinesByFile.get(filename), executableLines)
+  for (const filename of coverageMap.files()) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    const { coveredBitmap, executableBitmap } = getLineCoverageBitmaps(fileCoverage.getLineCoverage())
+    if (!executableBitmap) continue
+
+    const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
+    const skippedBitmap = skippedCoverageByFilename.get(relativeFilename)
+    const combinedCoveredBitmap = skippedBitmap
+      ? mergeCoverageBitmaps(coveredBitmap, skippedBitmap)
+      : coveredBitmap
+    totalExecutableLines += countBitmapBits(executableBitmap)
+    totalCoveredLines += countCoveredExecutableBits(combinedCoveredBitmap, executableBitmap)
+    if (executableFiles) {
+      executableFiles.push({ filename: relativeFilename, bitmap: executableBitmap })
+    }
   }
 
-  return totalExecutableLines === 0 ? 0 : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+  const percentage = totalExecutableLines === 0
+    ? 0
+    : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+  return { percentage, executableFiles }
+}
+
+function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
+  return getTestCoverageLinesData(coverage, skippedCoverage, rootDir).percentage
 }
 
 function isLineCoveredByBitmap (bitmap, line) {

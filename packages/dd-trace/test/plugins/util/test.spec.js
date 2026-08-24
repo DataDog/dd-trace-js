@@ -25,6 +25,7 @@ const {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
   getLineCoverageBitmap,
+  getTestCoverageLinesData,
   getTestCoverageLinesPercentage,
   applySkippedCoverageToCoverage,
   mergeCoverage,
@@ -1515,6 +1516,24 @@ describe('coverage utils', () => {
       }
 
       assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 75)
+    })
+
+    it('calculates coverage and executable-line files together', () => {
+      const partialCoverage = getPartialCoverage()
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.deepStrictEqual(getTestCoverageLinesData(partialCoverage, skippedCoverage, undefined, true), {
+        percentage: 75,
+        executableFiles: [{
+          filename: 'file.js',
+          bitmap: Buffer.from('Hg==', 'base64'),
+        }],
+      })
     })
 
     it('uses rootDir to match skipped coverage to absolute coverage paths', () => {
