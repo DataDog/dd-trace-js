@@ -63,6 +63,17 @@ llm validation:
   variables:
     LLMVAL_PLATFORM_REF: "0f48ca35f0b3dfd19d5c0dc9f92aa977c99bebbf"
 
+llm validation definitions:
+  extends: llm validation
+  variables:
+    LLMVAL_WATCH_PATHS: ".llm-validation/config.yaml .llm-validation/suites"
+    LLMVAL_LEVEL: "minimum"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .llm-validation/config.yaml
+        - .llm-validation/suites/**/*
+
 configure_system_tests:
   variables:
     SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,simple_onboarding_appsec,docker-ssi,lib-injection"

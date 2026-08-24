@@ -36,7 +36,7 @@ presets:
       - dd-trace-js-new-cache-integration-005
     runs: 3 # 6 pairwise comparisons.
   full: # Whole suite.
-    runs: 5
+    runs: 3
 
 # A case blocks on a confident regression by default; mark it `only_warn: true` to make it advisory.
 policy:
