@@ -62,6 +62,8 @@
 /packages/dd-trace/src/lambda/ @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/src/azure_metadata.js @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/src/serverless.js @DataDog/dd-trace-js @DataDog/apm-serverless
+/packages/dd-trace/src/serverless/ @DataDog/dd-trace-js @DataDog/apm-serverless
+/packages/dd-trace/src/flush.js @DataDog/dd-trace-js @DataDog/apm-serverless @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/lambda/ @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/test/azure_metadata.spec.js @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/test/serverless.spec.js @DataDog/dd-trace-js @DataDog/apm-serverless

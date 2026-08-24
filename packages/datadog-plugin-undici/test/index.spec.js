@@ -573,6 +573,62 @@ describe('Plugin', () => {
           })
         })
       })
+      describe('with configured HTTP client error statuses', () => {
+        beforeEach(() => {
+          process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '200-201,202'
+
+          return agent.load('undici', { service: 'test' })
+            .then(() => {
+              express = require('express')
+              fetch = require(`../../../versions/undici@${version}`, {}).get()
+            })
+        })
+
+        afterEach(() => {
+          express = null
+          delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+        })
+
+        it('should mark a configured status code as an error', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+                assert.strictEqual(traces[0][0].error, 1)
+              })
+              .then(done)
+              .catch(done)
+
+            fetch.fetch(`http://localhost:${port}/user`).catch(() => {})
+          })
+        })
+
+        it('should not mark a status code outside of the configured statuses as an error', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(500).send()
+          })
+
+          appListener = server(app, port => {
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '500')
+                assert.strictEqual(traces[0][0].error, 0)
+              })
+              .then(done)
+              .catch(done)
+
+            fetch.fetch(`http://localhost:${port}/user`).catch(() => {})
+          })
+        })
+      })
       describe('with headers configuration', () => {
         let config
 
