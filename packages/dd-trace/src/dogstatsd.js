@@ -10,6 +10,8 @@ const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
 const { entityId } = require('./exporters/common/docker')
+const { registerTelemetryFlusher } = require('./flush')
+const { createServerlessDeliveryTracker } = require('./serverless')
 
 const legacyStorage = storage('legacy')
 
@@ -85,6 +87,7 @@ class DogStatsDClient {
   #lookup
   #metrics = { message: '', offset: 0, queue: [] }
   #port
+  #serverlessDeliveryTracker
   #tagsPrefix
   #telemetryHttpTagsPrefix
   #telemetryUdpTagsPrefix
@@ -113,6 +116,7 @@ class DogStatsDClient {
     this.#host = options.host
     this.#port = options.port
     this.#tagsPrefix = options.tags?.length ? `|#${options.tags.join(',')}` : ''
+    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
 
     if (telemetryEnabled) {
       this.telemetry = {
@@ -157,19 +161,42 @@ class DogStatsDClient {
   }
 
   /**
-   * @param {boolean} [forceTelemetry] - Whether to ignore the telemetry interval
+   * @param {boolean|(() => void)} [forceTelemetry] - Whether to ignore the telemetry interval, or completion callback
+   * @param {() => void} [done] - Called after serverless deliveries complete
    * @returns {void}
    */
-  flush (forceTelemetry = false) {
-    this.#flush(this.#metrics, true)
-    if (this.telemetry) this.#flushTelemetry(forceTelemetry)
+  flush (forceTelemetry = false, done) {
+    if (typeof forceTelemetry === 'function') {
+      done = forceTelemetry
+      forceTelemetry = false
+    }
+
+    let complete
+    let track
+    if (done && !this.#serverlessDeliveryTracker) {
+      let pending = 1
+      complete = () => {
+        if (--pending === 0) done()
+      }
+      track = send => {
+        pending++
+        send(complete)
+      }
+    }
+
+    this.#flush(this.#metrics, true, track)
+    if (this.telemetry) this.#flushTelemetry(forceTelemetry, track)
+
+    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.waitForIdle(done)
+    complete?.()
   }
 
   /**
    * @param {boolean} force - Whether to ignore the telemetry interval
+   * @param {((send: (done?: () => void) => void) => void)} [track] - Tracks a non-serverless delivery
    * @returns {void}
    */
-  #flushTelemetry (force) {
+  #flushTelemetry (force, track) {
     const telemetry = this.telemetry
 
     const now = performance.now()
@@ -213,15 +240,16 @@ class DogStatsDClient {
       telemetry.metricsByType[index] = 0
     }
 
-    this.#flush(telemetry.payload, false)
+    this.#flush(telemetry.payload, false, track)
   }
 
   /**
    * @param {DogStatsDBufferState} state - Payload state to flush
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
+   * @param {((send: (done?: () => void) => void) => void)} [track] - Tracks a non-serverless delivery
    * @returns {void}
    */
-  #flush (state, recordTelemetry) {
+  #flush (state, recordTelemetry, track) {
     const queue = this._enqueue(state)
 
     if (queue.length === 0) return
@@ -230,11 +258,14 @@ class DogStatsDClient {
 
     state.queue = []
 
-    if (this.#httpOptions) {
-      this._sendHttp(queue, recordTelemetry)
-    } else {
-      this._sendUdp(queue, recordTelemetry)
+    const send = complete => {
+      if (this.#httpOptions) this._sendHttp(queue, recordTelemetry, complete)
+      else this._sendUdp(queue, recordTelemetry, complete)
     }
+
+    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.track(send)
+    if (track) return track(send)
+    send()
   }
 
   /**
@@ -265,16 +296,18 @@ class DogStatsDClient {
    *
    * @param {Buffer[]} queue - The metrics to send
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
+   * @param {() => void} [done] - Called after delivery completes
    * @returns {void}
    * @memberof DogStatsDClient
    */
-  _sendHttp (queue, recordTelemetry) {
+  _sendHttp (queue, recordTelemetry, done) {
     const buffer = Buffer.concat(queue)
     request(buffer, this.#httpOptions, (error, _result, _statusCode, _headers, dropped) => {
       if (dropped) {
         if (recordTelemetry && this.telemetry) {
           this.#recordDropped(buffer.length)
         }
+        done?.()
       } else if (error) {
         log.error('DogStatsDClient: HTTP error from agent: %s', error.message, error)
         if (error.status === 404) {
@@ -284,9 +317,10 @@ class DogStatsDClient {
           // options. Either way, we can give UDP a try.
           this.#httpOptions = undefined
         }
-        this._sendUdp(queue, recordTelemetry)
-      } else if (recordTelemetry && this.telemetry) {
-        this.#recordSent(buffer.length)
+        this._sendUdp(queue, recordTelemetry, done)
+      } else {
+        if (recordTelemetry && this.telemetry) this.#recordSent(buffer.length)
+        done?.()
       }
     })
   }
@@ -296,10 +330,11 @@ class DogStatsDClient {
    *
    * @param {Buffer[]} queue - The metrics to send
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
+   * @param {() => void} [done] - Called after delivery completes
    * @returns {void}
    * @memberof DogStatsDClient
    */
-  _sendUdp (queue, recordTelemetry) {
+  _sendUdp (queue, recordTelemetry, done) {
     // dgram resolves the local address via the instrumented dns.lookup when it
     // binds on first send; the noop store keeps that self-traffic off the trace.
     legacyStorage.run({ noop: true }, () => {
@@ -313,12 +348,13 @@ class DogStatsDClient {
               }
               this.#recordDropped(bytes, queue.length)
             }
-            return log.error('DogStatsDClient: Host not found', error)
+            log.error('DogStatsDClient: Host not found', error)
+            return done?.()
           }
-          this._sendUdpFromQueue(queue, address, family, recordTelemetry)
+          this._sendUdpFromQueue(queue, address, family, recordTelemetry, done)
         })
       } else {
-        this._sendUdpFromQueue(queue, this.#host, this.#family, recordTelemetry)
+        this._sendUdpFromQueue(queue, this.#host, this.#family, recordTelemetry, done)
       }
     })
   }
@@ -330,30 +366,41 @@ class DogStatsDClient {
    * @param {string} address - The address to send the metrics to
    * @param {number} family - The family of the address
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
+   * @param {() => void} [done] - Called after every packet completes
    * @returns {void}
    * @memberof DogStatsDClient
    */
-  _sendUdpFromQueue (queue, address, family, recordTelemetry) {
+  _sendUdpFromQueue (queue, address, family, recordTelemetry, done) {
     const socket = family === 6 ? this.#udp6 : this.#udp4
+    let pending = queue.length
+    const complete = () => {
+      if (--pending === 0) done?.()
+    }
 
     for (const buffer of queue) {
       log.debug('Sending to DogStatsD: %s', buffer)
 
-      if (!this.telemetry) {
+      if (!this.telemetry && !done) {
         socket.send(buffer, 0, buffer.length, this.#port, address)
         continue
       }
 
-      socket.send(buffer, 0, buffer.length, this.#port, address, (error) => {
-        if (error) {
-          if (recordTelemetry) {
-            this.#recordDropped(buffer.length)
+      try {
+        socket.send(buffer, 0, buffer.length, this.#port, address, (error) => {
+          if (error) {
+            if (recordTelemetry && this.telemetry) {
+              this.#recordDropped(buffer.length)
+            }
+            log.error('DogStatsDClient: UDP error', error)
+          } else if (recordTelemetry && this.telemetry) {
+            this.#recordSent(buffer.length)
           }
-          log.error('DogStatsDClient: UDP error', error)
-        } else if (recordTelemetry) {
-          this.#recordSent(buffer.length)
-        }
-      })
+          complete()
+        })
+      } catch (error) {
+        log.error('DogStatsDClient: UDP error sending metrics', error)
+        complete()
+      }
     }
   }
 
@@ -501,10 +548,16 @@ class MetricsAggregationClient {
   }
 
   /**
-   * @param {boolean} [forceTelemetry] - Whether to ignore the telemetry interval
+   * @param {boolean|(() => void)} [forceTelemetry] - Whether to ignore the telemetry interval, or completion callback
+   * @param {() => void} [done] - Called after serverless deliveries complete
    * @returns {void}
    */
-  flush (forceTelemetry = false) {
+  flush (forceTelemetry = false, done) {
+    if (typeof forceTelemetry === 'function') {
+      done = forceTelemetry
+      forceTelemetry = false
+    }
+
     const counters = this._captureCounters()
     const gauges = this._captureGauges()
     const histograms = this._captureHistograms()
@@ -516,7 +569,8 @@ class MetricsAggregationClient {
       telemetry.aggregatedContextsByType[TYPE_HISTOGRAM_INDEX] += histograms
     }
 
-    this._client.flush(forceTelemetry)
+    if (forceTelemetry) this._client.flush(true, done)
+    else this._client.flush(done)
   }
 
   reset () {
@@ -717,6 +771,7 @@ class CustomMetrics {
     setInterval(flush, 10 * 1000).unref?.()
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.#client.flush(true))
+    registerTelemetryFlusher(done => this.flush(done))
   }
 
   increment (stat, value = 1, tags) {
@@ -739,8 +794,8 @@ class CustomMetrics {
     this.#client.histogram(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
-  flush () {
-    return this.#client.flush()
+  flush (done) {
+    return this.#client.flush(false, done)
   }
 
   /**

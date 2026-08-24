@@ -13,6 +13,7 @@ const proxyquire = require('proxyquire')
 const datadogCore = require('../../datadog-core')
 
 require('./setup/core')
+const TelemetryDeliveryTracker = require('../src/serverless/telemetry-delivery-tracker')
 
 describe('dogstatsd', () => {
   let client
@@ -34,6 +35,8 @@ describe('dogstatsd', () => {
   let assertData
   let docker
   let log
+  let registerTelemetryFlusher
+  let createServerlessDeliveryTracker
 
   beforeEach((done) => {
     udp6 = {
@@ -76,10 +79,14 @@ describe('dogstatsd', () => {
 
     docker = {}
     log = { debug: sinon.stub(), error: sinon.stub() }
+    registerTelemetryFlusher = sinon.stub()
+    createServerlessDeliveryTracker = sinon.stub()
 
     const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
       dgram,
       '../../datadog-core': datadogCore,
+      './flush': { registerTelemetryFlusher },
+      './serverless': { createServerlessDeliveryTracker },
       './exporters/common/docker': docker,
       './log': log,
     })
@@ -525,6 +532,7 @@ describe('dogstatsd', () => {
       })
 
       try {
+        const done = sinon.spy()
         client = dogstatsd.createMetricsAggregationClient({
           host: '127.0.0.1',
           lookup: dns.lookup,
@@ -533,8 +541,9 @@ describe('dogstatsd', () => {
           tags: [],
         })
         client.gauge('test.avg', 1)
-        client.flush()
+        client.flush(done)
 
+        sinon.assert.calledOnce(done)
         sinon.assert.notCalled(udp4.send)
 
         now.returns(10_000)
@@ -746,6 +755,40 @@ describe('dogstatsd', () => {
     sinon.assert.notCalled(log.debug)
   })
 
+  it('calls the flush callback after UDP accepts the metrics', (done) => {
+    udp4.send = sinon.stub().callsFake((...args) => args.at(-1)())
+    client = createDogStatsDClient()
+
+    client.gauge('test.avg', 1)
+    client.flush(() => {
+      sinon.assert.calledOnce(udp4.send)
+      done()
+    })
+  })
+
+  it('joins an already in-flight UDP flush', (done) => {
+    let completeFirstFlush
+    udp4.send = sinon.stub().callsFake((...args) => {
+      completeFirstFlush = args.at(-1)
+    })
+    createServerlessDeliveryTracker.returns(new TelemetryDeliveryTracker())
+    client = createDogStatsDClient()
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    client.flush(() => {
+      try {
+        sinon.assert.calledOnce(udp4.send)
+        done()
+      } catch (error) {
+        done(error)
+      }
+    })
+
+    assert.strictEqual(completeFirstFlush instanceof Function, true)
+    completeFirstFlush()
+  })
+
   it('logs the metric count and the UDP transport on a non-empty flush', () => {
     client = createDogStatsDClient()
 
@@ -897,6 +940,22 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
+  it('calls the flush callback after the HTTP proxy responds', (done) => {
+    client = createDogStatsDClient({
+      metricsProxyUrl: `http://localhost:${httpPort}`,
+    })
+
+    client.gauge('test.avg', 1)
+    client.flush(() => {
+      try {
+        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\n')
+        done()
+      } catch (error) {
+        done(error)
+      }
+    })
+  })
+
   it('should support HTTP via URL object', (done) => {
     assertData = () => {
       try {
@@ -953,13 +1012,23 @@ describe('dogstatsd', () => {
       }
     })
 
-    statusCode = null
+    const request = sinon.stub().callsFake((buffer, options, callback) => {
+      callback(new Error('connection refused'))
+    })
+    const { DogStatsDClient: FailingDogStatsDClient } = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
+      dgram,
+      '../../datadog-core': datadogCore,
+      './exporters/common/docker': docker,
+      './exporters/common/request': request,
+      './log': log,
+    })
 
-    // host exists but port does not, ECONNREFUSED
-    client = createDogStatsDClient({
-      metricsProxyUrl: 'http://localhost:32700',
+    client = new FailingDogStatsDClient({
       host: 'localhost',
+      lookup: dns.lookup,
+      metricsProxyUrl: 'http://localhost:8126',
       port: 8125,
+      tags: [],
     })
 
     client.increment('test.foo', 10)
@@ -968,6 +1037,18 @@ describe('dogstatsd', () => {
   })
 
   describe('CustomMetrics', () => {
+    it('registers its aggregated metrics flush with the telemetry lifecycle', () => {
+      udp4.send = sinon.stub().callsFake((_buffer, _offset, _length, _port, _host, done) => done())
+      client = createCustomMetrics()
+      client.gauge('test.avg', 10)
+      const done = sinon.spy()
+
+      registerTelemetryFlusher.firstCall.args[0](done)
+
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnce(udp4.send)
+    })
+
     it('.gauge()', () => {
       client = createCustomMetrics()
 

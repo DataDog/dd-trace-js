@@ -472,6 +472,11 @@ module.exports = {
       name: 'mariadb',
       versions: ['2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2'],
     },
+    {
+      name: 'mariadb',
+      versions: ['3.5.3'],
+      node: '>=20',
+    },
   ],
   mercurius: [
     {

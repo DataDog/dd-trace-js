@@ -272,6 +272,7 @@ export interface GeneratedConfig {
   DD_TRACE_HAPI_ENABLED: boolean;
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HONO_ENABLED: boolean;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;
@@ -418,6 +419,7 @@ export interface GeneratedConfig {
       endpoint: string | undefined;
       maxContentSize: number;
       maxMessagesLength: number;
+      redactionEnabled: boolean;
       timeout: number;
     };
     appsec: {
@@ -614,6 +616,7 @@ export interface GeneratedEnvVarConfig {
   DD_AI_GUARD_ENDPOINT: string | undefined;
   DD_AI_GUARD_MAX_CONTENT_SIZE: number;
   DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
+  DD_AI_GUARD_REDACTION_ENABLED: boolean;
   DD_AI_GUARD_TIMEOUT: number;
   DD_API_KEY: string | undefined;
   DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
@@ -970,6 +973,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HEADER_TAGS: string[];
   DD_TRACE_HONO_ENABLED: boolean;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;

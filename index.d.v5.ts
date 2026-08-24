@@ -860,6 +860,13 @@ declare namespace tracer {
          */
         maxMessagesLength?: number,
         /**
+         * Whether AI Guard applies backend-provided sensitive-data redaction replacements.
+         * @default true
+         * @env DD_AI_GUARD_REDACTION_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        redactionEnabled?: boolean,
+        /**
          * Max size of the content property set in the meta-struct
          * @env DD_AI_GUARD_MAX_CONTENT_SIZE
          * Programmatic configuration takes precedence over the environment variables listed above.
@@ -1819,6 +1826,25 @@ declare namespace tracer {
     }
 
     /**
+     * A structured content part in an AI Guard message.
+     */
+    export interface ContentPart {
+      type: string;
+      text?: string;
+      image_url?: { url: string };
+    }
+
+    /**
+     * A conversational message whose content is represented by structured parts.
+     */
+    export interface ContentPartsMessage {
+      role: string;
+      content: ContentPart[];
+      tool_call_id?: string;
+      tool_calls?: ToolCall[];
+    }
+
+    /**
      * A standard conversational message exchanged with a Large Language Model (LLM).
      */
     export interface TextMessage {
@@ -1889,9 +1915,24 @@ declare namespace tracer {
 
     export type Message =
       | TextMessage
+      | ContentPartsMessage
       | AssistantTextMessage
       | AssistantToolCallMessage
       | ToolMessage;
+
+    /**
+     * A sensitive data replacement the AI Guard service determined for the evaluated conversation.
+     */
+    export interface RedactionReplacement {
+      /**
+       * Location of the replaced value within the evaluated conversation (e.g. `messages[0].content`).
+       */
+      path: string;
+      /**
+       * The value that replaces the sensitive data found at `path`.
+       */
+      replacement: string;
+    }
 
     /**
      * The result returned by AI Guard after evaluating a conversation.
@@ -1920,6 +1961,16 @@ declare namespace tracer {
        * Sensitive Data Scanner findings from the evaluation.
        */
       sds: Object[];
+      /**
+       * The evaluated conversation, redacted when required by the AI Guard service.
+       * This may contain sensitive data when redaction is disabled or no replacement was applied.
+       */
+      messages: Message[];
+      /**
+       * The replacements the AI Guard service determined for the evaluated conversation, reported whether or not
+       * the tracer applied them. Empty when the service determined no replacement.
+       */
+      redactionReplacements: RedactionReplacement[];
     }
 
     /**
@@ -4001,7 +4052,8 @@ declare namespace tracer {
         id?: string,
         inputData: JSONType,
         expectedOutput?: JSONType,
-        metadata?: Record<string, JSONType>
+        metadata?: Record<string, JSONType>,
+        tags?: string[]
       }>
     }
 
@@ -4034,6 +4086,8 @@ declare namespace tracer {
       expectedRecordCount?: number
       /** Maximum total time to wait, in ms. Default 30000. */
       maxWaitMs?: number
+      /** Filter records by these tags. */
+      tags?: string[]
     }
 
     interface ExperimentResultRow {
@@ -4151,7 +4205,12 @@ declare namespace tracer {
     }
 
     interface Dataset {
-      addRecord (input: JSONType, expectedOutput?: JSONType, metadata?: Record<string, JSONType>): Dataset
+      addRecord (
+        input: JSONType,
+        expectedOutput?: JSONType,
+        metadata?: Record<string, JSONType>,
+        tags?: string[]
+      ): Dataset
       /** Update fields on an existing dataset record. */
       update (index: number, fields: {
         input?: JSONType
@@ -4160,6 +4219,12 @@ declare namespace tracer {
       }): Dataset
       /** Delete an existing dataset record. */
       delete (index: number): Dataset
+      /** Add tags to a dataset record. */
+      addTags (index: number, tags: string[]): Dataset
+      /** Remove tags from a dataset record. */
+      removeTags (index: number, tags: string[]): Dataset
+      /** Replace all tags on a dataset record. */
+      replaceTags (index: number, tags: string[]): Dataset
       /** Creates the dataset remotely if needed and pushes any unpushed records. */
       push (): Promise<DatasetPushResult>
       name (): string
@@ -4172,8 +4237,11 @@ declare namespace tracer {
         id: string | null,
         input: JSONType,
         expectedOutput: JSONType,
-        metadata: Record<string, JSONType>
+        metadata: Record<string, JSONType>,
+        tags: string[]
       }>
+      /** Return the tags used to filter this dataset. */
+      filterTags (): string[]
       /** Dashboard URL for the dataset, or null until pushed. */
       url (): string | null
     }

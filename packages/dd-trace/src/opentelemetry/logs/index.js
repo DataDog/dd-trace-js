@@ -27,6 +27,7 @@ const os = require('os')
  * @package
  */
 
+const { registerTelemetryFlusher } = require('../../flush')
 const LoggerProvider = require('./logger_provider')
 const BatchLogRecordProcessor = require('./batch_log_processor')
 const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
@@ -77,8 +78,10 @@ function initializeOpenTelemetryLogs (config) {
   // Create logger provider with processor for Datadog Agent export
   const loggerProvider = new LoggerProvider({ processor })
 
-  // Register the logger provider globally with OpenTelemetry API
+  // Expose this provider to application calls through the OpenTelemetry Logs API.
   loggerProvider.register()
+  // Include final log batches in lifecycle retention with trace delivery.
+  registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
 }
 
 module.exports = {

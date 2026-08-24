@@ -146,6 +146,18 @@ describe('register', () => {
     assert.strictEqual(result, moduleExports)
     sinon.assert.notCalled(patch)
 
+    const unsupportedModuleExports = { default: class Query {} }
+    const unsupportedVersion = hook(
+      unsupportedModuleExports,
+      'mariadb/lib/cmd/query.js',
+      '/path/to/mariadb',
+      '3.5.0',
+      true
+    )
+
+    assert.strictEqual(unsupportedVersion, unsupportedModuleExports)
+    sinon.assert.notCalled(patch)
+
     const Query = class Query {}
     patch.returns('patched')
 

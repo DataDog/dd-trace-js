@@ -20,7 +20,6 @@ const {
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
   getCoveredFilesFromCoverage,
-  getExecutableFilesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
@@ -39,7 +38,7 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
-  getTestCoverageLinesPercentage,
+  getTestCoverageLinesData,
   applySkippedCoverageToCoverage,
   getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -2667,16 +2666,15 @@ function getTestSessionCoveragePayload (results, fallbackRootDir) {
     if (isSuitesSkipped) {
       applySkippedCoverageToJestCoverageMap(coverageMap, coverageRootDir)
     }
-    payload.testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
+    const coverageLinesData = getTestCoverageLinesData(
       coverageMap,
       undefined,
-      coverageRootDir
+      coverageRootDir,
+      isTiaCoverageBackfillEnabled()
     )
-    if (isTiaCoverageBackfillEnabled()) {
-      payload.testSessionCoverageFiles = getExecutableFilesFromCoverage(coverageMap).map(({ filename, bitmap }) => ({
-        filename: getTestSuitePath(filename, coverageRootDir),
-        bitmap,
-      }))
+    payload.testCodeCoverageLinesTotal = coverageLinesData.percentage
+    if (coverageLinesData.executableFiles) {
+      payload.testSessionCoverageFiles = coverageLinesData.executableFiles
     }
   } catch {
     // ignore errors

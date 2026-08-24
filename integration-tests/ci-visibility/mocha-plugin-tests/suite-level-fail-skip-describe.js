@@ -11,6 +11,7 @@ describe('mocha-test-suite-level-fail', function () {
   })
 })
 
+// This skipped suite is fixture input for suite-level status aggregation.
 describe.skip('mocha-test-suite-level-skip', function () {
   it('will pass', () => {
     assert.strictEqual(2, 2)

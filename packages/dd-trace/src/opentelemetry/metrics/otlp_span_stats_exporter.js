@@ -22,14 +22,16 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
   /**
    * @param {Array<{timeNs: number, bucket: import('../../span_stats').SpanBuckets}>} drained
    * @param {number} bucketSizeNs
+   * @param {Function} [done] Called after the HTTP export completes
    */
-  export (drained, bucketSizeNs) {
-    if (drained.length === 0) return
+  export (drained, bucketSizeNs, done) {
+    if (drained.length === 0) return done?.()
     const payload = this.#transformer.transform(drained, bucketSizeNs)
     this.sendPayload(payload, (result) => {
       if (result.code !== 0) {
         log.error('Failed to export span stats: %s', result.error?.message)
       }
+      done?.()
     })
   }
 }

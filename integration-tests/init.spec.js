@@ -40,8 +40,9 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
       const NODE_OPTIONS = `--no-warnings --${arg} ${path.join(__dirname, '..', filename)}`
       useEnv({ DD_TEST_TRACER_ROOT: path.join(__dirname, '..'), NODE_OPTIONS })
 
-      if (currentVersionIsSupported) {
-        context('without DD_INJECTION_ENABLED', () => {
+      {
+        const supportedRuntimeContext = currentVersionIsSupported ? context : context.skip
+        supportedRuntimeContext('without DD_INJECTION_ENABLED', () => {
           it('should initialize the tracer', () => testFile(tracerFile, 'true\n', [], 'manual'))
 
           it('should initialize instrumentation', () => testFile(instrFile, 'true\n', [], 'manual'))
@@ -60,8 +61,9 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
         it('should not initialize ESM instrumentation', () => testFile('init/instrument.mjs', 'false\n', [], ''))
 
-        if (arg === 'import') {
-          it('does not load loader internals after deferring to the app copy', () =>
+        {
+          const loaderInternalsTest = arg === 'import' ? it : it.skip
+          loaderInternalsTest('does not load loader internals after deferring to the app copy', () =>
             testFile('init/loader-hook-loaded.js', 'false\n', [], ''))
         }
       })
@@ -211,8 +213,9 @@ true
       })
     })
 
-    if (currentVersionIsSupported) {
-      context('when node version is in range of the engines field', () => {
+    {
+      const supportedRuntimeContext = currentVersionIsSupported ? context : context.skip
+      supportedRuntimeContext('when node version is in range of the engines field', () => {
         useEnv({ NODE_OPTIONS })
 
         before(() => {
@@ -324,8 +327,9 @@ describe('init.js', () => {
 
 // ESM is not supportable prior to Node.js 14.13.1 on the 14.x line,
 // or on 18.0.0 in particular.
-if (semver.satisfies(process.versions.node, '>=14.13.1')) {
-  describe('initialize.mjs', () => {
+{
+  const initializeEsmSuite = semver.satisfies(process.versions.node, '>=14.13.1') ? describe : describe.skip
+  initializeEsmSuite('initialize.mjs', () => {
     setShouldKill(false)
     useSandbox()
     stubTracerIfNeeded()
@@ -355,8 +359,9 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
       testRuntimeVersionChecks('loader', 'initialize.mjs')
 
       // Only off-thread loaders install the matcher; see initialize.mjs.
-      if (esmWorks && semver.satisfies(process.versions.node, '>=18.19.0')) {
-        context('import-in-the-middle include matcher', () => {
+      {
+        const matcherContext = esmWorks && semver.satisfies(process.versions.node, '>=18.19.0') ? context : context.skip
+        matcherContext('import-in-the-middle include matcher', () => {
           useEnv({
             NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs',
             pm2_env: JSON.stringify({
@@ -370,8 +375,9 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
         })
       }
 
-      if (process.versions.node === '20.0.0') {
-        context('with the Node.js 20.0.0 loader', () => {
+      {
+        const node20Context = process.versions.node === '20.0.0' ? context : context.skip
+        node20Context('with the Node.js 20.0.0 loader', () => {
           const NODE_OPTIONS = '--no-warnings --loader dd-trace/initialize.mjs'
 
           context('with force', () => {
@@ -395,8 +401,9 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
       }
     })
 
-    if (semver.satisfies(process.versions.node, '>=20.6.0')) {
-      context('as --import', () => {
+    {
+      const importContext = semver.satisfies(process.versions.node, '>=20.6.0') ? context : context.skip
+      importContext('as --import', () => {
         // The loader hook is skipped on bailout, so --import children exit on their
         // own; killing them would mask a regression that keeps the process alive.
         setShouldKill(false)
