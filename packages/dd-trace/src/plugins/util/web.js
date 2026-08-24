@@ -330,19 +330,22 @@ const web = {
       // through unchanged, so all standard methods are uppercase; the
       // `toLowerCase` fallback covers any non-standard caller.
       let headersModified = false
-      const hasStatusMessage = (statusMessage && typeof statusMessage === 'string')
+      const hasStatusMessage = typeof statusMessage === 'string'
       if (req.method === 'OPTIONS' || req.method.toLowerCase() === 'options') {
         headers = hasStatusMessage ? headers : statusMessage
         const headersAreArray = Array.isArray(headers)
+        const headersAreTuples = headersAreArray && Array.isArray(headers[0])
         const headersLookup = normalizeHeaderLookup(headers)
         const mergedHeaders = { ...res.getHeaders(), ...headersLookup }
 
         if (isOriginAllowed(req, mergedHeaders)) {
           const allowedHeaders = computeAllowedHeaders(req, mergedHeaders)
           if (allowedHeaders) {
-            headers = headersAreArray
-              ? setFlatHeader(headers, 'access-control-allow-headers', allowedHeaders)
-              : setObjectHeader(headers, 'access-control-allow-headers', allowedHeaders)
+            headers = headersAreTuples
+              ? setTupleHeader(headers, 'access-control-allow-headers', allowedHeaders)
+              : headersAreArray
+                ? setFlatHeader(headers, 'access-control-allow-headers', allowedHeaders)
+                : setObjectHeader(headers, 'access-control-allow-headers', allowedHeaders)
             headersModified = true
           }
         }
@@ -415,16 +418,38 @@ function isOriginAllowed (req, headers) {
   return origin && (allowOrigin === '*' || allowOrigin === origin)
 }
 
-function splitHeader (str) {
-  return typeof str === 'string' ? str.split(',').map((header) => header.trim()) : []
+function splitHeader (value) {
+  if (typeof value === 'string') {
+    return value.split(',').map((header) => header.trim())
+  }
+
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const result = []
+  for (const item of value) {
+    if (typeof item !== 'string') continue
+
+    for (const header of item.split(',')) {
+      result.push(header.trim())
+    }
+  }
+  return result
 }
 
 function normalizeHeaderLookup (headers) {
   const result = {}
 
   if (Array.isArray(headers)) {
-    for (let i = 0; i < headers.length; i += 2) {
-      result[headers[i].toLowerCase()] = headers[i + 1]
+    if (Array.isArray(headers[0])) {
+      for (const [key, value] of headers) {
+        result[key.toLowerCase()] = value
+      }
+    } else {
+      for (let i = 0; i < headers.length; i += 2) {
+        result[headers[i].toLowerCase()] = headers[i + 1]
+      }
     }
   } else if (headers) {
     for (const key of Object.keys(headers)) {
@@ -448,6 +473,25 @@ function setFlatHeader (headers, name, value) {
 
   if (!headerFound) {
     result.push(name, value)
+  }
+
+  return result
+}
+
+function setTupleHeader (headers, name, value) {
+  const result = [...headers]
+  let headerFound = false
+
+  for (let i = 0; i < result.length; i++) {
+    const [key] = result[i]
+    if (key.toLowerCase() === name) {
+      result[i] = [key, value]
+      headerFound = true
+    }
+  }
+
+  if (!headerFound) {
+    result.push([name, value])
   }
 
   return result

@@ -924,6 +924,29 @@ describe('plugins/util/web', () => {
       )
     })
 
+    it('preserves array values in explicit access-control-allow-headers', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
+      res.getHeaders.returns({})
+      res.writeHead = sinon.spy()
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200, {
+        [ALLOW_ORIGIN]: '*',
+        [ALLOW_HEADERS]: ['content-type', 'x-custom'],
+      })
+
+      assert.ok(res.writeHead.calledOnce)
+      assert.deepStrictEqual(
+        res.writeHead.firstCall.args,
+        [200, {
+          [ALLOW_ORIGIN]: '*',
+          [ALLOW_HEADERS]: 'content-type,x-custom,x-datadog-trace-id',
+        }]
+      )
+    })
+
     it('honours headers passed as the third writeHead argument with a status message', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
@@ -938,6 +961,23 @@ describe('plugins/util/web', () => {
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
         [200, 'OK', { [ALLOW_ORIGIN]: '*', [ALLOW_HEADERS]: 'x-datadog-trace-id' }]
+      )
+    })
+
+    it('honours an empty status message and headers passed as the third argument', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
+      res.getHeaders.returns({})
+      res.writeHead = sinon.spy()
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200, '', { [ALLOW_ORIGIN]: '*', 'x-test': '1' })
+
+      assert.ok(res.writeHead.calledOnce)
+      assert.deepStrictEqual(
+        res.writeHead.firstCall.args,
+        [200, '', { [ALLOW_ORIGIN]: '*', 'x-test': '1', [ALLOW_HEADERS]: 'x-datadog-trace-id' }]
       )
     })
 
@@ -997,6 +1037,55 @@ describe('plugins/util/web', () => {
           'Access-Control-Allow-Origin', '*',
           'Set-Cookie', 'second=2',
           ALLOW_HEADERS, 'x-datadog-trace-id',
+        ]]
+      )
+    })
+
+    it('honours headers passed as an array of tuples', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
+      res.getHeaders.returns({})
+      res.writeHead = sinon.spy()
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200, [
+        [ALLOW_ORIGIN, '*'],
+        ['Set-Cookie', 'first=1'],
+        ['Set-Cookie', 'second=2'],
+      ])
+
+      assert.ok(res.writeHead.calledOnce)
+      assert.deepStrictEqual(
+        res.writeHead.firstCall.args,
+        [200, [
+          [ALLOW_ORIGIN, '*'],
+          ['Set-Cookie', 'first=1'],
+          ['Set-Cookie', 'second=2'],
+          [ALLOW_HEADERS, 'x-datadog-trace-id'],
+        ]]
+      )
+    })
+
+    it('replaces mixed-case allow-headers passed as a tuple', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'baggage'
+      res.getHeaders.returns({})
+      res.writeHead = sinon.spy()
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200, [
+        [ALLOW_ORIGIN, '*'],
+        ['Access-Control-Allow-Headers', 'content-type'],
+      ])
+
+      assert.ok(res.writeHead.calledOnce)
+      assert.deepStrictEqual(
+        res.writeHead.firstCall.args,
+        [200, [
+          [ALLOW_ORIGIN, '*'],
+          ['Access-Control-Allow-Headers', 'content-type,baggage'],
         ]]
       )
     })
