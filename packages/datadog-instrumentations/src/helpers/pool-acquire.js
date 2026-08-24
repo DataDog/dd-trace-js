@@ -621,6 +621,7 @@ module.exports = {
   clearPoolWaitTime,
   dispatchesAcquireSynchronously,
   isPoolQueryAcquire,
+  reportPoolAcquireError,
   runOutsidePoolQueryAcquire,
   runPoolAcquireError,
   runWithPoolWait,
