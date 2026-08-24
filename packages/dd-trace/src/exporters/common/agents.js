@@ -9,17 +9,10 @@ const legacyStorage = storage('legacy')
 const keepAlive = true
 const maxSockets = 1
 
-/**
- * Creates an HTTP agent whose socket lifecycle runs outside the active trace context.
- *
- * @param {typeof http.Agent|typeof https.Agent} BaseAgent
- * @param {http.AgentOptions|https.AgentOptions} options
- * @returns {http.Agent|https.Agent}
- */
-function createAgent (BaseAgent, options) {
+function createAgentClass (BaseAgent) {
   class CustomAgent extends BaseAgent {
     constructor () {
-      super(options)
+      super({ keepAlive, maxSockets })
     }
 
     createConnection (...args) {
@@ -39,13 +32,13 @@ function createAgent (BaseAgent, options) {
     }
   }
 
-  return new CustomAgent()
+  return CustomAgent
 }
 
-const options = { keepAlive, maxSockets }
+const HttpAgent = createAgentClass(http.Agent)
+const HttpsAgent = createAgentClass(https.Agent)
 
 module.exports = {
-  createAgent,
-  httpAgent: createAgent(http.Agent, options),
-  httpsAgent: createAgent(https.Agent, options),
+  httpAgent: new HttpAgent(),
+  httpsAgent: new HttpsAgent(),
 }

@@ -1,6 +1,5 @@
 'use strict'
 
-const { existsSync } = require('node:fs')
 const path = require('node:path')
 
 const jest = require('jest')
@@ -11,13 +10,10 @@ const payloadSource = process.env.DD_REPRO_PAYLOAD_SOURCE || 'name'
 const finalStatisticsTimeoutMs = Number(process.env.DD_REPRO_FINAL_TIMEOUT_MS || 105_000)
 const ddTraceRoot = path.dirname(require.resolve('dd-trace'))
 const { version: ddTraceVersion } = require(path.join(ddTraceRoot, 'package.json'))
-const testOptimizationAgentsPath = path.join(
+const agentsPath = path.join(
   ddTraceRoot,
   'packages/dd-trace/src/ci-visibility/exporters/agents'
 )
-const agentsPath = existsSync(`${testOptimizationAgentsPath}.js`)
-  ? testOptimizationAgentsPath
-  : path.join(ddTraceRoot, 'packages/dd-trace/src/exporters/common/agents')
 const { httpAgent } = require(agentsPath)
 const intakeUrl = new URL(process.env.DD_CIVISIBILITY_AGENTLESS_URL)
 const agentName = httpAgent.getName({
@@ -27,7 +23,6 @@ const agentName = httpAgent.getName({
 const originalAddRequest = httpAgent.addRequest
 const statistics = {
   attempts: 0,
-  agent: agentsPath === testOptimizationAgentsPath ? 'test-optimization' : 'common',
   ddTraceVersion,
   errors: {},
   maxActiveSockets: 0,

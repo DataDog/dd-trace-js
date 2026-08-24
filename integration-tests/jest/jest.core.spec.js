@@ -673,6 +673,62 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  onlyLatestIt('delivers payloads from sequential runCLI executions under request pressure', async function () {
+    this.timeout(120_000)
+
+    receiver.setSettings({
+      code_coverage: false,
+      early_flake_detection: { enabled: false },
+      itr_enabled: false,
+      known_tests_enabled: false,
+      require_git: false,
+      test_management: { enabled: false },
+      tests_skipping: false,
+    })
+    receiver.setWaitingTime(3_000)
+
+    let output = ''
+    childProcess = exec(
+      'node ./ci-visibility/run-jest-request-pressure.js',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_ENABLE_LAGE_PACKAGE_NAME: 'true',
+          DD_REPRO_FINAL_TIMEOUT_MS: '105000',
+          DD_REPRO_PARAMETER_BYTES: '6000',
+          DD_REPRO_PAYLOAD_SOURCE: 'name',
+          DD_REPRO_RUN_COUNT: '2',
+          DD_REPRO_TEST_COUNT: '2000',
+          DD_TRACE_DEBUG: '1',
+          DD_TRACE_LOG_LEVEL: 'warn',
+        },
+      }
+    )
+    childProcess.stdout.on('data', (chunk) => { output += chunk.toString() })
+    childProcess.stderr.on('data', (chunk) => { output += chunk.toString() })
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      once(childProcess.stdout, 'end'),
+      once(childProcess.stderr, 'end'),
+    ])
+    const finalLine = output.split('\n').find(line => line.startsWith('DD_REPRO_FINAL '))
+
+    assert.strictEqual(exitCode, 0, output)
+    assert.ok(finalLine, output)
+
+    const statistics = JSON.parse(finalLine.slice('DD_REPRO_FINAL '.length))
+
+    assert.ok(statistics.attempts > statistics.maxSockets, output)
+    assert.strictEqual(statistics.maxSockets, 8, output)
+    assert.ok(statistics.maxActiveSockets > 1, output)
+    assert.ok(statistics.maxActiveSockets <= statistics.maxSockets, output)
+    assert.ok(statistics.maxQueuedRequests > 0, output)
+    assert.deepStrictEqual(statistics.errors, {}, output)
+    assert.strictEqual(statistics.responses, statistics.attempts, output)
+  })
+
   onlyLatestIt('reports test events when Jest loads the node environment from an isolated build file', async () => {
     const isolatedPackagePath = copyPackageToIsolatedNodeModules('jest-environment-node')
     const customTestEnvironment = path.join(isolatedPackagePath, 'build/index.js')

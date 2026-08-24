@@ -12,7 +12,6 @@ require('../../setup/core')
 const createRequest = http.request
 
 const {
-  createAgent,
   httpAgent: commonHttpAgent,
   httpsAgent: commonHttpsAgent,
 } = require('../../../src/exporters/common/agents')
@@ -55,7 +54,7 @@ describe('Test Optimization exporter agents', () => {
   })
 
   it('opens eight same-origin connections and queues the ninth', async () => {
-    const testAgent = createAgent(http.Agent, { keepAlive: true, maxSockets: httpAgent.maxSockets })
+    const testAgent = new httpAgent.constructor()
     const lookupCallbacks = []
     const lookup = (hostname, options, callback) => lookupCallbacks.push(callback)
     const requests = new Array(9)
