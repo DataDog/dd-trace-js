@@ -14,13 +14,14 @@ description: >-
 Spend one evidence pass on the failing step, the first actionable error, and whether the test process started. Do
 not reproduce or search test code before this gate.
 
-- **Infrastructure:** the test process never ran and checkout, runner, registry, network, credentials, or externally
-  owned service availability failed. State the evidence and stop; ignore it for flaky-test work. Treat recurrence as
-  a separate CI task only when asked.
+- **Infrastructure:** the test process never ran because checkout, runner, registry, network, or credentials failed,
+  or independent evidence proves an externally owned network or service outage regardless of test-entry timing. State
+  the evidence and stop; ignore it for flaky-test work. Treat recurrence as a separate CI task only when asked.
 - **Deterministic:** the same revision and inputs consistently fail because of a version, fixture, configuration, or
   assertion mismatch. It is not a flake; handle it in the owning change.
-- **Genuine flake:** the same test at the same revision can pass and fail, or evidence proves nondeterministic
-  ordering, timing, or shared state. A green rerun is evidence only when the test ran in both attempts.
+- **Genuine flake:** the same test can pass and fail at the same revision with matching relevant inputs and execution
+  configuration, or evidence proves nondeterministic ordering, timing, or shared state. A green rerun is evidence only
+  when the test ran under those matching conditions in both attempts.
 - **Unknown:** evidence proves none of the above. Run one targeted reproduction or history comparison; do not promote
   uncertainty to “flaky,” “infrastructure,” or “unrelated.”
 
