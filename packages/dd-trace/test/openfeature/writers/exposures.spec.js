@@ -260,6 +260,7 @@ describe('OpenFeature Exposures Writer', () => {
         allocation: { key: 'allocation_123' },
         flag: { key: 'test_flag' },
         variant: { key: 'A' },
+        serial_id: undefined,
         subject: {
           id: 'user_123',
           type: 'user',
@@ -291,14 +292,24 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(payload.exposures[0].serial_id, 0)
     })
 
-    it('should omit serial_id when absent', () => {
-      const payload = writer.makePayload([exposureEvent])
+    // The intake declares serial_id as an integer and rejects the whole exposure on a type
+    // mismatch, so anything non-numeric has to leave the encoded payload entirely.
+    for (const [label, serialId] of [
+      ['absent', undefined],
+      ['null', null],
+      ['a string', '340132'],
+      ['a boolean', true],
+    ]) {
+      it(`should omit serial_id when it is ${label}`, () => {
+        const event = { ...exposureEvent }
+        if (serialId !== undefined) {
+          event.serial_id = serialId
+        }
+        const encoded = JSON.stringify(writer.makePayload([event]))
 
-      assert.ok(
-        !Object.hasOwn(payload.exposures[0], 'serial_id'),
-        `Available keys: ${inspect(Object.keys(payload.exposures[0]))}`
-      )
-    })
+        assert.ok(!encoded.includes('serial_id'), `Encoded payload: ${encoded}`)
+      })
+    }
 
     it('should handle optional config values', () => {
       const writerWithoutOptionals = new ExposuresWriter({

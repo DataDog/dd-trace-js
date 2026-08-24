@@ -216,7 +216,7 @@ class ExposuresWriter extends BaseFFEWriter {
         variant: {
           key: event.variant?.key || event['variant.key'],
         },
-        ...(typeof event.serial_id === 'number' ? { serial_id: event.serial_id } : {}),
+        serial_id: typeof event.serial_id === 'number' ? event.serial_id : undefined,
         subject: {
           id: event.subject?.id || event['subject.id'],
           type: event.subject?.type,
