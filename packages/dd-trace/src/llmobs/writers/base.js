@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('node:fs')
 const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
@@ -15,6 +16,15 @@ const {
   EVP_PROXY_AGENT_BASE_PATH,
 } = require('../constants/writers')
 const { parseResponseAndLog } = require('./util')
+const { DATADOG_MINI_AGENT_PATH } = require('../../constants')
+
+// In Lambda, the execution environment can freeze between invocations, so a buffered
+// flush (interval timer or process 'beforeExit', which only ever fires once per
+// container) may never run before the next event is dropped. Mirrors the same check
+// used to force synchronous flushing of APM traces in config/index.js.
+function isRunningInLambda () {
+  return Boolean(getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')) && !fs.existsSync(DATADOG_MINI_AGENT_PATH)
+}
 
 class LLMObsBuffer {
   constructor ({ events, size, routing = {}, isDefault = false, limit = 1000 }) {
@@ -51,15 +61,19 @@ class BaseLLMObsWriter {
     this._baseEndpoint = endpoint // should not be unset
     this._intake = intake
 
-    this._periodic = setInterval(() => {
-      this.flush()
-    }, this._interval)
-    this._periodic.unref?.()
+    this._flushOnAppend = isRunningInLambda()
 
-    const destroyer = this.destroy.bind(this)
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(destroyer)
+    if (!this._flushOnAppend) {
+      this._periodic = setInterval(() => {
+        this.flush()
+      }, this._interval)
+      this._periodic.unref?.()
 
-    this.#destroyer = destroyer
+      const destroyer = this.destroy.bind(this)
+      globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(destroyer)
+
+      this.#destroyer = destroyer
+    }
   }
 
   // Split on protocol separator to preserve it
@@ -108,6 +122,11 @@ class BaseLLMObsWriter {
 
     buffer.size += eventSize
     buffer.events.push(event)
+
+    if (this._flushOnAppend) {
+      this.flush()
+    }
+
     return true
   }
 
@@ -185,6 +204,8 @@ class BaseLLMObsWriter {
       globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
       this.flush()
       this.#destroyer = undefined
+    } else if (this._flushOnAppend) {
+      this.flush()
     }
   }
 
