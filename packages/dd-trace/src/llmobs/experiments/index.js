@@ -190,8 +190,11 @@ class Experiments {
     }
     const projectName = options?.projectName ?? datasetProjectName
     const client = this.#clientForOperation(projectName)
+    const usesDatasetOverride = datasetProjectName !== undefined && datasetProjectName !== this.#projectName
     const resolvedProjectName = projectName ?? this.#config.llmobs?.projectName
-    const experimentOptions = options?.projectName === undefined && resolvedProjectName !== undefined
+    const experimentOptions = options?.projectName === undefined &&
+      (usesDatasetOverride || this.#config.llmobs?.projectName !== undefined) &&
+      resolvedProjectName !== undefined
       ? { ...options, projectName: resolvedProjectName }
       : options
     return new Experiment(client, experimentOptions, this.#llmobs)
