@@ -260,7 +260,6 @@ describe('OpenFeature Exposures Writer', () => {
         allocation: { key: 'allocation_123' },
         flag: { key: 'test_flag' },
         variant: { key: 'A' },
-        serial_id: undefined,
         subject: {
           id: 'user_123',
           type: 'user',
