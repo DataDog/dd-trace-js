@@ -75,7 +75,7 @@ function initializeTracer () {
     )
   }
 
-  // skipDefault: CI visibility stays on unless DD_CIVISIBILITY_ENABLED is explicitly false; the
+  // skipDefault: Test Optimization stays on unless DD_CIVISIBILITY_ENABLED is explicitly false; the
   // registered default (false) would otherwise turn it off whenever the variable is unset.
   let shouldInit = isValidationModeRequested
     ? isValidationMode && !isFalse(getEnvironmentVariable('DD_CIVISIBILITY_ENABLED'))
