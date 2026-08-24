@@ -1,9 +1,22 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
+const { createDatabaseIntegration } = require('../../dd-trace/src/events/database')
 const MySQLPlugin = require('../../datadog-plugin-mysql/src')
+const querySource = require('./query-source')
 
-class MariadbPlugin extends MySQLPlugin {
+const DatabaseQueryIntegration = createDatabaseIntegration({
+  base: MySQLPlugin,
+  id: 'mariadb',
+  system: 'mariadb',
+  operations: [{
+    operation: 'db.query',
+    adapter: 'query',
+    source: querySource,
+  }],
+})
+
+class MariadbPlugin extends DatabaseQueryIntegration {
   static id = 'mariadb'
   static system = 'mariadb'
 

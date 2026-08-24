@@ -18,6 +18,10 @@ one process-wide bridge, independent product contributors, one processor per tra
 opaque per-tracer trace ownership. The compatibility pipeline remains useful for variable stage composition; it
 should not be the default when a narrower domain contract can express the integration.
 
+MariaDB queries validate that shape against a hotter SQL integration and a non-Orchestrion source lifecycle. The
+shared query policy is reusable without replacing source wrappers that own real callback/command completion. Pool and
+connection lifecycles remain on the compatibility base until their separate adapter slice is designed and verified.
+
 This is not a recommendation to rewrite every plugin immediately. The next useful step is to migrate a few
 representative integrations, measure the repeated code that disappears and the hot-path cost, and improve the
 pipeline where those integrations expose missing capabilities.
@@ -112,24 +116,26 @@ quality claim; it should be evaluated on subsequent migrations.
 
 ### 5. Orchestrion becomes an input, not an architectural constraint
 
-Orchestrion is the default source today, but the engine depends on a small source contract: resolve lifecycle channel
-names and normalize a message into an invocation. Extraction, gating, correlation, tracing, and stages do not build
-Orchestrion channel names themselves.
+Orchestrion remains the preferred source when a lifecycle maps to a statically matched function, but the engines
+depend on small source contracts rather than Orchestrion channel names. MariaDB now supplies explicit `start`, `error`,
+and `finish` channels from its established instrumentation wrappers. Extraction, gating, correlation, tracing, and
+completion policy are unchanged by that source choice.
 
 This matters even if no second source is added soon. Source-specific assumptions have a named boundary, so a future
 instrumentation change should require replacing an adapter instead of reshaping every integration declaration.
 
 ### 6. The design supports incremental adoption
 
-Both generated plugin shells still satisfy the current plugin-manager contract. BullMQ extends `TracingPlugin`
+All generated plugin shells still satisfy the current plugin-manager contract. BullMQ extends `TracingPlugin`
 through the compatibility pipeline. Azure Cosmos uses a thin `Plugin` shell while one shared `DatabaseProcessor` per
 tracer retains `DatabasePlugin` service naming, peer-service finalization, code-origin behavior, span creation, and
-error tagging. `storage('legacy')` is mirrored during the migration.
+error tagging. MariaDB selects `MySQLPlugin` as a compatibility base: generated query subscriptions are suppressed,
+but its explicit pool and connection subscriptions remain active. `storage('legacy')` is mirrored during migration.
 
 That compatibility lets us validate the new model integration by integration. We do not need a flag day, and a plugin
 that does not fit the model can remain on the existing base classes while the missing abstraction is understood.
 
-## Evidence from the BullMQ and Azure Cosmos migrations
+## Evidence from the BullMQ, Azure Cosmos, and MariaDB migrations
 
 The current experiment establishes more than a smaller source file:
 
@@ -150,6 +156,11 @@ The current experiment establishes more than a smaller source file:
 - Cosmos response and error fields are applied through atomic trace-manager completion;
 - product-only activation and product/APM store composition have direct boundary tests;
 - the emulator-backed Cosmos plugin CI passes for the oldest and newest supported SDKs and for ESM loading.
+- one explicit MariaDB source descriptor reuses the same database processor and fixed query adapter as Cosmos;
+- v2 callback/promise and v3 command paths retain their real completion owners while sharing semantic lifecycle code;
+- DBM mutation remains processor-owned and reaches driver string and object query inputs through source write-back;
+- finish-store restoration, multi-tracer primary-only mutation, and physical bridge cardinality have direct tests;
+- minimum/current CJS and latest ESM MariaDB paths preserve their query spans and return behavior.
 
 These properties are useful regardless of whether integration declarations eventually use this exact syntax.
 
@@ -160,16 +171,18 @@ still be proven. A higher number means the design better satisfies the dimension
 
 | Dimension | Existing plugin | Compatibility pipeline | Processor/adapter | Reason for the processor/adapter score |
 | --- | ---: | ---: | ---: | --- |
-| Drift prevention | 5/10 | 9/10 | 9/10 | Database tracing policy and terminal behavior have one domain owner rather than one declaration per package. |
+| Drift prevention | 5/10 | 9/10 | 9/10 | Database tracing and DBM policy have one domain owner across Cosmos and MariaDB. |
 | Module coupling | 4/10 | 8/10 | 9/10 | Package sources expose facts, contributors receive normalized events, and spans remain private to per-tracer trace managers. |
 | Explicit contracts | 5/10 | 8/10 | 9/10 | Registries enforce ownership and configuration; a fixed query adapter replaces open-ended lifecycle conventions. |
-| Testability at boundaries | 6/10 | 9/10 | 9/10 | Raw binding cardinality, contributor composition, multi-tracer ownership, and atomic terminal behavior have direct tests. |
-| Extensibility | 5/10 | 8/10 | 8/10 | A new database package supplies facts and identity while reusing the processor and lifecycle adapter. |
-| Hot-path fitness | 8/10 | 7/10 | 7/10 | Accepted calls add 173 ns over the compatibility pipeline; rejected/no-op paths range from 59% faster to 4% slower. |
+| Testability at boundaries | 6/10 | 9/10 | 9/10 | Raw binding cardinality, contributor composition, multi-tracer ownership, source write-back, and atomic terminals have direct tests. |
+| Extensibility | 5/10 | 8/10 | 9/10 | Orchestrion and explicit-channel packages supply facts while reusing the processor and lifecycle adapter unchanged. |
+| Hot-path fitness | 8/10 | 7/10 | 7/10 | Accepted calls add 94-173 ns on direct paths and 151 ns for MariaDB pool-query facts; rejected/disabled paths improve or remain near parity. |
 
-The processor/adapter proposal clears the architectural bar on five dimensions. Hot-path fitness remains below the
-direct plugin model, but the remaining cost is bounded and is not a rollout blocker for network integrations like
-Azure Cosmos.
+The processor/adapter proposal clears the architectural bar on five dimensions. For the MariaDB query slice, the
+baseline-to-proposal scores are drift prevention 5→9, module coupling 5→8, explicit contracts 5→9, boundary
+testability 6→9, extensibility 4→9, and hot-path fitness 8→7. Composition owns query behavior; inheritance is limited
+to the compatibility base required for pool/connection behavior outside this slice. The measured cost is bounded for
+network database operations but remains a regression gate.
 
 ## What this approach does not yet prove
 
@@ -198,17 +211,32 @@ and completion handlers, allocates real `DatadogSpanContext` instances, and stub
 The accepted-path increase is reproducible and should remain a regression gate. The fixed source decision also makes
 duplicate rejection materially cheaper, while empty-path and inherited-noop behavior remains near parity.
 
+The MariaDB benchmark compares the legacy plugin at `286fc250d` with the processor/adapter query slice. Five
+fresh-process trials per implementation were interleaved on the same machine and runtime. Accepted paths timed
+1,000,000 operations after warmup; the disabled path timed 5,000,000:
+
+| MariaDB query path | Legacy plugin ns/op | Processor/adapter ns/op | Delta |
+| --- | ---: | ---: | ---: |
+| Direct query | 837.3 | 931.4 | +94.1 ns / +11.2% |
+| Pool query facts | 847.7 | 998.8 | +151.1 ns / +17.8% |
+| Tracing disabled | 2.59 | 1.33 | -1.26 ns / -48.6% |
+
+This benchmark drives the existing MariaDB diagnostic-channel lifecycle shared by v2 and v3, allocates real span
+contexts, and stubs export. It measures query normalization and lifecycle policy, not the driver wrapper or database
+server. The pool variant includes pool-wait normalization/tagging but not pool acquisition, which remains in the next
+adapter slice.
+
 End-to-end trials also ran the baseline and candidate with the real Cosmos SDK, tracer, mock-agent export path, and
 local Cosmos emulator. Across 32 fresh processes with 1,000-5,000 timed item reads each, request times were roughly
 0.9-1.4 ms and the distributions completely overlapped. In six simultaneous paired runs, the candidate process was
 faster five times, which is not evidence that it is faster; it demonstrates that emulator and scheduler variance is
 much larger than the sub-microsecond instrumentation delta. No request-level slowdown was detectable.
 
-At a representative 1 ms request, one accepted processor callback adds about 0.017% request time versus the
-compatibility pipeline; even two accepted callbacks are about 0.035%. The CPU delta is roughly 0.017% of one core at
-1,000 accepted callbacks/s, 0.17% at 10,000/s, and 1.7% at 100,000/s. This cost applies only to matching integration
-callbacks, not to every tracer operation. Keep the persistent microbenchmark as the regression gate, and add BullMQ,
-simple synchronous, and globally disabled measurements before broad adoption into substantially hotter libraries.
+At a representative 1 ms request, the largest accepted-path delta measured here adds about 0.017% request time; even
+two accepted callbacks are about 0.035%. The CPU delta is roughly 0.017% of one core at 1,000 accepted callbacks/s,
+0.17% at 10,000/s, and 1.7% at 100,000/s. This cost applies only to matching integration callbacks, not to every tracer
+operation. Keep the persistent microbenchmarks as regression gates, and add BullMQ and simple synchronous
+measurements before broad adoption into substantially hotter libraries.
 
 ### Tracing is separated at package and product boundaries, not fully modularized
 
@@ -255,18 +283,24 @@ they should not be forced into declarations that hide imperative behavior.
 | Product stages silently receive fewer events | Preserve per-invocation source publication and test subscriber cardinality, especially for AppSec and IAST. |
 | One physical bridge accidentally shares one tracer's span | Broadcast only normalized facts and event identity; keep span maps inside each tracer's trace manager and test multi-tracer success/error paths. |
 | Package arguments leak to unrelated products | Contributors receive allowlisted facts and lifecycle metadata, never raw argument, credential, or header containers or package object graphs. |
+| A generated source lifecycle finishes before the driver does | Retain source wrappers that own real completion; MariaDB v3 completes through command `resolve` / `reject`, not `Command.start()` return. |
 | Compatibility code becomes permanent | Track removal criteria for `storage('legacy')` and the `TracingPlugin` inheritance bridge. |
 
 ## Next adoption criteria
 
-Proceed beyond the Azure Cosmos slice if the next migrations demonstrate all of the following:
+The MariaDB query slice proves that a second database package and an explicit diagnostic-channel source can reuse the
+fixed processor/query adapter unchanged. Shared DBM and tracing policy now replaces real package duplication, and the
+direct, pool-query-facts, and tracing-disabled paths have persistent measurements. Query span shape, context
+restoration, configuration isolation, source write-back, and source cardinality are pinned.
 
-1. A second database package can supply facts to `DatabaseProcessor` without changing the fixed query lifecycle.
-2. Shared processor policy removes real duplication across at least two database integrations.
-3. Hot-path benchmarks show acceptable overhead, including filtered and tracing-disabled calls.
-4. Existing span shapes, propagation headers, DSM behavior, errors, and configuration remain compatible.
-5. A production non-tracing contributor can activate and consume a source without reaching through APM or a span.
-6. Package sources preserve the invocation cardinality required by every consumer without broadcasting raw arguments.
+Proceed to the next slices only if they preserve those results and demonstrate the remaining boundaries:
+
+1. MariaDB pool acquisition and connection behavior move through fixed adapters without losing caller context,
+   lazy-pool growth, or no-op internal boundaries.
+2. A production non-tracing contributor activates and consumes a source without reaching through APM or a span.
+3. Pool/connection and later messaging measurements keep absolute overhead acceptable on their actual hot paths.
+4. Compatibility removal criteria are defined before the selected MySQL base or `storage('legacy')` becomes an
+   untracked permanent layer.
 
 If those conditions hold, the two paths give us a better foundation than continuing to add helpers to plugin classes:
 flexible composition where needed, fixed domain lifecycles where possible, independently usable product context, and

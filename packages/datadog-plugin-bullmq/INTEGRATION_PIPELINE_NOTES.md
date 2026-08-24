@@ -1,8 +1,8 @@
 # How the integration lifecycle frameworks work
 
 This is a mechanical walkthrough of the current integration-lifecycle experiment. BullMQ demonstrates the
-compatibility `IntegrationPipeline`; Azure Cosmos demonstrates the fixed processor/adapter framework. Neither is a
-public API or stable API promise. For the adoption argument and trade-offs, see
+compatibility `IntegrationPipeline`; Azure Cosmos and MariaDB queries demonstrate the fixed processor/adapter
+framework. Neither is a public API or stable API promise. For the adoption argument and trade-offs, see
 [INTEGRATION_PIPELINE_RATIONALE.md](./INTEGRATION_PIPELINE_RATIONALE.md).
 
 ## The mental model
@@ -55,8 +55,12 @@ their stores, domain processors own APM policy, and trace managers privately own
 | `packages/datadog-plugin-bullmq/src/producer.js` | Producer operation declarations and propagation/DSM stages. |
 | `packages/datadog-plugin-bullmq/src/consumer.js` | Consumer declaration, carrier extraction, parent selection, and DSM stage. |
 | `packages/datadog-plugin-azure-cosmos/src/index.js` | Thin declaration using the shared database factory. |
-| `packages/datadog-plugin-azure-cosmos/src/query-source.js` | Cosmos-only argument, result, skip, and source-writeback facts. |
+| `packages/datadog-plugin-azure-cosmos/src/query-source.js` | Cosmos-only argument, result, and skip facts. |
 | `benchmark/sirun/plugin-azure-cosmos-pipeline` | Baseline/candidate hot-path benchmark for accepted, rejected, and inherited no-op calls. |
+| `packages/datadog-plugin-mariadb/src/index.js` | Shared query declaration layered over the MySQL pool/connection compatibility base. |
+| `packages/datadog-plugin-mariadb/src/query-source.js` | MariaDB-only connection/query facts and SQL write-back. |
+| `packages/datadog-instrumentations/src/mariadb.js` | Existing v2/v3 query completion owners and driver write-back. |
+| `benchmark/sirun/plugin-mariadb-pipeline` | Legacy/shared direct, pool-query-facts, and tracing-disabled benchmark. |
 
 ## 1. A compatibility integration is a definition
 
@@ -334,12 +338,47 @@ The shared `DatabaseProcessor` extends `DatabasePlugin`, retaining storage servi
 finalization. The narrow `finishSpan()` boundary lets the trace manager finalize the exact span it owns without
 exposing that span to the package source or a shared event.
 
+## 14. MariaDB query flow
+
+MariaDB reuses the same `db.query` processor and fixed query adapter through an explicit lifecycle descriptor:
+
+```text
+apm:mariadb:query:start -> apm:mariadb:query:error -> apm:mariadb:query:finish
+```
+
+The existing instrumentation remains the physical lifecycle owner. This is necessary rather than transitional
+duplication: MariaDB v2 has separate callback and promise query paths, while v3 commands settle through wrapped
+`resolve` / `reject` callbacks after `Command.start()` has returned. Treating `start()` as an Orchestrion async target
+would finish too early.
+
+The query flow is:
+
+1. One process-wide bridge installs two store bindings (`start` and parent-restoring `finish`) and two terminal
+   subscribers (`error` and `finish`) while any tracer consumes MariaDB queries.
+2. `query-source.js` allowlists the SQL statement, connection identity, and optional pool wait time. Passwords and
+   driver-owned option graphs are not published.
+3. The shared processor creates the MariaDB span with SQL-compatible `db.type` and `span.type` fields, preserving the
+   legacy span shape.
+4. When DBM propagation changes the statement, the processor records an opaque source update. The package source
+   writes it back to string or object query input, and the instrumentation applies that value before the driver runs.
+5. Only the primary tracer consumer mutates the physical SQL statement. Additional tracers still create and finish
+   distinct spans for the same normalized event.
+6. The finish binding restores the source caller's store around callback completion, independent of the span store
+   selected by any tracer.
+
+The generated query class uses `MySQLPlugin` only as a compatibility base. Its automatic query subscribers are
+suppressed, while constructor-owned pool acquisition and connection subscriptions remain active. Pool and connection
+lifecycle adapters are intentionally deferred to the next slice, so this commit does not mix their context risks with
+query ownership.
+
 ## Current boundaries
 
 - The compiled BullMQ class still extends `TracingPlugin`, directly or through a selected compatibility base;
   tracing is private to the compatibility pipeline but not yet an independently loadable capability.
 - The database processor is still implemented through `DatabasePlugin`; its span is private to `TraceManager`, while
   product contributors are independently registered and can keep a package source active without APM.
+- MariaDB pool acquisition and connection lifecycles still use the MySQL compatibility base. Only query lifecycle and
+  DBM write-back use the shared processor in this slice.
 - `storage('legacy')` remains necessary for compatibility with code outside the experiment.
 - BullMQ propagation cannot safely move before tracing until sampling decisions can be made from context alone.
 - `DD_TRACE_ENABLED=false` still selects a global no-op tracer that cannot reserve real unique correlation contexts.

@@ -14,6 +14,7 @@ class DatabaseProcessor extends DatabasePlugin {
   static peerServicePrecursors = ['db.name']
   static traceConnect = false
 
+  #consumers = new WeakMap()
   #lifecycleAdapter
   #traceManager
 
@@ -37,24 +38,34 @@ class DatabaseProcessor extends DatabasePlugin {
    * @returns {object} Stable source consumer used by the process-wide bridge.
    */
   createSourceConsumer (runtime) {
+    const existing = this.#consumers.get(runtime)
+    if (existing) return existing
+
     const { identity } = runtime.adapter
     const integration = identity.integration || runtime.source
     const system = identity.system || integration
     const schema = identity.schema === undefined ? integration : identity.schema
+    const sql = SQL_SYSTEMS.has(system)
     const policy = Object.freeze({
       component: identity.component || integration.replaceAll('-', '_'),
       integration,
       name: schema ? this.operationName({ id: schema }) : `${system}.query`,
       schema,
+      sql,
       system,
-      type: identity.spanType || (SQL_SYSTEMS.has(system) ? 'sql' : system),
+      systemTag: sql ? 'db.type' : 'db.system',
+      type: identity.spanType || (sql ? 'sql' : system),
     })
 
-    return Object.freeze({
+    const consumer = {
       complete: event => this.#complete(event),
       fail: event => this.#fail(event),
-      start: event => this.#bindStart(event, runtime, policy),
-    })
+      start: event => this.#bindStart(event, runtime, policy, consumer),
+    }
+
+    Object.freeze(consumer)
+    this.#consumers.set(runtime, consumer)
+    return consumer
   }
 
   /**
@@ -67,14 +78,43 @@ class DatabaseProcessor extends DatabasePlugin {
   addTraceSubs () {}
 
   /**
+   * Materialize a database span and apply processor-owned SQL write-back without exposing the span to package code.
+   *
+   * @param {string} name Resolved database operation name.
+   * @param {object & {sourceUpdate?: object}} options Resolved database tracing options.
+   * @param {object} context Source lifecycle context.
+   * @returns {import('../../../../..').Span} Started database span.
+   */
+  startSpan (name, options, context) {
+    const span = super.startSpan(name, options, context)
+    const event = options.sourceUpdate
+    if (!event) return span
+
+    try {
+      const serviceName = options.service !== null && typeof options.service === 'object'
+        ? options.service.name
+        : options.service
+      const statement = event.facts.statement
+      const updatedStatement = this.injectDbmQuery(span, statement, serviceName, false, options.config)
+      if (updatedStatement !== statement) event.updates = { statement: updatedStatement }
+    } catch (error) {
+      log.error('Database source "%s" failed during query update: %s',
+        options.integrationName, error?.message || error)
+    }
+
+    return span
+  }
+
+  /**
    * Normalize and start one database query operation.
    *
    * @param {object} event Package source lifecycle context.
    * @param {object} runtime Per-tracer package source runtime.
    * @param {object} policy Stable database source policy.
+   * @param {object} consumer Stable source consumer starting the operation.
    * @returns {object | undefined} Store active while the package operation runs.
    */
-  #bindStart (event, runtime, policy) {
+  #bindStart (event, runtime, policy, consumer) {
     const source = policy.integration
     if (!runtime.enabled) return event.parentStore
 
@@ -82,7 +122,12 @@ class DatabaseProcessor extends DatabasePlugin {
     if (!facts || facts.skip) return facts?.skip === 'noop' ? { noop: true } : event.parentStore
 
     try {
-      this.#lifecycleAdapter.start(policy.name, this.#createQueryOptions(runtime, policy, facts), event)
+      const options = this.#createQueryOptions(runtime, policy, facts)
+      if (policy.sql && runtime.adapter.supportsStatementUpdate && event.primaryConsumer === consumer &&
+        typeof facts.statement === 'string') {
+        options.sourceUpdate = event
+      }
+      this.#lifecycleAdapter.start(policy.name, options, event)
     } catch (error) {
       log.error('Database source "%s" failed to start tracing: %s', source, error?.message || error)
       return event.parentStore
@@ -129,7 +174,7 @@ class DatabaseProcessor extends DatabasePlugin {
    */
   #createQueryOptions (runtime, policy, facts) {
     const config = runtime.config
-    const { component, integration, schema, system, type } = policy
+    const { component, integration, schema, system, systemTag, type } = policy
     const connection = facts.connection || {}
     const service = schema
       ? this.serviceName({
@@ -146,7 +191,7 @@ class DatabaseProcessor extends DatabasePlugin {
       kind: 'client',
       meta: {
         component,
-        'db.system': system,
+        [systemTag]: system,
         'db.user': connection.user,
         'db.name': connection.database,
         'out.host': connection.host,

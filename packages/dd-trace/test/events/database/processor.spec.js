@@ -32,6 +32,12 @@ describe('DatabaseProcessor', () => {
     assert.strictEqual(harness.processor._subscriptions.length, 0)
   })
 
+  it('reuses one source consumer when a plugin is recreated for the same tracer', () => {
+    const harness = createHarness()
+
+    assert.strictEqual(harness.processor.createSourceConsumer(harness.runtime), harness.consumer)
+  })
+
   it('processes a normalized query through the fixed lifecycle adapter', () => {
     const harness = createHarness()
     const parentStore = { parent: true }
@@ -101,6 +107,8 @@ describe('DatabaseProcessor', () => {
     assert.strictEqual(harness.processor.startSpan.firstCall.args[0], 'mysql.query')
     assert.strictEqual(harness.processor.startSpan.firstCall.args[1].type, 'sql')
     assert.strictEqual(harness.processor.startSpan.firstCall.args[1].service, service)
+    assert.strictEqual(harness.processor.startSpan.firstCall.args[1].meta['db.type'], 'mysql')
+    assert.strictEqual(harness.processor.startSpan.firstCall.args[1].meta['db.system'], undefined)
   })
 
   it('applies completion metadata and releases state exactly once', () => {

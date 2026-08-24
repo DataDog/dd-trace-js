@@ -121,10 +121,16 @@ describe('EventDomainRegistry', () => {
     assert.strictEqual(Object.isFrozen(runtime.config), true)
   })
 
-  it('rejects duplicate source registrations', () => {
+  it('reuses an identical source registration and rejects a different adapter', () => {
     const registry = new EventDomainRegistry({}, {})
     registry.registerProcessor({ operation: 'db.query', Processor: TestProcessor })
-    registry.registerSource({ operation: 'db.query', source: 'mysql', adapter: {} })
+    const adapter = {}
+    const runtime = registry.registerSource({ operation: 'db.query', source: 'mysql', adapter })
+
+    assert.strictEqual(
+      registry.registerSource({ operation: 'db.query', source: 'mysql', adapter }),
+      runtime
+    )
 
     assert.throws(
       () => registry.registerSource({ operation: 'db.query', source: 'mysql', adapter: {} }),

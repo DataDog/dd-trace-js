@@ -54,6 +54,43 @@ describe('createDatabaseIntegration', () => {
     sinon.assert.calledTwice(start)
   })
 
+  it('shares one physical diagnostic-channel bridge across tracer consumers', () => {
+    const id = 'test-database-shared-channel-source'
+    const source = {
+      start: sinon.stub().returns({ statement: 'SELECT 1' }),
+    }
+    const Integration = createChannelIntegration(id, source)
+    const firstSpan = createSpan()
+    const secondSpan = createSpan()
+    const first = new Integration(createTracer('first', firstSpan), createTracerConfig())
+    const second = new Integration(createTracer('second', secondSpan), createTracerConfig())
+    plugins.push(first, second)
+
+    first.configure({ enabled: true })
+    second.configure({ enabled: true })
+
+    const runtime = getEventSourceRegistry().getSource('db.query', id)
+    assert.strictEqual(runtime.consumers.size, 2)
+    assert.strictEqual(runtime.instance._bindings.length, 2)
+    assert.strictEqual(runtime.instance._subscriptions.length, 2)
+
+    const context = { sql: 'SELECT 1' }
+    const parentStore = { parent: true }
+    legacyStorage.run(parentStore, () => dc.channel(`test:${id}:start`).runStores(context, () => {}))
+    dc.channel(`test:${id}:finish`).runStores(context, () => {
+      assert.strictEqual(legacyStorage.getStore(), parentStore)
+    })
+
+    sinon.assert.calledOnce(source.start)
+    sinon.assert.calledOnce(firstSpan.finish)
+    sinon.assert.calledOnce(secondSpan.finish)
+
+    first.configure(false)
+    second.configure(false)
+    dc.channel(`test:${id}:start`).runStores({ sql: 'SELECT 2' }, () => {})
+    sinon.assert.calledOnce(source.start)
+  })
+
   it('starts and finishes one trace per tracer through the shared bridge', async () => {
     const id = 'test-database-multiple-tracers'
     const source = {
@@ -363,18 +400,52 @@ describe('createDatabaseIntegration', () => {
       start: sinon.stub().returns(facts),
       updateSource: sinon.stub(),
     }
-    const Integration = createIntegration(id, source)
+    const Integration = createIntegration(id, source, 'async', 'mariadb')
     const span = createSpan()
     const plugin = new Integration(createTracer('writeback', span), createTracerConfig())
     plugins.push(plugin)
-    plugin.configure({ enabled: true })
+    plugin.configure({ dbmPropagationMode: 'service', enabled: true })
     const rawContext = { arguments: ['SELECT 1'] }
     const channel = dc.tracingChannel(`orchestrion:test:${id}:query`)
 
     await channel.tracePromise(() => Promise.resolve(), rawContext)
 
-    sinon.assert.calledOnceWithExactly(source.updateSource, rawContext, facts)
+    const updates = source.updateSource.firstCall.args[2]
+    sinon.assert.calledOnceWithExactly(source.updateSource, rawContext, facts, updates)
+    assert.match(updates.statement,
+      /^\/\*dddb='database',dddbs='writeback-test-database-writeback-source'/)
+    assert.match(updates.statement, /\*\/ SELECT 1$/)
     sinon.assert.calledOnce(span.finish)
+  })
+
+  it('uses only the primary tracer for one physical statement update', async () => {
+    const id = 'test-database-primary-writeback-source'
+    const source = {
+      start: sinon.stub().returns({
+        connection: { database: 'database' },
+        statement: 'SELECT 1',
+      }),
+      updateSource: sinon.stub(),
+    }
+    const Integration = createIntegration(id, source, 'async', 'mariadb')
+    const firstSpan = createSpan()
+    const secondSpan = createSpan()
+    const first = new Integration(createTracer('first', firstSpan), createTracerConfig())
+    const second = new Integration(createTracer('second', secondSpan), createTracerConfig())
+    plugins.push(first, second)
+    first.configure({ dbmPropagationMode: 'service', enabled: true })
+    second.configure({ dbmPropagationMode: 'service', enabled: true })
+    const rawContext = { arguments: ['SELECT 1'] }
+    const channel = dc.tracingChannel(`orchestrion:test:${id}:query`)
+
+    await channel.tracePromise(() => Promise.resolve(), rawContext)
+
+    sinon.assert.calledOnce(source.updateSource)
+    const statement = source.updateSource.firstCall.args[2].statement
+    assert.match(statement, /dddbs='first-test-database-primary-writeback-source'/)
+    assert.strictEqual((statement.match(/\/\*dddb=/g) || []).length, 1)
+    sinon.assert.calledOnce(firstSpan.finish)
+    sinon.assert.calledOnce(secondSpan.finish)
   })
 
   it('isolates package source update failures and still finishes tracing', async () => {
@@ -384,12 +455,12 @@ describe('createDatabaseIntegration', () => {
       start: sinon.stub().returns({ statement: 'SELECT 1' }),
       updateSource: sinon.stub().throws(updateError),
     }
-    const Integration = createIntegration(id, source)
+    const Integration = createIntegration(id, source, 'async', 'mariadb')
     const span = createSpan()
     const plugin = new Integration(createTracer('writeback-failure', span), createTracerConfig())
     const logError = sinon.stub(log, 'error')
     plugins.push(plugin)
-    plugin.configure({ enabled: true })
+    plugin.configure({ dbmPropagationMode: 'service', enabled: true })
     const channel = dc.tracingChannel(`orchestrion:test:${id}:query`)
 
     const result = await channel.tracePromise(() => Promise.resolve('application result'), {})
@@ -437,6 +508,10 @@ describe('createDatabaseIntegration', () => {
       /requires one query operation/
     )
     assert.throws(
+      () => createDatabaseIntegration({ base: class {}, id: 'invalid', operations: [], system: 'test' }),
+      /requires a Plugin base/
+    )
+    assert.throws(
       () => createDatabaseIntegration({
         id: 'invalid',
         operations: [{ adapter: 'pool.acquire', operation: 'db.pool.acquire', source: {} }],
@@ -466,6 +541,38 @@ describe('createDatabaseIntegration', () => {
     )
     assert.throws(
       () => createDatabaseIntegration({
+        id: 'invalid-channel-target',
+        operations: [{
+          adapter: 'query',
+          operation: 'db.query',
+          source: { start () {}, targets: [{ channels: { finish: 'finish', start: 'start' } }] },
+        }],
+        system: 'test',
+      }),
+      /has an invalid query target/
+    )
+    assert.throws(
+      () => createDatabaseIntegration({
+        id: 'ambiguous-target',
+        operations: [{
+          adapter: 'query',
+          operation: 'db.query',
+          source: {
+            start () {},
+            targets: [{
+              channels: { finish: 'finish', start: 'start' },
+              lifecycle: 'async',
+              module: 'test',
+              name: 'query',
+            }],
+          },
+        }],
+        system: 'test',
+      }),
+      /has an invalid query target/
+    )
+    assert.throws(
+      () => createDatabaseIntegration({
         id: 'duplicate-target',
         operations: [{
           adapter: 'query',
@@ -485,11 +592,32 @@ describe('createDatabaseIntegration', () => {
   })
 })
 
-function createIntegration (id, source, lifecycle = 'async') {
+function createIntegration (id, source, lifecycle = 'async', system = 'testdb') {
   source.targets = [{
     lifecycle,
     module: 'test',
     name: `${id}:query`,
+  }]
+
+  return createDatabaseIntegration({
+    id,
+    operations: [{
+      adapter: 'query',
+      operation: 'db.query',
+      source,
+    }],
+    schema: false,
+    system,
+  })
+}
+
+function createChannelIntegration (id, source) {
+  source.targets = [{
+    channels: {
+      error: `test:${id}:error`,
+      finish: `test:${id}:finish`,
+      start: `test:${id}:start`,
+    },
   }]
 
   return createDatabaseIntegration({
@@ -526,9 +654,16 @@ function createTracerConfig () {
 }
 
 function createSpan () {
+  const tags = {
+    'db.name': 'database',
+    'out.host': 'localhost',
+  }
   return {
     addTags: sinon.stub(),
-    context: sinon.stub().returns({ getTag: sinon.stub() }),
+    context: sinon.stub().returns({
+      getTag: name => tags[name],
+      getTags: () => tags,
+    }),
     finish: sinon.stub(),
     setTag: sinon.stub(),
   }

@@ -12,7 +12,7 @@ const legacyStorage = storage('legacy')
 const QUERY_OPERATION = DatabaseProcessor.eventOperation
 const queryEvent = Symbol('datadog.database.query.event')
 
-class OrchestrionDatabaseQueryBridge extends Plugin {
+class DatabaseQueryBridge extends Plugin {
   #identity
   #runtime
   #source
@@ -35,26 +35,37 @@ class OrchestrionDatabaseQueryBridge extends Plugin {
     this.#sourceRegistry = sourceRegistry
 
     for (const target of source.targets) {
-      const channels = getOrchestrionChannels(target)
+      const channels = getLifecycleChannels(target)
       const options = { allowNoop: true }
 
       this.addBind(channels.start, context => this.#bindStart(context))
+      if (channels.restoreParent) {
+        this.addBind(channels.finish, context => this.#bindFinish(context), options)
+      }
       this.addSub(channels.error, context => this.#publishError(context), options)
-      if (target.lifecycle === 'sync') {
-        this.addSub(channels.end, context => this.#publishFinish(context), options)
-      } else {
-        this.addSub(channels.end, context => {
+      if (channels.errorEnd) {
+        this.addSub(channels.errorEnd, context => {
           if (hasError(context)) this.#publishFinish(context)
         }, options)
-        this.addSub(channels.asyncEnd, context => this.#publishFinish(context), options)
       }
+      this.addSub(channels.finish, context => this.#publishFinish(context), options)
     }
+  }
+
+  /**
+   * Restore the source caller's store around a driver-owned completion callback.
+   *
+   * @param {object} context Raw package lifecycle context.
+   * @returns {object | undefined} Store captured when the query started.
+   */
+  #bindFinish (context) {
+    return context[queryEvent]?.sourceStore
   }
 
   /**
    * Normalize a raw package invocation and compose product and APM stores.
    *
-   * @param {object} context Raw Orchestrion invocation context.
+   * @param {object} context Raw package lifecycle context.
    * @returns {object | undefined} Store active while the package operation runs.
    */
   #bindStart (context) {
@@ -75,7 +86,9 @@ class OrchestrionDatabaseQueryBridge extends Plugin {
       currentStore: undefined,
       facts,
       parentStore,
+      primaryConsumer: runtime.primaryConsumer,
       source: this.#identity,
+      sourceStore: parentStore,
     }
     context[queryEvent] = event
     this.#sourceRegistry.holdOperation(runtime)
@@ -108,9 +121,9 @@ class OrchestrionDatabaseQueryBridge extends Plugin {
       }
     }
 
-    if (this.#source.updateSource && facts && !facts.skip) {
+    if (this.#source.updateSource && event.updates) {
       try {
-        this.#source.updateSource(context, facts)
+        this.#source.updateSource(context, facts, event.updates)
       } catch (error) {
         log.error(
           'Database source "%s" failed during source update: %s',
@@ -209,12 +222,14 @@ class OrchestrionDatabaseQueryBridge extends Plugin {
  * @param {boolean | string} [definition.schema] Database naming schema identifier, or false for storage defaults.
  * @param {string} [definition.component] Span component override.
  * @param {string} [definition.spanType] Span type override.
+ * @param {typeof Plugin} [definition.base] Compatibility plugin base for non-query behavior.
  * @param {Array<{operation: string, adapter: string, source: object}>} definition.operations Database operations.
  * @returns {typeof Plugin} Thin plugin-manager compatibility shell.
  */
 function createDatabaseIntegration (definition) {
   const query = validateDefinition(definition)
   const { id, system } = definition
+  const Base = definition.base || Plugin
   const sourceRegistry = getEventSourceRegistry()
   const identity = Object.freeze({
     component: definition.component,
@@ -227,18 +242,22 @@ function createDatabaseIntegration (definition) {
     operation: QUERY_OPERATION,
     source: id,
     owner: `datadog-plugin-${id}`,
-    create: runtime => new OrchestrionDatabaseQueryBridge(
+    create: runtime => new DatabaseQueryBridge(
       query.source,
       identity,
       sourceRegistry,
       runtime
     ),
   })
-  const adapter = Object.freeze({ identity })
+  const adapter = Object.freeze({
+    identity,
+    supportsStatementUpdate: typeof query.source.updateSource === 'function',
+  })
 
-  return class DatabaseIntegration extends Plugin {
+  return class DatabaseIntegration extends Base {
     static id = id
     static operation = 'query'
+    static system = system
 
     #consumer
     #registry
@@ -257,6 +276,15 @@ function createDatabaseIntegration (definition) {
       const runtime = this.#registry.registerSource({ operation: QUERY_OPERATION, source: id, adapter })
       this.#consumer = processor.createSourceConsumer(runtime)
     }
+
+    /**
+     * Suppress the compatibility base's automatic query subscriptions.
+     *
+     * Non-query subscriptions registered explicitly by the selected base remain active.
+     *
+     * @returns {void}
+     */
+    addTraceSubs () {}
 
     /**
      * Reference-count the physical source bridge and configure this tracer's immutable source runtime.
@@ -281,17 +309,20 @@ function createDatabaseIntegration (definition) {
 }
 
 /**
- * Resolve raw lifecycle channel names for one Orchestrion target.
+ * Resolve raw lifecycle channel names for one package source target.
  *
- * @param {{module: string, name: string}} target Orchestrion target descriptor.
- * @returns {{start: string, end: string, asyncEnd: string, error: string}} Lifecycle channel names.
+ * @param {object} target Package source target descriptor.
+ * @returns {{start: string, error: string, finish: string, errorEnd?: string, restoreParent?: boolean}}
+ *   Lifecycle channel names.
  */
-function getOrchestrionChannels (target) {
+function getLifecycleChannels (target) {
+  if (target.channels) return { ...target.channels, restoreParent: true }
+
   const prefix = `tracing:orchestrion:${target.module}:${target.name}`
   return {
-    asyncEnd: `${prefix}:asyncEnd`,
-    end: `${prefix}:end`,
     error: `${prefix}:error`,
+    errorEnd: target.lifecycle === 'async' ? `${prefix}:end` : undefined,
+    finish: target.lifecycle === 'async' ? `${prefix}:asyncEnd` : `${prefix}:end`,
     start: `${prefix}:start`,
   }
 }
@@ -319,6 +350,10 @@ function validateDefinition (definition) {
   if (typeof definition.system !== 'string' || definition.system.length === 0) {
     throw new TypeError(`Database integration "${definition.id}" requires a non-empty system`)
   }
+  if (definition.base !== undefined && (typeof definition.base !== 'function' ||
+    (definition.base !== Plugin && !(definition.base.prototype instanceof Plugin)))) {
+    throw new TypeError(`Database integration "${definition.id}" requires a Plugin base`)
+  }
   if (!Array.isArray(definition.operations) || definition.operations.length !== 1) {
     throw new TypeError(`Database integration "${definition.id}" requires one query operation`)
   }
@@ -334,12 +369,11 @@ function validateDefinition (definition) {
 
   const targets = new Set()
   for (const target of query.source.targets) {
-    if (!target || typeof target.module !== 'string' || typeof target.name !== 'string' ||
-      (target.lifecycle !== 'sync' && target.lifecycle !== 'async')) {
+    if (!isOrchestrionTarget(target) && !isChannelTarget(target)) {
       throw new TypeError(`Database integration "${definition.id}" has an invalid query target`)
     }
 
-    const key = `${target.module}:${target.name}`
+    const key = target.channels?.start || `${target.module}:${target.name}`
     if (targets.has(key)) {
       throw new TypeError(`Database integration "${definition.id}" repeats query target "${key}"`)
     }
@@ -347,6 +381,36 @@ function validateDefinition (definition) {
   }
 
   return query
+}
+
+/**
+ * Check whether a target describes an Orchestrion function lifecycle.
+ *
+ * @param {unknown} target Possible target descriptor.
+ * @returns {boolean} Whether the target is valid.
+ */
+function isOrchestrionTarget (target) {
+  return target !== null && typeof target === 'object' &&
+    target.channels === undefined &&
+    typeof target.module === 'string' && target.module.length > 0 &&
+    typeof target.name === 'string' && target.name.length > 0 &&
+    (target.lifecycle === 'sync' || target.lifecycle === 'async')
+}
+
+/**
+ * Check whether a target describes an existing diagnostic-channel lifecycle.
+ *
+ * @param {unknown} target Possible target descriptor.
+ * @returns {boolean} Whether the target is valid.
+ */
+function isChannelTarget (target) {
+  if (target === null || typeof target !== 'object') return false
+
+  const channels = target.channels
+  return channels !== null && typeof channels === 'object' &&
+    typeof channels.start === 'string' && channels.start.length > 0 &&
+    typeof channels.error === 'string' && channels.error.length > 0 &&
+    typeof channels.finish === 'string' && channels.finish.length > 0
 }
 
 /**

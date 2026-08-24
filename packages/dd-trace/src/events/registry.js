@@ -67,7 +67,10 @@ class EventDomainRegistry {
   registerSource ({ operation, source, adapter }) {
     const domain = this.#getDomain(operation)
 
-    if (domain.sources.has(source)) {
+    const existing = domain.sources.get(source)
+    if (existing) {
+      if (existing.adapter === adapter) return existing
+
       throw new Error(`Source "${source}" already registered for operation "${operation}"`)
     }
 

@@ -2,8 +2,8 @@
 
 This is the implementation and migration guide for agents continuing the experimental integration-pipeline work.
 It covers both the compatibility `IntegrationPipeline` engine and the processor/adapter framework now used by Azure
-Cosmos. It documents the current executable contracts, the invariants migrations must preserve, and the checks
-required before changing or adopting either path.
+Cosmos and MariaDB queries. It documents the current executable contracts, the invariants migrations must preserve,
+and the checks required before changing or adopting either path.
 
 Both frameworks are internal and experimental. They are not public APIs, and their declaration shapes may still
 change.
@@ -17,6 +17,9 @@ At this checkpoint, branch `crysmags/integration-processor-adapters`, based on
   DSM stages.
 - Azure Cosmos is the first database processor/adapter migration. Its package source extracts only Cosmos facts; one
   process-wide bridge normalizes the raw Orchestrion lifecycle; one database processor per tracer owns APM policy.
+- MariaDB is the second database proof. Its existing v2 callback/promise and v3 command wrappers retain physical
+  completion ownership, while one process-wide bridge normalizes their explicit diagnostic-channel lifecycle for the
+  same database processor and query adapter used by Cosmos.
 - The process-wide source registry maintains one physical raw binding per source operation and independently
   reference-counts APM consumers, product contributors, and in-flight operations awaiting terminal cleanup.
 - The per-tracer domain registry maintains one processor per semantic operation and immutable configuration per
@@ -39,13 +42,15 @@ At this checkpoint, branch `crysmags/integration-processor-adapters`, based on
 
 Verification completed at this checkpoint:
 
-- focused source-registry, domain-registry, trace-manager, database-factory, processor, and adapter tests: passing;
+- focused database-factory, processor, domain-registry, DBM, and MariaDB source tests: 66 passing;
 - Azure Cosmos focused source-boundary tests: 10 passing;
 - Azure Cosmos real SDK/emulator tests against `@azure/cosmos` 4.4.1 and 4.10.0: 8 passing;
 - Azure Cosmos ESM named and namespace imports against both boundary versions: 4 passing;
+- MariaDB 2.5.1 callback matrix: 23 passing; MariaDB 3.4.5 callback/promise/pool matrix: 64 passing;
+- MariaDB DBM driver write-back against 3.0.0: passing; latest ESM-only 3.5.2 named import variants: 2 passing;
 - BullMQ regression matrix after shared compiler optimization: 126 passing;
-- changed event registries, trace manager, query processor/adapter, and Azure source: 100% line coverage; the database
-  integration factory is above 98% line coverage with all important lifecycle paths covered;
+- focused changed-file coverage: 96.94% lines overall; MariaDB package source/shell, domain registry, and database
+  integration factory are at 100% lines, with the processor and MariaDB instrumentation above 96%;
 - focused ESLint and `git diff --check`: passing.
 - the persistent Azure microbenchmark retains a roughly 173 ns accepted-path cost versus the compatibility pipeline;
   duplicate rejection is materially faster, and empty-path and inherited-noop paths remain near parity. See the
@@ -65,7 +70,7 @@ Do not use that observation to waive focused lint or CI on subsequent changes.
 | [`integration-pipeline.spec.js`](../../test/plugins/integration-pipeline.spec.js) | Executable contract for ordering, correlation, spanless operations, errors, no-op scopes, and validation. |
 | [`source-registry.js`](../events/source-registry.js) | Process-wide source ownership, raw binding cardinality, and product contributor lifecycle. |
 | [`registry.js`](../events/registry.js) | Per-tracer processor ownership and immutable package-source configuration. |
-| [`database/integration.js`](../events/database/integration.js) | Database factory and process-wide Orchestrion-to-semantic bridge. |
+| [`database/integration.js`](../events/database/integration.js) | Database factory and process-wide package-lifecycle-to-semantic bridge. |
 | [`database/processor.js`](../events/database/processor.js) | Shared database APM policy and stable source-consumer compilation. |
 | [`database/query-lifecycle-adapter.js`](../events/database/query-lifecycle-adapter.js) | Fixed database-query-to-trace-manager lifecycle translation. |
 | [`trace-manager.js`](../events/trace-manager.js) | Opaque per-tracer span ownership and exactly-once terminal operations. |
@@ -74,10 +79,14 @@ Do not use that observation to waive focused lint or CI on subsequent changes.
 | [BullMQ plugin](../../../datadog-plugin-bullmq/src/index.js) | Messaging integration using multiple operations and product stages. |
 | [Azure Cosmos plugin](../../../datadog-plugin-azure-cosmos/src/index.js) | Thin database-factory declaration. |
 | [Azure Cosmos query source](../../../datadog-plugin-azure-cosmos/src/query-source.js) | Package-only Cosmos argument/result extraction and skip decisions. |
+| [MariaDB plugin](../../../datadog-plugin-mariadb/src/index.js) | Query migration using the shared processor plus the MySQL compatibility base for pool/connection behavior. |
+| [MariaDB query source](../../../datadog-plugin-mariadb/src/query-source.js) | MariaDB query normalization and processor-owned SQL write-back. |
+| [MariaDB instrumentation](../../../datadog-instrumentations/src/mariadb.js) | Version-specific v2/v3 lifecycle ownership and driver write-back. |
 | [Orchestrion config index](../../../datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js) | Registration point for source-rewriter definitions. |
 | [Azure Cosmos benchmark](../../../../benchmark/sirun/plugin-azure-cosmos-pipeline/README.md) | Persistent baseline/candidate measurement for accepted, rejected, and inherited no-op paths. |
+| [MariaDB benchmark](../../../../benchmark/sirun/plugin-mariadb-pipeline/README.md) | Persistent direct-query, pool-query-facts, and tracing-disabled measurement. |
 
-Before changing an integration or its Orchestrion match, read the relevant upstream library source for the oldest and
+Before changing an integration or its source match, read the relevant upstream library source for the oldest and
 newest supported versions. Inspect the matched function, its callers, its result and error shapes, and sibling paths
 that may publish the same logical operation.
 
@@ -87,7 +96,7 @@ Use the processor/adapter path when integrations in one semantic domain share a 
 module extracts package facts; shared domain code owns tracing policy and span lifecycle:
 
 ```text
-raw Orchestrion lifecycle
+raw package lifecycle
   -> one process-wide package source bridge
   -> normalized package facts
   -> independent product contributors
@@ -534,7 +543,7 @@ Read:
 Azure Cosmos demonstrates:
 
 - a thin `createDatabaseIntegration()` declaration;
-- package-only argument, result, skip, and source-writeback logic in `query-source.js`;
+- package-only argument, result, and skip logic in `query-source.js`;
 - one process-wide raw source bridge shared by independent product and APM consumers;
 - one `DatabaseProcessor` per tracer using the fixed query lifecycle adapter and opaque trace manager;
 - distinct span ownership and finalization when multiple tracers consume the same normalized event;
@@ -547,6 +556,28 @@ Read:
 - [`src/query-source.js`](../../../datadog-plugin-azure-cosmos/src/query-source.js)
 - [`test/get-resource.spec.js`](../../../datadog-plugin-azure-cosmos/test/get-resource.spec.js)
 - [`test/index.spec.js`](../../../datadog-plugin-azure-cosmos/test/index.spec.js)
+
+### MariaDB queries
+
+MariaDB demonstrates:
+
+- one explicit diagnostic-channel source descriptor using `start`, `error`, and `finish` channels;
+- retained v2 callback/promise and v3 command wrappers because upstream completion is not a common method-return
+  lifecycle;
+- processor-owned DBM SQL injection written back to both string and object query inputs before driver execution;
+- stable source-caller context restored around driver-owned completion callbacks;
+- the MySQL compatibility base preserving pool acquisition and connection behavior while its automatic query
+  subscribers are suppressed;
+- one physical query bridge with two bindings and two terminal subscribers regardless of tracer count;
+- preserved MariaDB span shape across minimum/current CJS versions and the latest ESM build.
+
+Read:
+
+- [`src/index.js`](../../../datadog-plugin-mariadb/src/index.js)
+- [`src/query-source.js`](../../../datadog-plugin-mariadb/src/query-source.js)
+- [`test/query-source.spec.js`](../../../datadog-plugin-mariadb/test/query-source.spec.js)
+- [`test/index.spec.js`](../../../datadog-plugin-mariadb/test/index.spec.js)
+- [`../datadog-instrumentations/src/mariadb.js`](../../../datadog-instrumentations/src/mariadb.js)
 
 ## Migration workflow
 
@@ -576,8 +607,10 @@ or another product depends on argument identity for every invocation.
 
 ### 3. Map source targets to operations
 
-Use one operation per observed source target. Keep Orchestrion as the default. If an existing source function can be
-matched statically, do not replace it with shimmer. When shimmer is unavoidable, document the concrete limitation.
+Use one operation per observed source target. Keep Orchestrion as the default when a source function can be matched
+statically. Retain an existing diagnostic-channel wrapper when it owns a lifecycle that the matched function does not
+expose, and document that limitation. MariaDB v3 commands, for example, complete through command `resolve` / `reject`
+callbacks rather than the return value of `Command.start()`.
 
 ### 4. Separate package facts, product work, and lifecycle
 
@@ -701,7 +734,8 @@ a fake test path that cannot occur through instrumentation and the plugin manage
   Tracing is not an independently loadable compatibility-pipeline capability.
 - `storage('legacy')` remains a compatibility bridge in both frameworks.
 - Only the `tracing` compatibility-stage requirement exists.
-- No non-Orchestrion package source has been proven.
+- MariaDB proves an explicit diagnostic-channel package source. It deliberately retains version-specific wrappers;
+  the framework does not yet generate or replace imperative source instrumentation.
 - The compatibility operation model explicitly distinguishes only `sync` and `async`; unusual callback, iterator, or
   streaming ownership may require source or lifecycle work.
 - Compatibility `frame.data` is intentionally flexible but weakly typed across integration-specific fields.
@@ -713,13 +747,16 @@ a fake test path that cannot occur through instrumentation and the plugin manage
   paths remain near parity. Real SDK/emulator trials cannot resolve that delta against roughly millisecond requests.
   See `benchmark/sirun/plugin-azure-cosmos-pipeline` and keep measuring before adopting the framework in much hotter
   integrations.
+- The MariaDB benchmark adds roughly 94 ns for direct queries and 151 ns for pool-query facts versus its legacy
+  plugin. The tracing-disabled source path remains effectively free. See `benchmark/sirun/plugin-mariadb-pipeline`;
+  pool acquisition and connection lifecycle costs are outside this query-slice measurement.
 - The contributor registry contract is tested, including contributor-only source activation and APM composition, but
   no production non-APM contributor has migrated to it yet.
 - Compatibility removal criteria for the legacy store and compatibility pipeline are not defined.
 
-The Azure benchmark covers accepted, rejected, and inherited no-op paths plus a one-off real emulator comparison. Add
-equivalent persistent measurements for BullMQ, simple synchronous integrations, and globally disabled tracing before
-broad adoption. Warm up for roughly one second, run at least five trials, and reproduce results in a fresh shell.
+The Azure and MariaDB benchmarks cover accepted, rejected/no-op, direct/pool-query-facts, and tracing-disabled paths.
+Add equivalent persistent measurements for BullMQ and simple synchronous integrations before broad adoption. Warm up
+for roughly one second, run at least five trials, and reproduce results in a fresh shell.
 
 ## Completion checklist
 
@@ -740,5 +777,5 @@ An agent should not declare a migration complete until all of the following are 
 - oldest/newest and ESM tests pass;
 - scoped coverage includes important changed production lines;
 - focused lint and `git diff --check` pass;
-- shared lifecycle changes were regression-tested against BullMQ and Azure Cosmos;
+- shared lifecycle changes were regression-tested against BullMQ, Azure Cosmos, and MariaDB;
 - notes and rationale reflect any new engine contract or remaining limitation.
