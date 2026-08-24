@@ -5,8 +5,9 @@ const { isEmpty } = require('../../util')
 const addresses = require('../addresses')
 const apiSecurity = require('../api_security')
 const { isBlocked, callBlockDelegation, handleResults } = require('../blocking')
+const { getCanonicalRequest } = require('../store')
 const waf = require('../waf')
-const { storedResponseHeaders, copyHeadersOmitting, getCanonicalRequest } = require('./http-shared')
+const { storedResponseHeaders, copyHeadersOmitting } = require('./http-shared')
 
 const responseAnalyzedSet = new WeakSet()
 

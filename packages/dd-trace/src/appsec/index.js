@@ -42,9 +42,9 @@ const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
 const lambda = require('./lambda')
 const rasp = require('./rasp')
+const { adoptRequest } = require('./store')
 const httpRequest = require('./handlers/http-request')
 const httpResponse = require('./handlers/http-response')
-const httpShared = require('./handlers/http-shared')
 const auth = require('./handlers/auth')
 const payments = require('./handlers/payments')
 
@@ -56,7 +56,7 @@ const channelHandlers = [
   [bodyParser, httpRequest.onRequestBodyParsed],
   [multerParser, httpRequest.onRequestBodyParsed],
   [cookieParser, httpRequest.onRequestCookieParser],
-  [http2ServerRequestAdopt, httpShared.onHttp2ServerRequestAdopt],
+  [http2ServerRequestAdopt, adoptRequest],
   [incomingHttpRequestStart, httpRequest.incomingHttpStartTranslator],
   [incomingHttpRequestEnd, httpRequest.incomingHttpEndTranslator],
   [passportVerify, auth.onPassportVerify],

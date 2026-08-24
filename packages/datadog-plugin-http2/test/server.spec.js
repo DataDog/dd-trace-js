@@ -16,6 +16,7 @@ const { channel } = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
 const {
+  informationalResponse,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   responseWriteHead,
@@ -30,10 +31,13 @@ const finishSetHeader = dc.channel('datadog:http:server:response:set-header:fini
 /**
  * @param {typeof import('http2')} http2
  * @param {string} url
- * @param {{ signal?: import('node:events').EventEmitter }} [options]
+ * @param {{
+ *   signal?: import('node:events').EventEmitter,
+ *   informationalHeaders?: import('node:http2').IncomingHttpHeaders[]
+ * }} [options]
  */
 function request (http2, url, options = {}) {
-  const { signal } = options
+  const { informationalHeaders, signal } = options
   const urlObj = new URL(url)
   return new Promise((resolve, reject) => {
     const client = http2
@@ -45,6 +49,13 @@ function request (http2, url, options = {}) {
       ':method': 'GET',
     })
     req.on('error', reject)
+    if (informationalHeaders) {
+      /** @param {import('node:http2').IncomingHttpHeaders} headers */
+      function recordInformationalHeaders (headers) {
+        informationalHeaders.push(headers)
+      }
+      req.on('headers', recordInformationalHeaders)
+    }
 
     if (signal) {
       signal.on('abort', () => req.destroy())
@@ -415,16 +426,23 @@ describe('Plugin', () => {
           request(http2, `http://localhost:${port}/user`).catch(done)
         })
 
-        it('preserves setHeader without security subscribers', async () => {
+        it('preserves response operations without security subscribers', async () => {
+          const informationalHeaders = []
           app = (req, res) => {
             assert.strictEqual(res.setHeader('x-test', 'value'), undefined)
             assert.strictEqual(res.getHeader('x-test'), 'value')
+            res.removeHeader('x-test')
+            res.writeContinue()
+            res.writeEarlyHints({ link: '</style.css>; rel=preload; as=style' })
           }
 
           await Promise.all([
             agent.assertFirstTraceSpan({ name: 'web.request' }),
-            request(http2, `http://localhost:${port}/user`),
+            request(http2, `http://localhost:${port}/user`, { informationalHeaders }),
           ])
+          assert.strictEqual(informationalHeaders.length, 2)
+          assert.strictEqual(informationalHeaders[0][':status'], 100)
+          assert.strictEqual(informationalHeaders[1][':status'], 103)
         })
 
         it('stops the request handler when a request subscriber aborts', async () => {
@@ -729,6 +747,30 @@ describe('Plugin', () => {
             }
           })
 
+          it('blocks an informational response when its subscriber aborts', async () => {
+            const server = appListener
+            server.removeAllListeners('stream')
+            server.on('stream', stream => {
+              stream.additionalHeaders({ ':status': 103 })
+              stream.respond({ ':status': 200 })
+              stream.end('ignored')
+            })
+
+            const informationalHeaders = []
+            informationalResponse.subscribe(abortWithBlockedResponse)
+
+            try {
+              const [, body] = await Promise.all([
+                agent.assertFirstTraceSpan({ name: 'web.request', meta: { 'http.status_code': '403' } }),
+                request(http2, `http://localhost:${port}/user`, { informationalHeaders }),
+              ])
+              assert.strictEqual(informationalHeaders.length, 0)
+              assert.strictEqual(body.toString(), 'blocked')
+            } finally {
+              informationalResponse.unsubscribe(abortWithBlockedResponse)
+            }
+          })
+
           it('blocks an implicit response started by write', async () => {
             const server = appListener
             server.removeAllListeners('stream')
@@ -806,19 +848,28 @@ describe('Plugin', () => {
                 const fileDescriptor = openSync(__filename, 'r')
                 stream.once('close', () => closeSync(fileDescriptor))
                 stream.respondWithFD(fileDescriptor, { ':status': 200 })
-              } else {
+              } else if (headers[':path'] === '/file') {
                 stream.respondWithFile(__filename, { ':status': 200 })
+              } else {
+                stream.additionalHeaders({ ':status': 103 })
+                stream.respond({ ':status': 200 })
+                stream.end('body')
               }
             })
 
             try {
-              for (const requestPath of ['/write', '/respond', '/fd', '/file']) {
+              for (const requestPath of ['/write', '/respond', '/fd', '/file', '/additional-headers']) {
+                const informationalHeaders = []
                 finishSetHeader.subscribe(observeResponseHeader)
                 const [, body] = await Promise.all([
                   agent.assertFirstTraceSpan({ name: 'web.request' }),
-                  request(http2, `http://localhost:${port}${requestPath}`),
+                  request(http2, `http://localhost:${port}${requestPath}`, { informationalHeaders }),
                 ])
                 assert.ok(body.length > 0)
+                if (requestPath === '/additional-headers') {
+                  assert.strictEqual(informationalHeaders.length, 1)
+                  assert.strictEqual(informationalHeaders[0][':status'], 103)
+                }
               }
             } finally {
               finishSetHeader.unsubscribe(observeResponseHeader)

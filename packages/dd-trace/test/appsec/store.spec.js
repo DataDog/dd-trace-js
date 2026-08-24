@@ -10,7 +10,13 @@ const { storage } = require('../../../datadog-core')
 const DatadogTracer = require('../../src/tracer')
 const web = require('../../src/plugins/util/web')
 const { getConfigFresh } = require('../helpers/config')
-const { getActiveRequest, getRequest, withRequest } = require('../../src/appsec/store')
+const {
+  adoptRequest,
+  getActiveRequest,
+  getCanonicalRequest,
+  getRequest,
+  withRequest,
+} = require('../../src/appsec/store')
 
 const gc = global.gc
 
@@ -112,6 +118,34 @@ describe('AppSec store', () => {
 
       assert.strictEqual(requestWasCollected, true)
       assert.strictEqual(getRequest(childStore), undefined)
+    })
+  })
+
+  describe('canonical requests', () => {
+    it('should preserve requests without an adopted alias', () => {
+      const req = {}
+
+      assert.strictEqual(getCanonicalRequest(req), req)
+    })
+
+    it('should resolve an adopted request to the active request', () => {
+      const canonicalRequest = {}
+      const adoptedRequest = {}
+      storage('legacy').enterWith(withRequest(undefined, canonicalRequest))
+
+      adoptRequest({ req: adoptedRequest })
+
+      assert.strictEqual(getCanonicalRequest(adoptedRequest), canonicalRequest)
+      assert.strictEqual(getCanonicalRequest(canonicalRequest), canonicalRequest)
+    })
+
+    it('should preserve the request when no active request can own it', () => {
+      const req = {}
+      storage('legacy').enterWith({})
+
+      adoptRequest({ req })
+
+      assert.strictEqual(getCanonicalRequest(req), req)
     })
   })
 })
