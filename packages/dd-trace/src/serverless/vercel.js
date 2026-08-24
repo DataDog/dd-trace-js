@@ -63,7 +63,7 @@ function registerVercelTelemetryRetention (tracer) {
   if (existing) return existing
 
   if (typeof tracer?.flushAll !== 'function') return
-  let activeFlush
+  let flushInProgress = false
   let queuedFlush
 
   /**
@@ -72,9 +72,13 @@ function registerVercelTelemetryRetention (tracer) {
   const startFlush = flush => {
     flushVercelTelemetry(tracer, () => {
       flush.complete()
-      activeFlush = queuedFlush
+      const nextFlush = queuedFlush
       queuedFlush = undefined
-      if (activeFlush) startFlush(activeFlush)
+      if (nextFlush) {
+        startFlush(nextFlush)
+      } else {
+        flushInProgress = false
+      }
     })
   }
   const flushRequest = () => {
@@ -84,12 +88,12 @@ function registerVercelTelemetryRetention (tracer) {
     const { waitUntil } = requestContext
     if (typeof waitUntil !== 'function') return
 
-    const start = activeFlush === undefined
-    let flush
-    if (start) {
-      flush = activeFlush = createVercelFlush()
+    const shouldStart = !flushInProgress
+    const flush = queuedFlush ?? createVercelFlush()
+    if (shouldStart) {
+      flushInProgress = true
     } else {
-      flush = queuedFlush ??= createVercelFlush()
+      queuedFlush = flush
     }
 
     try {
@@ -97,7 +101,7 @@ function registerVercelTelemetryRetention (tracer) {
     } catch (error) {
       log.warn('Unable to retain Vercel telemetry:', error)
     }
-    if (start) startFlush(flush)
+    if (shouldStart) startFlush(flush)
   }
   // The HTTP finish channel activates its response wrapper directly. HTTP/2 needs
   // a passive request-start subscriber before it can bind response emit events.

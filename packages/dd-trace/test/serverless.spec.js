@@ -529,6 +529,12 @@ describe('Vercel telemetry retention', () => {
       assert.strictEqual(flushes.length, 2)
       flushes[1]()
       await Promise.all(retained)
+
+      channel('apm:http:server:request:finish').publish({ req: {} })
+      await new Promise(resolve => setImmediate(resolve))
+      assert.strictEqual(flushes.length, 3)
+      flushes[2]()
+      await Promise.all(retained)
     } finally {
       unregister()
     }
