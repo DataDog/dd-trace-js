@@ -6,6 +6,7 @@ const { addHook } = require('./helpers/instrument')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
+const apiPromiseContexts = new WeakMap()
 
 // Provider lifecycle channels. Payloads stay OpenAI-native:
 // before { args, parentSpan, abortController, pending }
@@ -262,7 +263,62 @@ function wrapStreamIterator (response, options, ctx) {
   }
 }
 
+/**
+ * Propagates instrumentation state to the APIPromise returned by `_thenUnwrap`.
+ *
+ * @param {(...args: unknown[]) => object} thenUnwrap
+ * @returns {(...args: unknown[]) => object}
+ */
+function wrapThenUnwrap (thenUnwrap) {
+  return function (...args) {
+    const unwrappedPromise = thenUnwrap.apply(this, args)
+    const state = apiPromiseContexts.get(this)
+
+    if (state) apiPromiseContexts.set(unwrappedPromise, state)
+
+    return unwrappedPromise
+  }
+}
+
 const extensions = ['.js', '.mjs']
+
+for (const extension of extensions) {
+  const apiPromiseShims = [
+    { file: `core${extension}`, versions: ['>=4 <5'] },
+    { file: `core/api-promise${extension}`, versions: ['>=5'] },
+  ]
+
+  for (const { file, versions } of apiPromiseShims) {
+    // APIPromise is a Promise subclass whose methods are dynamically replaced on pagination instances,
+    // so preserving the returned object's identity requires shimmer instead of Orchestrion.
+    addHook({ name: 'openai', file, versions }, exports => {
+      const { prototype } = exports.APIPromise
+
+      shimmer.wrap(prototype, '_thenUnwrap', wrapThenUnwrap)
+
+      shimmer.wrap(prototype, 'parse', parse => function (...args) {
+        const state = apiPromiseContexts.get(this)
+        if (!state) return parse.apply(this, args)
+
+        const parsedPromise = parse.apply(this, args)
+          .then(body => Promise.all([this.responsePromise, body]))
+
+        return handleUnwrappedAPIPromise(parsedPromise, state)
+      })
+
+      shimmer.wrap(prototype, 'asResponse', asResponse => function (...args) {
+        const state = apiPromiseContexts.get(this)
+        const responsePromise = asResponse.apply(this, args)
+
+        if (!state?.getBeforeVerdict) return responsePromise
+
+        return Promise.all([state.getBeforeVerdict(), responsePromise]).then(([, response]) => response)
+      })
+
+      return exports
+    })
+  }
+}
 
 for (const extension of extensions) {
   for (const shim of V4_PACKAGE_SHIMS) {
@@ -309,42 +365,22 @@ for (const extension of extensions) {
               }
               : null
 
-            if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
-              // this should only ever be invoked from a client.beta.chat.completions.parse call
-              shimmer.wrap(apiProm, '_thenUnwrap', origApiPromThenUnwrap => function (...args) {
-                // TODO(sam.brenner): I wonder if we can patch the APIPromise prototype instead, although
-                // we might not have access to everything we need...
+            const state = { ctx, stream, getBeforeVerdict, afterChannel, parentSpan }
+            apiPromiseContexts.set(apiProm, state)
 
-                // this is a new apipromise instance
-                const unwrappedPromise = origApiPromThenUnwrap.apply(this, args)
-
-                shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => function (...args) {
-                  const parsedPromise = origApiPromParse.apply(this, args)
-                    .then(body => Promise.all([this.responsePromise, body]))
-
-                  return handleUnwrappedAPIPromise(
-                    parsedPromise, ctx, stream, getBeforeVerdict, afterChannel, parentSpan
-                  )
-                })
-
-                return unwrappedPromise
-              })
+            if (Object.hasOwn(apiProm, '_thenUnwrap')) {
+              shimmer.wrap(apiProm, '_thenUnwrap', wrapThenUnwrap)
             }
 
-            // wrapping `parse` avoids problematic wrapping of `then` when trying to call
-            // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
-            shimmer.wrap(apiProm, 'parse', origApiPromParse => function (...args) {
-              const parsedPromise = origApiPromParse.apply(this, args)
-                .then(body => Promise.all([this.responsePromise, body]))
+            // OpenAI 7.5+ replaces pagination promise methods with functions bound to a hidden APIPromise.
+            // Wrap the existing instance method so the context remains associated with the returned object.
+            if (Object.hasOwn(apiProm, 'then')) {
+              shimmer.wrap(apiProm, 'then', then => function (onfulfilled, onrejected) {
+                const state = apiPromiseContexts.get(this)
+                if (!state) return then.call(this, onfulfilled, onrejected)
 
-              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, getBeforeVerdict, afterChannel, parentSpan)
-            })
-
-            // Gate `.asResponse()` callers on the before verdict so raw-response paths still block.
-            if (beforeChannel && typeof apiProm.asResponse === 'function') {
-              shimmer.wrap(apiProm, 'asResponse', origAsResponse => function (...args) {
-                const responsePromise = origAsResponse.apply(this, args)
-                return Promise.all([getBeforeVerdict(), responsePromise]).then(([, response]) => response)
+                const parsedPromise = then.call(this, body => Promise.all([this.responsePromise, body]))
+                return handleUnwrappedAPIPromise(parsedPromise, state).then(onfulfilled, onrejected)
               })
             }
 
@@ -359,7 +395,8 @@ for (const extension of extensions) {
   }
 }
 
-function handleUnwrappedAPIPromise (apiProm, ctx, stream, getBeforeVerdict, afterChannel, parentSpan) {
+function handleUnwrappedAPIPromise (apiProm, state) {
+  const { ctx, stream, getBeforeVerdict, afterChannel, parentSpan } = state
   const gatedApiProm = getBeforeVerdict
     ? Promise.all([getBeforeVerdict(), apiProm]).then(([, result]) => result)
     : apiProm

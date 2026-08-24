@@ -19,6 +19,23 @@ const tracerRequirePath = '../../dd-trace'
 
 const { DD_MAJOR, NODE_MAJOR } = require('../../../version')
 
+/**
+ * Assert the OpenAI APIPromise `withResponse` property ownership for the installed SDK version.
+ *
+ * @param {{ withResponse: () => Promise<unknown> }} promise
+ * @param {string} realVersion
+ */
+function assertWithResponseOwnership (promise, realVersion) {
+  const expectedToOwnWithResponse = semver.satisfies(realVersion, '>=7.5.0')
+
+  assert.strictEqual(
+    Object.hasOwn(promise, 'withResponse'),
+    expectedToOwnWithResponse,
+    `Expected 'withResponse' ownership to be ${expectedToOwnWithResponse}, got promise: ${inspect(promise)}`
+  )
+  assert.ok('withResponse' in promise, `Expected promise to expose 'withResponse', got promise: ${inspect(promise)}`)
+}
+
 describe('Plugin', () => {
   let openai
   let toFile
@@ -1331,10 +1348,7 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const prom = openai.chat.completions.create(params)
-            assert.ok(
-              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
-              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
-            )
+            assertWithResponseOwnership(prom, realVersion)
 
             const result = await prom
 
@@ -1389,10 +1403,7 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const prom = openai.chat.completions.create(params)
-            assert.ok(
-              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
-              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
-            )
+            assertWithResponseOwnership(prom, realVersion)
 
             const result = await prom
             assert.strictEqual(result.choices.length, 3)
@@ -1515,10 +1526,7 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(
-              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
-              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
-            )
+            assertWithResponseOwnership(prom, realVersion)
             const stream = await prom
 
             for await (const part of stream) {
@@ -1558,10 +1566,7 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(
-              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
-              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
-            )
+            assertWithResponseOwnership(prom, realVersion)
             const stream = await prom
 
             for await (const part of stream) {
@@ -1604,10 +1609,7 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(
-              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
-              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
-            )
+            assertWithResponseOwnership(prom, realVersion)
             const stream = await prom
 
             for await (const part of stream) {
@@ -1649,10 +1651,7 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(
-              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
-              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
-            )
+            assertWithResponseOwnership(prom, realVersion)
             const stream = await prom
 
             for await (const part of stream) {
@@ -1776,10 +1775,7 @@ describe('Plugin', () => {
           user: 'dd-trace-test',
         })
 
-        assert.ok(
-          !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
-          `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
-        )
+        assertWithResponseOwnership(prom, realVersion)
         const response = await prom
         assert.ok(response.choices[0].message.content)
 
