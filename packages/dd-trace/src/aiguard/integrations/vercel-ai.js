@@ -80,7 +80,7 @@ function getStreamContent (chunks) {
     if (chunk?.type === 'tool-call') {
       toolCalls.push(chunk)
     } else if (chunk?.type === 'text-delta') {
-      text += chunk.textDelta
+      text += chunk.delta ?? chunk.textDelta ?? ''
     }
   }
 
