@@ -17,13 +17,20 @@ const {
 } = require('../constants/writers')
 const { parseResponseAndLog } = require('./util')
 
+const MAX_BUFFER_EVENTS = 1000
+
 class LLMObsBuffer {
-  constructor ({ events, size, routing = {}, isDefault = false, limit = 1000 }) {
+  /**
+   * @param {{
+   *   events: Record<string, unknown>[],
+   *   size: number,
+   *   routing?: { apiKey?: string, site?: string }
+   * }} options
+   */
+  constructor ({ events, size, routing = {} }) {
     this.events = events
     this.size = size
     this.routing = routing
-    this.isDefault = isDefault
-    this.limit = limit
   }
 
   clear () {
@@ -46,7 +53,7 @@ class BaseLLMObsWriter {
     this._eventType = eventType
 
     /** @type {LLMObsBuffer} */
-    this._buffer = new LLMObsBuffer({ events: [], size: 0, isDefault: true })
+    this._buffer = new LLMObsBuffer({ events: [], size: 0 })
 
     /** @type {import('../../config/config-base')} */
     this._config = config
@@ -102,8 +109,8 @@ class BaseLLMObsWriter {
   append (event, routing, byteLength) {
     const buffer = this._getBuffer(routing)
 
-    if (buffer.events.length >= buffer.limit) {
-      logger.warn(`${this.constructor.name} event buffer full (limit is ${buffer.limit}), dropping event`)
+    if (buffer.events.length >= MAX_BUFFER_EVENTS) {
+      logger.warn(`${this.constructor.name} event buffer full (limit is ${MAX_BUFFER_EVENTS}), dropping event`)
       telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
       return false
     }
@@ -158,7 +165,10 @@ class BaseLLMObsWriter {
     }
 
     for (const [apiKey, buffer] of this.#multiTenantBuffers) {
-      if (buffer.events.length === 0) continue
+      if (buffer.events.length === 0) {
+        this.#multiTenantBuffers.delete(apiKey)
+        continue
+      }
       const site = buffer.routing.site || this._config.site
       const maskedApiKey = `****${apiKey.slice(-4)}`
       let options
@@ -180,6 +190,7 @@ class BaseLLMObsWriter {
         url = this.#buildUrl(options.url.href, options.path)
       } catch (error) {
         buffer.clear()
+        this.#multiTenantBuffers.delete(apiKey)
         logger.error(
           'Failed to route LLMObs %s events for API key %s: %s',
           this._eventType,
@@ -191,11 +202,11 @@ class BaseLLMObsWriter {
 
       const events = buffer.events
       buffer.clear()
+      this.#multiTenantBuffers.delete(apiKey)
       log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
       requests.push({ events, options, url })
     }
 
-    this.#cleanupEmptyBuffers()
     return requests
   }
 
@@ -206,14 +217,6 @@ class BaseLLMObsWriter {
       parseResponseAndLog(err, code, events.length, url, this._eventType)
       done?.()
     })
-  }
-
-  #cleanupEmptyBuffers () {
-    for (const [key, buffer] of this.#multiTenantBuffers) {
-      if (buffer.events.length === 0) {
-        this.#multiTenantBuffers.delete(key)
-      }
-    }
   }
 
   makePayload (events) {}
