@@ -15,13 +15,9 @@ require('./setup/core')
 
 const {
   enableGCPPubSubPushSubscription,
-  initializeServerlessTelemetry,
 } = require('../src/serverless')
 const { registerVercelTelemetryRetention } = require('../src/serverless/vercel')
-const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
-const Tracer = require('../src/tracer')
-const { initializeOpenTelemetryLogs } = require('../src/opentelemetry/logs')
-const { initializeOpenTelemetryMetrics } = require('../src/opentelemetry/metrics')
+const { flushServerlessTelemetry } = require('../src/flush')
 const TelemetryDeliveryTracker = require('../src/serverless/telemetry-delivery-tracker')
 const agent = require('./plugins/agent')
 const { getConfigFresh } = require('./helpers/config')
@@ -30,19 +26,29 @@ function getServerlessFresh () {
   return proxyquire.noPreserveCache()('../src/serverless', {})
 }
 
+function getServerlessModulesFresh () {
+  const serverless = getServerlessFresh()
+  const flush = proxyquire.noPreserveCache()('../src/flush', {
+    './serverless': serverless,
+  })
+  return { flush, serverless }
+}
+
 describe('TelemetryDeliveryTracker', () => {
-  it('is created only for Vercel', () => {
+  it('snapshots Vercel detection at module load', () => {
     const originalVercel = process.env.VERCEL
     try {
       delete process.env.VERCEL
-      let serverless = getServerlessFresh()
-      assert.strictEqual(serverless.createServerlessDeliveryTracker(), undefined)
-      assert.strictEqual(serverless.supportsServerlessTelemetryRetention(), false)
+      const nonVercelServerless = getServerlessFresh()
 
       process.env.VERCEL = '1'
-      serverless = getServerlessFresh()
-      assert.ok(serverless.createServerlessDeliveryTracker() instanceof TelemetryDeliveryTracker)
-      assert.strictEqual(serverless.supportsServerlessTelemetryRetention(), true)
+      assert.strictEqual(nonVercelServerless.createServerlessDeliveryTracker(), undefined)
+      assert.strictEqual(nonVercelServerless.supportsServerlessTelemetryRetention(), false)
+
+      const vercelServerless = getServerlessFresh()
+      delete process.env.VERCEL
+      assert.ok(vercelServerless.createServerlessDeliveryTracker() instanceof TelemetryDeliveryTracker)
+      assert.strictEqual(vercelServerless.supportsServerlessTelemetryRetention(), true)
     } finally {
       if (originalVercel === undefined) delete process.env.VERCEL
       else process.env.VERCEL = originalVercel
@@ -296,7 +302,18 @@ describe('Vercel telemetry retention', () => {
 
     let unregister
     try {
-      const config = getConfigFresh({ service: 'serverless-flush' })
+      const { flush, serverless } = getServerlessModulesFresh()
+      const Tracer = proxyquire.noPreserveCache()('../src/tracer', {
+        './flush': flush,
+        './serverless': serverless,
+      })
+      const { initializeOpenTelemetryLogs } = proxyquire.noPreserveCache()('../src/opentelemetry/logs', {
+        '../../flush': flush,
+      })
+      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../src/opentelemetry/metrics', {
+        '../../flush': flush,
+      })
+      const config = getConfigFresh({ service: 'serverless-flush' }, { '../serverless': serverless })
       const tracer = new Tracer(config)
       initializeOpenTelemetryLogs(config)
       initializeOpenTelemetryMetrics(config)
@@ -343,7 +360,7 @@ describe('Vercel telemetry retention', () => {
       },
     }
 
-    const unregister = initializeServerlessTelemetry(tracer)
+    const unregister = getServerlessFresh().initializeServerlessTelemetry(tracer)
     try {
       nextFinishChannel.publish({})
       assert.strictEqual(retained, undefined)
@@ -513,9 +530,10 @@ describe('Vercel telemetry retention', () => {
       flushes++
       completeTelemetry.push(done)
     }
-    const unregisterTelemetry = registerTelemetryFlusher(telemetryFlusher)
+    const { flush } = getServerlessModulesFresh()
+    const unregisterTelemetry = flush.registerTelemetryFlusher(telemetryFlusher)
     const unregister = registerVercelTelemetryRetention({
-      flushAll: (done, options) => flushServerlessTelemetry(done, options),
+      flushAll: (done, options) => flush.flushServerlessTelemetry(done, options),
     })
     try {
       channel('apm:http:server:request:finish').publish({})
