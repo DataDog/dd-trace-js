@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const http = require('node:http')
 const path = require('node:path')
 const os = require('node:os')
@@ -30,7 +31,6 @@ describe('dogstatsd', () => {
   let udsPath
   let statusCode
   let sockets
-  let assertData
   let docker
   let log
   let registerTelemetryFlusher
@@ -94,16 +94,16 @@ describe('dogstatsd', () => {
 
     httpData = []
     statusCode = 200
-    assertData = undefined
     sockets = []
     httpServer = http.createServer((req, res) => {
       assert.strictEqual(req.method, 'POST')
       assert.strictEqual(req.url, '/dogstatsd/v2/proxy')
-      req.on('data', d => httpData.push(d))
+      const requestData = []
+      req.on('data', data => requestData.push(data))
       req.on('end', () => {
+        httpData = requestData
         res.statusCode = statusCode
         res.end()
-        setTimeout(() => assertData && assertData(httpData))
       })
     }).listen(0, () => {
       httpPort = httpServer.address().port
@@ -115,10 +115,11 @@ describe('dogstatsd', () => {
       httpUdsServer = http.createServer((req, res) => {
         assert.strictEqual(req.method, 'POST')
         assert.strictEqual(req.url, '/dogstatsd/v2/proxy')
-        req.on('data', d => httpData.push(d))
+        const requestData = []
+        req.on('data', data => requestData.push(data))
         req.on('end', () => {
+          httpData = requestData
           res.end()
-          setTimeout(() => assertData && assertData(httpData))
         })
       }).listen(udsPath, () => {
         done()
@@ -128,12 +129,15 @@ describe('dogstatsd', () => {
     httpServer.on('connection', socket => sockets.push(socket))
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    const closeEvents = [once(httpServer, 'close')]
     httpServer.close()
     if (httpUdsServer) {
+      closeEvents.push(once(httpUdsServer, 'close'))
       httpUdsServer.close()
     }
-    sockets.forEach(socket => socket.destroy())
+    for (const socket of sockets) socket.destroy()
+    await Promise.all(closeEvents)
   })
 
   function createDogStatsDClient (options) {
@@ -144,6 +148,14 @@ describe('dogstatsd', () => {
       tags: [],
       ...options,
     })
+  }
+
+  /**
+   * @param {{ flush: (done: () => void) => void }} dogstatsdClient
+   * @returns {Promise<void>}
+   */
+  function flushClient (dogstatsdClient) {
+    return new Promise(resolve => dogstatsdClient.flush(resolve))
   }
 
   function createCustomMetrics (CustomMetricsCtor = CustomMetrics) {
@@ -391,93 +403,55 @@ describe('dogstatsd', () => {
   })
 
   const udsIt = os.platform() === 'win32' ? it.skip : it
-  udsIt('should support HTTP via unix domain socket', (done) => {
-    assertData = () => {
-      try {
-        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:0|g\ntest.avg2:2|g\n')
-        done()
-      } catch (e) {
-        done(e)
-      }
-    }
-
+  udsIt('should support HTTP via unix domain socket', async () => {
     client = createDogStatsDClient({
       metricsProxyUrl: `unix://${udsPath}`,
     })
 
     client.gauge('test.avg', 0)
     client.gauge('test.avg2', 2)
-    client.flush()
+    await flushClient(client)
+
+    assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:0|g\ntest.avg2:2|g\n')
   })
 
-  it('should support HTTP via port', (done) => {
-    assertData = () => {
-      try {
-        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
-        done()
-      } catch (e) {
-        done(e)
-      }
-    }
-
+  it('should support HTTP via port', async () => {
     client = createDogStatsDClient({
       metricsProxyUrl: `http://localhost:${httpPort}`,
     })
 
     client.gauge('test.avg', 1)
     client.gauge('test.avg2', 2)
-    client.flush()
+    await flushClient(client)
+
+    assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
   })
 
-  it('calls the flush callback after the HTTP proxy responds', (done) => {
+  it('calls the flush callback after the HTTP proxy responds', async () => {
     client = createDogStatsDClient({
       metricsProxyUrl: `http://localhost:${httpPort}`,
     })
 
     client.gauge('test.avg', 1)
-    client.flush(() => {
-      try {
-        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\n')
-        done()
-      } catch (error) {
-        done(error)
-      }
-    })
+    await flushClient(client)
+
+    assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\n')
   })
 
-  it('should support HTTP via URL object', (done) => {
-    assertData = () => {
-      try {
-        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
-        done()
-      } catch (e) {
-        done(e)
-      }
-    }
-
+  it('should support HTTP via URL object', async () => {
     client = createDogStatsDClient({
       metricsProxyUrl: new URL(`http://localhost:${httpPort}`),
     })
 
     client.gauge('test.avg', 1)
     client.gauge('test.avg2', 2)
-    client.flush()
+    await flushClient(client)
+
+    assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
   })
 
-  it('should fail over to UDP when receiving HTTP 404 error from agent', (done) => {
-    assertData = () => {
-      setTimeout(() => {
-        try {
-          sinon.assert.called(udp4.send)
-          assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:10|c\n')
-          assert.strictEqual(udp4.send.firstCall.args[2], 16)
-          done()
-        } catch (e) {
-          done(e)
-        }
-      })
-    }
-
+  it('should fail over to UDP when receiving HTTP 404 error from agent', async () => {
+    udp4.send = sinon.stub().yields()
     statusCode = 404
 
     client = createDogStatsDClient({
@@ -486,7 +460,11 @@ describe('dogstatsd', () => {
 
     client.increment('test.count', 10)
 
-    client.flush()
+    await flushClient(client)
+
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:10|c\n')
+    assert.strictEqual(udp4.send.firstCall.args[2], 16)
   })
 
   it('should fail over to UDP when receiving network error from agent', (done) => {
