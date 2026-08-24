@@ -159,24 +159,38 @@ class BaseLLMObsWriter {
 
     for (const [apiKey, buffer] of this.#multiTenantBuffers) {
       if (buffer.events.length === 0) continue
+      const site = buffer.routing.site || this._config.site
+      const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
+      let options
+      let url
+      try {
+        options = {
+          headers: {
+            'Content-Type': 'application/json',
+            'DD-API-KEY': apiKey,
+          },
+          method: 'POST',
+          timeout: this._timeout,
+          url: new URL(format({
+            protocol: 'https:',
+            hostname: `${this._intake}.${site}`,
+          })),
+          path: this._baseEndpoint,
+        }
+        url = this.#buildUrl(options.url.href, options.path)
+      } catch (error) {
+        buffer.clear()
+        logger.error(
+          'Failed to route LLMObs %s events for API key %s: %s',
+          this._eventType,
+          maskedApiKey,
+          error.message
+        )
+        continue
+      }
+
       const events = buffer.events
       buffer.clear()
-      const site = buffer.routing.site || this._config.site
-      const options = {
-        headers: {
-          'Content-Type': 'application/json',
-          'DD-API-KEY': apiKey,
-        },
-        method: 'POST',
-        timeout: this._timeout,
-        url: new URL(format({
-          protocol: 'https:',
-          hostname: `${this._intake}.${site}`,
-        })),
-        path: this._baseEndpoint,
-      }
-      const url = this.#buildUrl(options.url.href, options.path)
-      const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
       log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
       requests.push({ events, options, url })
     }
