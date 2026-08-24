@@ -248,6 +248,10 @@ jobs:
       - run: npm run test:instrumentations:ci
         env:
           PLUGINS: webdriverio
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}-instrumentation
       - run: npm run test:integration:webdriverio:coverage
         env:
           WEBDRIVERIO_VERSION: ${{ matrix.webdriverio-version }}
@@ -257,7 +261,7 @@ jobs:
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          id: ${{ github.job }}-${{ strategy.job-index }}
+          id: ${{ github.job }}-${{ strategy.job-index }}-integration
 
   integration-jest:
     strategy:
