@@ -133,55 +133,64 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     await receiver.stop()
   })
 
-  it('does not load the tracer in auxiliary Jest workers', async function () {
-    this.timeout(60_000)
+  for (const workerType of ['processes', 'threads']) {
+    const workerInitializationIt = workerType === 'threads' ? onlyLatestIt : it
 
-    const outputDirectory = path.join(cwd, 'jest-worker-init-output')
-    const probePath = path.join(cwd, 'ci-visibility/jest-worker-init/probe.js')
-    fs.mkdirSync(outputDirectory)
+    workerInitializationIt(`does not load the tracer in auxiliary Jest worker ${workerType}`, async function () {
+      this.timeout(60_000)
 
-    childProcess = fork(startupTestFile, {
-      cwd,
-      env: {
-        ...process.env,
-        COLLECT_COVERAGE_FROM: 'ci-visibility/jest-worker-init/untested.js',
-        COVERAGE_REPORTERS: 'json-summary',
-        DD_CIVISIBILITY_ENABLED: 'false',
-        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-        DD_TEST_JEST_WORKER_OUTPUT: outputDirectory,
-        ENABLE_CODE_COVERAGE: '1',
-        MAX_WORKERS: '2',
-        NODE_OPTIONS: `-r ${probePath} -r dd-trace/ci/init`,
-        RUN_IN_PARALLEL: '1',
-        SHOULD_CHECK_RESULTS: '1',
-        TESTS_TO_RUN: 'ci-visibility/jest-worker-init/test-',
-      },
-      silent: true,
+      const outputDirectory = path.join(cwd, `jest-worker-init-${workerType}`)
+      const probePath = path.join(cwd, 'ci-visibility/jest-worker-init/probe.js')
+      fs.mkdirSync(outputDirectory)
+
+      childProcess = fork(startupTestFile, {
+        cwd,
+        env: {
+          ...process.env,
+          COLLECT_COVERAGE_FROM: 'ci-visibility/jest-worker-init/untested.js',
+          COVERAGE_REPORTERS: 'json-summary',
+          DD_CIVISIBILITY_ENABLED: 'false',
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+          DD_TEST_JEST_WORKER_OUTPUT: outputDirectory,
+          ENABLE_CODE_COVERAGE: '1',
+          MAX_WORKERS: '2',
+          NODE_OPTIONS: `-r ${probePath} -r dd-trace/ci/init`,
+          RUN_IN_PARALLEL: '1',
+          SHOULD_CHECK_RESULTS: '1',
+          TESTS_TO_RUN: 'ci-visibility/jest-worker-init/test-',
+          USE_WORKER_THREADS: workerType === 'threads' ? '1' : '',
+        },
+        silent: true,
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk })
+
+      const closePromise = once(childProcess, 'close')
+      const [message] = await once(childProcess, 'message')
+      assert.strictEqual(message, 'finished', testOutput)
+      const [exitCode] = await closePromise
+      assert.strictEqual(exitCode, 0, testOutput)
+
+      const workerRecords = fs.readdirSync(outputDirectory).map(filename => {
+        const record = JSON.parse(fs.readFileSync(path.join(outputDirectory, filename), 'utf8'))
+        return { ...record, packageName: getPackageName(record.workerPath) }
+      })
+      const testWorkers = workerRecords.filter(({ packageName }) => packageName === 'jest-runner')
+      const hasteWorkers = workerRecords.filter(({ packageName }) => packageName === 'jest-haste-map')
+      const coverageWorkers = workerRecords.filter(({ packageName }) => packageName === '@jest/reporters')
+
+      assert.ok(testWorkers.length > 0, `Jest did not create a test worker:\n${testOutput}`)
+      assert.ok(hasteWorkers.length > 0, `Jest did not create a haste-map worker:\n${testOutput}`)
+      assert.ok(coverageWorkers.length > 0, `Jest did not create a coverage worker:\n${testOutput}`)
+      assert.ok(testWorkers.every(({ tracerLoaded }) => tracerLoaded), inspect(testWorkers))
+      assert.ok(hasteWorkers.every(({ tracerLoaded }) => !tracerLoaded), inspect(hasteWorkers))
+      assert.ok(coverageWorkers.every(({ tracerLoaded }) => !tracerLoaded), inspect(coverageWorkers))
+      assert.ok(
+        workerRecords.every(({ threadId }) => workerType === 'threads' ? threadId > 0 : threadId === 0),
+        inspect(workerRecords)
+      )
     })
-    childProcess.stdout.on('data', chunk => { testOutput += chunk })
-    childProcess.stderr.on('data', chunk => { testOutput += chunk })
-
-    const closePromise = once(childProcess, 'close')
-    const [message] = await once(childProcess, 'message')
-    assert.strictEqual(message, 'finished', testOutput)
-    const [exitCode] = await closePromise
-    assert.strictEqual(exitCode, 0, testOutput)
-
-    const workerRecords = fs.readdirSync(outputDirectory).map(filename => {
-      const record = JSON.parse(fs.readFileSync(path.join(outputDirectory, filename), 'utf8'))
-      return { ...record, packageName: getPackageName(record.workerPath) }
-    })
-    const testWorkers = workerRecords.filter(({ packageName }) => packageName === 'jest-runner')
-    const hasteWorkers = workerRecords.filter(({ packageName }) => packageName === 'jest-haste-map')
-    const coverageWorkers = workerRecords.filter(({ packageName }) => packageName === '@jest/reporters')
-
-    assert.ok(testWorkers.length > 0, `Jest did not create a test worker:\n${testOutput}`)
-    assert.ok(hasteWorkers.length > 0, `Jest did not create a haste-map worker:\n${testOutput}`)
-    assert.ok(coverageWorkers.length > 0, `Jest did not create a coverage worker:\n${testOutput}`)
-    assert.ok(testWorkers.every(({ tracerLoaded }) => tracerLoaded))
-    assert.ok(hasteWorkers.every(({ tracerLoaded }) => !tracerLoaded))
-    assert.ok(coverageWorkers.every(({ tracerLoaded }) => !tracerLoaded))
-  })
+  }
 
   context('older versions of the agent (APM protocol)', () => {
     let oldApmProtocolEnvVars = {}

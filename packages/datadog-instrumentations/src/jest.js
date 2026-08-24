@@ -95,6 +95,7 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 // Message sent by jest's main process to workers to run a test suite (=test file)
 // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
 const CHILD_MESSAGE_CALL = 1
+const JEST_WORKER_THREAD_ARG = '--dd-test-optimization-jest-worker-thread'
 
 // Maximum time we'll wait for the tracer to flush
 // The exporter has a 10-second bounded final-flush deadline. Leave enough time
@@ -4062,6 +4063,18 @@ function wrapWorkerChannel (worker) {
   shimmer.wrap(workerChannel, worker._child ? 'send' : 'postMessage', sendWrapper)
 }
 
+/**
+ * Marks a Jest worker thread so ci/init can defer tracer initialization until its first worker message.
+ * @param {{ argv?: string[] }} [forkOptions]
+ * @returns {{ argv: string[] }}
+ */
+function getJestWorkerThreadForkOptions (forkOptions) {
+  return {
+    ...forkOptions,
+    argv: [...(forkOptions?.argv || []), JEST_WORKER_THREAD_ARG],
+  }
+}
+
 function wrapWorkerInitializer (worker) {
   if (wrappedWorkerInitializers.has(worker) || typeof worker.initialize !== 'function') return
 
@@ -4141,6 +4154,15 @@ addHook({
   } else if (ExperimentalWorker.prototype.onMessage) {
     shimmer.wrap(ExperimentalWorker.prototype, 'onMessage', onMessageWrapper)
   }
+  // jest-worker creates the Node Worker dynamically, so the marker must be added before its constructor runs.
+  shimmer.wrap(nodeThreadsWorker, 'default', Worker => class extends Worker {
+    constructor (options) {
+      super({
+        ...options,
+        forkOptions: getJestWorkerThreadForkOptions(options.forkOptions),
+      })
+    }
+  })
   return nodeThreadsWorker
 })
 
@@ -4150,5 +4172,17 @@ addHook({
 }, (jestWorkerPackage) => {
   shimmer.wrap(jestWorkerPackage.FifoQueue.prototype, 'enqueue', enqueueWrapper)
   shimmer.wrap(jestWorkerPackage.PriorityQueue.prototype, 'enqueue', enqueueWrapper)
+  // Jest 30 bundles its internal worker classes, so the public constructor is the pre-lifecycle mutation point.
+  shimmer.wrap(jestWorkerPackage, 'Worker', Worker => class extends Worker {
+    constructor (workerPath, options) {
+      if (options?.enableWorkerThreads) {
+        options = {
+          ...options,
+          forkOptions: getJestWorkerThreadForkOptions(options.forkOptions),
+        }
+      }
+      super(workerPath, options)
+    }
+  })
   return jestWorkerPackage
 })

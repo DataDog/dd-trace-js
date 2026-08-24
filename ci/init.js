@@ -7,6 +7,7 @@ const DEFAULT_FLUSH_INTERVAL = 5000
 const JEST_FLUSH_INTERVAL = 0
 const JEST_WORKER_INITIALIZE_MESSAGE = 0
 const JEST_WORKER_PACKAGE = 'jest-worker'
+const JEST_WORKER_THREAD_ARG = '--dd-test-optimization-jest-worker-thread'
 const JEST_AUXILIARY_WORKER_PACKAGES = new Set(['@jest/reporters', 'jest-haste-map'])
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
@@ -19,23 +20,43 @@ function isPackageManager () {
   )
 }
 
-if (
-  process.env.JEST_WORKER_ID &&
-  process.send &&
-  getPackageName(process.argv[1]) === JEST_WORKER_PACKAGE
-) {
+const jestWorkerMessagePort = getJestWorkerMessagePort()
+if (jestWorkerMessagePort) {
   const initializeOnWorkerType = (message) => {
     if (!Array.isArray(message) || message[0] !== JEST_WORKER_INITIALIZE_MESSAGE) return
 
-    process.removeListener('message', initializeOnWorkerType)
+    jestWorkerMessagePort.removeListener('message', initializeOnWorkerType)
     if (!isJestAuxiliaryWorker(message[2])) {
+      if (!process.env.JEST_WORKER_ID && typeof message[4] === 'string') {
+        process.env.JEST_WORKER_ID = message[4]
+      }
       module.exports = initializeTracer()
     }
   }
-  process.prependListener('message', initializeOnWorkerType)
+  jestWorkerMessagePort.on('message', initializeOnWorkerType)
   module.exports = {}
 } else {
   module.exports = initializeTracer()
+}
+
+/**
+ * Gets the IPC endpoint only for child processes and worker threads launched by jest-worker.
+ * @returns {import('node:events').EventEmitter|undefined}
+ */
+function getJestWorkerMessagePort () {
+  const workerThreadArgumentIndex = process.argv.indexOf(JEST_WORKER_THREAD_ARG)
+  if (workerThreadArgumentIndex !== -1) {
+    process.argv.splice(workerThreadArgumentIndex, 1)
+    return require('node:worker_threads').parentPort ?? undefined
+  }
+
+  if (
+    process.env.JEST_WORKER_ID &&
+    process.send &&
+    getPackageName(process.argv[1]) === JEST_WORKER_PACKAGE
+  ) {
+    return process
+  }
 }
 
 function isJestAuxiliaryWorker (workerPath) {
