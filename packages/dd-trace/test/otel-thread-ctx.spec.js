@@ -107,7 +107,14 @@ describe('otel-thread-ctx', () => {
         constructedContexts.push(this)
       }
 
-      appendAttributes () {}
+      // Applied to `attributes` with the record's last-wins handling of duplicate
+      // keys, so a test can assert the endpoint an out-of-process reader would
+      // read out of the record, not merely the calls the writer made.
+      appendAttributes (appended) {
+        for (const [index, value] of appended.entries()) {
+          if (value !== undefined) this.attributes[index] = value
+        }
+      }
 
       invalidate () {}
 
@@ -594,6 +601,119 @@ describe('otel-thread-ctx', () => {
       endpointResolvedCh.publish(activeSpan)
       sinon.assert.calledOnce(context.appendAttributes)
       assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
+    })
+
+    it('appends the endpoint to a descendant record built before the ancestry existed', () => {
+      // The record was built while the span had no web-server ancestry at all, so
+      // it never enlisted for a request. webTagsCache announces the descendant
+      // too when the promotion changes its answer, which is what fills the hole —
+      // a span in the middle of synchronous work never re-enters storage.
+      const webTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/x' }
+      activeSpan = makeSpan({ spanId: '2122232425262728', parentId: SPAN_ID_HEX, tags: {} })
+      enterCh.publish()
+      const context = constructedContexts[0]
+      assert.strictEqual(context.attributes[1], undefined)
+
+      cachedWebTags.set(activeSpan, webTags)
+      webTagsResolvedCh.publish(activeSpan)
+      sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
+      assert.equal(constructedContexts.length, 1)
+    })
+
+    it('waits for the endpoint when a descendant gains an ancestry before the route', () => {
+      // The announcement finds an ancestor but no settled endpoint yet, so the
+      // record has to join the request's waiting list — the endpoint announcement
+      // then names the ancestor, whose tag bag is the key it is waiting under.
+      const { parent, child, webTags } = makeWebSpanWithChild({ 'span.type': 'web', 'http.method': 'GET' })
+      activeSpan = child
+      enterCh.publish()
+      const context = constructedContexts[0]
+      assert.strictEqual(context.attributes[1], undefined)
+
+      cachedWebTags.set(child, webTags)
+      webTagsResolvedCh.publish(child)
+      sinon.assert.notCalled(context.appendAttributes)
+
+      webTags['http.route'] = '/x'
+      endpointResolvedCh.publish(parent)
+      sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
+    })
+
+    it('appends once when the same web-tags resolution is announced twice', () => {
+      const webTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/x' }
+      activeSpan = makeSpan({ tags: {} })
+      enterCh.publish()
+      const context = constructedContexts[0]
+
+      cachedWebTags.set(activeSpan, webTags)
+      webTagsResolvedCh.publish(activeSpan)
+      webTagsResolvedCh.publish(activeSpan)
+      sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
+    })
+
+    it('repoints a record at a nearer web-server span', () => {
+      // Nested request handling: the record was attributed to the outer request,
+      // then an intermediate span became a web-server span of its own. The inner
+      // endpoint is the one this span's work belongs to from now on, and the outer
+      // request's own announcement no longer applies to this record.
+      const outerTags = { 'span.type': 'web', 'http.method': 'GET' }
+      const outerSpan = makeSpan({ tags: outerTags })
+      const innerTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/inner' }
+      activeSpan = makeSpan({ spanId: '2122232425262728', parentId: SPAN_ID_HEX, tags: {} })
+      cachedWebTags.set(activeSpan, outerTags)
+      enterCh.publish()
+      const context = constructedContexts[0]
+      assert.strictEqual(context.attributes[1], undefined)
+
+      cachedWebTags.set(activeSpan, innerTags)
+      webTagsResolvedCh.publish(activeSpan)
+      assert.equal(context.attributes[1], 'GET /inner')
+
+      outerTags['http.route'] = '/outer'
+      endpointResolvedCh.publish(outerSpan)
+      sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.attributes[1], 'GET /inner')
+    })
+
+    it('keeps showing the outer endpoint until a nearer request settles its own', () => {
+      // The unavoidable window: the record already carries the outer request's
+      // settled endpoint, and the nearer web-server span that supersedes it has
+      // no route yet. The record buffer is append-only — there is no way to take
+      // an attribute back — and rebuilding the ThreadContext would strand every
+      // async-context frame already holding this one. So the outer endpoint, the
+      // request this work is still nested in, stands until the inner one settles.
+      const outerTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/outer' }
+      const innerTags = { 'span.type': 'web', 'http.method': 'GET' }
+      activeSpan = makeSpan({ spanId: '2122232425262728', parentId: SPAN_ID_HEX, tags: {} })
+      cachedWebTags.set(activeSpan, outerTags)
+      enterCh.publish()
+      const context = constructedContexts[0]
+      assert.equal(context.attributes[1], 'GET /outer')
+
+      cachedWebTags.set(activeSpan, innerTags)
+      webTagsResolvedCh.publish(activeSpan)
+      assert.equal(context.attributes[1], 'GET /outer')
+
+      innerTags['http.route'] = '/inner'
+      endpointResolvedCh.publish(makeSpan({ tags: innerTags }))
+      assert.equal(context.attributes[1], 'GET /inner')
+    })
+
+    it('does not query the cache again on re-entry', () => {
+      // Every answer change is announced, so a record that already has its
+      // ancestry never asks again — re-entry is the hottest path there is.
+      const webTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/x' }
+      activeSpan = makeSpan({ tags: {} })
+      enterCh.publish()
+      cachedWebTags.set(activeSpan, webTags)
+      webTagsResolvedCh.publish(activeSpan)
+      const lookups = sinon.spy(webTagsCacheStub, 'getCachedWebTags')
+      enterCh.publish()
+      enterCh.publish()
+      sinon.assert.notCalled(lookups)
     })
 
     it('endpoint announcements are a no-op for a span that has not been entered', () => {
