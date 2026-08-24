@@ -412,7 +412,9 @@ function restorePoolAcquisitionObserver (pool, observer) {
  * @returns {void}
  */
 function observePoolAcquisitions (pool) {
-  const observer = () => recordPoolAcquisition(pool)
+  const observer = () => {
+    if (connectionStartCh.hasSubscribers) recordPoolAcquisition(pool)
+  }
   pool.prependListener('acquire', observer)
 
   shimmer.wrap(pool, 'removeAllListeners', removeAllListeners => function (event) {
