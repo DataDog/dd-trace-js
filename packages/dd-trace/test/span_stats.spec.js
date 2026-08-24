@@ -81,12 +81,14 @@ const syntheticSpan = {
 
 const exporter = {
   export: sinon.stub(),
+  flush: sinon.stub(),
 }
 
 const SpanStatsExporter = sinon.stub().returns(exporter)
 
 const otlpExporter = {
   export: sinon.stub(),
+  flush: sinon.stub(),
 }
 
 const {
@@ -641,6 +643,101 @@ describe('SpanStatsProcessor', () => {
 
     assert.ok(exporter.export.notCalled)
     assert.ok(otlpExporter.export.calledOnce)
+  })
+
+  it('force flushes pending OTLP span statistics', () => {
+    const exporter = {
+      export: sinon.stub().callsFake((_drained, _bucketSizeNs, done) => done()),
+      flush: sinon.stub().callsFake(done => done()),
+    }
+    const p = new SpanStatsProcessor(config, exporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+
+    let flushed = false
+    p.forceFlush(() => { flushed = true })
+
+    assert.ok(exporter.export.calledOnce)
+    assert.ok(exporter.flush.calledOnce)
+    assert.ok(flushed)
+    assert.strictEqual(p.buckets.size, 0)
+  })
+
+  it('snapshots prior OTLP exports before starting the boundary export', () => {
+    let priorDone
+    let exportDone
+    const exporter = {
+      flush: sinon.stub().callsFake(done => { priorDone = done }),
+      export: sinon.stub().callsFake((_drained, _bucketSizeNs, done) => { exportDone = done }),
+    }
+    const p = new SpanStatsProcessor(config, exporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    const done = sinon.spy()
+
+    p.forceFlush(done)
+
+    sinon.assert.callOrder(exporter.flush, exporter.export)
+    exportDone()
+    sinon.assert.notCalled(done)
+    priorDone()
+    sinon.assert.calledOnce(done)
+  })
+
+  it('waits for a prior OTLP export when the boundary export throws', () => {
+    let priorDone
+    const exporter = {
+      flush: sinon.stub().callsFake(done => { priorDone = done }),
+      export: sinon.stub().throws(new Error('encode failed')),
+    }
+    const p = new SpanStatsProcessor(config, exporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    const done = sinon.spy()
+
+    p.forceFlush(done)
+
+    sinon.assert.notCalled(done)
+    priorDone()
+    sinon.assert.calledOnce(done)
+  })
+
+  it('force flushes pending agent span statistics', () => {
+    exporter.export.resetHistory()
+    exporter.flush.resetHistory()
+    exporter.export.callsFake((_payload, done) => done())
+    const p = new SpanStatsProcessor(config)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+
+    let flushed = false
+    p.forceFlush(() => { flushed = true })
+
+    assert.ok(exporter.export.calledOnce)
+    assert.ok(exporter.flush.notCalled)
+    assert.ok(flushed)
+    assert.strictEqual(p.buckets.size, 0)
+    exporter.export.resetBehavior()
+  })
+
+  it('joins an in-flight agent span statistics export during force flush', () => {
+    exporter.export.resetHistory()
+    exporter.flush.resetHistory()
+    const p = new SpanStatsProcessor(config)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+
+    let flushDone
+    exporter.export.callsFake((_payload, done) => { flushDone = done })
+    let flushed = false
+    p.forceFlush(() => { flushed = true })
+
+    assert.ok(exporter.export.calledOnce)
+    assert.ok(exporter.flush.notCalled)
+    assert.strictEqual(flushed, false)
+    flushDone()
+    assert.strictEqual(flushed, true)
+    exporter.export.resetBehavior()
   })
 
   it('should record spans when only OTLP is enabled', () => {

@@ -30,7 +30,7 @@ class TestOptimizationRequestTracker {
    */
   flush (done, options) {
     if (options?.deadline === undefined) {
-      BaseWriter.prototype.flush.call(this.#writer, done, options)
+      BaseWriter.prototype.flushDirect.call(this.#writer, done, options)
       return
     }
 
@@ -72,7 +72,7 @@ class TestOptimizationRequestTracker {
     const previousFinalFlush = this.#activeFinalFlush
     this.#activeFinalFlush = finalFlush
     try {
-      BaseWriter.prototype.flush.call(this.#writer, (error) => {
+      BaseWriter.prototype.flushDirect.call(this.#writer, (error) => {
         finalFlush.error ||= error
         finalFlush.writerDone = true
         this.#finishFinalFlush(finalFlush)

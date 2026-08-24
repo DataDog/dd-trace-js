@@ -27,6 +27,7 @@ let client = null
 let lastTime = 0
 let lastCpuUsage = null
 let eventLoopDelayObserver = null
+let capture = null
 
 // !!!!!!!!!!!
 //  IMPORTANT
@@ -76,11 +77,10 @@ module.exports = {
     lastTime = performance.now()
 
     if (nativeMetrics) {
-      interval = setInterval(() => {
+      capture = () => {
         captureNativeMetrics(trackEventLoop, trackGc)
         captureCommonMetrics(trackEventLoop)
-        client.flush()
-      }, flushIntervalMs)
+      }
     } else {
       lastCpuUsage = process.cpuUsage()
 
@@ -92,16 +92,20 @@ module.exports = {
         eventLoopDelayObserver.enable()
       }
 
-      interval = setInterval(() => {
+      capture = () => {
         captureCpuUsage()
         captureCommonMetrics(trackEventLoop)
         captureHeapSpace()
         if (trackEventLoop) {
           captureEventLoopDelay()
         }
-        client.flush()
-      }, flushIntervalMs)
+      }
     }
+
+    interval = setInterval(() => {
+      capture()
+      client.flush()
+    }, flushIntervalMs)
 
     interval.unref?.()
   },
@@ -114,6 +118,7 @@ module.exports = {
     interval = null
 
     client = null
+    capture = null
     lastCpuUsage = null
 
     gcObserver?.disconnect()
@@ -157,6 +162,12 @@ module.exports = {
 
   decrement (name, tag) {
     this.count(name, -1, tag)
+  },
+
+  flush (done) {
+    if (!client) return done?.()
+    capture?.()
+    client.flush(done)
   },
 }
 
