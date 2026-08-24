@@ -138,7 +138,7 @@ class NativeWallProfiler {
 
     this.#pprof.time.start({
       collectCpuTime: this.#cpuProfilingEnabled,
-      columnNumbers: 'pack',
+      columnNumbers: 'emit',
       durationMillis: this.#flushIntervalMillis,
       intervalMicros: this.#samplingIntervalMicros,
       lineNumbers: false,
@@ -229,13 +229,12 @@ class NativeWallProfiler {
         } else if (current !== sampleContext) {
           this.#pprof.time.setContext(sampleContext)
         }
-      // Every setContext() call in ACF mode allocates a fresh contextHolder
-      // (a node::ObjectWrap with its own v8::Global<v8::Value>) in the native
-      // profiler. Skip the call if the CPED already holds this sampleContext,
-      // which is the common case when the same span is repeatedly activated:
-      // #getProfilingContext caches profilingContext on span[ProfilingContext],
-      // so identity comparison short-circuits.
       } else if (current !== sampleContext) {
+        // Every setContext() call in ACF mode allocates a fresh contextHolder
+        // (a node::ObjectWrap with its own v8::Global<v8::Value>) in the native
+        // profiler. We're only incurring the cost when current !== sampleContext
+        // and skip it when current === sampleContext, which is the common case
+        // when the same span is repeatedly activated.
         this.#pprof.time.setContext(sampleContext)
       }
     } else {
