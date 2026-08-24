@@ -61,6 +61,7 @@ jobs:
       - run: npm i -g pnpm
         if: matrix.manager.name == 'pnpm'
       - name: Install packed package
+        shell: bash
         run: |
           cd /tmp/app
           ${{ matrix.manager.install }} /tmp/dd-trace.tgz 2>&1 | tee /tmp/package-manager-install.log
