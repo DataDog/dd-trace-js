@@ -4,10 +4,10 @@ const { storage } = require('../../../../datadog-core')
 
 const Plugin = require('../../plugins/plugin')
 const { getEventDomainRegistry } = require('../registry')
+const EventSourceLifecycle = require('../source-lifecycle')
 const { getEventSourceRegistry } = require('../source-registry')
 const ConnectionLifecycleAdapter = require('./connection-lifecycle-adapter')
 const DatabaseProcessor = require('./processor')
-const DatabaseSourceLifecycle = require('./source-lifecycle')
 
 const legacyStorage = storage('legacy')
 const DATABASE_DOMAIN = DatabaseProcessor.eventDomain
@@ -30,12 +30,13 @@ class DatabaseQueryBridge extends Plugin {
     super()
 
     this.#connectionLifecycleAdapter = new ConnectionLifecycleAdapter()
-    this.#lifecycle = new DatabaseSourceLifecycle(
+    this.#lifecycle = new EventSourceLifecycle(
       source,
       identity,
       QUERY_OPERATION,
       sourceRegistry,
-      runtime
+      runtime,
+      'Database'
     )
 
     if (source.parentChannels) {
@@ -84,12 +85,13 @@ class DatabasePoolAcquireBridge extends Plugin {
     super()
 
     this.#connectionLifecycleAdapter = new ConnectionLifecycleAdapter()
-    this.#lifecycle = new DatabaseSourceLifecycle(
+    this.#lifecycle = new EventSourceLifecycle(
       source,
       identity,
       POOL_ACQUIRE_OPERATION,
       sourceRegistry,
-      runtime
+      runtime,
+      'Database'
     )
 
     const connection = source.connection
