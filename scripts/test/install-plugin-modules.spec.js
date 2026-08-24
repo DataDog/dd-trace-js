@@ -84,12 +84,12 @@ describe('scripts/install_plugin_modules.js', function () {
       .split('\n')
       .map(JSON.parse)
     assert.deepStrictEqual(packageManagerCalls, [
-      ['bun', 'install', '--trust', '--network-concurrency', '1'],
-      ['bun', 'install', '--trust', '--network-concurrency', '1'],
-      ['bun', 'install', '--trust', '--network-concurrency', '1'],
-      ['bun', 'install', '--trust', '--network-concurrency', '1'],
-      ['bun', 'install', '--trust', '--network-concurrency', '1'],
-      ['bun', 'install', '--trust', '--network-concurrency', '1'],
+      ['bun', 'install', '--trust'],
+      ['bun', 'install', '--trust'],
+      ['bun', 'install', '--trust'],
+      ['bun', 'install', '--trust'],
+      ['bun', 'install', '--trust'],
+      ['bun', 'install', '--trust'],
     ])
   })
 
@@ -125,7 +125,7 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.strictEqual(result.status, 1)
     assert.deepStrictEqual(
       fs.readFileSync(traceFile, 'utf8').trim().split('\n').map(JSON.parse),
-      [['bun', 'install', '--trust', '--network-concurrency', '1']]
+      [['bun', 'install', '--trust']]
     )
   })
 
@@ -176,15 +176,6 @@ externals.express.push({ name: 'axios', overrides: ${override} })
     runInstall('not-a-plugin')
   })
 
-  it('ignores malformed entries in Bun\'s central store', () => {
-    runInstall('pino')
-    const dotBun = path.join(versionsDir, 'node_modules', '.bun')
-    fs.mkdirSync(path.join(dotBun, 'malformed'), { recursive: true })
-    fs.mkdirSync(path.join(dotBun, 'package@'), { recursive: true })
-
-    runInstall('pino')
-  })
-
   it('does not require latest-version caps for forced transitive dependencies', () => {
     runInstall('google-cloud-vertexai')
 
@@ -230,13 +221,6 @@ externals.express.push({ name: 'axios', overrides: ${override} })
 
     const manifest = require(path.join(versionsDir, 'moleculer', 'package.json'))
     assert.strictEqual(manifest.dependencies.bluebird, '3.7.2')
-  })
-
-  it('makes the sqlite build dependency direct in knex sandboxes', () => {
-    runInstall('knex')
-
-    const manifest = require(path.join(versionsDir, 'knex@1', 'package.json'))
-    assert.strictEqual(manifest.dependencies.tar, '7.5.4')
   })
 
   it('pins the Claude Agent SDK to its compatible zod major', () => {

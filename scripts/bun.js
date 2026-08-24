@@ -47,7 +47,6 @@ function getBunBinary () {
       '--package-lock=false',
       '--include=optional',
       '--ignore-scripts=false',
-      '--prefer-offline',
       '--no-audit',
       '--no-fund',
       `bun@${bunVersion}`
