@@ -8,11 +8,15 @@ const JEST_FLUSH_INTERVAL = 0
 const JEST_WORKER_INITIALIZE_MESSAGE = 0
 const JEST_WORKER_PACKAGE = 'jest-worker'
 const JEST_WORKER_THREAD_ARG = '--dd-test-optimization-jest-worker-thread'
+const TEST_OPTIMIZATION_PRELOAD = Symbol.for('dd-trace:test-optimization:preload')
 const JEST_AUXILIARY_WORKER_PACKAGES = new Set(['@jest/reporters', 'jest-haste-map'])
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
 const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
+
+// Only a preload is inherited by worker threads and can consume the worker marker.
+if (module.parent?.id === 'internal/preload') globalThis[TEST_OPTIMIZATION_PRELOAD] = true
 
 function isPackageManager () {
   return PACKAGE_MANAGERS.some(packageManager =>

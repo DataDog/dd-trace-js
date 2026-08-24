@@ -96,6 +96,7 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
 const CHILD_MESSAGE_CALL = 1
 const JEST_WORKER_THREAD_ARG = '--dd-test-optimization-jest-worker-thread'
+const TEST_OPTIMIZATION_PRELOAD = Symbol.for('dd-trace:test-optimization:preload')
 
 // Maximum time we'll wait for the tracer to flush
 // The exporter has a 10-second bounded final-flush deadline. Leave enough time
@@ -4157,10 +4158,13 @@ addHook({
   // jest-worker creates the Node Worker dynamically, so the marker must be added before its constructor runs.
   shimmer.wrap(nodeThreadsWorker, 'default', Worker => class extends Worker {
     constructor (options) {
-      super({
-        ...options,
-        forkOptions: getJestWorkerThreadForkOptions(options.forkOptions),
-      })
+      if (globalThis[TEST_OPTIMIZATION_PRELOAD]) {
+        options = {
+          ...options,
+          forkOptions: getJestWorkerThreadForkOptions(options.forkOptions),
+        }
+      }
+      super(options)
     }
   })
   return nodeThreadsWorker
@@ -4173,9 +4177,9 @@ addHook({
   shimmer.wrap(jestWorkerPackage.FifoQueue.prototype, 'enqueue', enqueueWrapper)
   shimmer.wrap(jestWorkerPackage.PriorityQueue.prototype, 'enqueue', enqueueWrapper)
   // Jest 30 bundles its internal worker classes, so the public constructor is the pre-lifecycle mutation point.
-  shimmer.wrap(jestWorkerPackage, 'Worker', Worker => class extends Worker {
+  jestWorkerPackage = shimmer.wrap(jestWorkerPackage, 'Worker', Worker => class extends Worker {
     constructor (workerPath, options) {
-      if (options?.enableWorkerThreads) {
+      if (options?.enableWorkerThreads && globalThis[TEST_OPTIMIZATION_PRELOAD]) {
         options = {
           ...options,
           forkOptions: getJestWorkerThreadForkOptions(options.forkOptions),
@@ -4183,6 +4187,6 @@ addHook({
       }
       super(workerPath, options)
     }
-  })
+  }, { replaceGetter: true })
   return jestWorkerPackage
 })

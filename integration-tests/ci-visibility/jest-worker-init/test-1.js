@@ -9,6 +9,10 @@ test('runs the first suite', () => {
   expect(1 + 1).toBe(2)
 })
 
+test('does not expose Test Optimization worker arguments', () => {
+  expect(process.argv).not.toContain('--dd-test-optimization-jest-worker-thread')
+})
+
 test('loads the tracer in a user child with inherited Jest state', async () => {
   const child = fork(path.join(__dirname, 'user-child.js'), {
     env: {

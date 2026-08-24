@@ -1091,13 +1091,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  context('when no ci visibility init is used', () => {
-    it('does not crash', (done) => {
+  context('when Test Optimization init is not used', () => {
+    it('does not expose Test Optimization worker arguments', (done) => {
       childProcess = fork(startupTestFile, {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: receiver.port,
           NODE_OPTIONS: '-r dd-trace/init',
+          TESTS_TO_RUN: 'ci-visibility/jest-worker-init/test-',
+          USE_WORKER_THREADS: '1',
         },
         stdio: 'pipe',
       })
