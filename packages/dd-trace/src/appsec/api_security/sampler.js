@@ -44,15 +44,20 @@ function disable () {
 }
 
 /**
- * @param {import('http').IncomingMessage} req
- * @param {import('http').ServerResponse} res
+ * @param {object} rootSpan Span the sampling decision is attached to
+ * @param {object} request
+ * @param {string} request.method
+ * @param {number|string} request.statusCode
+ * @param {string|null} request.route Tri-state: a route string, an empty string (still a valid
+ *   route — dd-trace-js represents the express root path '/' as an empty path segment), or
+ *   `null` meaning no route information at all.
+ * @param {boolean} [request.blocked] Whether the response was blocked by ASM
  * @param {boolean} record When true and the decision is SAMPLE, records the endpoint in the TTL cache
  * @returns {'sample' | 'missing_route' | 'skip'}
  */
-function sampleRequest (req, res, record = false) {
+function sampleRootSpanRequest (rootSpan, { method, statusCode, route, blocked = false }, record = false) {
   if (!enabled) return SamplingDecision.SKIP
 
-  const rootSpan = web.root(req)
   if (!rootSpan) return SamplingDecision.SKIP
 
   if (!asmStandaloneEnabled) {
@@ -67,25 +72,52 @@ function sampleRequest (req, res, record = false) {
     }
   }
 
-  const resolved = resolveSamplingKey(req, res)
-  if (!resolved) return SamplingDecision.SKIP
+  if (!method || !statusCode) {
+    log.warn('[ASM] Unsupported groupkey for API security')
+    return SamplingDecision.SKIP
+  }
 
-  if (record && resolved.route === null) {
-    if (resolved.status === 404 || isBlocked(res)) return SamplingDecision.SKIP
+  if (record && route === null) {
+    if (Number(statusCode) === 404 || blocked) return SamplingDecision.SKIP
     return SamplingDecision.MISSING_ROUTE
   }
 
-  if (sampledRequests.has(resolved.key)) return SamplingDecision.SKIP
+  const key = buildSamplingKey(method, route, statusCode)
+  if (sampledRequests.has(key)) return SamplingDecision.SKIP
 
   if (asmStandaloneEnabled) {
     keepTrace(rootSpan, ASM)
   }
 
   if (record) {
-    sampledRequests.set(resolved.key, undefined)
+    sampledRequests.set(key, undefined)
   }
 
   return SamplingDecision.SAMPLE
+}
+
+/**
+ * Node HTTP adapter over {@link sampleRootSpanRequest}.
+ *
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {boolean} record When true and the decision is SAMPLE, records the endpoint in the TTL cache
+ * @returns {'sample' | 'missing_route' | 'skip'}
+ */
+function sampleRequest (req, res, record = false) {
+  if (!enabled) return SamplingDecision.SKIP
+
+  const rootSpan = web.root(req)
+  if (!rootSpan) return SamplingDecision.SKIP
+
+  const statusCode = res.statusCode
+
+  return sampleRootSpanRequest(rootSpan, {
+    method: req.method,
+    statusCode,
+    route: getRouteOrEndpoint(web.getContext(req), statusCode),
+    blocked: isBlocked(res),
+  }, record)
 }
 
 /**
@@ -96,6 +128,10 @@ function sampleRequest (req, res, record = false) {
 function wasSampled (req, res) {
   const resolved = resolveSamplingKey(req, res)
   return resolved !== null && sampledRequests.has(resolved.key)
+}
+
+function buildSamplingKey (method, route, statusCode) {
+  return method + (route ?? '') + statusCode
 }
 
 function resolveSamplingKey (req, res) {
@@ -112,7 +148,7 @@ function resolveSamplingKey (req, res) {
 
   // route === null signals "no route information at all". An empty string is still a valid
   // route (dd-trace-js represents the express root path '/' as an empty path segment).
-  return { method, status, route, key: method + (route ?? '') + status }
+  return { method, status, route, key: buildSamplingKey(method, route, status) }
 }
 
 function getRouteOrEndpoint (context, statusCode) {
@@ -142,6 +178,7 @@ module.exports = {
   configure,
   disable,
   sampleRequest,
+  sampleRootSpanRequest,
   wasSampled,
   SamplingDecision,
 }
