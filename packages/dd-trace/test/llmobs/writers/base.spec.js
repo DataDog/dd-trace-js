@@ -11,6 +11,7 @@ const { useEnv } = require('../../../../../integration-tests/helpers')
 const { removeDestroyHandler } = require('../util')
 
 describe('BaseLLMObsWriter', () => {
+  const originalVercel = process.env.VERCEL
   let BaseLLMObsWriter
   let writer
   let request
@@ -49,6 +50,8 @@ describe('BaseLLMObsWriter', () => {
   })
 
   afterEach(() => {
+    if (originalVercel === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = originalVercel
     clock.restore()
     removeDestroyHandler()
   })
@@ -237,6 +240,123 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       sinon.assert.calledOnce(request)
+    })
+
+    it('flushes a lifecycle request after agent strategy selection completes', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'bar' })
+      const done = sinon.spy()
+
+      writer.flush(done)
+
+      sinon.assert.notCalled(request)
+      sinon.assert.notCalled(done)
+      writer.setAgentless(true)
+
+      sinon.assert.calledOnce(request)
+      request.firstCall.args[2]()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('continues flushing after a request throws', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'default' })
+      writer.append({ foo: 'tenant' }, { apiKey: 'key-a', site: 'site-a.com' })
+      request.onFirstCall().throws(new Error('invalid header value'))
+      const done = sinon.spy()
+
+      writer.flush(done)
+
+      sinon.assert.calledTwice(request)
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledWith(
+        logger.error,
+        'Failed to send LLMObs %s events: %s',
+        undefined,
+        'invalid header value'
+      )
+    })
+
+    it('waits for an export already in flight', () => {
+      process.env.VERCEL = '1'
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'bar' })
+      let requestDone
+      const done = sinon.spy()
+      request.callsFake((payload, requestOptions, callback) => { requestDone = callback })
+
+      writer.flush()
+      writer.flush(done)
+
+      sinon.assert.notCalled(done)
+      requestDone()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('waits for every request drained at the flush boundary', () => {
+      process.env.VERCEL = '1'
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'default' })
+      writer.append({ foo: 'tenant' }, { apiKey: 'key-a', site: 'site-a.com' })
+      const callbacks = []
+      const done = sinon.spy()
+      request.callsFake((payload, requestOptions, callback) => { callbacks.push(callback) })
+
+      writer.flush(done)
+
+      assert.strictEqual(callbacks.length, 2)
+      callbacks[0]()
+      sinon.assert.notCalled(done)
+      callbacks[1]()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('continues after a boundary request throws while waiting for earlier requests', () => {
+      process.env.VERCEL = '1'
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      const callbacks = []
+      request.onFirstCall().callsFake((payload, requestOptions, callback) => { callbacks.push(callback) })
+      writer.append({ foo: 'in flight' })
+      writer.flush()
+      writer.append({ foo: 'boundary' })
+      writer.append({ foo: 'tenant' }, { apiKey: 'key-a', site: 'site-a.com' })
+      request.onSecondCall().throws(new Error('invalid header value'))
+      request.onThirdCall().callsFake((payload, requestOptions, callback) => { callbacks.push(callback) })
+      const done = sinon.spy()
+
+      writer.flush(done)
+
+      sinon.assert.calledThrice(request)
+      sinon.assert.notCalled(done)
+      callbacks[0]()
+      sinon.assert.notCalled(done)
+      callbacks[1]()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('does not retain requests outside Vercel', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'bar' })
+      let requestDone
+      const done = sinon.spy()
+      request.callsFake((payload, requestOptions, callback) => { requestDone = callback })
+
+      writer.flush()
+      writer.flush(done)
+
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(typeof requestDone, 'function')
     })
   })
 
