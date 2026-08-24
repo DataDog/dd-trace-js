@@ -3009,6 +3009,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_HTTP_CLIENT_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "400-499"
+      }
+    ],
     "DD_TRACE_HTTP_ENABLED": [
       {
         "implementation": "A",
