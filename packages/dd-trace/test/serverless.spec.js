@@ -342,6 +342,26 @@ describe('Vercel telemetry retention', () => {
     }
   })
 
+  it('skips retention without a Vercel waitUntil boundary', async () => {
+    let flushes = 0
+    const unregister = registerVercelTelemetryRetention({
+      flushAll () {
+        flushes++
+      },
+    })
+    try {
+      delete globalThis[requestContext]
+      channel('apm:http:server:request:finish').publish({})
+      globalThis[requestContext] = { get: () => ({}) }
+      channel('apm:http:server:request:finish').publish({})
+      await new Promise(resolve => setImmediate(resolve))
+
+      assert.strictEqual(flushes, 0)
+    } finally {
+      unregister()
+    }
+  })
+
   it('retains an instrumented HTTP request without HTTP tracing plugins', () => {
     const vercelModule = require.resolve('../src/serverless/vercel')
     const instrumentationRegister = require.resolve('../../datadog-instrumentations/src/helpers/register')
@@ -430,15 +450,18 @@ describe('Vercel telemetry retention', () => {
     assert.strictEqual(result.status, 0, result.stderr)
   })
 
-  it('logs a Vercel waitUntil registration failure', () => {
+  it('logs a Vercel waitUntil registration failure and still flushes', async () => {
     const error = new Error('request context closed')
     const warn = sinon.stub(require('../src/log'), 'warn')
     globalThis[requestContext] = { get: () => ({ waitUntil: () => { throw error } }) }
-    const unregister = registerVercelTelemetryRetention({ flushAll () {} })
+    const flushAll = sinon.spy(done => done())
+    const unregister = registerVercelTelemetryRetention({ flushAll })
 
     try {
       channel('apm:http:server:request:finish').publish({})
+      await new Promise(resolve => setImmediate(resolve))
       sinon.assert.calledWith(warn, 'Unable to retain Vercel telemetry:', error)
+      sinon.assert.calledOnce(flushAll)
     } finally {
       unregister()
       warn.restore()
@@ -479,7 +502,7 @@ describe('Vercel telemetry retention', () => {
     }
   })
 
-  it('retains telemetry again when an outer Vercel response follows a nested request', async () => {
+  it('coalesces overlapping Vercel responses into one queued flush', async () => {
     const retained = []
     const flushes = []
     globalThis[requestContext] = {
@@ -494,14 +517,18 @@ describe('Vercel telemetry retention', () => {
       channel('apm:http:server:request:finish').publish({ req: {} })
       await new Promise(resolve => setImmediate(resolve))
       channel('apm:http:server:request:finish').publish({ req: {} })
+      channel('apm:http:server:request:finish').publish({ req: {} })
       await new Promise(resolve => setImmediate(resolve))
 
       // Other tracers initialized by this file can share this request context;
       // the callback count below isolates this test's tracer.
-      assert.ok(retained.length >= 2)
-      assert.strictEqual(flushes.length, 2)
+      assert.ok(retained.length >= 3)
+      assert.strictEqual(flushes.length, 1)
       flushes[0]()
+      await new Promise(resolve => setImmediate(resolve))
+      assert.strictEqual(flushes.length, 2)
       flushes[1]()
+      await Promise.all(retained)
     } finally {
       unregister()
     }
