@@ -4066,14 +4066,48 @@ function wrapWorkerChannel (worker) {
 
 /**
  * Marks a Jest worker thread so ci/init can defer tracer initialization until its first worker message.
- * @param {{ argv?: string[] }} [forkOptions]
- * @returns {{ argv: string[] }}
+ * @param {import('node:worker_threads').WorkerOptions} [forkOptions]
+ * @returns {import('node:worker_threads').WorkerOptions}
  */
 function getJestWorkerThreadForkOptions (forkOptions) {
   return {
     ...forkOptions,
     argv: [...(forkOptions?.argv || []), JEST_WORKER_THREAD_ARG],
   }
+}
+
+/**
+ * Checks whether a worker thread preserves the launch options that preloaded ci/init.
+ * @param {import('node:worker_threads').WorkerOptions} [forkOptions]
+ * @returns {boolean}
+ */
+function inheritsTestOptimizationPreload (forkOptions) {
+  const preload = globalThis[TEST_OPTIMIZATION_PRELOAD]
+  if (!preload) return false
+
+  const workerEnvironment = forkOptions?.env
+  if (
+    workerEnvironment !== undefined &&
+    typeof workerEnvironment !== 'symbol' &&
+    (typeof workerEnvironment !== 'object' ||
+      workerEnvironment === null ||
+      workerEnvironment.NODE_OPTIONS !== preload.nodeOptions)
+  ) {
+    return false
+  }
+  if (
+    (workerEnvironment === undefined || typeof workerEnvironment === 'symbol') &&
+    getEnvironmentVariable('NODE_OPTIONS') !== preload.nodeOptions
+  ) {
+    return false
+  }
+
+  const workerExecArgv = forkOptions?.execArgv === undefined ? process.execArgv : forkOptions.execArgv
+  if (!Array.isArray(workerExecArgv) || workerExecArgv.length !== preload.execArgv.length) return false
+  for (let index = 0; index < workerExecArgv.length; index++) {
+    if (workerExecArgv[index] !== preload.execArgv[index]) return false
+  }
+  return true
 }
 
 function wrapWorkerInitializer (worker) {
@@ -4158,7 +4192,7 @@ addHook({
   // jest-worker creates the Node Worker dynamically, so the marker must be added before its constructor runs.
   shimmer.wrap(nodeThreadsWorker, 'default', Worker => class extends Worker {
     constructor (options) {
-      if (globalThis[TEST_OPTIMIZATION_PRELOAD]) {
+      if (inheritsTestOptimizationPreload(options.forkOptions)) {
         options = {
           ...options,
           forkOptions: getJestWorkerThreadForkOptions(options.forkOptions),
@@ -4179,7 +4213,7 @@ addHook({
   // Jest 30 bundles its internal worker classes, so the public constructor is the pre-lifecycle mutation point.
   jestWorkerPackage = shimmer.wrap(jestWorkerPackage, 'Worker', Worker => class extends Worker {
     constructor (workerPath, options) {
-      if (options?.enableWorkerThreads && globalThis[TEST_OPTIMIZATION_PRELOAD]) {
+      if (options?.enableWorkerThreads && inheritsTestOptimizationPreload(options.forkOptions)) {
         options = {
           ...options,
           forkOptions: getJestWorkerThreadForkOptions(options.forkOptions),

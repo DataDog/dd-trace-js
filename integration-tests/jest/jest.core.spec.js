@@ -192,6 +192,33 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   }
 
+  for (const preloadSource of ['environment', 'execArgv']) {
+    it(`does not mark a Jest worker thread that omits the ${preloadSource} preload`, async function () {
+      this.timeout(60_000)
+
+      childProcess = fork(path.join(cwd, 'ci-visibility/jest-worker-init/user-jest-worker-parent.js'), {
+        cwd,
+        env: {
+          ...process.env,
+          DD_CIVISIBILITY_ENABLED: 'false',
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+          JEST_WORKER_PRELOAD_SOURCE: preloadSource,
+          NODE_OPTIONS: preloadSource === 'environment' ? '-r dd-trace/ci/init' : '',
+        },
+        execArgv: preloadSource === 'execArgv' ? ['-r', 'dd-trace/ci/init'] : [],
+        silent: true,
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk })
+
+      const closePromise = once(childProcess, 'close')
+      const [workerArguments] = await once(childProcess, 'message')
+      assert.ok(!workerArguments.includes('--dd-test-optimization-jest-worker-thread'), inspect(workerArguments))
+      const [exitCode] = await closePromise
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+  }
+
   context('older versions of the agent (APM protocol)', () => {
     let oldApmProtocolEnvVars = {}
 

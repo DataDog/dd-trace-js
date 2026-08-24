@@ -16,7 +16,12 @@ const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
 const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
 
 // Only a preload is inherited by worker threads and can consume the worker marker.
-if (module.parent?.id === 'internal/preload') globalThis[TEST_OPTIMIZATION_PRELOAD] = true
+if (module.parent?.id === 'internal/preload') {
+  globalThis[TEST_OPTIMIZATION_PRELOAD] = {
+    execArgv: [...process.execArgv],
+    nodeOptions: process.env.NODE_OPTIONS,
+  }
+}
 
 function isPackageManager () {
   return PACKAGE_MANAGERS.some(packageManager =>
