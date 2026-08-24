@@ -45,18 +45,16 @@ cases:
   - id: dd-trace-js-test-boundaries-004
     files: [AGENTS.md, CLAUDE.md]
     input: |
-      I fixed a 32-entry cap; the 33rd operation rejects with code ERR_LIMIT. Which boundary cases and assertions
-      should cover it, and how should two promise assertions that must both settle be awaited? Answer in at most
-      4 bullets.
+      I fixed a limit that accepts up to 32 entries and rejects additional entries with ERR_LIMIT.
+      What boundary tests and assertion style should cover it? Answer in at most 3 bullets.
     expected_criteria:
       - Tests both 32 as the last accepted value and 33 as the first rejected value.
       - Uses node:assert/strict and assert.rejects with the ERR_LIMIT code instead of manual try/catch plus assert.fail.
-      - Awaits both promises with Promise.all so one is not left temporarily unhandled.
       - Checks existing specs and adds the failure plus uncovered sibling cases sharing the fixed path.
     bad_signals:
       - Tests only values comfortably below and above the boundary.
-      - Weakens an assertion or raises a timeout to hide the underlying failure.
-      - Awaits the two already-started promise assertions sequentially.
+      - Uses manual try/catch plus assert.fail for the rejected promise.
+      - Duplicates a sibling case that an existing spec already covers.
 
   - id: dd-trace-js-new-cache-integration-005
     files:
@@ -92,14 +90,15 @@ cases:
   - id: dd-trace-js-real-path-tests-007
     files: [AGENTS.md, CLAUDE.md]
     input: |
-      A proposed plugin regression test creates Object.create(Plugin.prototype), stubs _tracer, and asserts against
-      the stub. Is this acceptable, and what should replace it? Answer in at most 3 bullets.
+      A plugin regression test bypasses the normal loader, replaces the tracer with a small stub, invokes a plugin
+      method directly, and only asserts calls to the stub. Is this sufficient, and what should replace it?
+      Answer in at most 3 bullets.
     expected_criteria:
-      - Rejects the prototype-and-stub test because it can exercise states production never reaches.
+      - Rejects the loader-bypassing stub test because it can exercise states production never reaches.
       - Uses the real plugin entry point through agent.load with the mock agent or a real service.
       - Asserts observable output such as spans, span metadata, propagation, pathway hashes, or DSM statistics.
     bad_signals:
-      - Accepts testing an Object.create(Plugin.prototype) instance as sufficient.
+      - Accepts invoking a plugin method against a stub tracer as sufficient.
       - Adds a production export, getter, or method solely to make the test possible.
       - Changes production behavior to satisfy the fake test.
 

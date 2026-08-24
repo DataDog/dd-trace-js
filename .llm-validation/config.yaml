@@ -25,9 +25,10 @@ presets:
   gate: # Curated per-PR gate: highest-signal, instruction-specific content cases.
     cases:
       - dd-trace-js-package-manager-001
+      - dd-trace-js-plugin-tests-002
       - dd-trace-js-new-cache-integration-005
-      - dd-trace-js-real-path-tests-007
       - dd-trace-js-channel-cardinality-008
+      - dd-trace-js-hung-ci-009
     runs: 3 # 6 pairwise comparisons per selected case.
   minimum: # One content case for each always-loaded or on-demand instruction source.
     cases:
