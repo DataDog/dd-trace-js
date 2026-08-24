@@ -92,36 +92,34 @@ describe('dogstatsd', () => {
     CustomMetrics = dogstatsd.CustomMetrics
     MetricsAggregationClient = dogstatsd.MetricsAggregationClient
 
-    httpData = []
+    httpData = undefined
     statusCode = 200
     sockets = []
-    httpServer = http.createServer((req, res) => {
-      assert.strictEqual(req.method, 'POST')
-      assert.strictEqual(req.url, '/dogstatsd/v2/proxy')
+
+    /**
+     * @param {import('node:http').IncomingMessage} request
+     * @param {import('node:http').ServerResponse} response
+     */
+    function handleRequest (request, response) {
+      assert.strictEqual(request.method, 'POST')
+      assert.strictEqual(request.url, '/dogstatsd/v2/proxy')
       const requestData = []
-      req.on('data', data => requestData.push(data))
-      req.on('end', () => {
-        httpData = requestData
-        res.statusCode = statusCode
-        res.end()
+      request.on('data', data => requestData.push(data))
+      request.on('end', () => {
+        httpData = Buffer.concat(requestData)
+        response.statusCode = statusCode
+        response.end()
       })
-    }).listen(0, () => {
+    }
+
+    httpServer = http.createServer(handleRequest).listen(0, () => {
       httpPort = httpServer.address().port
       if (os.platform() === 'win32') {
         done()
         return
       }
       udsPath = path.join(os.tmpdir(), `test-dogstatsd-dd-trace-uds-${Math.random()}`)
-      httpUdsServer = http.createServer((req, res) => {
-        assert.strictEqual(req.method, 'POST')
-        assert.strictEqual(req.url, '/dogstatsd/v2/proxy')
-        const requestData = []
-        req.on('data', data => requestData.push(data))
-        req.on('end', () => {
-          httpData = requestData
-          res.end()
-        })
-      }).listen(udsPath, () => {
+      httpUdsServer = http.createServer(handleRequest).listen(udsPath, () => {
         done()
       })
       httpUdsServer.on('connection', socket => sockets.push(socket))
@@ -152,7 +150,6 @@ describe('dogstatsd', () => {
 
   /**
    * @param {{ flush: (done: () => void) => void }} dogstatsdClient
-   * @returns {Promise<void>}
    */
   function flushClient (dogstatsdClient) {
     return new Promise(resolve => dogstatsdClient.flush(resolve))
@@ -412,7 +409,7 @@ describe('dogstatsd', () => {
     client.gauge('test.avg2', 2)
     await flushClient(client)
 
-    assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:0|g\ntest.avg2:2|g\n')
+    assert.strictEqual(httpData.toString(), 'test.avg:0|g\ntest.avg2:2|g\n')
   })
 
   it('should support HTTP via port', async () => {
@@ -424,18 +421,7 @@ describe('dogstatsd', () => {
     client.gauge('test.avg2', 2)
     await flushClient(client)
 
-    assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
-  })
-
-  it('calls the flush callback after the HTTP proxy responds', async () => {
-    client = createDogStatsDClient({
-      metricsProxyUrl: `http://localhost:${httpPort}`,
-    })
-
-    client.gauge('test.avg', 1)
-    await flushClient(client)
-
-    assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\n')
+    assert.strictEqual(httpData.toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
   })
 
   it('should support HTTP via URL object', async () => {
@@ -447,7 +433,7 @@ describe('dogstatsd', () => {
     client.gauge('test.avg2', 2)
     await flushClient(client)
 
-    assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
+    assert.strictEqual(httpData.toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
   })
 
   it('should fail over to UDP when receiving HTTP 404 error from agent', async () => {
