@@ -15,7 +15,7 @@ const {
 const { createWindowsFileReferenceFs } = require('./validation-test-helpers')
 
 describe('test optimization validation generated files', () => {
-  const itUnlessWindows = process.platform === 'win32' ? () => {} : it
+  const itUnlessWindows = process.platform === 'win32' ? it.skip : it
   it('allows existing generated files when the content matches', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
     const filename = path.join(root, 'dd-test-optimization-validation.test.js')
