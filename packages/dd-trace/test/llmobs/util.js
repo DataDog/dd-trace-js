@@ -498,11 +498,16 @@ function useLlmObs ({
       }
     },
 
-    getEvaluationMetrics: function () {
-      const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
-      return evaluationMetricsRequests
-        .flatMap(request => request.data.attributes.metrics)
-        .sort((a, b) => a.timestamp_ms - b.timestamp_ms)
+    getEvaluationMetrics: async function () {
+      const evaluationMetrics = []
+
+      while (evaluationMetrics.length === 0 && !runState.cancelled) {
+        await new Promise(resolve => setImmediate(resolve))
+        const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
+        evaluationMetrics.push(...evaluationMetricsRequests.flatMap(request => request.data.attributes.metrics))
+      }
+
+      return evaluationMetrics.sort((a, b) => a.timestamp_ms - b.timestamp_ms)
     },
   }
 }
