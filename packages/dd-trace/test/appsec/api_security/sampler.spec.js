@@ -90,7 +90,6 @@ describe('API Security Sampler', () => {
       clock.tick(25000)
 
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), true)
     })
 
     it('should sample after 30 seconds', () => {
@@ -108,11 +107,12 @@ describe('API Security Sampler', () => {
         assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SAMPLE)
       }
 
+      // A non-recording call reports SAMPLE for an evicted endpoint and SKIP for a cached one
       webStub.getContext.returns({ paths: ['/test0'] })
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), false)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SAMPLE)
 
       webStub.getContext.returns({ paths: ['/test4096'] })
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), true)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SKIP)
     })
 
     it('should set enabled to false and clear the cache', () => {
@@ -129,8 +129,8 @@ describe('API Security Sampler', () => {
       assert.strictEqual(apiSecuritySampler.sampleRequest(getReq, res, true), SamplingDecision.SAMPLE)
       assert.strictEqual(apiSecuritySampler.sampleRequest(postReq, res, true), SamplingDecision.SAMPLE)
 
-      assert.strictEqual(apiSecuritySampler.wasSampled(getReq, res), true)
-      assert.strictEqual(apiSecuritySampler.wasSampled(postReq, res), true)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(getReq, res), SamplingDecision.SKIP)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(postReq, res), SamplingDecision.SKIP)
     })
 
     it('should create different keys for different status codes', () => {
@@ -140,8 +140,8 @@ describe('API Security Sampler', () => {
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res200, true), SamplingDecision.SAMPLE)
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res404, true), SamplingDecision.SAMPLE)
 
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res200), true)
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res404), true)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res200), SamplingDecision.SKIP)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res404), SamplingDecision.SKIP)
     })
 
     it('should sample for AUTO_KEEP priority without checking prioritySampler', () => {
@@ -171,7 +171,9 @@ describe('API Security Sampler', () => {
 
     it('should never mark requests as sampled', () => {
       apiSecuritySampler.sampleRequest(req, res, true)
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), false)
+
+      // Nothing was recorded, so a non-recording call still reports SAMPLE
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SAMPLE)
     })
 
     it('should handle multiple different requests', () => {
@@ -183,7 +185,7 @@ describe('API Security Sampler', () => {
 
       requests.forEach(({ req, res }) => {
         assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SAMPLE)
-        assert.strictEqual(apiSecuritySampler.wasSampled(req, res), false)
+        assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SAMPLE)
       })
     })
 
@@ -303,7 +305,6 @@ describe('API Security Sampler', () => {
       webStub.getContext.returns({ paths: [], span: spanWithEndpoint })
 
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SAMPLE)
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), true)
       // Subsequent call hits TTL: confirms the endpoint key was recorded
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
     })
@@ -316,7 +317,10 @@ describe('API Security Sampler', () => {
 
       // Empty route + 404 => SKIP (not MISSING_ROUTE, since 404 is excluded)
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res404, true), SamplingDecision.SKIP)
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res404), false)
+
+      // Nothing was recorded. A non-recording call skips the missing-route carve-out, so it
+      // probes the TTL cache directly and reports SAMPLE for an absent key.
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res404), SamplingDecision.SAMPLE)
     })
 
     it('prefers http.route over http.endpoint: two requests sharing http.route hit the same TTL slot', () => {
@@ -367,9 +371,9 @@ describe('API Security Sampler', () => {
 
       // Both endpoints still recorded in TTL independently
       webStub.getContext.returns({ paths: [], span: span1 })
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), true)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SKIP)
       webStub.getContext.returns({ paths: [], span: span2 })
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), true)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SKIP)
     })
   })
 

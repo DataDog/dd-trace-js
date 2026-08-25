@@ -114,16 +114,6 @@ function sampleRequest (req, res, record = false) {
 }
 
 /**
- * @param {import('http').IncomingMessage} req
- * @param {import('http').ServerResponse} res
- * @returns {boolean} Whether this request's endpoint is currently recorded in the TTL cache.
- */
-function wasSampled (req, res) {
-  const resolved = resolveSamplingKey(req, res)
-  return resolved !== null && sampledRequests.has(resolved.key)
-}
-
-/**
  * @param {string|null} route
  * @param {boolean} record
  * @returns {boolean}
@@ -140,23 +130,6 @@ function needsBlockedFlag (route, record) {
  */
 function buildSamplingKey (method, route, statusCode) {
   return method + (route ?? '') + statusCode
-}
-
-function resolveSamplingKey (req, res) {
-  const method = req.method
-  const status = res.statusCode
-
-  if (!method || !status) {
-    log.warn('[ASM] Unsupported groupkey for API security')
-    return null
-  }
-
-  const context = web.getContext(req)
-  const route = getRouteOrEndpoint(context, status)
-
-  // route === null signals "no route information at all". An empty string is still a valid
-  // route (dd-trace-js represents the express root path '/' as an empty path segment).
-  return { method, status, route, key: buildSamplingKey(method, route, status) }
 }
 
 function getRouteOrEndpoint (context, statusCode) {
@@ -210,6 +183,5 @@ module.exports = {
   disable,
   sampleRequest,
   sampleRootSpanRequest,
-  wasSampled,
   SamplingDecision,
 }
