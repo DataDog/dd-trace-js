@@ -93,7 +93,7 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'playwright',
       command: './node_modules/.bin/playwright test -c playwright.config.js',
-      loggerNames: ['winston', 'bunyan'],
+      loggerNames: ['winston', 'bunyan', 'pino'],
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
         TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
