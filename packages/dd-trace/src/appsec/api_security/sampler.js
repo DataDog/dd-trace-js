@@ -67,7 +67,7 @@ function sampleRootSpanRequest (rootSpan, { method, statusCode, route, blocked =
     return SamplingDecision.SKIP
   }
 
-  if (record && route === null) {
+  if (needsBlockedFlag(route, record)) {
     if (Number(statusCode) === 404 || blocked) return SamplingDecision.SKIP
     return SamplingDecision.MISSING_ROUTE
   }
@@ -109,7 +109,7 @@ function sampleRequest (req, res, record = false) {
     method: req.method,
     statusCode,
     route,
-    blocked: record && route === null ? isBlocked(res) : false,
+    blocked: needsBlockedFlag(route, record) ? isBlocked(res) : false,
   }, record)
 }
 
@@ -123,6 +123,21 @@ function wasSampled (req, res) {
   return resolved !== null && sampledRequests.has(resolved.key)
 }
 
+/**
+ * @param {string|null} route
+ * @param {boolean} record
+ * @returns {boolean}
+ */
+function needsBlockedFlag (route, record) {
+  return record && route === null
+}
+
+/**
+ * @param {string} method
+ * @param {string|null} route A route string, an empty string (still a valid route), or `null`
+ * @param {number|string} statusCode
+ * @returns {string}
+ */
 function buildSamplingKey (method, route, statusCode) {
   return method + (route ?? '') + statusCode
 }
