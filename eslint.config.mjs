@@ -997,7 +997,6 @@ export default [
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-conditional-tests': 'off',
       'mocha/no-mocha-arrows': 'off',
-      'mocha/no-pending-tests': 'off',
       'mocha/no-root-hooks': 'off',
       'mocha/no-setup-in-suite': 'off',
       'n/handle-callback-err': 'off',
@@ -1054,9 +1053,6 @@ export default [
         jest: 'readonly',
       },
     },
-    rules: {
-      'mocha/no-pending-tests': 'off',
-    },
   },
   {
     // jest-docblock's `@datadog {"unskippable": true}` tag reads as a malformed
@@ -1065,6 +1061,29 @@ export default [
     files: ['packages/datadog-plugin-jest/test/fixtures/**/*.js'],
     rules: {
       'jsdoc/valid-types': 'off',
+    },
+  },
+  {
+    // These fixtures must report skipped tests to verify Test Optimization status handling.
+    name: 'dd-trace/test-optimization/pending-test-fixtures',
+    files: [
+      'integration-tests/ci-visibility/jest-plugin-tests/jest-test.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/skip-describe.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/skipping-with-after-each.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/skipping.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/suite-level-fail-skip-describe.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/suite-level-fail-test.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/suite-level-pass.js',
+      'integration-tests/ci-visibility/mocha-skips/skip-test.js',
+      'integration-tests/ci-visibility/test-early-flake-detection/focused-test.js',
+      'integration-tests/ci-visibility/test-early-flake-detection/skipped-and-todo-test.js',
+      'integration-tests/ci-visibility/test-management/test-attempt-to-fix-skip.js',
+      'integration-tests/webdriverio/fixtures/jasmine-attempt-to-fix-skipped.e2e.js',
+      'integration-tests/webdriverio/fixtures/jasmine-efd-skipped.e2e.js',
+      'integration-tests/webdriverio/fixtures/jasmine-statuses.e2e.js',
+    ],
+    rules: {
+      'mocha/no-pending-tests': 'off',
     },
   },
   {

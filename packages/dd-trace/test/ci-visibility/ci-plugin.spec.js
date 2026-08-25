@@ -42,6 +42,7 @@ const {
 } = require('../../src/plugins/util/test')
 
 describe('CiPlugin', () => {
+  const itUnlessWindows = process.platform === 'win32' ? () => {} : it
   let CiPlugin
   let distributionMetric
   let getCodeOwnersFileEntries
@@ -584,12 +585,7 @@ describe('CiPlugin', () => {
     })
   }
 
-  it('excludes symlinked coverage report files', function () {
-    if (process.platform === 'win32') {
-      // Windows does not expose the symbolic-link behavior exercised here.
-      this.skip()
-    }
-
+  itUnlessWindows('excludes symlinked coverage report files', function () {
     const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
     const rootDir = path.join(fixtureDir, 'root')
     const outsideReportPath = path.join(fixtureDir, 'outside.info')
