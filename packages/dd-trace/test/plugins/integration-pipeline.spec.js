@@ -16,6 +16,7 @@ const {
   self,
 } = require('../../src/plugins/integration-pipeline')
 const plugins = require('../../src/plugins')
+const TracingPlugin = require('../../src/plugins/tracing')
 const agent = require('./agent')
 
 const integrationName = 'commonPlugin'
@@ -23,6 +24,42 @@ const stageEvents = []
 const contextStorage = storage('context')
 const spanStorage = storage('span')
 const legacyStorage = storage('legacy')
+
+class PipelineBase extends TracingPlugin {
+  /**
+   * Inject a deterministic test DBM comment without exposing the span to the stage.
+   *
+   * @param {object} _span Recording span owned by the pipeline.
+   * @param {string} query Original query.
+   * @param {string} serviceName Resolved span service.
+   * @returns {string} Injected query.
+   */
+  injectDbmQuery (_span, query, serviceName) {
+    return `/*dbm:${serviceName}*/ ${query}`
+  }
+}
+
+const testSource = {
+  channels (target) {
+    if (target.name === 'Pool_acquire') {
+      return {
+        asyncEnd: 'example:pool:acquire:finish',
+        error: 'example:pool:acquire:finish',
+        start: 'example:pool:acquire:start',
+        startMode: 'publish',
+      }
+    }
+
+    const prefix = `tracing:orchestrion:${target.module}:${target.name}`
+    return {
+      asyncEnd: `${prefix}:asyncEnd`,
+      end: `${prefix}:end`,
+      error: `${prefix}:error`,
+      start: `${prefix}:start`,
+    }
+  },
+  invocation: value => value,
+}
 
 const correlationStage = {
   name: 'correlation',
@@ -100,8 +137,19 @@ const optionalContextStage = {
   },
 }
 
+const dbmStage = {
+  name: 'dbm-propagation',
+  requires: ['tracing', 'dbm'],
+  start (frame) {
+    const input = frame.invocation.arguments[0]
+    input.injected = frame.dbm.injectQuery(input.sql)
+  },
+}
+
 const PipelinePlugin = createIntegrationPlugin({
   id: integrationName,
+  base: PipelineBase,
+  source: testSource,
   operations: [
     {
       target: { module: '@example/client', name: 'Client_request' },
@@ -162,6 +210,32 @@ const PipelinePlugin = createIntegrationPlugin({
       },
       stages: [optionalContextStage, telemetryStage],
     },
+    {
+      target: { module: '@example/client', name: 'Client_query' },
+      lifecycle: 'sync',
+      extract: { start: { resource: argument(0, 'sql') } },
+      span: {
+        name: 'example.query',
+        resource: field('resource'),
+        service: frame => frame.config.service,
+      },
+      stages: [dbmStage],
+    },
+    {
+      target: { module: '@example/client', name: 'Pool_acquire' },
+      lifecycle: 'async',
+      extract: {
+        start: { startTime: invocation => invocation.startTime },
+        complete: { waitTime: invocation => invocation.waitTime },
+      },
+      span: {
+        name: 'example.pool.acquire',
+        resource: 'example.pool.acquire',
+        service: frame => frame.config.service,
+        startTime: field('startTime'),
+        resultTags: { 'example.pool.wait_time': field('waitTime') },
+      },
+    },
   ],
 })
 
@@ -170,9 +244,13 @@ describe('IntegrationPipeline', () => {
   const pingChannel = dc.tracingChannel('orchestrion:@example/client:Client_ping')
   const idsChannel = dc.tracingChannel('orchestrion:@example/client:Client_ids')
   const optionalChannel = dc.tracingChannel('orchestrion:@example/client:Client_optional')
+  const queryChannel = dc.tracingChannel('orchestrion:@example/client:Client_query')
+  const poolStartChannel = dc.channel('example:pool:acquire:start')
+  const poolFinishChannel = dc.channel('example:pool:acquire:finish')
+  let tracer
 
   before(async () => {
-    await agent.load()
+    tracer = await agent.load()
     plugins['@example/client'] = PipelinePlugin
     dc.channel('dd-trace:instrumentation:load').publish({ name: '@example/client' })
     agent.reload(integrationName, { service: 'example-service' })
@@ -361,6 +439,56 @@ describe('IntegrationPipeline', () => {
     await noTraces
   })
 
+  it('runs a DBM stage through a narrow capability', async () => {
+    const input = { sql: 'SELECT 1' }
+    const assertion = agent.assertFirstTraceSpan({
+      name: 'example.query',
+      resource: input.sql,
+      service: 'example-service',
+    })
+
+    queryChannel.traceSync(() => undefined, { arguments: [input] })
+
+    assert.strictEqual(input.injected, '/*dbm:example-service*/ SELECT 1')
+    await assertion
+  })
+
+  it('starts and completes a traced operation from publish-only source channels', async () => {
+    const parent = tracer.startSpan('publish-parent')
+    const context = { arguments: [], startTime: Date.now() - 5 }
+    const assertion = agent.assertSomeTraces(traces => {
+      const acquireSpan = traces[0].find(span => span.name === 'example.pool.acquire')
+
+      assert.ok(acquireSpan)
+      assert.strictEqual(acquireSpan.parent_id.toString(), parent.context().toSpanId())
+      assert.strictEqual(acquireSpan.metrics['example.pool.wait_time'], 12.5)
+    }, { spanResourceMatch: /^example\.pool\.acquire$/ })
+
+    tracer.scope().activate(parent, () => poolStartChannel.publish(context))
+    context.waitTime = 12.5
+    poolFinishChannel.publish(context)
+    parent.finish()
+
+    await assertion
+  })
+
+  it('records a terminal error from a publish-only source', async () => {
+    const context = { arguments: [], error: new Error('acquire failed') }
+    const assertion = agent.assertFirstTraceSpan({
+      name: 'example.pool.acquire',
+      error: 1,
+      meta: {
+        'error.message': 'acquire failed',
+        'error.type': 'Error',
+      },
+    }, { spanResourceMatch: /^example\.pool\.acquire$/ })
+
+    poolStartChannel.publish(context)
+    poolFinishChannel.publish(context)
+
+    await assertion
+  })
+
   it('isolates stage failures and still runs terminal cleanup', async () => {
     const noTraces = agent.assertNoTraces(() => {
       throw new Error('stage-failure operation unexpectedly produced a trace')
@@ -454,12 +582,91 @@ describe('IntegrationPipeline', () => {
     assert.throws(
       () => createIntegrationPlugin({
         id: 'invalid',
+        base: PipelineBase,
+        operations: [{
+          target: { module: 'example', name: 'request' },
+          lifecycle: 'sync',
+          span: { name: 'example.request' },
+          stages: [{ name: 'unknown', requires: ['unknown'] }],
+        }],
+      }),
+      { message: 'Integration stage "unknown" requires an unknown capability' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        base: PipelineBase,
+        operations: [{
+          target: { module: 'example', name: 'request' },
+          lifecycle: 'sync',
+          span: { name: 'example.request' },
+          stages: [{ name: 'dbm', requires: ['dbm'] }],
+        }],
+      }),
+      { message: 'Integration stage "dbm" requires DBM without tracing' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        operations: [{
+          target: { module: 'example', name: 'request' },
+          lifecycle: 'sync',
+          span: { name: 'example.request' },
+          stages: [{ name: 'dbm', requires: ['tracing', 'dbm'] }],
+        }],
+      }),
+      { message: 'Integration stage "dbm" requires a database plugin base' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
         operations: [
           { target: { module: 'example', name: 'request' }, lifecycle: 'sync' },
           { target: { module: 'example', name: 'request' }, lifecycle: 'async' },
         ],
       }),
       { message: 'Integration pipeline "invalid" repeats target "example:request"' }
+    )
+
+    const createSourcePlugin = (channels, operation = {}) => createIntegrationPlugin({
+      id: 'invalid-source',
+      source: {
+        channels: () => channels,
+        invocation: value => value,
+      },
+      operations: [{
+        target: { module: 'example', name: 'request' },
+        lifecycle: 'async',
+        ...operation,
+      }],
+    })
+
+    assert.throws(
+      () => new (createSourcePlugin({
+        asyncEnd: 'example:finish',
+        start: 'example:start',
+        startMode: 'invalid',
+      }))(tracer, {}),
+      { message: 'Integration operation "request" has an invalid source start mode' }
+    )
+    assert.throws(
+      () => new (createSourcePlugin({
+        asyncEnd: 'example:finish',
+        start: 'example:start',
+        startMode: 'publish',
+      }, {
+        span: { name: 'example.request' },
+        stages: [{ name: 'tracing', requires: ['tracing'] }],
+      }))(tracer, {}),
+      { message: 'Integration operation "request" cannot stage a publish-only source' }
+    )
+    assert.throws(
+      () => new (createSourcePlugin({ start: 'example:start' }))(tracer, {}),
+      { message: 'Integration operation "request" requires an asyncEnd channel' }
+    )
+    assert.throws(
+      () => new (createSourcePlugin({ start: 'example:start' }, { lifecycle: 'sync' }))(tracer, {}),
+      { message: 'Integration operation "request" requires an end channel' }
     )
   })
 })

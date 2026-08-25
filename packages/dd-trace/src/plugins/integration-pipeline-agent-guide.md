@@ -6,7 +6,7 @@ invariants migrations must preserve, and the checks required before changing or 
 
 The pipeline is internal and experimental. It is not a public API, and its declaration shape may still change.
 
-## Current checkpoint (2026-08-17)
+## Current checkpoint (2026-08-25)
 
 At this checkpoint, branch `pabloerhard/feat-new-orchestrion-pipeline` has reached this implementation state:
 
@@ -22,6 +22,13 @@ At this checkpoint, branch `pabloerhard/feat-new-orchestrion-pipeline` has reach
   shared semantic facts once instead of assembling them through many resolver calls.
 - Azure Cosmos preserves request-level deduplication, empty-path account-read suppression, service naming, resource and
   response tags, error handling, analytics, peer-service behavior, and CJS/ESM coverage.
+- MariaDB is the first explicit-channel migration. Query and pool-acquire operations retain their existing manual
+  wrappers because driver-owned callback and command completion cannot be represented as method-return lifecycles.
+- The engine accepts optional source terminal channels, publish-only starts for notification lifecycles, span start
+  times, and a narrow DBM capability. Publish-only operations cannot declare stages because no bound operation scope
+  exists around the original library call.
+- MariaDB SQL-injection analysis and DBM propagation are tracing-dependent stages. This intentionally demonstrates a
+  limitation of direct stage composition: IAST cannot activate the MariaDB source independently when APM is disabled.
 
 Verification completed at this checkpoint:
 
@@ -30,6 +37,9 @@ Verification completed at this checkpoint:
 - BullMQ regression matrix after shared compiler optimization: 126 passing;
 - Azure Cosmos changed production source: 100% line coverage;
 - focused ESLint and `git diff --check`: passing.
+- focused MariaDB plugin matrix: 327 passing across generated v2/v3 fixtures;
+- focused MariaDB DBM source-write-back regression: passing against 3.4.5;
+- focused IAST analyzer tests: 20 passing;
 - optimized Azure microbenchmark: 1,368 ns accepted, 251 ns duplicate rejection, 295 ns empty-path rejection, and
   74 ns inherited no-op; the respective exact legacy medians are 1,048, 231, 270, and 77 ns.
 - real SDK/emulator trials found no detectable request-level difference; the sub-microsecond delta was below the
@@ -49,6 +59,7 @@ Do not use that observation to waive focused lint or CI on subsequent changes.
 | [`INTEGRATION_PIPELINE_RATIONALE.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_RATIONALE.md) | Adoption argument, architecture score, risks, and rollout criteria. |
 | [BullMQ plugin](../../../datadog-plugin-bullmq/src/index.js) | Messaging integration using multiple operations and product stages. |
 | [Azure Cosmos plugin](../../../datadog-plugin-azure-cosmos/src/index.js) | Database integration using a compatibility base and a resolved skip mode. |
+| [MariaDB plugin](../../../datadog-plugin-mariadb/src/index.js) | Explicit-channel database migration with query/DBM/IAST stages and publish-only pool acquisition. |
 | [Orchestrion config index](../../../datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js) | Registration point for source-rewriter definitions. |
 | [Azure Cosmos benchmark](../../../../benchmark/sirun/plugin-azure-cosmos-pipeline/README.md) | Persistent baseline/candidate measurement for accepted, rejected, and inherited no-op paths. |
 
@@ -120,7 +131,7 @@ An optional source adapter with two methods:
 ```js
 {
   channels (target) {
-    return { start, end, asyncEnd, error }
+    return { start, startMode, end, asyncEnd, error }
   },
   invocation (message) {
     return normalizedInvocation
@@ -137,12 +148,22 @@ tracing:orchestrion:<target.module>:<target.name>:asyncEnd
 tracing:orchestrion:<target.module>:<target.name>:error
 ```
 
+`startMode` defaults to `bind`, where diagnostic-channel store bindings surround the original library call. A
+`publish` start is a notification-only lifecycle: the pipeline starts the span from a subscriber and later completes
+it on `asyncEnd`. Publish-only operations cannot declare stages because there is no operation scope in which to run
+stage work or mutate source arguments.
+
+`end`, `asyncEnd`, and `error` are optional only when the operation lifecycle does not need them. A synchronous
+operation requires `end`; an asynchronous operation requires `asyncEnd`. A terminal `asyncEnd` carrying `error` can
+perform both error tagging and completion, which is required by sources that publish one finish channel.
+
 The normalized invocation object must have an `arguments` array. Critically, the adapter must return the same object
 identity for every lifecycle event belonging to one call. Pipeline state is held in a `WeakMap` keyed by that object;
 returning a fresh wrapper for `error` or `asyncEnd` loses the state and leaks the operation lifecycle.
 
-No non-Orchestrion source has been adopted yet. Add a new adapter only when a real integration requires it and pin its
-identity and terminal-event contract in pipeline tests.
+MariaDB is the first non-Orchestrion source. Its adapter preserves the existing context object and maps manual query
+and pool-acquire channels to semantic targets. Add another adapter only when a real integration requires it and pin
+its identity, start mode, and terminal-event contract in pipeline tests.
 
 ### `configure`
 
@@ -333,6 +354,7 @@ span: {
   resource: field('resource'),
   type: 'custom',
   kind: 'client',
+  startTime: field('startTime'),
   tags: {
     'example.peer': field('peer'),
   },
@@ -363,7 +385,7 @@ meaningful `this`; use only their frame argument.
 - `enabled` is evaluated after span-independent stages start. When false, those stages still complete, but no span or
   tracing-dependent stage starts.
 - `name` is required when `span` exists.
-- `service`, `resource`, `type`, `kind`, `tags`, and `metrics` resolve when the span is materialized.
+- `service`, `resource`, `type`, `kind`, `startTime`, `tags`, and `metrics` resolve when the span is materialized.
 - Tag and metric entries resolving to `undefined` are omitted.
 - `resultTags` resolves during completion, after `extract.complete`.
 
@@ -401,7 +423,12 @@ stage is recorded as started before its `start` hook is invoked, so its terminal
 Every stage hook is isolated by a catch-and-log boundary. A stage failure must not throw into the library or prevent
 other stages and span cleanup from running.
 
-Only the `tracing` requirement exists today. Unknown capabilities fail definition validation.
+The available requirements are:
+
+- `tracing`: the stage starts only after a recording span is materialized;
+- `dbm`: provides `frame.dbm.injectQuery()` and must be paired with `tracing` on a database plugin base.
+
+Unknown capabilities, DBM without tracing, and DBM on a base without `injectDbmQuery()` fail definition validation.
 
 ## The frame
 
@@ -413,6 +440,7 @@ One `PipelineFrame` is created for each accepted or rejected invocation prepared
 | `data` | Per-invocation semantic values populated by extractors and integration code. |
 | `correlation` | Reserved IDs and `inject(format, carrier)` for accepted operations. Undefined while gating a rejection. |
 | `trace` | Narrow annotation capability. Tags are buffered until a span exists and discarded for permanently spanless calls. |
+| `dbm` | Narrow SQL-comment injection capability backed by the selected database base; the raw span remains private. |
 | `config` | Configured integration options after the optional definition transform. |
 | `serviceName(options)` | Existing schema-aware service-name resolver. |
 | `propagation.extract(format, carrier)` | Existing tracer propagation extraction. |
@@ -437,6 +465,9 @@ storage('context')
       -> start subscribers
       -> original library function
 ```
+
+This nesting applies to bound starts. A publish-only start creates a span without entering it into operation storage;
+it is restricted to operations with no stages and relies on the retained invocation for completion.
 
 - `storage('context')` carries span-independent correlation.
 - `storage('legacy')` preserves existing tracer/plugin behavior during migration.
@@ -488,6 +519,26 @@ Read:
 - [`src/index.js`](../../../datadog-plugin-azure-cosmos/src/index.js)
 - [`test/get-resource.spec.js`](../../../datadog-plugin-azure-cosmos/test/get-resource.spec.js)
 - [`test/index.spec.js`](../../../datadog-plugin-azure-cosmos/test/index.spec.js)
+
+### MariaDB
+
+MariaDB demonstrates:
+
+- a custom source adapter over existing diagnostic channels;
+- v2 callback/promise and v3 command wrappers retaining real completion ownership;
+- query source write-back after a DBM stage mutates the driver-owned SQL shape;
+- a narrow database compatibility base for queued-command parent capture, connection restoration, and pool no-op
+  boundaries;
+- a publish-only pool-acquire operation whose terminal channel also carries errors;
+- a tracing-dependent IAST stage and its resulting product-only activation limitation.
+
+Read:
+
+- [`src/index.js`](../../../datadog-plugin-mariadb/src/index.js)
+- [`src/source.js`](../../../datadog-plugin-mariadb/src/source.js)
+- [`src/stages.js`](../../../datadog-plugin-mariadb/src/stages.js)
+- [`src/base.js`](../../../datadog-plugin-mariadb/src/base.js)
+- [`mariadb.js`](../../../datadog-instrumentations/src/mariadb.js)
 
 ## Migration workflow
 
@@ -615,7 +666,7 @@ Do not add an engine concept merely to shorten one migration. Before extending t
 5. Add definition validation for invalid combinations.
 6. Add direct pipeline tests for ordering, errors, cleanup, no-op scopes, and restoration.
 7. Update this guide, the mechanical notes, and the rationale.
-8. Re-run BullMQ and Azure Cosmos CI when the shared lifecycle changes.
+8. Re-run BullMQ, Azure Cosmos, and MariaDB CI when the shared lifecycle changes.
 
 Architecture changes must be scored against drift prevention, module coupling, explicit contracts, boundary
 testability, extensibility, and hot-path fitness. Compare the existing design with the proposal; do not assign scores
@@ -629,8 +680,10 @@ a fake test path that cannot occur through instrumentation and the plugin manage
 - The generated plugin still extends `TracingPlugin`, directly or through a compatibility base. Tracing is not an
   independently loadable pipeline capability.
 - `storage('legacy')` remains a compatibility bridge.
-- Only the `tracing` stage requirement exists.
-- No non-Orchestrion source adapter has been proven.
+- DBM remains tracing-dependent because query injection requires the materialized database span.
+- MariaDB proves one non-Orchestrion source adapter, but publish-only lifecycles cannot run stages.
+- MariaDB IAST is declared inside the APM plugin and therefore cannot activate the source independently when tracing is
+  disabled. A shared processor/contributor design does not have this limitation.
 - The operation model explicitly distinguishes only `sync` and `async`; unusual callback, iterator, or streaming
   ownership may require source or lifecycle work.
 - `frame.data` is intentionally flexible but weakly typed across integration-specific fields.

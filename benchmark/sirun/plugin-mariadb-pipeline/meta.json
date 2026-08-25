@@ -1,0 +1,19 @@
+{
+  "name": "plugin-mariadb-pipeline",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 15,
+  "instructions": true,
+  "variants": {
+    "direct": {
+      "env": { "VARIANT": "direct", "OPERATIONS": "1000000" }
+    },
+    "pool": {
+      "env": { "VARIANT": "pool", "OPERATIONS": "1000000" }
+    },
+    "disabled": {
+      "env": { "VARIANT": "disabled", "OPERATIONS": "5000000" }
+    }
+  }
+}

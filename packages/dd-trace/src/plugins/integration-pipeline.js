@@ -44,6 +44,7 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
  * @property {Record<string, unknown>} data
  * @property {CorrelationContext | undefined} correlation
  * @property {TraceCapability} trace
+ * @property {DbmCapability} dbm
  * @property {Record<string, unknown>} config
  * @property {(options: object) => string | {name: string, source?: string}} serviceName
  * @property {{extract: (format: string, carrier: object) => object | null}} propagation
@@ -65,7 +66,7 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
  *
  * @typedef {object} PipelineStage
  * @property {string} name
- * @property {Array<'tracing'>} [requires]
+ * @property {Array<'tracing' | 'dbm'>} [requires]
  * @property {(frame: PipelineFrame) => void} [start]
  * @property {(frame: PipelineFrame) => void} [complete]
  * @property {(frame: PipelineFrame) => void} [error]
@@ -79,6 +80,7 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
  * @property {Resolvable<string | undefined>} [resource]
  * @property {Resolvable<string | undefined>} [type]
  * @property {Resolvable<string | undefined>} [kind]
+ * @property {Resolvable<number | undefined>} [startTime]
  * @property {Record<string, Resolvable<string | number | boolean | undefined>> |
  *   ((frame: PipelineFrame) => Record<string, unknown> | undefined)} [tags]
  * @property {Record<string, Resolvable<number | undefined>> |
@@ -133,7 +135,11 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
 /**
  * @typedef {object} IntegrationSource
  * @property {(target: {module: string, name: string}) => {
- *   start: string, end: string, asyncEnd: string, error: string
+ *   start: string,
+ *   startMode?: 'bind' | 'publish',
+ *   end?: string,
+ *   asyncEnd?: string,
+ *   error?: string
  * }} channels
  * @property {(value: unknown) => InvocationContext} invocation
  */
@@ -156,6 +162,7 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
  * @property {import('../../../..').Span | undefined} span
  * @property {PipelineStage[] | undefined} startedStages
  * @property {Record<string, unknown>} [pendingTags]
+ * @property {boolean} errored
  * @property {boolean} skipped
  */
 
@@ -300,8 +307,40 @@ class DataStreamsCapability {
   }
 }
 
+class DbmCapability {
+  #plugin
+  #state
+
+  /**
+   * Create a DBM query injection block without exposing the operation span.
+   *
+   * @param {TracingPlugin} plugin
+   * @param {InvocationState} state
+   */
+  constructor (plugin, state) {
+    this.#plugin = plugin
+    this.#state = state
+  }
+
+  /**
+   * Inject DBM propagation into one SQL statement through the selected database base.
+   *
+   * @param {string} query Original SQL statement.
+   * @param {boolean} [disableFullMode] Whether full-mode trace propagation is unsupported.
+   * @returns {string} Original or DBM-injected SQL statement.
+   */
+  injectQuery (query, disableFullMode) {
+    const span = this.#state.span
+    if (!span || typeof this.#plugin.injectDbmQuery !== 'function') return query
+
+    const serviceName = span.context().getTag('service.name')
+    return this.#plugin.injectDbmQuery(span, query, serviceName, disableFullMode)
+  }
+}
+
 class IntegrationFrame {
   #dataStreams
+  #dbm
   #plugin
   #propagation
   #state
@@ -362,6 +401,16 @@ class IntegrationFrame {
   get dataStreams () {
     this.#dataStreams ||= new DataStreamsCapability(this.#plugin.tracer, this)
     return this.#dataStreams
+  }
+
+  /**
+   * Get the DBM query injection block, allocating it on first use.
+   *
+   * @returns {DbmCapability}
+   */
+  get dbm () {
+    this.#dbm ||= new DbmCapability(this.#plugin, this.#state)
+    return this.#dbm
   }
 
   /**
@@ -429,6 +478,10 @@ function requiresTracing (stage) {
   return stage.requires?.includes('tracing') === true
 }
 
+function requiresDbm (stage) {
+  return stage.requires?.includes('dbm') === true
+}
+
 function runStageHook (stage, phase, frame) {
   try {
     stage[phase]?.(frame)
@@ -483,6 +536,7 @@ function prepareOperation (plugin, operation, invocation, states) {
     parent: undefined,
     span: undefined,
     startedStages: operation.stages.length > 0 ? [] : undefined,
+    errored: false,
     skipped: false,
   }
   const frame = new IntegrationFrame(plugin, invocation, state)
@@ -532,6 +586,7 @@ function bindLegacySpan (plugin, operation, invocation, states) {
     resource: resolveValue(span.resource, state.frame),
     type: resolveValue(span.type, state.frame),
     kind: resolveValue(span.kind, state.frame),
+    startTime: resolveValue(span.startTime, state.frame),
     meta: resolveRecord(operation.tagResolvers, state.frame),
     metrics: resolveRecord(operation.metricResolvers, state.frame),
   }, invocation)
@@ -554,7 +609,8 @@ function beginOperation (operation, invocation, states) {
 
 function errorOperation (plugin, operation, invocation, states) {
   const state = states.get(invocation)
-  if (!state || state.skipped) return
+  if (!state || state.skipped || state.errored || invocation.error === undefined) return
+  state.errored = true
   if (state.span) plugin.addError(invocation.error, state.span)
   unwindStages(state, 'error')
 }
@@ -565,6 +621,9 @@ function completeOperation (plugin, operation, invocation, states) {
 
   try {
     if (state.skipped) return
+    if (invocation.error !== undefined && !state.errored) {
+      errorOperation(plugin, operation, invocation, states)
+    }
     extractComplete(operation.completeExtractors, invocation, state.frame)
     if (state.span) {
       const resultTags = resolveRecord(operation.resultTagResolvers, state.frame)
@@ -590,6 +649,7 @@ function validateDefinition (definition) {
     throw new TypeError(`Integration pipeline "${definition.id}" requires a TracingPlugin base`)
   }
 
+  const Base = definition.base || TracingPlugin
   const targets = new Set()
   for (const operation of definition.operations) {
     const { target, lifecycle, span, stages = [] } = operation
@@ -607,8 +667,14 @@ function validateDefinition (definition) {
       throw new TypeError(`Integration operation "${target.name}" has a trace definition without a span name`)
     }
     for (const stage of stages) {
-      if (stage.requires?.some(capability => capability !== 'tracing')) {
+      if (stage.requires?.some(capability => capability !== 'tracing' && capability !== 'dbm')) {
         throw new TypeError(`Integration stage "${stage.name}" requires an unknown capability`)
+      }
+      if (requiresDbm(stage) && !requiresTracing(stage)) {
+        throw new TypeError(`Integration stage "${stage.name}" requires DBM without tracing`)
+      }
+      if (requiresDbm(stage) && typeof Base.prototype.injectDbmQuery !== 'function') {
+        throw new TypeError(`Integration stage "${stage.name}" requires a database plugin base`)
       }
       if (!span && requiresTracing(stage)) {
         throw new TypeError(`Integration stage "${stage.name}" requires tracing but the operation does not trace`)
@@ -674,39 +740,65 @@ function createIntegrationPlugin (definition) {
       for (const operation of operations) {
         const channels = source.channels(operation.target)
         const invocation = message => source.invocation(message)
+        const startMode = channels.startMode || 'bind'
+
+        if (startMode !== 'bind' && startMode !== 'publish') {
+          throw new TypeError(`Integration operation "${operation.target.name}" has an invalid source start mode`)
+        }
+        if (startMode === 'publish' && operation.stages.length > 0) {
+          throw new TypeError(`Integration operation "${operation.target.name}" cannot stage a publish-only source`)
+        }
 
         // Store bindings execute in reverse registration order. Register only the capability stores used by stages;
         // legacy storage remains the common span lifecycle block and sits between context and tracing when present.
-        if (operation.tracingStages.length > 0) {
-          this.addStoreBind(channels.start, spanStorage,
-            message => bindSpan(this, operation, invocation(message), states))
-        }
-        this.addBind(channels.start,
-          message => bindLegacySpan(this, operation, invocation(message), states),
-          operation.contextStages.length > 0 ? { allowNoop: true } : undefined)
-        if (operation.contextStages.length > 0) {
-          this.addStoreBind(channels.start, contextStorage,
-            message => bindContext(this, operation, invocation(message), states))
+        const contextSubscriptionOptions = operation.contextStages.length > 0 ? { allowNoop: true } : undefined
+        if (startMode === 'publish') {
+          this.addSub(channels.start, message => {
+            const current = invocation(message)
+            bindLegacySpan(this, operation, current, states)
+            beginOperation(operation, current, states)
+          }, contextSubscriptionOptions)
+        } else {
+          if (operation.tracingStages.length > 0) {
+            this.addStoreBind(channels.start, spanStorage,
+              message => bindSpan(this, operation, invocation(message), states))
+          }
+          this.addBind(channels.start,
+            message => bindLegacySpan(this, operation, invocation(message), states),
+            contextSubscriptionOptions)
+          if (operation.contextStages.length > 0) {
+            this.addStoreBind(channels.start, contextStorage,
+              message => bindContext(this, operation, invocation(message), states))
+          }
+          if (operation.tracingStages.length > 0) {
+            this.addSub(channels.start, message => beginOperation(operation, invocation(message), states))
+          }
         }
 
-        const contextSubscriptionOptions = operation.contextStages.length > 0 ? { allowNoop: true } : undefined
-        if (operation.tracingStages.length > 0) {
-          this.addSub(channels.start, message => beginOperation(operation, invocation(message), states))
+        if (channels.error) {
+          this.addSub(channels.error,
+            message => errorOperation(this, operation, invocation(message), states), contextSubscriptionOptions)
         }
-        this.addSub(channels.error,
-          message => errorOperation(this, operation, invocation(message), states), contextSubscriptionOptions)
 
         // A rejected operation may bind a no-op legacy scope. Completion must still delete its WeakMap state.
         const completionOptions = { allowNoop: true }
 
         if (operation.lifecycle === 'sync') {
+          if (!channels.end) {
+            throw new TypeError(`Integration operation "${operation.target.name}" requires an end channel`)
+          }
           this.addSub(channels.end,
             message => completeOperation(this, operation, invocation(message), states), completionOptions)
         } else {
-          this.addSub(channels.end, message => {
-            const current = invocation(message)
-            if (current.error !== undefined) completeOperation(this, operation, current, states)
-          }, completionOptions)
+          if (channels.end) {
+            this.addSub(channels.end, message => {
+              const current = invocation(message)
+              if (current.error !== undefined) completeOperation(this, operation, current, states)
+            }, completionOptions)
+          }
+          if (!channels.asyncEnd) {
+            throw new TypeError(`Integration operation "${operation.target.name}" requires an asyncEnd channel`)
+          }
           this.addSub(channels.asyncEnd,
             message => completeOperation(this, operation, invocation(message), states), completionOptions)
         }

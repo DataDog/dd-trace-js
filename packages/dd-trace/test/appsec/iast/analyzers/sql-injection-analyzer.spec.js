@@ -68,7 +68,7 @@ describe('sql-injection-analyzer', () => {
   sqlInjectionAnalyzer.configure(true)
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions.length, 7)
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions.length, 9)
     assert.strictEqual(sqlInjectionAnalyzer._subscriptions[0]._channel.name, 'apm:mysql:query:start')
     assert.strictEqual(sqlInjectionAnalyzer._subscriptions[1]._channel.name, 'datadog:mysql2:outerquery:start')
     assert.strictEqual(sqlInjectionAnalyzer._subscriptions[2]._channel.name, 'apm:pg:query:start')
@@ -76,6 +76,8 @@ describe('sql-injection-analyzer', () => {
     assert.strictEqual(sqlInjectionAnalyzer._subscriptions[4]._channel.name, 'datadog:pg:pool:query:finish')
     assert.strictEqual(sqlInjectionAnalyzer._subscriptions[5]._channel.name, 'datadog:mysql:pool:query:start')
     assert.strictEqual(sqlInjectionAnalyzer._subscriptions[6]._channel.name, 'datadog:mysql:pool:query:finish')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[7]._channel.name, 'datadog:iast:mariadb:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[8]._channel.name, 'datadog:iast:mariadb:query:finish')
 
     assert.strictEqual(sqlInjectionAnalyzer._bindings.length, 5)
     assert.strictEqual(sqlInjectionAnalyzer._bindings[0]._channel.name, 'datadog:sequelize:query:start')
@@ -180,6 +182,7 @@ describe('sql-injection-analyzer', () => {
       const datadogCore = {
         storage: () => {
           return {
+            enterWith: sinon.stub(),
             getStore,
           }
         },
@@ -230,6 +233,24 @@ describe('sql-injection-analyzer', () => {
       onPgQueryStart({ originalText: 'SELECT 1', query: { text: 'modified-query SELECT 1' } })
 
       sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
+    })
+
+    it('should analyze MariaDB stage queries in the current store', () => {
+      const setStoreAndAnalyze = sinon.stub(sqlInjectionAnalyzer, 'setStoreAndAnalyze')
+      const onMariaDBQueryStart = sqlInjectionAnalyzer._subscriptions[7]._handler
+
+      onMariaDBQueryStart({ sql: 'SELECT 1' })
+
+      sinon.assert.calledOnceWithExactly(setStoreAndAnalyze, 'SELECT 1', 'MYSQL')
+    })
+
+    it('should restore the parent store when a MariaDB stage query finishes', () => {
+      const returnToParentStore = sinon.stub(sqlInjectionAnalyzer, 'returnToParentStore')
+      const onMariaDBQueryFinish = sqlInjectionAnalyzer._subscriptions[8]._handler
+
+      onMariaDBQueryFinish()
+
+      sinon.assert.calledOnceWithExactly(returnToParentStore)
     })
   })
 
