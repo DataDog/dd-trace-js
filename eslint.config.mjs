@@ -995,6 +995,7 @@ export default [
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/consistent-structure': 'off',
       'mocha/limit-retries': ['error', { mode: 'disallow' }],
+      'mocha/limit-slow': ['error', { mode: 'disallow' }],
       'mocha/limit-timeout': ['error', { mode: 'disallowDisabled' }],
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-mocha-arrows': 'off',
