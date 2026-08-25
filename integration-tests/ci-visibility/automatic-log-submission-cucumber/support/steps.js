@@ -12,5 +12,5 @@ Then('I should have made a log', async function () {
 })
 
 When('we run a test', async function () {
-  logger.log('info', 'Hello simple log!')
+  logger.info('Hello simple log!')
 })
