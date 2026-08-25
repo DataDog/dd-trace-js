@@ -62,6 +62,43 @@ describe('test agent helper', () => {
       assert.strictEqual(origin in httpAgent.requests, false)
     })
 
+    it('finishes closing when an exporter socket resets', async () => {
+      const tracer = await agent.load([])
+      const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
+      const traceReceived = agent.assertSomeTraces(() => {})
+
+      tracer.trace('test', () => {})
+      await traceReceived
+
+      while (!(origin in httpAgent.freeSockets)) {
+        await once(httpAgent, 'free')
+      }
+
+      const [exporterSocket] = httpAgent.freeSockets[origin]
+      const resetError = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })
+      const resetObserved = once(exporterSocket, 'error')
+
+      /**
+       * @param {string} event
+       */
+      function resetAfterCloseListener (event) {
+        if (event !== 'close') return
+
+        exporterSocket.removeListener('newListener', resetAfterCloseListener)
+        queueMicrotask(() => {
+          exporterSocket.emit('error', resetError)
+          exporterSocket.destroy()
+        })
+      }
+      exporterSocket.on('newListener', resetAfterCloseListener)
+
+      const [, [observedReset]] = await Promise.all([agent.close(), resetObserved])
+      assert.strictEqual(observedReset, resetError)
+      assert.strictEqual(origin in httpAgent.sockets, false)
+      assert.strictEqual(origin in httpAgent.freeSockets, false)
+      assert.strictEqual(origin in httpAgent.requests, false)
+    })
+
     it('finishes closing with active and queued exporter requests', async () => {
       const remoteConfigurationEnabled = process.env.DD_REMOTE_CONFIGURATION_ENABLED
       const telemetryEnabled = process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
