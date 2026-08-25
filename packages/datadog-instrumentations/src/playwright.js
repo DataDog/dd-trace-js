@@ -59,6 +59,7 @@ const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const workerReportTelemetryCh = channel('ci:playwright:worker-report:telemetry')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
@@ -2215,7 +2216,8 @@ addHook({
 
 function instrumentWorkerMainMethods (workerMain) {
   if (!workerMain || workerMain[kDdPlaywrightWorkerInstrumented] ||
-      typeof workerMain._runTest !== 'function' || typeof workerMain.dispatchEvent !== 'function') {
+      typeof workerMain._runTest !== 'function' || typeof workerMain.dispatchEvent !== 'function' ||
+      typeof workerMain.gracefullyClose !== 'function') {
     return workerMain
   }
 
@@ -2229,6 +2231,15 @@ function instrumentWorkerMainMethods (workerMain) {
     const disabledIds = runPayload._ddDisabledTestIds
     this[kDdPlaywrightDisabledTestIds] = disabledIds ? new Set(disabledIds) : undefined
     return runTestGroup.apply(this, arguments)
+  })
+
+  // Playwright >=1.60 creates WorkerMain through a runtime factory, which Orchestrion cannot wrap statically.
+  shimmer.wrap(workerMain, 'gracefullyClose', gracefullyClose => async function () {
+    try {
+      return await gracefullyClose.apply(this, arguments)
+    } finally {
+      await getChannelPromise(logSubmissionFlushCh)
+    }
   })
 
   shimmer.wrap(workerMain, '_runTest', _runTest => async function (test) {
