@@ -330,8 +330,21 @@ interface Plugins {
 }
 
 type SpanTagScalar = string | number | boolean | Buffer | URL
-type ErrorMetaTag = 'error.type' | 'error.message' | 'error.stack'
-type StringOnlySpanTag = 'service.name' | 'span.type' | 'resource.name'
+type SpanErrorTag = boolean | number | Error | {
+  message: string
+  name?: string
+  stack?: string
+  code?: string | number
+}
+type BooleanOnlySpanTag = 'analytics.event' | 'manual.drop' | 'manual.keep'
+type StringOnlySpanTag =
+  | 'error.message'
+  | 'error.stack'
+  | 'error.type'
+  | 'resource.name'
+  | 'service.name'
+  | 'span.kind'
+  | 'span.type'
 type ValidatedSpanTagObject<Value extends object> =
   keyof Value extends never ? never :
   Extract<keyof Value, symbol> extends never ? Value extends {
@@ -342,24 +355,38 @@ type ValidatedSpanTagObject<Value extends object> =
   never
 type ValidatedSpanTagValue<Value> =
   Value extends SpanTagScalar ? Value :
+  Value extends Error ? never :
   Value extends readonly unknown[] ? never :
   Value extends (...args: never[]) => unknown ? never :
   Value extends object ? ValidatedSpanTagObject<Value> :
   never
-type SpanTagValueForKey<Key, Value> =
-  [Key] extends ['error']
-    ? Value extends Error ? Value : ValidatedSpanTagValue<Value>
-    : [Key] extends [ErrorMetaTag]
-      ? NonNullable<Value>
-      : [Key] extends [StringOnlySpanTag]
+type SpanTagValueForSingleKey<Key, Value> =
+  Key extends 'error'
+    ? Value extends SpanErrorTag ? Value : never
+    : Key extends BooleanOnlySpanTag
+      ? Value extends boolean ? Value : never
+      : Key extends StringOnlySpanTag
         ? Value extends string ? Value : never
-        : ValidatedSpanTagValue<Value>
+        : Key extends 'http.status_code'
+          ? Value extends string | number ? Value : never
+          : Key extends 'sampling.priority'
+            ? Value extends number ? Value : never
+            : ValidatedSpanTagValue<Value>
+type InvalidSpanTagKey<Key, Value> =
+  Key extends unknown
+    ? [Value] extends [SpanTagValueForSingleKey<Key, Value>] ? never : Key
+    : never
+type SpanTagValueForKey<Key, Value> =
+  [InvalidSpanTagKey<Key, Value>] extends [never] ? Value : never
 type ValidatedSpanTags<Tags extends object> =
   Tags extends readonly unknown[] ? never :
   Tags extends (...args: never[]) => unknown ? never :
   keyof Tags extends never ? Tags :
   Extract<keyof Tags, symbol> extends never ? {
-    [Key in keyof Tags]: SpanTagValueForKey<Key, Tags[Key]>
+    [Key in keyof Tags]:
+      [Exclude<Tags[Key], undefined>] extends [never]
+        ? never
+        : SpanTagValueForKey<Key, Exclude<Tags[Key], undefined>>
   } : never
 type SpanTagsOption<Tags extends object> =
   { tags?: Tags } &
@@ -371,7 +398,7 @@ declare namespace tracer {
   export interface PluginOptions extends Plugins {}
   export type PluginName = keyof PluginOptions;
 
-  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf' | 'tags'> & {
+  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
   /**
    * Set childOf to 'null' to create a root span without a parent, even when a parent span
    * exists in the current async context. If 'undefined' the parent will be inferred from the
@@ -382,10 +409,6 @@ declare namespace tracer {
      * Optional name of the integration that crated this span.
      */
     integrationName?: string;
-    /**
-     * Tags for the newly created span.
-     */
-    tags?: object;
   };
   export { Tracer };
 
@@ -937,7 +960,7 @@ declare namespace tracer {
      * @env DD_TAGS, OTEL_RESOURCE_ATTRIBUTES
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    tags?: object;
+    tags?: NonNullable<opentracing.SpanOptions['tags']>;
 
     /**
      * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.

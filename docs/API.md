@@ -274,6 +274,18 @@ async function handle () {
 
 Any error from the awaited handler will automatically be added to the span.
 
+<h3 id="span-tags">Span tags</h3>
+
+Tag values may be strings, numbers, booleans, `Buffer` or `URL` instances, or flat objects containing those
+values. Flat objects are expanded by one level, so `{ tags: { request: { method: 'GET' } } }` produces the
+`request.method` tag. `Error` and error-shaped values are also supported for the `error` tag.
+
+Arrays, nested objects, functions, symbols, bigint values, nullish values, typed arrays other than `Buffer`, and
+other built-in object types are not supported. Reserved tags use narrower values: service, resource, span type,
+span kind, and error metadata tags require strings; manual sampling and analytics event tags require booleans;
+`sampling.priority` requires a number; `http.status_code` accepts a string or number; and `error` accepts boolean
+or numeric flags, `Error` instances, and error-shaped objects.
+
 <h3 id="tracer-wrap">tracer.wrap(name[, options], fn)</h3>
 
 This method works very similarly to `tracer.trace()` except it wraps a function so that `tracer.trace()` is called automatically every time the function is called. This makes it easier to patch entire functions that have already been defined, or that are returned from code that cannot be edited easily.
