@@ -25,10 +25,10 @@ unexplained retries.
 2. Re-read the current diff and state a one-line candidate mechanism: “X fails because Y causes Z.”
 3. Reproduce with the narrowest equivalent command. Preserve relevant environment variables and services.
 4. Check deterministic sibling cases by searching for the same stale path, renamed key, version check, fixture shape,
-   resource lifecycle, or timing pattern.
+    resource lifecycle, or timing pattern.
 5. Use focused repeated runs only when they test a concrete nondeterminism hypothesis; do not loop blindly.
 6. When safe and practical, compare against the unchanged target branch in an isolated worktree or equivalent clean
-   environment. Use `master` for work based on `master`, not automatically for a backport branch.
+    environment. Use `master` for work based on `master`, not automatically for a backport branch.
 
 Evidence for an unrelated flake can include a passing rerun plus a credible race mechanism, the same failure on the
 unchanged target branch, a tracked known-flake entry, or a reproducible ordering/resource-contention dependency. A

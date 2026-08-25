@@ -22,7 +22,7 @@ abstraction that adds complexity without improving the baseline.
 3. Identify affected public APIs, package boundaries, consumers, and per-call production paths.
 4. Score the baseline and proposal from 1–10 on each dimension below using `baseline → proposal`.
 5. Require the proposal to score at least 8/10 on five dimensions. Treat regressions in public-surface discipline or
-   hot-path fitness as blockers even if the aggregate score passes.
+    hot-path fitness as blockers even if the aggregate score passes.
 6. Ask the user before implementation when two viable designs have meaningful trade-offs.
 7. Record the selected design's contracts and cover boundaries with observable tests.
 
