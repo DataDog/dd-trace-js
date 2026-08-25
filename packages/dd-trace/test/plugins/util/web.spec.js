@@ -931,7 +931,7 @@ describe('plugins/util/web', () => {
       const forwardedHeaders = res.writeHead.firstCall.args[1]
       assert.strictEqual(Object.getPrototypeOf(forwardedHeaders), null)
       assert.ok(Object.hasOwn(forwardedHeaders, '__proto__'))
-      assert.strictEqual(forwardedHeaders.__proto__, 'preserved')
+      assert.strictEqual(Object.getOwnPropertyDescriptor(forwardedHeaders, '__proto__').value, 'preserved')
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
         [200, nullPrototypeHeaders({
