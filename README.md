@@ -99,6 +99,6 @@ If you would like to trace your bundled application then please read this page o
 Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/master/SECURITY.md) document if you have found a security issue.
 
 
-## Datadog With OpenTelemetery
+## Datadog With OpenTelemetry
 
 Please refer to the [Node.js Custom Instrumentation using OpenTelemetry API](https://docs.datadoghq.com/tracing/trace_collection/custom_instrumentation/nodejs/otel/) document. It includes information on how to use the OpenTelemetry API with dd-trace-js.
