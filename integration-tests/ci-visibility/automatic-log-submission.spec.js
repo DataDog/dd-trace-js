@@ -27,6 +27,7 @@ describe('test optimization automatic log submission', () => {
   useSandbox([
     'mocha',
     ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
+    'bunyan',
     'jest',
     'winston',
     playwrightDependency,
@@ -65,7 +66,8 @@ describe('test optimization automatic log submission', () => {
   const testFrameworks = [
     {
       name: 'mocha',
-      command: 'mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js',
+      command: './node_modules/.bin/mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js',
+      loggerNames: ['winston', 'bunyan'],
     },
     {
       name: 'jest',
@@ -74,6 +76,7 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'cucumber',
       command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature',
+      loggerNames: ['winston', 'bunyan'],
     },
     {
       name: 'playwright',
@@ -86,10 +89,19 @@ describe('test optimization automatic log submission', () => {
     },
   ]
 
-  testFrameworks.forEach(({ name, command, getExtraEnvVars = () => ({}) }) => {
+  const loggers = {
+    bunyan: { level: 30, messageKey: 'msg' },
+    winston: { level: 'info', messageKey: 'message' },
+  }
+
+  testFrameworks.flatMap(framework => {
+    return (framework.loggerNames || ['winston']).map(loggerName => ({ ...framework, loggerName }))
+  }).forEach(({ name, command, getExtraEnvVars = () => ({}), loggerName }) => {
     if (!isLatestCucumberSupported && name === 'cucumber') return
 
-    context(`with ${name}`, () => {
+    const { level: expectedLevel, messageKey } = loggers[loggerName]
+
+    context(`with ${loggerName} and ${name}`, () => {
       it('can automatically submit logs', async () => {
         let logIds = {}
         let testIds = {}
@@ -98,20 +110,23 @@ describe('test optimization automatic log submission', () => {
           .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
             payloads.forEach(({ headers }) => {
               assert.equal(headers['dd-api-key'], '1')
+              if (loggerName !== 'winston') {
+                assert.equal(headers['content-type'], 'application/json')
+              }
             })
             const logMessages = payloads.flatMap(({ logMessage }) => logMessage)
             const [url] = payloads.flatMap(({ url }) => url)
 
-            assert.equal(url, '/api/v2/logs?ddsource=winston&service=my-service')
+            assert.equal(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`)
             assert.equal(logMessages.length, 2)
 
             logMessages.forEach(({ dd, level }) => {
-              assert.equal(level, 'info')
+              assert.equal(level, expectedLevel)
               assert.equal(dd.service, 'my-service')
               assert.deepStrictEqual(['service', 'span_id', 'trace_id'], Object.keys(dd).sort())
             })
 
-            assertObjectContains(logMessages.map(({ message }) => message), [
+            assertObjectContains(logMessages.map(logMessage => logMessage[messageKey]), [
               'Hello simple log!',
               'sum function being called',
             ])
@@ -142,6 +157,7 @@ describe('test optimization automatic log submission', () => {
               DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
               DD_API_KEY: '1',
               DD_SERVICE: 'my-service',
+              TEST_LOGGER: loggerName,
               ...getExtraEnvVars(),
             },
           }
@@ -183,6 +199,7 @@ describe('test optimization automatic log submission', () => {
               ...getCiVisAgentlessConfig(receiver.port),
               DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
               DD_SERVICE: 'my-service',
+              TEST_LOGGER: loggerName,
               ...getExtraEnvVars(),
             },
           }
@@ -224,6 +241,7 @@ describe('test optimization automatic log submission', () => {
               DD_TRACE_DEBUG: '1',
               DD_TRACE_LOG_LEVEL: 'warn',
               DD_API_KEY: '',
+              TEST_LOGGER: loggerName,
               ...getExtraEnvVars(),
             },
           }
