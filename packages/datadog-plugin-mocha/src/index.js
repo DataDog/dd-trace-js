@@ -13,6 +13,7 @@ const {
   hasEfdRetries,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const log = require('../../dd-trace/src/log')
+const { publishWithCompletion } = require('../../datadog-instrumentations/src/helpers/channel')
 const {
   sendWebdriverioWorkerMessage,
   SUITE_FINISH,
@@ -84,6 +85,7 @@ const jasmineTestFunctionStartCh = 'tracing:orchestrion:@wdio/utils:testFramewor
 const testFinishCh = channel('ci:mocha:test:finish')
 const testRetryCh = channel('ci:mocha:test:retry')
 const WEBDRIVERIO_JASMINE_ADAPTER = 'jasmine'
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const workerFinishCh = channel('ci:mocha:worker:finish')
 const WEBDRIVERIO_JASMINE_FAILED_EXPECTATION_COUNT = Symbol('webdriverioJasmineFailedExpectationCount')
 const WEBDRIVERIO_JASMINE_FUNCTION_TYPE = Symbol('webdriverioJasmineFunctionType')
@@ -1313,7 +1315,7 @@ class MochaPlugin extends CiPlugin {
   }
 
   /**
-   * Reports Jasmine suite statuses and flushes worker traces before its run settles.
+   * Reports Jasmine suite statuses and flushes worker data before its run settles.
    *
    * @param {{
    *   resolveCallback?: (onDone: () => void) => void,
@@ -1353,7 +1355,9 @@ class MochaPlugin extends CiPlugin {
         if (error) {
           log.error('WebdriverIO Test Optimization IPC error', error)
         }
-      }, () => workerFinishCh.publish({ onDone }))
+      }, () => workerFinishCh.publish({
+        onDone: () => publishWithCompletion(logSubmissionFlushCh, {}, onDone),
+      }))
     }
 
     const waitForWorker = onDone => {

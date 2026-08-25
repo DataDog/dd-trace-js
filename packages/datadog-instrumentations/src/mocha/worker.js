@@ -1,5 +1,6 @@
 'use strict'
 
+const { publishWithCompletion } = require('../helpers/channel')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { EMPTY_EFD_RETRY_POLICY } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
@@ -33,6 +34,7 @@ require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const workerFinishCh = channel('ci:mocha:worker:finish')
 const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 
@@ -342,12 +344,14 @@ function finishWebdriverioWorker (runner, onDone) {
   try {
     workerFinishCh.publish({
       onDone: () => {
-        try {
-          reportWebdriverioSuiteResults(runner, onDone)
-        } catch (error) {
-          log.error('WebdriverIO Test Optimization worker completion error', error)
-          onDone()
-        }
+        publishWithCompletion(logSubmissionFlushCh, {}, () => {
+          try {
+            reportWebdriverioSuiteResults(runner, onDone)
+          } catch (error) {
+            log.error('WebdriverIO Test Optimization worker completion error', error)
+            onDone()
+          }
+        })
       },
     })
   } catch (error) {

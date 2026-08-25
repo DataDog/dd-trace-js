@@ -32,6 +32,10 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  automaticLogSubmission: {
+    maxInstances: 1,
+    specs: ['./automatic-log-submission.e2e.js'],
+  },
   atr: {
     maxInstances: 1,
     specs: ['./atr.e2e.js'],
