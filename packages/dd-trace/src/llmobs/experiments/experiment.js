@@ -529,7 +529,7 @@ class Experiment {
         throwOnErrors,
         limit,
       })
-    }, limit)
+    }, limit, concurrency, throwOnErrors)
 
     const rows = new Array(results.length)
     const spans = []
@@ -586,25 +586,27 @@ class Experiment {
     }
   }
 
-  async #mapRecords (records, processRecord, limit) {
+  async #mapRecords (records, processRecord, limit, concurrency, throwOnErrors) {
     const results = new Array(records.length)
-    const pending = new Array(records.length)
-    let firstError
+    let nextIndex = 0
 
-    for (let i = 0; i < records.length; i++) {
-      pending[i] = processRecord(i).then(
-        result => { results[i] = result },
-        err => {
-          if (firstError === undefined) {
-            firstError = err
-            limit.cancel(err)
-          }
-        }
-      )
+    const worker = async () => {
+      while (nextIndex < records.length) {
+        const index = nextIndex++
+        // eslint-disable-next-line no-await-in-loop -- each worker processes one record at a time
+        results[index] = await processRecord(index)
+      }
     }
 
-    await Promise.all(pending)
-    if (firstError !== undefined) throw firstError
+    const workers = new Array(Math.min(concurrency, records.length))
+    for (let i = 0; i < workers.length; i++) workers[i] = worker()
+
+    try {
+      await Promise.all(workers)
+    } catch (error) {
+      if (throwOnErrors) limit.cancel(error)
+      throw error
+    }
     return results
   }
 
@@ -903,7 +905,7 @@ class Experiment {
     try {
       results = await Promise.all(pending)
     } catch (err) {
-      options.limit.cancel(err)
+      if (options.throwOnErrors) options.limit.cancel(err)
       throw err
     }
     for (const result of results) {

@@ -952,12 +952,16 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   it('does not start queued evaluator work after a throw-on-error failure', async () => {
     const { client: c } = clientWithMockBackend()
     const evaluatorInputs = []
+    const taskInputs = []
 
     await assert.rejects(
       () => new Experiment(c, {
         name: 'exp-demo',
         dataset: new Dataset(c, 'demo').addRecord('bad').addRecord('later'),
-        task: input => input,
+        task: input => {
+          taskInputs.push(input)
+          return input
+        },
         evaluators: {
           failing: (input) => {
             evaluatorInputs.push(input)
@@ -968,7 +972,72 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       }).run({ concurrency: 1, throwOnErrors: true }),
       /eval-fail/
     )
+    assert.deepEqual(taskInputs, ['bad'])
     assert.deepEqual(evaluatorInputs, ['bad'])
+  })
+
+  it('rejects before waiting for other active records after a throw-on-error failure', async () => {
+    const { client: c } = clientWithMockBackend()
+    const taskInputs = []
+    let releaseBad
+    let releaseSlow
+    let resolveBadStarted
+    let resolveSlowStarted
+    let rejection
+    const badStarted = new Promise(resolve => { resolveBadStarted = resolve })
+    const slowStarted = new Promise(resolve => { resolveSlowStarted = resolve })
+    const badGate = new Promise(resolve => { releaseBad = resolve })
+    const slowGate = new Promise(resolve => { releaseSlow = resolve })
+    const pendingResult = new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('bad').addRecord('slow').addRecord('later'),
+      task: async (input) => {
+        taskInputs.push(input)
+        if (input === 'bad') {
+          resolveBadStarted()
+          await badGate
+          throw new Error('task-fail')
+        }
+        if (input === 'slow') {
+          resolveSlowStarted()
+          await slowGate
+        }
+        return input
+      },
+    }).run({ concurrency: 2, throwOnErrors: true }).then(
+      () => { rejection = new Error('experiment unexpectedly resolved') },
+      error => { rejection = error }
+    )
+
+    try {
+      await Promise.all([badStarted, slowStarted])
+      releaseBad()
+      await waitFor(() => rejection !== undefined)
+      assert.match(rejection.message, /task-fail/)
+      assert.deepEqual(taskInputs, ['bad', 'slow'])
+    } finally {
+      releaseBad()
+      releaseSlow()
+      await pendingResult
+    }
+  })
+
+  it('continues processing task errors when throwOnErrors is false', async () => {
+    const { client: c } = clientWithMockBackend()
+    const taskInputs = []
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('bad').addRecord('later'),
+      task: (input) => {
+        taskInputs.push(input)
+        if (input === 'bad') throw new Error('task-fail')
+        return input
+      },
+    }).run({ concurrency: 1 })
+
+    assert.deepEqual(taskInputs, ['bad', 'later'])
+    assert.equal(result.rows[0].isError, true)
+    assert.equal(result.rows[1].isError, false)
   })
 
   it('normalizes fallback JSON evaluator metrics', async () => {
