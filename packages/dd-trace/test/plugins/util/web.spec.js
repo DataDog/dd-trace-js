@@ -16,6 +16,16 @@ const HTTP_RESPONSE_HEADERS = tagsExt.HTTP_RESPONSE_HEADERS
 const HTTP_ROUTE = tagsExt.HTTP_ROUTE
 const RESOURCE_NAME = tagsExt.RESOURCE_NAME
 
+/**
+ * Creates the header dictionary expected from object-form OPTIONS responses.
+ *
+ * @param {Record<string, string>} headers
+ * @returns {Record<string, string>}
+ */
+function nullPrototypeHeaders (headers) {
+  return Object.assign(Object.create(null), headers)
+}
+
 describe('plugins/util/web', () => {
   let web
   let tracer
@@ -863,7 +873,7 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, { [ALLOW_HEADERS]: 'x-datadog-parent-id,x-datadog-trace-id' }]
+        [200, nullPrototypeHeaders({ [ALLOW_HEADERS]: 'x-datadog-parent-id,x-datadog-trace-id' })]
       )
     })
 
@@ -880,7 +890,7 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, { [ALLOW_HEADERS]: 'baggage,traceparent,tracestate' }]
+        [200, nullPrototypeHeaders({ [ALLOW_HEADERS]: 'baggage,traceparent,tracestate' })]
       )
     })
 
@@ -897,7 +907,38 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, { [ALLOW_ORIGIN]: 'https://example.com', [ALLOW_HEADERS]: 'x-datadog-trace-id' }]
+        [200, nullPrototypeHeaders({
+          [ALLOW_ORIGIN]: 'https://example.com',
+          [ALLOW_HEADERS]: 'x-datadog-trace-id',
+        })]
+      )
+    })
+
+    it('preserves explicit headers named __proto__ when adding tracing headers', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
+      res.getHeaders.returns({})
+      res.writeHead = sinon.spy()
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200, {
+        [ALLOW_ORIGIN]: '*',
+        ['__proto__']: 'preserved',
+      })
+
+      assert.ok(res.writeHead.calledOnce)
+      const forwardedHeaders = res.writeHead.firstCall.args[1]
+      assert.strictEqual(Object.getPrototypeOf(forwardedHeaders), null)
+      assert.ok(Object.hasOwn(forwardedHeaders, '__proto__'))
+      assert.strictEqual(forwardedHeaders.__proto__, 'preserved')
+      assert.deepStrictEqual(
+        res.writeHead.firstCall.args,
+        [200, nullPrototypeHeaders({
+          [ALLOW_ORIGIN]: '*',
+          ['__proto__']: 'preserved',
+          [ALLOW_HEADERS]: 'x-datadog-trace-id',
+        })]
       )
     })
 
@@ -917,10 +958,10 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, {
+        [200, nullPrototypeHeaders({
           [ALLOW_ORIGIN]: '*',
           'Access-Control-Allow-Headers': 'content-type,baggage',
-        }]
+        })]
       )
     })
 
@@ -940,10 +981,10 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, {
+        [200, nullPrototypeHeaders({
           [ALLOW_ORIGIN]: '*',
           [ALLOW_HEADERS]: 'content-type,x-custom,x-datadog-trace-id',
-        }]
+        })]
       )
     })
 
@@ -960,7 +1001,10 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, 'OK', { [ALLOW_ORIGIN]: '*', [ALLOW_HEADERS]: 'x-datadog-trace-id' }]
+        [200, 'OK', nullPrototypeHeaders({
+          [ALLOW_ORIGIN]: '*',
+          [ALLOW_HEADERS]: 'x-datadog-trace-id',
+        })]
       )
     })
 
@@ -977,7 +1021,11 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, '', { [ALLOW_ORIGIN]: '*', 'x-test': '1', [ALLOW_HEADERS]: 'x-datadog-trace-id' }]
+        [200, '', nullPrototypeHeaders({
+          [ALLOW_ORIGIN]: '*',
+          'x-test': '1',
+          [ALLOW_HEADERS]: 'x-datadog-trace-id',
+        })]
       )
     })
 
@@ -1103,7 +1151,7 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, { [ALLOW_HEADERS]: 'x-datadog-trace-id' }]
+        [200, nullPrototypeHeaders({ [ALLOW_HEADERS]: 'x-datadog-trace-id' })]
       )
     })
 
@@ -1123,7 +1171,7 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, { [ALLOW_HEADERS]: 'content-type,x-datadog-trace-id' }]
+        [200, nullPrototypeHeaders({ [ALLOW_HEADERS]: 'content-type,x-datadog-trace-id' })]
       )
     })
 
@@ -1170,7 +1218,10 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, { [ALLOW_ORIGIN]: '*', [ALLOW_HEADERS]: 'content-type,x-datadog-trace-id' }]
+        [200, nullPrototypeHeaders({
+          [ALLOW_ORIGIN]: '*',
+          [ALLOW_HEADERS]: 'content-type,x-datadog-trace-id',
+        })]
       )
     })
 
@@ -1187,7 +1238,7 @@ describe('plugins/util/web', () => {
       assert.ok(res.writeHead.calledOnce)
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
-        [200, { [ALLOW_HEADERS]: 'x-datadog-parent-id,x-datadog-trace-id' }]
+        [200, nullPrototypeHeaders({ [ALLOW_HEADERS]: 'x-datadog-parent-id,x-datadog-trace-id' })]
       )
     })
   })

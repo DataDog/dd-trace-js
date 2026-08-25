@@ -439,7 +439,7 @@ function splitHeader (value) {
 }
 
 function normalizeHeaderLookup (headers) {
-  const result = {}
+  const result = Object.create(null)
 
   if (Array.isArray(headers)) {
     if (Array.isArray(headers[0])) {
@@ -498,7 +498,7 @@ function setTupleHeader (headers, name, value) {
 }
 
 function setObjectHeader (headers, name, value) {
-  const result = {}
+  const result = Object.create(null)
   let headerFound = false
 
   if (headers) {
