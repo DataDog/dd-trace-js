@@ -993,11 +993,15 @@ export default [
       // TODO: Re-enable this rule once we have a way to fix the false positives or have Node.js report better errors.
       'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
+      'mocha/consistent-structure': 'off',
+      'mocha/handle-done-callback': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
+      'mocha/no-async-in-sync-tests': 'off',
+      'mocha/no-conditional-tests': 'off',
       'mocha/no-mocha-arrows': 'off',
-      'mocha/no-setup-in-describe': 'off',
-      'mocha/no-sibling-hooks': 'off',
-      'mocha/no-top-level-hooks': 'off',
+      'mocha/no-pending-tests': 'off',
+      'mocha/no-root-hooks': 'off',
+      'mocha/no-setup-in-suite': 'off',
       'n/handle-callback-err': 'off',
       'n/no-extraneous-require': ['error', {
         allowModules: [
