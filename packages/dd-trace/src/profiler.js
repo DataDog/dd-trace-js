@@ -73,28 +73,30 @@ module.runWithLabels = function (labels, fn) {
 }
 
 configUpdateChannel.subscribe((config) => {
-  if (config.profiling.DD_PROFILING_ENABLED === 'true') {
+  const enabled = config.profiling.DD_PROFILING_ENABLED
+  if (enabled === 'true') {
     // Leave an already-running profiler alone; otherwise an unrelated remote-config publish
     // (e.g. an unrelated sampling-rate change) would restart it on every update.
     if (!module.started) module.started = module.start(config)
-  } else {
+  } else if (enabled === 'false') {
     // Only touch the profiling layer if it was actually running, so a disabled profiler never
     // forces the profiling engine (and its native crashtracker binding) to load.
     if (module.started) module.stop()
     module.started = false
-
-    // Guard against re-arming on every unrelated remote-config publish while still 'auto'; each
-    // SSIHeuristics instance registers its own listeners/timer that are only torn down on trigger.
-    if (config.profiling.DD_PROFILING_ENABLED === 'auto' && !armedSSIHeuristics) {
-      const { SSIHeuristics } = getSSIHeuristicsModule()
-      armedSSIHeuristics = new SSIHeuristics(config)
-      armedSSIHeuristics.start()
-      armedSSIHeuristics.onTriggered(() => {
-        module.started = module.start(config)
-        armedSSIHeuristics.onTriggered() // deregister this callback
-        armedSSIHeuristics = undefined
-      })
-    }
+  } else if (!module.started && !armedSSIHeuristics) {
+    // 'auto' defers the start decision to SSI heuristics. A running profiler already reflects a
+    // decision that was made (by SSI or a prior unconditional enablement), so leave it alone
+    // rather than stopping and re-arming it on every subsequent config publication. Also guard
+    // against re-arming while already armed; each SSIHeuristics instance registers its own
+    // listeners/timer that are only torn down on trigger.
+    const { SSIHeuristics } = getSSIHeuristicsModule()
+    armedSSIHeuristics = new SSIHeuristics(config)
+    armedSSIHeuristics.start()
+    armedSSIHeuristics.onTriggered(() => {
+      if (!module.started) module.started = module.start(config)
+      armedSSIHeuristics.onTriggered() // deregister this callback
+      armedSSIHeuristics = undefined
+    })
   }
 })
 

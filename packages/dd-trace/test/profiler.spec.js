@@ -66,13 +66,13 @@ describe('profiler', () => {
 
     // profiler.js tracks `started` at module scope; reset it so a prior test's enabled profiler
     // doesn't make this test's start() a no-op.
-    publishConfig(false)
+    publishConfig('false')
     profilingModule.profiler.stop.resetHistory()
   })
 
   describe('config update', () => {
     it('does not start or stop the profiler on an initial disabled publish', () => {
-      publishConfig(false)
+      publishConfig('false')
 
       sinon.assert.notCalled(profilingModule.profiler.start)
       sinon.assert.notCalled(profilingModule.profiler.stop)
@@ -97,7 +97,7 @@ describe('profiler', () => {
       publishConfig('true')
       sinon.assert.notCalled(profilingModule.profiler.stop)
 
-      publishConfig(false)
+      publishConfig('false')
 
       sinon.assert.calledOnce(profilingModule.profiler.stop)
       assert.strictEqual(profiler.started, false)
@@ -131,12 +131,35 @@ describe('profiler', () => {
       sinon.assert.calledOnce(profilingModule.profiler.start)
     })
 
+    it('does not stop a profiler already started by SSI heuristics on a repeated auto publish', () => {
+      publishConfig('auto')
+      ssiHeuristics.triggeredCallback()
+      sinon.assert.calledOnce(profilingModule.profiler.start)
+      assert.strictEqual(profiler.started, true)
+
+      publishConfig('auto')
+
+      sinon.assert.notCalled(profilingModule.profiler.stop)
+      assert.strictEqual(profiler.started, true)
+    })
+
+    it('does not stop or restart a profiler unconditionally enabled before an auto publish', () => {
+      publishConfig('true')
+      sinon.assert.calledOnce(profilingModule.profiler.start)
+
+      publishConfig('auto')
+
+      sinon.assert.notCalled(profilingModule.profiler.stop)
+      sinon.assert.calledOnce(profilingModule.profiler.start)
+      assert.strictEqual(profiler.started, true)
+    })
+
     it('re-arms the SSI heuristics after a prior arming has already triggered', () => {
       publishConfig('auto')
       ssiHeuristics.triggeredCallback()
       sinon.assert.calledOnce(FakeSSIHeuristics)
 
-      publishConfig(false)
+      publishConfig('false')
       publishConfig('auto')
 
       sinon.assert.calledTwice(FakeSSIHeuristics)
