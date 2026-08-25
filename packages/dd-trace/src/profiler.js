@@ -74,7 +74,9 @@ module.runWithLabels = function (labels, fn) {
 
 configUpdateChannel.subscribe((config) => {
   if (config.profiling.DD_PROFILING_ENABLED === 'true') {
-    module.started = module.start(config)
+    // Leave an already-running profiler alone; otherwise an unrelated remote-config publish
+    // (e.g. an unrelated sampling-rate change) would restart it on every update.
+    if (!module.started) module.started = module.start(config)
   } else {
     // Only touch the profiling layer if it was actually running, so a disabled profiler never
     // forces the profiling engine (and its native crashtracker binding) to load.

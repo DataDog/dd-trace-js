@@ -63,6 +63,11 @@ describe('profiler', () => {
     log.debug.resetHistory()
     log.error.resetHistory()
     ssiHeuristics = undefined
+
+    // profiler.js tracks `started` at module scope; reset it so a prior test's enabled profiler
+    // doesn't make this test's start() a no-op.
+    publishConfig(false)
+    profilingModule.profiler.stop.resetHistory()
   })
 
   describe('config update', () => {
@@ -81,11 +86,11 @@ describe('profiler', () => {
       assert.strictEqual(profiler.started, true)
     })
 
-    it('re-starts the profiler on every publish while enabled', () => {
+    it('does not re-start an already-running profiler on a repeated enabled publish', () => {
       publishConfig('true')
       publishConfig('true')
 
-      sinon.assert.calledTwice(profilingModule.profiler.start)
+      sinon.assert.calledOnce(profilingModule.profiler.start)
     })
 
     it('stops a running profiler when a later publish disables it', () => {
