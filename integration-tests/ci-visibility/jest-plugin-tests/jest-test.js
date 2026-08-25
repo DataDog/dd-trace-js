@@ -96,7 +96,6 @@ describe('jest-test-suite', () => {
     assert.deepStrictEqual(true, false)
   })
   // The callback keeps the Jest test open until the scheduled error is attributed to it.
-  // eslint-disable-next-line mocha/handle-done-callback
   it('does not crash with missing stack', (done) => {
     setTimeout(() => {
       const error = new Error('fail')
