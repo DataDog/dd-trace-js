@@ -994,6 +994,7 @@ export default [
       'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/consistent-structure': 'off',
+      'mocha/limit-retries': ['error', { mode: 'disallow' }],
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-mocha-arrows': 'off',
       'mocha/no-root-hooks': 'off',
@@ -1112,7 +1113,21 @@ export default [
       sonarjs: eslintPluginSonar,
     },
     rules: {
+      'mocha/limit-retries': 'off',
       'sonarjs/stable-tests': 'off',
+    },
+  },
+  {
+    // These tests intentionally exercise native retries or retry timing-dependent external behavior.
+    name: 'dd-trace/tests/intentional-mocha-retries',
+    files: [
+      'integration-tests/ci-visibility/test-early-flake-detection/fails-first-then-passes.js',
+      'integration-tests/ci-visibility/test-management/test-attempt-to-fix-fails-first.js',
+      'integration-tests/playwright/playwright-final-status.spec.js',
+      'integration-tests/profiler/profiler.spec.js',
+    ],
+    rules: {
+      'mocha/limit-retries': 'off',
     },
   },
   {
