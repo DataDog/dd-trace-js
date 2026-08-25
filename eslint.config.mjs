@@ -996,7 +996,6 @@ export default [
       'mocha/consistent-structure': 'off',
       'mocha/limit-timeout': ['error', { mode: 'disallowDisabled' }],
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
-      'mocha/no-conditional-tests': 'off',
       'mocha/no-mocha-arrows': 'off',
       'mocha/no-root-hooks': 'off',
       'mocha/no-setup-in-suite': 'off',
@@ -1062,6 +1061,17 @@ export default [
     files: ['packages/datadog-plugin-jest/test/fixtures/**/*.js'],
     rules: {
       'jsdoc/valid-types': 'off',
+    },
+  },
+  {
+    // These fixtures must omit retry suites when the active Jest runner has no retry support.
+    name: 'dd-trace/test-optimization/conditional-test-fixtures',
+    files: [
+      'integration-tests/ci-visibility/jest-plugin-tests/jest-test.js',
+      'integration-tests/ci-visibility/test/jest-concurrent-retry-http.js',
+    ],
+    rules: {
+      'mocha/no-conditional-tests': 'off',
     },
   },
   {
