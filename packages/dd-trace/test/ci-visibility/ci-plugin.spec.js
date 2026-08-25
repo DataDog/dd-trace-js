@@ -42,7 +42,7 @@ const {
 } = require('../../src/plugins/util/test')
 
 describe('CiPlugin', () => {
-  const itUnlessWindows = process.platform === 'win32' ? () => {} : it
+  const itUnlessWindows = process.platform === 'win32' ? it.skip : it
   let CiPlugin
   let distributionMetric
   let getCodeOwnersFileEntries

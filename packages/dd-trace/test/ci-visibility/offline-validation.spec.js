@@ -22,7 +22,7 @@ const {
 } = require('../../../../ci/test-optimization-validation/offline-output')
 
 describe('test optimization offline validation artifacts', () => {
-  const itUnlessWindows = process.platform === 'win32' ? () => {} : it
+  const itUnlessWindows = process.platform === 'win32' ? it.skip : it
   let repositoryRoot
 
   beforeEach(() => {

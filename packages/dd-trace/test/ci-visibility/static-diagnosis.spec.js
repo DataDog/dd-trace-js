@@ -12,7 +12,7 @@ const {
 } = require('../../../../ci/test-optimization-validation/static-diagnosis')
 
 describe('test optimization validation static diagnosis', () => {
-  const itUnlessWindows = process.platform === 'win32' ? () => {} : it
+  const itUnlessWindows = process.platform === 'win32' ? it.skip : it
   it('recognizes Better Node Test scripts as node:test diagnostics', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
