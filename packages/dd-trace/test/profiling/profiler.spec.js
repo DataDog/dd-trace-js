@@ -200,7 +200,12 @@ describe('profiler', function () {
       profiler.stop()
 
       wallProfiler.setCustomLabelKeys.resetHistory()
-      await profiler.start(makeStartOptions())
+      profiler.start(makeStartOptions())
+
+      // stop()'s shutdown collection is still in flight, so this start() is deferred until it
+      // settles (see the '#stopping' chaining in Profiler#start/#stop).
+      await waitForExport()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
 
       sinon.assert.calledOnce(wallProfiler.setCustomLabelKeys)
       assert.deepStrictEqual(
