@@ -475,6 +475,7 @@ export interface GeneratedConfig {
     agentlessEnabled: boolean | undefined;
     DD_LLMOBS_ENABLED: boolean;
     mlApp: string | undefined;
+    projectName: string | undefined;
     sampleRate: number;
   };
   logInjection: boolean;
@@ -761,6 +762,7 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
   DD_LLMOBS_ENABLED: boolean;
   DD_LLMOBS_ML_APP: string | undefined;
+  DD_LLMOBS_PROJECT_NAME: string | undefined;
   DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
