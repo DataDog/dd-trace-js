@@ -143,6 +143,29 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('experiment_name:')), ['experiment_name:exp-demo'])
   })
 
+  it('keeps the project name authoritative in external metric tags', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const experiment = await new Experiment(c, {
+      name: 'external-exp',
+      projectName: 'demo-project',
+      external: true,
+    }).start()
+
+    const span = await experiment.submitSpan({ input: 'input' })
+    await experiment.submitEvaluationMetrics(span, [{
+      label: 'score',
+      value: 1,
+      tags: { project_name: 'other-project' },
+    }])
+
+    const metricRequest = requests.find(request => request.method === 'postExperimentEvents' &&
+      request.attributes.metrics.length > 0)
+    assert.deepEqual(
+      metricRequest.attributes.metrics[0].tags.filter(tag => tag.startsWith('project_name:')),
+      ['project_name:demo-project']
+    )
+  })
+
   it('surfaces backend failures', async () => {
     const createDatasetError = new Error(`POST ${API_BASE_PATH}/proj/datasets failed: HTTP 500 boom`)
     const { client: c } = clientWithMockBackend({ createDatasetError })

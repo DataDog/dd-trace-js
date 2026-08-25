@@ -4187,7 +4187,7 @@ declare namespace tracer {
       id (): string | null
       projectId (): string | null
       /** Project associated with the client used to create or pull this dataset. */
-      projectName (): string | undefined
+      projectName (): string | null | undefined
       version (): number | null
       latestVersion (): number | null
       records (): Array<{

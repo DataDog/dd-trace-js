@@ -329,6 +329,8 @@ class Experiment {
         log.warn('LLMObs experiments: skipping external metric %s because it has neither value nor error', metric.label)
         continue
       }
+      const metricTags = mergeTags(this.#tags, metric.tags)
+      if (this.#projectName !== undefined) metricTags.project_name = this.#projectName
       payload.push(toMetric(
         metric.label,
         metric.value,
@@ -337,7 +339,7 @@ class Experiment {
         span.traceId,
         timestampMs(metric.timestamp),
         experimentId,
-        mergeTags(this.#tags, metric.tags),
+        metricTags,
         metric.source ?? 'custom'
       ))
     }
