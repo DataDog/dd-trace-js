@@ -130,6 +130,14 @@ module.exports = {
       versions: ['^4.0.0'],
     },
   ],
+  '@anthropic-ai/claude-agent-sdk': [
+    {
+      name: 'zod',
+      version: '^4.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
   'cookie-parser': [
     {
       name: 'express',
@@ -266,6 +274,65 @@ module.exports = {
       versions: ['5.0.7'],
     },
   ],
+  // pubsub@1.2.0's `pubsub.js` source-requires `@grpc/grpc-js` without declaring
+  // it; the parent-walk resolution can land on a different `@grpc/grpc-js`
+  // instance than the one its nested google-gax@1.15.4 uses (`~1.3.6`), and the
+  // credentials produced fail the `instanceof ChannelCredentials` check across
+  // module instances. Force the matching range as a direct dep of every pubsub
+  // sandbox so the workspace root resolves to one consistent copy.
+  '@google-cloud/pubsub': [
+    {
+      name: '@grpc/grpc-js',
+      version: '~1.3.6',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // The bedrock-runtime tests reach into `@smithy/node-http-handler` directly
+  // through `versions/@aws-sdk/client-bedrock-runtime@*/index.js.get(...)`.
+  // Under bun's isolated linker that transitive sits only inside aws-sdk's
+  // private store and isn't reachable from the workspace root, so inject it
+  // as a direct dep of every bedrock-runtime sandbox. Deliberately no `version`:
+  // each sandbox then inherits the range its own client declares, so the 3.422.0
+  // sandbox keeps the `@smithy/*` v2 line it was built against instead of pulling
+  // the newest handler, whose `@smithy/core` v3 requirement resolves on its own
+  // and leaves the sandbox unloadable.
+  '@aws-sdk/client-bedrock-runtime': [
+    {
+      name: '@smithy/node-http-handler',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // The lambda spec reads `@aws-sdk/core`'s version to decide whether the clock-skew guard is
+  // still in place. That transitive is only reachable from the client's own store entry under
+  // bun's isolated linker, so inject it; v3 clients always pair with the v3 line.
+  '@aws-sdk/client-lambda': [
+    {
+      name: '@aws-sdk/core',
+      version: '^3.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // The vertex-ai test stubs `GoogleAuth.prototype.getAccessToken` via
+  // `require('versions/@google-cloud/vertexai@<ver>').get('google-auth-library/...')`.
+  // `google-auth-library` is a regular transitive of `@google-cloud/vertexai`,
+  // so under bun's isolated linker it lives in vertexai's private store and
+  // isn't reachable from the workspace root. Inject it as a direct dep of
+  // every vertexai sandbox so the test's `getExport` lookup resolves.
+  // Pin to vertexai's own `^9.0.0` range (every published version still
+  // declares it) so bun dedupes the direct dep and the SDK's transitive to
+  // a single physical `.bun/google-auth-library@9.x.y` entry — the prototype
+  // stub only propagates to the SDK when both resolve to the same realpath.
+  '@google-cloud/vertexai': [
+    {
+      name: 'google-auth-library',
+      version: '^9.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
   genai: [
     {
       name: '@google/genai',
@@ -344,8 +411,8 @@ module.exports = {
   ],
   '@apollo/server': [
     {
-      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which yarn may
-      // hoist over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
+      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which may be
+      // hoisted over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
       // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
       name: 'graphql',
       dep: true,
@@ -376,9 +443,7 @@ module.exports = {
     },
     {
       // knex 1.x is the only major whose sqlite3 dialect requires the @vscode/sqlite3 fork instead of `sqlite3`
-      // (reverted in 2.x). The instrumentation spec loads knex from `versions/knex@<ver>` and opens a sqlite3
-      // client, so the fork must be installed there. Pin an exact prerelease build so prebuilt binaries exist for
-      // the whole Node CI matrix.
+      // (reverted in 2.x). Pin the fork so the instrumentation spec can open a sqlite3 client.
       name: '@vscode/sqlite3',
       versions: ['5.1.12-vscode'],
     },
@@ -428,6 +493,13 @@ module.exports = {
       name: '@langchain/core',
       versions: ['>=0.1'],
       dep: true,
+    },
+    {
+      // The recorded cassettes match the OpenAI/JS 4.x request shape.
+      name: '@langchain/openai',
+      version: '0.0.34',
+      dep: true,
+      forced: true,
     },
   ],
   langgraph: [
@@ -511,8 +583,16 @@ module.exports = {
   ],
   moleculer: [
     {
+      // bluebird is a runtime fallback in moleculer's transit/util layer; the
+      // package's manifest does not list it, so inject it as a direct dep of
+      // each moleculer sandbox via `dep: true, forced: true`. Under bun's
+      // isolated linker that lands bluebird at
+      // `versions/moleculer@<ver>/node_modules/bluebird`, where moleculer's
+      // require() walk from the central .bun store finds it.
       name: 'bluebird',
       versions: ['3.7.2'],
+      dep: true,
+      forced: true,
     },
   ],
   'mongodb-core': [
@@ -614,6 +694,7 @@ module.exports = {
     {
       name: 'pg-native',
       versions: ['3.0.0'],
+      trustedDependencies: ['libpq'],
     },
     {
       name: 'express',
@@ -681,6 +762,10 @@ module.exports = {
     {
       name: 'collections',
       versions: ['5'],
+      // q@2 requires collections/shim, which is absent from its declared collections@^2.
+      overrides: {
+        collections: '^5.0.0',
+      },
     },
     {
       name: 'q',

@@ -1,0 +1,42 @@
+{
+  "$comment": [
+    "Advisories that `node scripts/audit.js` may accept without failing, grouped by install directory.",
+    "Every entry needs a reason explaining why a patched version cannot be resolved.",
+    "The audit fails when an accepted advisory is no longer reported, so stale entries cannot linger.",
+    "`level` is the lowest severity that fails for that directory. Shipped code is audited below `high`."
+  ],
+  "directories": {
+    ".": {
+      "level": "high",
+      "allow": [
+        {
+          "id": "GHSA-5c6j-r48x-rmvq",
+          "package": "serialize-javascript",
+          "reason": "Patched in 7.0.3, but mocha declares serialize-javascript@^6.0.2 and cannot resolve 7.x. The vulnerable path is limited to Mocha's dev-only test metadata until Mocha widens its dependency range."
+        }
+      ]
+    },
+    "vendor": {
+      "level": "moderate",
+      "allow": [
+        {
+          "id": "GHSA-8988-4f7v-96qf",
+          "package": "@opentelemetry/core",
+          "reason": "Patched in 2.8.0, outside the OpenTelemetry 1.x compatibility range bundled by vendor. Removing this acceptance requires a deliberate OpenTelemetry major upgrade of the shipped vendor tree."
+        }
+      ]
+    },
+    "docs": {
+      "level": "high",
+      "allow": []
+    },
+    ".github/all-green": {
+      "level": "high",
+      "allow": []
+    },
+    ".github/actions/datadog-ci": {
+      "level": "high",
+      "allow": []
+    }
+  }
+}

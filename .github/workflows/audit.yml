@@ -1,20 +1,50 @@
 name: Audit
 
 on:
+  workflow_call:
   pull_request:
-    branches:
-      - dependabot/**
+    paths:
+      - ".github/actions/datadog-ci/bun.lock"
+      - ".github/actions/datadog-ci/package.json"
+      - ".github/all-green/bun.lock"
+      - ".github/all-green/package.json"
+      - ".github/audit-allowlist.json"
+      - ".github/workflows/audit.yml"
+      - ".github/workflows/dependabot-audit.yml"
+      - "bun.lock"
+      - "docs/bun.lock"
+      - "docs/package.json"
+      - "package.json"
+      - "scripts/audit.js"
+      - "scripts/bun.js"
+      - "vendor/bun.lock"
+      - "vendor/package.json"
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   dependencies:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+          - "."
+          - ".github/actions/datadog-ci"
+          - ".github/all-green"
+          - "docs"
+          - "vendor"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/latest
-      - run: yarn audit
-      - run: yarn audit
-        working-directory: ./vendor
+      - run: node scripts/audit.js "$DIRECTORY"
+        env:
+          DIRECTORY: ${{ matrix.directory }}

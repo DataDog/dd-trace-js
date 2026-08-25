@@ -66,12 +66,12 @@ updates:
   # Dependabot bumps deps in package.json; the electron variant is always regenerated
   # fresh on the next npm install / npm pack.
 
-  # Regular npm packages that fall into our supported ranges besides OTEL
-  - package-ecosystem: "npm"
+  # Root, docs, and All Green packages installed by Bun
+  - package-ecosystem: "bun"
     directories:
       - "/"
       - "/docs"
-      - "/.github/actions/datadog-ci"
+      - "/.github/all-green"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 100
@@ -139,8 +139,30 @@ updates:
         patterns:
           - "*"
 
+  # datadog-ci composite action
+  - package-ecosystem: "bun"
+    directory: "/.github/actions/datadog-ci"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 5
+      exclude:
+        - "@datadog/*"
+    versioning-strategy: "increase"
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
+      - semver-patch
+    groups:
+      security-production:
+        applies-to: security-updates
+        dependency-type: "production"
+        patterns:
+          - "*"
+
   # Vendored dependencies
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directories:
       - "/vendor"
     schedule:

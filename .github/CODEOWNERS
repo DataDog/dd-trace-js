@@ -1,10 +1,10 @@
 # TODO: Restructure the project by product and clean up this file.
 
-# Shared repository tooling
+# Default recursive ownership. GitHub applies the last matching rule, so the per-product entries
+# further down re-assign the parts of these trees that a product team owns.
 /.agents/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.claude/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/actions/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/ISSUE_TEMPLATE/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.github/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.gitlab/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.husky/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.vscode/ @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -113,6 +113,7 @@
 /packages/dd-trace/src/propagation-hash/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/dd-trace/test/plugins/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/dd-trace/test/process-tags.spec.js @DataDog/dd-trace-js @DataDog/apm-idm-js
+/versions/bunfig.toml @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/src/service-naming/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/dd-trace/test/payload_tagging.spec.js @DataDog/dd-trace-js @DataDog/apm-idm-js
@@ -340,6 +341,7 @@
 /.github/workflows/all-green.yml @DataDog/dd-trace-js @Datadog/lang-platform-js
 /.github/workflows/audit.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/workflows/custom-node-version-dispatch.yml @DataDog/dd-trace-js @Datadog/lang-platform-js
+/.github/workflows/dependabot-audit.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/workflows/dependabot-automation.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
 /.github/workflows/flakiness.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/workflows/platform.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -386,9 +388,13 @@
 /openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
 /.github/CODEOWNERS @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.github/audit-allowlist.json @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/dependabot.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
 /.github/pull_request_template.md @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/vendored-dependencies.csv @DataDog/dd-trace-js @DataDog/lang-platform-js
+
+/docs/bun.lock @DataDog/dd-trace-js @DataDog/lang-platform-js
+/vendor/bun.lock @DataDog/dd-trace-js @DataDog/lang-platform-js
 
 /benchmark/* @DataDog/dd-trace-js @DataDog/lang-platform-js
 /benchmark/openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
