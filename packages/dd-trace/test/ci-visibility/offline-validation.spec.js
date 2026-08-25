@@ -22,6 +22,7 @@ const {
 } = require('../../../../ci/test-optimization-validation/offline-output')
 
 describe('test optimization offline validation artifacts', () => {
+  const itUnlessWindows = process.platform === 'win32' ? () => {} : it
   let repositoryRoot
 
   beforeEach(() => {
@@ -247,11 +248,7 @@ describe('test optimization offline validation artifacts', () => {
     assert.throws(() => readOfflineOutput(outputRoot), /unexpected entry/)
   })
 
-  it('rejects symbolic-link and hard-linked payload files', function () {
-    if (process.platform === 'win32') {
-      // Windows does not expose the link semantics exercised here.
-      this.skip()
-    }
+  itUnlessWindows('rejects symbolic-link and hard-linked payload files', function () {
     const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
     const source = path.join(repositoryRoot, 'source.json')
     fs.writeFileSync(source, JSON.stringify(createTestCyclePayload()))
@@ -325,11 +322,7 @@ describe('test optimization offline validation artifacts', () => {
     }
   })
 
-  it('rejects malformed and hard-linked completion records', function () {
-    if (process.platform === 'win32') {
-      // Windows does not expose the hard-link semantics exercised here.
-      this.skip()
-    }
+  itUnlessWindows('rejects malformed and hard-linked completion records', function () {
     const { outputRoot, processId } = createPayloadRoot(repositoryRoot)
     const completionPath = path.join(outputRoot, 'completions', `completion-${processId}.json`)
 

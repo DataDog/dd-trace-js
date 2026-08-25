@@ -15,6 +15,7 @@ const {
 const { createWindowsFileReferenceFs } = require('./validation-test-helpers')
 
 describe('test optimization validation generated files', () => {
+  const itUnlessWindows = process.platform === 'win32' ? () => {} : it
   it('allows existing generated files when the content matches', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
     const filename = path.join(root, 'dd-test-optimization-validation.test.js')
@@ -79,12 +80,7 @@ describe('test optimization validation generated files', () => {
     }
   })
 
-  it('refuses generated file paths that escape through a symbolic-link directory', function () {
-    if (process.platform === 'win32') {
-      // Windows does not expose the symbolic-link behavior exercised here.
-      this.skip()
-    }
-
+  itUnlessWindows('refuses generated file paths that escape through a symbolic-link directory', function () {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-outside-'))
     const linkedDirectory = path.join(root, 'linked')
@@ -103,12 +99,7 @@ describe('test optimization validation generated files', () => {
     }
   })
 
-  it('does not delete outside files after the project root is replaced by a symbolic link', function () {
-    if (process.platform === 'win32') {
-      // Windows does not expose the symbolic-link replacement behavior exercised here.
-      this.skip()
-    }
-
+  itUnlessWindows('does not delete outside files after the project root is replaced by a symbolic link', function () {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-root-swap-'))
     const root = path.join(base, 'project')
     const originalRoot = path.join(base, 'original-project')
@@ -133,37 +124,35 @@ describe('test optimization validation generated files', () => {
     }
   })
 
-  it('does not delete redirected files after a generated directory is replaced by a symbolic link', function () {
-    if (process.platform === 'win32') {
-      // Windows does not expose the symbolic-link replacement behavior exercised here.
-      this.skip()
+  itUnlessWindows(
+    'does not delete redirected files after a generated directory is replaced by a symbolic link',
+    function () {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-directory-swap-'))
+      const generatedDirectory = path.join(root, 'generated')
+      const originalDirectory = path.join(root, 'original-generated')
+      const redirectedDirectory = path.join(root, 'redirected')
+      fs.mkdirSync(redirectedDirectory)
+      const filename = path.join(generatedDirectory, 'dd-test-optimization-validation.test.js')
+      const framework = getFramework(root, filename)
+
+      try {
+        writeGeneratedFiles(framework)
+        fs.renameSync(generatedDirectory, originalDirectory)
+        fs.symlinkSync(redirectedDirectory, generatedDirectory)
+        fs.writeFileSync(path.join(redirectedDirectory, path.basename(filename)), 'customer data\n')
+
+        cleanupGeneratedFiles({ frameworks: [framework] })
+
+        assert.strictEqual(
+          fs.readFileSync(path.join(redirectedDirectory, path.basename(filename)), 'utf8'),
+          'customer data\n'
+        )
+        assert.strictEqual(fs.existsSync(path.join(originalDirectory, path.basename(filename))), true)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
     }
-
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-directory-swap-'))
-    const generatedDirectory = path.join(root, 'generated')
-    const originalDirectory = path.join(root, 'original-generated')
-    const redirectedDirectory = path.join(root, 'redirected')
-    fs.mkdirSync(redirectedDirectory)
-    const filename = path.join(generatedDirectory, 'dd-test-optimization-validation.test.js')
-    const framework = getFramework(root, filename)
-
-    try {
-      writeGeneratedFiles(framework)
-      fs.renameSync(generatedDirectory, originalDirectory)
-      fs.symlinkSync(redirectedDirectory, generatedDirectory)
-      fs.writeFileSync(path.join(redirectedDirectory, path.basename(filename)), 'customer data\n')
-
-      cleanupGeneratedFiles({ frameworks: [framework] })
-
-      assert.strictEqual(
-        fs.readFileSync(path.join(redirectedDirectory, path.basename(filename)), 'utf8'),
-        'customer data\n'
-      )
-      assert.strictEqual(fs.existsSync(path.join(originalDirectory, path.basename(filename))), true)
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-    }
-  })
+  )
 
   it('refuses hidden secret-like values and control characters in generated source', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))

@@ -17,14 +17,6 @@ const { withVersions } = require('../setup/mocha')
 const { getConfigFresh } = require('../helpers/config')
 const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
-// The version matrices below necessarily pair plugin majors with fastify majors they reject. fastify core
-// reports that while booting (during `listen`) as FST_ERR_PLUGIN_VERSION_MISMATCH; older fastify-plugin
-// builds throw a plain Error carrying the same "expected '<range>' fastify version" text instead. Either
-// means "skip this unsupported combo", not a real failure.
-function isFastifyPluginVersionMismatch (error) {
-  return error.code === 'FST_ERR_PLUGIN_VERSION_MISMATCH' || /expected '.+?' fastify version/.test(error.message)
-}
-
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
     let app, server, requestBody, axios
@@ -427,7 +419,14 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Suspicious request blocking - cookie', () => {
-    withVersions('fastify', '@fastify/cookie', cookieVersion => {
+    withVersions('fastify', '@fastify/cookie', (cookieVersion, _, cookieLoadedVersion) => {
+      // Cookie majors 6, 7-9, and 10+ support Fastify majors 3, 4, and 5 respectively.
+      const supported =
+        semver.intersects(cookieLoadedVersion, '6') && semver.intersects(fastifyLoadedVersion, '>=3 <4') ||
+        semver.intersects(cookieLoadedVersion, '>=7 <10') && semver.intersects(fastifyLoadedVersion, '4') ||
+        semver.intersects(cookieLoadedVersion, '>=10') && semver.intersects(fastifyLoadedVersion, '5')
+      if (!supported || semver.intersects(fastifyLoadedVersion, '3.9.2')) return
+
       const hookConfigurations = [
         'onRequest',
         'preParsing',
@@ -440,16 +439,6 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           let server, requestCookie, axios
 
           before(async function () {
-            if (semver.intersects(fastifyLoadedVersion, '3.9.2')) {
-              // Fastify 3.9.2 is incompatible with @fastify/cookie >=6
-              this.skip()
-            }
-
-            if (hook === 'preParsing' && semver.intersects(fastifyLoadedVersion, '2')) {
-              // Fastify 2.x cannot run the preParsing hook fixture.
-              this.skip()
-            }
-
             await agent.load(['fastify', '@fastify/cookie', 'http'], { client: false })
             const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
             const fastifyCookie = require(`../../../../versions/@fastify/cookie@${cookieVersion}`).get()
@@ -469,16 +458,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
               reply.send('DONE')
             })
 
-            try {
-              await app.listen({ host: '127.0.0.1', port: 0 })
-            } catch (error) {
-              if (isFastifyPluginVersionMismatch(error)) {
-                // The installed plugin version is incompatible with this Fastify matrix entry.
-                this.skip()
-                return
-              }
-              throw error
-            }
+            await app.listen({ host: '127.0.0.1', port: 0 })
 
             server = app.server
             const { port } = /** @type {import('net').AddressInfo} */ (server.address())
@@ -536,30 +516,16 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
   describe('Suspicious request blocking - multipart', () => {
     withVersions('fastify', '@fastify/multipart', (multipartVersion, _, multipartLoadedVersion) => {
+      // Multipart 6 works with Fastify 3-4, 7-8 support Fastify 4, and 9+ supports Fastify 5.
+      const supported = semver.intersects(multipartLoadedVersion, '6') &&
+          semver.intersects(fastifyLoadedVersion, '>=3 <5') ||
+        semver.intersects(multipartLoadedVersion, '>=7 <9') && semver.intersects(fastifyLoadedVersion, '4') ||
+        semver.intersects(multipartLoadedVersion, '>=9') && semver.intersects(fastifyLoadedVersion, '5')
+      if (!supported) return
+
       let server, uploadSpy, axios
 
-      // The skips in this section are complex because of the incompatibilities between Fastify and @fastify/multipart
-      // We are not testing every major version of those libraries because of the complexity of the tests
       before(async function () {
-        // @fastify/multipart is not compatible with Fastify 2.x
-        if (semver.intersects(fastifyLoadedVersion, '2')) {
-          this.skip()
-        }
-
-        // This Fastify version is working only with @fastify/multipart 6
-        if (semver.intersects(fastifyLoadedVersion, '3.9.2') && semver.intersects(multipartLoadedVersion, '>=7')) {
-          this.skip()
-        }
-
-        // Fastify 5 drop le support pour multipart <7
-        if (semver.intersects(fastifyLoadedVersion, '>=5') && semver.intersects(multipartLoadedVersion, '<7.0.0')) {
-          this.skip()
-        }
-
-        if (semver.intersects(multipartLoadedVersion, '>=9.4.0') && semver.intersects(fastifyLoadedVersion, '<4')) {
-          this.skip()
-        }
-
         await agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
         const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
         const fastifyMultipart = require(`../../../../versions/@fastify/multipart@${multipartVersion}`).get()
@@ -573,14 +539,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           reply.send('DONE')
         })
 
-        try {
-          await app.listen({ host: '127.0.0.1', port: 0 })
-        } catch (error) {
-          if (isFastifyPluginVersionMismatch(error)) {
-            return this.skip()
-          }
-          throw error
-        }
+        await app.listen({ host: '127.0.0.1', port: 0 })
 
         server = app.server
         const { port } = /** @type {import('net').AddressInfo} */ (server.address())

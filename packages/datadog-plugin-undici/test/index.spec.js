@@ -795,44 +795,39 @@ describe('Plugin', () => {
           express = null
         })
 
-        it('should preserve custom dispatcher option and trace the request', async function () {
-          // Skip for versions that use fetch wrapping instead of native DC
-          // Those versions have the dispatcher issue described in #6439
-          if (!satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')) {
-            // These versions wrap fetch and cannot preserve a custom dispatcher.
-            this.skip()
-            return
-          }
+        // Earlier versions wrap fetch and cannot preserve a custom dispatcher.
+        if (satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')) {
+          it('should preserve custom dispatcher option and trace the request', async function () {
+            const app = express()
+            app.get('/user', (req, res) => {
+              res.status(200).send('OK')
+            })
 
-          const app = express()
-          app.get('/user', (req, res) => {
-            res.status(200).send('OK')
-          })
+            appListener = server(app)
+            await once(appListener, 'listening')
+            const port = (/** @type {import('net').AddressInfo} */ (appListener.address())).port
 
-          appListener = server(app)
-          await once(appListener, 'listening')
-          const port = (/** @type {import('net').AddressInfo} */ (appListener.address())).port
+            // Create a custom Agent with specific settings
+            // This is the use case from issue #6439
+            const customAgent = new fetch.Agent({
+              connect: { keepAlive: false },
+            })
+            const tracePromise = agent.assertFirstTraceSpan({
+              service: 'test',
+              type: 'http',
+              resource: 'GET',
+            })
 
-          // Create a custom Agent with specific settings
-          // This is the use case from issue #6439
-          const customAgent = new fetch.Agent({
-            connect: { keepAlive: false },
+            // Make request with custom dispatcher
+            // For native DC versions, dispatcher is preserved because we don't wrap fetch at all
+            const response = await fetch.fetch(`http://localhost:${port}/user`, {
+              dispatcher: customAgent,
+            })
+            assert.strictEqual(response.status, 200)
+            const [, body] = await Promise.all([tracePromise, response.text()])
+            assert.strictEqual(body, 'OK')
           })
-          const tracePromise = agent.assertFirstTraceSpan({
-            service: 'test',
-            type: 'http',
-            resource: 'GET',
-          })
-
-          // Make request with custom dispatcher
-          // For native DC versions, dispatcher is preserved because we don't wrap fetch at all
-          const response = await fetch.fetch(`http://localhost:${port}/user`, {
-            dispatcher: customAgent,
-          })
-          assert.strictEqual(response.status, 200)
-          const [, body] = await Promise.all([tracePromise, response.text()])
-          assert.strictEqual(body, 'OK')
-        })
+        }
       })
 
       describe('with ProxyAgent', () => {
@@ -860,67 +855,64 @@ describe('Plugin', () => {
         // the tunnel-setup request, but never :headers/:trailers/:error. Before the fix the
         // CONNECT span was started and never finished, which kept the parent trace pinned in
         // span_processor and prevented the surrounding express.request span from exporting.
-        it('finishes the CONNECT tunnel span established via ProxyAgent', async function () {
-          if (!satisfies(resolvedVersion, '>=5.1.0')) {
-            // ProxyAgent is only available from undici 5.1.0.
-            this.skip()
-            return
-          }
+        // ProxyAgent is available from undici 5.1.0.
+        if (satisfies(resolvedVersion, '>=5.1.0')) {
+          it('finishes the CONNECT tunnel span established via ProxyAgent', async function () {
+            const http = require('node:http')
+            const net = require('node:net')
 
-          const http = require('node:http')
-          const net = require('node:net')
+            const app = express()
+            app.get('/data', (req, res) => res.status(200).send('OK'))
 
-          const app = express()
-          app.get('/data', (req, res) => res.status(200).send('OK'))
+            appListener = server(app)
+            await once(appListener, 'listening')
+            const downstreamPort = (/** @type {import('net').AddressInfo} */ (appListener.address())).port
 
-          appListener = server(app)
-          await once(appListener, 'listening')
-          const downstreamPort = (/** @type {import('net').AddressInfo} */ (appListener.address())).port
-
-          const proxy = http.createServer((_req, res) => {
-            res.writeHead(405)
-            res.end()
-          })
-          proxy.on('connect', (req, clientSocket, head) => {
-            const [hostname, portStr] = req.url.split(':')
-            const upstream = net.connect(Number.parseInt(portStr, 10) || 80, hostname, () => {
-              clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
-              upstream.write(head)
-              upstream.pipe(clientSocket)
-              clientSocket.pipe(upstream)
+            const proxy = http.createServer((_req, res) => {
+              res.writeHead(405)
+              res.end()
             })
-            upstream.on('error', () => clientSocket.end())
-            clientSocket.on('error', () => upstream.end())
-          })
-          proxy.listen(0, 'localhost')
-          await once(proxy, 'listening')
-
-          proxyListener = proxy
-          const proxyPort = (/** @type {import('net').AddressInfo} */ (proxy.address())).port
-          const tracePromise = agent.assertSomeTraces(traces => {
-            const connectSpan = traces.flat().find(s => s.resource === 'CONNECT')
-            assert.ok(connectSpan, 'expected a finished CONNECT span to be exported')
-            assertObjectContains(connectSpan, {
-              name: 'undici.request',
-              service: 'test',
-              type: 'http',
-              resource: 'CONNECT',
-              meta: { 'http.method': 'CONNECT' },
+            proxy.on('connect', (req, clientSocket, head) => {
+              const [hostname, portStr] = req.url.split(':')
+              const upstream = net.connect(Number.parseInt(portStr, 10) || 80, hostname, () => {
+                clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+                upstream.write(head)
+                upstream.pipe(clientSocket)
+                clientSocket.pipe(upstream)
+              })
+              upstream.on('error', () => clientSocket.end())
+              clientSocket.on('error', () => upstream.end())
             })
-          }, { timeoutMs: 3000 })
+            proxy.listen(0, 'localhost')
+            await once(proxy, 'listening')
 
-          // proxyTunnel forces a CONNECT tunnel for the plain-HTTP-over-HTTP-proxy case.
-          // undici 8.7.0 (nodejs/undici#5116) made that case forward an absolute-form
-          // request instead of tunneling by default, so without this the proxy never sees
-          // a CONNECT and there is no CONNECT span to assert on. The option is a no-op on
-          // undici < 6.22.0, where CONNECT was always used.
-          const dispatcher = new fetch.ProxyAgent({
-            uri: `http://localhost:${proxyPort}`,
-            proxyTunnel: true,
+            proxyListener = proxy
+            const proxyPort = (/** @type {import('net').AddressInfo} */ (proxy.address())).port
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const connectSpan = traces.flat().find(s => s.resource === 'CONNECT')
+              assert.ok(connectSpan, 'expected a finished CONNECT span to be exported')
+              assertObjectContains(connectSpan, {
+                name: 'undici.request',
+                service: 'test',
+                type: 'http',
+                resource: 'CONNECT',
+                meta: { 'http.method': 'CONNECT' },
+              })
+            }, { timeoutMs: 3000 })
+
+            // proxyTunnel forces a CONNECT tunnel for the plain-HTTP-over-HTTP-proxy case.
+            // undici 8.7.0 (nodejs/undici#5116) made that case forward an absolute-form
+            // request instead of tunneling by default, so without this the proxy never sees
+            // a CONNECT and there is no CONNECT span to assert on. The option is a no-op on
+            // undici < 6.22.0, where CONNECT was always used.
+            const dispatcher = new fetch.ProxyAgent({
+              uri: `http://localhost:${proxyPort}`,
+              proxyTunnel: true,
+            })
+            const { body } = await fetch.request(`http://localhost:${downstreamPort}/data`, { dispatcher })
+            await Promise.all([body.text(), tracePromise])
           })
-          const { body } = await fetch.request(`http://localhost:${downstreamPort}/data`, { dispatcher })
-          await Promise.all([body.text(), tracePromise])
-        })
+        }
       })
     })
   })

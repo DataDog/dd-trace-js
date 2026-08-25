@@ -28,7 +28,6 @@ describe('Path traversal analyzer', () => {
   withVersions('express', 'express', version => {
     if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
       // Express 4.10.5 and older cannot start on Node.js 24.
-      describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
       return
     }
     withVersions('express', 'ejs', _ => {
