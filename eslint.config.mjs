@@ -994,7 +994,6 @@ export default [
       'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/consistent-structure': 'off',
-      'mocha/handle-done-callback': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-async-in-sync-tests': 'off',
       'mocha/no-conditional-tests': 'off',

@@ -123,30 +123,36 @@ describe('Dynamic Instrumentation', function () {
         )
       })
 
-      it('should report error when capture expression cannot be compiled', function (done) {
-        const rcConfig = t.generateRemoteConfig({
-          captureExpressions: [
-            { name: 'invalid expr', expr: { dsl: 'this is not valid', json: { ref: 'this is not valid' } } },
-          ],
+      it('should report error when capture expression cannot be compiled', async function () {
+        await new Promise((resolve, reject) => {
+          const rcConfig = t.generateRemoteConfig({
+            captureExpressions: [
+              { name: 'invalid expr', expr: { dsl: 'this is not valid', json: { ref: 'this is not valid' } } },
+            ],
+          })
+
+          t.agent.on('debugger-diagnostics', ({ payload }) => {
+            const errorDiagnostic = payload.find(({ debugger: { diagnostics } }) => diagnostics.status === 'ERROR')
+            if (!errorDiagnostic) return
+
+            try {
+              assert.ok(
+                errorDiagnostic.debugger.diagnostics.exception.message.includes('Cannot compile capture expression'),
+                `Expected compile error, got: ${errorDiagnostic.debugger.diagnostics.exception.message}`
+              )
+
+              const installedDiagnostic = payload.find(({ debugger: { diagnostics } }) => {
+                return diagnostics.status === 'INSTALLED'
+              })
+              assert.ok(!installedDiagnostic, 'Probe should not be installed when expression cannot be compiled')
+              resolve()
+            } catch (error) {
+              reject(error)
+            }
+          })
+
+          t.agent.addRemoteConfig(rcConfig)
         })
-
-        t.agent.on('debugger-diagnostics', ({ payload }) => {
-          const errorDiagnostic = payload.find(({ debugger: { diagnostics } }) => diagnostics.status === 'ERROR')
-          if (errorDiagnostic) {
-            assert.ok(
-              errorDiagnostic.debugger.diagnostics.exception.message.includes('Cannot compile capture expression'),
-              `Expected compile error, got: ${errorDiagnostic.debugger.diagnostics.exception.message}`
-            )
-
-            const installedDiagnostic = payload.find(({ debugger: { diagnostics } }) => {
-              return diagnostics.status === 'INSTALLED'
-            })
-            assert.ok(!installedDiagnostic, 'Probe should not be installed when expression cannot be compiled')
-            done()
-          }
-        })
-
-        t.agent.addRemoteConfig(rcConfig)
       })
     })
 

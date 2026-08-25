@@ -137,29 +137,30 @@ describe('pg instrumentation', () => {
               })
 
               describe('with callback in query object', () => {
-                it('Should not fail if it is not aborted', (done) => {
-                  const query = new Query('SELECT 1')
-                  query.callback = (error) => {
-                    done(error)
-                  }
+                it('Should not fail if it is not aborted', async () => {
+                  await new Promise((resolve, reject) => {
+                    const query = new Query('SELECT 1')
+                    query.callback = (error) => {
+                      if (error) reject(error)
+                      else resolve()
+                    }
 
-                  client.query(query)
+                    client.query(query)
+                  })
                 })
 
-                it('Should abort query', (done) => {
+                it('Should abort query', async () => {
                   queryClientStartChannel.subscribe(abortQuery)
 
-                  const query = new Query('SELECT 1')
-                  query.callback = error => {
-                    try {
-                      assert.strictEqual(error.message, 'Test')
-                      done()
-                    } catch (error) {
-                      done(error)
+                  await assert.rejects(new Promise((resolve, reject) => {
+                    const query = new Query('SELECT 1')
+                    query.callback = error => {
+                      if (error) reject(error)
+                      else resolve()
                     }
-                  }
 
-                  client.query(query)
+                    client.query(query)
+                  }), { message: 'Test' })
                 })
               })
 
