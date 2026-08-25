@@ -6,8 +6,8 @@ const log = require('./log')
 
 const configUpdateChannel = dc.channel('datadog:config:update')
 
-/** @type {boolean | undefined} */
-module.started = undefined
+/** @type {boolean} */
+module.started = false
 
 /** @type {import('./profiling/ssi-heuristics').SSIHeuristics | undefined} */
 let armedSSIHeuristics
