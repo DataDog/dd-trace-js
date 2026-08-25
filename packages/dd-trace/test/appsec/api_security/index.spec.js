@@ -54,6 +54,12 @@ describe('API Security domain', () => {
       sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
     })
 
+    it('does not resolve the root span on SKIP decision', () => {
+      apiSecurity.reportRequest(req, SamplingDecision.SKIP, undefined)
+
+      sinon.assert.notCalled(web.root)
+    })
+
     it('emits missing_route with framework tag on MISSING_ROUTE decision', () => {
       apiSecurity.reportRequest(req, SamplingDecision.MISSING_ROUTE, undefined)
 

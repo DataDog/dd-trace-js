@@ -373,6 +373,46 @@ describe('API Security Sampler', () => {
     })
   })
 
+  describe('sampleRequest fast paths', () => {
+    beforeEach(() => {
+      apiSecuritySampler.configure({ appsec: { DD_API_SECURITY_ENABLED: true, DD_API_SECURITY_SAMPLE_DELAY: 30 } })
+    })
+
+    it('does not resolve the route nor the blocked flag on a rejected trace', () => {
+      span.context.returns({ _sampling: { priority: USER_REJECT } })
+
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
+
+      sinon.assert.notCalled(webStub.getContext)
+      sinon.assert.notCalled(blockingStub.isBlocked)
+    })
+
+    it('does not resolve the blocked flag when the request has a route', () => {
+      webStub.getContext.returns({ paths: ['/users/:id'] })
+
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SAMPLE)
+
+      sinon.assert.notCalled(blockingStub.isBlocked)
+    })
+
+    it('does not resolve the blocked flag when not recording', () => {
+      webStub.getContext.returns({ paths: [], span: { context: () => ({ _tags: {} }) } })
+
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, false), SamplingDecision.SAMPLE)
+
+      sinon.assert.notCalled(blockingStub.isBlocked)
+    })
+
+    it('still resolves the blocked flag when recording a request without a route', () => {
+      webStub.getContext.returns({ paths: [], span: { context: () => ({ _tags: {} }) } })
+      blockingStub.isBlocked.returns(true)
+
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
+
+      sinon.assert.calledOnceWithExactly(blockingStub.isBlocked, res)
+    })
+  })
+
   describe('sampleRootSpanRequest', () => {
     const request = { method: 'GET', statusCode: 200, route: '/users/:id' }
 

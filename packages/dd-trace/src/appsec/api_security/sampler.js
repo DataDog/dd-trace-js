@@ -60,17 +60,7 @@ function sampleRootSpanRequest (rootSpan, { method, statusCode, route, blocked =
 
   if (!rootSpan) return SamplingDecision.SKIP
 
-  if (!asmStandaloneEnabled) {
-    let priority = getSpanPriority(rootSpan)
-    if (!priority) {
-      rootSpan._prioritySampler?.sample(rootSpan)
-      priority = getSpanPriority(rootSpan)
-    }
-
-    if (priority === AUTO_REJECT || priority === USER_REJECT) {
-      return SamplingDecision.SKIP
-    }
-  }
+  if (isRejected(rootSpan)) return SamplingDecision.SKIP
 
   if (!method || !statusCode) {
     log.warn('[ASM] Unsupported groupkey for API security')
@@ -110,13 +100,16 @@ function sampleRequest (req, res, record = false) {
   const rootSpan = web.root(req)
   if (!rootSpan) return SamplingDecision.SKIP
 
+  if (isRejected(rootSpan)) return SamplingDecision.SKIP
+
   const statusCode = res.statusCode
+  const route = getRouteOrEndpoint(web.getContext(req), statusCode)
 
   return sampleRootSpanRequest(rootSpan, {
     method: req.method,
     statusCode,
-    route: getRouteOrEndpoint(web.getContext(req), statusCode),
-    blocked: isBlocked(res),
+    route,
+    blocked: record && route === null ? isBlocked(res) : false,
   }, record)
 }
 
@@ -167,6 +160,27 @@ function getRouteOrEndpoint (context, statusCode) {
   if (endpoint) return endpoint
 
   return null
+}
+
+/**
+ * Whether the span's trace is dropped, forcing the sampling decision if none was made yet.
+ *
+ * Always false under ASM standalone: there the trace is kept via `keepTrace(rootSpan, ASM)`
+ * regardless of the APM sampling decision.
+ *
+ * @param {object} rootSpan
+ * @returns {boolean}
+ */
+function isRejected (rootSpan) {
+  if (asmStandaloneEnabled) return false
+
+  let priority = getSpanPriority(rootSpan)
+  if (!priority) {
+    rootSpan._prioritySampler?.sample(rootSpan)
+    priority = getSpanPriority(rootSpan)
+  }
+
+  return priority === AUTO_REJECT || priority === USER_REJECT
 }
 
 function getSpanPriority (span) {

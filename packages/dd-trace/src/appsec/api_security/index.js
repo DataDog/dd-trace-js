@@ -42,6 +42,8 @@ function reportRootSpanRequest (rootSpan, samplingDecision, wafResult) {
  * @param {{ attributes?: Record<string, unknown> } | undefined} wafResult WAF run result
  */
 function reportRequest (req, samplingDecision, wafResult) {
+  if (samplingDecision === sampler.SamplingDecision.SKIP) return
+
   reportRootSpanRequest(web.root(req), samplingDecision, wafResult)
 }
 
