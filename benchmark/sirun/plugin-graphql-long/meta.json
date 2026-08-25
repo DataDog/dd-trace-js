@@ -3,51 +3,52 @@
   "run": "node --require ../noop-request.js index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../noop-request.js index.js\"",
   "cachegrind": false,
-  "iterations": 7,
+  "iterations": 10,
   "instructions": true,
   "variants": {
     "with-depth-off": {
-      "iterations": 14,
       "operations_by_node": {
-        "20": "1825",
-        "24": "3650"
+        "20": "1280",
+        "24": "2550"
       },
       "env": {
         "DEPTH": "0",
         "DD_INJECT_FORCE": "true",
         "DD_REMOTE_CONFIGURATION_ENABLED": "false",
         "DD_TRACE_ENABLED": "true",
-        "OPERATIONS": "3650",
+        "OPERATIONS": "2550",
+        "OTEL_TRACES_EXPORTER": "none",
         "WITH_TRACER": "1"
       }
     },
     "with-depth-on-max": {
       "operations_by_node": {
-        "20": "1200",
-        "24": "2400"
+        "20": "840",
+        "24": "1680"
       },
       "env": {
         "COLLAPSE": "1",
         "DD_INJECT_FORCE": "true",
         "DD_REMOTE_CONFIGURATION_ENABLED": "false",
         "DD_TRACE_ENABLED": "true",
-        "OPERATIONS": "2600",
+        "OPERATIONS": "1820",
+        "OTEL_TRACES_EXPORTER": "none",
         "DEPTH": "6",
         "WITH_TRACER": "1"
       }
     },
     "with-depth-and-collapse-off": {
-      "iterations": 26,
       "operations_by_node": {
-        "20": "360",
-        "24": "520"
+        "20": "310",
+        "24": "450"
       },
       "env": {
         "COLLAPSE": "0",
         "DD_INJECT_FORCE": "true",
         "DD_REMOTE_CONFIGURATION_ENABLED": "false",
         "DD_TRACE_ENABLED": "true",
-        "OPERATIONS": "400",
+        "OPERATIONS": "350",
+        "OTEL_TRACES_EXPORTER": "none",
         "DEPTH": "4",
         "WITH_TRACER": "1"
       }

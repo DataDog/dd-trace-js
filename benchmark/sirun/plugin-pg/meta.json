@@ -11,8 +11,7 @@
       "env": { "VARIANT": "service", "OPERATIONS": "11000000" }
     },
     "full": {
-      "iterations": 9,
-      "env": { "VARIANT": "full", "OPERATIONS": "5500000" }
+      "env": { "VARIANT": "full", "OPERATIONS": "4950000" }
     }
   }
 }

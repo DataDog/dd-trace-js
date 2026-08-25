@@ -16,8 +16,10 @@
       "env": { "VARIANT": "rule-miss", "OPERATIONS": "3000000" }
     },
     "rate-limited": {
+      "run": "node --predictable-gc-schedule index.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule index.js\"",
       "iterations": 24,
-      "env": { "VARIANT": "rate-limited", "OPERATIONS": "18000000" }
+      "env": { "VARIANT": "rate-limited", "OPERATIONS": "9000000" }
     }
   }
 }

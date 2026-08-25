@@ -21,10 +21,11 @@
       }
     },
     "delayed-noisy-stream-scan": {
+      "iterations": 10,
       "env": {
         "SCENARIO": "delayed-noisy",
         "VARIANT": "stream-scan",
-        "OPERATIONS": "250000"
+        "OPERATIONS": "125000"
       }
     },
     "delayed-noisy-hook-indexed": {

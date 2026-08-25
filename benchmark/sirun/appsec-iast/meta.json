@@ -15,7 +15,7 @@
         "DD_INJECT_FORCE": "true",
         "DD_IAST_ENABLED": "1",
         "DD_REMOTE_CONFIGURATION_ENABLED": "false",
-        "OPERATIONS": "30000"
+        "OPERATIONS": "20000"
       }
     },
     "with-vulnerability-iast-enabled-default-config": {
@@ -29,7 +29,7 @@
         "DD_INJECT_FORCE": "true",
         "DD_IAST_ENABLED": "1",
         "DD_REMOTE_CONFIGURATION_ENABLED": "false",
-        "OPERATIONS": "11500"
+        "OPERATIONS": "7700"
       }
     },
     "startup-time-iast-enabled": {

@@ -9,10 +9,9 @@
     "extract-response-body": {
       "run": "node --predictable-gc-schedule index.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule index.js\"",
-      "iterations": 5,
       "env": {
         "VARIANT": "extract-response-body",
-        "OPERATIONS": "110000000"
+        "OPERATIONS": "27500000"
       }
     },
     "eventbridge-inject-detail": {
@@ -32,7 +31,7 @@
       "iterations": 16,
       "env": {
         "VARIANT": "lambda-inject-with-context",
-        "OPERATIONS": "2000000"
+        "OPERATIONS": "1330000"
       }
     }
   }
