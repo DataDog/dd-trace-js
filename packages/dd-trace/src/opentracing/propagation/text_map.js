@@ -647,6 +647,9 @@ class TextMapPropagator {
    * @returns {DatadogSpanContext | undefined}
    */
   #extractSpanContext (carrier) {
+    // No carrier means nothing to extract; some extractors below don't guard against this.
+    if (carrier == null) return
+
     let context
     let datadogContext
     let style = ''

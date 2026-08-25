@@ -716,6 +716,14 @@ describe('TextMapPropagator', () => {
   })
 
   describe('extract', () => {
+    it('should return null instead of throwing when the carrier is undefined', () => {
+      assert.strictEqual(propagator.extract(undefined), null)
+    })
+
+    it('should return null instead of throwing when the carrier is null', () => {
+      assert.strictEqual(propagator.extract(null), null)
+    })
+
     it('should extract a span context from the carrier', () => {
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
