@@ -1,22 +1,21 @@
 'use strict'
 
 const BaseWriter = require('../../../exporters/common/writer')
+const { createFinalFlushTimeoutError } = require('../../final-flush')
 
-const FINAL_FLUSH_TIMEOUT_CODE = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
-
-class TestOptimizationRequestTracker {
-  #writer
+class FinalFlushRequestTracker {
+  #flush
   #pendingRequests = new Set()
   #finalFlushes = new Set()
   #activeFinalFlush
 
   /**
-   * Creates request tracking for a Test Optimization writer.
+   * Creates request tracking for a Test Optimization exporter.
    *
-   * @param {BaseWriter} writer
+   * @param {(done?: (error?: Error) => void, options?: { deadline?: number }) => void} flush
    */
-  constructor (writer) {
-    this.#writer = writer
+  constructor (flush) {
+    this.#flush = flush
   }
 
   /**
@@ -30,7 +29,7 @@ class TestOptimizationRequestTracker {
    */
   flush (done, options) {
     if (options?.deadline === undefined) {
-      BaseWriter.prototype.flushDirect.call(this.#writer, done, options)
+      this.#flush(done, options)
       return
     }
 
@@ -50,8 +49,7 @@ class TestOptimizationRequestTracker {
 
     const remaining = Math.max(0, options.deadline - Date.now())
     finalFlush.timeoutId = setTimeout(() => {
-      const error = new Error('Timed out flushing Test Optimization data')
-      error.code = FINAL_FLUSH_TIMEOUT_CODE
+      const error = createFinalFlushTimeoutError()
 
       finalFlush.error ||= error
       finalFlush.writerDone = true
@@ -72,7 +70,7 @@ class TestOptimizationRequestTracker {
     const previousFinalFlush = this.#activeFinalFlush
     this.#activeFinalFlush = finalFlush
     try {
-      BaseWriter.prototype.flushDirect.call(this.#writer, (error) => {
+      this.#flush((error) => {
         finalFlush.error ||= error
         finalFlush.writerDone = true
         this.#finishFinalFlush(finalFlush)
@@ -100,22 +98,37 @@ class TestOptimizationRequestTracker {
     this.#pendingRequests.add(pendingRequest)
     if (this.#activeFinalFlush) this.#attachRequest(this.#activeFinalFlush, pendingRequest)
 
-    request(data, requestOptions, (error, result, statusCode, headers) => {
-      if (error) {
-        for (const finalFlush of pendingRequest.finalFlushes) finalFlush.error ||= error
-      }
-
-      try {
-        callback(error, result, statusCode, headers)
-      } finally {
-        this.#pendingRequests.delete(pendingRequest)
-        for (const finalFlush of pendingRequest.finalFlushes) {
-          finalFlush.requests.delete(pendingRequest)
-          this.#finishFinalFlush(finalFlush)
+    try {
+      request(data, requestOptions, (error, result, statusCode, headers) => {
+        if (error) {
+          for (const finalFlush of pendingRequest.finalFlushes) finalFlush.error ||= error
         }
-        pendingRequest.finalFlushes.clear()
-      }
-    })
+
+        try {
+          callback(error, result, statusCode, headers)
+        } finally {
+          this.#dropRequest(pendingRequest)
+        }
+      })
+    } catch (error) {
+      this.#dropRequest(pendingRequest)
+      throw error
+    }
+  }
+
+  /**
+   * Stops tracking a settled request and releases final flushes waiting for it.
+   *
+   * @param {object} pendingRequest
+   * @returns {void}
+   */
+  #dropRequest (pendingRequest) {
+    this.#pendingRequests.delete(pendingRequest)
+    for (const finalFlush of pendingRequest.finalFlushes) {
+      finalFlush.requests.delete(pendingRequest)
+      this.#finishFinalFlush(finalFlush)
+    }
+    pendingRequest.finalFlushes.clear()
   }
 
   /**
@@ -161,4 +174,16 @@ class TestOptimizationRequestTracker {
   }
 }
 
+class TestOptimizationRequestTracker extends FinalFlushRequestTracker {
+  /**
+   * Creates request tracking for a Test Optimization writer.
+   *
+   * @param {BaseWriter} writer
+   */
+  constructor (writer) {
+    super((done, options) => BaseWriter.prototype.flushDirect.call(writer, done, options))
+  }
+}
+
 module.exports = TestOptimizationRequestTracker
+module.exports.FinalFlushRequestTracker = FinalFlushRequestTracker
