@@ -35,7 +35,7 @@ const {
   RUM_TEST_EXECUTION_ID_COOKIE_NAME: RUM_COOKIE_NAME,
 } = require('../../dd-trace/src/ci-visibility/rum')
 const { DD_MAJOR } = require('../../../version')
-const { getChannelPromise } = require('./helpers/channel')
+const { getChannelPromise, publishWithCompletion } = require('./helpers/channel')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -59,6 +59,7 @@ const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const workerReportTelemetryCh = channel('ci:playwright:worker-report:telemetry')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
@@ -2396,7 +2397,11 @@ function instrumentWorkerMainMethods (workerMain) {
   // We reproduce what happens in `Dispatcher#_onStepBegin` and `Dispatcher#_onStepEnd`,
   // since `startTime` and `duration` are not available directly in the worker process
   shimmer.wrap(workerMain, 'dispatchEvent', dispatchEvent => function (event, payload) {
-    if (event === 'testBegin') {
+    if (event === 'done') {
+      // Playwright exits the worker after this event, so wait for pending log submission first.
+      publishWithCompletion(logSubmissionFlushCh, {}, () => dispatchEvent.apply(this, arguments))
+      return
+    } else if (event === 'testBegin') {
       automaticFailureScreenshotPaths.clear()
     } else if (event === 'stepBegin') {
       stepInfoByStepId[payload.stepId] = {
