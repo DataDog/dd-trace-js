@@ -38,6 +38,8 @@
       }
     },
     "with-depth-and-collapse-off": {
+      "run": "node --predictable-gc-schedule --require ../noop-request.js index.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule --require ../noop-request.js index.js\"",
       "operations_by_node": {
         "20": "310",
         "24": "450"
