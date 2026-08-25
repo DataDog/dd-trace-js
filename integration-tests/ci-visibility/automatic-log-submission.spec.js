@@ -81,7 +81,7 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'playwright',
       command: './node_modules/.bin/playwright test -c playwright.config.js',
-      loggerNames: ['winston', 'bunyan'],
+      loggerNames: ['bunyan'],
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
         TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
@@ -264,6 +264,51 @@ describe('test optimization automatic log submission', () => {
         assert.match(testOutput, /Hello simple log!/)
         assert.match(testOutput, /no automatic log submission will be performed/)
       })
+    })
+  })
+
+  context('with bunyan and multiple playwright test groups', () => {
+    it('flushes one complete batch when the worker exits', async () => {
+      childProcess = exec('./node_modules/.bin/playwright test -c playwright.config.js', {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+          DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+          DD_API_KEY: '1',
+          DD_SERVICE: 'my-service',
+          PLAYWRIGHT_WORKERS: '1',
+          TEST_DIR: 'ci-visibility/automatic-log-submission-playwright-multiple-groups',
+          TEST_LOGGER: 'bunyan',
+        },
+      })
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      const logsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.includes('/api/v2/logs'),
+        payloads => {
+          assert.equal(payloads.length, 1)
+          const logMessages = payloads.flatMap(({ logMessage }) => logMessage)
+          assert.deepStrictEqual(logMessages.map(({ msg }) => msg).sort(), [
+            'first group log',
+            'second group log',
+          ])
+        }
+      )
+
+      await Promise.all([
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        logsPromise,
+      ])
+
+      assert.equal(childProcess.exitCode, 0, testOutput)
     })
   })
 })

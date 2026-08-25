@@ -35,7 +35,7 @@ const {
   RUM_TEST_EXECUTION_ID_COOKIE_NAME: RUM_COOKIE_NAME,
 } = require('../../dd-trace/src/ci-visibility/rum')
 const { DD_MAJOR } = require('../../../version')
-const { getChannelPromise, publishWithCompletion } = require('./helpers/channel')
+const { getChannelPromise } = require('./helpers/channel')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -2216,7 +2216,8 @@ addHook({
 
 function instrumentWorkerMainMethods (workerMain) {
   if (!workerMain || workerMain[kDdPlaywrightWorkerInstrumented] ||
-      typeof workerMain._runTest !== 'function' || typeof workerMain.dispatchEvent !== 'function') {
+      typeof workerMain._runTest !== 'function' || typeof workerMain.dispatchEvent !== 'function' ||
+      typeof workerMain.gracefullyClose !== 'function') {
     return workerMain
   }
 
@@ -2230,6 +2231,15 @@ function instrumentWorkerMainMethods (workerMain) {
     const disabledIds = runPayload._ddDisabledTestIds
     this[kDdPlaywrightDisabledTestIds] = disabledIds ? new Set(disabledIds) : undefined
     return runTestGroup.apply(this, arguments)
+  })
+
+  // Playwright >=1.60 creates WorkerMain through a runtime factory, which Orchestrion cannot wrap statically.
+  shimmer.wrap(workerMain, 'gracefullyClose', gracefullyClose => async function () {
+    try {
+      return await gracefullyClose.apply(this, arguments)
+    } finally {
+      await getChannelPromise(logSubmissionFlushCh)
+    }
   })
 
   shimmer.wrap(workerMain, '_runTest', _runTest => async function (test) {
@@ -2397,11 +2407,7 @@ function instrumentWorkerMainMethods (workerMain) {
   // We reproduce what happens in `Dispatcher#_onStepBegin` and `Dispatcher#_onStepEnd`,
   // since `startTime` and `duration` are not available directly in the worker process
   shimmer.wrap(workerMain, 'dispatchEvent', dispatchEvent => function (event, payload) {
-    if (event === 'done') {
-      // Playwright exits the worker after this event, so wait for pending log submission first.
-      publishWithCompletion(logSubmissionFlushCh, {}, () => dispatchEvent.apply(this, arguments))
-      return
-    } else if (event === 'testBegin') {
+    if (event === 'testBegin') {
       automaticFailureScreenshotPaths.clear()
     } else if (event === 'stepBegin') {
       stepInfoByStepId[payload.stepId] = {
