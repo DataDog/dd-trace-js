@@ -232,7 +232,16 @@ function applyHttpOtelSemantics (formattedSpan) {
     // Not a span this layer touched. A hook that strips the method and URL from one it did touch
     // leaves the marker behind, and the status and user agent it captured at finish still have to
     // be renamed, so that case falls through instead.
-    delete meta[HTTP_STATUS_ERROR]
+    //
+    // The marker is set mid-request, so deleting it would demote the span to V8 dictionary mode
+    // the same way the rename below would. Rebuild instead, and only when it is actually there.
+    if (Object.hasOwn(meta, HTTP_STATUS_ERROR)) {
+      const cleanMeta = {}
+      for (const key of Object.keys(meta)) {
+        if (key !== HTTP_STATUS_ERROR) cleanMeta[key] = meta[key]
+      }
+      formattedSpan.meta = cleanMeta
+    }
     return
   }
 
