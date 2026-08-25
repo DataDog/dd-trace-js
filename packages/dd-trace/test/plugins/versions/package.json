@@ -133,7 +133,7 @@
     "express-mongo-sanitize": "2.2.0",
     "express-session": "1.19.0",
     "fastify": "5.12.1",
-    "find-my-way": "9.8.0",
+    "find-my-way": "9.9.0",
     "fs": "0.0.1-security",
     "generic-pool": "3.9.0",
     "google-gax": "6.0.2",
