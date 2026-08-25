@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
-const { inspect } = require('node:util')
+const { inspect, promisify } = require('node:util')
 const { assertObjectContains, sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const ufcPayloads = require('./fixtures/ufc-payloads')
@@ -72,7 +72,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         await agent.stop()
       })
 
-      it('should generate exposure events with manual flush', (done) => {
+      it('should generate exposure events with manual flush', () => promisify((done) => {
         const configId = 'org-42-env-test'
         const exposureEvents = []
         let receivedAckUpdate = false
@@ -149,7 +149,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         function endIfDone () {
           if (receivedAckUpdate && exposureEvents.length === 2) done()
         }
-      })
+      })())
     })
 
     describe('with automatic flush', () => {
@@ -173,7 +173,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         await agent.stop()
       })
 
-      it('should handle multiple flag evaluations with automatic flush', (done) => {
+      it('should handle multiple flag evaluations with automatic flush', () => promisify((done) => {
         const configId = 'org-42-env-test'
         const exposureEvents = []
 
@@ -232,7 +232,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           id: configId,
           config: ufcPayloads.testBooleanAndStringFlags,
         })
-      })
+      })())
     })
   })
 
