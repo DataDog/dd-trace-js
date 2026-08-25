@@ -60,6 +60,7 @@ class Profiler extends EventEmitter {
   #exporters
   #flushInterval
   #lastStart
+  #pendingStart
   #profileSeq = 0
   #profilers
   #spanFinishListener
@@ -178,9 +179,10 @@ class Profiler extends EventEmitter {
 
     // A prior stop()'s shutdown collection may still be encoding/exporting via #tags,
     // #exporters and #endpointCounts. Wait for it to finish before this start() overwrites
-    // that shared state out from under it.
+    // that shared state out from under it. Record the desired config rather than chaining
+    // straight onto #stopping, so a stop() arriving before it settles can cancel this restart.
     if (this.#stopping) {
-      this.#stopping.then(() => this.start(config))
+      this.#pendingStart = config
       return true
     }
 
@@ -266,12 +268,23 @@ class Profiler extends EventEmitter {
   }
 
   stop () {
+    // A stop() always reflects the latest desired state, so it cancels any restart queued by a
+    // start() that arrived while a prior shutdown collection was still in flight.
+    this.#pendingStart = undefined
+
     if (!this.enabled) return
 
     // collect and export current profiles
     // once collect returns, profilers can be safely stopped
     this.#stopping = this._collect(snapshotKinds.ON_SHUTDOWN, false)
-      .finally(() => { this.#stopping = undefined })
+      .finally(() => {
+        this.#stopping = undefined
+        if (this.#pendingStart) {
+          const config = this.#pendingStart
+          this.#pendingStart = undefined
+          this.start(config)
+        }
+      })
     this.#stop()
   }
 
