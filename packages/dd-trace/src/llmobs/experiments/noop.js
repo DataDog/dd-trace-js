@@ -114,6 +114,10 @@ class NoopDataset {
     return null
   }
 
+  projectName () {
+    return null
+  }
+
   version () {
     return null
   }
@@ -200,11 +204,9 @@ class NoopExperiment {
 // throwing, so intentionally disabled experiments remain graceful.
 class NoopExperiments {
   #reason
-  #startExperiment
 
-  constructor (reason, options = {}) {
+  constructor (reason) {
     this.#reason = reason || 'LLMObs experiments are not available'
-    this.#startExperiment = options.startExperiment
   }
 
   #warn () {
@@ -231,10 +233,6 @@ class NoopExperiments {
    * @returns {Promise<ExternalExperiment>}
    */
   startExperiment (options = {}) {
-    if (this.#startExperiment !== undefined && options.projectName) {
-      return this.#startExperiment(options)
-    }
-
     this.#warn()
     return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name, true)))
   }

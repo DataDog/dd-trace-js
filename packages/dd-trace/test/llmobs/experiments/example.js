@@ -15,6 +15,7 @@
 //     node packages/dd-trace/test/llmobs/experiments/example.js
 
 const tracer = require('../../../../..')
+const experimentsProjectName = 'node-tracer-experiments-demo'
 
 function requireEnv (name) {
   const value = process.env[name]
@@ -38,7 +39,10 @@ function keywordOverlap (prompt, topics) {
 
 async function runExperiment (experiments) {
   console.log('\n=== Experiment: topic relevance ===')
-  const dataset = experiments.createDataset('node-tracer-topic-relevance', 'demo dataset')
+  const dataset = experiments.createDataset('node-tracer-topic-relevance', {
+    description: 'demo dataset',
+    projectName: experimentsProjectName,
+  })
     .addRecord({ prompt: 'I love hiking in the mountains on weekends.', topics: 'outdoor, travel' }, 'true',
       { source: 'synthetic', difficulty: 'easy' }, ['split:train'])
     .addRecord({ prompt: 'Explain quantum entanglement in two sentences.', topics: 'outdoor, travel' }, 'false',
@@ -48,6 +52,7 @@ async function runExperiment (experiments) {
 
   const result = await experiments.experiment({
     name: 'topic-relevance-demo',
+    projectName: experimentsProjectName,
     dataset,
     task: (input) => {
       const overlap = keywordOverlap(input.prompt, input.topics)
@@ -74,7 +79,10 @@ async function runExperiment (experiments) {
 async function runDatasetOps (experiments) {
   console.log('\n=== Dataset operations: create / push / pull ===')
   const name = `node-tracer-capitals-${Date.now()}`
-  const dataset = experiments.createDataset(name, 'country -> capital')
+  const dataset = experiments.createDataset(name, {
+    description: 'country -> capital',
+    projectName: experimentsProjectName,
+  })
     .addRecord({ country: 'France' }, 'Paris', { continent: 'Europe' }, ['continent:europe'])
     .addRecord({ country: 'Japan' }, 'Tokyo', { continent: 'Asia' }, ['continent:asia'])
   await dataset.push()
@@ -86,7 +94,11 @@ async function runDatasetOps (experiments) {
   dataset.replaceTags(1, ['continent:asia', 'split:train'])
   await dataset.push()
 
-  const pulled = await experiments.pullDataset(name, { expectedRecordCount: 1, tags: ['split:eval'] })
+  const pulled = await experiments.pullDataset(name, {
+    projectName: experimentsProjectName,
+    expectedRecordCount: 1,
+    tags: ['split:eval'],
+  })
   console.log(`Pulled dataset id  : ${pulled.id()}`)
   console.log(`Pulled records     : ${pulled.records().length}`)
   for (const [i, record] of pulled.records().entries()) {
@@ -100,7 +112,10 @@ async function main () {
   requireEnv('DD_APP_KEY')
 
   tracer.init({
-    llmobs: { mlApp: 'node-tracer-experiments-demo' },
+    llmobs: {
+      mlApp: 'node-tracer-experiments-demo',
+      projectName: experimentsProjectName,
+    },
   })
 
   const { experiments } = tracer.llmobs

@@ -336,6 +336,10 @@ class Dataset {
     return this.#projectId
   }
 
+  projectName () {
+    return this.#client.projectName
+  }
+
   version () {
     return this.#version
   }
