@@ -3,6 +3,7 @@
 const assert = require('assert')
 const { exec } = require('child_process')
 const { once } = require('events')
+const http = require('http')
 
 const {
   sandboxCwd,
@@ -268,47 +269,99 @@ describe('test optimization automatic log submission', () => {
   })
 
   context('with bunyan and multiple playwright test groups', () => {
-    it('flushes one complete batch when the worker exits', async () => {
-      childProcess = exec('./node_modules/.bin/playwright test -c playwright.config.js', {
-        cwd,
-        env: {
-          ...getCiVisAgentlessConfig(receiver.port),
-          DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
-          DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
-          DD_API_KEY: '1',
-          DD_SERVICE: 'my-service',
-          PLAYWRIGHT_WORKERS: '1',
-          TEST_DIR: 'ci-visibility/automatic-log-submission-playwright-multiple-groups',
-          TEST_LOGGER: 'bunyan',
-        },
-      })
-      childProcess.stdout?.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-      childProcess.stderr?.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
+    it('waits for pending requests only when the worker exits', async () => {
+      const logMessages = []
+      let firstLogResponse
+      let firstLogRequestAborted = false
+      let waitingTestResponse
 
-      const logsPromise = receiver.gatherPayloadsUntilChildExit(
-        childProcess,
-        ({ url }) => url.includes('/api/v2/logs'),
-        payloads => {
-          assert.equal(payloads.length, 1)
-          const logMessages = payloads.flatMap(({ logMessage }) => logMessage)
-          assert.deepStrictEqual(logMessages.map(({ msg }) => msg).sort(), [
-            'first group log',
-            'second group log',
-          ])
+      const respond = (response) => {
+        if (response.destroyed || response.writableEnded) return
+
+        response.writeHead(200)
+        response.end('OK')
+      }
+      const logsServer = http.createServer((request, response) => {
+        if (request.method === 'GET' && request.url === '/wait-for-first-log') {
+          if (firstLogResponse) respond(response)
+          else waitingTestResponse = () => respond(response)
+          return
         }
-      )
+        if (request.method === 'GET' && request.url === '/second-group-started') {
+          firstLogResponse()
+          respond(response)
+          return
+        }
+        if (request.method !== 'POST' || !request.url.startsWith('/api/v2/logs')) {
+          response.writeHead(404)
+          response.end()
+          return
+        }
 
-      await Promise.all([
-        once(childProcess.stdout, 'end'),
-        once(childProcess.stderr, 'end'),
-        logsPromise,
-      ])
+        let body = ''
+        request.setEncoding('utf8')
+        request.on('data', chunk => {
+          body += chunk
+        })
+        request.on('end', () => {
+          logMessages.push(...JSON.parse(body))
+          if (firstLogResponse) {
+            respond(response)
+            return
+          }
+
+          response.once('close', () => {
+            if (!response.writableEnded) firstLogRequestAborted = true
+          })
+          firstLogResponse = () => respond(response)
+          waitingTestResponse?.()
+        })
+      })
+      await new Promise((resolve, reject) => {
+        logsServer.once('error', reject)
+        logsServer.listen(0, resolve)
+      })
+
+      try {
+        const { port } = logsServer.address()
+        childProcess = exec('./node_modules/.bin/playwright test -c playwright.config.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+            DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${port}`,
+            DD_API_KEY: '1',
+            DD_SERVICE: 'my-service',
+            LOG_SUBMISSION_CONTROL_URL: `http://localhost:${port}`,
+            PLAYWRIGHT_WORKERS: '1',
+            TEST_DIR: 'ci-visibility/automatic-log-submission-playwright-multiple-groups',
+            TEST_LOGGER: 'bunyan',
+          },
+        })
+        childProcess.stdout?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+        ])
+      } finally {
+        firstLogResponse?.()
+        waitingTestResponse?.()
+        await new Promise(resolve => logsServer.close(resolve))
+      }
 
       assert.equal(childProcess.exitCode, 0, testOutput)
+      assert.equal(firstLogRequestAborted, false)
+      assert.deepStrictEqual(logMessages.map(({ msg }) => msg).sort(), [
+        'first group log',
+        'second group log',
+      ])
     })
   })
 })
