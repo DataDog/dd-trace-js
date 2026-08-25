@@ -36,11 +36,11 @@ describe('test optimization validation execution lock', () => {
 
     assert.throws(
       () => acquireExecutionLock({ out, approvedPlanSha256: 'a'.repeat(64) }),
-      error => {
-        assert.strictEqual(error.validationExitCode, 2)
-        assert.strictEqual(error.suppressReport, true)
-        assert.strictEqual(error.validationBlocker.kind, 'execution-lock-exists')
-        assert.match(error.validationBlocker.recommendation, /confirming no validation process is active/)
+      lockError => {
+        assert.strictEqual(lockError.validationExitCode, 2)
+        assert.strictEqual(lockError.suppressReport, true)
+        assert.strictEqual(lockError.validationBlocker.kind, 'execution-lock-exists')
+        assert.match(lockError.validationBlocker.recommendation, /confirming no validation process is active/)
         return true
       }
     )
