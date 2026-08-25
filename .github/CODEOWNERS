@@ -328,43 +328,51 @@
 /packages/dd-trace/test/openfeature/ @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk
 
 # CI
+/.github/actions/**/action.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/actions/**/action.yaml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/actions/upload-coverage-artifact/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/.github/actions/upload-coverage-artifact/action.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
+/.github/actions/upload-coverage-artifact/action.yaml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 /.github/actions/upload-junit-artifacts/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/.github/actions/upload-junit-artifacts/action.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
+/.github/actions/upload-junit-artifacts/action.yaml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 /.github/editorconfig-checker/ @DataDog/dd-trace-js @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /.github/selenium/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /.github/chainguard/ @DataDog/dd-trace-js @DataDog/sdlc-security
 /.github/codeql_config.yml @DataDog/dd-trace-js @DataDog/sdlc-security
-/.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js @DataDog/sdlc-security
-/.github/workflows/mirror-image.yml @DataDog/dd-trace-js @Datadog/lang-platform-js
-/.github/workflows/all-green.yml @DataDog/dd-trace-js @Datadog/lang-platform-js
-/.github/workflows/audit.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/workflows/custom-node-version-dispatch.yml @DataDog/dd-trace-js @Datadog/lang-platform-js
-/.github/workflows/dependabot-automation.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
-/.github/workflows/flakiness.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/workflows/platform.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/workflows/project.yml @DataDog/dd-trace-js @Datadog/lang-platform-js
-/.github/workflows/release-proposal.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/workflows/release-validate.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/workflows/stale.yml @DataDog/dd-trace-js @Datadog/lang-platform-js
-/.github/workflows/update-3rdparty-licenses.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.github/workflows/*.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/*.yaml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js @DataDog/sdlc-security @dd-octo-sts
+/.github/workflows/mirror-image.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/all-green.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/audit.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/custom-node-version-dispatch.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/dependabot-automation.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
+/.github/workflows/flakiness.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/platform.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/project.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/release-proposal.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/release-validate.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/stale.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/update-3rdparty-licenses.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 
-/.github/workflows/apm-capabilities.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
-/.github/workflows/eslint-rules.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
-/.github/workflows/apm-integrations.yml @DataDog/dd-trace-js @DataDog/apm-idm-js
-/.github/workflows/aiguard.yml @DataDog/dd-trace-js @DataDog/asm-js
-/.github/workflows/appsec.yml @DataDog/dd-trace-js @DataDog/asm-js
-/.github/workflows/debugger.yml @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/.github/workflows/instrumentation.yml @DataDog/dd-trace-js @DataDog/apm-idm-js
-/.github/workflows/electron.yml @DataDog/dd-trace-js @DataDog/apm-idm-js
-/.github/workflows/release.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/workflows/serverless.yml @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
-/.github/workflows/llmobs.yml @DataDog/dd-trace-js @DataDog/ml-observability
-/.github/workflows/openfeature.yml @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk
-/.github/workflows/pr-title.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/workflows/profiling.yml @DataDog/dd-trace-js @DataDog/profiling-js
-/.github/workflows/system-tests.yml @DataDog/dd-trace-js @DataDog/asm-js
-/.github/workflows/test-optimization.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/.github/workflows/apm-capabilities.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
+/.github/workflows/eslint-rules.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
+/.github/workflows/apm-integrations.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
+/.github/workflows/aiguard.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
+/.github/workflows/appsec.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
+/.github/workflows/debugger.yml @DataDog/dd-trace-js @DataDog/debugger-nodejs @dd-octo-sts
+/.github/workflows/instrumentation.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
+/.github/workflows/electron.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
+/.github/workflows/release.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/serverless.yml @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless @dd-octo-sts
+/.github/workflows/llmobs.yml @DataDog/dd-trace-js @DataDog/ml-observability @dd-octo-sts
+/.github/workflows/openfeature.yml @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk @dd-octo-sts
+/.github/workflows/pr-title.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/profiling.yml @DataDog/dd-trace-js @DataDog/profiling-js @dd-octo-sts
+/.github/workflows/system-tests.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
+/.github/workflows/test-optimization.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 
 # Profiling
 /benchmark/sirun/profiler/ @DataDog/dd-trace-js @DataDog/profiling-js
@@ -514,3 +522,21 @@
 /ext/tags.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
 /ext/types.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-serverless
 /packages/dd-trace/src/plugin_manager.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-idm-js
+
+# Automated dependency updates
+/package.json @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/yarn.lock @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/docs/package.json @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
+/docs/yarn.lock @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/actions/datadog-ci/package.json @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/actions/datadog-ci/yarn.lock @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/vendor/package.json @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/vendor/package-lock.json @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/packages/dd-trace/test/plugins/versions/package.json @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
+/integration-tests/esbuild/package.json @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
+/integration-tests/appsec/iast-esbuild-esm/package.json @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
+/integration-tests/appsec/iast-esbuild-cjs/package.json @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
+/.github/editorconfig-checker/Dockerfile @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
+/.github/playwright/Dockerfile @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
+/.github/selenium/Dockerfile @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
+/benchmark/sirun/Dockerfile* @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
