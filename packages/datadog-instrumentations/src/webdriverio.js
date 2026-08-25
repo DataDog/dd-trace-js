@@ -1003,19 +1003,28 @@ function finishCoordinator (state, error, onDone) {
   })
 }
 
-// dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
-// @ts-expect-error
-baseReporterWaitForSyncCh.subscribe({
-  asyncEnd (context) {
-    if (!isWebdriverioWorker || !logSubmissionFlushCh.hasSubscribers) {
-      return
-    }
+/**
+ * Delays WebdriverIO worker exit until pending log-submission requests settle.
+ *
+ * @param {{
+ *   resolveCallback?: (onDone: () => void) => void,
+ *   rejectCallback?: (onDone: () => void) => void
+ * }} context
+ * @returns {void}
+ */
+function waitForLogSubmissionAtWorkerExit (context) {
+  if (!isWebdriverioWorker || !logSubmissionFlushCh.hasSubscribers) {
+    return
+  }
 
-    const waitForLogs = onDone => publishWithCompletion(logSubmissionFlushCh, {}, onDone)
-    context.resolveCallback = waitForLogs
-    context.rejectCallback = waitForLogs
-  },
-})
+  const waitForLogs = onDone => publishWithCompletion(logSubmissionFlushCh, {}, onDone)
+  context.resolveCallback = waitForLogs
+  context.rejectCallback = waitForLogs
+}
+
+baseReporterWaitForSyncCh.asyncEnd.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForLogSubmissionAtWorkerExit)
+)
 
 // dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
 // @ts-expect-error

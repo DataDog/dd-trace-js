@@ -61,7 +61,6 @@ module.exports = {
   '@wdio/cli': { esmFirst: true, fn: () => require('../webdriverio') },
   '@wdio/jasmine-framework': { esmFirst: true, fn: () => require('../webdriverio') },
   '@wdio/local-runner': { esmFirst: true, fn: () => require('../webdriverio') },
-  '@wdio/runner': { esmFirst: true, fn: () => require('../webdriverio') },
   '@wdio/utils': { esmFirst: true, fn: () => require('../webdriverio') },
   aerospike: () => require('../aerospike'),
   ai: () => require('../ai'),
