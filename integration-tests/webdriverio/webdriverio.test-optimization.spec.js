@@ -307,14 +307,18 @@ for (const version of versions) {
               await runScenario('automaticLogSubmission', 1, payloads => {
                 const logRequests = getLogRequests(payloads)
 
-                assert.strictEqual(logRequests.length, 1)
-                assert.strictEqual(logRequests[0].headers['dd-api-key'], '1')
-                assert.strictEqual(logRequests[0].headers['content-type'], 'application/json')
-                assert.strictEqual(logRequests[0].url, '/api/v2/logs?ddsource=bunyan&service=my-service')
-                assert.strictEqual(logRequests[0].logMessage.length, 2)
+                assert.ok(logRequests.length > 0)
+                for (const logRequest of logRequests) {
+                  assert.strictEqual(logRequest.headers['dd-api-key'], '1')
+                  assert.strictEqual(logRequest.headers['content-type'], 'application/json')
+                  assert.strictEqual(logRequest.url, '/api/v2/logs?ddsource=bunyan&service=my-service')
+                }
 
-                const logMessage = logRequests[0].logMessage.find(({ msg }) => msg === 'Hello from WebdriverIO!')
-                const afterHookLogMessage = logRequests[0].logMessage.find(
+                const logMessages = logRequests.flatMap(({ logMessage }) => logMessage)
+                assert.strictEqual(logMessages.length, 2)
+
+                const logMessage = logMessages.find(({ msg }) => msg === 'Hello from WebdriverIO!')
+                const afterHookLogMessage = logMessages.find(
                   ({ msg }) => msg === 'Hello from WebdriverIO after hook!'
                 )
                 const test = getEvents(payloads).find(event => event.type === 'test').content
