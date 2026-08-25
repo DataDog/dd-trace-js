@@ -157,6 +157,13 @@ function waitForExporterTransition (socket) {
 }
 
 /**
+ * @param {import('node:net').Socket} socket
+ */
+function waitForSocketClose (socket) {
+  return new Promise(resolve => socket.once('close', resolve))
+}
+
+/**
  * @param {string} origin
  */
 async function waitForExporterIdle (origin) {
@@ -931,7 +938,7 @@ module.exports = {
     await waitForExporterIdle(origin)
 
     const exporterSockets = httpAgent.freeSockets[origin] ?? []
-    const exporterSocketsClosed = exporterSockets.map(socket => once(socket, 'close'))
+    const exporterSocketsClosed = exporterSockets.map(waitForSocketClose)
 
     await Promise.all([serverClosed, ...exporterSocketsClosed])
     this.server = null
