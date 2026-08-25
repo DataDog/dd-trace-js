@@ -9,19 +9,14 @@ const sinon = require('sinon')
 describe('bullmq producer telemetry metadata parsing', () => {
   let log
   let parseTelemetryMetadata
-  let operations
-  let DsmPathwayCodec
-  let getMessageSize
+  let source
 
   beforeEach(() => {
     log = { warn: sinon.stub(), error: sinon.stub() }
-    DsmPathwayCodec = { encode: sinon.stub() }
-    getMessageSize = sinon.stub()
-    operations = proxyquire('../src/producer', {
+    source = proxyquire('../src/producer', {
       '../../dd-trace/src/log': log,
-      '../../dd-trace/src/datastreams': { DsmPathwayCodec, getMessageSize },
     })
-    ;({ parseTelemetryMetadata } = operations)
+    ;({ parseTelemetryMetadata } = source)
   })
 
   it('preserves well-formed customer metadata', () => {
@@ -46,23 +41,45 @@ describe('bullmq producer telemetry metadata parsing', () => {
     sinon.assert.notCalled(log.warn)
   })
 
-  it('creates bulk DSM checkpoints for jobs with falsy data', () => {
-    const pathway = { hash: Buffer.alloc(8) }
-    const dataStreams = { setCheckpoint: sinon.stub().returns(pathway) }
+  it('writes processor carriers for bulk jobs with falsy data', () => {
+    const target = source.targets[1]
     const job = { data: false, opts: { telemetry: { metadata: '{}' } } }
+    const context = { arguments: [[job]], self: { name: 'jobs' } }
+    const facts = target.start(context)
+    const carrier = { pathway: 'encoded' }
 
-    operations[1].stages[1].start({
-      config: { dsmEnabled: true },
-      data: { jobs: [job], queueName: 'jobs' },
-      dataStreams,
+    target.updateSource(context, facts, { carriers: [{ carrier, index: 0 }] })
+
+    assert.strictEqual(facts.messages[0].body, false)
+    assert.deepStrictEqual(JSON.parse(job.opts.telemetry.metadata), { _datadog: carrier })
+    assert.strictEqual(job.opts.telemetry.omitContext, true)
+  })
+
+  it('preserves customer metadata when writing a Queue.add carrier', () => {
+    const target = source.targets[0]
+    const context = {
+      arguments: ['job', { id: 1 }, { telemetry: { metadata: JSON.stringify({ customer: true }) } }],
+      self: { name: 'jobs' },
+    }
+    const facts = target.start(context)
+
+    target.updateSource(context, facts, { carriers: [{ carrier: { trace: '1' }, index: 0 }] })
+
+    assert.deepStrictEqual(JSON.parse(context.arguments[2].telemetry.metadata), {
+      _datadog: { trace: '1' },
+      customer: true,
     })
+  })
 
-    sinon.assert.calledOnceWithExactly(dataStreams.setCheckpoint, [
-      'direction:out',
-      'topic:jobs',
-      'type:bullmq',
-    ], 0)
-    sinon.assert.notCalled(getMessageSize)
-    sinon.assert.calledOnce(DsmPathwayCodec.encode)
+  it('adds a mutable Queue.add options argument only when propagation writes back', () => {
+    const target = source.targets[0]
+    const context = { arguments: ['job', { id: 1 }], self: { name: 'jobs' } }
+    const facts = target.start(context)
+
+    assert.strictEqual(context.arguments.length, 2)
+    target.updateSource(context, facts, { carriers: [{ carrier: { trace: '1' }, index: 0 }] })
+
+    assert.strictEqual(context.arguments.length, 3)
+    assert.strictEqual(context.arguments[2].telemetry.omitContext, true)
   })
 })

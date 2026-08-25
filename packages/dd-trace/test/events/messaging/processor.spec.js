@@ -175,6 +175,24 @@ describe('MessagingProcessor', () => {
     assert.strictEqual(harness.tracer.setCheckpoint.firstCall.args[2], 0)
   })
 
+  it('returns the operation store after consumer data-stream context is established', () => {
+    const harness = createHarness({ lifecycle: 'consume' }, 'messaging.consume', {
+      dsmEnabled: true,
+      enabled: true,
+    })
+    const pathway = { pathway: 'consumer' }
+    harness.tracer.decodeDataStreamsContext.callsFake(() => {
+      const store = legacyStorage.getStore()
+      assert.strictEqual(store.span, harness.span)
+      legacyStorage.enterWith({ ...store, dataStreamsContext: pathway })
+    })
+    const event = createEvent({ parent: true }, { action: 'processJob', carrier: { trace: '1' } })
+
+    assert.strictEqual(harness.consumer.start(event), event.currentStore)
+    assert.strictEqual(event.currentStore.span, harness.span)
+    assert.strictEqual(event.currentStore.dataStreamsContext, pathway)
+  })
+
   it('finishes successful and failed messaging operations exactly once', () => {
     const harness = createHarness()
     const success = createEvent({ parent: true })

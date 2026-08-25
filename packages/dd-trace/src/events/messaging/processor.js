@@ -1,11 +1,14 @@
 'use strict'
 
+const { storage } = require('../../../../datadog-core')
+
 const { DsmPathwayCodec, getMessageSize } = require('../../datastreams')
 const log = require('../../log')
 const TracingPlugin = require('../../plugins/tracing')
 const TraceManager = require('../trace-manager')
 const MessagingLifecycleAdapter = require('./lifecycle-adapter')
 
+const legacyStorage = storage('legacy')
 const ADAPTER_ERROR_MESSAGES = {
   consume: {
     complete: 'Messaging consume adapter failed during completion: %s',
@@ -123,9 +126,26 @@ class MessagingProcessor extends TracingPlugin {
     if (event.sourceConsumer === undefined) {
       event.sourceConsumer = consumer
       if (policy.lifecycle === 'produce') {
-        this.#startProduceCapabilities(event, runtime.config, policy, facts, messages)
+        event.currentStore = legacyStorage.run(
+          event.currentStore,
+          startProduceCapabilities,
+          this.#traceManager,
+          event,
+          runtime.config,
+          policy,
+          facts,
+          messages
+        )
       } else {
-        this.#startConsumeCapabilities(event, runtime.config, policy, facts)
+        event.currentStore = legacyStorage.run(
+          event.currentStore,
+          startConsumeCapabilities,
+          this.#traceManager,
+          event,
+          runtime.config,
+          policy,
+          facts
+        )
       }
     }
 
@@ -154,80 +174,8 @@ class MessagingProcessor extends TracingPlugin {
       return messages
     }
 
-    return accepted.length === 0 && facts.messageCount > 0 ? false : accepted
-  }
-
-  /**
-   * Run processor-owned trace propagation and data-streams production once for a physical source event.
-   *
-   * @param {object} event Active source lifecycle event.
-   * @param {object} config Immutable source configuration.
-   * @param {object} policy Stable messaging source policy.
-   * @param {object} facts Normalized producer facts.
-   * @param {object[] | undefined} messages Accepted messages.
-   * @returns {void}
-   */
-  #startProduceCapabilities (event, config, policy, facts, messages) {
-    if (!messages || messages.length === 0) return
-
-    const carriers = new Array(messages.length)
-    for (let i = 0; i < messages.length; i++) {
-      carriers[i] = { carrier: {}, index: messages[i].index }
-    }
-
-    let updateSource = false
-    try {
-      for (const { carrier } of carriers) {
-        this.#traceManager.inject(event, 'text_map', carrier)
-      }
-      updateSource = true
-    } catch (error) {
-      log.error('Messaging source "%s" failed during trace propagation: %s',
-        policy.integration, error?.message || error)
-    }
-
-    if (config.dsmEnabled) {
-      try {
-        const edgeTags = ['direction:out', `topic:${facts.destination}`, `type:${policy.system}`]
-        for (let i = 0; i < messages.length; i++) {
-          const body = messages[i].body
-          const payloadSize = body ? getMessageSize(body) : 0
-          const pathway = this.#traceManager.setCheckpoint(event, edgeTags, payloadSize)
-          DsmPathwayCodec.encode(pathway, carriers[i].carrier)
-        }
-        updateSource = true
-      } catch (error) {
-        log.error('Messaging source "%s" failed during data-streams production: %s',
-          policy.integration, error?.message || error)
-      }
-    }
-
-    if (updateSource) event.updates = { carriers }
-  }
-
-  /**
-   * Run processor-owned data-streams consumption once for a physical source event.
-   *
-   * @param {object} event Active source lifecycle event.
-   * @param {object} config Immutable source configuration.
-   * @param {object} policy Stable messaging source policy.
-   * @param {object} facts Normalized consumer facts.
-   * @returns {void}
-   */
-  #startConsumeCapabilities (event, config, policy, facts) {
-    if (!config.dsmEnabled) return
-
-    try {
-      this.#traceManager.decodeDataStreamsContext(facts.carrier)
-      this.#traceManager.setCheckpoint(
-        event,
-        ['direction:in', `topic:${facts.destination}`, `type:${policy.system}`],
-        facts.body ? getMessageSize(facts.body) : 0
-      )
-    } catch (error) {
-      log.error('Messaging source "%s" failed during data-streams consumption: %s',
-        policy.integration, error?.message || error)
-    }
+    const filterCount = facts.filterCount ?? facts.messageCount
+    return accepted.length === 0 && filterCount > 0 ? false : accepted
   }
 
   /**
@@ -299,6 +247,95 @@ class MessagingProcessor extends TracingPlugin {
       log.error(ADAPTER_ERROR_MESSAGES[lifecycle].complete, error?.message || error)
     }
   }
+}
+
+/**
+ * Run processor-owned trace propagation and data-streams production inside the operation's bound store.
+ *
+ * @param {TraceManager} traceManager Processor trace manager.
+ * @param {object} event Active source lifecycle event.
+ * @param {object} config Immutable source configuration.
+ * @param {object} policy Stable messaging source policy.
+ * @param {object} facts Normalized producer facts.
+ * @param {object[] | undefined} messages Accepted messages.
+ * @returns {object | undefined} Store carrying the producer's resulting data-stream context.
+ */
+function startProduceCapabilities (traceManager, event, config, policy, facts, messages) {
+  if (!messages || messages.length === 0) return legacyStorage.getStore()
+
+  let writableCount = 0
+  for (const message of messages) {
+    if (message.writable !== false) writableCount++
+  }
+  if (writableCount === 0) return legacyStorage.getStore()
+
+  const writableMessages = new Array(writableCount)
+  const carriers = new Array(writableCount)
+  let writableIndex = 0
+  for (const message of messages) {
+    if (message.writable === false) continue
+    writableMessages[writableIndex] = message
+    carriers[writableIndex] = { carrier: {}, index: message.index }
+    writableIndex++
+  }
+
+  let updateSource = false
+  try {
+    for (const { carrier } of carriers) {
+      traceManager.inject(event, 'text_map', carrier)
+    }
+    updateSource = true
+  } catch (error) {
+    log.error('Messaging source "%s" failed during trace propagation: %s',
+      policy.integration, error?.message || error)
+  }
+
+  if (config.dsmEnabled) {
+    try {
+      const edgeTags = ['direction:out', `topic:${facts.destination}`, `type:${policy.system}`]
+      for (let i = 0; i < writableMessages.length; i++) {
+        const body = writableMessages[i].body
+        const payloadSize = body ? getMessageSize(body) : 0
+        const pathway = traceManager.setCheckpoint(event, edgeTags, payloadSize)
+        DsmPathwayCodec.encode(pathway, carriers[i].carrier)
+      }
+      updateSource = true
+    } catch (error) {
+      log.error('Messaging source "%s" failed during data-streams production: %s',
+        policy.integration, error?.message || error)
+    }
+  }
+
+  if (updateSource) event.updates = { carriers }
+  return legacyStorage.getStore()
+}
+
+/**
+ * Run processor-owned data-streams consumption inside the operation's bound store.
+ *
+ * @param {TraceManager} traceManager Processor trace manager.
+ * @param {object} event Active source lifecycle event.
+ * @param {object} config Immutable source configuration.
+ * @param {object} policy Stable messaging source policy.
+ * @param {object} facts Normalized consumer facts.
+ * @returns {object | undefined} Store carrying the consumed message's data-stream context.
+ */
+function startConsumeCapabilities (traceManager, event, config, policy, facts) {
+  if (config.dsmEnabled) {
+    try {
+      traceManager.decodeDataStreamsContext(facts.carrier)
+      traceManager.setCheckpoint(
+        event,
+        ['direction:in', `topic:${facts.destination}`, `type:${policy.system}`],
+        facts.body ? getMessageSize(facts.body) : 0
+      )
+    } catch (error) {
+      log.error('Messaging source "%s" failed during data-streams consumption: %s',
+        policy.integration, error?.message || error)
+    }
+  }
+
+  return legacyStorage.getStore()
 }
 
 module.exports = MessagingProcessor

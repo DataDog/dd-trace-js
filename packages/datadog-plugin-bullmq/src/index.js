@@ -1,12 +1,23 @@
 'use strict'
 
-const { createIntegrationPlugin } = require('../../dd-trace/src/plugins/integration-pipeline')
+const { createMessagingIntegration } = require('../../dd-trace/src/events/messaging')
+const consumerSource = require('./consumer')
 const { getFilter } = require('./filter')
-const producerOperations = require('./producer')
-const consumerOperation = require('./consumer')
+const producerSource = require('./producer')
 
-module.exports = createIntegrationPlugin({
-  id: 'bullmq',
+module.exports = createMessagingIntegration({
   configure: config => ({ ...config, producerFilter: getFilter(config) }),
-  operations: [...producerOperations, consumerOperation],
+  id: 'bullmq',
+  operations: [
+    {
+      adapter: 'produce',
+      operation: 'messaging.produce',
+      source: producerSource,
+    },
+    {
+      adapter: 'consume',
+      operation: 'messaging.consume',
+      source: consumerSource,
+    },
+  ],
 })
