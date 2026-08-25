@@ -1,12 +1,19 @@
 'use strict'
 
-const { createLogger, format, transports } = require('winston')
+let logger
 
-module.exports = createLogger({
-  level: 'info',
-  exitOnError: false,
-  format: format.json(),
-  transports: [
-    new transports.Console(),
-  ],
-})
+if (process.env.TEST_LOGGER === 'bunyan') {
+  logger = require('bunyan').createLogger({ name: 'test-logger' })
+} else {
+  const { createLogger, format, transports } = require('winston')
+  logger = createLogger({
+    level: 'info',
+    exitOnError: false,
+    format: format.json(),
+    transports: [
+      new transports.Console(),
+    ],
+  })
+}
+
+module.exports = logger
