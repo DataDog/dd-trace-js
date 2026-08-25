@@ -1,5 +1,14 @@
 # How the integration lifecycle frameworks work
 
+> Historical compatibility snapshot: this walkthrough describes the earlier BullMQ `IntegrationPipeline` prototype.
+> BullMQ now uses `createMessagingIntegration()` with package fact sources, a shared messaging processor, and fixed
+> produce/consume lifecycle adapters. Use the
+> [current agent guide](../dd-trace/src/plugins/integration-pipeline-agent-guide.md) for migration decisions; raw
+> integration-authored stage arrays are compatibility-only.
+
+The remainder is intentionally preserved as a point-in-time record and contains present-tense statements that no
+longer describe the branch.
+
 This is a mechanical walkthrough of the current integration-lifecycle experiment. BullMQ demonstrates the
 compatibility `IntegrationPipeline`; Azure Cosmos and MariaDB queries demonstrate the fixed processor/adapter
 framework. Neither is a public API or stable API promise. For the adoption argument and trade-offs, see

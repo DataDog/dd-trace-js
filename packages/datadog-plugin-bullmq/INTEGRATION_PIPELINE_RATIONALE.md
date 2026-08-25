@@ -1,5 +1,14 @@
 # Why proceed with shared integration lifecycle frameworks
 
+> Historical compatibility snapshot: this rationale records the experiment that led to the fixed processor/adapter
+> model. BullMQ has since migrated from `IntegrationPipeline` stages to the shared messaging processor and fixed
+> produce/consume adapters, and MariaDB pool/connection behavior has moved off its compatibility base. Use the
+> [current agent guide](../dd-trace/src/plugins/integration-pipeline-agent-guide.md) for the active architecture and
+> migration policy.
+
+The remainder is intentionally preserved as a point-in-time decision record and contains present-tense statements
+that no longer describe the branch.
+
 This is the adoption case for the compatibility `IntegrationPipeline` and fixed processor/adapter experiments. It is
 intentionally separate from the mechanical walkthrough in
 [INTEGRATION_PIPELINE_NOTES.md](./INTEGRATION_PIPELINE_NOTES.md): this file explains why the change is worth pursuing,

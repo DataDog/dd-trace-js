@@ -654,6 +654,7 @@ function normalizeOperations (operations) {
  * Compile a declarative integration into the current plugin-manager contract.
  * Orchestrion is the default event source today, but routing is kept behind a source adapter.
  *
+ * @deprecated Compatibility-only. New integrations should use a fixed domain processor and lifecycle adapter.
  * @param {IntegrationDefinition} definition
  * @returns {typeof TracingPlugin}
  */
