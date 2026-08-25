@@ -99,7 +99,9 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents(12)
 
-      const sessionId = llmobsSpans[0].session_id
+      const llmobsSpansById = new Map(llmobsSpans.map(span => [span.span_id, span]))
+      const spanEventsByApmIndex = apmSpans.map(span => llmobsSpansById.get(span.span_id.toString(10)))
+      const sessionId = spanEventsByApmIndex[0].session_id
       const is03 = semifies(realVersion, '>=0.3.0')
 
       // Subagent prompt is determined by the LLM at the previous step.
@@ -142,7 +144,7 @@ describe('Plugin', () => {
         : 'toolu_011fGRBzQJ5yT5Erd9kqXQXZ'
 
       // [0] root query span
-      assertLlmObsSpanEvent(llmobsSpans[0], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[0], {
         span: apmSpans[0],
         spanKind: 'agent',
         name: 'claude_agent_sdk.query',
@@ -154,9 +156,9 @@ describe('Plugin', () => {
       })
 
       // [1] outer step-0 LLM — first call, spawns subagent
-      assertLlmObsSpanEvent(llmobsSpans[1], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[2], {
         span: apmSpans[2],
-        parentId: llmobsSpans[2].span_id,
+        parentId: apmSpans[1].span_id,
         spanKind: 'llm',
         name: 'claude-sonnet-4-6',
         modelName: 'claude-sonnet-4-6',
@@ -198,9 +200,9 @@ describe('Plugin', () => {
       })
 
       // [2] outer step-0 — input is the LLM's thinking text
-      assertLlmObsSpanEvent(llmobsSpans[2], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[1], {
         span: apmSpans[1],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'step',
         name: 'step-0',
         inputValue: outerThinkingText,
@@ -212,9 +214,9 @@ describe('Plugin', () => {
       // [3]=agent wrapper, [4]=subagent LLM, [5]=subagent step-0
 
       // [3] Agent (<description>) — the subagent wrapper span
-      assertLlmObsSpanEvent(llmobsSpans[3], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[3], {
         span: apmSpans[3],
-        parentId: llmobsSpans[2].span_id,
+        parentId: apmSpans[1].span_id,
         spanKind: 'agent',
         name: `Agent (${agentDescription})`,
         inputValue: subagentPrompt,
@@ -224,9 +226,9 @@ describe('Plugin', () => {
       })
 
       // [4] subagent step-0 LLM — calls the weather tool for NY
-      assertLlmObsSpanEvent(llmobsSpans[4], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[5], {
         span: apmSpans[5],
-        parentId: llmobsSpans[5].span_id,
+        parentId: apmSpans[4].span_id,
         spanKind: 'llm',
         name: 'claude-sonnet-4-6',
         modelName: 'claude-sonnet-4-6',
@@ -256,9 +258,9 @@ describe('Plugin', () => {
       })
 
       // [5] subagent step-0 — no thinking, output is the tool result text
-      assertLlmObsSpanEvent(llmobsSpans[5], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[4], {
         span: apmSpans[4],
-        parentId: llmobsSpans[3].span_id,
+        parentId: apmSpans[3].span_id,
         spanKind: 'step',
         name: 'step-0',
         inputValue: '',
@@ -268,9 +270,9 @@ describe('Plugin', () => {
       })
 
       // [6] mcp__local__fetch_weather — NY weather tool call inside subagent
-      assertLlmObsSpanEvent(llmobsSpans[6], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[6], {
         span: apmSpans[6],
-        parentId: llmobsSpans[5].span_id,
+        parentId: apmSpans[4].span_id,
         spanKind: 'tool',
         name: 'mcp__local__fetch_weather',
         inputValue: '{"location":"NY","units":"fahrenheit"}',
@@ -280,9 +282,9 @@ describe('Plugin', () => {
       })
 
       // [7] outer step-1 LLM — fetches CA weather directly after subagent result
-      assertLlmObsSpanEvent(llmobsSpans[7], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[8], {
         span: apmSpans[8],
-        parentId: llmobsSpans[8].span_id,
+        parentId: apmSpans[7].span_id,
         spanKind: 'llm',
         name: 'claude-sonnet-4-6',
         modelName: 'claude-sonnet-4-6',
@@ -337,9 +339,9 @@ describe('Plugin', () => {
       })
 
       // [8] outer step-1 — no thinking, output is the CA tool result
-      assertLlmObsSpanEvent(llmobsSpans[8], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[7], {
         span: apmSpans[7],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'step',
         name: 'step-1',
         inputValue: '',
@@ -349,9 +351,9 @@ describe('Plugin', () => {
       })
 
       // [9] mcp__local__fetch_weather — CA weather tool call in outer agent
-      assertLlmObsSpanEvent(llmobsSpans[9], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[9], {
         span: apmSpans[9],
-        parentId: llmobsSpans[8].span_id,
+        parentId: apmSpans[7].span_id,
         spanKind: 'tool',
         name: 'mcp__local__fetch_weather',
         inputValue: '{"location":"CA","units":"fahrenheit"}',
@@ -361,9 +363,9 @@ describe('Plugin', () => {
       })
 
       // [10] outer step-2 LLM — final summary after both results are in
-      assertLlmObsSpanEvent(llmobsSpans[10], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[11], {
         span: apmSpans[11],
-        parentId: llmobsSpans[11].span_id,
+        parentId: apmSpans[10].span_id,
         spanKind: 'llm',
         name: 'claude-sonnet-4-6',
         modelName: 'claude-sonnet-4-6',
@@ -418,9 +420,9 @@ describe('Plugin', () => {
       })
 
       // [11] outer step-2 — no thinking, output is the final LLM summary
-      assertLlmObsSpanEvent(llmobsSpans[11], {
+      assertLlmObsSpanEvent(spanEventsByApmIndex[10], {
         span: apmSpans[10],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'step',
         name: 'step-2',
         inputValue: '',

@@ -284,7 +284,7 @@ describe('Plugin', () => {
       })
       assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
@@ -348,7 +348,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
@@ -392,7 +392,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'embedding',
         modelName: 'text-embedding-ada-002',
         modelProvider: 'openai',
@@ -441,7 +441,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'embedding',
         modelName: 'text-embedding-ada-002',
         modelProvider: 'openai',
@@ -501,7 +501,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
@@ -571,7 +571,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
@@ -664,7 +664,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
@@ -690,7 +690,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[2], {
         span: apmSpans[2],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         name: 'weather',
         spanKind: 'tool',
         inputValue: '{"location":"Tokyo"}',
@@ -700,7 +700,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[3], {
         span: apmSpans[3],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
@@ -815,7 +815,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
@@ -862,7 +862,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[3], {
         span: apmSpans[3],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
@@ -935,7 +935,7 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
-        parentId: llmobsSpans[0].span_id,
+        parentId: apmSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
@@ -1091,7 +1091,7 @@ describe('Plugin', () => {
 
         assertLlmObsSpanEvent(llmobsSpans[1], {
           span: apmSpans[1],
-          parentId: llmobsSpans[0].span_id,
+          parentId: apmSpans[0].span_id,
           spanKind: 'llm',
           modelName: 'gpt-4o-mini',
           modelProvider: 'openai',
@@ -1117,7 +1117,7 @@ describe('Plugin', () => {
 
         assertLlmObsSpanEvent(llmobsSpans[2], {
           span: apmSpans[2],
-          parentId: llmobsSpans[0].span_id,
+          parentId: apmSpans[0].span_id,
           name: 'weather',
           spanKind: 'tool',
           inputValue: JSON.stringify({ location: 'Tokyo' }),
@@ -1127,7 +1127,7 @@ describe('Plugin', () => {
 
         assertLlmObsSpanEvent(llmobsSpans[3], {
           span: apmSpans[3],
-          parentId: llmobsSpans[0].span_id,
+          parentId: apmSpans[0].span_id,
           spanKind: 'llm',
           modelName: 'gpt-4o-mini',
           modelProvider: 'openai',
@@ -1213,7 +1213,7 @@ describe('Plugin', () => {
 
         assertLlmObsSpanEvent(llmobsSpans[1], {
           span: apmSpans[1],
-          parentId: llmobsSpans[0].span_id,
+          parentId: apmSpans[0].span_id,
           spanKind: 'llm',
           modelName: 'gpt-4o-mini',
           modelProvider: 'openai',
@@ -1250,7 +1250,7 @@ describe('Plugin', () => {
 
         assertLlmObsSpanEvent(llmobsSpans[3], {
           span: apmSpans[3],
-          parentId: llmobsSpans[0].span_id,
+          parentId: apmSpans[0].span_id,
           spanKind: 'llm',
           modelName: 'gpt-4o-mini',
           modelProvider: 'openai',
