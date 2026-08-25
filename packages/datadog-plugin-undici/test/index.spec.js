@@ -795,9 +795,10 @@ describe('Plugin', () => {
           express = null
         })
 
-        // Earlier versions wrap fetch and cannot preserve a custom dispatcher.
-        if (satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')) {
-          it('should preserve custom dispatcher option and trace the request', async function () {
+        {
+          // Earlier versions wrap fetch and cannot preserve a custom dispatcher.
+          const customDispatcherIt = satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0') ? it : it.skip
+          customDispatcherIt('should preserve custom dispatcher option and trace the request', async function () {
             const app = express()
             app.get('/user', (req, res) => {
               res.status(200).send('OK')
@@ -855,9 +856,10 @@ describe('Plugin', () => {
         // the tunnel-setup request, but never :headers/:trailers/:error. Before the fix the
         // CONNECT span was started and never finished, which kept the parent trace pinned in
         // span_processor and prevented the surrounding express.request span from exporting.
-        // ProxyAgent is available from undici 5.1.0.
-        if (satisfies(resolvedVersion, '>=5.1.0')) {
-          it('finishes the CONNECT tunnel span established via ProxyAgent', async function () {
+        {
+          // ProxyAgent is available from undici 5.1.0.
+          const proxyAgentIt = satisfies(resolvedVersion, '>=5.1.0') ? it : it.skip
+          proxyAgentIt('finishes the CONNECT tunnel span established via ProxyAgent', async function () {
             const http = require('node:http')
             const net = require('node:net')
 
