@@ -100,7 +100,7 @@ class Tracer extends NoopProxy {
   #openfeatureState = OPENFEATURE_STATE_NOOP
 
   /** @type {boolean} */
-  #profilerConfigured = false
+  #configPublished = false
 
   constructor () {
     super()
@@ -234,7 +234,7 @@ class Tracer extends NoopProxy {
       }
 
       configUpdateChannel.publish(config)
-      this.#profilerConfigured = true
+      this.#configPublished = true
 
       // Experimental: mirror the active trace ID, span ID and endpoint into
       // an OTEP-4947 thread-local context record an out-of-process eBPF
@@ -439,7 +439,7 @@ class Tracer extends NoopProxy {
    * @override
    */
   profilerStarted () {
-    if (!this.#profilerConfigured) {
+    if (!this.#configPublished) {
       // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
