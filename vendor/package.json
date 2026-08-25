@@ -5,7 +5,7 @@
   },
   "dependencies": {
     "@apm-js-collab/code-transformer": "^0.18.1",
-    "@datadog/openfeature-node-server": "2.1.0",
+    "@datadog/openfeature-node-server": "2.2.0",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/source-map": "npm:source-map@^0.6.0",
     "@isaacs/ttlcache": "^2.1.5",

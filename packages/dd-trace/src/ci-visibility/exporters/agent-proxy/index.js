@@ -8,6 +8,8 @@ const request = require('../request')
 const { fetchAgentInfo } = require('../../../agent/info')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
+// Product-specific discovery: newest advertised version, skip v3 (citestcycle), gzip if >= v4.
+// Shared `evp_proxy` discovery is an explicit path allowlist and does not cover this contract.
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
 const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\/?/
 

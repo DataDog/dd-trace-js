@@ -15,6 +15,7 @@ const {
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
 const id = require('./id')
+const log = require('./log')
 
 const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
 const ZERO_ID = id('0')
@@ -235,6 +236,18 @@ class SpanStatsProcessor {
   }
 
   onInterval () {
+    this.#flush()
+  }
+
+  /**
+   * Drains pending span statistics and waits for their export.
+   * @param {Function} [done]
+   */
+  forceFlush (done) {
+    this.#flush(done)
+  }
+
+  #flush (done) {
     const drained = this.#drainBuckets()
 
     if (this.enabled && !this.otlpExporter) {
@@ -248,10 +261,34 @@ class SpanStatsProcessor {
         RuntimeID: this.tags['runtime-id'],
         Sequence: ++this.sequence,
         ProcessTags: processTags.serialized,
-      })
+      }, done)
     } else if (this.otlpExporter && drained.length > 0) {
-      this.otlpExporter.export(drained, this.bucketSizeNs)
-    }
+      if (typeof this.otlpExporter.flush === 'function' && done) {
+        // Snapshot requests already in flight before starting this boundary
+        // export, so a later invocation cannot extend this lifecycle barrier.
+        let pending = 2
+        const complete = () => {
+          if (--pending === 0) done()
+        }
+        try {
+          this.otlpExporter.flush(complete)
+        } catch (error) {
+          log.error('Failed to flush OTLP span stats:', error)
+          complete()
+        }
+        try {
+          this.otlpExporter.export(drained, this.bucketSizeNs, complete)
+        } catch (error) {
+          log.error('Failed to export OTLP span stats:', error)
+          complete()
+        }
+      } else {
+        this.otlpExporter.export(drained, this.bucketSizeNs, done)
+      }
+    } else if (this.otlpExporter) {
+      if (typeof this.otlpExporter.flush === 'function') this.otlpExporter.flush(done)
+      else done?.()
+    } else done?.()
   }
 
   onSpanFinished (span) {

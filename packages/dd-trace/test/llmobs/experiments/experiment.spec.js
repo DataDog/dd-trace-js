@@ -66,7 +66,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       { q: 'apple' },
       'apple',
       { row: 0 },
-      ['topic:math', 'topic:logic']
+      ['topic:math', 'topic:logic', 'project_name:record-project']
     )
     const callsToLlmobs = []
     const llmobs = {
@@ -82,6 +82,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
     const result = await new Experiment(c, {
       name: 'exp-demo',
+      projectName: 'demo-project',
       dataset,
       task: (input) => input.q,
       evaluators: { ok: () => true },
@@ -93,6 +94,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[0][1].name, 'task')
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
+    assert.equal(callsToLlmobs[1][1].tags.project_name, 'demo-project')
     assert.deepEqual(callsToLlmobs[1][1].tags.topic, ['math', 'logic'])
     assert.equal(callsToLlmobs[1][1].tags.run_iteration, 1)
     assert.equal(result.rows[0].spanId, '000000000000abcd')
@@ -148,6 +150,29 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('project_id:')), ['project_id:proj'])
     assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('dataset_name:')), ['dataset_name:demo'])
     assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('experiment_name:')), ['experiment_name:exp-demo'])
+  })
+
+  it('keeps the project name authoritative in external metric tags', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const experiment = await new Experiment(c, {
+      name: 'external-exp',
+      projectName: 'demo-project',
+      external: true,
+    }).start()
+
+    const span = await experiment.submitSpan({ input: 'input' })
+    await experiment.submitEvaluationMetrics(span, [{
+      label: 'score',
+      value: 1,
+      tags: { project_name: 'other-project' },
+    }])
+
+    const metricRequest = requests.find(request => request.method === 'postExperimentEvents' &&
+      request.attributes.metrics.length > 0)
+    assert.deepEqual(
+      metricRequest.attributes.metrics[0].tags.filter(tag => tag.startsWith('project_name:')),
+      ['project_name:demo-project']
+    )
   })
 
   it('surfaces backend failures', async () => {

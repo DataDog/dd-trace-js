@@ -1,12 +1,44 @@
 'use strict'
 
-const { test, expect } = require('@playwright/test')
+const { test: base, expect } = require('@playwright/test')
+
+let releaseDeferredFailureScreenshot
+const test = base.extend({
+  deferFailureScreenshotAttachment: [async ({ screenshot }, use, testInfo) => {
+    if (process.env.PLAYWRIGHT_DEFER_FAILURE_SCREENSHOT_ATTACHMENT !== 'true' || screenshot === 'off') {
+      await use()
+      return
+    }
+
+    const originalAttachmentsPush = testInfo.attachments.push.bind(testInfo.attachments)
+    testInfo.attachments.push = (...attachments) => {
+      const hasFailureScreenshot = attachments.some(({ name, path }) =>
+        name === 'screenshot' && /test-failed-1\.png$/.test(path ?? ''))
+      if (hasFailureScreenshot) {
+        releaseDeferredFailureScreenshot = () => originalAttachmentsPush(...attachments)
+        return testInfo.attachments.length + attachments.length
+      }
+      return originalAttachmentsPush(...attachments)
+    }
+    await use()
+  }, { auto: true }],
+  // The worker fixture must not depend on Playwright's test-scoped screenshot fixture.
+  // eslint-disable-next-line no-empty-pattern
+  releaseDeferredFailureScreenshot: [async ({}, use) => {
+    await use()
+    if (releaseDeferredFailureScreenshot) {
+      setImmediate(releaseDeferredFailureScreenshot)
+    }
+  }, { auto: true, scope: 'worker' }],
+})
 
 test('does not upload programmatic screenshots', async ({ page }, testInfo) => {
   await page.goto(process.env.PW_BASE_URL)
 
   await page.screenshot({ path: testInfo.outputPath('programmatic-screenshot.png') })
 })
+
+test.skip('does not reserve a worker trace slot for an expected skip', () => {})
 
 test('uploads only the automatic failure screenshot', async ({ page }, testInfo) => {
   await page.goto(process.env.PW_BASE_URL)

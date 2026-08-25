@@ -16,6 +16,7 @@ describe('mocha-test-suite-level-pass', function () {
     assert.strictEqual(2, 2)
   })
 
+  // This skip is fixture input for mixed suite-level status aggregation.
   it.skip('will skip', () => {
     assert.strictEqual(2, 2)
   })

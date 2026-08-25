@@ -543,7 +543,8 @@ class TextMapPropagator {
     this._extractOrigin(carrier, spanContext)
     this._extractLegacyBaggageItems(carrier, spanContext)
     this._extractSamplingPriority(carrier, spanContext)
-    this._extractTags(carrier, spanContext)
+    const traceTags = this._extractTags(carrier)
+    if (traceTags) spanContext._trace.tags = traceTags
 
     if (this._config.DD_TRACE_PROPAGATION_EXTRACT_FIRST) return spanContext
 
@@ -865,37 +866,45 @@ class TextMapPropagator {
     }
   }
 
-  _extractTags (carrier, spanContext) {
+  /**
+   * @param {Record<string, unknown>} carrier
+   * @returns {Record<string, string> | undefined}
+   */
+  _extractTags (carrier) {
     const header = readDatadogTags(carrier)
     if (!header) return
-
-    const trace = spanContext._trace
 
     if (this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) {
       log.debug('Trace tag propagation is disabled, skipping extraction.')
     } else if (header.length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
       log.error('Trace tags from carrier are too large, skipping extraction.')
     } else {
-      const pairs = header.split(',')
       const tags = {}
+      let start = 0
+      let separator = header.indexOf('=')
 
-      for (const pair of pairs) {
-        const [key, ...rest] = pair.split('=')
-        const value = rest.join('=')
+      while (start <= header.length) {
+        const comma = header.indexOf(',', start)
+        const end = comma === -1 ? header.length : comma
+        const hasSeparator = separator !== -1 && separator < end
+        const key = header.slice(start, hasSeparator ? separator : end)
+        const value = hasSeparator ? header.slice(separator + 1, end) : ''
 
         if (!this._validateTagKey(key) || !this._validateTagValue(value)) {
           log.error('Trace tags from carrier are invalid, skipping extraction.')
           return
         }
-        // Check if value is a valid 16 character lower-case hexadecimal encoded number as per spec
-        if (key === '_dd.p.tid' && !(hex16.test(value))) {
+        if (key === '_dd.p.tid' && !hex16.test(value)) {
           log.error('Invalid _dd.p.tid tag %s, skipping', value)
-          continue
+        } else {
+          tags[key] = value
         }
-        tags[key] = value
+
+        start = end + 1
+        if (hasSeparator) separator = header.indexOf('=', start)
       }
 
-      Object.assign(trace.tags, tags)
+      return tags
     }
   }
 

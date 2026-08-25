@@ -48,6 +48,7 @@ function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
     dataset_record_id: ids.datasetRecordId,
     dataset_name: ids.datasetName,
     experiment_name: ids.experimentName,
+    project_name: ids.projectName,
   })
 
   return {
@@ -183,6 +184,7 @@ class Experiment {
   #tags
   #metadata
   #runs
+  #projectName
   #projectId
   #experimentId
   #runId
@@ -207,7 +209,9 @@ class Experiment {
     this.#config = { ...options.config }
     const filterTags = this.#dataset.filterTags?.() ?? []
     if (filterTags.length > 0) this.#config.filtered_record_tags = filterTags
+    this.#projectName = options.projectName
     this.#tags = { ...options.tags }
+    if (this.#projectName !== undefined) this.#tags.project_name = this.#projectName
     this.#metadata = { ...options.metadata }
     this.#runs = this.#external ? 1 : normalizePositiveInteger(options.runs ?? 1, 'runs')
     this.#projectId = null
@@ -326,6 +330,7 @@ class Experiment {
       projectId: this.#projectId,
       datasetId: this.#dataset.id,
       datasetRecordId: input.datasetRecordId,
+      projectName: this.#projectName,
       runId: input.runId ?? this.#runId,
       runIteration: input.runIteration ?? this.#runIteration,
     }, input.name ?? this.#name, mergeTags(this.#tags, input.tags))
@@ -369,6 +374,8 @@ class Experiment {
         log.warn('LLMObs experiments: skipping external metric %s because it has neither value nor error', metric.label)
         continue
       }
+      const metricTags = mergeTags(this.#tags, metric.tags)
+      if (this.#projectName !== undefined) metricTags.project_name = this.#projectName
       payload.push(toMetric(
         metric.label,
         metric.value,
@@ -377,7 +384,7 @@ class Experiment {
         span.traceId,
         timestampMs(metric.timestamp),
         experimentId,
-        mergeTags(this.#tags, metric.tags),
+        metricTags,
         metric.source ?? 'custom'
       ))
     }
@@ -556,6 +563,7 @@ class Experiment {
           datasetRecordId: i < recordIds.length ? recordIds[i] : '',
           datasetName: this.#dataset.name(),
           experimentName: this.#name,
+          projectName: this.#projectName,
           runId,
           runIteration,
         }, this.#task.name || this.#name, this.#tags, records[i].tags))
@@ -789,6 +797,7 @@ class Experiment {
       dataset_name: this.#dataset.name(),
       experiment_name: this.#name,
     }
+    if (this.#projectName !== undefined) autoTags.project_name = this.#projectName
     const tags = mergeTags(this.#tags, { ...recordTagsToObject(record.tags), ...autoTags })
 
     const execute = () => this.#runWithRetries(
