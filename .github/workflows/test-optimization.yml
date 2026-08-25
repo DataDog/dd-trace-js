@@ -249,17 +249,22 @@ jobs:
         env:
           PLUGINS: webdriverio
       - uses: ./.github/actions/upload-junit-artifacts
+        id: webdriverio_instrumentation_upload
         if: "!cancelled()"
         with:
           id: ${{ github.job }}-${{ strategy.job-index }}-instrumentation
-      - run: npm run test:integration:webdriverio:coverage
+      - name: Clear uploaded instrumentation JUnit reports
+        if: "!cancelled() && steps.webdriverio_instrumentation_upload.outcome == 'success'"
+        run: rm -f ./*.xml
+      - id: webdriverio_integration
+        run: npm run test:integration:webdriverio:coverage
         env:
           WEBDRIVERIO_VERSION: ${{ matrix.webdriverio-version }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-webdriverio-${{ matrix.node-version }}-${{ matrix.webdriverio-version }}
       - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
+        if: "!cancelled() && steps.webdriverio_integration.outcome != 'skipped'"
         with:
           id: ${{ github.job }}-${{ strategy.job-index }}-integration
 
