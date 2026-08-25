@@ -16,6 +16,7 @@ const {
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SUITE_EXECUTION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
+const { publishWithCompletion } = require('./helpers/channel')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 const {
   CONFIGURATION_REQUEST,
@@ -38,6 +39,7 @@ const testSuiteStartCh = channel('ci:mocha:test-suite:start')
 const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
 const knownTestsCh = channel('ci:mocha:known-tests')
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const modifiedFilesCh = channel('ci:mocha:modified-files')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const workerConfigurationCh = channel('ci:mocha:worker:configuration')
@@ -46,6 +48,7 @@ const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
 const jasmineAdapterInitCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
+const baseReporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync')
 const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance')
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
@@ -999,6 +1002,20 @@ function finishCoordinator (state, error, onDone) {
     testManagementExecutions: state.testManagementExecutions,
   })
 }
+
+// dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
+// @ts-expect-error
+baseReporterWaitForSyncCh.subscribe({
+  asyncEnd (context) {
+    if (!isWebdriverioWorker || !logSubmissionFlushCh.hasSubscribers) {
+      return
+    }
+
+    const waitForLogs = onDone => publishWithCompletion(logSubmissionFlushCh, {}, onDone)
+    context.resolveCallback = waitForLogs
+    context.rejectCallback = waitForLogs
+  },
+})
 
 // dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
 // @ts-expect-error

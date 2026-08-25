@@ -311,17 +311,22 @@ for (const version of versions) {
                 assert.strictEqual(logRequests[0].headers['dd-api-key'], '1')
                 assert.strictEqual(logRequests[0].headers['content-type'], 'application/json')
                 assert.strictEqual(logRequests[0].url, '/api/v2/logs?ddsource=bunyan&service=my-service')
-                assert.strictEqual(logRequests[0].logMessage.length, 1)
+                assert.strictEqual(logRequests[0].logMessage.length, 2)
 
-                const [logMessage] = logRequests[0].logMessage
+                const logMessage = logRequests[0].logMessage.find(({ msg }) => msg === 'Hello from WebdriverIO!')
+                const afterHookLogMessage = logRequests[0].logMessage.find(
+                  ({ msg }) => msg === 'Hello from WebdriverIO after hook!'
+                )
                 const test = getEvents(payloads).find(event => event.type === 'test').content
 
+                assert.ok(logMessage)
                 assert.strictEqual(logMessage.level, 30)
-                assert.strictEqual(logMessage.msg, 'Hello from WebdriverIO!')
                 assert.deepStrictEqual(Object.keys(logMessage.dd).sort(), ['service', 'span_id', 'trace_id'])
                 assert.strictEqual(logMessage.dd.service, 'my-service')
                 assert.strictEqual(logMessage.dd.span_id, test.span_id.toString())
                 assert.strictEqual(logMessage.dd.trace_id, test.trace_id.toString())
+                assert.ok(afterHookLogMessage)
+                assert.strictEqual(afterHookLogMessage.level, 30)
               }, {
                 DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
                 DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
