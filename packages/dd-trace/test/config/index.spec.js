@@ -3924,6 +3924,35 @@ describe('Config', () => {
       }])
     })
 
+    it('should configure the experiments project name from options and enable llmobs', () => {
+      const config = getConfig({ llmobs: { projectName: 'experiments-project' } })
+      assert.strictEqual(config.llmobs.projectName, 'experiments-project')
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+    })
+
+    context('DD_LLMOBS_PROJECT_NAME', () => {
+      let savedEnv
+
+      beforeEach(() => {
+        savedEnv = process.env
+        process.env.DD_LLMOBS_PROJECT_NAME = 'env-project'
+      })
+
+      afterEach(() => {
+        process.env = savedEnv
+      })
+
+      it('should configure the experiments project name from the environment', () => {
+        const config = getConfig()
+        assert.strictEqual(config.llmobs.projectName, 'env-project')
+        assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+
+        assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
+          name: 'DD_LLMOBS_PROJECT_NAME', value: 'env-project', origin: 'env_var',
+        }])
+      })
+    })
+
     it('should have DD_LLMOBS_ENABLED take priority over options', () => {
       process.env.DD_LLMOBS_ENABLED = 'false'
       const config = getConfig({ llmobs: { agentlessEnabled: true } })

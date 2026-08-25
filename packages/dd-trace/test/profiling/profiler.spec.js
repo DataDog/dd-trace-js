@@ -180,6 +180,35 @@ describe('profiler', function () {
       )
     })
 
+    it('should apply custom label keys set before start to the started profilers', async () => {
+      wallProfiler.setCustomLabelKeys = sinon.stub()
+      profiler.setCustomLabelKeys(['endpoint', 'resource'])
+
+      await profiler.start(makeStartOptions())
+
+      sinon.assert.calledOnce(wallProfiler.setCustomLabelKeys)
+      assert.deepStrictEqual(
+        [...wallProfiler.setCustomLabelKeys.firstCall.args[0]],
+        ['endpoint', 'resource']
+      )
+    })
+
+    it('should reapply custom label keys to profilers created by a later start', async () => {
+      wallProfiler.setCustomLabelKeys = sinon.stub()
+      await profiler.start(makeStartOptions())
+      profiler.setCustomLabelKeys(['endpoint', 'resource'])
+      profiler.stop()
+
+      wallProfiler.setCustomLabelKeys.resetHistory()
+      await profiler.start(makeStartOptions())
+
+      sinon.assert.calledOnce(wallProfiler.setCustomLabelKeys)
+      assert.deepStrictEqual(
+        [...wallProfiler.setCustomLabelKeys.firstCall.args[0]],
+        ['endpoint', 'resource']
+      )
+    })
+
     it('should delegate runWithLabels to the first profiler that supports it', async () => {
       wallProfiler.runWithLabels = sinon.stub().callsFake((labels, fn) => fn())
       await profiler.start(makeStartOptions())
