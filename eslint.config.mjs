@@ -993,7 +993,6 @@ export default [
       // TODO: Re-enable this rule once we have a way to fix the false positives or have Node.js report better errors.
       'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
-      'mocha/consistent-structure': 'off',
       'mocha/limit-retries': ['error', { mode: 'disallow' }],
       'mocha/limit-slow': ['error', { mode: 'disallow' }],
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
@@ -1062,6 +1061,20 @@ export default [
     files: ['packages/datadog-plugin-jest/test/fixtures/**/*.js'],
     rules: {
       'jsdoc/valid-types': 'off',
+    },
+  },
+  {
+    // These fixtures intentionally register duplicate hooks to verify hook and reporter behavior.
+    name: 'dd-trace/test-optimization/duplicate-hook-fixtures',
+    files: [
+      'integration-tests/ci-visibility/mocha-plugin-tests/failing.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/hook-async-error.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/reporter-reusable-run.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/reporter-terminal-event.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/reporter-test-start.js',
+    ],
+    rules: {
+      'mocha/consistent-structure': 'off',
     },
   },
   {
