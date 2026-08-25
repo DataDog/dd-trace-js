@@ -102,7 +102,7 @@ and allocation happen once.
 The default source adapter performs two jobs:
 
 1. Translate a target into the four Orchestrion lifecycle channels:
-   `start`, `end`, `asyncEnd`, and `error`.
+    `start`, `end`, `asyncEnd`, and `error`.
 2. Validate and return the invocation object containing `arguments`, `self`, `result`, and `error`.
 
 For example, the BullMQ target `{ module: 'bullmq', name: 'Queue_add' }` maps to channels under:
@@ -116,8 +116,9 @@ other event-source formats.
 
 ## 4. Start bindings establish three nested stores
 
-For every operation, the generated plugin registers three bindings on the start channel. Store bindings execute in
-reverse registration order, producing this effective nesting:
+Every operation registers the legacy binding plus only the capability stores its stages use. Diagnostic-channel
+implementations enter multiple stores in different orders, so the pipeline chooses their registration order to preserve
+this effective nesting:
 
 ```text
 storage('context')
@@ -278,7 +279,7 @@ For `Queue.add`, the flow is:
 3. Reserve and bind correlation.
 4. Create the producer span.
 5. Run `messaging`: create a carrier, inject correlation into it, and when DSM is enabled create the outgoing
-   checkpoint and encode its pathway into the same carrier.
+    checkpoint and encode its pathway into the same carrier.
 6. Commit the finished carrier into `opts.telemetry.metadata` under `_datadog`, preserving customer fields.
 7. Execute `Queue.add` and unwind the stage when its promise settles.
 

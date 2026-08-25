@@ -10,6 +10,9 @@ const contextStorage = storage('context')
 const spanStorage = storage('span')
 const legacyStorage = storage('legacy')
 const spanContextKey = Symbol('integration.pipeline.span_context')
+// Scope-based diagnostic channels enter bound stores in registration order. Older run-based channels nest them in
+// reverse order, so registration must preserve the same context -> legacy -> span nesting across both implementations.
+const storeBindingsRunInRegistrationOrder = typeof contextStorage.withScope === 'function'
 const definitionFields = new Set(['id', 'source', 'configure', 'operations'])
 const extractorPhases = new Set(['start', 'complete'])
 const spanFields = new Set(['enabled', 'name', 'service', 'resource', 'type', 'kind', 'tags', 'metrics', 'resultTags'])
@@ -816,21 +819,29 @@ function createIntegrationPlugin (definition) {
         const channels = source.channels(operation.target)
         const invocation = message => source.invocation(message)
 
-        // Store bindings execute in reverse registration order. Register only the capability stores used by stages;
-        // legacy storage remains the common span lifecycle block and sits between context and tracing when present.
-        if (operation.tracingStages.length > 0) {
-          this.addStoreBind(channels.start, spanStorage,
-            message => bindSafely(this, operation, message, source, states, spanStorage, bindSpan))
+        const contextSubscriptionOptions = operation.contextStages.length > 0 ? { allowNoop: true } : undefined
+        const bindContextStore = message =>
+          bindSafely(this, operation, message, source, states, contextStorage, bindContext)
+        const bindTracingStore = message =>
+          bindSafely(this, operation, message, source, states, spanStorage, bindSpan)
+
+        // Register only the capability stores used by stages. Legacy storage remains the common span lifecycle block
+        // and sits between context and tracing regardless of the diagnostic-channel store implementation.
+        if (storeBindingsRunInRegistrationOrder && operation.contextStages.length > 0) {
+          this.addStoreBind(channels.start, contextStorage, bindContextStore)
+        }
+        if (!storeBindingsRunInRegistrationOrder && operation.tracingStages.length > 0) {
+          this.addStoreBind(channels.start, spanStorage, bindTracingStore)
         }
         this.addBind(channels.start,
           message => bindSafely(this, operation, message, source, states, legacyStorage, bindLegacySpan),
-          operation.contextStages.length > 0 ? { allowNoop: true } : undefined)
-        if (operation.contextStages.length > 0) {
-          this.addStoreBind(channels.start, contextStorage,
-            message => bindSafely(this, operation, message, source, states, contextStorage, bindContext))
+          contextSubscriptionOptions)
+        if (storeBindingsRunInRegistrationOrder && operation.tracingStages.length > 0) {
+          this.addStoreBind(channels.start, spanStorage, bindTracingStore)
         }
-
-        const contextSubscriptionOptions = operation.contextStages.length > 0 ? { allowNoop: true } : undefined
+        if (!storeBindingsRunInRegistrationOrder && operation.contextStages.length > 0) {
+          this.addStoreBind(channels.start, contextStorage, bindContextStore)
+        }
         if (operation.tracingStages.length > 0) {
           this.addSub(channels.start, message => beginOperation(operation, invocation(message), states))
         }

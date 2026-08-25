@@ -463,7 +463,8 @@ name, configuration override, and service-source attribution.
 
 ## Store and lifecycle invariants
 
-Start bindings execute in reverse registration order. The effective nesting is:
+Diagnostic-channel implementations enter multiple stores in different orders. The pipeline chooses their registration
+order so the effective nesting remains:
 
 ```text
 storage('context')
