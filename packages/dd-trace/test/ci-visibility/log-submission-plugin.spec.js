@@ -8,7 +8,11 @@ const sinon = require('sinon')
 
 require('../setup/core')
 
+const { publishWithCompletion } = require('../../../datadog-instrumentations/src/helpers/channel')
+const { FINAL_FLUSH_TIMEOUT } = require('../../src/ci-visibility/final-flush')
+
 const logSubmissionCh = channel('ci:log-submission:log')
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const request = sinon.stub()
 const log = {
   error: sinon.stub(),
@@ -83,6 +87,108 @@ describe('LogSubmissionPlugin', () => {
     beforeExitHandler()
 
     sinon.assert.calledOnce(request)
+  })
+
+  it('completes a log submission flush immediately when no logs are pending', () => {
+    const onDone = sinon.spy()
+
+    publishWithCompletion(logSubmissionFlushCh, {}, onDone)
+
+    sinon.assert.calledOnce(onDone)
+    sinon.assert.notCalled(request)
+  })
+
+  it('flushes the batch and waits for the intake request to finish', () => {
+    let onRequestDone
+    request.callsFake((data, options, callback) => {
+      onRequestDone = callback
+    })
+    publishLog('{"msg":"hello"}')
+    const onDone = sinon.spy()
+
+    publishWithCompletion(logSubmissionFlushCh, {}, onDone)
+
+    sinon.assert.calledOnce(request)
+    sinon.assert.notCalled(onDone)
+    onRequestDone()
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('does not wait for a request started after the flush snapshot', () => {
+    const requestCallbacks = []
+    request.callsFake((data, options, callback) => requestCallbacks.push(callback))
+    publishLog('{"msg":"first"}')
+    const onDone = sinon.spy()
+    publishWithCompletion(logSubmissionFlushCh, {}, onDone)
+
+    publishLog('{"msg":"second"}')
+    clock.tick(1000)
+    assert.strictEqual(requestCallbacks.length, 2)
+    requestCallbacks[0]()
+
+    sinon.assert.calledOnce(onDone)
+    requestCallbacks[1]()
+  })
+
+  it('releases a flush when the intake request fails', () => {
+    let onRequestDone
+    request.callsFake((data, options, callback) => {
+      onRequestDone = callback
+    })
+    publishLog('{"msg":"hello"}')
+    const onDone = sinon.spy()
+    const error = new Error('boom')
+    publishWithCompletion(logSubmissionFlushCh, {}, onDone)
+
+    onRequestDone(error)
+
+    sinon.assert.calledOnce(onDone)
+    sinon.assert.calledWith(log.error, 'Error submitting %s logs', 'bunyan', error)
+  })
+
+  it('aborts pending requests and releases the final flush at the deadline', () => {
+    request.callsFake(() => {})
+    publishLog('{"msg":"hello"}')
+    const onDone = sinon.spy()
+
+    publishWithCompletion(logSubmissionFlushCh, {}, onDone)
+
+    const { signal } = request.firstCall.args[1]
+    clock.tick(FINAL_FLUSH_TIMEOUT - 1)
+    sinon.assert.notCalled(onDone)
+    assert.strictEqual(signal.aborted, false)
+    clock.tick(1)
+    sinon.assert.calledOnce(onDone)
+    assert.strictEqual(signal.aborted, true)
+    assert.strictEqual(signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+  })
+
+  it('waits for every intake request in the flush snapshot', () => {
+    const requestCallbacks = []
+    request.callsFake((data, options, callback) => requestCallbacks.push(callback))
+    publishLog('{"msg":"bunyan"}')
+    publishLog('{"msg":"pino"}', 'pino')
+    const onDone = sinon.spy()
+
+    publishWithCompletion(logSubmissionFlushCh, {}, onDone)
+
+    assert.strictEqual(requestCallbacks.length, 2)
+    requestCallbacks[0]()
+    sinon.assert.notCalled(onDone)
+    requestCallbacks[1]()
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('releases a flush when request throws synchronously', () => {
+    const error = new Error('boom')
+    request.throws(error)
+    publishLog('{"msg":"hello"}')
+    const onDone = sinon.spy()
+
+    publishWithCompletion(logSubmissionFlushCh, {}, onDone)
+
+    sinon.assert.calledOnce(onDone)
+    sinon.assert.calledWith(log.error, 'Error submitting %s logs', 'bunyan', error)
   })
 
   it('uses the default logs intake when no override is configured', () => {
