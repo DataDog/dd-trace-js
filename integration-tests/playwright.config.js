@@ -56,4 +56,12 @@ if (process.env.MAX_FAILURES) {
   config.maxFailures = Number(process.env.MAX_FAILURES)
 }
 
+if (process.env.FAIL_ON_FLAKY_TESTS) {
+  config.failOnFlakyTests = true
+}
+
+if (process.env.FAIL_GLOBAL_TEARDOWN) {
+  config.globalTeardown = './ci-visibility/playwright-tests-test-management/global-teardown.js'
+}
+
 module.exports = config

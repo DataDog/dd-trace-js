@@ -4,6 +4,8 @@ const { readFileSync } = require('node:fs')
 const { extname } = require('node:path')
 
 const getConfig = require('../../config')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const log = require('../../log')
 const request = require('../exporters/request')
 
@@ -134,8 +136,8 @@ function uploadTestScreenshot (
   if (isEvpProxy) {
     // Agent mode: prefix the evp_proxy path, tell the proxy which subdomain to forward to, and
     // drop the API key — the Agent injects it. The query params survive the proxy.
-    options.path = `${evpProxyPrefix}${basePath}?${query}`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = `${joinEVPProxyPath(evpProxyPrefix, basePath)}?${query}`
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
   } else {
     options.headers['DD-API-KEY'] = DD_API_KEY
   }

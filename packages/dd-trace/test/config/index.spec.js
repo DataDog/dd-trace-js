@@ -897,6 +897,25 @@ describe('Config', () => {
     })
   })
 
+  describe('HTTP client error statuses', () => {
+    it('should default to 400-499', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '400-499')
+    })
+
+    it('should initialize from DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', () => {
+      process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '500-599'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '500-599')
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', value: '500-599', origin: 'env_var' },
+      ])
+    })
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = getConfig()
 
@@ -965,6 +984,7 @@ describe('Config', () => {
           enabled: false,
           endpoint: undefined,
           maxMessagesLength: 16,
+          redactionEnabled: true,
           timeout: 10_000,
           maxContentSize: 512 * 1024,
         },
@@ -1099,6 +1119,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 512 * 1024, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
+      { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 10_000, origin: 'default' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: '', origin: 'default' },
@@ -1255,6 +1276,7 @@ describe('Config', () => {
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(1024 * 1024)
     process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = '32'
+    process.env.DD_AI_GUARD_REDACTION_ENABLED = 'false'
     process.env.DD_AI_GUARD_TIMEOUT = '2000'
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
@@ -1446,6 +1468,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          redactionEnabled: false,
           timeout: 2000,
         },
         enableGetRumData: true,
@@ -1582,6 +1605,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 512 * 1024, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
+      { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 10_000, origin: 'default' },
       { name: 'DD_AI_GUARD_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'env_var' },
@@ -1589,6 +1613,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_TIMEOUT', value: 2000, origin: 'env_var' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 1024 * 1024, origin: 'env_var' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 32, origin: 'env_var' },
+      { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: false, origin: 'env_var' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: 'log', origin: 'env_var' },
       { name: 'DD_AGENT_HOST', value: 'agent', origin: 'env_var' },
@@ -1950,6 +1975,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          redactionEnabled: true,
           timeout: 2000,
         },
         exporter: 'log',
@@ -2056,6 +2082,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          redactionEnabled: true,
           timeout: 2000,
         },
         enableGetRumData: true,
@@ -2201,6 +2228,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_ENDPOINT', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'code' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 1024 * 1024, origin: 'code' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 32, origin: 'code' },
+      { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'code' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 2_000, origin: 'code' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: true, origin: 'code' },
       { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: 'log', origin: 'code' },
@@ -2424,6 +2452,7 @@ describe('Config', () => {
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datadog.com/api/unstable/ai-guard'
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(512 * 1024)
     process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = '16'
+    process.env.DD_AI_GUARD_REDACTION_ENABLED = 'false'
     process.env.DD_AI_GUARD_TIMEOUT = '1000'
     process.env.DD_API_KEY = '123'
     process.env.DD_API_SECURITY_ENABLED = 'false'
@@ -2560,6 +2589,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          redactionEnabled: true,
           timeout: 2000,
         },
         b3: false,
@@ -2674,6 +2704,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          redactionEnabled: true,
           timeout: 2000,
         },
         enableGetRumData: false,
@@ -3892,6 +3923,35 @@ describe('Config', () => {
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
         name: 'DD_LLMOBS_ENABLED', value: true, origin: 'calculated',
       }])
+    })
+
+    it('should configure the experiments project name from options and enable llmobs', () => {
+      const config = getConfig({ llmobs: { projectName: 'experiments-project' } })
+      assert.strictEqual(config.llmobs.projectName, 'experiments-project')
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+    })
+
+    context('DD_LLMOBS_PROJECT_NAME', () => {
+      let savedEnv
+
+      beforeEach(() => {
+        savedEnv = process.env
+        process.env.DD_LLMOBS_PROJECT_NAME = 'env-project'
+      })
+
+      afterEach(() => {
+        process.env = savedEnv
+      })
+
+      it('should configure the experiments project name from the environment', () => {
+        const config = getConfig()
+        assert.strictEqual(config.llmobs.projectName, 'env-project')
+        assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+
+        assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
+          name: 'DD_LLMOBS_PROJECT_NAME', value: 'env-project', origin: 'env_var',
+        }])
+      })
     })
 
     it('should have DD_LLMOBS_ENABLED take priority over options', () => {

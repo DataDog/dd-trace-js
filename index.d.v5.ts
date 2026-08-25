@@ -860,6 +860,13 @@ declare namespace tracer {
          */
         maxMessagesLength?: number,
         /**
+         * Whether AI Guard applies backend-provided sensitive-data redaction replacements.
+         * @default true
+         * @env DD_AI_GUARD_REDACTION_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        redactionEnabled?: boolean,
+        /**
          * Max size of the content property set in the meta-struct
          * @env DD_AI_GUARD_MAX_CONTENT_SIZE
          * Programmatic configuration takes precedence over the environment variables listed above.
@@ -1819,6 +1826,25 @@ declare namespace tracer {
     }
 
     /**
+     * A structured content part in an AI Guard message.
+     */
+    export interface ContentPart {
+      type: string;
+      text?: string;
+      image_url?: { url: string };
+    }
+
+    /**
+     * A conversational message whose content is represented by structured parts.
+     */
+    export interface ContentPartsMessage {
+      role: string;
+      content: ContentPart[];
+      tool_call_id?: string;
+      tool_calls?: ToolCall[];
+    }
+
+    /**
      * A standard conversational message exchanged with a Large Language Model (LLM).
      */
     export interface TextMessage {
@@ -1889,9 +1915,24 @@ declare namespace tracer {
 
     export type Message =
       | TextMessage
+      | ContentPartsMessage
       | AssistantTextMessage
       | AssistantToolCallMessage
       | ToolMessage;
+
+    /**
+     * A sensitive data replacement the AI Guard service determined for the evaluated conversation.
+     */
+    export interface RedactionReplacement {
+      /**
+       * Location of the replaced value within the evaluated conversation (e.g. `messages[0].content`).
+       */
+      path: string;
+      /**
+       * The value that replaces the sensitive data found at `path`.
+       */
+      replacement: string;
+    }
 
     /**
      * The result returned by AI Guard after evaluating a conversation.
@@ -1920,6 +1961,16 @@ declare namespace tracer {
        * Sensitive Data Scanner findings from the evaluation.
        */
       sds: Object[];
+      /**
+       * The evaluated conversation, redacted when required by the AI Guard service.
+       * This may contain sensitive data when redaction is disabled or no replacement was applied.
+       */
+      messages: Message[];
+      /**
+       * The replacements the AI Guard service determined for the evaluated conversation, reported whether or not
+       * the tracer applied them. Empty when the service determined no replacement.
+       */
+      redactionReplacements: RedactionReplacement[];
     }
 
     /**
@@ -3816,7 +3867,7 @@ declare namespace tracer {
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
        */
-      enable (options: LLMObsEnableOptions): void,
+      enable (options: LLMObsRuntimeEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
@@ -3996,6 +4047,8 @@ declare namespace tracer {
     ) => any | Promise<any>
 
     interface CreateDatasetOptions {
+      /** Override the configured project for this dataset. */
+      projectName?: string
       description?: string
       records?: Array<{
         id?: string,
@@ -4010,6 +4063,8 @@ declare namespace tracer {
       name: string
       dataset: Dataset
       task: ExperimentTask
+      /** Override the configured project for this experiment. */
+      projectName?: string
       /** Evaluators keyed by metric label, or named functions. */
       evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
       /** Summary evaluators keyed by metric label, or named functions. */
@@ -4029,6 +4084,8 @@ declare namespace tracer {
     }
 
     interface PullDatasetOptions {
+      /** Override the configured project for this dataset pull. */
+      projectName?: string
       /** Dataset version to pull. Defaults to latest. */
       version?: number
       /** Wait until at least this many records are readable (absorbs write lag). */
@@ -4180,6 +4237,8 @@ declare namespace tracer {
       description (): string
       id (): string | null
       projectId (): string | null
+      /** Project associated with the client used to create or pull this dataset. */
+      projectName (): string | null | undefined
       version (): number | null
       latestVersion (): number | null
       records (): Array<{
@@ -4707,6 +4766,13 @@ declare namespace tracer {
      */
     interface LLMObsEnableOptions {
       /**
+       * The name of the LLM Observability project used for experiments.
+       * @env DD_LLMOBS_PROJECT_NAME
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      projectName?: string,
+
+      /**
        * The name of your ML application.
        * @env DD_LLMOBS_ML_APP
        * Programmatic configuration takes precedence over the environment variables listed above.
@@ -4729,6 +4795,10 @@ declare namespace tracer {
        */
       sampleRate?: number,
     }
+
+    /** Options accepted by the deprecated runtime `llmobs.enable()` method. */
+    type LLMObsRuntimeEnableOptions = Omit<LLMObsEnableOptions, 'projectName'>
+
     /** @hidden */
     type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm'
   }

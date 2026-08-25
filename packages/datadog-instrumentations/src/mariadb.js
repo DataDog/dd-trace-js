@@ -14,6 +14,7 @@ const {
   takePoolWaitTime,
   wrapPoolQueryMethod,
 } = require('./helpers/pool-acquire')
+const { wrapCallbackBundle, wrapPromiseBundle } = require('./mariadb-bundle')
 
 const commandAddCh = channel('apm:mariadb:command:add')
 const connectionStartCh = channel('apm:mariadb:connection:start')
@@ -443,3 +444,9 @@ addHook({ name, file: 'lib/connection.js', versions: ['>=2.0.4 <=2.5.1'] }, (Con
 addHook({ name, file: 'lib/pool-base.js', versions: ['>=2.0.4 <3'] }, (PoolBase) => {
   return shimmer.wrapFunction(PoolBase, wrapPoolBase)
 })
+
+// MariaDB 3.5.3 added single-file CommonJS bundles that do not load the original source modules at runtime.
+// Matching their generated, minified internals would couple instrumentation to unstable bundle output, so wrap
+// the runtime objects returned by the public factories instead.
+addHook({ name, versions: ['>=3.5.3'] }, wrapPromiseBundle)
+addHook({ name, file: 'dist/callback.cjs', versions: ['>=3.5.3'] }, wrapCallbackBundle)

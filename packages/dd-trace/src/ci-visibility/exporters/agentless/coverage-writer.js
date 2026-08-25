@@ -1,7 +1,9 @@
 'use strict'
 const getConfig = require('../../../config')
-const log = require('../../../log')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../../evp_proxy/path')
 const { safeJSONStringify } = require('../../../exporters/common/util')
+const log = require('../../../log')
 
 const {
   incrementCountMetric,
@@ -53,9 +55,9 @@ class Writer extends BaseWriter {
     }
 
     if (this._evpProxyPrefix) {
-      options.path = `${this._evpProxyPrefix}/api/v2/citestcov`
+      options.path = joinEVPProxyPath(this._evpProxyPrefix, '/api/v2/citestcov')
       delete options.headers['dd-api-key']
-      options.headers['X-Datadog-EVP-Subdomain'] = 'citestcov-intake'
+      options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'citestcov-intake'
     }
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style

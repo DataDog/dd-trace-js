@@ -534,6 +534,7 @@ class PlaywrightPlugin extends CiPlugin {
       testSourceLine,
       browserName,
       isNew,
+      isAttemptToFix,
       isDisabled,
       isModified,
       isQuarantined,
@@ -558,6 +559,9 @@ class PlaywrightPlugin extends CiPlugin {
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
+      }
+      if (isAttemptToFix) {
+        span.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
       }
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')

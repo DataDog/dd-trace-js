@@ -3,6 +3,7 @@
 const assert = require('assert')
 const { exec } = require('child_process')
 const { once } = require('events')
+const http = require('http')
 
 const {
   sandboxCwd,
@@ -27,6 +28,7 @@ describe('test optimization automatic log submission', () => {
   useSandbox([
     'mocha',
     ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
+    'bunyan',
     'jest',
     'winston',
     playwrightDependency,
@@ -65,7 +67,8 @@ describe('test optimization automatic log submission', () => {
   const testFrameworks = [
     {
       name: 'mocha',
-      command: 'mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js',
+      command: './node_modules/.bin/mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js',
+      loggerNames: ['winston', 'bunyan'],
     },
     {
       name: 'jest',
@@ -74,10 +77,12 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'cucumber',
       command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature',
+      loggerNames: ['winston', 'bunyan'],
     },
     {
       name: 'playwright',
       command: './node_modules/.bin/playwright test -c playwright.config.js',
+      loggerNames: ['bunyan'],
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
         TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
@@ -86,10 +91,19 @@ describe('test optimization automatic log submission', () => {
     },
   ]
 
-  testFrameworks.forEach(({ name, command, getExtraEnvVars = () => ({}) }) => {
+  const loggers = {
+    bunyan: { level: 30, messageKey: 'msg' },
+    winston: { level: 'info', messageKey: 'message' },
+  }
+
+  testFrameworks.flatMap(framework => {
+    return (framework.loggerNames || ['winston']).map(loggerName => ({ ...framework, loggerName }))
+  }).forEach(({ name, command, getExtraEnvVars = () => ({}), loggerName }) => {
     if (!isLatestCucumberSupported && name === 'cucumber') return
 
-    context(`with ${name}`, () => {
+    const { level: expectedLevel, messageKey } = loggers[loggerName]
+
+    context(`with ${loggerName} and ${name}`, () => {
       it('can automatically submit logs', async () => {
         let logIds = {}
         let testIds = {}
@@ -98,20 +112,23 @@ describe('test optimization automatic log submission', () => {
           .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
             payloads.forEach(({ headers }) => {
               assert.equal(headers['dd-api-key'], '1')
+              if (loggerName !== 'winston') {
+                assert.equal(headers['content-type'], 'application/json')
+              }
             })
             const logMessages = payloads.flatMap(({ logMessage }) => logMessage)
             const [url] = payloads.flatMap(({ url }) => url)
 
-            assert.equal(url, '/api/v2/logs?ddsource=winston&service=my-service')
+            assert.equal(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`)
             assert.equal(logMessages.length, 2)
 
             logMessages.forEach(({ dd, level }) => {
-              assert.equal(level, 'info')
+              assert.equal(level, expectedLevel)
               assert.equal(dd.service, 'my-service')
               assert.deepStrictEqual(['service', 'span_id', 'trace_id'], Object.keys(dd).sort())
             })
 
-            assertObjectContains(logMessages.map(({ message }) => message), [
+            assertObjectContains(logMessages.map(logMessage => logMessage[messageKey]), [
               'Hello simple log!',
               'sum function being called',
             ])
@@ -142,6 +159,7 @@ describe('test optimization automatic log submission', () => {
               DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
               DD_API_KEY: '1',
               DD_SERVICE: 'my-service',
+              TEST_LOGGER: loggerName,
               ...getExtraEnvVars(),
             },
           }
@@ -183,6 +201,7 @@ describe('test optimization automatic log submission', () => {
               ...getCiVisAgentlessConfig(receiver.port),
               DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
               DD_SERVICE: 'my-service',
+              TEST_LOGGER: loggerName,
               ...getExtraEnvVars(),
             },
           }
@@ -224,6 +243,7 @@ describe('test optimization automatic log submission', () => {
               DD_TRACE_DEBUG: '1',
               DD_TRACE_LOG_LEVEL: 'warn',
               DD_API_KEY: '',
+              TEST_LOGGER: loggerName,
               ...getExtraEnvVars(),
             },
           }
@@ -245,6 +265,103 @@ describe('test optimization automatic log submission', () => {
         assert.match(testOutput, /Hello simple log!/)
         assert.match(testOutput, /no automatic log submission will be performed/)
       })
+    })
+  })
+
+  context('with bunyan and multiple playwright test groups', () => {
+    it('waits for pending requests only when the worker exits', async () => {
+      const logMessages = []
+      let firstLogResponse
+      let firstLogRequestAborted = false
+      let waitingTestResponse
+
+      const respond = (response) => {
+        if (response.destroyed || response.writableEnded) return
+
+        response.writeHead(200)
+        response.end('OK')
+      }
+      const logsServer = http.createServer((request, response) => {
+        if (request.method === 'GET' && request.url === '/wait-for-first-log') {
+          if (firstLogResponse) respond(response)
+          else waitingTestResponse = () => respond(response)
+          return
+        }
+        if (request.method === 'GET' && request.url === '/second-group-started') {
+          firstLogResponse()
+          respond(response)
+          return
+        }
+        if (request.method !== 'POST' || !request.url.startsWith('/api/v2/logs')) {
+          response.writeHead(404)
+          response.end()
+          return
+        }
+
+        let body = ''
+        request.setEncoding('utf8')
+        request.on('data', chunk => {
+          body += chunk
+        })
+        request.on('end', () => {
+          logMessages.push(...JSON.parse(body))
+          if (firstLogResponse) {
+            respond(response)
+            return
+          }
+
+          response.once('close', () => {
+            if (!response.writableEnded) firstLogRequestAborted = true
+          })
+          firstLogResponse = () => respond(response)
+          waitingTestResponse?.()
+        })
+      })
+      await new Promise((resolve, reject) => {
+        logsServer.once('error', reject)
+        logsServer.listen(0, resolve)
+      })
+
+      try {
+        const { port } = logsServer.address()
+        childProcess = exec('./node_modules/.bin/playwright test -c playwright.config.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+            DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${port}`,
+            DD_API_KEY: '1',
+            DD_SERVICE: 'my-service',
+            LOG_SUBMISSION_CONTROL_URL: `http://localhost:${port}`,
+            PLAYWRIGHT_WORKERS: '1',
+            TEST_DIR: 'ci-visibility/automatic-log-submission-playwright-multiple-groups',
+            TEST_LOGGER: 'bunyan',
+          },
+        })
+        childProcess.stdout?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+        ])
+      } finally {
+        firstLogResponse?.()
+        waitingTestResponse?.()
+        await new Promise(resolve => logsServer.close(resolve))
+      }
+
+      assert.equal(childProcess.exitCode, 0, testOutput)
+      assert.equal(firstLogRequestAborted, false)
+      assert.deepStrictEqual(logMessages.map(({ msg }) => msg).sort(), [
+        'first group log',
+        'second group log',
+      ])
     })
   })
 })

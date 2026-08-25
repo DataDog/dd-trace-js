@@ -1,5 +1,7 @@
 'use strict'
 const getConfig = require('../../../config')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../../evp_proxy/path')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const log = require('../../../log')
 
@@ -54,9 +56,9 @@ class Writer extends BaseWriter {
     }
 
     if (this._evpProxyPrefix) {
-      options.path = `${this._evpProxyPrefix}/api/v2/citestcycle`
+      options.path = joinEVPProxyPath(this._evpProxyPrefix, '/api/v2/citestcycle')
       delete options.headers['dd-api-key']
-      options.headers['X-Datadog-EVP-Subdomain'] = 'citestcycle-intake'
+      options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'citestcycle-intake'
     }
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style

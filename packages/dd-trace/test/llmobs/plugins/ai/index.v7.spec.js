@@ -150,9 +150,10 @@ describe('Plugin', () => {
       })
     })
 
-    it('creates a span for embedMany', async function () {
-      if (!semifies(resolvedVersion, '>=7.0.23')) this.skip()
+    const embedManyTest = semifies(resolvedVersion, '>=7.0.23') ? it : it.skip
 
+    // embedMany is only available from ai 7.0.23.
+    embedManyTest('creates a span for embedMany', async function () {
       await ai.embedMany({
         model: openai.embedding('text-embedding-ada-002'),
         values: ['hello world', 'goodbye world'],
@@ -1146,8 +1147,11 @@ describe('Plugin', () => {
               PackageModule = require(`../../../../../../versions/${packageName}@${packageVersion}`)
             })
 
-            if (scenarios.includes('cache-read')) {
-              it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
+            {
+              const cacheReadTest = scenarios.includes('cache-read') ? it : it.skip
+              const cacheReadTitle = `surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`
+
+              cacheReadTest(cacheReadTitle, async () => {
                 const model = buildModel(PackageModule, 'cache-read')
                 await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
 
@@ -1159,10 +1163,12 @@ describe('Plugin', () => {
                 assert.equal(languageModelCallSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
                 assert.equal(languageModelCallSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
               })
-            }
 
-            if (scenarios.includes('cache-write')) {
-              it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
+              const cacheWriteTest = scenarios.includes('cache-write') ? it : it.skip
+              const cacheWriteTitle = `surfaces cache_write_input_tokens when ${providerName} ` +
+                'returns cache write tokens'
+
+              cacheWriteTest(cacheWriteTitle, async () => {
                 const model = buildModel(PackageModule, 'cache-write')
                 await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
 
