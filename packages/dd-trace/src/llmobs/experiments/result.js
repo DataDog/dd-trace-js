@@ -27,6 +27,7 @@ class ExperimentRun {
   constructor (fields) {
     this.runId = fields.runId
     this.runIteration = fields.runIteration
+    this.hasError = fields.hasError
     this.rows = fields.rows
     this.summaryEvaluations = fields.summaryEvaluations
   }
