@@ -12,7 +12,7 @@ const legacyStorage = storage('legacy')
 // agents cap at a single socket per origin, so concurrent payloads queue behind
 // one connection and the bounded final flush aborts the backlog. A dedicated
 // pool with bounded concurrency drains the queue in parallel instead.
-const MAX_SOCKETS = 16
+const MAX_SOCKETS = 32
 const agentOptions = { keepAlive: true, maxSockets: MAX_SOCKETS }
 
 /**
