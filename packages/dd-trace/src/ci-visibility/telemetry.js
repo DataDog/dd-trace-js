@@ -45,7 +45,10 @@ function formatMetricTags (tagsDictionary) {
   return Object.keys(tagsDictionary).reduce((/** @type {string[]} */ acc, tagKey) => {
     if (tagKey === 'statusCode') {
       const statusCode = tagsDictionary[tagKey]
-      if (isStatusCode400(statusCode)) {
+      // Emit the status_code tag for any truthy value, not just 4xx. Network errors
+      // carry the error code (e.g. ECONNRESET) here so it surfaces in the existing
+      // status_code dashboard dimension without adding a new tag.
+      if (statusCode) {
         acc.push(`status_code:${statusCode}`)
       }
       acc.push(`error_type:${getErrorTypeFromStatusCode(statusCode)}`)
@@ -128,10 +131,6 @@ const TELEMETRY_TEST_MANAGEMENT_TESTS_MS = 'test_management_tests.request_ms'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS = 'test_management_tests.request_errors'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS = 'test_management_tests.response_tests'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES = 'test_management_tests.response_bytes'
-
-function isStatusCode400 (statusCode) {
-  return statusCode >= 400 && statusCode < 500
-}
 
 function getErrorTypeFromStatusCode (statusCode) {
   if (statusCode >= 400 && statusCode < 500) {

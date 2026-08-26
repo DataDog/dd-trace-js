@@ -69,11 +69,11 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       if (err) {
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-          { endpoint: 'di_logs', statusCode, code: err.code }
+          { endpoint: 'di_logs', statusCode: statusCode ?? err.code }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'di_logs', code: err.code }
+          { endpoint: 'di_logs', statusCode: statusCode ?? err.code }
         )
         log.error('Error sending DI logs payload', err)
         done(err)

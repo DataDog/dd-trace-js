@@ -122,7 +122,7 @@ describe('CI Visibility Coverage Writer', () => {
         sinon.assert.calledWithExactly(
           incrementCountMetric,
           'endpoint_payload.dropped',
-          { endpoint: 'code_coverage', code: 'ECONNRESET' }
+          { endpoint: 'code_coverage', statusCode: 'ECONNRESET' }
         )
         done()
       })
