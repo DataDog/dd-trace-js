@@ -60,7 +60,7 @@ describe('Test Optimization request tracker', () => {
     sinon.assert.calledOnceWithExactly(done, undefined)
   })
 
-  it('aborts pending requests and releases the process at the deadline', () => {
+  it('detaches pending requests and releases the final flush at the deadline', () => {
     const writer = getWriter()
     writer._encoder.count.returns(1)
     const done = sinon.spy()
@@ -68,7 +68,8 @@ describe('Test Optimization request tracker', () => {
     writer.flush(done, { deadline: Date.now() + 1000 })
     clock.tick(1000)
 
-    assert.strictEqual(pendingRequests[0].options.signal.aborted, true)
+    // The request is detached (not aborted) so it can complete in the background.
+    assert.strictEqual(pendingRequests[0].options.signal.aborted, false)
     sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
   })
