@@ -59,15 +59,15 @@
 /packages/dd-trace/test/plugins/util/stacktrace.spec.js @DataDog/dd-trace-js @DataDog/debugger-nodejs
 
 # Serverless
-/packages/dd-trace/src/lambda/ @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
+/packages/dd-trace/src/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/src/azure_metadata.js @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/src/serverless.js @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/src/serverless/ @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/src/flush.js @DataDog/dd-trace-js @DataDog/apm-serverless @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/lambda/ @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
+/packages/dd-trace/test/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/test/azure_metadata.spec.js @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/test/serverless.spec.js @DataDog/dd-trace-js @DataDog/apm-serverless
-/packages/dd-trace/test/plugins/util/inferred_proxy.spec.js @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
+/packages/dd-trace/test/plugins/util/inferred_proxy.spec.js @DataDog/serverless-aws @DataDog/apm-serverless
 
 # IDM
 /.agents/skills/apm-integrations/ @DataDog/dd-trace-js @DataDog/apm-idm-js
@@ -385,7 +385,7 @@
 /.github/workflows/instrumentation.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /.github/workflows/electron.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /.github/workflows/release.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/workflows/serverless.yml @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless @dd-octo-sts
+/.github/workflows/serverless.yml @DataDog/serverless-aws @DataDog/apm-serverless @dd-octo-sts
 /.github/workflows/llmobs.yml @DataDog/dd-trace-js @DataDog/ml-observability @dd-octo-sts
 /.github/workflows/openfeature.yml @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk @dd-octo-sts
 /.github/workflows/pr-title.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
