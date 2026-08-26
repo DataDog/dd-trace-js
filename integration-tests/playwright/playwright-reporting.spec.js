@@ -1219,6 +1219,23 @@ versions.forEach((version) => {
         const [exitCode] = await once(proc, 'exit')
         assert.strictEqual(exitCode, 0)
       })
+
+      it('finishes if worker trace flushing throws synchronously', async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            timeout: 30000,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-flush-error',
+            },
+          }
+        )
+
+        const [exitCode] = await once(proc, 'exit')
+        assert.strictEqual(exitCode, 0)
+      })
     }
 
     const fullyParallelConfigValue = [true, false]
