@@ -8,6 +8,7 @@ const { afterEach, describe, it } = require('mocha')
 
 const { withDatadogTurbopack } = require('..')
 const loader = require('../src/loader')
+const { createEsmProxy } = require('../src/targets')
 
 const directories = []
 
@@ -76,6 +77,21 @@ describe('datadog-turbopack loader', () => {
     assert.match(result, /dd-trace:bundler:load/)
     assert.match(result, /package: "ioredis"/)
     assert.match(result, /path: "ioredis"/)
+    assert.ok(result.includes(`require(${JSON.stringify(relativeImport(
+      path.dirname(resourcePath), require.resolve('dc-polyfill')
+    ))})`))
+  })
+
+  it('resolves generated ESM proxy dependencies from dd-trace', async () => {
+    const directory = createPackage('openai', { type: 'module' })
+    const resourcePath = write(directory, 'index.mjs', 'export const client = true')
+    const proxyPath = write(directory, '../.cache/dd-trace/turbopack/openai.mjs', '')
+
+    const result = await createEsmProxy(resourcePath, proxyPath, 'openai')
+
+    assert.ok(result.includes(`from ${JSON.stringify(relativeImport(
+      path.dirname(proxyPath), require.resolve('import-in-the-middle/lib/register.js')
+    ))}`))
   })
 })
 
@@ -131,4 +147,10 @@ function write (directory, relativePath, content) {
 
 function realpath (file) {
   return fs.realpathSync(file).replaceAll('\\', '/')
+}
+
+function relativeImport (from, to) {
+  let value = path.relative(from, to).replaceAll('\\', '/')
+  if (!value.startsWith('.')) value = `./${value}`
+  return value
 }
