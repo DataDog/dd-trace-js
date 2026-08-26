@@ -8,6 +8,8 @@ require('../../../../../dd-trace/test/setup/core')
 
 const { getAgent } = require('../../../../src/ci-visibility/exporters/agents')
 
+let isOriginSaturated
+
 let Writer
 let writer
 let span
@@ -39,6 +41,7 @@ describe('CI Visibility Writer', () => {
       error: sinon.spy(),
     }
     incrementCountMetric = sinon.stub()
+    isOriginSaturated = () => false
 
     const AgentlessCiVisibilityEncoder = function () {
       return encoder
@@ -56,7 +59,7 @@ describe('CI Visibility Writer', () => {
 
     Writer = proxyquire('../../../../src/ci-visibility/exporters/agentless/writer', {
       '../request': request,
-      '../agents': { getAgent },
+      '../agents': { getAgent, isOriginSaturated: (...args) => isOriginSaturated(...args) },
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
       '../../../ci-visibility/telemetry': { incrementCountMetric },
@@ -129,6 +132,54 @@ describe('CI Visibility Writer', () => {
           )
           done()
         })
+      })
+    })
+
+    describe('size-gated flush coalescing', () => {
+      it('defers a background flush while the intake origin is saturated', (done) => {
+        encoder.count.returns(1)
+        encoder._traceBytes = { length: 1_000_000 }
+        isOriginSaturated = () => true
+
+        const callback = sinon.spy()
+        writer.flush(callback)
+
+        sinon.assert.calledOnceWithExactly(callback)
+        sinon.assert.notCalled(request)
+        done()
+      })
+
+      it('flushes near the encoder hard cap even when saturated', (done) => {
+        encoder.count.returns(1)
+        encoder._traceBytes = { length: 50_000_000 }
+        isOriginSaturated = () => true
+
+        writer.flush(() => {
+          sinon.assert.calledOnce(request)
+          done()
+        })
+      })
+
+      it('flushes when the intake origin is idle', (done) => {
+        encoder.count.returns(1)
+        encoder._traceBytes = { length: 1_000_000 }
+        isOriginSaturated = () => false
+
+        writer.flush(() => {
+          sinon.assert.calledOnce(request)
+          done()
+        })
+      })
+
+      it('always flushes a final flush with a deadline even when saturated', (done) => {
+        encoder.count.returns(1)
+        encoder._traceBytes = { length: 1_000_000 }
+        isOriginSaturated = () => true
+
+        writer.flush(() => {
+          sinon.assert.calledOnce(request)
+          done()
+        }, { deadline: Date.now() + 20_000 })
       })
     })
   })
