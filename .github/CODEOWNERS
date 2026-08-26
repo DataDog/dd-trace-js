@@ -340,11 +340,11 @@
 /supported_versions_table.csv @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 
 # Feature Flagging
-/integration-tests/esbuild/*openfeature* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
-/integration-tests/openfeature/ @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk
-/integration-tests/webpack/*openfeature* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
-/packages/dd-trace/src/openfeature/ @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk
-/packages/dd-trace/test/openfeature/ @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk
+/integration-tests/esbuild/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
+/integration-tests/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/integration-tests/webpack/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/src/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/test/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 
 # CI
 /.github/actions/**/action.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
@@ -387,7 +387,7 @@
 /.github/workflows/release.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/serverless.yml @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless @dd-octo-sts
 /.github/workflows/llmobs.yml @DataDog/dd-trace-js @DataDog/ml-observability @dd-octo-sts
-/.github/workflows/openfeature.yml @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk @dd-octo-sts
+/.github/workflows/openfeature.yml @DataDog/feature-flagging-and-experimentation-sdk @dd-octo-sts
 /.github/workflows/pr-title.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/profiling.yml @DataDog/dd-trace-js @DataDog/profiling-js @dd-octo-sts
 /.github/workflows/system-tests.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
@@ -409,8 +409,8 @@
 
 # Language Platform
 /* @DataDog/dd-trace-js @DataDog/lang-platform-js
-/openfeature.d.ts @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
-/openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/openfeature.d.ts @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
 /.github/CODEOWNERS @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/dependabot.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
@@ -418,7 +418,7 @@
 /.github/vendored-dependencies.csv @DataDog/dd-trace-js @DataDog/lang-platform-js
 
 /benchmark/* @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/benchmark/openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /benchmark/sirun/* @DataDog/dd-trace-js @DataDog/lang-platform-js
 /benchmark/stubs/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /benchmark/sirun/async_hooks/ @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -446,7 +446,7 @@
 /integration-tests/import-variants.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/init/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/helpers/fake-agent.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/integration-tests/helpers/fake-agent.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /integration-tests/memory-leak/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files-fixtures/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -466,7 +466,7 @@
 /packages/dd-trace/src/exporter.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/src/feature-registry.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/exporters/common/client-library-headers.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/src/exporters/common/client-library-headers.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /packages/dd-trace/src/evp_proxy/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/src/heap_snapshots.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/src/histogram.js @DataDog/dd-trace-js @DataDog/lang-platform-js
