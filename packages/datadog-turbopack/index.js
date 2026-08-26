@@ -6,8 +6,8 @@ const loader = require.resolve('./src/loader')
 
 /**
  * Adds Datadog instrumentation rules to a Turbopack configuration. Generated
- * aliases and loader metadata are local to the application and apply only to
- * Node.js bundles. Browser and Edge bundles retain their original modules.
+ * loader metadata is local to the application and applies only to Node.js
+ * bundles. Browser and Edge bundles retain their original modules.
  *
  * @param {object} [turbopack]
  * @param {string} [projectDir]
@@ -26,32 +26,38 @@ async function addRules (turbopack = {}, projectDir = process.cwd()) {
   const manifest = await createManifest(projectDir)
   if (!manifest.packagePathPattern || !manifest.path) return turbopack
 
-  const aliases = { ...turbopack.resolveAlias }
-
-  for (const [specifier, alias] of Object.entries(manifest.aliases)) {
-    // Do not replace application aliases, which would change customer behavior.
-    aliases[specifier] ??= alias
-  }
-
   const rules = { ...turbopack.rules }
   for (const extension of ['*.js', '*.cjs', '*.mjs']) {
     const existing = rules[extension]
-    const rule = {
+    if (hasDatadogLoader(existing)) continue
+
+    const datadogRules = [{
       condition: {
         all: ['foreign', 'node', { path: manifest.packagePathPattern }],
       },
       loaders: [{ loader, options: { manifestPath: manifest.path } }],
+    }]
+    if (manifest.esmImportPattern) {
+      datadogRules.push({
+        condition: {
+          all: ['node', { not: 'foreign' }, { content: manifest.esmImportPattern }],
+        },
+        loaders: [{ loader, options: { manifestPath: manifest.path, rewriteApplicationImports: true } }],
+      })
     }
     rules[extension] = existing
-      ? [...(Array.isArray(existing) ? existing : [existing]), rule]
-      : rule
+      ? [...(Array.isArray(existing) ? existing : [existing]), ...datadogRules]
+      : datadogRules.length === 1 ? datadogRules[0] : datadogRules
   }
 
   return {
     ...turbopack,
-    resolveAlias: aliases,
     rules,
   }
+}
+
+function hasDatadogLoader (rules) {
+  return [rules].flat().some(rule => rule?.loaders?.some(item => item?.loader === loader))
 }
 
 module.exports = {

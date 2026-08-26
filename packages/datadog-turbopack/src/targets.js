@@ -17,7 +17,7 @@ const CACHE_DIRECTORY = path.join('node_modules', '.cache', 'dd-trace', 'turbopa
  * instrumentation targets installed in an application.
  *
  * @param {string} projectDir
- * @returns {Promise<{ aliases: Record<string, object>, packagePathPattern?: RegExp, path?: string }>}
+ * @returns {Promise<{ esmImportPattern?: RegExp, packagePathPattern?: RegExp, path?: string }>}
  */
 async function createManifest (projectDir) {
   loadInstrumentations()
@@ -26,11 +26,11 @@ async function createManifest (projectDir) {
   const cacheDirectory = path.join(projectDir, CACHE_DIRECTORY)
   const targets = getTargets(appRequire)
   const manifestTargets = {}
-  const aliases = {}
 
-  if (targets.length === 0) return { aliases }
+  if (targets.length === 0) return {}
 
   await fs.mkdir(cacheDirectory, { recursive: true })
+  const realCacheDirectory = normalizePath(cacheDirectory)
 
   for (const [index, target] of targets.entries()) {
     const entry = {
@@ -41,7 +41,7 @@ async function createManifest (projectDir) {
     }
 
     if (target.esm) {
-      const proxyPath = path.join(cacheDirectory, `${index}.mjs`)
+      const proxyPath = path.join(realCacheDirectory, `${index}.mjs`)
       try {
         // Proxies are build-time artifacts; preserve source order for stable paths.
         // eslint-disable-next-line no-await-in-loop
@@ -54,27 +54,25 @@ async function createManifest (projectDir) {
         continue
       }
       entry.proxyPath = normalizePath(proxyPath)
-
-      if (target.entrypoint || target.specifier !== target.name) {
-        aliases[target.specifier] = {
-          browser: relativeImport(projectDir, target.path),
-          default: relativeImport(projectDir, proxyPath),
-        }
-      }
     }
 
     manifestTargets[normalizePath(target.path)] = entry
   }
 
-  const manifestPath = path.join(cacheDirectory, 'manifest.json')
+  const manifestPath = path.join(realCacheDirectory, 'manifest.json')
   await fs.writeFile(manifestPath, JSON.stringify({ targets: manifestTargets }))
 
   const packageNames = [...new Set(targets.map(target => target.name))]
   const packagePathPattern = new RegExp(
     `(?:^|/)node_modules/(?:${packageNames.map(escapeRegExp).join('|')})(?:/|$)`
   )
+  const esmPackageNames = [...new Set(targets.filter(target => target.esm).map(target => target.name))]
+  const esmPackagePattern = esmPackageNames.map(escapeRegExp).join('|')
+  const esmImportPattern = esmPackageNames.length > 0 && new RegExp(
+    String.raw`\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)["'](?:${esmPackagePattern})(?:/[^"']*)?["']`
+  )
 
-  return { aliases, packagePathPattern, path: manifestPath }
+  return { esmImportPattern, packagePathPattern, path: manifestPath }
 }
 
 /**
@@ -91,7 +89,7 @@ function loadInstrumentations () {
 /**
  * @param {Function & { resolve: Function }} appRequire
  * @returns {Array<{
- *   esm: boolean, entrypoint: boolean, instrumentationPath: string, name: string,
+ *   esm: boolean, instrumentationPath: string, name: string,
  *   path: string, specifier: string, version: string
  * }>}
  */
@@ -134,7 +132,6 @@ function getTargets (appRequire) {
 
         targets.set(normalizePath(file), {
           esm: isESMFile(file, path.join(packageRoot, 'package.json'), packageJson),
-          entrypoint: !entry.file && !entry.filePattern && samePath(file, entrypoint),
           instrumentationPath: filename(name, modulePath),
           name,
           path: file,
@@ -209,13 +206,13 @@ async function createEsmProxy (sourcePath, proxyPath, name, specifier, version) 
     path.dirname(proxyPath),
     require.resolve('dc-polyfill')
   )
-  return `import { channel } from ${JSON.stringify(dcPolyfillPath)};
+  return `import dc from ${JSON.stringify(dcPolyfillPath)};
 import * as namespace from ${JSON.stringify(relativeImport(path.dirname(proxyPath), sourcePath))};
 const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
 const set = {};
 const get = {};
 ${[...setters.values()].join(';\n')};
-channel('dd-trace:bundler:load').publish({
+dc.channel('dd-trace:bundler:load').publish({
   package: ${JSON.stringify(name)},
   module: _,
   path: ${JSON.stringify(specifier)},
@@ -235,10 +232,6 @@ function relativeImport (from, to) {
 
 function normalizePath (value) {
   return fsSync.realpathSync(value).replaceAll('\\', '/')
-}
-
-function samePath (left, right) {
-  return normalizePath(left) === normalizePath(right)
 }
 
 function escapeRegExp (value) {
