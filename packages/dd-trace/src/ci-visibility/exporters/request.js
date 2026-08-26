@@ -11,6 +11,20 @@ const {
 } = require('../../exporters/common/retry')
 const { getRateLimitResetDelay } = require('../requests/rate-limit')
 
+// HTTP status codes where retrying cannot help: the request is malformed,
+// unauthorized, or otherwise permanently rejected. Everything else (408, 429,
+// 5xx, and other 4xx not listed here) is potentially transient and worth a retry.
+const NON_RETRIABLE_HTTP_STATUS_CODES = new Set([400, 401, 403, 404, 405, 413, 422])
+
+/**
+ * @param {number} statusCode
+ * @returns {boolean}
+ */
+function isRetriableHttpStatus (statusCode) {
+  return statusCode !== undefined && statusCode !== null &&
+    !NON_RETRIABLE_HTTP_STATUS_CODES.has(statusCode)
+}
+
 /**
  * @param {AbortSignal} signal
  * @returns {Error}
@@ -164,8 +178,7 @@ function requestBuffered (data, options, callback) {
       lastError = error
 
       const responseStatus = statusCode ?? error.status
-      const isRetriableHttpError = options.deadline !== undefined &&
-        (responseStatus === 429 || responseStatus >= 500)
+      const isRetriableHttpError = isRetriableHttpStatus(responseStatus)
       if (options.retry === false || (attemptIndex >= getMaxAttempts(attemptOptions) &&
         (isRetriableNetworkError(error) || isRetriableHttpError))) {
         complete(error, result, statusCode, headers)
@@ -181,8 +194,13 @@ function requestBuffered (data, options, callback) {
       if (responseStatus === 429) {
         const resetDelay = getRateLimitResetDelay(headers)
         if (Number.isFinite(resetDelay)) {
-          const retryRemaining = options.deadline - Date.now()
-          if (resetDelay > RATE_LIMIT_MAX_WAIT_MS || resetDelay >= retryRemaining) {
+          if (options.deadline !== undefined) {
+            const retryRemaining = options.deadline - Date.now()
+            if (resetDelay > RATE_LIMIT_MAX_WAIT_MS || resetDelay >= retryRemaining) {
+              complete(error, result, statusCode, headers)
+              return
+            }
+          } else if (resetDelay > RATE_LIMIT_MAX_WAIT_MS) {
             complete(error, result, statusCode, headers)
             return
           }

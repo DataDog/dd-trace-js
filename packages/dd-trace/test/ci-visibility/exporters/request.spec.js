@@ -53,6 +53,58 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
   })
 
+  it('retries a 408 response within the finalization deadline', () => {
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 10_000 }, done)
+
+    const error = Object.assign(new Error('request timeout'), { status: 408 })
+    pendingRequests[0].callback(error, null, 408, {})
+    clock.tick(5999)
+    assert.strictEqual(pendingRequests.length, 1)
+    clock.tick(1)
+    assert.strictEqual(pendingRequests.length, 2)
+
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('retries a 408 response during a background flush without a deadline', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+
+    const error = Object.assign(new Error('request timeout'), { status: 408 })
+    pendingRequests[0].callback(error, null, 408, {})
+    clock.tick(5999)
+    assert.strictEqual(pendingRequests.length, 1)
+    clock.tick(1)
+    assert.strictEqual(pendingRequests.length, 2)
+
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('does not retry a 400 response', () => {
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 10_000 }, done)
+
+    const error = Object.assign(new Error('bad request'), { status: 400 })
+    pendingRequests[0].callback(error, null, 400, {})
+
+    sinon.assert.calledOnceWithExactly(done, error, null, 400, {})
+    assert.strictEqual(pendingRequests.length, 1)
+  })
+
+  it('does not retry a 401 response during a background flush', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+
+    const error = Object.assign(new Error('unauthorized'), { status: 401 })
+    pendingRequests[0].callback(error, null, 401, {})
+
+    sinon.assert.calledOnceWithExactly(done, error, null, 401, {})
+    assert.strictEqual(pendingRequests.length, 1)
+  })
+
   it('uses the remaining finalization budget for a late 5xx retry', () => {
     const done = sinon.spy()
     request('payload', { deadline: Date.now() + 1000, timeout: 2000 }, done)
