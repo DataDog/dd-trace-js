@@ -76,42 +76,75 @@ describe('BufferingExporter', () => {
     assert.deepStrictEqual(exporter.getUncodedTraces(), [])
   })
 
-  it('skips the periodic flush when _shouldFlush returns false', (done) => {
-    const flushingWriter = {
-      append: sinon.spy(),
-      flush: sinon.spy(),
-      setUrl: sinon.spy(),
-    }
-    const exporter = new BufferingExporter({ port, flushInterval })
-    exporter._writer = flushingWriter
-    exporter._isInitialized = true
-    exporter._shouldFlush = () => false
+  it('skips the periodic flush when _shouldFlush returns false', () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const flushingWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy(),
+        setUrl: sinon.spy(),
+      }
+      const exporter = new BufferingExporter({ port, flushInterval })
+      exporter._writer = flushingWriter
+      exporter._isInitialized = true
+      exporter._shouldFlush = () => false
 
-    exporter.export([{ span_id: '1' }])
+      exporter.export([{ span_id: '1' }])
+      clock.tick(flushInterval * 2)
 
-    setTimeout(() => {
       sinon.assert.called(flushingWriter.append)
       sinon.assert.notCalled(flushingWriter.flush)
-      done()
-    }, flushInterval * 2)
+    } finally {
+      clock.restore()
+    }
   })
 
-  it('flushes on the periodic timer when _shouldFlush returns true', (done) => {
-    const flushingWriter = {
-      append: sinon.spy(),
-      flush: sinon.spy(),
-      setUrl: sinon.spy(),
-    }
-    const exporter = new BufferingExporter({ port, flushInterval })
-    exporter._writer = flushingWriter
-    exporter._isInitialized = true
-    exporter._shouldFlush = () => true
+  it('flushes on the periodic timer when _shouldFlush returns true', () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const flushingWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy(),
+        setUrl: sinon.spy(),
+      }
+      const exporter = new BufferingExporter({ port, flushInterval })
+      exporter._writer = flushingWriter
+      exporter._isInitialized = true
+      exporter._shouldFlush = () => true
 
-    exporter.export([{ span_id: '1' }])
+      exporter.export([{ span_id: '1' }])
+      clock.tick(flushInterval * 2)
 
-    setTimeout(() => {
       sinon.assert.called(flushingWriter.flush)
-      done()
-    }, flushInterval * 2)
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('re-arms the timer and flushes once saturation clears', () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const flushingWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy(),
+        setUrl: sinon.spy(),
+      }
+      const exporter = new BufferingExporter({ port, flushInterval })
+      exporter._writer = flushingWriter
+      exporter._isInitialized = true
+      let saturated = true
+      exporter._shouldFlush = () => !saturated
+
+      exporter.export([{ span_id: '1' }])
+      // First tick: saturated, flush suppressed and timer re-armed.
+      clock.tick(flushInterval)
+      sinon.assert.notCalled(flushingWriter.flush)
+      // Origin becomes idle; the re-armed timer fires and flushes.
+      saturated = false
+      clock.tick(flushInterval)
+      sinon.assert.called(flushingWriter.flush)
+    } finally {
+      clock.restore()
+    }
   })
 })

@@ -132,7 +132,12 @@ function isOriginSaturated (url, agent = getAgent(url)) {
   const parsed = toURL(url)
   if (!parsed) return false
 
-  const name = agent.getName({ host: parsed.hostname, port: parsed.port })
+  // Node normalizes a request to a default port (443 / 80) before keying the
+  // agent's socket and request maps, so probe with the same default when the
+  // URL omits an explicit port. Otherwise the keys never match and saturation
+  // is never detected for the primary agentless intake URLs.
+  const port = parsed.port || (parsed.protocol === 'https:' ? 443 : 80)
+  const name = agent.getName({ host: parsed.hostname, port })
   const activeSockets = agent.sockets?.[name]?.length || 0
   const queuedRequests = agent.requests?.[name]?.length || 0
 

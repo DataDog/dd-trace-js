@@ -35,14 +35,24 @@ class BufferingExporter {
     if (flushInterval === 0 && !deferImmediateFlush) {
       writer.flush()
     } else if (flushInterval !== 0 && this[timerKey] === undefined) {
-      this[timerKey] = setTimeout(() => {
-        this[timerKey] = undefined
-        // The periodic timer is a latency backstop; the encoder's size gate and the
-        // final flush still deliver payloads. Subclasses can suppress it (e.g. while
-        // the intake origin is saturated) so events coalesce instead of queueing.
-        if (this._shouldFlush(writer)) writer.flush()
-      }, flushInterval)
-      this[timerKey].unref?.()
+      const scheduleFlush = () => {
+        this[timerKey] = setTimeout(() => {
+          // The periodic timer is a latency backstop; the encoder's size gate and the
+          // final flush still deliver payloads. Subclasses can suppress it (e.g. while
+          // the intake origin is saturated) so events coalesce instead of queueing.
+          if (this._shouldFlush(writer)) {
+            this[timerKey] = undefined
+            writer.flush()
+          } else {
+            // Saturation suppressed the flush; re-arm so a buffered payload below the
+            // encoder's size threshold is still delivered once the origin becomes idle,
+            // rather than waiting indefinitely for another event.
+            scheduleFlush()
+          }
+        }, flushInterval)
+        this[timerKey].unref?.()
+      }
+      scheduleFlush()
     }
 
     return appended

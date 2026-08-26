@@ -116,6 +116,33 @@ describe('Test Optimization exporter agents', () => {
       }
     })
 
+    it('detects saturation for a default-port URL that omits an explicit port', async () => {
+      const agent = new httpsAgent.constructor()
+      const lookup = () => {} // never resolves, so requests stay in flight
+      const requests = new Array(8)
+      const url = 'https://saturated.example' // no explicit port; Node normalizes to 443
+
+      for (let index = 0; index < requests.length; index++) {
+        const request = createRequest({
+          agent,
+          ...require('node:url').urlToHttpOptions(new URL(url)),
+          lookup,
+        })
+        request.on('error', () => {})
+        request.end()
+        requests[index] = request
+      }
+
+      await new Promise(resolve => setImmediate(resolve))
+
+      try {
+        assert.strictEqual(isOriginSaturated(url, agent), true)
+      } finally {
+        for (const request of requests) request.destroy()
+        agent.destroy()
+      }
+    })
+
     it('is saturated once a request is queued behind the active sockets', async () => {
       const agent = new http.Agent({ keepAlive: true, maxSockets: 1 })
       const lookup = () => {}
