@@ -8,7 +8,7 @@ const nock = require('nock')
 require('../../setup/core')
 const { clearCache } = require('../../../src/agent/info')
 const ExposuresWriter = require('../../../src/openfeature/writers/exposures')
-const { setExposureDeliveryStrategy } = require('../../../src/openfeature/writers/util')
+const { setEventDeliveryStrategy } = require('../../../src/openfeature/writers/util')
 
 describe('OpenFeature Exposures Writer transport', () => {
   let writer
@@ -59,7 +59,7 @@ describe('OpenFeature Exposures Writer transport', () => {
 
     writer = new ExposuresWriter(config)
     await new Promise((resolve, reject) => {
-      setExposureDeliveryStrategy(config, (enabled, route) => {
+      setEventDeliveryStrategy(config, (enabled, route) => {
         try {
           assert.strictEqual(enabled, true)
           assert.strictEqual(route.basePath, '/evp_proxy/v4')
@@ -115,7 +115,7 @@ describe('OpenFeature Exposures Writer transport', () => {
 
     writer = new ExposuresWriter(config)
     await new Promise((resolve, reject) => {
-      setExposureDeliveryStrategy(config, (enabled, route) => {
+      setEventDeliveryStrategy(config, (enabled, route) => {
         try {
           assert.strictEqual(enabled, true)
           assert.strictEqual(route.basePath, '/evp_proxy/v4')
@@ -170,7 +170,7 @@ describe('OpenFeature Exposures Writer transport', () => {
 
     writer = new ExposuresWriter(config)
     await new Promise((resolve, reject) => {
-      setExposureDeliveryStrategy(config, (enabled, route) => {
+      setEventDeliveryStrategy(config, (enabled, route) => {
         try {
           assert.strictEqual(enabled, true)
           assert.strictEqual(route.basePath, '')

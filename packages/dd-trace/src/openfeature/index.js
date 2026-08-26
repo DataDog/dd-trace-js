@@ -3,7 +3,7 @@
 const { channel } = require('dc-polyfill')
 const log = require('../log')
 const ExposuresWriter = require('./writers/exposures')
-const { setExposureDeliveryStrategy } = require('./writers/util')
+const { setEventDeliveryStrategy } = require('./writers/util')
 
 const exposureSubmitCh = channel('ffe:exposure:submit')
 const flushCh = channel('ffe:writers:flush')
@@ -45,7 +45,7 @@ function enable (config) {
   exposureSubmitCh.subscribe(_handleExposureSubmit)
   flushCh.subscribe(_handleFlush)
 
-  setExposureDeliveryStrategy(config, (enabled, route) => {
+  setEventDeliveryStrategy(config, (enabled, route) => {
     if (exposuresWriter !== writer) return
 
     writer.setEnabled(enabled, route)

@@ -25,7 +25,7 @@ describe('FlaggingProvider', () => {
   let mockFlagEvalWriterClass
   let mockFlagEvalEVPHook
   let mockFlagEvalEVPHookClass
-  let setExposureDeliveryStrategyStub
+  let setEventDeliveryStrategyStub
 
   beforeEach(() => {
     mockTracer = {
@@ -83,7 +83,7 @@ describe('FlaggingProvider', () => {
     mockFlagEvalEVPHook = {}
     mockFlagEvalEVPHookClass = sinon.stub().returns(mockFlagEvalEVPHook)
 
-    setExposureDeliveryStrategyStub = sinon.stub()
+    setEventDeliveryStrategyStub = sinon.stub()
 
     // evaluationCountsEnabled defaults to true in mockConfig; tests that need the killswitch
     // set mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false directly.
@@ -98,7 +98,7 @@ describe('FlaggingProvider', () => {
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
       './writers/flag-evaluations': mockFlagEvalWriterClass,
       './writers/flag-eval-evp-hook': mockFlagEvalEVPHookClass,
-      './writers/util': { setExposureDeliveryStrategy: setExposureDeliveryStrategyStub },
+      './writers/util': { setEventDeliveryStrategy: setEventDeliveryStrategyStub },
       '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
     })
   })
@@ -170,17 +170,17 @@ describe('FlaggingProvider', () => {
       assert.ok(!provider.hooks.includes(mockFlagEvalEVPHook),
         'EVP hook must not be registered when killswitch is false')
       sinon.assert.notCalled(mockFlagEvalWriterClass)
-      sinon.assert.notCalled(setExposureDeliveryStrategyStub)
-      assert.ok(!setExposureDeliveryStrategyStub.called,
+      sinon.assert.notCalled(setEventDeliveryStrategyStub)
+      assert.ok(!setEventDeliveryStrategyStub.called,
         'agent probe must not run when the killswitch disables the writer')
     })
 
     it('applies the selected EVP delivery route', () => {
       new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
 
-      sinon.assert.calledOnce(setExposureDeliveryStrategyStub)
+      sinon.assert.calledOnce(setEventDeliveryStrategyStub)
       const setEnabled = mockFlagEvalWriter.setEnabled
-      const selectRoute = setExposureDeliveryStrategyStub.firstCall.args[1]
+      const selectRoute = setEventDeliveryStrategyStub.firstCall.args[1]
       const route = {
         url: new URL('https://event-platform-intake.datadoghq.com'),
         basePath: '',

@@ -10,7 +10,7 @@ const FlagEvalMetricsHook = require('./flag-eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
 const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
 const FlagEvaluationsWriter = require('./writers/flag-evaluations')
-const { setExposureDeliveryStrategy } = require('./writers/util')
+const { setEventDeliveryStrategy } = require('./writers/util')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
@@ -45,7 +45,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       this.#flagEvalEVPWriter = new FlagEvaluationsWriter(config)
       const writer = this.#flagEvalEVPWriter
       this.hooks.push(new FlagEvalEVPHook(writer))
-      setExposureDeliveryStrategy(config, (enabled, route) => {
+      setEventDeliveryStrategy(config, (enabled, route) => {
         if (this.#flagEvalEVPWriter !== writer) return
         writer.setEnabled(enabled, route)
       })

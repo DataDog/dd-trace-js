@@ -9,11 +9,11 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-describe('OpenFeature exposure delivery strategy', () => {
+describe('OpenFeature event delivery strategy', () => {
   let createDirectEVPRoute
   let discoverEVPProxy
   let log
-  let setExposureDeliveryStrategy
+  let setEventDeliveryStrategy
   let setWriterEnabledValue
 
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('OpenFeature exposure delivery strategy', () => {
     }
     setWriterEnabledValue = sinon.spy()
 
-    ;({ setExposureDeliveryStrategy } = proxyquire('../../../src/openfeature/writers/util', {
+    ;({ setEventDeliveryStrategy } = proxyquire('../../../src/openfeature/writers/util', {
       '../../evp_proxy/direct': { createDirectEVPRoute },
       '../../evp_proxy/discovery': { discoverEVPProxy },
       '../../log': log,
@@ -43,7 +43,7 @@ describe('OpenFeature exposure delivery strategy', () => {
     }
     discoverEVPProxy.yields(null, route)
 
-    setExposureDeliveryStrategy(config, setWriterEnabledValue)
+    setEventDeliveryStrategy(config, setWriterEnabledValue)
 
     sinon.assert.calledOnceWithExactly(discoverEVPProxy, config.url, {
       supportedPaths: ['/evp_proxy/v2'],
@@ -52,10 +52,10 @@ describe('OpenFeature exposure delivery strategy', () => {
     sinon.assert.notCalled(createDirectEVPRoute)
   })
 
-  it('disables Remote Configuration exposure delivery when discovery fails', () => {
+  it('disables Remote Configuration event delivery when discovery fails', () => {
     discoverEVPProxy.yields(new Error('Agent unavailable'))
 
-    setExposureDeliveryStrategy({
+    setEventDeliveryStrategy({
       url: new URL('http://localhost:8126'),
       featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config' },
     }, setWriterEnabledValue)
@@ -81,7 +81,7 @@ describe('OpenFeature exposure delivery strategy', () => {
     createDirectEVPRoute.returns(directRoute)
     discoverEVPProxy.yields(null, localRoute)
 
-    setExposureDeliveryStrategy(config, setWriterEnabledValue)
+    setEventDeliveryStrategy(config, setWriterEnabledValue)
 
     sinon.assert.calledOnceWithExactly(discoverEVPProxy, config.url, {
       retry: false,
@@ -106,7 +106,7 @@ describe('OpenFeature exposure delivery strategy', () => {
       basePath: '/evp_proxy/v2',
     })
 
-    setExposureDeliveryStrategy(config, setWriterEnabledValue)
+    setEventDeliveryStrategy(config, setWriterEnabledValue)
 
     sinon.assert.calledOnceWithExactly(discoverEVPProxy, config.url, {
       retry: false,
@@ -130,7 +130,7 @@ describe('OpenFeature exposure delivery strategy', () => {
     createDirectEVPRoute.returns(directRoute)
     discoverEVPProxy.yields(null)
 
-    setExposureDeliveryStrategy(config, setWriterEnabledValue)
+    setEventDeliveryStrategy(config, setWriterEnabledValue)
 
     sinon.assert.calledOnceWithExactly(setWriterEnabledValue, true, directRoute)
     sinon.assert.notCalled(log.warn)
@@ -149,17 +149,47 @@ describe('OpenFeature exposure delivery strategy', () => {
     createDirectEVPRoute.returns(directRoute)
     discoverEVPProxy.yields(new Error('connect ECONNREFUSED'))
 
-    setExposureDeliveryStrategy(config, setWriterEnabledValue)
+    setEventDeliveryStrategy(config, setWriterEnabledValue)
 
     sinon.assert.calledOnceWithExactly(setWriterEnabledValue, true, directRoute)
     sinon.assert.notCalled(log.warn)
     assert.match(format(...log.debug.firstCall.args), /local discovery failed/)
   })
 
+  it('shares one discovery result with every event writer', () => {
+    const config = {
+      url: new URL('http://serverless-init:8126'),
+      featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
+    }
+    const route = {
+      url: config.url,
+      basePath: '/evp_proxy/v4',
+    }
+    const firstWriter = sinon.spy()
+    const secondWriter = sinon.spy()
+    let resolveDiscovery
+    discoverEVPProxy.callsFake((url, options, callback) => {
+      resolveDiscovery = callback
+    })
+
+    setEventDeliveryStrategy(config, firstWriter)
+    setEventDeliveryStrategy(config, secondWriter)
+    sinon.assert.calledOnce(discoverEVPProxy)
+
+    resolveDiscovery(null, route)
+    sinon.assert.calledOnceWithMatch(firstWriter, true, { basePath: '/evp_proxy/v4' })
+    sinon.assert.calledOnceWithMatch(secondWriter, true, { basePath: '/evp_proxy/v4' })
+
+    const lateWriter = sinon.spy()
+    setEventDeliveryStrategy(config, lateWriter)
+    sinon.assert.calledOnceWithMatch(lateWriter, true, { basePath: '/evp_proxy/v4' })
+    sinon.assert.calledOnce(discoverEVPProxy)
+  })
+
   it('disables delivery and warns when no local route or direct credentials exist', () => {
     discoverEVPProxy.yields(new Error('connect ECONNREFUSED'))
 
-    setExposureDeliveryStrategy({
+    setEventDeliveryStrategy({
       url: new URL('http://127.0.0.1:9'),
       featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
     }, setWriterEnabledValue)
@@ -169,15 +199,15 @@ describe('OpenFeature exposure delivery strategy', () => {
     assert.match(format(...log.warn.firstCall.args), /direct intake credentials/)
   })
 
-  it('logs the unavailable exposure-delivery warning once', () => {
+  it('logs the unavailable event-delivery warning once', () => {
     discoverEVPProxy.yields(new Error('connect ECONNREFUSED'))
     const config = {
       url: new URL('http://127.0.0.1:9'),
       featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
     }
 
-    setExposureDeliveryStrategy(config, setWriterEnabledValue)
-    setExposureDeliveryStrategy(config, setWriterEnabledValue)
+    setEventDeliveryStrategy(config, setWriterEnabledValue)
+    setEventDeliveryStrategy(config, setWriterEnabledValue)
 
     sinon.assert.calledTwice(setWriterEnabledValue)
     sinon.assert.calledOnce(log.warn)
