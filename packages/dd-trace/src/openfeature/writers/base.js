@@ -165,7 +165,7 @@ class BaseFFEWriter {
     log.debug(() => `${this.constructor.name} flushing payload: ${safeJSONStringify(payload)}`)
 
     const route = this.#createActiveRoute()
-    this.#sendRequest(payload, events.length, route, this._fallbackRoute)
+    this.#sendRequest(payload, eventCount, route, this._fallbackRoute)
   }
 
   /**

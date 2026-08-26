@@ -103,6 +103,33 @@ describe('FlagEvaluationsWriter', () => {
       assert.strictEqual(writer._headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
     })
 
+    it('applies a direct intake route with the API key header', () => {
+      writer.setEnabled(true, {
+        url: new URL('https://event-platform-intake.datadoghq.com'),
+        basePath: '',
+        headers: { 'DD-API-KEY': 'test-api-key' },
+      })
+
+      assert.strictEqual(writer._baseUrl.href, 'https://event-platform-intake.datadoghq.com/')
+      assert.strictEqual(writer._endpoint, '/api/v2/flagevaluation')
+      assert.strictEqual(writer._requestOptions.headers['DD-API-KEY'], 'test-api-key')
+      assert.strictEqual(writer._requestOptions.headers['X-Datadog-EVP-Subdomain'], undefined)
+    })
+
+    it('applies an advertised v4 route', () => {
+      writer.setEnabled(true, {
+        url: new URL('http://serverless-init:8126'),
+        basePath: '/evp_proxy/v4',
+      })
+
+      assert.strictEqual(writer._baseUrl.href, 'http://serverless-init:8126/')
+      assert.strictEqual(writer._endpoint, '/evp_proxy/v4/api/v2/flagevaluation')
+      assert.strictEqual(
+        writer._requestOptions.headers['X-Datadog-EVP-Subdomain'],
+        'event-platform-intake'
+      )
+    })
+
     it('builds context with service, version, env from config', () => {
       assert.deepStrictEqual(writer._context, {
         service: 'test-service',

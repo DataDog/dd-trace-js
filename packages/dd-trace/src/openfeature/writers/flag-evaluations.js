@@ -2,12 +2,15 @@
 
 const {
   FLAGEVALUATIONS_ENDPOINT,
-  EVP_PROXY_AGENT_BASE_PATH,
-  EVP_SUBDOMAIN_HEADER_NAME,
-  EVP_SUBDOMAIN_VALUE,
   EVP_PAYLOAD_SIZE_LIMIT,
   EVP_EVENT_SIZE_LIMIT,
 } = require('../constants/constants')
+const {
+  EVP_EVENT_PLATFORM_SUBDOMAIN,
+  EVP_PROXY_PATH_V2,
+  EVP_SUBDOMAIN_HEADER_NAME,
+} = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const log = require('../../log')
 const telemetryMetrics = require('../../telemetry/metrics')
 const BaseFFEWriter = require('./base')
@@ -49,6 +52,15 @@ const MAX_FIELD_LENGTH = 256
 // Guards against exotic inputs beyond the cycle-set guarantee. Values at or beyond
 // this depth are dropped rather than emitted, matching the cycle-truncation policy.
 const MAX_CONTEXT_DEPTH = 32
+
+/**
+ * @typedef {object} FlagEvaluationRoute
+ * @property {URL} url - Route base URL
+ * @property {string} basePath - EVP base path
+ * @property {object} [headers] - Route-specific headers
+ * @property {import('node:https').Agent} [agent] - Optional HTTPS proxy agent
+ * @property {FlagEvaluationRoute} [fallback] - Optional direct fallback route
+ */
 
 // Type-tag bytes for canonical context key encoding.
 // Distinct per JS type so that, e.g., int 1 and string "1" cannot alias.
@@ -554,18 +566,14 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
    * @param {import('../../config')} config - Tracer configuration object
    */
   constructor (config) {
-    const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/$/, '')
-    const endpoint = FLAGEVALUATIONS_ENDPOINT.replace(/^\/+/, '')
-    const fullEndpoint = `${basePath}/${endpoint}`
-
     super({
       config,
-      endpoint: fullEndpoint,
+      endpoint: joinEVPProxyPath(EVP_PROXY_PATH_V2, FLAGEVALUATIONS_ENDPOINT),
       interval: 10_000,
       payloadSizeLimit: EVP_PAYLOAD_SIZE_LIMIT,
       eventSizeLimit: EVP_EVENT_SIZE_LIMIT,
       headers: {
-        [EVP_SUBDOMAIN_HEADER_NAME]: EVP_SUBDOMAIN_VALUE,
+        [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
       },
     })
 
@@ -745,17 +753,40 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   }
 
   /**
-   * Gates delivery on the Agent advertising the EVP proxy endpoint. Mirrors the
-   * exposure writer's `setAgentStrategy` gate: when the Agent lacks `/evp_proxy/v2`,
-   * flush becomes a no-op so the writer stops POSTing to an unsupported endpoint.
-   * Aggregation still runs (bounded by the cardinality caps) so no evaluation work is
-   * lost if the probe later enables delivery.
+   * Applies the selected EVP route and gates delivery until route selection completes.
    *
-   * @param {boolean} enabled - Whether the Agent supports EVP proxy delivery
+   * @param {boolean} enabled - Whether EVP delivery is available
+   * @param {FlagEvaluationRoute} [route] - Selected EVP route
    * @returns {void}
    */
-  setEnabled (enabled) {
+  setEnabled (enabled, route) {
+    if (route) {
+      this.#setRoute(route)
+    }
     this.#enabled = enabled
+  }
+
+  /**
+   * @param {FlagEvaluationRoute} route - Selected EVP route
+   * @returns {void}
+   */
+  #setRoute (route) {
+    const fallbackRoute = route.fallback && {
+      url: route.fallback.url,
+      endpoint: joinEVPProxyPath(route.fallback.basePath, FLAGEVALUATIONS_ENDPOINT),
+      headers: route.fallback.headers ?? {},
+      agent: route.fallback.agent,
+    }
+    const headers = route.headers ?? {
+      [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
+    }
+
+    this._setRoutes({
+      url: route.url,
+      endpoint: joinEVPProxyPath(route.basePath, FLAGEVALUATIONS_ENDPOINT),
+      headers,
+      agent: route.agent,
+    }, fallbackRoute)
   }
 
   /**
@@ -763,9 +794,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
    * races ahead of the microtask-scheduled drain and loses queued evaluations.
    */
   flush () {
-    // Skip delivery entirely when the Agent does not expose /evp_proxy/v2. The hand-off
-    // queue and aggregation maps are still bounded by their caps, so memory stays fenced
-    // while delivery is disabled.
+    // Aggregation remains bounded while delivery is disabled.
     if (!this.#enabled) return
 
     this._drainQueue()

@@ -25,7 +25,7 @@ describe('FlaggingProvider', () => {
   let mockFlagEvalWriterClass
   let mockFlagEvalEVPHook
   let mockFlagEvalEVPHookClass
-  let setAgentStrategyStub
+  let setExposureDeliveryStrategyStub
 
   beforeEach(() => {
     mockTracer = {
@@ -83,7 +83,7 @@ describe('FlaggingProvider', () => {
     mockFlagEvalEVPHook = {}
     mockFlagEvalEVPHookClass = sinon.stub().returns(mockFlagEvalEVPHook)
 
-    setAgentStrategyStub = sinon.stub()
+    setExposureDeliveryStrategyStub = sinon.stub()
 
     // evaluationCountsEnabled defaults to true in mockConfig; tests that need the killswitch
     // set mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false directly.
@@ -98,7 +98,7 @@ describe('FlaggingProvider', () => {
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
       './writers/flag-evaluations': mockFlagEvalWriterClass,
       './writers/flag-eval-evp-hook': mockFlagEvalEVPHookClass,
-      './writers/util': { setAgentStrategy: setAgentStrategyStub },
+      './writers/util': { setExposureDeliveryStrategy: setExposureDeliveryStrategyStub },
       '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
     })
   })
@@ -170,24 +170,27 @@ describe('FlaggingProvider', () => {
       assert.ok(!provider.hooks.includes(mockFlagEvalEVPHook),
         'EVP hook must not be registered when killswitch is false')
       sinon.assert.notCalled(mockFlagEvalWriterClass)
-      sinon.assert.notCalled(setAgentStrategyStub)
-      assert.ok(!setAgentStrategyStub.called,
+      sinon.assert.notCalled(setExposureDeliveryStrategyStub)
+      assert.ok(!setExposureDeliveryStrategyStub.called,
         'agent probe must not run when the killswitch disables the writer')
     })
 
-    it('gates EVP delivery on the Agent advertising /evp_proxy/v2', () => {
+    it('applies the selected EVP delivery route', () => {
       new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
 
-      sinon.assert.calledOnce(setAgentStrategyStub)
+      sinon.assert.calledOnce(setExposureDeliveryStrategyStub)
       const setEnabled = mockFlagEvalWriter.setEnabled
-      const probe = setAgentStrategyStub.firstCall.args[1]
+      const selectRoute = setExposureDeliveryStrategyStub.firstCall.args[1]
+      const route = {
+        url: new URL('https://event-platform-intake.datadoghq.com'),
+        basePath: '',
+        headers: { 'DD-API-KEY': 'test-api-key' },
+      }
 
-      // Agent has EVP proxy → writer stays enabled for delivery.
-      probe(true)
-      sinon.assert.calledWith(setEnabled, true)
+      selectRoute(true, route)
+      sinon.assert.calledWith(setEnabled, true, route)
 
-      // Agent lacks EVP proxy → writer disabled, stops POSTing to the unsupported endpoint.
-      probe(false)
+      selectRoute(false)
       sinon.assert.calledWith(setEnabled, false)
     })
 
