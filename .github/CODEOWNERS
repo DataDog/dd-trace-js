@@ -26,23 +26,23 @@
 /packages/dd-trace/test/fixtures/esm/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 
 # AppSec
-/benchmark/sirun/appsec/ @DataDog/dd-trace-js @DataDog/asm-js
-/benchmark/sirun/appsec-waf/ @DataDog/dd-trace-js @DataDog/asm-js
-/benchmark/sirun/appsec-iast/ @DataDog/dd-trace-js @DataDog/asm-js
-/benchmark/sirun/iast/ @DataDog/dd-trace-js @DataDog/asm-js
-/integration-tests/appsec/ @DataDog/dd-trace-js @DataDog/asm-js
-/integration-tests/graphql/ @DataDog/dd-trace-js @DataDog/asm-js
-/integration-tests/standalone-asm/ @DataDog/dd-trace-js @DataDog/asm-js
-/packages/dd-trace/src/appsec/ @DataDog/dd-trace-js @DataDog/asm-js
-/packages/dd-trace/test/appsec/ @DataDog/dd-trace-js @DataDog/asm-js
-/packages/dd-trace/test/fixtures/config/appsec-* @DataDog/dd-trace-js @DataDog/asm-js
+/benchmark/sirun/appsec/ @DataDog/asm-js
+/benchmark/sirun/appsec-waf/ @DataDog/asm-js
+/benchmark/sirun/appsec-iast/ @DataDog/asm-js
+/benchmark/sirun/iast/ @DataDog/asm-js
+/integration-tests/appsec/ @DataDog/asm-js
+/integration-tests/graphql/ @DataDog/asm-js
+/integration-tests/standalone-asm/ @DataDog/asm-js
+/packages/dd-trace/src/appsec/ @DataDog/asm-js
+/packages/dd-trace/test/appsec/ @DataDog/asm-js
+/packages/dd-trace/test/fixtures/config/appsec-* @DataDog/asm-js
 
-/integration-tests/aiguard/ @DataDog/dd-trace-js @DataDog/asm-js
-/packages/dd-trace/src/aiguard/ @DataDog/dd-trace-js @DataDog/asm-js
-/packages/dd-trace/test/aiguard/ @DataDog/dd-trace-js @DataDog/asm-js
-/packages/dd-trace/test/plugins/util/ip_extractor.spec.js @DataDog/dd-trace-js @DataDog/asm-js
+/integration-tests/aiguard/ @DataDog/asm-js
+/packages/dd-trace/src/aiguard/ @DataDog/asm-js
+/packages/dd-trace/test/aiguard/ @DataDog/asm-js
+/packages/dd-trace/test/plugins/util/ip_extractor.spec.js @DataDog/asm-js
 
-/packages/dd-trace/*/standalone @DataDog/dd-trace-js @DataDog/asm-js
+/packages/dd-trace/*/standalone @DataDog/asm-js
 
 # Debugger
 /benchmark/sirun/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
@@ -379,8 +379,8 @@
 /.github/workflows/apm-capabilities.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
 /.github/workflows/eslint-rules.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
 /.github/workflows/apm-integrations.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
-/.github/workflows/aiguard.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
-/.github/workflows/appsec.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
+/.github/workflows/aiguard.yml @DataDog/asm-js @dd-octo-sts
+/.github/workflows/appsec.yml @DataDog/asm-js @dd-octo-sts
 /.github/workflows/debugger.yml @DataDog/dd-trace-js @DataDog/debugger-nodejs @dd-octo-sts
 /.github/workflows/instrumentation.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /.github/workflows/electron.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
@@ -390,7 +390,7 @@
 /.github/workflows/openfeature.yml @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk @dd-octo-sts
 /.github/workflows/pr-title.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/profiling.yml @DataDog/dd-trace-js @DataDog/profiling-js @dd-octo-sts
-/.github/workflows/system-tests.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
+/.github/workflows/system-tests.yml @DataDog/asm-js @dd-octo-sts
 /.github/workflows/test-optimization.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 
 # Profiling
@@ -553,8 +553,8 @@
 /vendor/package-lock.json @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /packages/dd-trace/test/plugins/versions/package.json @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /integration-tests/esbuild/package.json @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
-/integration-tests/appsec/iast-esbuild-esm/package.json @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
-/integration-tests/appsec/iast-esbuild-cjs/package.json @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
+/integration-tests/appsec/iast-esbuild-esm/package.json @DataDog/asm-js @dd-octo-sts
+/integration-tests/appsec/iast-esbuild-cjs/package.json @DataDog/asm-js @dd-octo-sts
 /.github/editorconfig-checker/Dockerfile @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
 /.github/playwright/Dockerfile @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 /.github/selenium/Dockerfile @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
