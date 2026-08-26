@@ -22,6 +22,8 @@ const {
   validateEvaluatorName,
 } = require('./util')
 
+const TASK_ERROR_MESSAGE = 'task error; evaluation skipped'
+
 // One span per experiment row (LLM Obs experiment span wire format).
 function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
   const meta = {
@@ -134,15 +136,14 @@ function errorMessage (error) {
 function createLimiter (concurrency) {
   const waiting = []
   let active = 0
-  let cancelled = false
-  let cancellationError
+  let cancellation
 
   const limit = async function limit (fn, cancelOnError = false) {
-    if (cancelled) throw cancellationError
+    if (cancellation !== undefined) throw cancellation.error
     if (active >= concurrency) {
       await new Promise((resolve, reject) => waiting.push({ resolve, reject }))
     }
-    if (cancelled) throw cancellationError
+    if (cancellation !== undefined) throw cancellation.error
     active++
     try {
       return await fn()
@@ -157,9 +158,8 @@ function createLimiter (concurrency) {
   }
 
   limit.cancel = (error) => {
-    if (cancelled) return
-    cancelled = true
-    cancellationError = error
+    if (cancellation !== undefined) return
+    cancellation = { error }
     const queued = [...waiting]
     waiting.length = 0
     for (const waiter of queued) waiter.reject(error)
@@ -700,15 +700,14 @@ class Experiment {
     limit,
   }) {
     if (row.isError) {
-      const msg = 'task error; evaluation skipped'
-      row.evaluationErrors[label] = msg
+      row.evaluationErrors[label] = TASK_ERROR_MESSAGE
       return {
         label,
         value: null,
         metric: toMetric(
           label,
           null,
-          msg,
+          TASK_ERROR_MESSAGE,
           row.spanId,
           row.traceId,
           timestampMs,
