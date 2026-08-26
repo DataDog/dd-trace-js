@@ -38,9 +38,9 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     )
 
     assert.ok(requestStub.calledOnce)
-    const { path, headers } = requestStub.getCall(0).args[1]
+    const { path, headers, deadline, signal } = requestStub.getCall(0).args[1]
     const query = new URL(path, 'http://localhost:8126').searchParams
-    return { path, headers, query }
+    return { path, headers, query, deadline, signal }
   }
 
   before(() => {
@@ -53,7 +53,7 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       '../../../src/ci-visibility/requests/upload-test-screenshot',
       {
         '../../config': () => ({ DD_API_KEY: 'test-api-key' }),
-        '../../exporters/common/request': requestStub,
+        '../exporters/request': requestStub,
       }
     )
     uploadTestScreenshot = upload
@@ -78,6 +78,16 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.match(path, new RegExp(`^/api/v2/ci/test-runs/${traceId}/media\\?`))
       assert.strictEqual(headers['DD-API-KEY'], 'test-api-key')
       assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], undefined)
+    })
+
+    it('forwards the deadline and AbortSignal to the media request', () => {
+      const abortController = new AbortController()
+      const deadline = Date.now() + 10_000
+
+      const requestOptions = uploadForFile('screenshot.png', { deadline, signal: abortController.signal })
+
+      assert.strictEqual(requestOptions.deadline, deadline)
+      assert.strictEqual(requestOptions.signal, abortController.signal)
     })
 
     it('reports an error when the request helper drops the upload', () => {

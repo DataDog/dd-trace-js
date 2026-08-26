@@ -5,6 +5,7 @@ const {
   getHeadersSize,
   getMessageSize,
   getSizeOrZero,
+  PATHWAY_FIELD_BYTES,
 } = require('./size')
 
 // This is only needed because DSM code is spread across existing tracing
@@ -121,6 +122,7 @@ module.exports = {
   DataStreamsManager,
   DataStreamsProcessor,
   SchemaBuilder,
+  PATHWAY_FIELD_BYTES,
 
   // These are small functions so they are exposed directly and not lazy loaded.
   getAmqpMessageSize,

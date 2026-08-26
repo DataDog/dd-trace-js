@@ -2,12 +2,15 @@
 
 const {
   EXPOSURES_ENDPOINT,
-  EVP_PROXY_AGENT_BASE_PATH,
-  EVP_SUBDOMAIN_HEADER_NAME,
-  EVP_SUBDOMAIN_VALUE,
   EVP_PAYLOAD_SIZE_LIMIT,
   EVP_EVENT_SIZE_LIMIT,
 } = require('../constants/constants')
+const {
+  EVP_EVENT_PLATFORM_SUBDOMAIN,
+  EVP_PROXY_PATH_V2,
+  EVP_SUBDOMAIN_HEADER_NAME,
+} = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const log = require('../../log')
 const BaseFFEWriter = require('./base')
 
@@ -15,6 +18,15 @@ const BaseFFEWriter = require('./base')
 // exposure dedupe cache keeps masking dropped events after recovery. The first
 // drop emits a warning and `droppedEventCount` accumulates the cumulative loss.
 const PENDING_MAX_EVENTS = 1000
+
+/**
+ * @typedef {object} ExposureRoute
+ * @property {URL} url - Route base URL
+ * @property {string} basePath - EVP base path
+ * @property {object} [headers] - Route-specific headers
+ * @property {import('node:https').Agent} [agent] - Optional HTTPS proxy agent
+ * @property {ExposureRoute} [fallback] - Optional direct fallback route
+ */
 
 /**
  * @typedef {object} ExposureEvent
@@ -25,6 +37,7 @@ const PENDING_MAX_EVENTS = 1000
  * @property {string} flag.key - Flag key
  * @property {object} variant - Variant information
  * @property {string} variant.key - Variant key
+ * @property {number} [serial_id] - Serial id of the split the subject landed in
  * @property {object} subject - Subject (user/entity) information
  * @property {string} subject.id - Subject identifier
  * @property {string} [subject.type] - Subject type
@@ -45,10 +58,10 @@ const PENDING_MAX_EVENTS = 1000
  */
 
 /**
- * ExposuresWriter is responsible for sending exposure events to the Datadog Agent.
+ * Sends exposure events through the selected local EVP proxy or direct intake route.
  */
 class ExposuresWriter extends BaseFFEWriter {
-  // Disabled until the agent strategy probe resolves.
+  // Disabled until route selection resolves.
   #enabled = false
 
   /** @type {ExposureEvent[]} */
@@ -61,21 +74,26 @@ class ExposuresWriter extends BaseFFEWriter {
 
   /**
    * @param {import('../../config/config-base')} config - Tracer configuration object
+   * @param {ExposureRoute} [route] - Caller-supplied route
    */
-  constructor (config) {
-    const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/$/, '')
-    const endpoint = EXPOSURES_ENDPOINT.replace(/^\/+/, '')
-    const fullEndpoint = `${basePath}/${endpoint}`
+  constructor (config, route) {
+    route ??= { url: config.url, basePath: EVP_PROXY_PATH_V2 }
+    const headers = route.headers ?? {
+      [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
+    }
 
     super({
       config,
-      endpoint: fullEndpoint,
+      agentUrl: route.url,
+      endpoint: joinEVPProxyPath(route.basePath, EXPOSURES_ENDPOINT),
       payloadSizeLimit: EVP_PAYLOAD_SIZE_LIMIT,
       eventSizeLimit: EVP_EVENT_SIZE_LIMIT,
-      headers: {
-        [EVP_SUBDOMAIN_HEADER_NAME]: EVP_SUBDOMAIN_VALUE,
-      },
+      headers,
     })
+
+    if (route.agent || route.fallback) {
+      this.#setRoute({ ...route, headers })
+    }
 
     /** @type {ExposureContext} */
     const context = {
@@ -95,8 +113,14 @@ class ExposuresWriter extends BaseFFEWriter {
 
   /**
    * @param {boolean} enabled - Whether to enable the writer
+   * @param {ExposureRoute} [route] - Selected EVP route
+   * @returns {void}
    */
-  setEnabled (enabled) {
+  setEnabled (enabled, route) {
+    if (route) {
+      this.#setRoute(route)
+    }
+
     this.#enabled = enabled
 
     if (enabled && this.#pendingEvents.length > 0) {
@@ -104,6 +128,31 @@ class ExposuresWriter extends BaseFFEWriter {
       super.append(this.#pendingEvents)
       this.#pendingEvents = []
     }
+  }
+
+  /**
+   * Applies caller-supplied route data without performing discovery.
+   *
+   * @param {ExposureRoute} route - Selected EVP route
+   * @returns {void}
+   */
+  #setRoute (route) {
+    const fallbackRoute = route.fallback && {
+      url: route.fallback.url,
+      endpoint: joinEVPProxyPath(route.fallback.basePath, EXPOSURES_ENDPOINT),
+      headers: route.fallback.headers ?? {},
+      agent: route.fallback.agent,
+    }
+    const headers = route.headers ?? {
+      [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
+    }
+
+    this._setRoutes({
+      url: route.url,
+      endpoint: joinEVPProxyPath(route.basePath, EXPOSURES_ENDPOINT),
+      headers,
+      agent: route.agent,
+    }, fallbackRoute)
   }
 
   /**
@@ -156,7 +205,7 @@ class ExposuresWriter extends BaseFFEWriter {
   makePayload (events) {
     const formattedEvents = events.map(event => {
       /** @type {ExposureEvent} */
-      return {
+      const formatted = {
         timestamp: event.timestamp || Date.now(),
         allocation: {
           key: event.allocation?.key || event['allocation.key'],
@@ -173,6 +222,12 @@ class ExposuresWriter extends BaseFFEWriter {
           attributes: event.subject?.attributes,
         },
       }
+
+      if (typeof event.serial_id === 'number') {
+        formatted.serial_id = event.serial_id
+      }
+
+      return formatted
     })
 
     return {

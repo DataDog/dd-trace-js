@@ -27,12 +27,37 @@ function appHost (site) {
 
 function datasetRecordFromResource (resource) {
   const attrs = resource?.attributes ?? resource ?? {}
+  const id = String(resource?.id ?? attrs.id ?? '')
+  if (id === '') throw new Error('Dataset record response is missing an id')
   return new DatasetRecord(
     attrs.input ?? null,
     attrs.expected_output ?? null,
     attrs.metadata ?? {},
-    String(resource?.id ?? attrs.id ?? '') || null
+    id,
+    attrs.tags ?? []
   )
+}
+
+function datasetVersionFromResource (resource) {
+  const attrs = resource?.attributes ?? resource ?? {}
+  return attrs.valid_from_version ?? attrs.version ?? null
+}
+
+function datasetVersionFromResources (resources) {
+  const versions = resources
+    .map(datasetVersionFromResource)
+    .filter(version => version != null)
+    .map(Number)
+    .filter(Number.isFinite)
+  if (versions.length === 0) return null
+  return Math.max(...versions)
+}
+
+function datasetMutationResultFromResources (resources) {
+  return {
+    records: resources.map(datasetRecordFromResource),
+    version: datasetVersionFromResources(resources),
+  }
 }
 
 function datasetFromResource (client, projectId, resource) {
@@ -44,7 +69,6 @@ function datasetFromResource (client, projectId, resource) {
     String(attrs.description ?? ''),
     resource?.id ?? attrs.id ?? null,
     projectId,
-    [],
     [],
     version,
     version
@@ -82,6 +106,10 @@ class ExperimentsClient {
 
   get site () {
     return this.#site
+  }
+
+  get projectName () {
+    return this.#projectName
   }
 
   // Dashboard URL base for the configured site, e.g. https://app.datadoghq.com
@@ -172,13 +200,40 @@ class ExperimentsClient {
     const resources = Array.isArray(response?.records)
       ? response.records
       : (Array.isArray(response?.data) ? response.data : [])
-    return resources.map(datasetRecordFromResource)
+    return datasetMutationResultFromResources(resources)
+  }
+
+  async batchUpdateDatasetRecords (projectId, datasetId, attributes) {
+    const response = await this.request(
+      'POST',
+      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/batch_update`,
+      {
+        data: {
+          type: 'datasets',
+          id: datasetId,
+          attributes: {
+            insert_records: attributes.insert_records ?? [],
+            update_records: attributes.update_records ?? [],
+            delete_records: attributes.delete_records ?? [],
+            deduplicate: attributes.deduplicate !== false,
+            create_new_version: attributes.create_new_version !== false,
+          },
+        },
+      }
+    )
+    const resources = Array.isArray(response?.records)
+      ? response.records
+      : (Array.isArray(response?.data) ? response.data : [])
+    return datasetMutationResultFromResources(resources)
   }
 
   async listDatasetRecords (projectId, datasetId, options = {}) {
     const query = new URLSearchParams()
     if (options.cursor) query.set('page[cursor]', options.cursor)
     if (options.version !== undefined && options.version !== null) query.set('filter[version]', String(options.version))
+    if (Array.isArray(options.tags)) {
+      for (const tag of options.tags) query.append('filter[tags]', tag)
+    }
     const response = await this.request(
       'GET',
       `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`

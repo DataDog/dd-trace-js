@@ -13,6 +13,7 @@ const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
+const { getServerStatusValidator } = require('./status-validator')
 const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
 const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
 
@@ -35,11 +36,6 @@ const MANUAL_DROP = tags.MANUAL_DROP
 
 const contexts = new WeakMap()
 const requests = new WeakMap()
-const statusCodeRangesPattern = /^[1-5]\d{2}(?:-[1-5]\d{2})?(?:,[1-5]\d{2}(?:-[1-5]\d{2})?)*$/
-const whitespacePattern = /\s/g
-const MAX_HTTP_STATUS_CODE = 599
-
-/** @typedef {(code: number) => boolean} StatusValidator */
 
 // TODO: change this to no longer rely on creating a dummy plugin to be able to access startSpan
 function createWebPlugin (tracer, config = {}) {
@@ -65,7 +61,7 @@ const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
-    const validateStatus = getStatusValidator(config)
+    const validateStatus = getServerStatusValidator(config)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
@@ -376,6 +372,9 @@ function addAllowHeaders (req, res, headers) {
   const allowHeaders = splitHeader(headers['access-control-allow-headers'])
   const requestHeaders = splitHeader(req.headers['access-control-request-headers'])
   const contextHeaders = [
+    'baggage',
+    'traceparent',
+    'tracestate',
     'x-datadog-origin',
     'x-datadog-parent-id',
     'x-datadog-sampled', // Deprecated, but still accept it in case it's sent.
@@ -558,65 +557,6 @@ function getHeadersToRecord (config) {
     log.error('Expected `headers` to be an array of strings.')
   }
   return []
-}
-
-function isNot500ErrorCode (code) {
-  return code < 500
-}
-
-/**
- * @param {{ validateStatus?: unknown, DD_TRACE_HTTP_SERVER_ERROR_STATUSES?: unknown }} config
- * @returns {StatusValidator}
- */
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return /** @type {StatusValidator} */ (config.validateStatus)
-  } else if (config.hasOwnProperty('validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-
-  const { DD_TRACE_HTTP_SERVER_ERROR_STATUSES } = config
-  if (DD_TRACE_HTTP_SERVER_ERROR_STATUSES === undefined) return isNot500ErrorCode
-  if (typeof DD_TRACE_HTTP_SERVER_ERROR_STATUSES !== 'string') {
-    log.error('Expected `DD_TRACE_HTTP_SERVER_ERROR_STATUSES` to be a string.')
-    return isNot500ErrorCode
-  }
-  if (DD_TRACE_HTTP_SERVER_ERROR_STATUSES === '500-599') return isNot500ErrorCode
-
-  const normalized = DD_TRACE_HTTP_SERVER_ERROR_STATUSES.replaceAll(whitespacePattern, '')
-  if (normalized === '500-599') return isNot500ErrorCode
-  if (!statusCodeRangesPattern.test(normalized)) {
-    log.error(
-      '`DD_TRACE_HTTP_SERVER_ERROR_STATUSES` must contain comma-separated status codes or ranges from 100 to 599.'
-    )
-    return isNot500ErrorCode
-  }
-
-  const errorStatusCodes = new Uint8Array(MAX_HTTP_STATUS_CODE + 1)
-  const ranges = normalized.split(',')
-  for (const range of ranges) {
-    const separator = range.indexOf('-')
-    if (separator === -1) {
-      errorStatusCodes[Number(range)] = 1
-      continue
-    }
-
-    const first = Number(range.slice(0, separator))
-    const second = Number(range.slice(separator + 1))
-    const start = Math.min(first, second)
-    const end = Math.max(first, second)
-    errorStatusCodes.fill(1, start, end + 1)
-  }
-
-  /**
-   * @param {number} code
-   * @returns {boolean}
-   */
-  function isValidStatusCode (code) {
-    return errorStatusCodes[code] !== 1
-  }
-
-  return isValidStatusCode
 }
 
 const noop = () => {}

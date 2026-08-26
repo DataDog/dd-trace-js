@@ -93,6 +93,16 @@
         "default": "16"
       }
     ],
+    "DD_AI_GUARD_REDACTION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.aiguard.redactionEnabled"
+        ],
+        "default": "true"
+      }
+    ],
     "DD_AI_GUARD_TIMEOUT": [
       {
         "implementation": "A",
@@ -1351,6 +1361,16 @@
         "default": null
       }
     ],
+    "DD_LLMOBS_PROJECT_NAME": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "llmobs.projectName"
+        ],
+        "default": null
+      }
+    ],
     "DD_LLMOBS_SAMPLE_RATE": [
       {
         "implementation": "A",
@@ -2462,6 +2482,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_BROWSER_BUNYAN_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_BSON_ENABLED": [
       {
         "implementation": "A",
@@ -3002,6 +3029,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_HTTP_CLIENT_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "400-499"
+      }
+    ],
     "DD_TRACE_HTTP_ENABLED": [
       {
         "implementation": "A",
@@ -3522,6 +3556,13 @@
       }
     ],
     "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_TRACE_OTEL_CTX_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

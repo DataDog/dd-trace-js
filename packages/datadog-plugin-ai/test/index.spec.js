@@ -85,8 +85,9 @@ describe('Plugin', () => {
     })
 
     describe('patching behavior with experimental_telemetry options', () => {
-      if (semifies(realVersion, '>=6.0.0')) {
-        it('preserves the original model error with a dd-trace OTel tracer', async () => {
+      {
+        const v6Test = semifies(realVersion, '>=6.0.0') ? it : it.skip
+        v6Test('preserves the original model error with a dd-trace OTel tracer', async () => {
           const originalError = new Error('original model error')
           const model = {
             specificationVersion: 'v3',
@@ -256,8 +257,9 @@ describe('Plugin', () => {
         assert.ok(result.text, 'Expected result to be truthy')
       })
 
-      if (semifies(realVersion, '>=6.0.0')) {
-        it('delegates the complete span interface to the original span', async () => {
+      {
+        const v6Test = semifies(realVersion, '>=6.0.0') ? it : it.skip
+        v6Test('delegates the complete span interface to the original span', async () => {
           const calls = []
           const context = { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 1 }
           const originalError = new Error('model error')

@@ -12,13 +12,21 @@ const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
 const { writeSettingsToCache } = require('../test-optimization-cache')
 const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
+const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../telemetry')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
+const spanFormat = require('../../span_format')
 const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
+const { TEST_STATUS } = require('../../plugins/util/test')
+const {
+  createFinalFlushTimeoutError,
+  FINAL_FLUSH_FALLBACK_DELAY,
+  FINAL_FLUSH_TIMEOUT,
+} = require('../final-flush')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 
 const hostname = getHostname()
@@ -87,6 +95,12 @@ function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSh
 }
 
 class CiVisibilityExporter extends BufferingExporter {
+  #finalFlush
+  #deferredTestSessionTraces = []
+  #pendingScreenshotUploads = new Set()
+  #screenshotFlushWaiters = new Set()
+  #deferredTestSuiteSpans = new Map()
+
   constructor (config, options = {}) {
     super(config)
     this._timer = undefined
@@ -137,18 +151,7 @@ class CiVisibilityExporter extends BufferingExporter {
       }
     })
 
-    const flush = () => {
-      if (this._writer) {
-        this._writer.flush()
-      }
-      if (this._coverageWriter) {
-        this._coverageWriter.flush()
-      }
-      if (this._logsWriter) {
-        this._logsWriter.flush()
-      }
-    }
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush.bind(this))
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => {}))
   }
 
   shouldRequestSkippableSuites () {
@@ -399,18 +402,189 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   export (trace) {
+    this.#resetFinalFlush()
+
+    if (this.#deferredTestSuiteSpans.size === 0) {
+      this.#exportTrace(trace)
+      return
+    }
+
+    let hasDeferredTestSuiteSpan = false
+    let immediateTrace
+    for (let index = 0; index < trace.length; index++) {
+      const formattedSpan = trace[index]
+      const spanId = formattedSpan.span_id?.toString()
+      const deferredTestSuiteSpan = this.#deferredTestSuiteSpans.get(spanId)
+      if (deferredTestSuiteSpan) {
+        if (!hasDeferredTestSuiteSpan && index > 0) immediateTrace = trace.slice(0, index)
+        hasDeferredTestSuiteSpan = true
+        if (deferredTestSuiteSpan.emitted || (this._isInitialized && !this.canReportSessionTraces())) {
+          this.#deferredTestSuiteSpans.delete(spanId)
+        } else {
+          deferredTestSuiteSpan.formattedSpan = formattedSpan
+        }
+      } else if (hasDeferredTestSuiteSpan) {
+        immediateTrace ??= []
+        immediateTrace.push(formattedSpan)
+      }
+    }
+
+    if (!hasDeferredTestSuiteSpan) this.#exportTrace(trace)
+    else if (immediateTrace) this.#exportTrace(immediateTrace)
+  }
+
+  /**
+   * Exports spans that are not retained for late updates to session, module, or suite events.
+   *
+   * @param {Array<object>} trace
+   * @returns {void}
+   */
+  #exportTrace (trace) {
     // Until it's initialized, we just store the traces as is
     if (!this._isInitialized) {
       this._traceBuffer.push(trace)
       return
     }
-    if (!this.canReportSessionTraces() && getIsTestSessionTrace(trace)) {
+    const isTestSessionTrace = getIsTestSessionTrace(trace)
+    if (!this.canReportSessionTraces() && isTestSessionTrace) {
       return
     }
-    this._export(trace)
+    if (this._export(trace, undefined, undefined, isTestSessionTrace) === false && isTestSessionTrace) {
+      this.#deferredTestSessionTraces.push(trace)
+    }
+  }
+
+  /**
+   * Retains a completed suite until finalization so a later framework error can still update it.
+   *
+   * @param {import('../../opentracing/span')} testSuiteSpan
+   * @returns {void}
+   */
+  deferTestSuiteSpan (testSuiteSpan) {
+    this.#resetFinalFlush()
+    this.#deferredTestSuiteSpans.set(testSuiteSpan.context()._spanId.toString(), {
+      span: testSuiteSpan,
+      formattedSpan: undefined,
+      emitted: false,
+    })
+  }
+
+  /**
+   * Retains formatted test suite events received from test framework workers until finalization.
+   *
+   * @param {Array<object>} trace
+   * @returns {void}
+   */
+  exportTraceWithDeferredTestSuite (trace) {
+    for (const formattedSpan of trace) {
+      if (formattedSpan.type !== 'test_suite_end') continue
+
+      this.#deferredTestSuiteSpans.set(formattedSpan.span_id.toString(), {
+        span: undefined,
+        formattedSpan,
+        emitted: false,
+      })
+    }
+    this.export(trace)
+  }
+
+  /**
+   * Applies a late framework error to every completed suite retained by the current finalization boundary.
+   *
+   * @param {Error} error
+   * @returns {void}
+   */
+  setDeferredTestSuiteError (error) {
+    for (const { span, formattedSpan, emitted } of this.#deferredTestSuiteSpans.values()) {
+      if (emitted) continue
+      if (span) {
+        span.setTag(TEST_STATUS, 'fail')
+        span.setTag('error', error)
+      } else if (formattedSpan) {
+        formattedSpan.meta[TEST_STATUS] = 'fail'
+        spanFormat.addError(formattedSpan, error)
+      }
+    }
+  }
+
+  /**
+   * Appends a completed suite while preserving the ordinary writer call shape outside finalization.
+   *
+   * @param {object} formattedSpan
+   * @param {{ deadline?: number }} [options]
+   * @returns {boolean|undefined}
+   */
+  #appendDeferredTestSuiteSpan (formattedSpan, options) {
+    const appended = options === undefined
+      ? this._writer.append([formattedSpan])
+      : this._writer.append([formattedSpan], options)
+
+    if (appended !== false && this._config.isCiVisibility) {
+      incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION)
+    }
+    return appended
+  }
+
+  /**
+   * Appends completed suites before their module and session parents are exported.
+   *
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  exportDeferredTestSuiteSpans (options) {
+    if (!this._writer || !this.canReportSessionTraces()) return
+
+    for (const [spanId, deferredTestSuiteSpan] of this.#deferredTestSuiteSpans) {
+      const { span, formattedSpan, emitted } = deferredTestSuiteSpan
+      if (emitted) continue
+      const updatedSpan = span && spanFormat(span)
+      if (span && formattedSpan) {
+        formattedSpan.error = updatedSpan.error
+        Object.assign(formattedSpan.meta, updatedSpan.meta)
+        Object.assign(formattedSpan.metrics, updatedSpan.metrics)
+        if (this.#appendDeferredTestSuiteSpan(formattedSpan, options) === false) continue
+        this.#deferredTestSuiteSpans.delete(spanId)
+      } else if (formattedSpan) {
+        if (this.#appendDeferredTestSuiteSpan(formattedSpan, options) === false) continue
+        this.#deferredTestSuiteSpans.delete(spanId)
+      } else {
+        if (this.#appendDeferredTestSuiteSpan(updatedSpan, options) === false) continue
+        deferredTestSuiteSpan.emitted = true
+      }
+    }
+  }
+
+  /**
+   * Discards completed suites that the selected transport cannot deliver.
+   *
+   * @returns {void}
+   */
+  resetDeferredTestSuiteSpans () {
+    this.#deferredTestSuiteSpans.clear()
+  }
+
+  /**
+   * Retries session, module, and suite traces rejected by writer backpressure within the final deadline.
+   *
+   * @param {{ deadline?: number }} options final-flush options
+   * @returns {void}
+   */
+  #exportDeferredTestSessionTraces (options) {
+    if (!this._writer || !this.canReportSessionTraces()) return
+
+    let retainedCount = 0
+
+    for (const trace of this.#deferredTestSessionTraces) {
+      if (this._writer.append(trace, options) === false) {
+        this.#deferredTestSessionTraces[retainedCount++] = trace
+      }
+    }
+    this.#deferredTestSessionTraces.length = retainedCount
   }
 
   exportCoverage (formattedCoverage) {
+    this.#resetFinalFlush()
+
     // Until it's initialized, we just store the coverages as is
     if (!this._isInitialized) {
       this._coverageBuffer.push(formattedCoverage)
@@ -455,6 +629,7 @@ class CiVisibilityExporter extends BufferingExporter {
       return
     }
 
+    this.#resetFinalFlush()
     this._export(
       this.formatLogMessage(testEnvironmentMetadata, logMessage),
       this._logsWriter,
@@ -462,32 +637,140 @@ class CiVisibilityExporter extends BufferingExporter {
     )
   }
 
-  flush (done = () => {}) {
-    if (!this._isInitialized) {
-      return done()
+  flush (done) {
+    const isFinalFlush = typeof done === 'function'
+    const onDone = done || (() => {})
+    let finalFlush
+
+    if (isFinalFlush && this.#finalFlush) {
+      if (this.#finalFlush.completed) onDone(this.#finalFlush.error)
+      else this.#finalFlush.callbacks.push(onDone)
+      return
     }
 
-    // TODO: safe to do them at once? Or do we want to do them one by one?
-    const writers = [
-      this._writer,
-      this._coverageWriter,
-      this._logsWriter,
-    ].filter(Boolean)
-
-    let remaining = writers.length
-
-    if (remaining === 0) {
-      return done()
+    if (isFinalFlush && !this._isInitialized &&
+      this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
+      this.#deferredTestSuiteSpans.size === 0 && this.#deferredTestSessionTraces.length === 0 &&
+      this.#pendingScreenshotUploads.size === 0) {
+      onDone()
+      return
     }
 
-    const onFlushComplete = () => {
-      remaining -= 1
-      if (remaining === 0) {
-        done()
+    if (isFinalFlush) {
+      finalFlush = {
+        callbacks: [onDone],
+        completed: false,
+        error: undefined,
+      }
+      this.#finalFlush = finalFlush
+    }
+
+    const deadline = isFinalFlush ? Date.now() + FINAL_FLUSH_TIMEOUT : undefined
+    let hasCompleted = false
+    let initializationTimeoutId
+
+    const fallbackTimeoutId = isFinalFlush
+      ? setTimeout(() => {
+        complete(createFinalFlushTimeoutError())
+      }, FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY)
+      : undefined
+
+    const complete = (error) => {
+      if (hasCompleted) return
+      hasCompleted = true
+      clearTimeout(fallbackTimeoutId)
+      clearTimeout(initializationTimeoutId)
+      this.#screenshotFlushWaiters.delete(flushWriters)
+      if (error) log.error('Error flushing Test Optimization data', error)
+      if (!isFinalFlush) {
+        onDone(error)
+        return
+      }
+
+      finalFlush.completed = true
+      finalFlush.error = error
+      const callbacks = finalFlush.callbacks
+      finalFlush.callbacks = []
+      for (const callback of callbacks) {
+        try {
+          callback(error)
+        } catch (callbackError) {
+          log.error('Error completing Test Optimization flush callback', callbackError)
+        }
       }
     }
 
-    for (const writer of writers) writer.flush(onFlushComplete)
+    const flushWriters = () => {
+      if (isFinalFlush && this.#pendingScreenshotUploads.size !== 0) {
+        this.#screenshotFlushWaiters.add(flushWriters)
+        return
+      }
+
+      const options = deadline === undefined ? undefined : { deadline }
+      if (isFinalFlush) {
+        this.exportDeferredTestSuiteSpans(options)
+        this.#exportDeferredTestSessionTraces(options)
+      }
+
+      const writers = [
+        this._writer,
+        this._coverageWriter,
+        this._logsWriter,
+      ].filter(Boolean)
+
+      let remaining = writers.length
+      let flushError
+
+      if (remaining === 0) {
+        complete()
+        return
+      }
+
+      const onFlushComplete = (error) => {
+        flushError ||= error
+        remaining -= 1
+        if (remaining === 0) complete(flushError)
+      }
+
+      for (const writer of writers) writer.flush(onFlushComplete, options)
+    }
+
+    if (isFinalFlush && this._initializationRequest) {
+      const initializationRequest = this._initializationRequest
+      const { controller, options } = initializationRequest
+      initializationRequest.finalFlush = finalFlush
+      options.deadline = deadline
+      initializationTimeoutId = setTimeout(() => {
+        const error = createFinalFlushTimeoutError()
+        if (initializationRequest.finalFlush === finalFlush) controller.abort(error)
+        complete(error)
+      }, Math.max(0, deadline - Date.now()))
+    }
+
+    if (!isFinalFlush) {
+      if (this._isInitialized) flushWriters()
+      else complete()
+      return
+    }
+
+    if (this._isInitialized) {
+      flushWriters()
+      return
+    }
+
+    this._canUseCiVisProtocolPromise.then(() => {
+      clearTimeout(initializationTimeoutId)
+      if (!hasCompleted) flushWriters()
+    })
+  }
+
+  /**
+   * Allows later test activity to establish a new finalization boundary.
+   *
+   * @returns {void}
+   */
+  #resetFinalFlush () {
+    this.#finalFlush = undefined
   }
 
   exportUncodedCoverages () {
@@ -572,11 +855,53 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} options.traceId - Test trace id used as the screenshot key
    * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
    * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
+   * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
    */
-  uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs }, callback) {
+  uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs, signal }, callback) {
     if (!this._testScreenshotUploadUrl) {
       return callback(new Error('Test screenshot upload URL not configured'))
+    }
+
+    this.#resetFinalFlush()
+    const controller = new AbortController()
+    const deadline = Date.now() + FINAL_FLUSH_TIMEOUT
+    let settled = false
+    const complete = (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutId)
+      signal?.removeEventListener('abort', onAbort)
+
+      try {
+        callback(error)
+      } finally {
+        this.#pendingScreenshotUploads.delete(controller)
+        if (this.#pendingScreenshotUploads.size === 0) {
+          const waiters = [...this.#screenshotFlushWaiters]
+          this.#screenshotFlushWaiters.clear()
+          for (const waiter of waiters) queueMicrotask(waiter)
+        }
+      }
+    }
+    const onAbort = () => {
+      const error = signal.reason || Object.assign(new Error('Test screenshot upload aborted'), { code: 'ABORT_ERR' })
+      controller.abort(error)
+      complete(error)
+    }
+
+    this.#pendingScreenshotUploads.add(controller)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    const timeoutId = setTimeout(() => {
+      const error = createFinalFlushTimeoutError()
+      controller.abort(error)
+      complete(error)
+    }, FINAL_FLUSH_TIMEOUT)
+    timeoutId.unref?.()
+
+    if (signal?.aborted) {
+      onAbort()
+      return
     }
 
     uploadTestScreenshotRequest({
@@ -587,7 +912,9 @@ class CiVisibilityExporter extends BufferingExporter {
       url: this._testScreenshotUploadUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,
-    }, callback)
+      deadline,
+      signal: controller.signal,
+    }, complete)
   }
 }
 

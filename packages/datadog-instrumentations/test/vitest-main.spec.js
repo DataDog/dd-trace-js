@@ -123,6 +123,7 @@ describe('vitest main instrumentation', () => {
     const knownTestsCh = {}
     const noWorkerInitStates = []
     const providedContexts = []
+    const testSuiteFinishPayloads = []
     let reserveEarlyFlakeDetectionSuite
     let shouldUseNoWorkerInit = false
     const testSuiteFinishCh = {
@@ -166,6 +167,9 @@ describe('vitest main instrumentation', () => {
           }
           if (currentChannel === knownTestsCh) {
             return Promise.resolve({ knownTests: { vitest: {} } })
+          }
+          if (currentChannel === testSuiteFinishCh) {
+            testSuiteFinishPayloads.push(data)
           }
           return Promise.resolve()
         },
@@ -245,7 +249,9 @@ describe('vitest main instrumentation', () => {
 
     class Typechecker {
       async prepareResults () {
-        return { files: [] }
+        return {
+          files: [{ filepath: '/repo/typecheck.ts', result: { state: 'pass' }, tasks: [] }],
+        }
       }
     }
     const typecheckerHook = hooks.find(({ target }) => target.versions[0] === '>=4.0.0').hook
@@ -254,6 +260,8 @@ describe('vitest main instrumentation', () => {
     const typechecker = new Typechecker()
     typechecker.ctx = ctx
     await typechecker.prepareResults()
+    assert.strictEqual(testSuiteFinishPayloads.length, 1)
+    assert.strictEqual(testSuiteFinishPayloads[0].deferFlush, true)
 
     const customPoolTypechecker = new Typechecker()
     customPoolTypechecker.ctx = {

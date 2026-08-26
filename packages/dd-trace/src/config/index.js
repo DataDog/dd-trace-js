@@ -15,7 +15,7 @@ const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
-  getPlatformTags,
+  getServerlessPlatformTags,
   IS_SERVERLESS,
   getIsGCPFunction,
   getIsAzureFunction,
@@ -478,9 +478,13 @@ class Config extends ConfigBase {
 
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
     // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
-    // that don't set the sampler still get parent-based sampling.
+    // that don't set the sampler still get parent-based sampling. Electron exporter spans go over
+    // the Electron SDK's IPC bridge rather than OTLP (see opentracing/tracer.js), so an
+    // OTEL_TRACES_EXPORTER=otlp set for an unrelated telemetry pipeline shouldn't also override
+    // dd-trace's own sampling policy in that case.
     if (!trackedConfigOrigins.has('sampleRate') &&
-        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || this.OTEL_TRACES_EXPORTER === 'otlp')) {
+        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
+          (this.OTEL_TRACES_EXPORTER === 'otlp' && this.experimental.exporter !== 'electron'))) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
@@ -506,7 +510,8 @@ class Config extends ConfigBase {
     if (!this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
         (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
-        trackedConfigOrigins.has('llmobs.mlApp'))) {
+        trackedConfigOrigins.has('llmobs.mlApp') ||
+        trackedConfigOrigins.has('llmobs.projectName'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
@@ -598,8 +603,11 @@ class Config extends ConfigBase {
       this.tags.version = this.version
     }
     this.tags['runtime-id'] = RUNTIME_ID
-    for (const [name, value] of Object.entries(getPlatformTags())) {
-      this.tags[name] ??= value
+    const platformTags = getServerlessPlatformTags()
+    if (platformTags) {
+      for (let i = 0; i < platformTags.length; i += 2) {
+        this.tags[platformTags[i]] ??= platformTags[i + 1]
+      }
     }
 
     if (IS_SERVERLESS) {

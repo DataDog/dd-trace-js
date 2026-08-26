@@ -6,10 +6,12 @@ const { metrics } = require('@opentelemetry/api')
 
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
+const { registerTelemetryFlusher } = require('../../flush')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
 
+const RESERVED_TRACER_TAGS = new Set(['service', 'env', 'version', 'runtime_id', 'runtime-id'])
 /**
  * @typedef {import('../../config')} Config
  */
@@ -76,9 +78,20 @@ function initializeOpenTelemetryMetrics (config) {
 
   const meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
+  // Include the final metric collection and export in lifecycle retention.
+  registerTelemetryFlusher(done => meterProvider.forceFlush(done))
 }
 
-function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, service, env, serviceVersion } = {}) {
+/**
+ * @param {Record<string, unknown>} tags
+ * @param {object} [options]
+ * @param {boolean} [options.reportHostname]
+ * @param {string} [options.service]
+ * @param {string} [options.env]
+ * @param {string} [options.serviceVersion]
+ * @returns {import('@opentelemetry/api').Attributes}
+ */
+function buildResourceAttributes (tags, { reportHostname, service, env, serviceVersion } = {}) {
   const attrs = {
     'telemetry.sdk.name': 'datadog',
     'telemetry.sdk.language': 'nodejs',
@@ -89,14 +102,19 @@ function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, 
   if (env) attrs['deployment.environment.name'] = env
   if (reportHostname) attrs['host.name'] = os.hostname()
 
-  if (!otelSemanticsEnabled) {
-    if (tags?.['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
-    const processTagsObject = processTags.tagsObject
-    if (processTagsObject) {
-      for (const key of Object.keys(processTagsObject)) {
-        attrs[`datadog.${key}`] = processTagsObject[key]
-      }
-    }
+  if (tags['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
+  const tracerTags = []
+  for (const [key, value] of Object.entries(tags)) {
+    const valueType = typeof value
+    const supported = valueType === 'string' || valueType === 'boolean' ||
+      (valueType === 'number' && Number.isFinite(value))
+    if (!RESERVED_TRACER_TAGS.has(key) && supported) tracerTags.push(`${key}:${value}`)
+  }
+  if (tracerTags.length) attrs['datadog.tracer_tags'] = tracerTags
+  // Mirrors the legacy v0.6/stats ProcessTags shape (buildProcessTags().tagsArray); keep both in sync.
+  const processTagsArray = processTags.tagsArray
+  if (processTagsArray.length) {
+    attrs['datadog.process_tags'] = processTagsArray
   }
   return attrs
 }
@@ -106,7 +124,6 @@ function createOtlpSpanStatsExporter (config) {
   const protocol = config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || 'http/json'
   const resourceAttributes = buildResourceAttributes(config.tags, {
     reportHostname: config.reportHostname,
-    otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
     service: config.service,
     env: config.env,
     serviceVersion: config.version,
@@ -115,8 +132,6 @@ function createOtlpSpanStatsExporter (config) {
     config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
     protocol,
     resourceAttributes,
-    config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
-    config.service,
     config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
     config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
   )

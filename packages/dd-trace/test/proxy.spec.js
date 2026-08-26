@@ -6,7 +6,6 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const featureRegistry = require('../src/feature-registry')
 const RemoteConfigCapabilities = require('../src/remote_config/capabilities')
 
 require('./setup/core')
@@ -36,6 +35,7 @@ describe('TracerProxy', () => {
   let aiguard
   let telemetry
   let iast
+  let rewriter
   let openfeature
   let PluginManager
   let pluginManager
@@ -48,6 +48,10 @@ describe('TracerProxy', () => {
   let NoopDogStatsDClient
   let OpenFeatureProvider
   let openfeatureProvider
+  let registerTelemetryFlusher
+  let initializeServerlessTelemetry
+  let supportsServerlessTelemetryRetention
+  let flushServerlessTelemetry
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -181,7 +185,13 @@ describe('TracerProxy', () => {
 
     runtimeMetrics = {
       start: sinon.spy(),
+      flush: sinon.spy(),
     }
+
+    registerTelemetryFlusher = sinon.stub().returns(() => {})
+    initializeServerlessTelemetry = sinon.spy()
+    supportsServerlessTelemetryRetention = sinon.stub().returns(true)
+    flushServerlessTelemetry = sinon.spy()
 
     profiler = {
       start: sinon.spy(),
@@ -202,6 +212,11 @@ describe('TracerProxy', () => {
     }
 
     iast = {
+      enable: sinon.spy(),
+      disable: sinon.spy(),
+    }
+
+    rewriter = {
       enable: sinon.spy(),
       disable: sinon.spy(),
     }
@@ -260,6 +275,7 @@ describe('TracerProxy', () => {
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
+      './appsec/iast/taint-tracking/rewriter': rewriter,
       './aiguard': aiguard,
       './telemetry': telemetry,
       './remote_config': RemoteConfig,
@@ -268,25 +284,14 @@ describe('TracerProxy', () => {
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
       './flare': flare,
-    })
-
-    const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')
-    const noopOpenfeature = {}
-
-    featureRegistry.registerFeature({
-      name: 'openfeature',
-      noop: noopOpenfeature,
-      factory: () => openfeature,
-      provider: () => OpenFeatureProvider,
-      /** @param {object} config */
-      isEnabled (config) {
-        return config.featureFlags.DD_FEATURE_FLAGS_ENABLED
+      './openfeature': openfeature,
+      './openfeature/flagging_provider': OpenFeatureProvider,
+      './serverless': {
+        IS_SERVERLESS: false,
+        initializeServerlessTelemetry,
+        supportsServerlessTelemetryRetention,
       },
-      remoteConfig (rc, config, proxy) {
-        const subscribe = config.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
-          config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'remote_config'
-        openfeatureRcEnable(rc, () => proxy.openfeature, subscribe)
-      },
+      './flush': { flushServerlessTelemetry, registerTelemetryFlusher },
     })
 
     proxy = new ProxyClass()
@@ -306,6 +311,15 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(Config, options)
         sinon.assert.calledWith(DatadogTracer, config)
         sinon.assert.calledOnceWithExactly(RemoteConfig, config)
+        sinon.assert.notCalled(rewriter.enable)
+      })
+
+      it('should enable the IAST rewriter when IAST is enabled', () => {
+        config.iast.enabled = true
+
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(rewriter.enable, config)
       })
 
       it('should not initialize twice', () => {
@@ -602,6 +616,39 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.called(runtimeMetrics.start)
+      })
+
+      it('registers the runtime metrics flush with the serverless lifecycle', () => {
+        config.runtimeMetrics.enabled = true
+        const done = sinon.spy()
+
+        proxy.init()
+        registerTelemetryFlusher.firstCall.args[0](done)
+
+        sinon.assert.calledOnceWithExactly(runtimeMetrics.flush, done)
+      })
+
+      it('registers Vercel telemetry retention when tracing is disabled', () => {
+        config.DD_TRACE_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.calledOnce(initializeServerlessTelemetry)
+        const telemetry = initializeServerlessTelemetry.firstCall.args[0]
+        assert.strictEqual(typeof telemetry.flushAll, 'function')
+        const done = sinon.spy()
+        telemetry.flushAll(done)
+        sinon.assert.calledOnceWithExactly(flushServerlessTelemetry, done, undefined)
+      })
+
+      it('does not create a lifecycle owner outside a retention platform', () => {
+        supportsServerlessTelemetryRetention.returns(false)
+        proxy = new ProxyClass()
+
+        proxy.init()
+
+        assert.strictEqual(proxy._serverlessTelemetry, undefined)
+        sinon.assert.calledWithExactly(initializeServerlessTelemetry, undefined)
       })
 
       it('should expose noop metrics methods prior to initialization', () => {

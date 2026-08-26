@@ -43,38 +43,63 @@ function isInServerlessEnvironment () {
 }
 
 /**
- * Gets tags describing the platform where the tracer is running.
+ * Gets tags describing the serverless platform where the tracer is running.
  *
- * @returns {Record<string, string>}
+ * @param {{ isVercel: boolean }} [platform] Detected serverless platform.
+ * @returns {string[]|undefined}
  */
-function getPlatformTags () {
-  return getVercelTags()
+function getServerlessPlatformTags (platform = getServerlessPlatform()) {
+  if (platform.isVercel) {
+    return require('./serverless/vercel').getVercelPlatformTags()
+  }
 }
 
 /**
- * @returns {Record<string, string>}
+ * Detects the serverless platform once while configuration is built.
+ * @returns {{ isVercel: boolean }}
  */
-function getVercelTags () {
-  if (getEnvironmentVariable('VERCEL') !== '1') return {}
+function getServerlessPlatform () {
+  return { isVercel: getEnvironmentVariable('VERCEL') === '1' }
+}
 
-  const tags = {
-    'vercel.project_id': getEnvironmentVariable('VERCEL_PROJECT_ID'),
-    'vercel.environment': getEnvironmentVariable('VERCEL_ENV'),
-    'vercel.region': getEnvironmentVariable('VERCEL_REGION'),
+/**
+ * Whether the current platform can retain an invocation for telemetry delivery.
+ *
+ * Add future serverless platforms here as they gain an equivalent retention hook.
+ * @returns {boolean}
+ */
+function supportsServerlessTelemetryRetention () {
+  return getServerlessPlatform().isVercel
+}
+
+/**
+ * Creates delivery tracking for platforms with an invocation retention hook.
+ */
+function createServerlessDeliveryTracker () {
+  if (supportsServerlessTelemetryRetention()) {
+    return new (require('./serverless/telemetry-delivery-tracker'))()
   }
+}
 
-  for (const [name, value] of Object.entries(tags)) {
-    if (!value) delete tags[name]
+/**
+ * Registers the lifecycle adapter selected by the detected serverless platform.
+ * @param {{ flushAll?: (done: () => void) => void }} tracer
+ */
+function initializeServerlessTelemetry (tracer) {
+  if (supportsServerlessTelemetryRetention()) {
+    return require('./serverless/vercel').registerVercelTelemetryRetention(tracer)
   }
-
-  return tags
 }
 
 module.exports = {
-  getPlatformTags,
+  getServerlessPlatformTags,
+  getServerlessPlatform,
+  supportsServerlessTelemetryRetention,
+  createServerlessDeliveryTracker,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  initializeServerlessTelemetry,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

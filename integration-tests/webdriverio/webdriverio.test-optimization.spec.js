@@ -9,6 +9,7 @@ const path = require('node:path')
 
 const {
   getCiVisAgentlessConfig,
+  getCiVisEvpProxyConfig,
   sandboxCwd,
   useSandbox,
 } = require('../helpers')
@@ -139,6 +140,16 @@ function countRequests (payloads, requestPath) {
   return payloads.filter(({ url }) => url.endsWith(requestPath)).length
 }
 
+/**
+ * Gets automatic log-submission requests from intake payloads.
+ *
+ * @param {object[]} payloads
+ * @returns {object[]}
+ */
+function getLogRequests (payloads) {
+  return payloads.filter(({ url }) => url.startsWith('/api/v2/logs?'))
+}
+
 for (const version of versions) {
   describe(`webdriverio@${version} Test Optimization`, function () {
     this.timeout(90_000)
@@ -154,6 +165,7 @@ for (const version of versions) {
       `@wdio/jasmine-framework@${version}`,
       `@wdio/local-runner@${version}`,
       `@wdio/mocha-framework@${version}`,
+      'bunyan',
     ], true, [
       './integration-tests/webdriverio/fixtures/*',
       './integration-tests/ci-visibility/dynamic-instrumentation/dependency.js',
@@ -289,6 +301,75 @@ for (const version of versions) {
           )
         }
 
+        if (version === 'latest') {
+          describe('automatic log submission', () => {
+            it('submits correlated Bunyan logs', async () => {
+              await runScenario('automaticLogSubmission', 1, payloads => {
+                const logRequests = getLogRequests(payloads)
+
+                assert.ok(logRequests.length > 0)
+                for (const logRequest of logRequests) {
+                  assert.strictEqual(logRequest.headers['dd-api-key'], '1')
+                  assert.strictEqual(logRequest.headers['content-type'], 'application/json')
+                  assert.strictEqual(logRequest.url, '/api/v2/logs?ddsource=bunyan&service=my-service')
+                }
+
+                const logMessages = logRequests.flatMap(({ logMessage }) => logMessage)
+                assert.strictEqual(logMessages.length, 2)
+
+                const logMessage = logMessages.find(({ msg }) => msg === 'Hello from WebdriverIO!')
+                const afterHookLogMessage = logMessages.find(
+                  ({ msg }) => msg === 'Hello from WebdriverIO after hook!'
+                )
+                const test = getEvents(payloads).find(event => event.type === 'test').content
+
+                assert.ok(logMessage)
+                assert.strictEqual(logMessage.level, 30)
+                assert.deepStrictEqual(Object.keys(logMessage.dd).sort(), ['service', 'span_id', 'trace_id'])
+                assert.strictEqual(logMessage.dd.service, 'my-service')
+                assert.strictEqual(logMessage.dd.span_id, test.span_id.toString())
+                assert.strictEqual(logMessage.dd.trace_id, test.trace_id.toString())
+                assert.ok(afterHookLogMessage)
+                assert.strictEqual(afterHookLogMessage.level, 30)
+              }, {
+                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_SERVICE: 'my-service',
+              })
+
+              assert.match(testOutput, /Hello from WebdriverIO!/)
+            })
+
+            it('does not submit Bunyan logs when automatic submission is disabled', async () => {
+              await runScenario('automaticLogSubmission', 1, payloads => {
+                assert.strictEqual(getLogRequests(payloads).length, 0)
+              }, {
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_SERVICE: 'my-service',
+              })
+
+              assert.match(testOutput, /Hello from WebdriverIO!/)
+              assert.match(testOutput, /span_id/)
+            })
+
+            it('does not submit Bunyan logs when the API key is missing', async () => {
+              await runScenario('automaticLogSubmission', 1, payloads => {
+                assert.strictEqual(getLogRequests(payloads).length, 0)
+              }, {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_API_KEY: '',
+                DD_SERVICE: 'my-service',
+                NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
+              })
+
+              assert.match(testOutput, /Hello from WebdriverIO!/)
+              assert.match(testOutput, /span_id/)
+            })
+          })
+        }
+
         it('requests enabled data once and keeps TIA disabled across parallel workers', async () => {
           receiver.setSettings({
             code_coverage: true,
@@ -357,8 +438,61 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('keeps skipped tests and their suite and session successful with EFD', async () => {
+        it('keeps quarantine metadata on EFD retries of a new test', async () => {
+          const numRetries = 2
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              faulty_session_threshold: 100,
+              slow_test_retries: { '5s': numRetries },
+            },
+            known_tests_enabled: true,
+            test_management: { enabled: true },
+          })
+          receiver.setKnownTests({ webdriverio: {} })
+          receiver.setTestManagementTests({
+            webdriverio: {
+              suites: {
+                'atr-always-fail.e2e.js': {
+                  tests: {
+                    'WebdriverIO ATR fails every retry': {
+                      properties: { quarantined: true },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          await runScenario('atrAlwaysFails', 1, payloads => {
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suite = events.find(event => event.type === 'test_suite_end').content
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(tests.length, numRetries + 1)
+            for (const test of tests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            }
+
+            const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, numRetries)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd))
+
+            const finalAttempt = tests.find(test => TEST_FINAL_STATUS in test.meta)
+            assert.ok(finalAttempt)
+            assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'skip')
+            assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          })
+        })
+
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('keeps skipped tests and their suite and session successful with EFD', async () => {
             receiver.setSettings({
               early_flake_detection: {
                 enabled: true,
@@ -395,8 +529,9 @@ for (const version of versions) {
           })
         }
 
-        if (framework === 'jasmine') {
-          it('keeps tests filtered by jasmineOpts.grep skipped with EFD', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('keeps tests filtered by jasmineOpts.grep skipped with EFD', async () => {
             receiver.setSettings({
               early_flake_detection: {
                 enabled: true,
@@ -643,8 +778,9 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('falls back to ATR when the EFD retry policy has no retries', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('falls back to ATR when the EFD retry policy has no retries', async () => {
             receiver.setSettings({
               early_flake_detection: {
                 enabled: true,
@@ -673,8 +809,9 @@ for (const version of versions) {
           })
         }
 
-        if (framework === 'jasmine') {
-          it('does not retry tests with ATR when their hooks fail', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('does not retry tests with ATR when their hooks fail', async () => {
             receiver.setSettings({
               flaky_test_retries_count: 1,
               flaky_test_retries_enabled: true,
@@ -696,8 +833,9 @@ for (const version of versions) {
           })
         }
 
-        if (framework === 'jasmine') {
-          it('applies ATR before WebdriverIO retries the spec file', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('applies ATR before WebdriverIO retries the spec file', async () => {
             receiver.setSettings({
               flaky_test_retries_count: 1,
               flaky_test_retries_enabled: true,
@@ -723,8 +861,9 @@ for (const version of versions) {
           })
         }
 
-        if (framework === 'jasmine') {
-          it('applies ATR to failures caused by jasmineOpts.failSpecWithNoExpectations', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('applies ATR to failures caused by jasmineOpts.failSpecWithNoExpectations', async () => {
             receiver.setSettings({
               flaky_test_retries_count: 1,
               flaky_test_retries_enabled: true,
@@ -798,8 +937,9 @@ for (const version of versions) {
           }, 1)
         })
 
-        if (framework === 'jasmine') {
-          it('reports user-configured Jasmine retries as external retries', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('reports user-configured Jasmine retries as external retries', async () => {
             await runScenario('jasmineRetry', 1, payloads => {
               const tests = getEvents(payloads)
                 .filter(event => event.type === 'test')
@@ -891,8 +1031,9 @@ for (const version of versions) {
           }, {}, 1)
         })
 
-        if (framework === 'jasmine') {
-          it('keeps skipped attempt-to-fix tests skipped', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('keeps skipped attempt-to-fix tests skipped', async () => {
             receiver.setSettings({
               test_management: {
                 attempt_to_fix_retries: 2,
@@ -931,7 +1072,7 @@ for (const version of versions) {
             })
           })
 
-          it('does not run hooks for disabled tests', async () => {
+          jasmineTest('does not run hooks for disabled tests', async () => {
             receiver.setSettings({
               test_management: { enabled: true },
             })
@@ -1089,8 +1230,9 @@ for (const version of versions) {
           }, {}, 1)
         })
 
-        if (framework === 'jasmine') {
-          it('does not retry or suppress expectation-based hook failures', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('does not retry or suppress expectation-based hook failures', async () => {
             receiver.setSettings({
               early_flake_detection: {
                 enabled: true,
@@ -1199,8 +1341,9 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('marks tests as impacted when WebdriverIO runs below the repository root', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('marks tests as impacted when WebdriverIO runs below the repository root', async () => {
             receiver.setSettings({ impacted_tests_enabled: true })
 
             await runScenario('impacted', 1, payloads => {
@@ -1259,8 +1402,9 @@ for (const version of versions) {
           })
         })
 
-        if (framework === 'jasmine') {
-          it('captures Failed Test Replay when the first EFD attempt passes', async () => {
+        {
+          const jasmineTest = framework === 'jasmine' ? it : it.skip
+          jasmineTest('captures Failed Test Replay when the first EFD attempt passes', async () => {
             receiver.setSettings({
               di_enabled: true,
               early_flake_detection: {

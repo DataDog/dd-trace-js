@@ -518,10 +518,11 @@ function runPoolQueryConnectionCallback (
  * @param {unknown} error
  * @param {Record<string, unknown>} acquireCtx
  * @param {AcquireErrorChannels} channels
+ * @param {number} [poolWaitTime]
  */
-function reportPoolAcquireError (start, error, acquireCtx, channels) {
+function reportPoolAcquireError (start, error, acquireCtx, channels, poolWaitTime) {
   acquireCtx.error = error
-  acquireCtx.poolWaitTime = acquireWait(start)
+  acquireCtx.poolWaitTime = poolWaitTime ?? acquireWait(start)
   if (start !== undefined) acquireCtx.startTime = performance.timeOrigin + start
   channels.acquireStartCh.publish(acquireCtx)
   channels.acquireFinishCh.publish(acquireCtx)
@@ -536,11 +537,14 @@ function reportPoolAcquireError (start, error, acquireCtx, channels) {
  * @param {Function} callback
  * @param {unknown} thisArg
  * @param {ArgumentsLike} args
+ * @param {number} [poolWaitTime]
  * @returns {unknown}
  */
-function runPoolAcquireError (start, error, acquireCtx, channels, connectionCtx, callback, thisArg, args) {
+function runPoolAcquireError (
+  start, error, acquireCtx, channels, connectionCtx, callback, thisArg, args, poolWaitTime
+) {
   return channels.connectionFinishCh.runStores(connectionCtx, () => {
-    reportPoolAcquireError(start, error, acquireCtx, channels)
+    reportPoolAcquireError(start, error, acquireCtx, channels, poolWaitTime)
     return callback.apply(thisArg, args)
   })
 }
@@ -613,9 +617,11 @@ function takeClusterAcquire (key) {
 }
 
 module.exports = {
+  acquireWait,
   clearPoolWaitTime,
   dispatchesAcquireSynchronously,
   isPoolQueryAcquire,
+  reportPoolAcquireError,
   runOutsidePoolQueryAcquire,
   runPoolAcquireError,
   runWithPoolWait,

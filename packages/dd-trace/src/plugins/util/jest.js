@@ -68,6 +68,8 @@ function getJestTestName (test) {
 function getJestSuitesToRun (skippableSuites, originalTests, rootDir, fallbackRootDir) {
   const unskippableSuites = {}
   const forcedToRunSuites = {}
+  let hasUnskippableSuites = false
+  let hasForcedToRunSuites = false
 
   const skippedSuites = []
   const suitesToRun = []
@@ -87,11 +89,13 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir, fallbackRo
     if (isMarkedAsUnskippable(test)) {
       suitesToRun.push(test)
       unskippableSuites[relativePath] = true
+      hasUnskippableSuites = true
       if (fallbackRelativePath !== undefined) {
         unskippableSuites[fallbackRelativePath] = true
       }
       if (skippedSuite !== undefined) {
         forcedToRunSuites[relativePath] = true
+        hasForcedToRunSuites = true
         if (fallbackRelativePath !== undefined) {
           forcedToRunSuites[fallbackRelativePath] = true
         }
@@ -104,9 +108,6 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir, fallbackRo
       skippedSuites.push(skippedSuite)
     }
   }
-
-  const hasUnskippableSuites = Object.keys(unskippableSuites).length > 0
-  const hasForcedToRunSuites = Object.keys(forcedToRunSuites).length > 0
 
   if (originalTests.length) {
     // The config object is shared by all tests, so we can just take the first one

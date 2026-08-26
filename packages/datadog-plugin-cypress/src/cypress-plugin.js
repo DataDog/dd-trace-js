@@ -477,7 +477,7 @@ class CypressPlugin {
   testsToSkip = []
   skippedTests = []
   skippedTestIds = new Set()
-  skippableTestsCoverage = {}
+  skippableTestsCoverage
   testSessionCoverageMap = createCoverageMap()
   hasForcedToRunSuites = false
   hasUnskippableSuites = false
@@ -492,6 +492,7 @@ class CypressPlugin {
   loggedAttemptToFixTests = new Set()
   uploadedScreenshotPaths = new Set()
   screenshotUploadPromisesByTraceId = new Map()
+  screenshotUploadAbortControllers = new Set()
   afterScreenshotHandler = undefined
   lastFinishedTest = null
   pendingScreenshotUploads = []
@@ -565,7 +566,7 @@ class CypressPlugin {
     this.testsToSkip = []
     this.skippedTests = []
     this.skippedTestIds = new Set()
-    this.skippableTestsCoverage = {}
+    this.skippableTestsCoverage = undefined
     this.testSessionCoverageMap = createCoverageMap()
     this.hasForcedToRunSuites = false
     this.hasUnskippableSuites = false
@@ -581,10 +582,12 @@ class CypressPlugin {
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
     this.screenshotUploadPromisesByTraceId = new Map()
+    this.screenshotUploadAbortControllers = new Set()
     this.lastFinishedTest = null
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
     this.testSuiteSpan = null
+    this.finishedTestSuiteSpans = []
     this.testModuleSpan = null
     this.testSessionSpan = null
     this.command = undefined
@@ -644,6 +647,19 @@ class CypressPlugin {
   }
 
   /**
+   * Cancels screenshot work that must not outlive an errored after:spec finalization boundary.
+   *
+   * @param {Error} error - Error that triggered finalization
+   * @returns {void}
+   */
+  abortPendingScreenshotUploads (error) {
+    for (const controller of this.screenshotUploadAbortControllers) controller.abort(error)
+    this.screenshotUploadAbortControllers.clear()
+    this.screenshotUploadPromisesByTraceId.clear()
+    this.pendingScreenshotUploads = []
+  }
+
+  /**
    * Returns the current time in the same coordinate system used by span
    * start/finish. Captured at session span creation so it shares the same
    * epoch as the trace without reaching into span internals.
@@ -664,17 +680,6 @@ class CypressPlugin {
   }
 
   /**
-   * Returns whether the backend supplied skipped-test coverage data.
-   *
-   * @returns {boolean}
-   */
-  hasSkippableTestsCoverage () {
-    return !!(this.skippableTestsCoverage &&
-      typeof this.skippableTestsCoverage === 'object' &&
-      Object.keys(this.skippableTestsCoverage).length > 0)
-  }
-
-  /**
    * Returns whether skipped test coverage should be backfilled into the session coverage map.
    *
    * @returns {boolean}
@@ -683,7 +688,7 @@ class CypressPlugin {
     return this.isItrEnabled &&
       this.isCoverageReportUploadEnabled &&
       this.isTestsSkipped &&
-      this.hasSkippableTestsCoverage()
+      this.skippableTestsCoverage !== undefined
   }
 
   /**
@@ -800,6 +805,17 @@ class CypressPlugin {
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
+    if (this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries) {
+      cypressConfig.retries = this.originalCypressRetries !== null &&
+        typeof this.originalCypressRetries === 'object'
+        ? { ...this.originalCypressRetries }
+        : this.originalCypressRetries
+    } else {
+      this.originalCypressRetries = cypressConfig.retries !== null && typeof cypressConfig.retries === 'object'
+        ? { ...cypressConfig.retries }
+        : cypressConfig.retries
+      this.hasOriginalCypressRetries = true
+    }
     this.resetRunState()
     this._isInit = true
     this.tracer = tracer
@@ -1063,9 +1079,13 @@ class CypressPlugin {
   }
 
   async beforeRun (details) {
-    // We need to make sure that the plugin is initialized before running the tests
-    // This is for the case where the user has not returned the promise from the init function
-    await this.libraryConfigurationPromise
+    if (this._isInit) {
+      // The user may not have returned the promise from the init function.
+      await this.libraryConfigurationPromise
+    } else {
+      // Cypress open reuses the same plugin process for every interactive run.
+      await this.init(this.tracer, this.cypressConfig)
+    }
 
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
@@ -1131,7 +1151,7 @@ class CypressPlugin {
       } else {
         const { skippableTests, correlationId, skippableTestsCoverage } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
-        this.skippableTestsCoverage = skippableTestsCoverage || {}
+        this.skippableTestsCoverage = skippableTestsCoverage
         this.itrCorrelationId = correlationId
         incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
@@ -1252,18 +1272,29 @@ class CypressPlugin {
     return details
   }
 
-  afterRun (suiteStats) {
+  afterRun (suiteStats, error, shouldFailFinishedSuites = true) {
     if (!this._isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
       return
     }
     if (this.testSessionSpan && this.testModuleSpan) {
-      const testStatus = getSessionStatus(suiteStats)
+      const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
       const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
+      for (const span of this.finishedTestSuiteSpans) {
+        if (error && shouldFailFinishedSuites) {
+          span.setTag(TEST_STATUS, 'fail')
+          span.setTag('error', error)
+        }
+      }
+      this.finishedTestSuiteSpans = []
+      if (error) {
+        this.testModuleSpan.setTag('error', error)
+        this.testSessionSpan.setTag('error', error)
+      }
 
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
@@ -1301,6 +1332,7 @@ class CypressPlugin {
       })
 
       finishAllTraceSpans(this.testSessionSpan)
+      this.tracer._tracer._exporter?.exportDeferredTestSuiteSpans?.()
     }
 
     return new Promise(resolve => {
@@ -1358,7 +1390,7 @@ class CypressPlugin {
     }
   }
 
-  afterSpec (spec, results) {
+  afterSpec (spec, results, error) {
     const { tests, stats, screenshots } = results || {}
     const cypressTests = tests || []
     const specScreenshots = screenshots || []
@@ -1572,13 +1604,16 @@ class CypressPlugin {
         const screenshotUploadResultPromise = failedTestTraceId
           ? this.getScreenshotUploadResultPromise(failedTestTraceId)
           : undefined
-        if (screenshotUploadResultPromise) {
+        if (screenshotUploadResultPromise && !error) {
           testSpanFinishPromises.push(screenshotUploadResultPromise.then((uploadResult) => {
             setScreenshotUploadTags(finishedTest.testSpan, uploadResult)
             this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
             finishedTest.testSpan.finish(finishedTest.finishTime)
           }))
         } else {
+          if (screenshotUploadResultPromise) {
+            this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
+          }
           finishedTest.testSpan.finish(finishedTest.finishTime)
         }
       }
@@ -1586,13 +1621,18 @@ class CypressPlugin {
 
     const finishSuite = () => {
       if (this.testSuiteSpan) {
-        const status = getSuiteStatus(stats)
+        const status = error ? 'fail' : getSuiteStatus(stats)
         this.testSuiteSpan.setTag(TEST_STATUS, status)
 
-        if (latestError) {
-          this.testSuiteSpan.setTag('error', latestError)
+        if (error || latestError) {
+          this.testSuiteSpan.setTag('error', error || latestError)
         }
+        const canRunAfterRun = this.cypressConfig.isTextTerminal ||
+          this.cypressConfig.experimentalInteractiveRunEvents
+        const exporter = this.tracer._tracer._exporter
+        if (canRunAfterRun && exporter?.deferTestSuiteSpan) exporter.deferTestSuiteSpan(this.testSuiteSpan)
         this.testSuiteSpan.finish()
+        if (canRunAfterRun) this.finishedTestSuiteSpans.push(this.testSuiteSpan)
         this.testSuiteSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
@@ -1608,16 +1648,23 @@ class CypressPlugin {
 
     finishSuite()
 
+    if (error) {
+      this.abortPendingScreenshotUploads(error)
+      return this.afterRun(undefined, error, false)
+    }
+
     const screenshotUploadsPromise = waitForScreenshotUploads()
+    let afterSpecPromise = screenshotUploadsPromise
     if (testSpanFinishPromises.length > 0) {
       const testSpansPromise = Promise.all(testSpanFinishPromises).then(() => null)
       if (screenshotUploadsPromise) {
-        return Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+        afterSpecPromise = Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+      } else {
+        afterSpecPromise = testSpansPromise
       }
-      return testSpansPromise
     }
 
-    return screenshotUploadsPromise
+    return afterSpecPromise
   }
 
   /**
@@ -1637,6 +1684,7 @@ class CypressPlugin {
     }
 
     const uploadPromises = []
+    const abortController = new AbortController()
 
     for (const screenshot of screenshots) {
       const filePath = getScreenshotFilePath(screenshot)
@@ -1655,6 +1703,7 @@ class CypressPlugin {
           traceId,
           idempotencyKey,
           capturedAtMs,
+          signal: abortController.signal,
         }, (err) => {
           resolve(err ? SCREENSHOT_UPLOAD_RESULT_ERROR : SCREENSHOT_UPLOAD_RESULT_UPLOADED)
         })
@@ -1662,7 +1711,10 @@ class CypressPlugin {
     }
 
     if (uploadPromises.length > 0) {
-      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult)
+      this.screenshotUploadAbortControllers.add(abortController)
+      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult).finally(() => {
+        this.screenshotUploadAbortControllers.delete(abortController)
+      })
       this.addScreenshotUploadPromise(traceId, uploadPromise)
       return uploadPromise
     }

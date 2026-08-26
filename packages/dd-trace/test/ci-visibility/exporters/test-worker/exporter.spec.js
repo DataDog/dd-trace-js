@@ -113,6 +113,18 @@ describe('CI Visibility Test Worker Exporter', () => {
       sinon.assert.calledOnce(onDone)
     })
 
+    it('reports an IPC send error after all writers settle', () => {
+      const error = new Error('IPC channel closed')
+      process.send = sinon.stub().callsFake((payload, callback) => callback(error))
+      const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      const onDone = sinon.spy()
+
+      jestWorkerExporter.export([{ type: 'test' }])
+      jestWorkerExporter.flush(onDone)
+
+      sinon.assert.calledOnceWithExactly(onDone, error)
+    })
+
     it('does not break if process.send is undefined', () => {
       delete process.send
       const trace = [{ type: 'test' }]

@@ -1,0 +1,34 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/experiments/d9af753d-be9c-4e9f-99a9-76beae7783ba/events",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "1147"
+    },
+    "body": "{\"data\":{\"type\":\"experiments\",\"attributes\":{\"metrics\":[{\"metric_source\":\"custom\",\"label\":\"exact\",\"span_id\":\"6c2d23bc3d60c142\",\"trace_id\":\"6a8374da000000006c2d23bc3d60c142\",\"timestamp_ms\":1787000026572,\"tags\":[\"experiment_id:d9af753d-be9c-4e9f-99a9-76beae7783ba\"],\"experiment_id\":\"d9af753d-be9c-4e9f-99a9-76beae7783ba\",\"metric_type\":\"boolean\",\"boolean_value\":true}],\"spans\":[{\"span_id\":\"6c2d23bc3d60c142\",\"trace_id\":\"6a8374da000000006c2d23bc3d60c142\",\"project_id\":\"784231a1-73e6-43c3-b252-72c6b7a8c3d2\",\"dataset_id\":\"8ba23f9a-d680-48fe-a1af-81f444b4c272\",\"name\":\"task\",\"start_ns\":1787000026572000000,\"duration\":90625,\"status\":\"ok\",\"meta\":{\"input\":{\"value\":1},\"output\":{\"value\":2},\"expected_output\":{\"value\":2},\"metadata\":{\"source\":\"backend-test\"}},\"tags\":[\"experiment_id:d9af753d-be9c-4e9f-99a9-76beae7783ba\",\"run_id:7716420f667d6cfb\",\"run_iteration:0\",\"project_id:784231a1-73e6-43c3-b252-72c6b7a8c3d2\",\"dataset_id:8ba23f9a-d680-48fe-a1af-81f444b4c272\",\"dataset_record_id:f1a85430-c609-49e8-bb84-3f6bcc6e32cf\",\"dataset_name:dd-trace-js-experiments-vcr-facade-experiment-dataset\",\"experiment_name:dd-trace-js-experiments-vcr-facade-experiment\"]}]}}}"
+  },
+  "response": {
+    "status": {
+      "code": 202,
+      "message": "Accepted"
+    },
+    "headers": {
+      "content-security-policy": "frame-ancestors 'self'; report-uri https://logs.browser-intake-datadoghq.com/api/v2/logs?dd-api-key=pube4f163c23bbf91c16b8f57f56af9fc58&dd-evp-origin=content-security-policy&ddsource=csp-report&ddtags=site%3Adatadoghq.com",
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "0",
+      "date": "Thu, 13 Aug 2026 19:39:32 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": ""
+  }
+}

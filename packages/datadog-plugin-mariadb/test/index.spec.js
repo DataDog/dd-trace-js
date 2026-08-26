@@ -1,6 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const dc = require('node:diagnostics_channel')
+const net = require('node:net')
+const { performance } = require('node:perf_hooks')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -36,6 +40,32 @@ function assertNoConnectionSpanLeak () {
     assert.ok(names.has('test'), 'root span has not flushed yet')
     assert.strictEqual(names.has('tcp.connect'), false, 'tcp.connect leaked into the request trace')
   })
+}
+
+/**
+ * @returns {Promise<number>}
+ */
+async function getClosedPort () {
+  const probe = net.createServer()
+  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
+  const port = probe.address().port
+  await new Promise(resolve => probe.close(resolve))
+  return port
+}
+
+/**
+ * @param {number} start
+ * @param {(advanceTo: (value: number) => void) => Promise<unknown>} run
+ * @returns {Promise<void>}
+ */
+async function withFakeNow (start, run) {
+  const nowStub = sinon.stub(performance, 'now').returns(start)
+
+  try {
+    await run(value => nowStub.returns(value))
+  } finally {
+    nowStub.restore()
+  }
 }
 
 describe('Plugin', () => {
@@ -736,6 +766,49 @@ describe('Plugin', () => {
             })
           })
         })
+
+        if (semver.intersects(version, '>=3.4.1')) {
+          it('records the pool acquire wait time on a callback pooled query span', async () => {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
+
+                assert.strictEqual(typeof span.metrics['mariadb.pool.wait_time'], 'number')
+                assert.ok(span.metrics['mariadb.pool.wait_time'] >= 0)
+                assert.strictEqual(traces[0].find(span => span.name === 'mariadb.pool.acquire'), undefined)
+              }, { spanResourceMatch: /^SELECT 4 AS callback_pool_wait$/ }),
+              new Promise((resolve, reject) => {
+                pool.query('SELECT 4 AS callback_pool_wait', error => error ? reject(error) : resolve())
+              }),
+            ])
+          })
+
+          it('creates a dedicated acquire span for an explicit callback getConnection', async () => {
+            const parent = tracer.startSpan('callback-acquire-parent')
+
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+
+                assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                assert.strictEqual(acquireSpan.resource, 'mariadb.pool.acquire')
+                assert.strictEqual(acquireSpan.parent_id.toString(), parent.context().toSpanId())
+                assert.strictEqual(typeof acquireSpan.metrics['mariadb.pool.wait_time'], 'number')
+              }, { spanResourceMatch: /^mariadb\.pool\.acquire$/ }),
+              tracer.scope().activate(parent, () => new Promise((resolve, reject) => {
+                pool.getConnection((error, connection) => {
+                  if (error) {
+                    reject(error)
+                    return
+                  }
+                  connection.release()
+                  parent.finish()
+                  resolve()
+                })
+              })),
+            ])
+          })
+        }
       })
 
       if (semver.intersects(version, '>=3')) {
@@ -800,6 +873,309 @@ describe('Plugin', () => {
               })
             })
           })
+
+          if (semver.intersects(version, '>=3.4.1')) {
+            for (const [method, sql] of [
+              ['query', 'SELECT 5 AS promise_pool_wait'],
+              ['execute', 'SELECT 6 AS execute_pool_wait'],
+            ]) {
+              it(`records the pool acquire wait time on the pooled ${method} span`, async () => {
+                await Promise.all([
+                  agent.assertSomeTraces(traces => {
+                    const span = traces[0][0]
+
+                    assert.strictEqual(typeof span.metrics['mariadb.pool.wait_time'], 'number')
+                    assert.ok(span.metrics['mariadb.pool.wait_time'] >= 0)
+                    assert.strictEqual(traces[0].find(span => span.name === 'mariadb.pool.acquire'), undefined)
+                  }, { spanResourceMatch: new RegExp(`^${sql}$`) }),
+                  pool[method](sql),
+                ])
+              })
+            }
+
+            it('uses zero wait without clock reads for a recent idle connection', async () => {
+              const recentPool = mariadb.createPool({
+                connectionLimit: 1,
+                host: 'localhost',
+                minDelayValidation: Number.MAX_SAFE_INTEGER,
+                user: 'root',
+              })
+
+              try {
+                await recentPool.query('SELECT 1')
+
+                const tracePromise = agent.assertSomeTraces(traces => {
+                  assert.strictEqual(traces[0][0].metrics['mariadb.pool.wait_time'], 0)
+                }, { spanResourceMatch: /^SELECT 12 AS recent_idle_probe$/ })
+                const nowStub = sinon.stub(performance, 'now').returns(100)
+
+                try {
+                  const queryPromise = recentPool.query('SELECT 12 AS recent_idle_probe')
+
+                  sinon.assert.notCalled(nowStub)
+                  await Promise.all([tracePromise, queryPromise])
+                } finally {
+                  nowStub.restore()
+                }
+              } finally {
+                await recentPool.end()
+              }
+            })
+
+            it('includes idle-connection validation in the pool wait time', async () => {
+              const validationPool = mariadb.createPool({
+                connectionLimit: 1,
+                host: 'localhost',
+                minDelayValidation: 0,
+                user: 'root',
+              })
+
+              try {
+                await validationPool.query('SELECT 1')
+
+                const tracePromise = agent.assertSomeTraces(traces => {
+                  assert.strictEqual(traces[0][0].metrics['mariadb.pool.wait_time'], 50)
+                }, { spanResourceMatch: /^SELECT 7 AS validation_probe$/ })
+
+                await withFakeNow(100, async advanceTo => {
+                  const queryPromise = validationPool.query('SELECT 7 AS validation_probe')
+                  advanceTo(150)
+
+                  await Promise.all([tracePromise, queryPromise])
+                })
+              } finally {
+                await validationPool.end()
+              }
+            })
+
+            it('does not classify sibling pool operations as query acquires', async () => {
+              const batchPool = mariadb.createPool({
+                connectionLimit: 1,
+                database: 'db',
+                host: 'localhost',
+                minDelayValidation: 0,
+                user: 'root',
+              })
+
+              try {
+                await batchPool.query('CREATE TEMPORARY TABLE dd_batch_probe (value INT)')
+                const nowStub = sinon.stub(performance, 'now').returns(100)
+
+                try {
+                  await batchPool.batch('INSERT INTO dd_batch_probe VALUES (?)', [[1], [2]])
+
+                  sinon.assert.notCalled(nowStub)
+                } finally {
+                  nowStub.restore()
+                }
+              } finally {
+                await batchPool.end()
+              }
+            })
+
+            describe('when sibling pool operations are reentrant', () => {
+              let batchPool
+
+              beforeEach(async () => {
+                batchPool = mariadb.createPool({
+                  connectionLimit: 1,
+                  database: 'db',
+                  host: 'localhost',
+                  minDelayValidation: Number.MAX_SAFE_INTEGER,
+                  user: 'root',
+                })
+                await batchPool.query('CREATE TEMPORARY TABLE dd_reentrant_batch_probe (value INT)')
+              })
+
+              afterEach(async () => {
+                await batchPool.end()
+              })
+
+              it('does not classify a sibling batch as an explicit acquire', async () => {
+                const acquireStart = sinon.spy()
+                const acquireFinish = sinon.spy()
+                const acquireStartChannel = dc.channel('apm:mariadb:pool:acquire:start')
+                const acquireFinishChannel = dc.channel('apm:mariadb:pool:acquire:finish')
+                acquireStartChannel.subscribe(acquireStart)
+                acquireFinishChannel.subscribe(acquireFinish)
+
+                try {
+                  let nestedBatch
+                  batchPool.once('acquire', () => {
+                    nestedBatch = batchPool.batch('INSERT INTO dd_reentrant_batch_probe VALUES (?)', [[1]])
+                  })
+
+                  const connection = await batchPool.getConnection()
+                  await connection.release()
+                  assert.ok(nestedBatch, 'nested batch did not start')
+                  await nestedBatch
+
+                  assert.strictEqual(acquireStart.callCount, 1)
+                  assert.strictEqual(acquireFinish.callCount, 1)
+                } finally {
+                  acquireStartChannel.unsubscribe(acquireStart)
+                  acquireFinishChannel.unsubscribe(acquireFinish)
+                }
+              })
+
+              it('does not time a sibling batch as a pool query acquire', async () => {
+                let nestedBatch
+                batchPool.once('acquire', () => {
+                  nestedBatch = batchPool.batch('INSERT INTO dd_reentrant_batch_probe VALUES (?)', [[1]])
+                })
+                const nowStub = sinon.stub(performance, 'now').returns(100)
+
+                try {
+                  await batchPool.query('SELECT 15 AS reentrant_batch_probe')
+                  assert.ok(nestedBatch, 'nested batch did not start')
+                  await nestedBatch
+
+                  sinon.assert.notCalled(nowStub)
+                } finally {
+                  nowStub.restore()
+                }
+              })
+            })
+
+            it('forwards pool operations without subscribers', async () => {
+              tracer.use('mariadb', false)
+              try {
+                const rows = await pool.query('SELECT 11 AS untraced_pool_query')
+                const connection = await pool.getConnection()
+
+                await connection.release()
+                assert.strictEqual(rows[0].untraced_pool_query, 11)
+              } finally {
+                tracer.use('mariadb', true)
+              }
+            })
+
+            it('creates a dedicated acquire span for an explicit promise getConnection', async () => {
+              const parent = tracer.startSpan('promise-acquire-parent')
+
+              await Promise.all([
+                agent.assertSomeTraces(traces => {
+                  const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+                  const querySpan = traces[0].find(span => span.resource === 'SELECT 8 AS acquired_probe')
+
+                  assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                  assert.strictEqual(acquireSpan.resource, 'mariadb.pool.acquire')
+                  assert.strictEqual(acquireSpan.parent_id.toString(), parent.context().toSpanId())
+                  assert.strictEqual(typeof acquireSpan.metrics['mariadb.pool.wait_time'], 'number')
+                  assert.ok(querySpan, `missing query span: ${inspect(traces[0].map(span => span.resource))}`)
+                  assert.strictEqual(querySpan.metrics['mariadb.pool.wait_time'], undefined)
+                }, { spanResourceMatch: /^mariadb\.pool\.acquire$/ }),
+                tracer.scope().activate(parent, async () => {
+                  const connection = await pool.getConnection()
+                  await connection.query('SELECT 8 AS acquired_probe')
+                  await connection.release()
+                  parent.finish()
+                }),
+              ])
+            })
+
+            it('does not classify a nested pool query as an explicit acquire', async () => {
+              await pool.query('SELECT 1')
+
+              const acquireStart = sinon.spy()
+              const acquireFinish = sinon.spy()
+              const acquireStartChannel = dc.channel('apm:mariadb:pool:acquire:start')
+              const acquireFinishChannel = dc.channel('apm:mariadb:pool:acquire:finish')
+              acquireStartChannel.subscribe(acquireStart)
+              acquireFinishChannel.subscribe(acquireFinish)
+
+              try {
+                let nestedQuery
+                pool.once('acquire', () => {
+                  nestedQuery = pool.query('SELECT 13 AS nested_acquire_query')
+                })
+
+                const connection = await pool.getConnection()
+                await connection.release()
+                const rows = await nestedQuery
+
+                assert.strictEqual(rows[0].nested_acquire_query, 13)
+                assert.strictEqual(acquireStart.callCount, 1)
+                assert.strictEqual(acquireFinish.callCount, 1)
+              } finally {
+                acquireStartChannel.unsubscribe(acquireStart)
+                acquireFinishChannel.unsubscribe(acquireFinish)
+              }
+            })
+
+            it('does not classify a nested explicit acquire as a pool query', async () => {
+              const nestedPool = mariadb.createPool({
+                connectionLimit: 1,
+                host: 'localhost',
+                minDelayValidation: Number.MAX_SAFE_INTEGER,
+                user: 'root',
+              })
+
+              try {
+                await nestedPool.query('SELECT 1')
+
+                const parent = tracer.startSpan('nested-explicit-acquire-parent')
+
+                await Promise.all([
+                  agent.assertSomeTraces(traces => {
+                    const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+                    const querySpan = traces[0].find(span => span.resource === 'SELECT 14 AS nested_explicit_acquire')
+
+                    assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                    assert.ok(querySpan, `missing query span: ${inspect(traces[0].map(span => span.resource))}`)
+                  }, { spanResourceMatch: /^nested-explicit-acquire-parent$/ }),
+                  tracer.scope().activate(parent, async () => {
+                    try {
+                      let nestedAcquire
+                      nestedPool.once('acquire', () => {
+                        nestedAcquire = nestedPool.getConnection()
+                      })
+
+                      await nestedPool.query('SELECT 14 AS nested_explicit_acquire')
+                      const connection = await nestedAcquire
+                      await connection.release()
+                    } finally {
+                      parent.finish()
+                    }
+                  }),
+                ])
+              } finally {
+                await nestedPool.end()
+              }
+            })
+
+            it('records an error on explicit and pooled-query acquire failures', async () => {
+              const failingPool = mariadb.createPool({
+                acquireTimeout: 500,
+                connectTimeout: 100,
+                host: '127.0.0.1',
+                port: await getClosedPort(),
+                user: 'root',
+              })
+              failingPool.on('error', () => {})
+
+              try {
+                for (const [method, args] of [
+                  ['getConnection', []],
+                  ['query', ['SELECT 9 AS query_acquire_failure']],
+                  ['execute', ['SELECT 10 AS execute_acquire_failure']],
+                ]) {
+                  await Promise.all([
+                    agent.assertSomeTraces(traces => {
+                      const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+
+                      assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                      assert.strictEqual(acquireSpan.error, 1)
+                      assert.strictEqual(typeof acquireSpan.metrics['mariadb.pool.wait_time'], 'number')
+                    }),
+                    assert.rejects(failingPool[method](...args)),
+                  ])
+                }
+              } finally {
+                await failingPool.end()
+              }
+            })
+          }
         })
       }
 

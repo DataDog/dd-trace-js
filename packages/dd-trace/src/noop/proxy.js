@@ -1,9 +1,9 @@
 'use strict'
 
-const { features } = require('../feature-registry')
 const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
+const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
 
@@ -12,6 +12,7 @@ const noopAppsec = new NoopAppsecSdk()
 const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
 const noopAIGuard = new NoopAIGuardSDK()
+const noopFlaggingProviderInstance = new NoopFlaggingProvider()
 const noopProfiling = {
   setCustomLabelKeys () {},
   runWithLabels (labels, fn) { return fn() },
@@ -25,9 +26,7 @@ class NoopProxy {
     this.dogstatsd = noopDogStatsDClient
     this.llmobs = noopLLMObs
     this.aiguard = noopAIGuard
-    for (const { name, noop } of Object.values(features)) {
-      this[name] = noop
-    }
+    this.openfeature = noopFlaggingProviderInstance
     this.setBaggageItem = (key, value) => {}
     this.getBaggageItem = (key) => {}
     this.getAllBaggageItems = () => {}

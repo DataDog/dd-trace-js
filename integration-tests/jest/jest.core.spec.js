@@ -1909,7 +1909,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     assert.strictEqual(childProcess.exitCode, 1)
   })
 
-  it('does not hang if server is not available and logs an error', (done) => {
+  it('bounds the final flush if the server is not available and logs an error', async function () {
+    this.timeout(20_000)
     // Very slow intake
     receiver.setWaitingTime(30000)
     // Needs to run with the CLI if we want --forceExit to work
@@ -1924,17 +1925,71 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
       }
     )
-    childProcess.on('exit', () => {
-      assert.match(testOutput, /Jest's '--forceExit' flag has been passed/)
-      assert.match(testOutput, /Timeout waiting for the tracer to flush/)
-      done()
-    })
     childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      once(childProcess.stdout, 'end'),
+      once(childProcess.stderr, 'end'),
+    ])
+
+    assert.match(testOutput, /Jest's '--forceExit' flag has been passed/)
+    assert.match(testOutput, /Error flushing Test Optimization data/)
+  })
+
+  it('reports the session when a custom reporter rejects runCLI', async function () {
+    this.timeout(20_000)
+    childProcess = exec(
+      'node ./node_modules/jest/bin/jest --config config-jest.js',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          CONFIG_TEST_MATCH: '**/ci-visibility/test/ci-visibility-test.js',
+          JEST_THROWING_REPORTER: '1',
+        },
+      }
+    )
+
+    const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end')?.content
+        const testModule = events.find(event => event.type === 'test_module_end')?.content
+        const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        assert.ok(testSession)
+        assert.ok(testModule)
+        assert.strictEqual(testSuites.length, 1)
+        assert.strictEqual(tests.length, 1)
+
+        const [testSuite] = testSuites
+        for (const event of [testSession, testModule, testSuite]) {
+          assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(event.error, 1)
+          assert.match(event.meta[ERROR_MESSAGE], /custom reporter failed/)
+        }
+        assert.strictEqual(testSuite.test_session_id.toString(), testSession.test_session_id.toString())
+        assert.strictEqual(testSuite.test_module_id.toString(), testModule.test_module_id.toString())
+        assert.strictEqual(tests[0].test_suite_id.toString(), testSuite.test_suite_id.toString())
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      receiverPromise,
+    ])
+
+    assert.notStrictEqual(exitCode, 0)
   })
 
   it('grabs the jest displayName config and sets tag in tests and suites', (done) => {

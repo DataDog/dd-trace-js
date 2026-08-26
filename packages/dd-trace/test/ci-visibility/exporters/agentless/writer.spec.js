@@ -14,6 +14,7 @@ let encoder
 let coverageEncoder
 let url
 let log
+let incrementCountMetric
 
 describe('CI Visibility Writer', () => {
   beforeEach(() => {
@@ -35,6 +36,7 @@ describe('CI Visibility Writer', () => {
     log = {
       error: sinon.spy(),
     }
+    incrementCountMetric = sinon.stub()
 
     const AgentlessCiVisibilityEncoder = function () {
       return encoder
@@ -51,9 +53,10 @@ describe('CI Visibility Writer', () => {
     }
 
     Writer = proxyquire('../../../../src/ci-visibility/exporters/agentless/writer', {
-      '../../../exporters/common/request': request,
+      '../request': request,
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
+      '../../../ci-visibility/telemetry': { incrementCountMetric },
       '../../../log': log,
     })
     writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' }, coverageUrl: url })
@@ -115,6 +118,11 @@ describe('CI Visibility Writer', () => {
 
         writer.flush(() => {
           sinon.assert.calledWith(log.error, 'Error sending CI agentless payload', error)
+          sinon.assert.calledWithExactly(
+            incrementCountMetric,
+            'endpoint_payload.dropped',
+            { endpoint: 'test_cycle' }
+          )
           done()
         })
       })

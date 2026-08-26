@@ -7,7 +7,7 @@ const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_thr
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
 const getDebuggerConfig = require('./config')
-const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('./constants')
+const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2, INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('./constants')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
@@ -64,7 +64,9 @@ function start (config, rcInstance) {
   const logChannel = new MessageChannel()
   configChannel = new MessageChannel()
 
-  globalThis[Symbol.for('dd-trace')].utilTypes = types
+  const debuggerGlobals = globalThis[Symbol.for('dd-trace')]
+  debuggerGlobals.utilTypes = types
+  debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] = require('./inspect-segment')
 
   const probeSamplerBuffer = installProbeSampler()
 
