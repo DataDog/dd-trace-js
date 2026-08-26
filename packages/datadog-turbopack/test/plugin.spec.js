@@ -82,16 +82,19 @@ describe('datadog-turbopack loader', () => {
     ))})`))
   })
 
-  it('resolves generated ESM proxy dependencies from dd-trace', async () => {
+  it('publishes generated ESM proxies through the existing bundler channel', async () => {
     const directory = createPackage('openai', { type: 'module' })
     const resourcePath = write(directory, 'index.mjs', 'export const client = true')
     const proxyPath = write(directory, '../.cache/dd-trace/turbopack/openai.mjs', '')
 
-    const result = await createEsmProxy(resourcePath, proxyPath, 'openai')
+    const result = await createEsmProxy(resourcePath, proxyPath, 'openai', 'openai', '5.0.0')
 
     assert.ok(result.includes(`from ${JSON.stringify(relativeImport(
-      path.dirname(proxyPath), require.resolve('import-in-the-middle/lib/register.js')
+      path.dirname(proxyPath), require.resolve('dc-polyfill')
     ))}`))
+    assert.match(result, /dd-trace:bundler:load/)
+    assert.match(result, /apply \(exports\)/)
+    assert.doesNotMatch(result, /import-in-the-middle/)
   })
 })
 
