@@ -202,7 +202,11 @@ function findMatchingFiles (directory, pattern) {
  */
 async function createEsmProxy (sourcePath, proxyPath, specifier) {
   const setters = await processModule({ path: sourcePath, context: { format: 'module' } })
-  return `import { register } from 'import-in-the-middle/lib/register.js';
+  const registerPath = relativeImport(
+    path.dirname(proxyPath),
+    require.resolve('import-in-the-middle/lib/register.js')
+  )
+  return `import { register } from ${JSON.stringify(registerPath)};
 import * as namespace from ${JSON.stringify(relativeImport(path.dirname(proxyPath), sourcePath))};
 const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
 const set = {};

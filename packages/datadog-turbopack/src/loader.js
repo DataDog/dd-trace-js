@@ -27,9 +27,14 @@ module.exports = function loader (source) {
 
   if (!target) return source
 
+  const dcPolyfillPath = relativeImport(
+    path.dirname(this.resourcePath),
+    require.resolve('dc-polyfill')
+  )
+
   return `${source}
 ;{
-  const __dd_dc = require('dc-polyfill')
+  const __dd_dc = require(${JSON.stringify(dcPolyfillPath)})
   const __dd_ch = __dd_dc.channel('${CHANNEL}')
   const __dd_payload = {
     module: module.exports,
