@@ -2097,7 +2097,6 @@ moduleTypes.forEach(({
       finishedTestsByFile: cypressPlugin.finishedTestsByFile,
       testsToSkip: cypressPlugin.testsToSkip,
       testSuiteSpan: cypressPlugin.testSuiteSpan,
-      finishedTestSuiteSpans: cypressPlugin.finishedTestSuiteSpans,
     }
 
     afterEach(() => {
@@ -2110,7 +2109,6 @@ moduleTypes.forEach(({
       cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
       cypressPlugin.testsToSkip = originalState.testsToSkip
       cypressPlugin.testSuiteSpan = originalState.testSuiteSpan
-      cypressPlugin.finishedTestSuiteSpans = originalState.finishedTestSuiteSpans
       sinon.restore()
     })
 
@@ -2172,14 +2170,12 @@ moduleTypes.forEach(({
         cypressPlugin.finishedTestsByFile = {}
         cypressPlugin.testsToSkip = []
         cypressPlugin.testSuiteSpan = testSuiteSpan
-        cypressPlugin.finishedTestSuiteSpans = []
         cypressPlugin.tracer = { _tracer: { _exporter: {} } }
         sinon.stub(cypressPlugin, 'ciVisEvent')
 
         cypressPlugin.afterSpec({ relative: 'cypress/e2e/basic-pass.js' }, { stats: { tests: 1 } })
 
         sinon.assert.calledOnce(testSuiteSpan.finish)
-        assert.strictEqual(cypressPlugin.finishedTestSuiteSpans.length, 1)
       })
     }
 

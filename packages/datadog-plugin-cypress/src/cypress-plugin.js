@@ -587,7 +587,6 @@ class CypressPlugin {
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
     this.testSuiteSpan = null
-    this.finishedTestSuiteSpans = []
     this.testModuleSpan = null
     this.testSessionSpan = null
     this.command = undefined
@@ -1284,7 +1283,6 @@ class CypressPlugin {
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
-      this.finishedTestSuiteSpans = []
       if (error) {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
@@ -1620,10 +1618,7 @@ class CypressPlugin {
         if (error || latestError) {
           this.testSuiteSpan.setTag('error', error || latestError)
         }
-        const canRunAfterRun = this.cypressConfig.isTextTerminal ||
-          this.cypressConfig.experimentalInteractiveRunEvents
         this.testSuiteSpan.finish()
-        if (canRunAfterRun) this.finishedTestSuiteSpans.push(this.testSuiteSpan)
         this.testSuiteSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }

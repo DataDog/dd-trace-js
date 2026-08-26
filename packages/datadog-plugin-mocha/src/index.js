@@ -174,12 +174,10 @@ class MochaPlugin extends CiPlugin {
 
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
-    this._pendingTestSuiteSpans = []
     this._timeOrigin = dateNow()
     this._perfOrigin = performance.now()
 
     this.addSub('ci:mocha:session:start', () => {
-      this._pendingTestSuiteSpans = []
       this._timeOrigin = dateNow()
       this._perfOrigin = performance.now()
     })
@@ -532,7 +530,6 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:worker:finish', ({ onDone } = {}) => {
-      this._finishPendingTestSuiteSpans()
       this.tracer._exporter.flush(onDone)
     })
 
@@ -743,8 +740,6 @@ class MochaPlugin extends CiPlugin {
           this.testModuleSpan.setTag('error', error)
         }
 
-        this._finishPendingTestSuiteSpans()
-
         if (isParallel) {
           this.testSessionSpan.setTag(MOCHA_IS_PARALLEL, 'true')
         }
@@ -810,18 +805,6 @@ class MochaPlugin extends CiPlugin {
    */
   _now () {
     return this._timeOrigin + performance.now() - this._perfOrigin
-  }
-
-  /**
-   * Finishes suites retained for a later framework finalization event.
-   *
-   * @returns {void}
-   */
-  _finishPendingTestSuiteSpans () {
-    for (const { span, finishTime } of this._pendingTestSuiteSpans) {
-      span.finish(finishTime)
-    }
-    this._pendingTestSuiteSpans = []
   }
 
   /**
