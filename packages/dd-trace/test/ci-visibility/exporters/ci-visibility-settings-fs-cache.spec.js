@@ -2,6 +2,8 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
@@ -48,6 +50,23 @@ const SETTINGS_REQUIRE_GIT = {
       code_coverage: true,
       tests_skipping: true,
       known_tests_enabled: false,
+      // Phase 1 disables coverage report upload; phase 2 enables it. nyc reads
+      // this field off the settings handoff file, so the final file must hold
+      // the phase-2 value, never the transient phase-1 value.
+      coverage_report_upload_enabled: false,
+    },
+  },
+}
+
+const SETTINGS_FINAL_AFTER_GIT = {
+  data: {
+    attributes: {
+      itr_enabled: true,
+      require_git: false,
+      code_coverage: true,
+      tests_skipping: true,
+      known_tests_enabled: false,
+      coverage_report_upload_enabled: true,
     },
   },
 }
@@ -91,26 +110,41 @@ function makeExporter (testOptimization) {
 describe('ci-visibility settings filesystem cache', () => {
   let originalApiKey
   let originalFsCache
+  let originalSettingsCachePath
+  let settingsCacheDir
+  let settingsCachePath
 
   beforeEach(() => {
     originalApiKey = getConfig().DD_API_KEY
     originalFsCache = getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+    originalSettingsCachePath = process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE
     getConfig().DD_API_KEY = '1'
 
     process.env.DD_API_KEY = '1'
 
     process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
     getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = true
+    settingsCacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-settings-handoff-'))
+    settingsCachePath = path.join(settingsCacheDir, 'nyc-settings.json')
+    process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE = settingsCachePath
     nock.cleanAll()
   })
 
   afterEach(() => {
     getConfig().DD_API_KEY = originalApiKey
     getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = originalFsCache
+    if (originalSettingsCachePath === undefined) {
+      delete process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE
+    } else {
+      process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE = originalSettingsCachePath
+    }
 
     delete process.env.DD_API_KEY
 
     delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+    if (settingsCacheDir) {
+      fs.rmSync(settingsCacheDir, { recursive: true, force: true })
+    }
     nock.cleanAll()
   })
 
@@ -202,6 +236,60 @@ describe('ci-visibility settings filesystem cache', () => {
         cleanup(exporter, TEST_CONFIGURATION)
         done()
       })
+    })
+    // Simulate the git upload finishing so the phase-2 request can proceed.
+    setImmediate(() => exporter._resolveGit())
+  })
+
+  // Regression: nyc runs in a separate process and reads the library
+  // configuration from the file pointed at by DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE
+  // (see datadog-plugin-nyc readLibraryConfiguration). The settings request has a
+  // two-phase shape (require_git -> upload git metadata -> re-request), and the
+  // handoff file must end up holding the final (phase-2) configuration, never the
+  // transient phase-1 state, so nyc sees the correct coverage-report-upload flag.
+  it('writes only the final config to the nyc settings handoff file across the require_git flow', (done) => {
+    const exporter = makeExporter({
+      DD_CIVISIBILITY_ITR_ENABLED: true,
+      DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+    })
+    // Avoid a real git upload; we resolve the upload promise ourselves below.
+    exporter.sendGitMetadata = function () {}
+    exporter._resolveCanUseCiVisProtocol(true)
+    cleanup(exporter, TEST_CONFIGURATION)
+
+    const scope = nock(url)
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, JSON.stringify(SETTINGS_REQUIRE_GIT))
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, JSON.stringify(SETTINGS_FINAL_AFTER_GIT))
+
+    exporter.getLibraryConfiguration(TEST_CONFIGURATION, (err, finalConfig) => {
+      try {
+        assert.strictEqual(err, null)
+        assert.strictEqual(scope.isDone(), true, 'both phases should have hit the API')
+        assert.strictEqual(finalConfig.requireGit, false, 'final config should have require_git false')
+        assert.strictEqual(
+          finalConfig.isCoverageReportUploadEnabled,
+          true,
+          'final config should enable coverage report upload'
+        )
+
+        assert.ok(fs.existsSync(settingsCachePath), 'nyc settings handoff file should exist')
+        const handoff = JSON.parse(fs.readFileSync(settingsCachePath, 'utf8'))
+        // The handoff file must reflect the final (phase-2) configuration, not the
+        // transient phase-1 state where coverage report upload was disabled.
+        assert.strictEqual(handoff.requireGit, false, 'handoff must not retain phase-1 require_git')
+        assert.strictEqual(
+          handoff.isCoverageReportUploadEnabled,
+          true,
+          'handoff must hold the phase-2 coverage report upload flag for nyc'
+        )
+        cleanup(exporter, TEST_CONFIGURATION)
+        done()
+      } catch (err) {
+        cleanup(exporter, TEST_CONFIGURATION)
+        done(err)
+      }
     })
     // Simulate the git upload finishing so the phase-2 request can proceed.
     setImmediate(() => exporter._resolveGit())
