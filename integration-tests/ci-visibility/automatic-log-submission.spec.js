@@ -20,6 +20,7 @@ const webAppServer = require('./web-app-server')
 
 const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 const playwrightDependency = `@playwright/test@${getLatestPlaywrightSpecifier()}`
+const vitestDependency = NODE_MAJOR <= 18 ? 'vitest@3.2.6' : 'vitest'
 
 describe('test optimization automatic log submission', () => {
   let cwd, receiver, childProcess, webAppPort
@@ -30,6 +31,7 @@ describe('test optimization automatic log submission', () => {
     ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
     'bunyan',
     'jest',
+    vitestDependency,
     'winston',
     playwrightDependency,
   ], true)
@@ -69,6 +71,14 @@ describe('test optimization automatic log submission', () => {
       name: 'mocha',
       command: './node_modules/.bin/mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js',
       loggerNames: ['winston', 'bunyan'],
+    },
+    {
+      name: 'vitest',
+      command: './node_modules/.bin/vitest run --config ./ci-visibility/automatic-log-submission-vitest/config.mjs',
+      loggerNames: ['bunyan'],
+      getExtraEnvVars: () => ({
+        NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+      }),
     },
     {
       name: 'jest',
