@@ -46,8 +46,10 @@ class BufferingExporter {
           } else {
             // Saturation suppressed the flush; re-arm so a buffered payload below the
             // encoder's size threshold is still delivered once the origin becomes idle,
-            // rather than waiting indefinitely for another event.
-            scheduleFlush()
+            // rather than waiting indefinitely for another event. Skip re-arming for a
+            // non-finite or overflowed interval: setTimeout would clamp it to 1 ms and
+            // spin. The encoder size gate and final flush still deliver the payload.
+            if (Number.isFinite(flushInterval)) scheduleFlush()
           }
         }, flushInterval)
         this[timerKey].unref?.()

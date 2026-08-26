@@ -4,6 +4,7 @@ const http = require('node:http')
 const https = require('node:https')
 
 const { storage } = require('../../../../datadog-core')
+const { parseUrl } = require('../../exporters/common/url')
 
 const legacyStorage = storage('legacy')
 
@@ -129,13 +130,19 @@ function getAgent (url) {
  * @returns {boolean}
  */
 function isOriginSaturated (url, agent = getAgent(url)) {
-  const parsed = toURL(url)
-  if (!parsed) return false
+  // Normalize the URL with the same conversion the transport uses (urlToHttpOptions)
+  // so the host and port match the key Node assigns in the agent's socket map:
+  // IPv6 brackets are stripped and a default port (443 / 80) is applied when the
+  // URL omits one. Without this, the probe keys never match and saturation is
+  // never detected for IPv6 literals or default-port intake URLs.
+  let parsed
+  try {
+    parsed = typeof url === 'string' || url instanceof URL ? parseUrl(url) : url
+  } catch {
+    return false
+  }
+  if (!parsed || !parsed.hostname) return false
 
-  // Node normalizes a request to a default port (443 / 80) before keying the
-  // agent's socket and request maps, so probe with the same default when the
-  // URL omits an explicit port. Otherwise the keys never match and saturation
-  // is never detected for the primary agentless intake URLs.
   const port = parsed.port || (parsed.protocol === 'https:' ? 443 : 80)
   const name = agent.getName({ host: parsed.hostname, port })
   const activeSockets = agent.sockets?.[name]?.length || 0

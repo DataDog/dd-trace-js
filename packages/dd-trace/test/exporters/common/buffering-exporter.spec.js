@@ -147,4 +147,28 @@ describe('BufferingExporter', () => {
       clock.restore()
     }
   })
+
+  it('does not spin re-arming when the flush interval is non-finite', () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const flushingWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy(),
+        setUrl: sinon.spy(),
+      }
+      const exporter = new BufferingExporter({ port, flushInterval: Infinity })
+      exporter._writer = flushingWriter
+      exporter._isInitialized = true
+      exporter._shouldFlush = () => false
+
+      exporter.export([{ span_id: '1' }])
+      // setTimeout(Infinity) clamps to 1 ms; advance well past several clamped
+      // intervals and assert the re-arm did not loop or flush.
+      clock.tick(50)
+      sinon.assert.called(flushingWriter.append)
+      sinon.assert.notCalled(flushingWriter.flush)
+    } finally {
+      clock.restore()
+    }
+  })
 })

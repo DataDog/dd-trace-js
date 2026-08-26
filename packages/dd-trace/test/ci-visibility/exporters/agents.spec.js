@@ -143,6 +143,33 @@ describe('Test Optimization exporter agents', () => {
       }
     })
 
+    it('detects saturation for an IPv6 literal URL', async () => {
+      const agent = new httpAgent.constructor()
+      const lookup = () => {}
+      const requests = new Array(8)
+      const url = 'http://[::1]:8126' // Node keys the pool as ::1:8126:
+
+      for (let index = 0; index < requests.length; index++) {
+        const request = createRequest({
+          agent,
+          ...require('node:url').urlToHttpOptions(new URL(url)),
+          lookup,
+        })
+        request.on('error', () => {})
+        request.end()
+        requests[index] = request
+      }
+
+      await new Promise(resolve => setImmediate(resolve))
+
+      try {
+        assert.strictEqual(isOriginSaturated(url, agent), true)
+      } finally {
+        for (const request of requests) request.destroy()
+        agent.destroy()
+      }
+    })
+
     it('is saturated once a request is queued behind the active sockets', async () => {
       const agent = new http.Agent({ keepAlive: true, maxSockets: 1 })
       const lookup = () => {}
