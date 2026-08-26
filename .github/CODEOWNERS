@@ -102,6 +102,7 @@
 /integration-tests/pino.spec.js @DataDog/dd-trace-js @DataDog/apm-idm-js
 
 /packages/datadog-esbuild/ @DataDog/dd-trace-js @DataDog/apm-idm-js
+/packages/datadog-turbopack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/datadog-webpack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/dd-trace-js @DataDog/apm-idm-js
