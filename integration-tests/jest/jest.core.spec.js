@@ -1087,9 +1087,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       code_coverage: false,
       tests_skipping: true,
     })
-    receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-      const events = payloads.flatMap(({ payload }) => payload.events)
-      const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+    receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(events => {
+      const testSuiteEvents = events.payload.events.filter(event => event.type === 'test_suite_end')
       assert.strictEqual(testSuiteEvents.length, 3)
       const testSuites = testSuiteEvents.map(span => span.content.meta[TEST_SUITE])
 
@@ -1101,7 +1100,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ]
       )
 
-      const testSession = events.find(event => event.type === 'test_session_end').content
+      const testSession = events.payload.events.find(event => event.type === 'test_session_end').content
       assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
 
       // We run the second shard
@@ -1131,9 +1130,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
       )
 
-      receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-        const events = payloads.flatMap(({ payload }) => payload.events)
-        const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+      receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(secondShardEvents => {
+        const testSuiteEvents = secondShardEvents.payload.events.filter(event => event.type === 'test_suite_end')
 
         // The suites for this shard are to be skipped
         assert.strictEqual(testSuiteEvents.length, 2)
@@ -1143,7 +1141,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(testSuite.content.meta[TEST_SKIPPED_BY_ITR], 'true')
         })
 
-        const testSession = events
+        const testSession = secondShardEvents
+          .payload
+          .events
           .find(event => event.type === 'test_session_end').content
 
         assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
@@ -2089,26 +2089,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ({ url }) => url === '/api/v2/git/repository/search_commits'
     )
     const packfileRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/git/repository/packfile')
-    const eventsPromise = receiver.gatherPayloadsMaxTimeout(
-      ({ url }) => url === '/api/v2/citestcycle',
-      (payloads) => {
-        const events = payloads.flatMap(({ payload }) => payload.events)
-        const eventTypes = events.map(event => event.type)
-        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
-        const numSuites = eventTypes.reduce(
-          (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
-        )
-        assert.strictEqual(numSuites, 2)
-      }
-    )
+    const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
 
     Promise.all([
       searchCommitsRequestPromise,
       packfileRequestPromise,
-      eventsPromise,
-    ]).then(([searchCommitRequest, packfileRequest]) => {
+      eventsRequestPromise,
+    ]).then(([searchCommitRequest, packfileRequest, eventsRequest]) => {
       assert.strictEqual(searchCommitRequest.headers['dd-api-key'], '1')
       assert.strictEqual(packfileRequest.headers['dd-api-key'], '1')
+
+      const eventTypes = eventsRequest.payload.events.map(event => event.type)
+      assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+      const numSuites = eventTypes.reduce(
+        (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+      )
+      assert.strictEqual(numSuites, 2)
 
       done()
     }).catch(done)

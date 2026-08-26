@@ -902,24 +902,13 @@ describe(`cucumber@${version} commonJS`, () => {
           )
           const packfileRequestPromise = receiver
             .payloadReceived(({ url }) => url.endsWith('/api/v2/git/repository/packfile'))
-          const eventsPromise = receiver.gatherPayloadsMaxTimeout(
-            ({ url }) => url.endsWith('/api/v2/citestcycle'),
-            (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const eventTypes = events.map(event => event.type)
-              assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
-              const numSuites = eventTypes.reduce(
-                (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
-              )
-              assert.strictEqual(numSuites, 2)
-            }
-          )
+          const eventsRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle'))
 
           Promise.all([
             searchCommitsRequestPromise,
             packfileRequestPromise,
-            eventsPromise,
-          ]).then(([searchCommitRequest, packfileRequest]) => {
+            eventsRequestPromise,
+          ]).then(([searchCommitRequest, packfileRequest, eventsRequest]) => {
             if (isAgentless) {
               assert.strictEqual(searchCommitRequest.headers['dd-api-key'], '1')
               assert.strictEqual(packfileRequest.headers['dd-api-key'], '1')
@@ -927,6 +916,13 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.ok(!('dd-api-key' in searchCommitRequest.headers))
               assert.ok(!('dd-api-key' in packfileRequest.headers))
             }
+
+            const eventTypes = eventsRequest.payload.events.map(event => event.type)
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+            const numSuites = eventTypes.reduce(
+              (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+            )
+            assert.strictEqual(numSuites, 2)
 
             done()
           }).catch(done)
@@ -945,29 +941,13 @@ describe(`cucumber@${version} commonJS`, () => {
             ({ url }) => url.endsWith('/api/v2/libraries/tests/services/setting')
           )
           const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'))
-          const eventsPromise = receiver.gatherPayloadsMaxTimeout(
-            ({ url }) => url.endsWith('/api/v2/citestcycle'),
-            (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const testSession = events
-                .find(event => event.type === 'test_session_end')
-                .content
-              assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
-
-              const eventTypes = events.map(event => event.type)
-              assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
-              const numSuites = eventTypes.reduce(
-                (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
-              )
-              assert.strictEqual(numSuites, 2)
-            }
-          )
+          const eventsRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle'))
 
           Promise.all([
             libraryConfigRequestPromise,
             codeCovRequestPromise,
-            eventsPromise,
-          ]).then(([libraryConfigRequest, codeCovRequest]) => {
+            eventsRequestPromise,
+          ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
             const [coveragePayload] = codeCovRequest.payload
             if (isAgentless) {
               assert.strictEqual(libraryConfigRequest.headers['dd-api-key'], '1')
@@ -1003,6 +983,20 @@ describe(`cucumber@${version} commonJS`, () => {
             )
             assert.ok(coveragePayload.content.coverages[0].test_session_id)
             assert.ok(coveragePayload.content.coverages[0].test_suite_id)
+
+            const testSession = eventsRequest
+              .payload
+              .events
+              .find(event => event.type === 'test_session_end')
+              .content
+            assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
+
+            const eventTypes = eventsRequest.payload.events.map(event => event.type)
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+            const numSuites = eventTypes.reduce(
+              (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+            )
+            assert.strictEqual(numSuites, 2)
           }).catch(done)
 
           childProcess = exec(
@@ -1073,60 +1067,58 @@ describe(`cucumber@${version} commonJS`, () => {
             const skippableRequestPromise = receiver
               .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
             const coverageRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'))
-            const eventsPromise = receiver.gatherPayloadsMaxTimeout(
-              ({ url }) => url.endsWith('/api/v2/citestcycle'),
-              (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const eventTypes = events.map(event => event.type)
-
-                const skippedSuite = events.find(event =>
-                  event.content.resource === `test_suite.${featuresPath}farewell.feature`
-                ).content
-                assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
-                assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
-
-                assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
-                const numSuites = eventTypes.reduce(
-                  (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
-                )
-                assert.strictEqual(numSuites, 2)
-                const testSession = events
-                  .find(event => event.type === 'test_session_end').content
-                assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
-                assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
-                assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
-                assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
-                assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
-
-                const testModule = events
-                  .find(event => event.type === 'test_module_end').content
-                assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'true')
-                assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
-                assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
-                assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
-                assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
-                assertItrSkippingEnabledTags(events, 'true')
-              }
-            )
+            const eventsRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle'))
 
             Promise.all([
               skippableRequestPromise,
               coverageRequestPromise,
-              eventsPromise,
-            ]).then(([skippableRequest, coverageRequest]) => {
+              eventsRequestPromise,
+            ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
               const [coveragePayload] = coverageRequest.payload
               if (isAgentless) {
                 assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
                 assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
+                assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
               } else {
                 assert.ok(!('dd-api-key' in skippableRequest.headers))
                 assert.ok(!('dd-api-key' in coverageRequest.headers))
+                assert.ok(!('dd-api-key' in eventsRequest.headers))
               }
               assertObjectContains(coveragePayload, {
                 name: 'coverage1',
                 filename: 'coverage1.msgpack',
                 type: 'application/msgpack',
               })
+
+              const eventTypes = eventsRequest.payload.events.map(event => event.type)
+
+              const skippedSuite = eventsRequest.payload.events.find(event =>
+                event.content.resource === `test_suite.${featuresPath}farewell.feature`
+              ).content
+              assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+              assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+              const numSuites = eventTypes.reduce(
+                (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+              )
+              assert.strictEqual(numSuites, 2)
+              const testSession = eventsRequest
+                .payload.events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+              assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+              assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+              assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
+              assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+
+              const testModule = eventsRequest
+                .payload.events.find(event => event.type === 'test_module_end').content
+              assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+              assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+              assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+              assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
+              assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+              assertItrSkippingEnabledTags(eventsRequest.payload.events, 'true')
               done()
             }).catch(done)
 
