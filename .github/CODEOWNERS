@@ -1,29 +1,29 @@
 # TODO: Restructure the project by product and clean up this file.
 
 # Shared repository tooling
-/.agents/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.claude/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/actions/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/ISSUE_TEMPLATE/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.gitlab/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.husky/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.vscode/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/scripts/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/vendor/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.agents/ @DataDog/lang-platform-js
+/.claude/ @DataDog/lang-platform-js
+/.github/actions/ @DataDog/lang-platform-js
+/.github/ISSUE_TEMPLATE/ @DataDog/lang-platform-js
+/.gitlab/ @DataDog/lang-platform-js
+/.husky/ @DataDog/lang-platform-js
+/.vscode/ @DataDog/lang-platform-js
+/scripts/ @DataDog/lang-platform-js
+/vendor/ @DataDog/lang-platform-js
 
 # Shared tracer infrastructure; product-specific rules below take precedence.
-/packages/dd-trace/src/agent/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/encode/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/exporters/agent/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/exporters/log/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/exporters/span-stats/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/external-logger/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/flare/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/guardrails/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/msgpack/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/noop/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/encode/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/fixtures/esm/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/packages/dd-trace/src/agent/ @DataDog/lang-platform-js
+/packages/dd-trace/src/encode/ @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/agent/ @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/log/ @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/span-stats/ @DataDog/lang-platform-js
+/packages/dd-trace/src/external-logger/ @DataDog/lang-platform-js
+/packages/dd-trace/src/flare/ @DataDog/lang-platform-js
+/packages/dd-trace/src/guardrails/ @DataDog/lang-platform-js
+/packages/dd-trace/src/msgpack/ @DataDog/lang-platform-js
+/packages/dd-trace/src/noop/ @DataDog/lang-platform-js
+/packages/dd-trace/test/encode/ @DataDog/lang-platform-js
+/packages/dd-trace/test/fixtures/esm/ @DataDog/lang-platform-js
 
 # AppSec
 /benchmark/sirun/appsec/ @DataDog/dd-trace-js @DataDog/asm-js
@@ -347,34 +347,34 @@
 /packages/dd-trace/test/openfeature/ @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk
 
 # CI
-/.github/actions/**/action.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/actions/**/action.yaml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/actions/**/action.yml @DataDog/lang-platform-js @dd-octo-sts
+/.github/actions/**/action.yaml @DataDog/lang-platform-js @dd-octo-sts
 /.github/actions/upload-coverage-artifact/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /.github/actions/upload-coverage-artifact/action.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 /.github/actions/upload-coverage-artifact/action.yaml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 /.github/actions/upload-junit-artifacts/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /.github/actions/upload-junit-artifacts/action.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 /.github/actions/upload-junit-artifacts/action.yaml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
-/.github/editorconfig-checker/ @DataDog/dd-trace-js @Datadog/lang-platform-js
+/.github/editorconfig-checker/ @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /.github/selenium/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /.github/chainguard/ @DataDog/dd-trace-js @DataDog/sdlc-security
 /.github/codeql_config.yml @DataDog/dd-trace-js @DataDog/sdlc-security
-/.github/workflows/*.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/workflows/*.yaml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/*.yml @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/*.yaml @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js @DataDog/sdlc-security @dd-octo-sts
-/.github/workflows/mirror-image.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
-/.github/workflows/all-green.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
-/.github/workflows/audit.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/workflows/custom-node-version-dispatch.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
-/.github/workflows/dependabot-automation.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
-/.github/workflows/flakiness.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/workflows/platform.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/workflows/project.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
-/.github/workflows/release-proposal.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/workflows/release-validate.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/workflows/stale.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
-/.github/workflows/update-3rdparty-licenses.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/mirror-image.yml @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/all-green.yml @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/audit.yml @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/custom-node-version-dispatch.yml @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/dependabot-automation.yml @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
+/.github/workflows/flakiness.yml @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/platform.yml @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/project.yml @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/release-proposal.yml @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/release-validate.yml @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/stale.yml @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/update-3rdparty-licenses.yml @DataDog/lang-platform-js @dd-octo-sts
 
 /.github/workflows/apm-capabilities.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
 /.github/workflows/eslint-rules.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
@@ -384,11 +384,11 @@
 /.github/workflows/debugger.yml @DataDog/dd-trace-js @DataDog/debugger-nodejs @dd-octo-sts
 /.github/workflows/instrumentation.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /.github/workflows/electron.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
-/.github/workflows/release.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/release.yml @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/serverless.yml @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless @dd-octo-sts
 /.github/workflows/llmobs.yml @DataDog/dd-trace-js @DataDog/ml-observability @dd-octo-sts
 /.github/workflows/openfeature.yml @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk @dd-octo-sts
-/.github/workflows/pr-title.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/workflows/pr-title.yml @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/profiling.yml @DataDog/dd-trace-js @DataDog/profiling-js @dd-octo-sts
 /.github/workflows/system-tests.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
 /.github/workflows/test-optimization.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
@@ -408,154 +408,154 @@
 /packages/dd-trace/test/web-tags-cache.spec.js @DataDog/dd-trace-js @DataDog/profiling-js
 
 # Language Platform
-/* @DataDog/dd-trace-js @DataDog/lang-platform-js
-/openfeature.d.ts @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
-/openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/* @DataDog/lang-platform-js
+/openfeature.d.ts @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
-/.github/CODEOWNERS @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/dependabot.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
-/.github/pull_request_template.md @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/vendored-dependencies.csv @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.github/CODEOWNERS @DataDog/lang-platform-js
+/.github/dependabot.yml @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
+/.github/pull_request_template.md @DataDog/lang-platform-js
+/.github/vendored-dependencies.csv @DataDog/lang-platform-js
 
-/benchmark/* @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
-/benchmark/sirun/* @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/stubs/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/async_hooks/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/dogstatsd/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/encoding/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/exporting-pipeline/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/id/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/log/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/runtime-metrics/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/scope/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/shimmer-runtime/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/shimmer-startup/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/startup/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/benchmark/sirun/tracing-channel/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/benchmark/* @DataDog/lang-platform-js
+/benchmark/openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/benchmark/sirun/* @DataDog/lang-platform-js
+/benchmark/stubs/ @DataDog/lang-platform-js
+/benchmark/sirun/async_hooks/ @DataDog/lang-platform-js
+/benchmark/sirun/dogstatsd/ @DataDog/lang-platform-js
+/benchmark/sirun/encoding/ @DataDog/lang-platform-js
+/benchmark/sirun/exporting-pipeline/ @DataDog/lang-platform-js
+/benchmark/sirun/id/ @DataDog/lang-platform-js
+/benchmark/sirun/log/ @DataDog/lang-platform-js
+/benchmark/sirun/runtime-metrics/ @DataDog/lang-platform-js
+/benchmark/sirun/scope/ @DataDog/lang-platform-js
+/benchmark/sirun/shimmer-runtime/ @DataDog/lang-platform-js
+/benchmark/sirun/shimmer-startup/ @DataDog/lang-platform-js
+/benchmark/sirun/startup/ @DataDog/lang-platform-js
+/benchmark/sirun/tracing-channel/ @DataDog/lang-platform-js
 
-/ext/scopes.* @DataDog/dd-trace-js @DataDog/lang-platform-js
+/ext/scopes.* @DataDog/lang-platform-js
 
-/integration-tests/bun/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/coverage/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/coverage-child-process.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/coverage-merge-lcov.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/coverage-fixtures/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/crashtracking/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/helpers/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/import-variants.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/init/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/init.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/helpers/fake-agent.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
-/integration-tests/memory-leak/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/mocha-parallel-files-fixtures/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/mocha-parallel-files.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/package-guardrails/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/package-guardrails.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/startup/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/startup.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/integration-tests/tsconfig.json @DataDog/dd-trace-js @DataDog/lang-platform-js
+/integration-tests/bun/ @DataDog/lang-platform-js
+/integration-tests/coverage/ @DataDog/lang-platform-js
+/integration-tests/coverage-child-process.spec.js @DataDog/lang-platform-js
+/integration-tests/coverage-merge-lcov.spec.js @DataDog/lang-platform-js
+/integration-tests/coverage-fixtures/ @DataDog/lang-platform-js
+/integration-tests/crashtracking/ @DataDog/lang-platform-js
+/integration-tests/helpers/ @DataDog/lang-platform-js
+/integration-tests/import-variants.spec.js @DataDog/lang-platform-js
+/integration-tests/init/ @DataDog/lang-platform-js
+/integration-tests/init.spec.js @DataDog/lang-platform-js
+/integration-tests/helpers/fake-agent.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/integration-tests/memory-leak/ @DataDog/lang-platform-js
+/integration-tests/mocha-parallel-files-fixtures/ @DataDog/lang-platform-js
+/integration-tests/mocha-parallel-files.spec.js @DataDog/lang-platform-js
+/integration-tests/package-guardrails/ @DataDog/lang-platform-js
+/integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
+/integration-tests/startup/ @DataDog/lang-platform-js
+/integration-tests/startup.spec.js @DataDog/lang-platform-js
+/integration-tests/tsconfig.json @DataDog/lang-platform-js
 
-/packages/datadog-core/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/datadog-shimmer/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/*/crashtracking/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/index.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/bootstrap.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/constants.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/dogstatsd.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/exporter.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/feature-registry.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/exporters/common/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/exporters/common/client-library-headers.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
-/packages/dd-trace/src/evp_proxy/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/heap_snapshots.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/histogram.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/id.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/iitm.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/index.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/pkg.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/proxy.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/rate_limiter.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/require-package-json.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/ritm.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/scope.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/span_format.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/span_processor.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/span_stats.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/spanleak.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/tagger.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/tracer.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/src/util.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/agent/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/dd-trace.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/dogstatsd.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/evp_proxy/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/esm-named-exports.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/exporter.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/exporters/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/external-logger/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/flare.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/guardrails/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/heap_snapshots.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/histogram.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/id.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/iitm.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/loader-hook.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/log.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/msgpack/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/mocha-hooks.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/node_modules/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/noop.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/pkg.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/plugin_manager.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/plugins/plugin.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/plugins/util/env.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/pkg-loader.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/profile.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/proxy.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/proxyquire.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/rate_limiter.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/register.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/require-package-json.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/ritm-tests/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/ritm.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/scope.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/setup/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/span_format.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/span_processor.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/span_stats.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/tagger.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/tracer.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-/packages/dd-trace/test/util.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
+/packages/datadog-core/ @DataDog/lang-platform-js
+/packages/datadog-shimmer/ @DataDog/lang-platform-js
+/packages/dd-trace/*/crashtracking/ @DataDog/lang-platform-js
+/packages/dd-trace/index.js @DataDog/lang-platform-js
+/packages/dd-trace/src/bootstrap.js @DataDog/lang-platform-js
+/packages/dd-trace/src/constants.js @DataDog/lang-platform-js
+/packages/dd-trace/src/dogstatsd.js @DataDog/lang-platform-js
+/packages/dd-trace/src/exporter.js @DataDog/lang-platform-js
+/packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/common/client-library-headers.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/src/evp_proxy/ @DataDog/lang-platform-js
+/packages/dd-trace/src/heap_snapshots.js @DataDog/lang-platform-js
+/packages/dd-trace/src/histogram.js @DataDog/lang-platform-js
+/packages/dd-trace/src/id.js @DataDog/lang-platform-js
+/packages/dd-trace/src/iitm.js @DataDog/lang-platform-js
+/packages/dd-trace/src/index.js @DataDog/lang-platform-js
+/packages/dd-trace/src/pkg.js @DataDog/lang-platform-js
+/packages/dd-trace/src/proxy.js @DataDog/lang-platform-js
+/packages/dd-trace/src/rate_limiter.js @DataDog/lang-platform-js
+/packages/dd-trace/src/require-package-json.js @DataDog/lang-platform-js
+/packages/dd-trace/src/ritm.js @DataDog/lang-platform-js
+/packages/dd-trace/src/scope.js @DataDog/lang-platform-js
+/packages/dd-trace/src/span_format.js @DataDog/lang-platform-js
+/packages/dd-trace/src/span_processor.js @DataDog/lang-platform-js
+/packages/dd-trace/src/span_stats.js @DataDog/lang-platform-js
+/packages/dd-trace/src/spanleak.js @DataDog/lang-platform-js
+/packages/dd-trace/src/tagger.js @DataDog/lang-platform-js
+/packages/dd-trace/src/tracer.js @DataDog/lang-platform-js
+/packages/dd-trace/src/util.js @DataDog/lang-platform-js
+/packages/dd-trace/test/agent/ @DataDog/lang-platform-js
+/packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/evp_proxy/ @DataDog/lang-platform-js
+/packages/dd-trace/test/esm-named-exports.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/exporter.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/exporters/ @DataDog/lang-platform-js
+/packages/dd-trace/test/external-logger/ @DataDog/lang-platform-js
+/packages/dd-trace/test/flare.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/guardrails/ @DataDog/lang-platform-js
+/packages/dd-trace/test/heap_snapshots.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/histogram.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/id.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/iitm.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/loader-hook.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/log.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/msgpack/ @DataDog/lang-platform-js
+/packages/dd-trace/test/mocha-hooks.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/node_modules/ @DataDog/lang-platform-js
+/packages/dd-trace/test/noop.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/pkg.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/plugin_manager.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/plugins/plugin.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/plugins/util/env.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/pkg-loader.js @DataDog/lang-platform-js
+/packages/dd-trace/test/profile.js @DataDog/lang-platform-js
+/packages/dd-trace/test/proxy.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/proxyquire.js @DataDog/lang-platform-js
+/packages/dd-trace/test/rate_limiter.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/register.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/require-package-json.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/ritm-tests/ @DataDog/lang-platform-js
+/packages/dd-trace/test/ritm.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/scope.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/setup/ @DataDog/lang-platform-js
+/packages/dd-trace/test/span_format.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/span_processor.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/span_stats.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/tagger.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/tracer.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/util.spec.js @DataDog/lang-platform-js
 
 # Multiple teams
 /devdocs/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-idm-js
-/docs/ @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/lang-platform-js
+/docs/ @DataDog/apm-idm-js @DataDog/lang-platform-js
 /docs/API.md @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-idm-js
 /docs/test.ts @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-idm-js
-/.gitlab/benchmarks/ @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/ecosystems-performance
-/eslint-rules/* @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js
-/ext/exporters.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/ci-app-libraries @DataDog/lang-platform-js
+/.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
+/eslint-rules/* @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js
+/ext/exporters.* @DataDog/apm-idm-js @DataDog/ci-app-libraries @DataDog/lang-platform-js
 /ext/formats.* @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
-/ext/index.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-serverless @DataDog/ci-app-libraries @DataDog/data-streams-monitoring @DataDog/lang-platform-js
+/ext/index.* @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-serverless @DataDog/ci-app-libraries @DataDog/data-streams-monitoring @DataDog/lang-platform-js
 /ext/tags.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
 /ext/types.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-serverless
-/packages/dd-trace/src/plugin_manager.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-idm-js
+/packages/dd-trace/src/plugin_manager.js @DataDog/lang-platform-js @DataDog/apm-idm-js
 
 # Automated dependency updates
-/package.json @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/yarn.lock @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/docs/package.json @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
-/docs/yarn.lock @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/actions/datadog-ci/package.json @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/actions/datadog-ci/yarn.lock @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/vendor/package.json @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/vendor/package-lock.json @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/package.json @DataDog/lang-platform-js @dd-octo-sts
+/yarn.lock @DataDog/lang-platform-js @dd-octo-sts
+/docs/package.json @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
+/docs/yarn.lock @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/actions/datadog-ci/package.json @DataDog/lang-platform-js @dd-octo-sts
+/.github/actions/datadog-ci/yarn.lock @DataDog/lang-platform-js @dd-octo-sts
+/vendor/package.json @DataDog/lang-platform-js @dd-octo-sts
+/vendor/package-lock.json @DataDog/lang-platform-js @dd-octo-sts
 /packages/dd-trace/test/plugins/versions/package.json @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /integration-tests/esbuild/package.json @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /integration-tests/appsec/iast-esbuild-esm/package.json @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
 /integration-tests/appsec/iast-esbuild-cjs/package.json @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
-/.github/editorconfig-checker/Dockerfile @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
+/.github/editorconfig-checker/Dockerfile @Datadog/lang-platform-js @dd-octo-sts
 /.github/playwright/Dockerfile @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 /.github/selenium/Dockerfile @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
-/benchmark/sirun/Dockerfile* @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+/benchmark/sirun/Dockerfile* @DataDog/lang-platform-js @dd-octo-sts
