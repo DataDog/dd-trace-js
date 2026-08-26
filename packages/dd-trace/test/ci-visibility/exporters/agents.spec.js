@@ -170,6 +170,39 @@ describe('Test Optimization exporter agents', () => {
       }
     })
 
+    it('detects saturation for a Unix-domain socket URL', async () => {
+      const net = require('node:net')
+      const fs = require('node:fs')
+      const socketPath = `/tmp/dd-test-agents-${process.pid}.sock`
+      try { fs.unlinkSync(socketPath) } catch {}
+      const server = net.createServer((socket) => socket.resume())
+      const openSockets = new Set()
+      server.on('connection', (socket) => openSockets.add(socket))
+      await new Promise(resolve => server.listen(socketPath, resolve))
+
+      const agent = new httpAgent.constructor()
+      const url = `unix://${socketPath}`
+      const requests = new Array(8)
+
+      try {
+        for (let index = 0; index < requests.length; index++) {
+          const request = createRequest({ agent, socketPath })
+          request.on('error', () => {})
+          request.end()
+          requests[index] = request
+        }
+
+        await new Promise(resolve => setImmediate(resolve))
+
+        assert.strictEqual(isOriginSaturated(url, agent), true)
+      } finally {
+        for (const request of requests) request.destroy()
+        for (const socket of openSockets) socket.destroy()
+        agent.destroy()
+        await new Promise(resolve => server.close(() => { try { fs.unlinkSync(socketPath) } catch {} resolve() }))
+      }
+    })
+
     it('is saturated once a request is queued behind the active sockets', async () => {
       const agent = new http.Agent({ keepAlive: true, maxSockets: 1 })
       const lookup = () => {}

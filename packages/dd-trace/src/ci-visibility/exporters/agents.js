@@ -131,20 +131,31 @@ function getAgent (url) {
  */
 function isOriginSaturated (url, agent = getAgent(url)) {
   // Normalize the URL with the same conversion the transport uses (urlToHttpOptions)
-  // so the host and port match the key Node assigns in the agent's socket map:
-  // IPv6 brackets are stripped and a default port (443 / 80) is applied when the
-  // URL omits one. Without this, the probe keys never match and saturation is
-  // never detected for IPv6 literals or default-port intake URLs.
+  // so the origin key matches the one Node assigns in the agent's socket map:
+  // IPv6 brackets are stripped, a default port (443 / 80) is applied when the URL
+  // omits one, and Unix-domain sockets are keyed by their path. Without this, the
+  // probe keys never match and saturation is never detected for IPv6 literals,
+  // default-port intake URLs, or EVP-capable Agents reached over a Unix socket.
   let parsed
   try {
     parsed = typeof url === 'string' || url instanceof URL ? parseUrl(url) : url
   } catch {
     return false
   }
-  if (!parsed || !parsed.hostname) return false
+  if (!parsed) return false
 
-  const port = parsed.port || (parsed.protocol === 'https:' ? 443 : 80)
-  const name = agent.getName({ host: parsed.hostname, port })
+  let name
+  if (parsed.protocol === 'unix:') {
+    if (!parsed.pathname) return false
+    // Node still applies the http default port (80) to the agent key for a
+    // Unix-socket request, so probe with it to match.
+    name = agent.getName({ port: 80, socketPath: parsed.pathname })
+  } else {
+    if (!parsed.hostname) return false
+    const port = parsed.port || (parsed.protocol === 'https:' ? 443 : 80)
+    name = agent.getName({ host: parsed.hostname, port })
+  }
+
   const activeSockets = agent.sockets?.[name]?.length || 0
   const queuedRequests = agent.requests?.[name]?.length || 0
 
