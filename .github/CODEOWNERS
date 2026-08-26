@@ -122,128 +122,128 @@
 /packages/dd-trace/src/tracer_metadata.js @DataDog/dd-trace-js @DataDog/apm-idm-js
 
 # Test Optimization
-/ci/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/ci/ @DataDog/ci-app-libraries
 
-/integration-tests/selenium/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/selenium/ @DataDog/ci-app-libraries
 
-/packages/dd-trace/src/ci-visibility/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-plugin-jest/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-plugin-mocha/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-plugin-cucumber/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-plugin-cypress/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-plugin-playwright/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-plugin-vitest/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-plugin-nyc/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/plugins/util/git.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/plugins/ci_plugin.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/ci-visibility/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/encode/agentless-ci-visibility.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/encode/agentless-json.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/encode/coverage-ci-visibility.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/encode/tags-processors.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/git_metadata.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/git_metadata_tagger.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/fixtures/config/git-folder*/ @DataDog/dd-trace-js @DataDog/ci-app-libraries @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/fixtures/config/git.properties* @DataDog/dd-trace-js @DataDog/ci-app-libraries @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/plugins/util/git.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/ci-env/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/fixtures/jest/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/jest.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/test.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/test-environment.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/encode/agentless-ci-visibility.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/encode/agentless-json.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/encode/coverage-ci-visibility.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/encode/tags-processors.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/exporters/agentless/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/git_metadata.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/git_metadata_tagger.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/plugins/util/ci.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/plugins/util/env.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/plugins/util/git-cache.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/plugins/util/jest.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/plugins/util/tags.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/plugins/util/test.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/src/plugins/util/user-provided-git.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/__test__/CODEOWNERS @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/fixtures/github_event_payload_malformed.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/fixtures/github_event_payload.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/fixtures/istanbul-map-fixture.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/fixtures/runner/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/dd-trace/test/plugins/util/fixtures/runner_empty/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/dd-trace/src/ci-visibility/ @DataDog/ci-app-libraries
+/packages/datadog-plugin-jest/ @DataDog/ci-app-libraries
+/packages/datadog-plugin-mocha/ @DataDog/ci-app-libraries
+/packages/datadog-plugin-cucumber/ @DataDog/ci-app-libraries
+/packages/datadog-plugin-cypress/ @DataDog/ci-app-libraries
+/packages/datadog-plugin-playwright/ @DataDog/ci-app-libraries
+/packages/datadog-plugin-vitest/ @DataDog/ci-app-libraries
+/packages/datadog-plugin-nyc/ @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/git.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/ci_plugin.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/ci-visibility/ @DataDog/ci-app-libraries
+/packages/dd-trace/test/encode/agentless-ci-visibility.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/encode/agentless-json.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/encode/coverage-ci-visibility.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/encode/tags-processors.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/git_metadata.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/git_metadata_tagger.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/fixtures/config/git-folder*/ @DataDog/ci-app-libraries @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/fixtures/config/git.properties* @DataDog/ci-app-libraries @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/plugins/util/git.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/ci-env/ @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/fixtures/jest/ @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/jest.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/test.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/test-environment.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/encode/agentless-ci-visibility.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/encode/agentless-json.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/encode/coverage-ci-visibility.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/encode/tags-processors.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/exporters/agentless/ @DataDog/ci-app-libraries
+/packages/dd-trace/src/git_metadata.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/git_metadata_tagger.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/ci.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/env.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/git-cache.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/jest.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/tags.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/test.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/user-provided-git.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/__test__/CODEOWNERS @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/fixtures/github_event_payload_malformed.json @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/fixtures/github_event_payload.json @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/fixtures/istanbul-map-fixture.json @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/fixtures/runner/ @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/fixtures/runner_empty/ @DataDog/ci-app-libraries
 
-/packages/datadog-instrumentations/src/jest.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/jest/bail-reporter.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/mocha/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/cucumber.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/cypress.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/playwright.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/vitest.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/vitest-main.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/vitest-main-no-worker-init.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/vitest-util.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/vitest-worker.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/cucumber-worker-threads.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/cypress-config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/cypress-legacy-finalizers.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/playwright-browser-scripts.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/playwright-reporter.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/webdriverio.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/nyc.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/jest/coverage-backfill.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/test/vitest-main.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/test/webdriverio.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/test/nyc.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/test/fixtures/jasmine-core.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/test/fixtures/mocha-regular-worker.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/test/fixtures/webdriverio-* @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/jest.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/jest/bail-reporter.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/mocha/ @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/cucumber.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/cypress.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/playwright.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/vitest.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/vitest-main.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/vitest-main-no-worker-init.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/vitest-util.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/vitest-worker.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/cucumber-worker-threads.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/cypress-config.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/cypress-legacy-finalizers.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/playwright-browser-scripts.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/playwright-reporter.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/webdriverio.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/nyc.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/jest/coverage-backfill.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/test/vitest-main.spec.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/test/webdriverio.spec.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/test/nyc.spec.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/test/fixtures/jasmine-core.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/test/fixtures/mocha-regular-worker.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/test/fixtures/webdriverio-* @DataDog/ci-app-libraries
 
-/integration-tests/ci-visibility/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cucumber/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/jest/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/mocha/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/playwright/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/vitest/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/webdriverio/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/vitest.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/vitest.second-project.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/vitest.typecheck.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/tsconfig.typecheck.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/tsconfig.typecheck-overlap.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/tsconfig.typecheck-fail.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/tsconfig.typecheck-test-management-fail.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/tsconfig.typecheck-test-management-file-fail.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/ci-visibility-intake.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/ci-visibility-intake.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/CODEOWNERS @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/config-jest-multiproject.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/config-jest.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-config.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-custom-after-hooks.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-custom-after-hooks.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-auto-esm.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-component.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-double-run.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-double-run.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-esm-config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-legacy-plugin.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-legacy-plugin.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-plain-object-auto.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-plain-object-auto.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-plain-object-manual.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-plain-object-manual.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-return-config.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-return-config.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-support-file-false.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress-typescript.config.ts @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/cypress.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/my-nyc.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/playwright.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/playwright.config.ts @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/integration-tests/vite.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/ci-visibility/ @DataDog/ci-app-libraries
+/integration-tests/cucumber/ @DataDog/ci-app-libraries
+/integration-tests/cypress/ @DataDog/ci-app-libraries
+/integration-tests/jest/ @DataDog/ci-app-libraries
+/integration-tests/mocha/ @DataDog/ci-app-libraries
+/integration-tests/playwright/ @DataDog/ci-app-libraries
+/integration-tests/vitest/ @DataDog/ci-app-libraries
+/integration-tests/webdriverio/ @DataDog/ci-app-libraries
+/integration-tests/vitest.config.mjs @DataDog/ci-app-libraries
+/integration-tests/vitest.second-project.config.mjs @DataDog/ci-app-libraries
+/integration-tests/vitest.typecheck.config.mjs @DataDog/ci-app-libraries
+/integration-tests/tsconfig.typecheck.json @DataDog/ci-app-libraries
+/integration-tests/tsconfig.typecheck-overlap.json @DataDog/ci-app-libraries
+/integration-tests/tsconfig.typecheck-fail.json @DataDog/ci-app-libraries
+/integration-tests/tsconfig.typecheck-test-management-fail.json @DataDog/ci-app-libraries
+/integration-tests/tsconfig.typecheck-test-management-file-fail.json @DataDog/ci-app-libraries
+/integration-tests/ci-visibility-intake.js @DataDog/ci-app-libraries
+/integration-tests/ci-visibility-intake.spec.js @DataDog/ci-app-libraries
+/integration-tests/CODEOWNERS @DataDog/ci-app-libraries
+/integration-tests/config-jest-multiproject.js @DataDog/ci-app-libraries
+/integration-tests/config-jest.js @DataDog/ci-app-libraries
+/integration-tests/cypress-config.json @DataDog/ci-app-libraries
+/integration-tests/cypress-custom-after-hooks.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-custom-after-hooks.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-auto-esm.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-component.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-double-run.js @DataDog/ci-app-libraries
+/integration-tests/cypress-double-run.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-esm-config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-legacy-plugin.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-legacy-plugin.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-auto.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-auto.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-manual.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-manual.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-return-config.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-return-config.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-support-file-false.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-typescript.config.ts @DataDog/ci-app-libraries
+/integration-tests/cypress.config.js @DataDog/ci-app-libraries
+/integration-tests/my-nyc.config.js @DataDog/ci-app-libraries
+/integration-tests/playwright.config.js @DataDog/ci-app-libraries
+/integration-tests/playwright.config.ts @DataDog/ci-app-libraries
+/integration-tests/vite.config.mjs @DataDog/ci-app-libraries
 
-/benchmark/e2e-test-optimization/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/benchmark/e2e-test-optimization/ @DataDog/ci-app-libraries
 
 # LLM Observability
 /.agents/skills/llmobs-integration/ @DataDog/dd-trace-js @DataDog/ml-observability
@@ -288,8 +288,8 @@
 /benchmark/sirun/sampling/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/span-format/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/spans/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
-/benchmark/sirun/test-codeowners/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/benchmark/sirun/test-optimization/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/benchmark/sirun/test-codeowners/ @DataDog/ci-app-libraries
+/benchmark/sirun/test-optimization/ @DataDog/ci-app-libraries
 
 /integration-tests/log_injection/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /integration-tests/log_injection.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
@@ -349,15 +349,15 @@
 # CI
 /.github/actions/**/action.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/actions/**/action.yaml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/actions/upload-coverage-artifact/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/.github/actions/upload-coverage-artifact/action.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
-/.github/actions/upload-coverage-artifact/action.yaml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
-/.github/actions/upload-junit-artifacts/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/.github/actions/upload-junit-artifacts/action.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
-/.github/actions/upload-junit-artifacts/action.yaml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
+/.github/actions/upload-coverage-artifact/ @DataDog/ci-app-libraries
+/.github/actions/upload-coverage-artifact/action.yml @DataDog/ci-app-libraries @dd-octo-sts
+/.github/actions/upload-coverage-artifact/action.yaml @DataDog/ci-app-libraries @dd-octo-sts
+/.github/actions/upload-junit-artifacts/ @DataDog/ci-app-libraries
+/.github/actions/upload-junit-artifacts/action.yml @DataDog/ci-app-libraries @dd-octo-sts
+/.github/actions/upload-junit-artifacts/action.yaml @DataDog/ci-app-libraries @dd-octo-sts
 /.github/editorconfig-checker/ @DataDog/dd-trace-js @Datadog/lang-platform-js
-/.github/playwright/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/.github/selenium/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/.github/playwright/ @DataDog/ci-app-libraries
+/.github/selenium/ @DataDog/ci-app-libraries
 /.github/chainguard/ @DataDog/dd-trace-js @DataDog/sdlc-security
 /.github/codeql_config.yml @DataDog/dd-trace-js @DataDog/sdlc-security
 /.github/workflows/*.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
@@ -391,7 +391,7 @@
 /.github/workflows/pr-title.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/profiling.yml @DataDog/dd-trace-js @DataDog/profiling-js @dd-octo-sts
 /.github/workflows/system-tests.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
-/.github/workflows/test-optimization.yml @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
+/.github/workflows/test-optimization.yml @DataDog/ci-app-libraries @dd-octo-sts
 
 # Profiling
 /benchmark/sirun/profiler/ @DataDog/dd-trace-js @DataDog/profiling-js
@@ -535,9 +535,9 @@
 /docs/test.ts @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-idm-js
 /.gitlab/benchmarks/ @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/ecosystems-performance
 /eslint-rules/* @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js
-/ext/exporters.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/ci-app-libraries @DataDog/lang-platform-js
+/ext/exporters.* @DataDog/apm-idm-js @DataDog/ci-app-libraries @DataDog/lang-platform-js
 /ext/formats.* @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
-/ext/index.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-serverless @DataDog/ci-app-libraries @DataDog/data-streams-monitoring @DataDog/lang-platform-js
+/ext/index.* @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-serverless @DataDog/ci-app-libraries @DataDog/data-streams-monitoring @DataDog/lang-platform-js
 /ext/tags.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
 /ext/types.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-serverless
 /packages/dd-trace/src/plugin_manager.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-idm-js
@@ -556,6 +556,6 @@
 /integration-tests/appsec/iast-esbuild-esm/package.json @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
 /integration-tests/appsec/iast-esbuild-cjs/package.json @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
 /.github/editorconfig-checker/Dockerfile @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
-/.github/playwright/Dockerfile @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
-/.github/selenium/Dockerfile @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
+/.github/playwright/Dockerfile @DataDog/ci-app-libraries @dd-octo-sts
+/.github/selenium/Dockerfile @DataDog/ci-app-libraries @dd-octo-sts
 /benchmark/sirun/Dockerfile* @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
