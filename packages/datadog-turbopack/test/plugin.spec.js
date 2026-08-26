@@ -4,11 +4,12 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 const { afterEach, describe, it } = require('mocha')
 
 const { withDatadogTurbopack } = require('..')
 const loader = require('../src/loader')
-const { createEsmProxy } = require('../src/targets')
+const { createEsmProxy, createManifest } = require('../src/targets')
 
 const directories = []
 
@@ -19,6 +20,21 @@ afterEach(() => {
 })
 
 describe('datadog-turbopack loader', () => {
+  it('uses CommonJS-compatible diagnostics channel imports in ESM proxies', async () => {
+    const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-')))
+    directories.push(directory)
+    const source = write(directory, 'module.mjs', 'export const value = 1')
+    const proxyPath = path.join(directory, 'proxy.mjs')
+    const proxy = await createEsmProxy(source, proxyPath, 'ai', 'ai', '7.0.0')
+
+    assert.match(proxy, /import dc from /)
+    assert.match(proxy, /dc\.channel\('dd-trace:bundler:load'\)/)
+    assert.doesNotMatch(proxy, /import \{ channel \} from /)
+
+    fs.writeFileSync(proxyPath, proxy)
+    await import(pathToFileURL(proxyPath).href)
+  })
+
   it('routes an internal ESM import through its generated proxy', () => {
     const directory = createPackage('openai', { type: 'module' })
     const client = write(directory, 'client.mjs', "import { Models } from './resources/models.mjs'\nexport { Models }")
@@ -43,6 +59,40 @@ describe('datadog-turbopack loader', () => {
     })
 
     assert.match(result, /import\("\.\.\/\.cache\/dd-trace\/turbopack\/models\.mjs"\)/)
+  })
+
+  it('routes an application ESM import through its generated proxy', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const packagePath = createPackageIn(directory, 'ai', { main: 'index.mjs', type: 'module', version: '7.0.0' })
+    write(packagePath, 'index.mjs', 'export const generateText = () => {}')
+    const appPath = write(directory, 'app/route.js', "import { generateText } from 'ai'")
+    const manifest = await createManifest(directory)
+
+    const result = loader.call({
+      getOptions: () => ({ manifestPath: manifest.path, rewriteApplicationImports: true }),
+      resourcePath: appPath,
+    }, fs.readFileSync(appPath, 'utf8'))
+
+    assert.match(result, /from "\.\.\/node_modules\/\.cache\/dd-trace\/turbopack\/0\.mjs"/)
+  })
+
+  it('routes an application CommonJS require through its generated proxy', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const packagePath = createPackageIn(directory, 'ai', { main: 'index.mjs', type: 'module', version: '7.0.0' })
+    write(packagePath, 'index.mjs', 'export const generateText = () => {}')
+    const appPath = write(directory, 'pages/api/route.js', "const { generateText } = require('ai')")
+    const manifest = await createManifest(directory)
+
+    const result = loader.call({
+      getOptions: () => ({ manifestPath: manifest.path, rewriteApplicationImports: true }),
+      resourcePath: appPath,
+    }, fs.readFileSync(appPath, 'utf8'))
+
+    assert.match(result, /require\("\.\.\/\.\.\/node_modules\/\.cache\/dd-trace\/turbopack\/0\.mjs"\)/)
   })
 
   it('preserves ESM modules without an instrumented import', () => {
@@ -124,6 +174,40 @@ describe('datadog-turbopack configuration', () => {
     assert.equal(config.rules['*.js'].length, 2)
     assert.deepEqual(config.rules['*.js'][0], { loaders: ['existing-loader'] })
     assert.match(config.rules['*.js'][1].condition.all[2].path.source, /node_modules/)
+  })
+
+  it('does not add the Datadog loader twice when composed repeatedly', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const packagePath = createPackageIn(directory, 'ioredis', { main: 'index.js', version: '5.0.0' })
+    write(packagePath, 'index.js', 'module.exports = {}')
+
+    const once = await withDatadogTurbopack({}, directory)
+    const twice = await withDatadogTurbopack(once, directory)
+
+    for (const extension of ['*.js', '*.cjs', '*.mjs']) {
+      const rules = [twice.rules[extension]].flat()
+      assert.equal(rules.filter(rule => rule.loaders.some(item => item.loader.includes('datadog-turbopack'))).length, 1)
+    }
+  })
+
+  it('adds a Node-only rule for application ESM imports and requires', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const packagePath = createPackageIn(directory, 'ai', { main: 'index.mjs', type: 'module', version: '7.0.0' })
+    write(packagePath, 'index.mjs', 'export const generateText = () => {}')
+
+    const config = await withDatadogTurbopack({}, directory)
+    const rules = [config.rules['*.js']].flat()
+    const applicationRule = rules.find(rule => rule.condition.all.some(condition => condition?.not === 'foreign'))
+
+    assert.deepEqual(applicationRule.condition.all.slice(0, 2), ['node', { not: 'foreign' }])
+    assert.match('import { generateText } from "ai"', applicationRule.condition.all[2].content)
+    assert.match('const { generateText } = require("ai")', applicationRule.condition.all[2].content)
+    assert.doesNotMatch('import { something } from "unrelated"', applicationRule.condition.all[2].content)
+    assert.equal(applicationRule.loaders[0].options.rewriteApplicationImports, true)
   })
 })
 
