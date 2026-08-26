@@ -170,7 +170,10 @@ describe('Test Optimization exporter agents', () => {
       }
     })
 
-    it('detects saturation for a Unix-domain socket URL', async () => {
+    it('detects saturation for a Unix-domain socket URL', async function () {
+      // Unix-domain sockets are not available on Windows.
+      if (process.platform === 'win32') this.skip()
+
       const net = require('node:net')
       const fs = require('node:fs')
       const socketPath = `/tmp/dd-test-agents-${process.pid}.sock`

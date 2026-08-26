@@ -171,4 +171,27 @@ describe('BufferingExporter', () => {
       clock.restore()
     }
   })
+
+  it('does not spin re-arming when the flush interval overflows the timer budget', () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const flushingWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy(),
+        setUrl: sinon.spy(),
+      }
+      // 2^31 ms is Node's setTimeout ceiling; 2^32 is finite but overflowed.
+      const exporter = new BufferingExporter({ port, flushInterval: 0x100000000 })
+      exporter._writer = flushingWriter
+      exporter._isInitialized = true
+      exporter._shouldFlush = () => false
+
+      exporter.export([{ span_id: '1' }])
+      clock.tick(50)
+      sinon.assert.called(flushingWriter.append)
+      sinon.assert.notCalled(flushingWriter.flush)
+    } finally {
+      clock.restore()
+    }
+  })
 })

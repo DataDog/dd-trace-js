@@ -35,6 +35,11 @@ class BufferingExporter {
     if (flushInterval === 0 && !deferImmediateFlush) {
       writer.flush()
     } else if (flushInterval !== 0 && this[timerKey] === undefined) {
+      // Node clamps setTimeout delays above its 32-bit signed maximum (2^31 - 1 ms)
+      // to 1 ms, so a finite-but-overflowed interval would spin the re-arm below.
+      // Only schedule when the interval fits the timer budget; the encoder size
+      // gate and the final flush still deliver payloads for overflowed intervals.
+      const canSchedule = flushInterval > 0 && flushInterval <= 2_147_483_647
       const scheduleFlush = () => {
         this[timerKey] = setTimeout(() => {
           // The periodic timer is a latency backstop; the encoder's size gate and the
@@ -43,18 +48,16 @@ class BufferingExporter {
           if (this._shouldFlush(writer)) {
             this[timerKey] = undefined
             writer.flush()
-          } else {
+          } else if (canSchedule) {
             // Saturation suppressed the flush; re-arm so a buffered payload below the
             // encoder's size threshold is still delivered once the origin becomes idle,
-            // rather than waiting indefinitely for another event. Skip re-arming for a
-            // non-finite or overflowed interval: setTimeout would clamp it to 1 ms and
-            // spin. The encoder size gate and final flush still deliver the payload.
-            if (Number.isFinite(flushInterval)) scheduleFlush()
+            // rather than waiting indefinitely for another event.
+            scheduleFlush()
           }
         }, flushInterval)
         this[timerKey].unref?.()
       }
-      scheduleFlush()
+      if (canSchedule) scheduleFlush()
     }
 
     return appended
