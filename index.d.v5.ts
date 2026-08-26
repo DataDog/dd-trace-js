@@ -901,6 +901,16 @@ declare namespace tracer {
          */
         initializationTimeoutMs?: number
         /**
+         * Whether to emit server-side flag evaluation counts to the EVP flagevaluation track.
+         * Does not affect the OpenTelemetry `feature_flag.evaluations` metric, which is independent.
+         * Can be configured via DD_FLAGGING_EVALUATION_COUNTS_ENABLED environment variable.
+         *
+         * @default true
+         * @env DD_FLAGGING_EVALUATION_COUNTS_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        evaluationCountsEnabled?: boolean
+        /**
          * Configuration for span enrichment with feature flag evaluation data.
          */
         spanEnrichment?: {
@@ -4072,6 +4082,8 @@ declare namespace tracer {
       description?: string
       config?: Record<string, JSONType>
       tags?: Record<string, string>
+      /** Number of full experiment runs to execute. Default 1. */
+      runs?: number
     }
 
     interface ExperimentRunOptions {
@@ -4081,6 +4093,8 @@ declare namespace tracer {
       retryDelay?: (attempt: number) => number
       /** Reject on the first task/evaluator error instead of capturing it. Default false. */
       throwOnErrors?: boolean
+      /** Maximum number of task/evaluator executions to process concurrently. Default 10. */
+      concurrency?: number
     }
 
     interface PullDatasetOptions {
@@ -4114,17 +4128,21 @@ declare namespace tracer {
 
     interface ExperimentRun {
       runId: string
+      /** 1-based run iteration. */
       runIteration: number
+      /** Whether this run had a task, row-evaluator, or summary-evaluator error. */
+      hasError: boolean
       rows: ExperimentResultRow[]
       summaryEvaluations: Record<string, { value: any, error: string | null }>
     }
 
     interface ExperimentResult {
       experimentId: string
+      /** Rows from the first run, kept as a compatibility alias. */
       rows: ExperimentResultRow[]
-      /** Single-run summary evaluator results. */
+      /** Summary evaluator results from the first run, kept as a compatibility alias. */
       summaryEvaluations: Record<string, { value: any, error: string | null }>
-      /** Experiment runs. P0 Node experiments currently return one run. */
+      /** All experiment runs. */
       runs: ExperimentRun[]
       /** Dashboard URL for the experiment. */
       url: string

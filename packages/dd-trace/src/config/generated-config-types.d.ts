@@ -432,6 +432,7 @@ export interface GeneratedConfig {
     exporter: string;
     flaggingProvider: {
       enabled: boolean;
+      evaluationCountsEnabled: boolean;
       initializationTimeoutMs: number;
       spanEnrichment: {
         enabled: boolean;
@@ -713,6 +714,7 @@ export interface GeneratedEnvVarConfig {
   DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
   DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
   DD_FEATURE_FLAGS_ENABLED: boolean;
+  DD_FLAGGING_EVALUATION_COUNTS_ENABLED: boolean;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
   DD_GIT_COMMIT_AUTHOR_EMAIL: string | undefined;

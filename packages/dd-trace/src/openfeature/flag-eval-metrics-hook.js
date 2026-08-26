@@ -32,7 +32,7 @@ const COUNTER_UNIT = '{evaluation}'
  *
  * When `config.DD_METRICS_OTEL_ENABLED` is false, `finally()` is always a no-op.
  */
-class EvalMetricsHook {
+class FlagEvalMetricsHook {
   #enabled = false
   #counter = null
 
@@ -60,7 +60,7 @@ class EvalMetricsHook {
         unit: COUNTER_UNIT,
       })
     } catch (e) {
-      log.warn('EvalMetricsHook: failed to create counter: %s', e.message)
+      log.warn('FlagEvalMetricsHook: failed to create counter: %s', e.message)
     }
 
     return this.#counter
@@ -100,4 +100,4 @@ class EvalMetricsHook {
   }
 }
 
-module.exports = EvalMetricsHook
+module.exports = FlagEvalMetricsHook

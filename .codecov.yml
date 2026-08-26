@@ -30,3 +30,4 @@ coverage:
 
 ignore:
   - "benchmark/sirun/**"
+  - "packages/dd-trace/test/openfeature/**"

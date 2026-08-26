@@ -854,6 +854,16 @@
         "default": "false"
       }
     ],
+    "DD_FLAGGING_EVALUATION_COUNTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.flaggingProvider.evaluationCountsEnabled"
+        ],
+        "default": "true"
+      }
+    ],
     "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE": [
       {
         "implementation": "A",

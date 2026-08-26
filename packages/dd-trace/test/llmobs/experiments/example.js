@@ -8,6 +8,7 @@
 // It exercises everything added in this PR against a real Datadog org:
 //   - create a dataset + add records, run an experiment with boolean / numeric /
 //     categorical evaluators, and print the dataset + experiment URLs
+//   - a throwOnErrors fast-fail experiment that stops after the first evaluator error
 //   - a dataset create -> push -> pull round-trip
 //
 // Run:
@@ -76,6 +77,51 @@ async function runExperiment (experiments) {
   }
 }
 
+async function runThrowOnErrorsFastFail (experiments) {
+  console.log('\n=== Experiment: throwOnErrors fast fail ===')
+  const dataset = experiments.createDataset(`node-tracer-fast-fail-${Date.now()}`, {
+    description: 'manual end-to-end fast-fail demo',
+    projectName: experimentsProjectName,
+  })
+    .addRecord('first')
+    .addRecord('later-1')
+    .addRecord('later-2')
+
+  let taskCalls = 0
+  let evaluatorCalls = 0
+  const experiment = experiments.experiment({
+    name: `throw-on-errors-fast-fail-${Date.now()}`,
+    projectName: experimentsProjectName,
+    dataset,
+    task: (input) => {
+      taskCalls++
+      return input
+    },
+    evaluators: {
+      failing: (input) => {
+        evaluatorCalls++
+        if (input === 'first') throw new Error('intentional evaluator failure')
+        return true
+      },
+    },
+  })
+
+  try {
+    await experiment.run({ concurrency: 1, throwOnErrors: true })
+    throw new Error('Expected the experiment to fail')
+  } catch (err) {
+    if (!/intentional evaluator failure/.test(err.message)) throw err
+  }
+
+  if (taskCalls !== 1 || evaluatorCalls !== 1) {
+    throw new Error(`Expected fast fail after one row; taskCalls=${taskCalls}, evaluatorCalls=${evaluatorCalls}`)
+  }
+
+  console.log(`Experiment URL : ${experiment.url()}`)
+  console.log(`Experiment ID  : ${experiment.experimentId()}`)
+  console.log(`Fast fail verified after taskCalls=${taskCalls}, evaluatorCalls=${evaluatorCalls}`)
+}
+
 async function runDatasetOps (experiments) {
   console.log('\n=== Dataset operations: create / push / pull ===')
   const name = `node-tracer-capitals-${Date.now()}`
@@ -120,6 +166,7 @@ async function main () {
 
   const { experiments } = tracer.llmobs
   await runExperiment(experiments)
+  await runThrowOnErrorsFastFail(experiments)
   await runDatasetOps(experiments)
 }
 

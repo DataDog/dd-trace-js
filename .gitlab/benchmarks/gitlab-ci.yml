@@ -22,8 +22,6 @@ variables:
   BASE_CI_IMAGE_PLATFORM: linux/amd64
 
   SLS_CI_BRANCH: main
-  # Temporary until the serverless-tools Node.js amd64 layer size limit is updated.
-  RELEASE_ALLOW_BENCHMARK_FAILURES: "true"
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "2.0"
@@ -103,6 +101,8 @@ benchmark:
         GROUP: 5
       - MAJOR_VERSION: 20
         GROUP: 6
+      - MAJOR_VERSION: 20
+        GROUP: 7
       - MAJOR_VERSION: 24
         GROUP: 1
       - MAJOR_VERSION: 24
@@ -115,6 +115,8 @@ benchmark:
         GROUP: 5
       - MAJOR_VERSION: 24
         GROUP: 6
+      - MAJOR_VERSION: 24
+        GROUP: 7
       - MAJOR_VERSION: 26
         GROUP: 1
       - MAJOR_VERSION: 26
@@ -127,8 +129,10 @@ benchmark:
         GROUP: 5
       - MAJOR_VERSION: 26
         GROUP: 6
+      - MAJOR_VERSION: 26
+        GROUP: 7
   variables:
-    SPLITS: 6
+    SPLITS: 7
 
 benchmark-serverless:
   stage: benchmarks
