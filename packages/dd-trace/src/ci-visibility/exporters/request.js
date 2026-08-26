@@ -132,7 +132,7 @@ function requestBuffered (data, options, callback) {
       // deadline timeout — the telemetry needs the original cause (ECONNRESET,
       // ETIMEDOUT, etc.) to distinguish failure modes.
       if (lastError) {
-        complete(lastError)
+        complete(lastError, null, lastError.status)
       } else {
         const error = new Error('Test Optimization request reached its finalization deadline')
         error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
