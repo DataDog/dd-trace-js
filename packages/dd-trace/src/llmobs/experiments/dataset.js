@@ -1,6 +1,7 @@
 'use strict'
 
 const { randomUUID } = require('node:crypto')
+const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
 /** @typedef {{add?: string[], remove?: string[], replace?: string[]}} TagOperations */
 /**
@@ -108,23 +109,17 @@ function valuesAreEqual (left, right) {
 }
 
 function snapshotPayload (payload) {
-  // Match the request body's JSON serialization, including custom toJSON methods.
-  // eslint-disable-next-line unicorn/prefer-structured-clone
-  return JSON.parse(JSON.stringify(payload))
-}
-
-function valuesAreEqualInRecordField (left, right, field) {
-  return valuesAreEqual({ [field]: left }, { [field]: right })
+  return clone(payload)
 }
 
 function updateFromInsertedRecord (recordId, record, payload) {
   const update = { id: recordId }
-  if (!valuesAreEqualInRecordField(record.input, payload.input, 'input')) update.input = record.input
-  if (!valuesAreEqualInRecordField(record.expectedOutput, payload.expected_output, 'expected_output')) {
+  if (!valuesAreEqual(record.input, payload.input)) update.input = record.input
+  if (!valuesAreEqual(record.expectedOutput, payload.expected_output)) {
     update.expectedOutput = record.expectedOutput
   }
-  if (!valuesAreEqualInRecordField(record.metadata, payload.metadata, 'metadata')) update.metadata = record.metadata
-  if (!valuesAreEqualInRecordField(record.tags, payload.tags ?? [], 'tags')) {
+  if (!valuesAreEqual(record.metadata, payload.metadata)) update.metadata = record.metadata
+  if (!valuesAreEqual(record.tags, payload.tags ?? [])) {
     update.tagOperations = { replace: [...record.tags] }
   }
   return update
