@@ -198,7 +198,6 @@ class MyPlugin extends DatabasePlugin {
     return ctx.currentStore
   }
 
-  // Use `end` for synchronous targets and `asyncEnd` for promises or callbacks.
   asyncEnd (ctx) {
     this.finish(ctx)
   }
@@ -309,4 +308,3 @@ PLUGINS="<name>" npm run test:plugins:ci
 - [ ] CI job added to `.github/workflows/apm-integrations.yml`
 - [ ] Unit tests written and passing
 - [ ] ESM integration tests written and passing
-- [ ] `packages/dd-trace/test/plugins/plugin-structure.spec.js` passes

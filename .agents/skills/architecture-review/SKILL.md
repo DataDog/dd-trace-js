@@ -9,9 +9,8 @@ description: |
 
 # Architecture Review
 
-Use this skill before implementing a non-trivial structural change. Introducing a second implementation of shared
-behavior requires review even when the local diff is small. Do not use it for a local bug fix or a small refactor
-whose boundaries, contracts, and behavior ownership remain unchanged.
+Use this skill before implementing a non-trivial structural change. Do not use it for a local bug fix or a small
+refactor whose boundaries and contracts remain unchanged.
 
 The score is a decision aid, not a substitute for reasoning. Explain the evidence behind each score and reject an
 abstraction that adds complexity without improving the baseline.
