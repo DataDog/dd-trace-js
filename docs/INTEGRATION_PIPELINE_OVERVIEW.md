@@ -17,11 +17,10 @@ implemented much of the same machinery itself.
 flowchart TD
     A["Orchestrion start event"] --> B["Plugin extracts library data"]
     B --> C{"Trace this call?"}
-    C -- "No" --> D{"Suppress nested spans?"}
-    D -- "No" --> I["Run original library function"]
-    D -- "Yes" --> E["Bind no-op storage"]
+    C -- "Inherit parent" --> I["Run original library function"]
+    C -- "Suppress nested" --> E["Bind no-op storage"]
     E --> I
-    C -- "Yes" --> F["Select parent and bind span storage"]
+    C -- "Yes" --> F["Select parent and reserve correlation"]
     F --> G["Create and configure span"]
     G --> H["Run propagation or product logic"]
     H --> I
@@ -45,10 +44,10 @@ owns the lifecycle.
 flowchart TD
     A["Existing Orchestrion start event"] --> B["Normalize invocation"]
     B --> C["Extract frame.data"]
-    C --> D{"when gate passes?"}
-    D -- "No" --> E["skip: noop or parent"]
-    D -- "Yes" --> F["Select parent and reserve SpanContext"]
-    F --> G["Bind stores and create span"]
+    C --> D{"when decision?"}
+    D -- "parent or noop" --> E["Apply rejected-call mode"]
+    D -- "true" --> F["Select parent and reserve SpanContext"]
+    F --> G["Create optional span and bind legacy storage"]
     G --> H["Run declared stages"]
     E --> I["Original library function"]
     H --> I
@@ -115,7 +114,7 @@ payload — so an integration declares that once and the pipeline supplies both 
 createMessagingStage({
   direction: 'out',
   system: 'bullmq',
-  topic: field('queueName'),
+  topic: data('queueName'),
   messages: frame => [ensureQueueOpts(frame.invocation)],
   commit: commitCarrier,
   payload: (opts, frame) => frame.data.data,
@@ -151,8 +150,8 @@ Stages share data through the frame without reaching into the plugin, tracer int
 The result is less code for integration authors, more consistent behavior across integrations, and one place to test
 and optimize the difficult lifecycle mechanics.
 
-The pipeline also compiles each declaration into an execution plan. It installs only the storage and capabilities an
-operation declares, so simple or rejected operations avoid unrelated work.
+The pipeline also compiles each declaration into an execution plan. It reserves correlation only for accepted
+operations and materializes capabilities lazily, so simple or rejected operations avoid unrelated work.
 
 ## What stays the same
 
@@ -206,4 +205,4 @@ stays provisional until a second messaging library confirms it.
 
 - [BullMQ mechanical walkthrough](../packages/datadog-plugin-bullmq/INTEGRATION_PIPELINE_NOTES.md)
 - [Integration Pipeline rationale and trade-offs](../packages/datadog-plugin-bullmq/INTEGRATION_PIPELINE_RATIONALE.md)
-- [Integration Pipeline implementation guide](../packages/dd-trace/src/plugins/integration-pipeline-agent-guide.md)
+- [Integration Pipeline agent context](../packages/dd-trace/src/plugins/integration-pipeline-agent-guide.md)

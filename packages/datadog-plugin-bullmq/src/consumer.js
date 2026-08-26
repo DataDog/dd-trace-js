@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../dd-trace/src/log')
-const { argument, field } = require('../../dd-trace/src/plugins/integration-pipeline')
+const { argument, data } = require('../../dd-trace/src/plugins/integration-pipeline')
 const { createMessagingStage } = require('../../dd-trace/src/plugins/stages/messaging')
 
 /**
@@ -42,7 +42,7 @@ function consumerService (frame) {
 const consumerMessagingStage = createMessagingStage({
   direction: 'in',
   system: 'bullmq',
-  topic: field('queueName'),
+  topic: data('queueName'),
   messages: frame => [frame.data.job],
   carrier: (job, frame) => frame.data.carrier,
   payload: job => job.data,
@@ -64,13 +64,13 @@ const operation = {
   span: {
     name: 'bullmq.processJob',
     service: consumerService,
-    resource: field('queueName'),
+    resource: data('queueName'),
     kind: 'consumer',
     tags: {
       component: 'bullmq',
       'span.kind': 'consumer',
       'messaging.system': 'bullmq',
-      'messaging.destination.name': field('queueName'),
+      'messaging.destination.name': data('queueName'),
       'messaging.operation': 'process',
     },
   },

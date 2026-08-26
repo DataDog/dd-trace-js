@@ -239,6 +239,20 @@ describe('bullmq pipeline stages', () => {
       assert.deepStrictEqual(checkpoints, [])
     })
 
+    it('accepts a truthy non-boolean Queue.add filter result', async () => {
+      const producerFilter = sinon.stub().returns({ accepted: true })
+      load({ producerFilter })
+      const opts = {}
+
+      await invoke('Queue_add', {
+        arguments: ['job', { id: 1 }, opts],
+        self: { name: 'queue' },
+      })
+
+      sinon.assert.calledOnce(tracer.startSpan)
+      assert.strictEqual(readCarrier(opts).carrier[TRACE_KEY], '1')
+    })
+
     it('continues Queue.add when the producer filter throws', async () => {
       const producerFilter = sinon.stub().throws(new Error('bad filter'))
       load({ producerFilter })

@@ -6,6 +6,7 @@ const dc = require('dc-polyfill')
 
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 
 describe('azure-cosmos pipeline', () => {
   const channel = dc.tracingChannel('orchestrion:@azure/cosmos:executePlugins')
@@ -195,6 +196,29 @@ describe('azure-cosmos pipeline', () => {
 
     await noTraces
   })
+
+  withNamingSchema(
+    () => channel.tracePromise(
+      () => Promise.resolve({ code: 200 }),
+      {
+        arguments: [undefined, {
+          operationType: 'read',
+          resourceType: 'docs',
+          path: '/dbs/myDb/colls/myContainer/docs/item-id',
+        }, undefined, 'operation'],
+      }
+    ),
+    {
+      v0: {
+        opName: 'cosmosdb.query',
+        serviceName: 'test-azure-cosmos',
+      },
+      v1: {
+        opName: 'cosmosdb.query',
+        serviceName: 'test',
+      },
+    }
+  )
 
   describe('with a configured service', () => {
     before(() => agent.reload('azure-cosmos', { service: 'custom-cosmos' }))

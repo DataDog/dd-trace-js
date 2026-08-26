@@ -11,7 +11,7 @@ require('../setup/core')
 const {
   argument,
   createIntegrationPlugin,
-  field,
+  data,
   result,
   self,
 } = require('../../src/plugins/integration-pipeline')
@@ -20,10 +20,15 @@ const agent = require('./agent')
 
 const integrationName = 'commonPlugin'
 const stageEvents = []
-const contextStorage = storage('context')
-const spanStorage = storage('span')
 const legacyStorage = storage('legacy')
 const resultStatus = result('status')
+let requestGateCalls = 0
+
+function decideRequest (frame) {
+  requestGateCalls++
+  if (frame.data.operation === 'ignored-noop') return 'noop'
+  return frame.data.operation !== 'ignored'
+}
 
 function extractOptionalTrace (invocation) {
   if (invocation.arguments[0].failExtractor) throw new Error('author extractor failed')
@@ -40,11 +45,21 @@ function resolveStatusTag (frame) {
   return frame.data.status
 }
 
+/**
+ * Throw the configured sentinel from a specific stage phase.
+ *
+ * @param {import('../../src/plugins/integration-pipeline').PipelineFrame} frame
+ * @param {'start' | 'complete' | 'error'} phase
+ * @returns {void}
+ */
+function maybeFailStage (frame, phase) {
+  const failure = frame.invocation.arguments[0].stageFailure
+  if (failure?.phase === phase) throw failure.value
+}
+
 const correlationStage = {
   name: 'correlation',
   start (frame) {
-    assert.strictEqual(contextStorage.getStore().correlation, frame.correlation)
-    assert.strictEqual(spanStorage.getStore()?.span, undefined)
     assert.strictEqual(Object.hasOwn(frame, 'span'), false)
     assert.strictEqual(Object.hasOwn(frame, 'state'), false)
     stageEvents.push('correlation:start')
@@ -64,7 +79,8 @@ const propagationStage = {
   name: 'propagation',
   requires: ['tracing'],
   start (frame) {
-    assert.ok(spanStorage.getStore()?.span)
+    assert.ok(legacyStorage.getStore()?.span)
+    assert.strictEqual(legacyStorage.getStore().correlation, frame.correlation)
     assert.strictEqual(Object.hasOwn(frame, 'span'), false)
     assert.strictEqual(Object.hasOwn(frame, 'plugin'), false)
     assert.strictEqual(Object.hasOwn(frame, 'tracer'), false)
@@ -82,14 +98,17 @@ const propagationStage = {
 const telemetryStage = {
   name: 'telemetry',
   requires: ['tracing'],
-  start () {
+  start (frame) {
     stageEvents.push('telemetry:start')
+    maybeFailStage(frame, 'start')
   },
-  complete () {
+  complete (frame) {
     stageEvents.push('telemetry:complete')
+    maybeFailStage(frame, 'complete')
   },
-  error () {
+  error (frame) {
     stageEvents.push('telemetry:error')
+    maybeFailStage(frame, 'error')
   },
 }
 
@@ -131,15 +150,15 @@ const PipelinePlugin = createIntegrationPlugin({
           status: extractStatus,
         },
       },
-      when: frame => frame.data.operation !== 'ignored',
+      when: decideRequest,
       span: {
         name: 'example.request',
-        resource: field('operation'),
+        resource: data('operation'),
         service: frame => frame.config.service,
         type: 'custom',
         kind: 'client',
         tags: {
-          'example.peer': field('peer'),
+          'example.peer': data('peer'),
         },
         resultTags: {
           'example.status': resolveStatusTag,
@@ -156,11 +175,11 @@ const PipelinePlugin = createIntegrationPlugin({
       },
       span: {
         name: 'example.ping',
-        resource: field('resource'),
+        resource: data('resource'),
         type: 'custom',
         kind: 'client',
         tags: () => ({ 'example.tag_block': 'resolved' }),
-        resultTags: { 'example.status': field('status') },
+        resultTags: { 'example.status': data('status') },
       },
     },
     {
@@ -173,7 +192,7 @@ const PipelinePlugin = createIntegrationPlugin({
       lifecycle: 'sync',
       extract: { start: { trace: extractOptionalTrace } },
       span: {
-        enabled: field('trace'),
+        enabled: data('trace'),
         name: 'example.optional',
       },
       stages: [optionalContextStage, telemetryStage],
@@ -181,8 +200,13 @@ const PipelinePlugin = createIntegrationPlugin({
     {
       target: { module: '@example/client', name: 'Client_child' },
       lifecycle: 'sync',
-      context: { parent: () => undefined },
+      context: { parent: frame => frame.invocation.arguments[0] },
       span: { name: 'example.child' },
+    },
+    {
+      target: { module: '@example/client', name: 'Client_asyncThrow' },
+      lifecycle: 'async',
+      span: { name: 'example.async-throw' },
     },
   ],
 })
@@ -193,6 +217,7 @@ describe('IntegrationPipeline', () => {
   const idsChannel = dc.tracingChannel('orchestrion:@example/client:Client_ids')
   const optionalChannel = dc.tracingChannel('orchestrion:@example/client:Client_optional')
   const childChannel = dc.tracingChannel('orchestrion:@example/client:Client_child')
+  const asyncThrowChannel = dc.tracingChannel('orchestrion:@example/client:Client_asyncThrow')
   let tracer
 
   before(async () => {
@@ -209,6 +234,7 @@ describe('IntegrationPipeline', () => {
 
   beforeEach(() => {
     stageEvents.length = 0
+    requestGateCalls = 0
   })
 
   it('runs correlation before tracing and materializes the reserved IDs', async () => {
@@ -249,8 +275,7 @@ describe('IntegrationPipeline', () => {
       'propagation:complete',
       'correlation:complete',
     ])
-    assert.strictEqual(contextStorage.getStore(), undefined)
-    assert.strictEqual(spanStorage.getStore(), undefined)
+    assert.strictEqual(legacyStorage.getStore(), undefined)
   })
 
   it('records errors and unwinds every started stage', async () => {
@@ -300,6 +325,29 @@ describe('IntegrationPipeline', () => {
     await assertion
   })
 
+  it('does not let reused invocation state bypass an inherited noop scope', async () => {
+    const invocation = { arguments: ['first'] }
+    const assertion = agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'example.ping')
+      assert.strictEqual(span.resource, 'first')
+    })
+
+    pingChannel.traceSync(() => ({ status: 204 }), invocation)
+    await assertion
+
+    invocation.arguments[0] = 'second'
+    const noTraces = agent.assertNoTraces(() => {
+      throw new Error('reused invocation unexpectedly bypassed the noop scope')
+    }, { timeoutMs: 100 })
+    const result = legacyStorage.run({ noop: true }, () => pingChannel.traceSync(() => {
+      assert.deepStrictEqual(legacyStorage.getStore(), { noop: true })
+      return { status: 204 }
+    }, invocation))
+
+    assert.deepStrictEqual(result, { status: 204 })
+    await noTraces
+  })
+
   it('skips unused capability blocks inside a legacy noop scope', async () => {
     const noTraces = agent.assertNoTraces(() => {
       throw new Error('noop-nested stage-free operation unexpectedly produced a trace')
@@ -307,8 +355,6 @@ describe('IntegrationPipeline', () => {
 
     const value = legacyStorage.run({ noop: true }, () => pingChannel.traceSync(() => {
       assert.deepStrictEqual(legacyStorage.getStore(), { noop: true })
-      assert.strictEqual(contextStorage.getStore(), undefined)
-      assert.strictEqual(spanStorage.getStore(), undefined)
       return 'noop-pong'
     }, { arguments: [] }))
 
@@ -323,9 +369,9 @@ describe('IntegrationPipeline', () => {
     }, { timeoutMs: 100 })
 
     const value = idsChannel.traceSync(() => {
-      assert.strictEqual(contextStorage.getStore().correlation.traceId, ids.traceId)
-      assert.strictEqual(contextStorage.getStore().correlation.spanId, ids.spanId)
-      assert.strictEqual(spanStorage.getStore()?.span, undefined)
+      assert.strictEqual(legacyStorage.getStore().correlation.traceId, ids.traceId)
+      assert.strictEqual(legacyStorage.getStore().correlation.spanId, ids.spanId)
+      assert.strictEqual(legacyStorage.getStore().span, undefined)
       return 'ids'
     }, { arguments: [ids] })
 
@@ -333,7 +379,7 @@ describe('IntegrationPipeline', () => {
     assert.ok(ids.traceId)
     assert.ok(ids.spanId)
     assert.deepStrictEqual(stageEvents, ['context-only:start', 'context-only:complete'])
-    assert.strictEqual(contextStorage.getStore(), undefined)
+    assert.strictEqual(legacyStorage.getStore(), undefined)
     await noTraces
   })
 
@@ -341,8 +387,9 @@ describe('IntegrationPipeline', () => {
     const ids = {}
 
     const value = legacyStorage.run({ noop: true }, () => idsChannel.traceSync(() => {
-      assert.strictEqual(contextStorage.getStore().correlation.traceId, ids.traceId)
-      assert.deepStrictEqual(legacyStorage.getStore(), { noop: true })
+      assert.strictEqual(legacyStorage.getStore().correlation.traceId, ids.traceId)
+      assert.strictEqual(legacyStorage.getStore().noop, true)
+      assert.strictEqual(legacyStorage.getStore().span, undefined)
       return 'nested-ids'
     }, { arguments: [ids] }))
 
@@ -395,9 +442,181 @@ describe('IntegrationPipeline', () => {
     }), 'completed')
 
     assert.deepStrictEqual(stageEvents, ['optional-context:start', 'optional-context:complete'])
-    assert.strictEqual(contextStorage.getStore(), undefined)
-    assert.strictEqual(spanStorage.getStore(), undefined)
+    assert.strictEqual(legacyStorage.getStore(), undefined)
     await noTraces
+  })
+
+  for (const [phase, value] of [['start', undefined], ['error', null], ['complete', undefined]]) {
+    it(`isolates a nullish value thrown during the ${phase} stage without disabling the plugin`, async () => {
+      const operation = `stage-${phase}`
+      const libraryError = new Error('library failed')
+      const assertion = agent.assertFirstTraceSpan(span => {
+        assert.strictEqual(span.name, 'example.request')
+        assert.strictEqual(span.resource, operation)
+      })
+      const resultPromise = requestChannel.tracePromise(
+        () => phase === 'error' ? Promise.reject(libraryError) : Promise.resolve({ status: 200 }),
+        {
+          arguments: [{ operation, stageFailure: { phase, value } }, {}],
+          self: { host: 'api.example.test' },
+        }
+      )
+
+      if (phase === 'error') {
+        await Promise.all([assertion, assert.rejects(resultPromise, libraryError)])
+      } else {
+        await Promise.all([assertion, resultPromise])
+      }
+
+      const recoveryAssertion = agent.assertFirstTraceSpan(span => {
+        assert.strictEqual(span.name, 'example.ping')
+      })
+      assert.deepStrictEqual(pingChannel.traceSync(() => ({ status: 204 }), {
+        arguments: ['recovery'],
+      }), { status: 204 })
+      await recoveryAssertion
+    })
+  }
+
+  it('finishes an async operation that synchronously throws undefined', async () => {
+    const assertion = agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'example.async-throw')
+      assert.strictEqual(span.error, 1)
+    })
+
+    assert.throws(
+      () => asyncThrowChannel.tracePromise(() => {
+        // eslint-disable-next-line no-throw-literal -- valid JavaScript edge case for lifecycle completion
+        throw undefined
+      }, { arguments: [] }),
+      error => error === undefined
+    )
+    await assertion
+  })
+
+  it('finishes an async operation that returns synchronously on end', async () => {
+    const invocation = { arguments: [] }
+    const assertion = agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'example.async-throw')
+      assert.strictEqual(span.error, 0)
+    })
+
+    asyncThrowChannel.start.runStores(invocation, () => {
+      invocation.result = 'synchronous result'
+      asyncThrowChannel.end.publish(invocation)
+    })
+    await assertion
+  })
+
+  it('keeps an async error open until its terminal event and ignores duplicate terminals', async () => {
+    const error = new Error('request failed')
+    const invocation = {
+      arguments: [{ operation: 'terminal-error' }, {}],
+      self: { host: 'api.example.test' },
+    }
+    const assertion = agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'example.request')
+      assert.strictEqual(span.resource, 'terminal-error')
+      assert.strictEqual(span.error, 1)
+      assert.strictEqual(span.meta['error.message'], error.message)
+    })
+
+    requestChannel.start.runStores(invocation, () => {
+      requestChannel.end.publish(invocation)
+      invocation.error = error
+      requestChannel.error.publish(invocation)
+      assert.deepStrictEqual(stageEvents, [
+        'correlation:start',
+        'propagation:start',
+        'telemetry:start',
+        'telemetry:error',
+        'propagation:error',
+        'correlation:error',
+      ])
+
+      requestChannel.asyncEnd.publish(invocation)
+      requestChannel.asyncEnd.publish(invocation)
+      requestChannel.end.publish(invocation)
+    })
+    await assertion
+
+    assert.deepStrictEqual(stageEvents, [
+      'correlation:start',
+      'propagation:start',
+      'telemetry:start',
+      'telemetry:error',
+      'propagation:error',
+      'correlation:error',
+      'telemetry:complete',
+      'propagation:complete',
+      'correlation:complete',
+    ])
+  })
+
+  it('records lifecycle errors published from a nested noop scope', async () => {
+    const error = new Error('nested failure')
+    const invocation = { arguments: [] }
+    const assertion = agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'example.async-throw')
+      assert.strictEqual(span.error, 1)
+      assert.strictEqual(span.meta['error.message'], error.message)
+    })
+
+    asyncThrowChannel.start.runStores(invocation, () => {
+      legacyStorage.run({ noop: true }, () => {
+        invocation.error = error
+        asyncThrowChannel.error.publish(invocation)
+      })
+      asyncThrowChannel.asyncEnd.publish(invocation)
+    })
+    await assertion
+  })
+
+  it('does not treat a stale error property as an async end signal', async () => {
+    const invocation = {
+      arguments: [{ operation: 'stale-error' }, {}],
+      error: new Error('stale error'),
+      self: { host: 'api.example.test' },
+    }
+    const assertion = agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'example.request')
+      assert.strictEqual(span.resource, 'stale-error')
+      assert.strictEqual(span.error, 0)
+    })
+
+    requestChannel.start.runStores(invocation, () => {
+      assert.deepStrictEqual(stageEvents, ['correlation:start', 'propagation:start', 'telemetry:start'])
+
+      requestChannel.end.publish(invocation)
+      assert.deepStrictEqual(stageEvents, ['correlation:start', 'propagation:start', 'telemetry:start'])
+
+      invocation.result = { status: 200 }
+      requestChannel.asyncEnd.publish(invocation)
+    })
+
+    await assertion
+    assert.deepStrictEqual(stageEvents, [
+      'correlation:start',
+      'propagation:start',
+      'telemetry:start',
+      'telemetry:complete',
+      'propagation:complete',
+      'correlation:complete',
+    ])
+  })
+
+  it('does not disable the pipeline after malformed terminal messages', async () => {
+    requestChannel.end.publish(null)
+    requestChannel.error.publish(null)
+    requestChannel.asyncEnd.publish(null)
+
+    const assertion = agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'example.ping')
+    })
+    assert.deepStrictEqual(pingChannel.traceSync(() => ({ status: 204 }), {
+      arguments: ['recovery'],
+    }), { status: 204 })
+    await assertion
   })
 
   it('does not let a throwing extractor escape into the instrumented application', async () => {
@@ -465,6 +684,26 @@ describe('IntegrationPipeline', () => {
     ])
   })
 
+  it('uses an unmaterialized correlation context as a virtual parent', async () => {
+    const ids = {}
+    const assertion = agent.assertSomeTraces(traces => {
+      const spans = traces[0]
+
+      assert.strictEqual(spans.length, 1)
+      assert.strictEqual(spans[0].name, 'example.child')
+      assert.strictEqual(spans[0].trace_id.toString(), ids.traceId)
+      assert.strictEqual(spans[0].parent_id.toString(), ids.spanId)
+      assert.notStrictEqual(spans[0].span_id.toString(), ids.spanId)
+    })
+
+    const result = idsChannel.traceSync(() => childChannel.traceSync(() => 'child-result', {
+      arguments: [],
+    }), { arguments: [ids] })
+
+    assert.strictEqual(result, 'child-result')
+    await assertion
+  })
+
   it('inherits the active parent when an explicit parent resolver returns undefined', async () => {
     const parent = tracer.startSpan('example.parent')
     const assertion = agent.assertSomeTraces(traces => {
@@ -505,6 +744,27 @@ describe('IntegrationPipeline', () => {
     await noTraces
   })
 
+  it('evaluates one gate decision and applies its nested-span mode', async () => {
+    const noTraces = agent.assertNoTraces(() => {
+      throw new Error('noop-rejected operation unexpectedly produced a trace')
+    }, { timeoutMs: 100 })
+
+    const value = await requestChannel.tracePromise(
+      () => {
+        assert.deepStrictEqual(legacyStorage.getStore(), { noop: true })
+        return Promise.resolve('ignored')
+      },
+      {
+        arguments: [{ operation: 'ignored-noop' }, {}],
+        self: { host: 'api.example.test' },
+      }
+    )
+
+    assert.strictEqual(value, 'ignored')
+    assert.strictEqual(requestGateCalls, 1)
+    await noTraces
+  })
+
   it('rejects invalid definitions before registering subscriptions', () => {
     assert.throws(
       () => createIntegrationPlugin({ id: '', operations: [] }),
@@ -538,7 +798,9 @@ describe('IntegrationPipeline', () => {
         id: 'invalid',
         operations: [{ target: { module: 'example', name: 'request' }, lifecycle: 'sync', skip: 'invalid' }],
       }),
-      { message: 'Integration operation "request" has an invalid skip mode' }
+      {
+        message: 'Integration operation "request" no longer supports skip; return "parent" or "noop" from when',
+      }
     )
     assert.throws(
       () => createIntegrationPlugin({

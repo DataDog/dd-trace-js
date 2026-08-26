@@ -48,24 +48,23 @@ class Subscription {
 }
 
 class StoreBinding {
-  constructor (event, store, transform, allowNoop) {
+  constructor (event, transform, allowNoop) {
     this._channel = dc.channel(event)
-    this._store = store
     this._transform = data => {
-      const handle = store.getHandle()
+      const handle = legacyStorage.getHandle()
 
-      return allowNoop || store !== legacyStorage || !handle?.noop || (data && Object.hasOwn(data, 'currentStore'))
+      return allowNoop || !handle?.noop || (data && Object.hasOwn(data, 'currentStore'))
         ? transform(data)
-        : store.getStore()
+        : legacyStorage.getStore()
     }
   }
 
   enable () {
-    this._channel.bindStore(this._store, this._transform)
+    this._channel.bindStore(legacyStorage, this._transform)
   }
 
   disable () {
-    this._channel.unbindStore(this._store)
+    this._channel.unbindStore(legacyStorage)
   }
 }
 
@@ -138,20 +137,7 @@ module.exports = class Plugin {
    * @returns {void}
    */
   addBind (channelName, transform, options) {
-    this.addStoreBind(channelName, legacyStorage, transform, options)
-  }
-
-  /**
-   * Bind a named product store to a diagnostic channel.
-   *
-   * @param {string} channelName Diagnostic channel name.
-   * @param {import('async_hooks').AsyncLocalStorage} store Store to bind.
-   * @param {(data: unknown) => object | undefined} transform Transform to compute the bound store.
-   * @param {{ allowNoop?: boolean }} [options] Binding behavior.
-   * @returns {void}
-   */
-  addStoreBind (channelName, store, transform, options) {
-    this._bindings.push(new StoreBinding(channelName, store, transform, options?.allowNoop))
+    this._bindings.push(new StoreBinding(channelName, transform, options?.allowNoop))
   }
 
   /**

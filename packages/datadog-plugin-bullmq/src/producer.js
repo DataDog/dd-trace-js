@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../dd-trace/src/log')
-const { argument, field } = require('../../dd-trace/src/plugins/integration-pipeline')
+const { argument, data } = require('../../dd-trace/src/plugins/integration-pipeline')
 const { exitCodeOrigin } = require('../../dd-trace/src/plugins/stages/code-origin')
 const { createMessagingStage } = require('../../dd-trace/src/plugins/stages/messaging')
 
@@ -146,7 +146,7 @@ function producerService (frame) {
 const outboundMessaging = {
   direction: 'out',
   system: 'bullmq',
-  topic: field('queueName'),
+  topic: data('queueName'),
   carrier: newCarrier,
 }
 
@@ -175,7 +175,6 @@ const operations = [
   {
     target: { module: 'bullmq', name: 'Queue_add' },
     lifecycle: 'async',
-    skip: 'noop',
     extract: {
       start: {
         name: argument(0),
@@ -189,15 +188,15 @@ const operations = [
       data: frame.data.data,
       opts: frame.data.opts,
       queueName: frame.invocation.self?.name,
-    }),
+    }) || 'noop',
     span: {
       name: 'bullmq.add',
       service: producerService,
-      resource: field('queueName'),
+      resource: data('queueName'),
       kind: 'producer',
       tags: {
         ...producerTags,
-        'messaging.destination.name': field('queueName'),
+        'messaging.destination.name': data('queueName'),
       },
     },
     stages: [exitCodeOrigin, queueMessagingStage],
@@ -205,7 +204,6 @@ const operations = [
   {
     target: { module: 'bullmq', name: 'Queue_addBulk' },
     lifecycle: 'async',
-    skip: 'noop',
     extract: {
       start: {
         rawJobs: argument(0),
@@ -213,15 +211,16 @@ const operations = [
         queueName: context => context.self?.name || 'bullmq',
       },
     },
-    when: frame => frame.data.jobs === undefined || frame.data.jobs.length > 0 || frame.data.rawJobs.length === 0,
+    when: frame =>
+      frame.data.jobs === undefined || frame.data.jobs.length > 0 || frame.data.rawJobs.length === 0 || 'noop',
     span: {
       name: 'bullmq.addBulk',
       service: producerService,
-      resource: field('queueName'),
+      resource: data('queueName'),
       kind: 'producer',
       tags: {
         ...producerTags,
-        'messaging.destination.name': field('queueName'),
+        'messaging.destination.name': data('queueName'),
         'messaging.batch.message_count': frame => frame.data.rawJobs?.length,
       },
     },
@@ -230,7 +229,6 @@ const operations = [
   {
     target: { module: 'bullmq', name: 'FlowProducer_add' },
     lifecycle: 'async',
-    skip: 'noop',
     extract: {
       start: {
         flow: argument(0),
@@ -242,11 +240,11 @@ const operations = [
       data: frame.data.flow?.data,
       opts: frame.data.flow?.opts,
       queueName: frame.data.flow?.queueName,
-    }),
+    }) || 'noop',
     span: {
       name: 'bullmq.add',
       service: producerService,
-      resource: field('queueName'),
+      resource: data('queueName'),
       kind: 'producer',
       tags: {
         ...producerTags,

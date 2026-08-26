@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 
 const { describe, it, after } = require('mocha')
 const { channel } = require('dc-polyfill')
@@ -144,26 +144,5 @@ describe('Plugin', () => {
       channel('apm:noopLifecycle:end').publish({ inside: true })
     })
     sinon.assert.calledOnceWithExactly(handler, { inside: true }, 'apm:noopLifecycle:end')
-  })
-
-  it('should bind and restore a non-legacy store', () => {
-    const contextStorage = storage('plugin-test-context')
-
-    class ContextPlugin extends Plugin {
-      static id = 'contextPlugin'
-
-      constructor () {
-        super()
-        this.addStoreBind('apm:contextPlugin:start', contextStorage, data => data.context)
-      }
-    }
-
-    plugin = new ContextPlugin()
-    plugin.configure({ enabled: true })
-
-    channel('apm:contextPlugin:start').runStores({ context: { id: 42 } }, () => {
-      assert.deepStrictEqual(contextStorage.getStore(), { id: 42 })
-    })
-    assert.strictEqual(contextStorage.getStore(), undefined)
   })
 })

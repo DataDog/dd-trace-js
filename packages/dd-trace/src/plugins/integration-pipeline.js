@@ -6,13 +6,8 @@ const { addExitCodeOrigin } = require('./stages/code-origin')
 const { addPeerService } = require('./stages/peer-service')
 const TracingPlugin = require('./tracing')
 
-const contextStorage = storage('context')
-const spanStorage = storage('span')
 const legacyStorage = storage('legacy')
 const spanContextKey = Symbol('integration.pipeline.span_context')
-// Scope-based diagnostic channels enter bound stores in registration order. Older run-based channels nest them in
-// reverse order, so registration must preserve the same context -> legacy -> span nesting across both implementations.
-const storeBindingsRunInRegistrationOrder = typeof contextStorage.withScope === 'function'
 const definitionFields = new Set(['id', 'source', 'configure', 'operations'])
 const extractorPhases = new Set(['start', 'complete'])
 const spanFields = new Set(['enabled', 'name', 'service', 'resource', 'type', 'kind', 'tags', 'metrics', 'resultTags'])
@@ -26,8 +21,6 @@ const stageFields = new Set(['name', 'requires', 'start', 'complete', 'error'])
  * @property {unknown} [error]
  * @property {object} [currentStore]
  * @property {object} [parentStore]
- * @property {object} [currentContextStore]
- * @property {object} [parentContextStore]
  */
 
 /**
@@ -69,8 +62,8 @@ const stageFields = new Set(['name', 'requires', 'start', 'complete', 'error'])
 
 /**
  * Stages without the `tracing` requirement start before a span exists. Stages which require
- * tracing start after the independent span store has been bound. All terminal hooks unwind in
- * reverse start order.
+ * tracing start after the optional span has been materialized and bound in legacy storage. All
+ * terminal hooks unwind in reverse start order.
  *
  * @typedef {object} PipelineStage
  * @property {string} name
@@ -109,8 +102,7 @@ const stageFields = new Set(['name', 'requires', 'start', 'complete', 'error'])
  *   complete?: Record<string, (invocation: InvocationContext, frame: PipelineFrame) => unknown> |
  *     ((invocation: InvocationContext, frame: PipelineFrame) => Record<string, unknown> | undefined)
  * }} [extract]
- * @property {(frame: PipelineFrame) => boolean} [when]
- * @property {Resolvable<'parent' | 'noop'>} [skip]
+ * @property {(frame: PipelineFrame) => boolean | 'parent' | 'noop'} [when]
  * @property {IntegrationSpanDefinition} [span]
  * @property {PipelineStage[]} [stages]
  */
@@ -164,8 +156,9 @@ const stageFields = new Set(['name', 'requires', 'start', 'complete', 'error'])
  * @property {import('../../../..').Span | undefined} span
  * @property {PipelineStage[] | undefined} startedStages
  * @property {Record<string, unknown>} [pendingTags]
- * @property {boolean} skipped
+ * @property {'parent' | 'noop' | undefined} skipMode
  * @property {boolean} failed
+ * @property {boolean} errorHandled
  */
 
 const orchestrionSource = {
@@ -201,7 +194,7 @@ function result (...path) {
   return invocation => readPath(invocation.result, path)
 }
 
-function field (name) {
+function data (name) {
   return frame => frame.data[name]
 }
 
@@ -468,7 +461,7 @@ function runStageHook (stage, phase, frame) {
   try {
     stage[phase]?.(frame)
   } catch (error) {
-    log.error('Integration pipeline stage "%s" failed during %s: %s', stage.name, phase, error.message)
+    log.error('Integration pipeline stage "%s" failed during %s: %s', stage.name, phase, describeError(error))
   }
 }
 
@@ -493,7 +486,7 @@ function getParentContext (operation, frame) {
     if (parent !== undefined) return parent
   }
 
-  const activeCorrelation = contextStorage.getStore()?.correlation
+  const activeCorrelation = legacyStorage.getStore()?.correlation
   if (activeCorrelation?.[spanContextKey]) return activeCorrelation[spanContextKey]
   return legacyStorage.getStore()?.span
 }
@@ -519,17 +512,21 @@ function prepareOperation (plugin, operation, invocation, states) {
     parent: undefined,
     span: undefined,
     startedStages: operation.stages.length > 0 ? [] : undefined,
-    skipped: false,
+    skipMode: undefined,
     failed: false,
+    errorHandled: false,
   }
   const frame = new IntegrationFrame(plugin, invocation, state)
   state.frame = frame
   if (operation.sharesStartState) states.set(invocation, state)
 
   extractStart(operation.startExtractors, invocation, frame)
-  if (operation.when && !operation.when(frame)) {
-    state.skipped = true
-    return state
+  if (operation.when) {
+    const decision = operation.when(frame)
+    if (!decision || decision === 'parent' || decision === 'noop') {
+      state.skipMode = decision === 'noop' ? 'noop' : 'parent'
+      return state
+    }
   }
 
   if (!operation.sharesStartState) states.set(invocation, state)
@@ -538,28 +535,19 @@ function prepareOperation (plugin, operation, invocation, states) {
   return state
 }
 
-function bindContext (plugin, operation, invocation, states) {
-  const state = prepareOperation(plugin, operation, invocation, states)
-  const parentStore = contextStorage.getStore()
-  invocation.parentContextStore = parentStore
-  if (state.skipped || state.failed) return parentStore
-
-  invocation.currentContextStore = { ...parentStore, correlation: state.frame.correlation }
-  return invocation.currentContextStore
-}
-
 function bindLegacySpan (plugin, operation, invocation, states) {
   const state = prepareOperation(plugin, operation, invocation, states)
   const parentStore = legacyStorage.getStore()
   if (state.failed) return parentStore
-  if (state.skipped) {
-    return resolveValue(operation.skip, state.frame) === 'noop' ? { noop: true } : parentStore
-  }
+  if (state.skipMode) return state.skipMode === 'noop' ? { noop: true } : parentStore
 
   startStages(state, operation.contextStages)
-  if (parentStore?.noop && !Object.hasOwn(invocation, 'currentStore')) return parentStore
+  const currentStore = operation.contextStages.length > 0
+    ? { ...parentStore, correlation: state.frame.correlation }
+    : parentStore
+  if (parentStore?.noop) return currentStore
   if (!operation.span || (operation.span.enabled !== undefined && !resolveValue(operation.span.enabled, state.frame))) {
-    return parentStore
+    return currentStore
   }
 
   const span = operation.span
@@ -572,28 +560,28 @@ function bindLegacySpan (plugin, operation, invocation, states) {
     kind: resolveValue(span.kind, state.frame),
     meta: resolveRecord(operation.tagResolvers, state.frame),
     metrics: resolveRecord(operation.metricResolvers, state.frame),
-  }, invocation)
+  }, false)
   if (state.pendingTags) state.span.addTags(state.pendingTags)
-  return invocation.currentStore
-}
-
-function bindSpan (plugin, operation, invocation, states) {
-  if (operation.contextStages.length === 0 && legacyStorage.getStore()?.noop) return spanStorage.getStore()
-  const state = prepareOperation(plugin, operation, invocation, states)
-  if (state.skipped || state.failed || !state.span) return spanStorage.getStore()
-  return { ...spanStorage.getStore(), span: state.span }
+  return { ...currentStore, span: state.span }
 }
 
 function beginOperation (operation, invocation, states) {
   const state = states.get(invocation)
-  if (!state || state.skipped || state.failed || !state.span) return
+  if (!state || state.skipMode || state.failed || !state.span) return
   startStages(state, operation.tracingStages)
 }
 
 function errorOperation (plugin, operation, invocation, states) {
   const state = states.get(invocation)
-  if (!state || state.skipped) return
-  if (state.span) plugin.addError(invocation.error, state.span)
+  if (!state || state.errorHandled) return
+  state.errorHandled = true
+  if (state.skipMode) return
+
+  try {
+    plugin.addError(invocation.error, state.span)
+  } catch (error) {
+    logOperationFailure(plugin, operation, 'error', error)
+  }
   unwindStages(state, 'error')
 }
 
@@ -602,7 +590,7 @@ function completeOperation (plugin, operation, invocation, states) {
   if (!state) return
 
   try {
-    if (state.skipped) return
+    if (state.skipMode) return
     if (!state.failed) {
       try {
         extractComplete(operation.completeExtractors, invocation, state.frame)
@@ -617,7 +605,11 @@ function completeOperation (plugin, operation, invocation, states) {
     unwindStages(state, 'complete')
   } finally {
     states.delete(invocation)
-    if (state.span) plugin.finish(invocation)
+    try {
+      state.span?.finish()
+    } catch (error) {
+      logOperationFailure(plugin, operation, 'complete', error)
+    }
   }
 }
 
@@ -626,7 +618,7 @@ function completeOperation (plugin, operation, invocation, states) {
  *
  * @param {TracingPlugin} plugin
  * @param {NormalizedOperation} operation
- * @param {'start' | 'complete'} phase
+ * @param {'start' | 'error' | 'complete'} phase
  * @param {unknown} error
  * @returns {void}
  */
@@ -636,8 +628,25 @@ function logOperationFailure (plugin, operation, phase, error) {
     plugin.constructor.id,
     operation.target.name,
     phase,
-    error?.message || error
+    describeError(error)
   )
+}
+
+/**
+ * Convert an arbitrary thrown value into a safe log message.
+ *
+ * @param {unknown} error
+ * @returns {string}
+ */
+function describeError (error) {
+  try {
+    if (error === null) return 'null'
+    if (error === undefined) return 'undefined'
+    if (typeof error === 'string') return error
+    return typeof error.message === 'string' ? error.message : 'Unknown error'
+  } catch {
+    return 'Unknown error'
+  }
 }
 
 function bindSafely (plugin, operation, message, source, states, store, bind) {
@@ -650,6 +659,24 @@ function bindSafely (plugin, operation, message, source, states, store, bind) {
     if (state) state.failed = true
     logOperationFailure(plugin, operation, 'start', error)
     return store.getStore()
+  }
+}
+
+/**
+ * Isolate source normalization and lifecycle handling from the diagnostic-channel subscriber.
+ *
+ * @param {TracingPlugin} plugin
+ * @param {NormalizedOperation} operation
+ * @param {unknown} message
+ * @param {IntegrationSource} source
+ * @param {'start' | 'error' | 'complete'} phase
+ * @returns {InvocationContext | undefined}
+ */
+function normalizeSafely (plugin, operation, message, source, phase) {
+  try {
+    return source.invocation(message)
+  } catch (error) {
+    logOperationFailure(plugin, operation, phase, error)
   }
 }
 
@@ -731,9 +758,10 @@ function validateDefinition (definition) {
     if (lifecycle !== 'sync' && lifecycle !== 'async') {
       throw new TypeError(`Integration operation "${target.name}" requires a sync or async lifecycle`)
     }
-    if (operation.skip !== undefined && typeof operation.skip !== 'function' &&
-      operation.skip !== 'parent' && operation.skip !== 'noop') {
-      throw new TypeError(`Integration operation "${target.name}" has an invalid skip mode`)
+    if (Object.hasOwn(operation, 'skip')) {
+      throw new TypeError(
+        `Integration operation "${target.name}" no longer supports skip; return "parent" or "noop" from when`
+      )
     }
     if (operation.when !== undefined && typeof operation.when !== 'function') {
       throw new TypeError(`Integration operation "${target.name}" requires a when function`)
@@ -817,50 +845,41 @@ function createIntegrationPlugin (definition) {
       const states = new WeakMap()
       for (const operation of operations) {
         const channels = source.channels(operation.target)
-        const invocation = message => source.invocation(message)
 
-        const contextSubscriptionOptions = operation.contextStages.length > 0 ? { allowNoop: true } : undefined
-        const bindContextStore = message =>
-          bindSafely(this, operation, message, source, states, contextStorage, bindContext)
-        const bindTracingStore = message =>
-          bindSafely(this, operation, message, source, states, spanStorage, bindSpan)
-
-        // Register only the capability stores used by stages. Legacy storage remains the common span lifecycle block
-        // and sits between context and tracing regardless of the diagnostic-channel store implementation.
-        if (storeBindingsRunInRegistrationOrder && operation.contextStages.length > 0) {
-          this.addStoreBind(channels.start, contextStorage, bindContextStore)
-        }
-        if (!storeBindingsRunInRegistrationOrder && operation.tracingStages.length > 0) {
-          this.addStoreBind(channels.start, spanStorage, bindTracingStore)
-        }
+        const startOptions = operation.contextStages.length > 0 ? { allowNoop: true } : undefined
         this.addBind(channels.start,
           message => bindSafely(this, operation, message, source, states, legacyStorage, bindLegacySpan),
-          contextSubscriptionOptions)
-        if (storeBindingsRunInRegistrationOrder && operation.tracingStages.length > 0) {
-          this.addStoreBind(channels.start, spanStorage, bindTracingStore)
-        }
-        if (!storeBindingsRunInRegistrationOrder && operation.contextStages.length > 0) {
-          this.addStoreBind(channels.start, contextStorage, bindContextStore)
-        }
+          startOptions)
         if (operation.tracingStages.length > 0) {
-          this.addSub(channels.start, message => beginOperation(operation, invocation(message), states))
+          this.addSub(channels.start, message => {
+            const invocation = normalizeSafely(this, operation, message, source, 'start')
+            if (invocation) beginOperation(operation, invocation, states)
+          })
         }
-        this.addSub(channels.error,
-          message => errorOperation(this, operation, invocation(message), states), contextSubscriptionOptions)
 
-        // A rejected operation may bind a no-op legacy scope. Completion must still delete its WeakMap state.
-        const completionOptions = { allowNoop: true }
+        // Lifecycle notifications must still reach state created outside, or intentionally inside,
+        // a legacy no-op scope.
+        const lifecycleOptions = { allowNoop: true }
+        this.addSub(channels.error, message => {
+          const invocation = normalizeSafely(this, operation, message, source, 'error')
+          if (invocation) errorOperation(this, operation, invocation, states)
+        }, lifecycleOptions)
 
-        if (operation.lifecycle === 'sync') {
-          this.addSub(channels.end,
-            message => completeOperation(this, operation, invocation(message), states), completionOptions)
-        } else {
-          this.addSub(channels.end, message => {
-            const current = invocation(message)
-            if (current.error !== undefined) completeOperation(this, operation, current, states)
-          }, completionOptions)
-          this.addSub(channels.asyncEnd,
-            message => completeOperation(this, operation, invocation(message), states), completionOptions)
+        this.addSub(channels.end, message => {
+          const invocation = normalizeSafely(this, operation, message, source, 'complete')
+          if (!invocation) return
+
+          const state = states.get(invocation)
+          if (operation.lifecycle === 'sync' ||
+            (state && (state.errorHandled || Object.hasOwn(invocation, 'result')))) {
+            completeOperation(this, operation, invocation, states)
+          }
+        }, lifecycleOptions)
+        if (operation.lifecycle === 'async') {
+          this.addSub(channels.asyncEnd, message => {
+            const invocation = normalizeSafely(this, operation, message, source, 'complete')
+            if (invocation) completeOperation(this, operation, invocation, states)
+          }, lifecycleOptions)
         }
       }
     }
@@ -879,7 +898,7 @@ function createIntegrationPlugin (definition) {
 module.exports = {
   argument,
   createIntegrationPlugin,
-  field,
+  data,
   result,
   self,
 }

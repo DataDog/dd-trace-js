@@ -21,7 +21,7 @@ instrumented library call
   -> error hooks run if the call fails
   -> result data is extracted
   -> stages complete in reverse order
-  -> optional span finishes and async stores are restored
+  -> optional span finishes and async storage is restored
 ```
 
 Pub/sub is therefore still the transport. The pipeline is the orchestration layer between an instrumentation event
@@ -31,13 +31,13 @@ and the products that act on that event.
 
 | File | Responsibility |
 | --- | --- |
-| `packages/dd-trace/src/plugins/integration-pipeline.js` | Definition compiler, lifecycle engine, stores, correlation facade, and default Orchestrion source adapter. |
-| `packages/dd-trace/src/plugins/integration-pipeline-agent-guide.md` | Agent handoff, declaration reference, migration workflow, invariants, verification, and open work. |
+| `packages/dd-trace/src/plugins/integration-pipeline.js` | Definition compiler, lifecycle engine, storage, correlation facade, and default Orchestrion source adapter. |
+| `packages/dd-trace/src/plugins/integration-pipeline-agent-guide.md` | Concise agent context for the pipeline contract, phases, capabilities, invariants, and boundaries. |
 | `packages/dd-trace/src/plugins/stages/code-origin.js` | Shared exit code-origin capability. |
 | `packages/dd-trace/src/plugins/stages/messaging.js` | Shared propagation and Data Streams capability, parameterized by a per-operation message descriptor. |
 | `packages/dd-trace/src/opentracing/span_context_factory.js` | Creates a real `DatadogSpanContext` without creating a span and lets a later span adopt it once. |
 | `packages/dd-trace/src/opentracing/tracer.js` | Exposes internal context reservation and accepts an already reserved context when starting a span. |
-| `packages/dd-trace/src/plugins/plugin.js` | Supports binding named stores and subscribing inside a legacy no-op scope when requested. |
+| `packages/dd-trace/src/plugins/plugin.js` | Supports lifecycle subscribers and bindings inside a legacy no-op scope when requested. |
 | `packages/datadog-plugin-bullmq/src/index.js` | Compiles the BullMQ integration definition into the plugin-manager class. |
 | `packages/datadog-plugin-bullmq/src/producer.js` | Producer operation declarations, telemetry-metadata carrier codec, and outbound message descriptors. |
 | `packages/datadog-plugin-bullmq/src/consumer.js` | Consumer declaration, carrier extraction, parent selection, and inbound message descriptor. |
@@ -89,10 +89,10 @@ An operation has the following main parts:
 - `context.parent` can override the inherited correlation parent.
 - `span` describes optional recording behavior.
 - `stages` contain ordered product work.
-- `skip: 'noop'` asks a rejected operation to suppress nested legacy tracing rather than simply inherit its parent.
-  It may also be a frame resolver when one source target needs different skip behavior for different invocations.
+- `when` returns `true` to trace, `false` or `'parent'` to reject while inheriting the parent store, and `'noop'` to
+  reject while suppressing nested legacy tracing. The pipeline evaluates this decision once per invocation.
 
-Helper extractors such as `argument(0)`, `self('name')`, `result('status')`, and `field('queueName')` keep common paths
+Helper extractors such as `argument(0)`, `self('name')`, `result('status')`, and `data('queueName')` keep common paths
 short. An ordinary function is used when extraction needs integration-specific behavior. Span `tags`, `metrics`, and
 `resultTags` likewise accept either per-field records or a function returning the complete record, so shared parsing
 and allocation happen once.
@@ -114,31 +114,26 @@ tracing:orchestrion:bullmq:Queue_add
 The pipeline accepts a different `definition.source`, so the lifecycle engine itself does not construct or understand
 other event-source formats.
 
-## 4. Start bindings establish three nested stores
+## 4. Start bindings establish one compatibility store
 
-Every operation registers the legacy binding plus only the capability stores its stages use. Diagnostic-channel
-implementations enter multiple stores in different orders, so the pipeline chooses their registration order to preserve
-this effective nesting:
+Every operation registers one legacy-store binding:
 
 ```text
-storage('context')
-  -> storage('legacy')
-    -> storage('span')
-      -> start subscribers and original function
+storage('legacy') {
+  correlation,
+  span,
+  ...existingProductState
+}
+  -> start subscribers and original function
 ```
 
-The stores have deliberately different meanings:
+Correlation is reserved before optional span creation, and context stages receive it through the frame. The returned
+legacy store carries that correlation during the library call whenever context stages need span-independent async
+propagation. If recording is enabled, the same store also carries the materialized span for existing tracer and product
+code. When the diagnostic-channel scope exits, the storage implementation restores the parent store automatically.
 
-| Store | Value and purpose |
-| --- | --- |
-| `storage('context')` | Span-independent product context, currently including `correlation`. |
-| `storage('span')` | The active recording span, when one was materialized. |
-| `storage('legacy')` | Compatibility store used by existing tracer and plugin code during migration. |
-
-The context binding is outermost so correlation exists before the compatibility binding decides whether to create a
-span. The named span store is innermost so tracing-dependent stages and the library call can observe it.
-
-When the diagnostic-channel scope exits, the storage implementation restores every parent store automatically.
+This keeps the context and recording contracts separate without maintaining multiple async stores before a real
+non-tracing product establishes the permanent context-store shape.
 
 ## 5. Preparation extracts data and reserves correlation
 
@@ -157,11 +152,11 @@ Preparation happens once:
 The parent is selected from the first available source:
 
 1. `operation.context.parent`, when explicitly declared;
-2. the correlation in the active context store;
-3. the active span in the legacy store.
+2. the correlation in the active legacy store;
+3. the active span in that store.
 
-A rejected operation stops before context allocation, stages, or tracing. Its bindings return either the inherited
-store or a legacy no-op store according to `skip`.
+A rejected operation stops before context allocation, stages, or tracing. Its binding returns either the inherited
+store or a legacy no-op store according to the `when` decision.
 
 ## 6. Correlation exists independently of a span
 
@@ -185,7 +180,7 @@ materialization and every tracing-dependent stage while preserving context-stage
 
 ## 7. Context stages run before tracing
 
-Stages without a requirement start as soon as the context and legacy scopes are active:
+Stages without a requirement start after correlation is reserved and before optional span creation:
 
 ```js
 const contextStage = {
@@ -218,7 +213,7 @@ The span context factory permits that context to be materialized once. Consequen
 IDs visible to context stages == IDs injected through correlation == IDs recorded by the span
 ```
 
-The pipeline then binds the span in `storage('span')` and starts stages that explicitly declare:
+The pipeline includes the span in the returned legacy store and starts stages that explicitly declare:
 
 ```js
 requires: ['tracing']

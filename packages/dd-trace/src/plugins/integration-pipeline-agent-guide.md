@@ -1,369 +1,172 @@
-# IntegrationPipeline agent guide
+# Integration Pipeline: agent context
 
-This is the implementation and migration guide for agents continuing the experimental `IntegrationPipeline` work.
-It is intentionally more prescriptive than the design notes: it documents the current executable contract, the
-invariants migrations must preserve, and the checks required before changing or adopting the pipeline.
+The Integration Pipeline is an internal, experimental architecture for authoring dd-trace integrations as operation
+definitions instead of bespoke plugin lifecycles. It is designed for Orchestrion's uniform function lifecycle and is not a
+public API.
 
-The pipeline is internal and experimental. It is not a public API, and its declaration shape may still change.
+## Objective
 
-## Current checkpoint (2026-08-17)
+An integration should describe what is unique about a library operation:
 
-At this checkpoint, branch `pabloerhard/feat-new-orchestrion-pipeline` has reached this implementation state:
+- which source function is observed;
+- how arguments and results become semantic data;
+- whether the invocation should be instrumented;
+- what the optional span looks like;
+- which reusable product capabilities run.
 
-- BullMQ is the first full pipeline migration and exercises producer, consumer, propagation, and DSM stages.
-- Azure Cosmos is migrated to one async pipeline operation with schema-driven service naming and explicit peer-service
-  and code-origin stages.
-- The generated class always extends `TracingPlugin`; definitions cannot inherit behavior through a configurable base.
-  `skip` remains a literal or frame resolver.
-- Correlation context is reserved before optional span materialization. The materialized span adopts the same context,
-  preserving IDs exposed to span-independent stages.
-- The compiler installs context/span stores only for operations whose stages need them. Frames, correlation strings,
-  capability blocks, stage arrays, and retained state are lazy or omitted on paths that do not use them.
-- Start/completion extraction and span tag records support coarse whole-record functions, letting integrations compute
-  shared semantic facts once instead of assembling them through many resolver calls.
-- Azure Cosmos preserves request-level deduplication, empty-path account-read suppression, service naming, resource and
-  response tags, error handling, analytics, peer-service behavior, and CJS/ESM coverage.
+The pipeline owns the mechanics that should not vary between integrations: channel subscriptions, invocation state,
+parent selection, context reservation, async storage, optional span creation, stage ordering, errors, completion, and
+cleanup.
 
-Verification completed at this checkpoint:
-
-- focused pipeline and Azure Cosmos tests: 21 passing;
-- Azure Cosmos CI-equivalent matrix against `@azure/cosmos` 4.4.1 and 4.10.0, including ESM: 22 passing;
-- BullMQ regression matrix after shared compiler optimization: 126 passing;
-- Azure Cosmos changed production source: 100% line coverage;
-- focused ESLint and `git diff --check`: passing.
-
-Repository-wide lint is not a valid clean-checkout signal in the current local workspace because it traverses an
-unrelated nested worktree, generated integration-test artifacts, and a pre-existing OpenTracing indentation error.
-Do not use that observation to waive focused lint or CI on subsequent changes.
-
-## Read these files first
-
-| File | Why it matters |
-| --- | --- |
-| [`integration-pipeline.js`](./integration-pipeline.js) | Authoritative implementation, JSDoc types, validation, lifecycle, stores, and exported helpers. |
-| [`integration-pipeline.spec.js`](../../test/plugins/integration-pipeline.spec.js) | Executable contract for ordering, correlation, spanless operations, errors, no-op scopes, and validation. |
-| [`stages/code-origin.js`](./stages/code-origin.js) | Shared exit code-origin capability. |
-| [`stages/messaging.js`](./stages/messaging.js) | Shared propagation and Data Streams capability. Read before hand-writing either in a plugin. |
-| [`stages/peer-service.js`](./stages/peer-service.js) | Shared outbound peer-service finalization. |
-| [`stages/messaging.spec.js`](../../test/plugins/stages/messaging.spec.js) | Executable contract for edge tags, carrier sharing, batching, gating, and inbound decode ordering. |
-| [`INTEGRATION_PIPELINE_NOTES.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_NOTES.md) | Mechanical walkthrough using BullMQ and Azure Cosmos. |
-| [`INTEGRATION_PIPELINE_RATIONALE.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_RATIONALE.md) | Adoption argument, architecture score, risks, and rollout criteria. |
-| [BullMQ plugin](../../../datadog-plugin-bullmq/src/index.js) | Messaging integration using multiple operations and product stages. |
-| [Azure Cosmos plugin](../../../datadog-plugin-azure-cosmos/src/index.js) | Database integration using explicit naming and outbound stages with a resolved skip mode. |
-| [Orchestrion config index](../../../datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js) | Registration point for source-rewriter definitions. |
-
-Before changing an integration or its Orchestrion match, read the relevant upstream library source for the oldest and
-newest supported versions. Inspect the matched function, its callers, its result and error shapes, and sibling paths
-that may publish the same logical operation.
-
-## What the pipeline owns
-
-Instrumentation still observes library calls and publishes diagnostic-channel lifecycle events. The pipeline compiles
-an integration definition into a plugin class and owns the common work after publication:
+## Lifecycle
 
 ```text
-source event
+Orchestrion event
   -> normalize invocation
   -> extract start data
-  -> gate operation
-  -> select parent and reserve correlation IDs
-  -> bind context store
-  -> start span-independent stages
-  -> optionally materialize and bind a span
+  -> evaluate the operation gate
+  -> select a parent and reserve correlation context
+  -> start context stages
+  -> optionally materialize a span
+  -> bind correlation and the optional span in legacy storage
   -> start tracing-dependent stages
   -> run the library function
-  -> record errors and unwind error hooks
+  -> observe error and terminal events
   -> extract completion data and apply result tags
-  -> unwind completion hooks
-  -> finish the span and restore stores
+  -> unwind started stages in reverse order
+  -> finish the optional span and delete invocation state
 ```
 
-An integration definition should contain integration-specific facts. It should not recreate subscriptions, async
-storage, span cleanup, or source lifecycle routing.
+Rejected operations stop before context reservation, stages, and span creation. They run the library function under the
+inherited or no-op legacy store selected by the `when` decision.
 
-## Definition reference
-
-The top-level definition passed to `createIntegrationPlugin` has this shape:
+## Definition shape
 
 ```js
-createIntegrationPlugin({
-  id: 'integration-id',
-  source,               // optional; defaults to the Orchestrion adapter
-  configure,            // optional config transformation
-  operations: [],       // required and non-empty
+const Plugin = createIntegrationPlugin({
+  id: 'example',
+  configure: config => config,
+  operations: [{
+    target: { module: '@example/client', name: 'Client_request' },
+    lifecycle: 'async',
+    extract: {
+      start: {
+        request: argument(0),
+        resource: invocation => normalizeResource(invocation.arguments[0]),
+      },
+      complete: {
+        status: result('status'),
+      },
+    },
+    when: frame => shouldInstrument(frame.data.request),
+    context: {
+      parent: frame => frame.data.remoteParent,
+    },
+    span: {
+      enabled: frame => true,
+      name: 'example.request',
+      service: frame => frame.config.service,
+      resource: data('resource'),
+      type: 'custom',
+      kind: 'client',
+      tags: frame => frame.data.tags,
+      resultTags: {
+        'example.status': data('status'),
+      },
+    },
+    stages: [contextStage, tracingStage],
+  }],
 })
 ```
 
-### `id`
+`target.module` and `target.name` must match the Orchestrion module and `channelName`. `lifecycle: 'sync'` completes on
+`end`. `lifecycle: 'async'` normally completes on `asyncEnd`; the default source classifies an `end` after an observed
+error or newly added result as synchronous completion. Later terminal events are ignored.
 
-The existing integration ID used by the plugin manager, configuration, telemetry, and integration tagging.
+## Extraction and gating
 
-### `source`
+`extract.start` runs before the gate and before any context or span allocation. `extract.complete` runs after the result
+or error is available and before result tags and stage completion.
 
-An optional source adapter with two methods:
+An extractor may be a field record or one function returning the complete data record. Prefer the complete-record form
+when several fields share parsing or traversal.
 
-```js
-{
-  channels (target) {
-    return { start, end, asyncEnd, error }
-  },
-  invocation (message) {
-    return normalizedInvocation
-  },
-}
-```
+Helpers:
 
-The default adapter maps a target to Orchestrion channels:
+- `argument(index, ...path)` reads an invocation argument;
+- `self(...path)` reads the receiver;
+- `result(...path)` reads the completed result;
+- `data(name)` reads `frame.data[name]` from a frame resolver.
+
+`when` makes the complete gate decision and is evaluated once:
+
+- a truthy value other than `'parent'` or `'noop'`: accept and trace the operation;
+- a falsy value or `'parent'`: reject and inherit the active legacy store;
+- `'noop'`: reject and suppress nested legacy tracing.
+
+A gate controls only this pipeline operation. It must not reduce source-channel publication cardinality required by
+AppSec, IAST, or other subscribers.
+
+## Context and recording are separate phases
+
+The pipeline reserves a real `DatadogSpanContext` before optional span creation. A later span adopts that context once,
+so IDs observed before recording are the IDs written by the span.
+
+A stage without `requires` is a context stage. It runs after correlation is reserved and before a span exists. Context
+stages still run when:
+
+- the operation has no `span` definition;
+- `span.enabled` resolves to false;
+- an inherited legacy no-op scope suppresses recording.
+
+A stage with `requires: ['tracing']` runs only after a span is materialized and bound. In this API, `tracing` currently
+means that a recording span is available.
+
+The compiler partitions stages by this requirement: all context stages start before all tracing-dependent stages, while
+preserving order inside each group. Declare context stages first; otherwise runtime order differs from array order.
+Terminal hooks unwind the actual start order in reverse.
+
+The current runtime uses one compatibility store:
 
 ```text
-tracing:orchestrion:<target.module>:<target.name>:start
-tracing:orchestrion:<target.module>:<target.name>:end
-tracing:orchestrion:<target.module>:<target.name>:asyncEnd
-tracing:orchestrion:<target.module>:<target.name>:error
-```
-
-The normalized invocation object must have an `arguments` array. Critically, the adapter must return the same object
-identity for every lifecycle event belonging to one call. Pipeline state is held in a `WeakMap` keyed by that object;
-returning a fresh wrapper for `error` or `asyncEnd` loses the state and leaks the operation lifecycle.
-
-No non-Orchestrion source has been adopted yet. Add a new adapter only when a real integration requires it and pin its
-identity and terminal-event contract in pipeline tests.
-
-### `configure`
-
-An optional function applied to non-boolean plugin configuration before `TracingPlugin` is configured:
-
-```js
-configure: config => ({ ...config, compiledFilter: compileFilter(config) })
-```
-
-Boolean enable/disable calls bypass this transformation. Never allow user configuration callbacks to throw into an
-instrumented application; catch and log integration-specific callback failures where they are invoked.
-
-## Operation reference
-
-Each operation describes one observed source function:
-
-```js
-{
-  target: { module: '@example/client', name: 'Client_request' },
-  lifecycle: 'async',
-  extract: {
-    start: {},
-    complete: {},
-  },
-  when: frame => true,
-  skip: 'parent',
-  context: {
-    parent: frame => null,
-  },
-  span: {},
-  stages: [],
+storage('legacy') {
+  correlation,   // reserved context when a context stage needs it
+  span,          // optional materialized recording span
+  ...existingProductState
 }
 ```
 
-### `target`
+The frame and stage phases keep correlation logically independent from recording without paying for separate async
+stores before a non-tracing product demonstrates that need. Adding a context stage also installs its reserved context
+as the preferred parent for nested pipeline operations. A
+context-only operation can therefore act as a non-recording parent boundary. If the boundary is never materialized, a
+nested recorded span intentionally uses the reserved span ID as `parent_id` even though no local span with that ID is
+emitted. Do not assume a context stage merely observes the existing parent identity.
 
-Identifies the source event. With the default adapter, `module` and `name` must exactly match the Orchestrion module
-and `channelName`. Duplicate targets in one definition are rejected.
+## Frame capabilities
 
-### `lifecycle`
+Stages receive a `PipelineFrame`, not the plugin, tracer, raw span, or mutable pipeline state.
 
-- `sync`: completion runs on `end`.
-- `async`: promise/callback completion runs on `asyncEnd`. A synchronous failure may complete on `end` when the
-  invocation already contains `error`.
+| Surface | Contract |
+| --- | --- |
+| `frame.invocation` | Normalized `arguments`, `self`, and eventual `result` or `error`. |
+| `frame.data` | Integration-specific semantic data shared by extractors, span resolvers, and stages. |
+| `frame.config` | Configured integration options. |
+| `frame.correlation` | Reserved trace/span IDs and injection backed by the reserved context. |
+| `frame.trace.setTag()` | Writes to the span or buffers until one is materialized; discarded if no span is created. |
+| `frame.propagation.extract()` | Extracts a remote parent from a carrier. |
+| `frame.dataStreams` | Decodes DSM context and records checkpoints. |
+| `frame.serviceName()` | Resolves schema-aware service naming for the integration. |
 
-The source instrumentation kind and operation lifecycle must agree. Orchestrion does not publish legacy `finish`.
+Correlation IDs are safe to read in a context stage. Trace injection from a newly reserved root context is not yet a
+general context-stage capability because priority sampling may require a materialized span. Keep injection in a
+tracing-dependent stage until context-level sampling exists.
 
-### `extract.start`
-
-A record of semantic field extractors or one whole-record extractor. With a record, each extractor receives
-`(invocation, frame)`, and its return value is assigned immediately to `frame.data` under the same key:
-
-```js
-extract: {
-  start: {
-    request: argument(0),
-    host: self('options', 'host'),
-    resource: invocation => normalizeResource(invocation.arguments[0]),
-  },
-}
-```
-
-When several fields share parsing, traversal, or allocation, return the complete semantic data record in one call:
+## Stage contract
 
 ```js
-extract: {
-  start: invocation => {
-    const request = invocation.arguments[0]
-    const target = parseTarget(request.url)
-    return {
-      request,
-      resource: target.resource,
-      tags: target.tags,
-    }
-  },
-}
-```
-
-The whole-record form becomes `frame.data` directly. It avoids an intermediate wrapper, an entry loop, and repeated
-work, so prefer it when the fields are naturally computed together. Its contract is the complete start-data record;
-it receives only `invocation` because no earlier `frame.data` exists yet.
-
-Start extraction runs before `when`, parent selection, correlation allocation, stages, or span creation. Rejected
-operations therefore pay extraction cost but do not reserve IDs or start product work.
-
-Extractors currently execute in record insertion order, and later extractors can observe earlier `frame.data` fields.
-Avoid depending on that ordering when the same values can be derived directly from the invocation; hidden ordering
-dependencies make declarations harder to rearrange and review.
-
-### `extract.complete`
-
-Completion extraction accepts the same field-record form and may also be a function returning a record. Returned
-completion fields are merged into the existing start data after `result` or `error` is available:
-
-```js
-extract: {
-  complete: {
-    status: result('status'),
-  },
-}
-```
-
-```js
-extract: {
-  complete: invocation => ({ status: invocation.result?.status }),
-}
-```
-
-They run before `span.resultTags` and stage completion hooks.
-
-### Extractor helpers
-
-- `argument(index, ...path)` reads an argument and optional nested path.
-- `self(...path)` reads the receiver and optional nested path.
-- `result(...path)` reads the completed result and optional nested path.
-- `field(name)` is a frame resolver returning `frame.data[name]`; it is not an invocation extractor by itself.
-
-For example, this correctly extracts and then uses a resource:
-
-```js
-extract: {
-  start: {
-    resource: invocation => normalizeResource(invocation.arguments[0]),
-  },
-},
-span: {
-  name: 'example.request',
-  resource: field('resource'),
-},
-```
-
-If no extractor or stage assigns `frame.data.resource`, then `field('resource')` resolves to `undefined`.
-
-### `when`
-
-An early gate evaluated after start extraction. Returning `false` marks the operation as rejected.
-
-A rejected operation:
-
-- reserves no correlation context;
-- starts no stages;
-- creates no span;
-- does not run completion extraction or result tags;
-- still runs the original library call under the store selected by `skip`.
-
-The gate must not reduce diagnostic-channel publication cardinality. Instrumentation should still publish once per
-source call when AppSec, IAST, or another subscriber requires each invocation. The pipeline gate controls this
-operation's work after publication; it is not a reason to move the instrumentation publish behind a dedupe gate.
-
-### `skip`
-
-Controls the legacy store for a rejected operation:
-
-- `parent` or omitted: inherit the active legacy store.
-- `noop`: bind `{ noop: true }`, suppressing nested legacy tracing.
-- resolver: return either mode from the extracted frame.
-
-Azure Cosmos uses a resolver because duplicate request-level hooks should inherit their enclosing operation span,
-while empty-path account reads must suppress their nested HTTP span.
-
-`skip` is evaluated only for a rejected operation. Its frame has start-extracted data but no correlation context.
-
-The current split between `when` and a resolved `skip` can evaluate the same predicate twice. A future combined gate
-result may be cleaner, but do not change the contract without updating validation, lifecycle tests, both migrations,
-and these documents.
-
-### `context.parent`
-
-Overrides parent selection. Parent precedence is:
-
-1. explicitly declared `context.parent`;
-2. correlation from the active `storage('context')` store;
-3. span from the active `storage('legacy')` store.
-
-Use this for extracted remote parents, as BullMQ consumer propagation does. Returning `undefined` falls back to the
-active context. Returning `null` explicitly requests a root context.
-
-### `span`
-
-Omit `span` for a correlation-only operation. When present, it supports:
-
-```js
-span: {
-  enabled: frame => true,
-  name: 'example.request',
-  service: frame => frame.config.service,
-  resource: field('resource'),
-  type: 'custom',
-  kind: 'client',
-  tags: {
-    'example.peer': field('peer'),
-  },
-  metrics: {
-    'example.count': field('count'),
-  },
-  resultTags: {
-    'example.status': field('status'),
-  },
-}
-```
-
-`tags`, `metrics`, and `resultTags` can instead be a function returning the complete record. This is the preferred
-form when several fields come from one parsed object or when the integration already built a tag block during start
-extraction:
-
-```js
-span: {
-  name: 'example.request',
-  tags: frame => frame.data.tags,
-  resultTags: frame => buildResultTags(frame.invocation.result, frame.invocation.error),
-}
-```
-
-Every field marked resolvable accepts either a literal or `frame => value`. Resolver functions are called without a
-meaningful `this`; use only their frame argument.
-
-- `enabled` is evaluated after span-independent stages start. When false, those stages still complete, but no span or
-  tracing-dependent stage starts.
-- `name` is required when `span` exists.
-- `service`, `resource`, `type`, `kind`, `tags`, and `metrics` resolve when the span is materialized.
-- Tag and metric entries resolving to `undefined` are omitted.
-- `resultTags` resolves during completion, after `extract.complete`.
-
-Definition records and block functions are compiled once when `createIntegrationPlugin()` runs. Do not add a
-per-invocation map/filter pass when a block can be returned directly.
-
-Do not add a raw span to the frame. Use `frame.trace.setTag()` for narrow annotation needs or design a new bounded
-capability only after multiple integrations demonstrate the requirement.
-
-### `stages`
-
-A stage encapsulates product work:
-
-```js
-{
-  name: 'trace-propagation',
+const stage = {
+  name: 'capability-name',
   requires: ['tracing'],
   start (frame) {},
   error (frame) {},
@@ -371,340 +174,97 @@ A stage encapsulates product work:
 }
 ```
 
-Stages without `requires` start after correlation is bound and before span creation. Stages requiring `tracing` start
-only after a recording span is materialized and bound in `storage('span')`.
+Rules:
 
-Stages start in declaration order and unwind in reverse order. A started stage receives:
+- stages start in compiled phase order and unwind in reverse;
+- a stage is recorded as started before its `start` hook runs, allowing cleanup after partial initialization;
+- failed operations receive `error` hooks and later `complete` hooks;
+- every hook is isolated so a stage failure cannot break the application or prevent remaining cleanup;
+- stages have no private per-invocation state slot; use `frame.data` sparingly and avoid collisions;
+- never expose or reach through to a raw span, tracer, plugin, or invocation state;
+- add a bounded frame capability only when multiple integrations demonstrate the need.
 
-- `error` hooks in reverse order when the invocation fails;
-- `complete` hooks in reverse order when terminal completion runs.
+## Parent selection
 
-On a failed async operation, both `error` and later `complete` hooks may run. Hooks must tolerate that sequence. A
-stage is recorded as started before its `start` hook is invoked, so its terminal hooks can still run if `start` throws.
+The parent is selected in this order:
 
-Every stage hook is isolated by a catch-and-log boundary. A stage failure must not throw into the library or prevent
-other stages and span cleanup from running.
+1. `operation.context.parent`, when it returns a value other than `undefined`;
+2. the active reserved correlation context in `storage('legacy')`;
+3. the active span in that store.
 
-Only the `tracing` requirement exists today. Unknown capabilities fail definition validation.
+Returning `null` from `context.parent` explicitly requests a root. Returning `undefined` falls back to active context.
 
-### Shared capability stages
+## Source adapter contract
 
-Do not hand-write a stage for behavior another integration already needs. Two shared stages exist:
-
-| Stage | Import | Shape |
-| --- | --- | --- |
-| `exitCodeOrigin` | `plugins/stages/code-origin` | Nullary. Declared by naming it; takes no parameters. |
-| `createMessagingStage(descriptor)` | `plugins/stages/messaging` | Parameterized by where the library keeps its messages. |
-
-`exitCodeOrigin` is the model for a reusable stage: it binds to nothing library-specific, so all three BullMQ producer
-operations share the same object. A stage that needs to bind to library data cannot be shared that way, which is what
-`createMessagingStage` exists to solve.
-
-```js
-createMessagingStage({
-  direction: 'out',              // 'out' injects and encodes; 'in' decodes
-  system: 'bullmq',              // Data Streams `type` tag
-  topic: field('queueName'),     // (frame) => string
-  messages: frame => [...],      // (frame) => unknown[] | undefined
-  carrier: newCarrier,           // (message, frame) => object | undefined
-  commit: commitCarrier,         // optional (message, carrier, frame) => void
-  payload: job => job.data,      // optional (message, frame) => unknown, for DSM sizing
-})
-```
-
-The descriptor answers only the library-specific questions: which messages does this invocation handle, where does each
-one carry its Datadog fields, and what sizes its payload. The stage owns everything neither the library nor the
-integration should decide — the edge-tag format, the pathway encoding, the `dsmEnabled` gate, the ordering of injection
-against encoding, and the fact that both write one shared carrier per message.
-
-`carrier` may return a live reference the stage mutates in place (a header map, no `commit` needed) or a detached object
-the integration merges back in `commit` (a serialized envelope). Either way the carrier is read or written exactly once
-per message, so a fused stage costs one JSON round trip where two separate stages cost two.
-
-### When a capability earns a shared stage
-
-A shared, parameterized stage is justified when two or more of these hold. Otherwise write a plain stage local to the
-integration and wait for a second consumer.
-
-- Two capabilities consume the same per-operation input, so that input has to be hoisted above both.
-- It encodes a Datadog-owned format or spec rather than library semantics.
-- It has an ordering constraint against another capability that no per-author array can enforce.
-- Its gate is tracer configuration rather than library state.
-
-Propagation and Data Streams hit all four, which is why they are one stage instead of six. `exitCodeOrigin` hits none,
-which is why it stays a bare object.
-
-## The frame
-
-One `PipelineFrame` is created for each accepted or rejected invocation prepared by the pipeline:
-
-| Field | Contract |
-| --- | --- |
-| `invocation` | Normalized source data: `arguments`, `self`, and later `result` or `error`. |
-| `data` | Per-invocation semantic values populated by extractors and integration code. |
-| `correlation` | Reserved IDs and `inject(format, carrier)` for accepted operations. Undefined while gating a rejection. |
-| `trace` | Narrow annotation capability. Tags are buffered until a span exists and discarded for permanently spanless calls. |
-| `config` | Configured integration options after the optional definition transform. |
-| `serviceName(options)` | Schema-aware resolver that supplies the integration ID and configured plugin options. |
-| `propagation.extract(format, carrier)` | Existing tracer propagation extraction. |
-| `dataStreams.decode(carrier)` | Decode an incoming DSM pathway. |
-| `dataStreams.setCheckpoint(tags, size)` | Create a DSM checkpoint using the operation's trace capability. |
-
-The frame intentionally does not expose the plugin, tracer, raw span, or mutable invocation state. Internal state is
-stored separately in a `WeakMap` and includes the selected parent, reserved span context, actual span, pending tags,
-started stages, and lifecycle flags.
-
-Do not confuse the frame with an Orchestrion `ctx`, JavaScript stack frame, or span. It is the integration-facing
-workspace and capability boundary for one invocation.
-
-Authors pass only the semantic schema coordinates, for example `frame.serviceName({ type: 'storage', kind: 'client' })`.
-The pipeline supplies the integration ID and current plugin configuration; the selected v0/v1 schema owns the default
-name, configuration override, and service-source attribution.
-
-## Store and lifecycle invariants
-
-Diagnostic-channel implementations enter multiple stores in different orders. The pipeline chooses their registration
-order so the effective nesting remains:
+The default source maps targets to Orchestrion channels:
 
 ```text
-storage('context')
-  -> storage('legacy')
-    -> storage('span')
-      -> start subscribers
-      -> original library function
+tracing:orchestrion:<module>:<name>:start
+tracing:orchestrion:<module>:<name>:end
+tracing:orchestrion:<module>:<name>:asyncEnd
+tracing:orchestrion:<module>:<name>:error
 ```
 
-- `storage('context')` carries span-independent correlation.
-- `storage('legacy')` preserves existing tracer/plugin behavior during migration.
-- `storage('span')` carries the recording span for tracing-dependent stages.
+A custom source must create one fresh normalized invocation object with an `arguments` array for each call. It must
+return that exact object identity for every lifecycle event belonging to the call because state is held in a `WeakMap`
+keyed by that object. It must not reuse the object after completion or prepopulate terminal fields such as `error` and
+`result`; add those fields only when the source observes the corresponding event.
 
-An inherited legacy `{ noop: true }` scope suppresses span creation and tracing stages, but accepted operations still
-receive correlation and run span-independent stages. Store restoration is owned by diagnostic-channel binding.
+Every accepted start must eventually publish one terminal `end` or `asyncEnd`, including after an `error`; `error`
+records failure but is not terminal because callback execution may still be pending. Duplicate terminal events are
+ignored. For async operations, the default lifecycle also treats `end` as terminal after an observed error or when the
+source adds a synchronous result. It does not infer failure from a retained error payload.
 
-The pipeline reserves a `DatadogSpanContext` before optional span creation. A later span adopts it exactly once, so IDs
-observed or injected before tracing are the IDs recorded on the span.
+Do not add a source adapter to hide integration-specific streaming, callback, mutation, or result-identity behavior. A
+source belongs here only when it can provide the same bounded invocation lifecycle generically.
 
-Completion always deletes invocation state in a `finally` block. When a span exists, completion calls
-`TracingPlugin#finish(invocation)`. Outbound finalization such as peer-service tagging is declared as a stage instead of
-arriving through inheritance.
+## Invariants
 
-## Reference migrations
+Changes to the pipeline must preserve these properties:
 
-### BullMQ
+- rejected operations allocate no correlation context, start no stages, and create no span;
+- context stages run before optional recording and complete even when recording is suppressed;
+- tracing-dependent stages never start without a materialized span;
+- a materialized span uses the exact reserved context and can adopt it only once;
+- integration-authored failures never throw into the instrumented application;
+- terminal cleanup deletes invocation state and finishes the optional span exactly once;
+- source publication cardinality is unchanged;
+- legacy storage is restored after synchronous and asynchronous calls;
+- hot paths allocate only capabilities and storage fields required by the compiled operation.
 
-BullMQ demonstrates:
+## Current boundaries
 
-- multiple operations in one definition;
-- producer and consumer span shapes;
-- configuration transformation for producer filters;
-- extracted remote-parent selection;
-- four operations sharing one `createMessagingStage` capability through per-operation descriptors;
-- single, batched, and flow-node message sets expressed as `messages` accessors rather than separate stages;
-- argument mutation through `frame.invocation.arguments`;
-- correlation and span IDs remaining identical.
+- The generated class still extends `TracingPlugin`; this is not a tracing-independent product runtime.
+- correlation and the optional recording span currently share `storage('legacy')`; their frame and stage contracts
+  remain separate so a dedicated product-context store can be introduced from a concrete non-tracing requirement.
+- The only stage requirement is `tracing`.
+- Globally disabled tracing uses the no-op tracer and cannot reserve normal independent contexts.
+- Pre-span root propagation does not yet have a complete priority-sampling decision.
+- Only `sync` and `async` operation lifecycles are modeled; unusual streaming or iterator ownership may not fit.
+- The operation and stage declaration shapes are experimental and may change.
 
-Read:
+These boundaries are reasons to extend the architecture from concrete requirements, not reasons to bypass it with raw
+tracer or span access.
 
-- [`src/index.js`](../../../datadog-plugin-bullmq/src/index.js)
-- [`src/producer.js`](../../../datadog-plugin-bullmq/src/producer.js)
-- [`src/consumer.js`](../../../datadog-plugin-bullmq/src/consumer.js)
+## Change checklist
 
-### Azure Cosmos
+Before changing the engine or adding a capability:
 
-Azure Cosmos demonstrates:
+1. Identify the repeated behavior and the exact phase in which it must run.
+2. Keep integration semantics in extractors and reusable product semantics in stages.
+3. Define a narrow capability instead of exposing internals.
+4. Validate invalid declaration combinations at plugin creation time.
+5. Test accepted, rejected, no-op, context-only, optionally recorded, error, and terminal paths as applicable.
+6. Test stage start order, reverse unwind, failure isolation, and store restoration.
+7. Test synchronous throws and asynchronous rejection without inferring lifecycle state from payload values.
+8. Benchmark the real diagnostic-channel lifecycle before adding work to hot integrations.
+9. Keep Node.js store-binding behavior compatible across supported runtimes.
 
-- one async database operation;
-- schema-driven v0/v1 service naming with service-source attribution;
-- explicit peer-service and exit code-origin stages;
-- response and error fields through `resultTags`;
-- a resolved skip mode;
-- preserving request-level dedupe and nested HTTP suppression;
-- source-boundary tests without exporting private helpers.
+## Authoritative files
 
-Read:
-
-- [`src/index.js`](../../../datadog-plugin-azure-cosmos/src/index.js)
-- [`test/get-resource.spec.js`](../../../datadog-plugin-azure-cosmos/test/get-resource.spec.js)
-- [`test/index.spec.js`](../../../datadog-plugin-azure-cosmos/test/index.spec.js)
-
-## Migration workflow
-
-### 1. Establish the legacy behavior inventory
-
-Read the existing instrumentation, plugin, tests, and upstream source. Record:
-
-- source functions and supported versions;
-- sync, promise, callback, iterator, and synchronous-throw behavior;
-- span name, service, resource, type, kind, tags, metrics, and analytics;
-- result and error tags;
-- parent selection and propagation;
-- DSM, AppSec, IAST, or other product work;
-- filter, dedupe, recursion, and no-op rules;
-- nested span behavior for accepted and rejected calls;
-- inherited legacy behavior that must be expressed by the definition or a shared stage;
-- integration configuration and user callbacks;
-- CJS, ESM, browser, or alternate build paths.
-
-Do not migrate from memory. Compare at least the oldest and newest supported upstream versions.
-
-### 2. Audit channel cardinality
-
-Search every published channel and list all subscribers. Decide whether each subscriber needs once-per-call or
-once-per-first-occurrence publication. Keep per-call publishers outside tracing-only dedupe gates when AppSec, IAST,
-or another product depends on argument identity for every invocation.
-
-### 3. Map source targets to operations
-
-Use one operation per observed source target. Keep Orchestrion as the default. If an existing source function can be
-matched statically, do not replace it with shimmer. When shimmer is unavoidable, document the concrete limitation.
-The source adapter is a transport boundary, not an escape hatch for dynamic interception, pre-lifecycle mutation,
-custom streaming or callback ownership, or result-identity constraints. If an adapter would contain operation-specific
-control flow, keep the integration on the existing plugin model until a reusable lifecycle contract emerges.
-
-### 4. Separate semantic extraction from lifecycle
-
-Put argument/result interpretation in extractors and ordinary helper functions. Put product work in stages. Keep
-subscription, state, stores, errors, completion, and span finishing in the pipeline.
-
-### 5. Preserve semantic behavior
-
-Represent operation-specific behavior as reusable stages when it does not require a different lifecycle. For example,
-producer operations use the standard `exitCodeOrigin` stage instead of inheriting the outbound plugin hierarchy.
-Test the observable behavior supplied by the stage; its presence in a declaration is not proof of compatibility.
-
-### 6. Test the real boundary
-
-Prefer actual library calls against the mock agent or a real service/emulator. For declaration-only cases, drive the
-real source channel through `dc.tracingChannel` and assert emitted spans and active stores. Do not export helpers or
-construct fake plugin prototypes only to make internal logic reachable.
-
-At minimum cover:
-
-- successful completion;
-- synchronous throw or promise rejection, as applicable;
-- completion result tags;
-- the last accepted and first rejected boundary of every gate;
-- every sibling path sharing the gate;
-- parent versus no-op rejected behavior;
-- selected standard-stage behavior such as code-origin tagging;
-- context and store restoration;
-- oldest and newest supported package versions;
-- CJS and ESM builds;
-- important changed production lines with scoped coverage.
-
-### 7. Run CI-equivalent verification
-
-Unset externally configured OTLP exporters before span-asserting plugin tests:
-
-```bash
-unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
-```
-
-Run the focused engine contract:
-
-```bash
-./node_modules/.bin/mocha packages/dd-trace/test/plugins/integration-pipeline.spec.js
-```
-
-Run plugin CI:
-
-```bash
-PLUGINS="<name>" npm run test:plugins:ci
-```
-
-For services:
-
-```bash
-docker compose up -d <service>
-PLUGINS="<name>" SERVICES="<service>" npm run test:plugins:ci
-```
-
-Azure Cosmos currently uses:
-
-```bash
-docker compose up -d azurite azurecosmosemulator
-PLUGINS="azure-cosmos" \
-SERVICES="azurite,azurecosmosemulator" \
-NODE_OPTIONS="--experimental-global-webcrypto" \
-NODE_TLS_REJECT_UNAUTHORIZED=0 \
-npm run test:plugins:ci
-```
-
-Use Colima when Docker is unavailable locally. Wait for `http://127.0.0.1:8080/ready` before running Cosmos tests.
-
-Run scoped coverage over every changed production path, for example:
-
-```bash
-./node_modules/.bin/nyc \
-  --include packages/dd-trace/src/plugins/integration-pipeline.js \
-  --include packages/datadog-plugin-<name>/src/**/*.js \
-  ./node_modules/.bin/mocha \
-  packages/dd-trace/test/plugins/integration-pipeline.spec.js \
-  packages/datadog-plugin-<name>/test/**/*.spec.js
-```
-
-Run focused ESLint and `git diff --check`. Repository-wide lint can traverse ignored local worktrees or generated
-fixtures in a developer checkout; focused lint must still pass, and CI remains the authority for a clean checkout.
-
-## Rules for extending the engine
-
-Do not add an engine concept merely to shorten one migration. Before extending the contract:
-
-1. Identify the concrete integration behavior the current model cannot express.
-2. Check whether a second integration has the same need.
-3. Prefer a narrow capability over exposing a plugin, tracer, span, or mutable state.
-4. Preserve source independence in the lifecycle engine.
-5. Add definition validation for invalid combinations.
-6. Add direct pipeline tests for ordering, errors, cleanup, no-op scopes, and restoration.
-7. Update this guide, the mechanical notes, and the rationale.
-8. Re-run BullMQ and Azure Cosmos CI when the shared lifecycle changes.
-
-Architecture changes must be scored against drift prevention, module coupling, explicit contracts, boundary
-testability, extensibility, and hot-path fitness. Compare the existing design with the proposal; do not assign scores
-only to the new design.
-
-Never add a public method, export, getter, or mutable field solely for tests. Never make production behavior conform to
-a fake test path that cannot occur through instrumentation and the plugin manager.
-
-## Known limitations and open work
-
-- The generated plugin still extends `TracingPlugin`. Tracing is not an independently loadable pipeline capability.
-- `storage('legacy')` remains a compatibility bridge.
-- Only the `tracing` stage requirement exists.
-- No non-Orchestrion source adapter has been proven.
-- The operation model explicitly distinguishes only `sync` and `async`; unusual callback, iterator, or streaming
-  ownership may require source or lifecycle work.
-- `frame.data` is intentionally flexible but weakly typed across integration-specific fields.
-- `when` and resolved `skip` are separate and may repeat a gate computation.
-- Priority sampling can still require a materialized span, so BullMQ propagation remains tracing-dependent.
-- Globally disabled tracing still selects a no-op tracer that cannot reserve normal unique correlation contexts.
-- The compiler avoids installing unused stores and lazily creates capabilities, but representative persistent
-  benchmarks are still required before adopting the engine in substantially hotter integrations.
-- `createMessagingStage` is shared across BullMQ's four operations but has only one integration as a consumer. Its
-  descriptor shape is not frozen; confirm or correct it against a header-map carrier (kafkajs or amqplib) before
-  promoting propagation and Data Streams to declarative operation keywords alongside `span`.
-- Azure Cosmos and BullMQ both use the code-origin stage; peer-service now has its own reusable outbound stage.
-- Compatibility removal criteria for the legacy store are not defined.
-
-Add representative persistent measurements for BullMQ, simple synchronous integrations, and globally disabled tracing
-before broad adoption. Warm up for roughly one second, run at least five trials, and reproduce results in a fresh shell.
-
-## Completion checklist
-
-An agent should not declare a migration complete until all of the following are true:
-
-- upstream source for supported boundary versions was inspected;
-- one or two same-type reference integrations were read;
-- every source target and build format is instrumented;
-- channel subscriber cardinality was audited;
-- legacy span shape, errors, propagation, DSM, and configuration are preserved;
-- every inherited legacy behavior is either removed intentionally or asserted through observable output;
-- every gate includes accepted, rejected, and sibling cases;
-- no-op and parent inheritance behavior is pinned;
-- source-boundary or real-library tests replace internal helper tests;
-- focused engine and plugin tests pass;
-- oldest/newest and ESM tests pass;
-- scoped coverage includes important changed production lines;
-- focused lint and `git diff --check` pass;
-- shared lifecycle changes were regression-tested against BullMQ and Azure Cosmos;
-- notes and rationale reflect any new engine contract or remaining limitation.
+- [`integration-pipeline.js`](./integration-pipeline.js): executable contract, compiler, lifecycle, storage, and validation.
+- [`integration-pipeline.spec.js`](../../test/plugins/integration-pipeline.spec.js): context/recording ordering, errors,
+  no-op behavior, cleanup, and definition validation.
+- [`span_context_factory.js`](../opentracing/span_context_factory.js): context reservation and one-time materialization.
+- [`plugin.js`](./plugin.js): diagnostic-channel subscriptions and named store bindings.
+- [`stages/`](./stages): reusable pipeline capabilities.

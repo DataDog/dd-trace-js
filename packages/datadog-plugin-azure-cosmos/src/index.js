@@ -118,14 +118,15 @@ function isDuplicateRequest (frame) {
 }
 
 /**
- * Empty-path account reads should suppress their nested HTTP client span as well.
+ * Select tracing, parent inheritance, or nested-span suppression for one SDK request.
  *
  * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
- * @returns {boolean}
+ * @returns {true | 'parent' | 'noop'}
  */
-function isEmptyPathRead (frame) {
+function getGateDecision (frame) {
   const { requestContext } = frame.data
-  return requestContext.operationType === 'read' && requestContext.path === ''
+  if (requestContext.operationType === 'read' && requestContext.path === '') return 'noop'
+  return isDuplicateRequest(frame) ? 'parent' : true
 }
 
 /**
@@ -164,8 +165,7 @@ module.exports = createIntegrationPlugin({
     target: { module: '@azure/cosmos', name: 'executePlugins' },
     lifecycle: 'async',
     extract: { start: getSpanData },
-    when: frame => !isDuplicateRequest(frame) && !isEmptyPathRead(frame),
-    skip: frame => isEmptyPathRead(frame) ? 'noop' : 'parent',
+    when: getGateDecision,
     span: {
       name: 'cosmosdb.query',
       service: getService,

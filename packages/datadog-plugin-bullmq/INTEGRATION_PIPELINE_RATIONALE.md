@@ -49,9 +49,10 @@ the engine implements the common control flow.
 The existing model normally reaches trace and span IDs through the active span in `storage('legacy')`. This makes a
 recording object the de facto context object for every product, even if that product never reads or changes a span.
 
-The pipeline first reserves a `DatadogSpanContext`, exposes immutable correlation information, and binds it in
-`storage('context')`. Creating and binding the actual span is a later, optional action. If tracing is enabled, the span
-adopts the reserved context, so the IDs seen before tracing are the IDs eventually recorded.
+The pipeline first reserves a `DatadogSpanContext` and exposes immutable correlation information through the frame.
+Creating the actual span is a later, optional action. The current runtime carries correlation and the optional span in
+`storage('legacy')` during the library call; if tracing is enabled, the span adopts the reserved context, so the IDs
+seen before tracing are the IDs eventually recorded.
 
 This is a real functional improvement:
 
@@ -130,8 +131,9 @@ not successful pipeline composition.
 
 The generated class still satisfies the current plugin-manager contract and extends `TracingPlugin`. Azure Cosmos
 resolves service naming through the existing schemas and declares peer-service and code-origin behavior as stages.
-Existing plugin loading, configuration, span creation, and error tagging continue to work. `storage('legacy')` is
-mirrored during the migration.
+Existing plugin loading, configuration, span creation, and error tagging continue to work. Correlation and recording
+remain separate frame capabilities and stage phases while sharing `storage('legacy')` until a non-tracing product
+demonstrates the permanent context-store boundary.
 
 That compatibility lets us validate the new model integration by integration. We do not need a flag day, and a plugin
 that does not fit the model can remain on the existing base classes while the missing abstraction is understood.
@@ -163,12 +165,12 @@ still be proven. A higher number means the design better satisfies the dimension
 
 | Dimension | Existing plugin model | IntegrationPipeline | Reason for the change |
 | --- | ---: | ---: | --- |
-| Drift prevention | 5/10 | 9/10 | Shared ordering, cleanup, stores, and terminal behavior move from each integration into one engine. |
+| Drift prevention | 5/10 | 9/10 | Shared ordering, cleanup, storage, and terminal behavior move from each integration into one engine. |
 | Module coupling | 4/10 | 8/10 | Stages receive bounded capabilities rather than spans, tracer internals, or plugin internals; `TracingPlugin` inheritance remains a bridge. |
 | Explicit contracts | 5/10 | 8/10 | Operation validation, source normalization, stage requirements, and a bounded frame replace lifecycle conventions spread across handlers. |
 | Testability at boundaries | 6/10 | 9/10 | Context reservation/materialization, store separation, stage order, no-op behavior, and invalid definitions have direct contract tests. |
 | Extensibility | 5/10 | 8/10 | New operations primarily add declarations and stages; new sources have an adapter boundary. More product capabilities still need design. |
-| Hot-path fitness | 8/10 | 7/10 | The compiler omits unused stores and capabilities, but broader persistent benchmark coverage is still needed. |
+| Hot-path fitness | 8/10 | 7/10 | The runtime uses one store and lazy capabilities, but broader persistent benchmark coverage is still needed. |
 
 The proposal clears the architectural bar on five dimensions. Hot-path fitness remains below the direct plugin model
 until representative persistent benchmarks establish the cost across accepted, rejected, and tracing-disabled paths.
@@ -180,13 +182,13 @@ A credible adoption case needs to be clear about its gaps.
 ### Performance was optimized but is not free
 
 The first pipeline measurement was materially worse because every operation eagerly allocated every capability and
-entered all three async-context stores, even when its declaration used none of them. It also resolved declarations
+entered three async-context stores, even when its declaration used none of them. It also resolved declarations
 field-by-field and created per-invocation closures and argument arrays.
 
-The compiler now treats declarations as executable plans: it installs only stores needed by declared stages, lazily
-materializes correlation and capability blocks, precompiles extractors/resolvers, supports whole-record extraction and
-tag blocks, avoids rejected-operation state retention, and keeps the inherited no-op path ahead of frame allocation.
-These are reusable pipeline optimizations rather than Azure-specific shortcuts.
+The runtime now uses only the existing legacy store while retaining reserved correlation and separate context/tracing
+stage phases. It also lazily materializes correlation and capability blocks, precompiles extractors/resolvers, supports
+whole-record extraction and tag blocks, avoids rejected-operation state retention, and keeps the inherited no-op path
+ahead of frame allocation. These are reusable pipeline optimizations rather than Azure-specific shortcuts.
 
 Performance still needs a durable gate. Add representative benchmarks for BullMQ, simple synchronous operations,
 rejected gates, inherited no-op scopes, and globally disabled tracing before broad adoption into hotter libraries.
@@ -233,7 +235,7 @@ they should not be forced into declarations that hide imperative behavior.
 | Central bugs affect several integrations | Pin engine boundary contracts directly and migrate gradually before expanding usage. |
 | Abstraction overhead hurts hot paths | Benchmark representative operations and preserve an early gate/skip fast path. |
 | Product stages silently receive fewer events | Preserve per-invocation source publication and test subscriber cardinality, especially for AppSec and IAST. |
-| Compatibility code becomes permanent | Track removal criteria for `storage('legacy')` and the `TracingPlugin` inheritance bridge. |
+| Context remains coupled to legacy storage | Introduce a dedicated product-context store only when a non-tracing consumer establishes its contract. |
 
 ## Proposed adoption criteria
 
@@ -243,7 +245,8 @@ Proceed beyond BullMQ if the next migrations demonstrate all of the following:
 2. Shared stages remove real duplication across at least two integrations.
 3. Hot-path benchmarks show acceptable overhead, including filtered and tracing-disabled calls.
 4. Existing span shapes, propagation headers, DSM behavior, errors, and configuration remain compatible.
-5. A non-tracing product can run from `storage('context')` without reaching through a span.
+5. A non-tracing product can run from `frame.correlation` without reaching through a span; if it needs async access
+   outside stage hooks, use that requirement to define a dedicated context store.
 6. Source adapters preserve the invocation cardinality required by every subscriber.
 
 If those conditions hold, the pipeline gives us a better foundation than continuing to add helpers to plugin classes:
