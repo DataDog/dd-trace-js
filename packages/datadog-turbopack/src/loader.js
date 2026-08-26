@@ -17,12 +17,14 @@ const CHANNEL = 'dd-trace:bundler:load'
  * @returns {string}
  */
 module.exports = function loader (source) {
-  const { manifestPath } = this.getOptions()
+  const { manifestPath, rewriteApplicationImports } = this.getOptions()
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
   const target = manifest.targets[normalizePath(this.resourcePath)]
+  const esm = isESMFile(this.resourcePath)
 
-  if (isESMFile(this.resourcePath)) {
-    return rewriteImports(source, this.resourcePath, manifest.targets)
+  if (rewriteApplicationImports || esm) {
+    const rewritten = rewriteImports(source, this.resourcePath, manifest.targets)
+    if (rewritten !== source || esm) return rewritten
   }
 
   if (!target) return source
@@ -65,16 +67,17 @@ function rewriteImports (source, resourcePath, targets) {
 
   matcher.addTransform('rewriteImports', (_state, program) => {
     visit(program, node => {
-      if (!isModuleSource(node)) return
+      const source = getModuleSource(node)
+      if (!source) return
 
-      const resolved = resolveFrom(resourcePath, node.source.value)
+      const resolved = resolveFrom(resourcePath, source.value)
       const target = resolved && targets[resolved]
       if (!target?.esm || !target.proxyPath) return
 
       const proxySpecifier = relativeImport(path.dirname(resourcePath), target.proxyPath)
       // The code transformer emits `raw` when present, so update both fields.
-      node.source.value = proxySpecifier
-      node.source.raw = JSON.stringify(proxySpecifier)
+      source.value = proxySpecifier
+      source.raw = JSON.stringify(proxySpecifier)
       rewritten = true
     })
   })
@@ -91,12 +94,23 @@ function rewriteImports (source, resourcePath, targets) {
   }
 }
 
-function isModuleSource (node) {
-  return (node.type === 'ImportDeclaration' ||
+function getModuleSource (node) {
+  if (node.type === 'ImportDeclaration' ||
     node.type === 'ExportNamedDeclaration' ||
     node.type === 'ExportAllDeclaration' ||
-    node.type === 'ImportExpression') &&
-    node.source?.type === 'Literal' && typeof node.source.value === 'string'
+    node.type === 'ImportExpression') {
+    return isStringLiteral(node.source) && node.source
+  }
+
+  if (node.type === 'CallExpression' &&
+    node.callee?.type === 'Identifier' && node.callee.name === 'require' &&
+    node.arguments?.length === 1) {
+    return isStringLiteral(node.arguments[0]) && node.arguments[0]
+  }
+}
+
+function isStringLiteral (node) {
+  return node?.type === 'Literal' && typeof node.value === 'string'
 }
 
 function visit (node, callback) {
