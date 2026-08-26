@@ -2368,7 +2368,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) module.
      */
-    interface ai extends Instrumentation {}
+    interface ai extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
@@ -2386,13 +2386,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) module.
      */
-    interface claude_agent_sdk extends Instrumentation {}
+    interface claude_agent_sdk extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
      * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
      */
-    interface anthropic extends Instrumentation {}
+    interface anthropic extends Instrumentation, LLMObsIntegration {}
 
     /**
      * Currently this plugin automatically instruments
@@ -2453,7 +2453,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
-    interface aws_sdk extends Instrumentation {
+    interface aws_sdk extends Instrumentation, LLMObsIntegration {
       /**
        * The service name to be used for this plugin. When a function is used it is called with the AWS
        * request parameters (e.g. `{ TableName }` for DynamoDB, `{ Bucket }` for S3) and its return value
@@ -2688,13 +2688,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
     */
-  interface google_cloud_vertexai extends Integration {}
+  interface google_cloud_vertexai extends Integration, LLMObsIntegration {}
 
   /**
     * This plugin automatically instruments the
     * [@google-genai](https://github.com/googleapis/js-genai) module.
     */
-  interface google_genai extends Integration {}
+  interface google_genai extends Integration, LLMObsIntegration {}
 
   /** @hidden */
   interface ExecutionArgs {
@@ -3052,7 +3052,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [langgraph](https://github.com/npmjs/package/langgraph) library.
      */
-    interface langgraph extends Instrumentation {}
+    interface langgraph extends Instrumentation, LLMObsIntegration {}
 
       /**
      * This plugin automatically instruments the
@@ -3212,13 +3212,13 @@ declare namespace tracer {
      * [DogStatsD](https://docs.datadoghq.com/developers/dogstatsd/?tab=hostagent#setup)
      * in the agent.
      */
-    interface openai extends Instrumentation {}
+    interface openai extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
      * [@openai/agents](https://www.npmjs.com/package/@openai/agents) library.
      */
-    interface openai_agents extends Instrumentation {}
+    interface openai_agents extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the

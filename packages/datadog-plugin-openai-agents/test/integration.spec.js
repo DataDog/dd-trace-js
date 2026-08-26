@@ -62,6 +62,26 @@ describe('OpenAIAgentsIntegration', () => {
       integration.configure({ enabled: false })
       assert.strictEqual(integration.enabled, false)
     })
+
+    it('keeps APM tracing enabled while opting out of LLM Observability', () => {
+      const workflowSpan = makeFakeSpan('workflow')
+      const { integration, tracer } = build({
+        tracerSpans: [workflowSpan],
+        config: {
+          llmobs: {
+            DD_LLMOBS_ENABLED: true,
+            mlApp: 'test',
+            sampleRate: 1,
+          },
+        },
+      })
+
+      integration.configure({ enabled: true, llmobs: false })
+      integration.startTrace({ traceId: 't1' })
+
+      sinon.assert.calledOnce(tracer.startSpan)
+      assert.strictEqual(LLMObsTagger.tagMap.get(workflowSpan), undefined)
+    })
   })
 
   describe('startTrace', () => {

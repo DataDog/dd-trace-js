@@ -523,7 +523,15 @@ class PlaywrightPlugin extends CiPlugin {
 
       finishAllTraceSpans(span)
       if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
-        this.tracer._exporter.flush(onDone)
+        try {
+          this.tracer._exporter.flush(onDone)
+        } catch (error) {
+          // A synchronous flush failure must still release the worker, otherwise it hangs.
+          // Log rather than rethrow: an exception from this diagnostics-channel subscriber
+          // would surface as an uncaught error in the worker and crash the user's test run.
+          onDone?.()
+          log.error('Error flushing traces at Playwright worker shutdown', error)
+        }
       }
     })
 
