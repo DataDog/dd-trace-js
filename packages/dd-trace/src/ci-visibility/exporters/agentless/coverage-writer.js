@@ -80,11 +80,11 @@ class Writer extends BaseWriter {
       if (err) {
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-          { endpoint: 'code_coverage', statusCode: statusCode ?? err.code ?? err.status }
+          { endpoint: 'code_coverage', statusCode, errorType: statusCode ? undefined : err.code }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'code_coverage', statusCode: statusCode ?? err.code ?? err.status }
+          { endpoint: 'code_coverage', statusCode, errorType: statusCode ? undefined : err.code }
         )
         log.error('Error sending CI coverage payload', err)
         done(err)

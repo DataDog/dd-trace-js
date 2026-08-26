@@ -129,7 +129,7 @@ describe('CI Visibility Writer', () => {
           sinon.assert.calledWithExactly(
             incrementCountMetric,
             'endpoint_payload.dropped',
-            { endpoint: 'test_cycle', statusCode: 'ECONNRESET' }
+            { endpoint: 'test_cycle', statusCode: undefined, errorType: 'ECONNRESET' }
           )
           done()
         })
