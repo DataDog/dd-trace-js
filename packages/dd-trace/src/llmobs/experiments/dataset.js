@@ -1,7 +1,7 @@
 'use strict'
 
 const { randomUUID } = require('node:crypto')
-const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const snapshotPayload = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
 /** @typedef {{add?: string[], remove?: string[], replace?: string[]}} TagOperations */
 /**
@@ -106,10 +106,6 @@ function mergeTagOperations (operations, operation, tags) {
 
 function valuesAreEqual (left, right) {
   return JSON.stringify(left) === JSON.stringify(right)
-}
-
-function snapshotPayload (payload) {
-  return clone(payload)
 }
 
 function updateFromInsertedRecord (recordId, record, payload) {
