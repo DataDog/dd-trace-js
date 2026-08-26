@@ -104,14 +104,18 @@ dc.subscribe(CHANNEL, (message) => {
     return
   }
 
-  for (const { file, versions, hook } of instrumentation) {
-    if (payload.path !== filename(name, file) || !matchVersion(payload.version, versions)) {
+  for (const { file, filePattern, versions, hook } of instrumentation) {
+    const matchesFile = payload.path === filename(name, file) ||
+      (filePattern && new RegExp(filename(name, filePattern)).test(payload.path))
+    if (!matchesFile || !matchVersion(payload.version, versions)) {
       continue
     }
 
     try {
       loadChannel.publish({ name, version: payload.version, file })
-      payload.module = hook(payload.module, payload.version) ?? payload.module
+      const exports = hook(payload.module, payload.version) ?? payload.module
+      payload.module = exports
+      payload.apply?.(exports)
     } catch (e) {
       log.error('Error executing bundler hook', e)
     }

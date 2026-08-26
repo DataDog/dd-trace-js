@@ -4,7 +4,6 @@ const fs = require('node:fs/promises')
 const fsSync = require('node:fs')
 const Module = require('node:module')
 const path = require('node:path')
-const { pathToFileURL } = require('node:url')
 
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
 const hooks = require('../../datadog-instrumentations/src/helpers/hooks')
@@ -46,7 +45,9 @@ async function createManifest (projectDir) {
       try {
         // Proxies are build-time artifacts; preserve source order for stable paths.
         // eslint-disable-next-line no-await-in-loop
-        await fs.writeFile(proxyPath, await createEsmProxy(target.path, proxyPath, target.specifier))
+        await fs.writeFile(proxyPath, await createEsmProxy(
+          target.path, proxyPath, target.name, target.specifier, target.version
+        ))
       } catch {
         // An unsupported dependency must not prevent the customer's build. Its
         // original module remains bundled without instrumentation instead.
@@ -197,22 +198,32 @@ function findMatchingFiles (directory, pattern) {
 /**
  * @param {string} sourcePath
  * @param {string} proxyPath
+ * @param {string} name
  * @param {string} specifier
+ * @param {string} version
  * @returns {Promise<string>}
  */
-async function createEsmProxy (sourcePath, proxyPath, specifier) {
+async function createEsmProxy (sourcePath, proxyPath, name, specifier, version) {
   const setters = await processModule({ path: sourcePath, context: { format: 'module' } })
-  const registerPath = relativeImport(
+  const dcPolyfillPath = relativeImport(
     path.dirname(proxyPath),
-    require.resolve('import-in-the-middle/lib/register.js')
+    require.resolve('dc-polyfill')
   )
-  return `import { register } from ${JSON.stringify(registerPath)};
+  return `import { channel } from ${JSON.stringify(dcPolyfillPath)};
 import * as namespace from ${JSON.stringify(relativeImport(path.dirname(proxyPath), sourcePath))};
 const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
 const set = {};
 const get = {};
 ${[...setters.values()].join(';\n')};
-register(${JSON.stringify(pathToFileURL(sourcePath).href)}, _, set, get, ${JSON.stringify(specifier)});
+channel('dd-trace:bundler:load').publish({
+  package: ${JSON.stringify(name)},
+  module: _,
+  path: ${JSON.stringify(specifier)},
+  version: ${JSON.stringify(version)},
+  apply (exports) {
+    for (const name of Object.keys(exports)) set[name]?.(exports[name]);
+  },
+});
 `
 }
 
