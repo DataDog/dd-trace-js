@@ -31,6 +31,12 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     }
   }
 
+  error (ctx) {
+    if (ctx.error?.name === 'GraphInterrupt') return
+
+    super.error(ctx)
+  }
+
   bindStart (ctx) {
     // TODO(bengl): All this renaming is just so we don't have to change the existing handlers
     ctx.args = ctx.arguments
