@@ -90,6 +90,13 @@ describe('esm', () => {
             'aas.function.operation': 'get_count',
           },
         })
+
+        const allSpans = payload.flat()
+        const httpSpan = allSpans.find(span => span.resource === 'GET /api/httptest')
+        const activitySpan = allSpans.find(span => span.resource === 'Activity hola')
+        assert.ok(httpSpan, 'expected HTTP root span')
+        assert.ok(activitySpan, 'expected activity span')
+        assert.strictEqual(activitySpan.trace_id.toString(), httpSpan.trace_id.toString())
       })
     }).timeout(60_000)
   })
