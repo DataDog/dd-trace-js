@@ -194,4 +194,26 @@ describe('BufferingExporter', () => {
       clock.restore()
     }
   })
+
+  it('flushes promptly for a negative flush interval', () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const flushingWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy(),
+        setUrl: sinon.spy(),
+      }
+      const exporter = new BufferingExporter({ port, flushInterval: -5 })
+      exporter._writer = flushingWriter
+      exporter._isInitialized = true
+      exporter._shouldFlush = () => true
+
+      exporter.export([{ span_id: '1' }])
+      // A negative interval previously clamped to a 1 ms timer; preserve prompt flush.
+      clock.tick(1)
+      sinon.assert.called(flushingWriter.flush)
+    } finally {
+      clock.restore()
+    }
+  })
 })

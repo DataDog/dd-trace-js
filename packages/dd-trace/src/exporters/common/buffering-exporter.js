@@ -39,25 +39,30 @@ class BufferingExporter {
       // to 1 ms, so a finite-but-overflowed interval would spin the re-arm below.
       // Only schedule when the interval fits the timer budget; the encoder size
       // gate and the final flush still deliver payloads for overflowed intervals.
+      // A negative interval (accepted by the INT config parser) previously clamped
+      // to a 1 ms timer; preserve that prompt-flush behavior by treating it as 0
+      // rather than silently disabling the periodic flush.
       const canSchedule = flushInterval > 0 && flushInterval <= 2_147_483_647
-      const scheduleFlush = () => {
-        this[timerKey] = setTimeout(() => {
-          // The periodic timer is a latency backstop; the encoder's size gate and the
-          // final flush still deliver payloads. Subclasses can suppress it (e.g. while
-          // the intake origin is saturated) so events coalesce instead of queueing.
-          if (this._shouldFlush(writer)) {
-            this[timerKey] = undefined
-            writer.flush()
-          } else if (canSchedule) {
-            // Saturation suppressed the flush; re-arm so a buffered payload below the
-            // encoder's size threshold is still delivered once the origin becomes idle,
-            // rather than waiting indefinitely for another event.
-            scheduleFlush()
-          }
-        }, flushInterval)
-        this[timerKey].unref?.()
+      if (canSchedule || flushInterval < 0) {
+        const scheduleFlush = () => {
+          this[timerKey] = setTimeout(() => {
+            // The periodic timer is a latency backstop; the encoder's size gate and the
+            // final flush still deliver payloads. Subclasses can suppress it (e.g. while
+            // the intake origin is saturated) so events coalesce instead of queueing.
+            if (this._shouldFlush(writer)) {
+              this[timerKey] = undefined
+              writer.flush()
+            } else if (canSchedule) {
+              // Saturation suppressed the flush; re-arm so a buffered payload below the
+              // encoder's size threshold is still delivered once the origin becomes idle,
+              // rather than waiting indefinitely for another event.
+              scheduleFlush()
+            }
+          }, flushInterval)
+          this[timerKey].unref?.()
+        }
+        scheduleFlush()
       }
-      if (canSchedule) scheduleFlush()
     }
 
     return appended
