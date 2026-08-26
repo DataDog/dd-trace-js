@@ -1,295 +1,259 @@
 'use strict'
 
 const log = require('../../dd-trace/src/log')
-const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
-const { getFilter } = require('./filter')
+const { argument, data } = require('../../dd-trace/src/plugins/integration-pipeline')
+const { exitCodeOrigin } = require('../../dd-trace/src/plugins/stages/code-origin')
+const { createMessagingStage } = require('../../dd-trace/src/plugins/stages/messaging')
 
-const filteredJobs = Symbol('bullmq.filteredJobs')
+const producerTags = {
+  component: 'bullmq',
+  'span.kind': 'producer',
+  'messaging.system': 'bullmq',
+  'messaging.operation': 'publish',
+}
 
-// Customer-controlled metadata may be malformed JSON. Returning a fresh `{}`
-// on parse failure keeps the publish path alive instead of throwing into
-// `Queue.add` / `Queue.addBulk`.
+/**
+ * Parse BullMQ telemetry metadata without allowing customer-controlled JSON to break publishing.
+ *
+ * @param {unknown} raw
+ * @returns {Record<string, unknown>}
+ */
 function parseTelemetryMetadata (raw) {
-  if (!raw) return {}
+  if (typeof raw !== 'string' || raw.length === 0) return {}
   try {
-    return JSON.parse(raw)
+    const metadata = JSON.parse(raw)
+    return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {}
   } catch (error) {
     log.warn('bullmq: ignoring malformed telemetry.metadata: %s', error.message)
     return {}
   }
 }
 
-class BaseBullmqProducerPlugin extends ProducerPlugin {
-  static id = 'bullmq'
-
-  asyncEnd (ctx) {
-    ctx.currentStore?.span?.finish()
-  }
-
-  start (ctx) {
-    if (!this.config.dsmEnabled) return
-    const { span } = ctx.currentStore
-    this.setProducerCheckpoint(span, ctx)
-  }
-
-  bindStart (ctx) {
-    let instrument = true
-    if (this.config.producerFilter) {
-      try {
-        instrument = this.shouldInstrument(ctx)
-      } catch (error) {
-        log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
-      }
-    }
-
-    if (!instrument) {
-      return { noop: true }
-    }
-
-    const { resource, meta } = this.getSpanData(ctx)
-    const span = this.startSpan({
-      resource,
-      meta: {
-        component: 'bullmq',
-        'span.kind': 'producer',
-        'messaging.system': 'bullmq',
-        'messaging.operation': 'publish',
-        ...meta,
-      },
-    }, ctx)
-
-    this.injectTraceContext(span, ctx)
-
-    return ctx.currentStore
-  }
-
-  configure (config) {
-    if (typeof config === 'boolean') {
-      return super.configure(config)
-    }
-    return super.configure({ ...config, producerFilter: getFilter(config) })
-  }
-
-  shouldInstrument (ctx) {
-    throw new Error('shouldInstrument must be implemented by subclass')
-  }
-
-  getSpanData (ctx) {
-    throw new Error('getSpanData must be implemented by subclass')
-  }
-
-  injectTraceContext (span, ctx) {
-    throw new Error('injectTraceContext must be implemented by subclass')
-  }
-
-  // Returned so setProducerCheckpoint can mutate it without a second parse.
-  _injectIntoOpts (span, opts) {
-    const carrier = {}
-    this.tracer.inject(span, 'text_map', carrier)
-    const metadata = parseTelemetryMetadata(opts.telemetry?.metadata)
-    metadata._datadog = carrier
-    opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
-    return metadata
-  }
-
-  setProducerCheckpoint (span, ctx) {
-    const { queueName, payloadSize, optsTarget } = this.getDsmData(ctx)
-    const edgeTags = ['direction:out', `topic:${queueName}`, 'type:bullmq']
-    const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-
-    if (optsTarget && typeof optsTarget === 'object') {
-      const metadata = ctx._ddMetadata ?? parseTelemetryMetadata(optsTarget.telemetry?.metadata)
-      DsmPathwayCodec.encode(dataStreamsContext, metadata._datadog || metadata)
-      if (!metadata._datadog) metadata._datadog = {}
-      optsTarget.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
-    }
-  }
-
-  getDsmData (ctx) {
-    throw new Error('getDsmData must be implemented by subclass')
-  }
+/**
+ * Create the detached carrier the pipeline injects correlation and the DSM pathway into.
+ *
+ * @returns {Record<string, unknown>}
+ */
+function newCarrier () {
+  return {}
 }
 
-class QueueAddPlugin extends BaseBullmqProducerPlugin {
-  static prefix = 'tracing:orchestrion:bullmq:Queue_add'
-
-  shouldInstrument (ctx) {
-    return this.config.producerFilter({
-      name: ctx.arguments?.[0],
-      data: ctx.arguments?.[1],
-      opts: ctx.arguments?.[2],
-      queueName: ctx.self?.name,
-    })
-  }
-
-  getSpanData (ctx) {
-    const queueName = ctx.self?.name || 'bullmq'
-    return {
-      resource: queueName,
-      meta: {
-        'messaging.destination.name': ctx.self?.name,
-      },
-    }
-  }
-
-  #ensureOpts (ctx) {
-    let opts = ctx.arguments?.[2]
-    if (!opts || typeof opts !== 'object') {
-      opts = {}
-      if (ctx.arguments.length <= 2) {
-        Array.prototype.push.call(ctx.arguments, opts)
-      } else {
-        ctx.arguments[2] = opts
-      }
-    }
-    return opts
-  }
-
-  injectTraceContext (span, ctx) {
-    const opts = this.#ensureOpts(ctx)
-    ctx._ddMetadata = this._injectIntoOpts(span, opts)
-  }
-
-  getDsmData (ctx) {
-    const data = ctx.arguments?.[1]
-    return {
-      queueName: ctx.self?.name || 'bullmq',
-      payloadSize: data ? getMessageSize(data) : 0,
-      optsTarget: this.#ensureOpts(ctx),
-    }
-  }
+/**
+ * Persist a completed carrier into BullMQ telemetry metadata, preserving customer fields.
+ *
+ * @param {object} opts
+ * @param {Record<string, unknown>} carrier
+ * @returns {void}
+ */
+function commitCarrier (opts, carrier) {
+  const metadata = parseTelemetryMetadata(opts.telemetry?.metadata)
+  metadata._datadog = carrier
+  opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
 }
 
-class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
-  static prefix = 'tracing:orchestrion:bullmq:Queue_addBulk'
+/**
+ * Persist a carrier into a job descriptor or flow node, which may carry no options yet.
+ *
+ * @param {{opts?: object}} node
+ * @param {Record<string, unknown>} carrier
+ * @returns {void}
+ */
+function commitNodeCarrier (node, carrier) {
+  node.opts ||= {}
+  commitCarrier(node.opts, carrier)
+}
 
-  shouldInstrument (ctx) {
-    const jobs = this.#getFilteredJobs(ctx)
-    // Empty bulk calls are publish attempts and should keep producing a span.
-    return jobs === undefined || jobs.length > 0 || ctx.arguments?.[0].length === 0
-  }
-
-  #getFilteredJobs (ctx) {
-    if (Object.hasOwn(ctx, filteredJobs)) return ctx[filteredJobs]
-
-    const jobs = ctx.arguments?.[0]
-    if (!Array.isArray(jobs)) return
-
-    let allowedJobs
-    if (this.config.producerFilter) {
-      const queueName = ctx.self?.name
-      try {
-        allowedJobs = []
-        for (const job of jobs) {
-          if (job && this.config.producerFilter({ name: job.name, data: job.data, opts: job.opts, queueName })) {
-            allowedJobs.push(job)
-          }
-        }
-      } catch (error) {
-        log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
-        allowedJobs = jobs.filter(Boolean)
-      }
+/**
+ * Ensure Queue.add has a mutable options argument.
+ *
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').InvocationContext} context
+ * @returns {object}
+ */
+function ensureQueueOpts (context) {
+  let opts = context.arguments[2]
+  if (!opts || typeof opts !== 'object') {
+    opts = {}
+    if (context.arguments.length <= 2) {
+      Array.prototype.push.call(context.arguments, opts)
     } else {
-      allowedJobs = jobs
-    }
-
-    ctx[filteredJobs] = allowedJobs
-    return allowedJobs
-  }
-
-  operationName () {
-    return 'bullmq.addBulk'
-  }
-
-  getSpanData (ctx) {
-    const queueName = ctx.self?.name || 'bullmq'
-    const jobs = ctx.arguments?.[0]
-    return {
-      resource: queueName,
-      meta: {
-        'messaging.destination.name': ctx.self?.name,
-        'messaging.batch.message_count': jobs?.length,
-      },
+      context.arguments[2] = opts
     }
   }
+  return opts
+}
 
-  injectTraceContext (span, ctx) {
-    const jobs = this.#getFilteredJobs(ctx)
-    if (!jobs) return
-
-    const cache = []
-    for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i]
-      if (!job) continue
-      job.opts ||= {}
-      cache[i] = this._injectIntoOpts(span, job.opts)
-    }
-    ctx._ddMetadata = cache
-  }
-
-  setProducerCheckpoint (span, ctx) {
-    const jobs = this.#getFilteredJobs(ctx) || []
-    const queueName = ctx.self?.name || 'bullmq'
-    const edgeTags = ['direction:out', `topic:${queueName}`, 'type:bullmq']
-    const cache = ctx._ddMetadata
-
-    for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i]
-      if (!job?.data) continue
-      const payloadSize = getMessageSize(job.data)
-      const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-      const metadata = cache?.[i] ?? parseTelemetryMetadata(job.opts.telemetry?.metadata)
-      DsmPathwayCodec.encode(dataStreamsContext, metadata._datadog || metadata)
-      if (!metadata._datadog) metadata._datadog = {}
-      job.opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
-    }
+/**
+ * Run a producer filter without allowing user code to break the instrumented operation.
+ *
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
+ * @param {object} job
+ * @returns {boolean}
+ */
+function shouldInstrument (frame, job) {
+  const filter = frame.config.producerFilter
+  if (!filter) return true
+  try {
+    return filter(job)
+  } catch (error) {
+    log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
+    return true
   }
 }
 
-class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
-  static prefix = 'tracing:orchestrion:bullmq:FlowProducer_add'
+/**
+ * Select jobs accepted by the configured bulk filter.
+ *
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').InvocationContext} context
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
+ * @returns {object[] | undefined}
+ */
+function extractBulkJobs (context, frame) {
+  const jobs = context.arguments[0]
+  if (!Array.isArray(jobs)) return
 
-  shouldInstrument (ctx) {
-    const flow = ctx.arguments?.[0]
-    return this.config.producerFilter({
-      name: flow?.name,
-      data: flow?.data,
-      opts: flow?.opts,
-      queueName: flow?.queueName,
-    })
-  }
+  const filter = frame.config.producerFilter
+  if (!filter) return jobs
 
-  getSpanData (ctx) {
-    const flow = ctx.arguments?.[0]
-    const queueName = flow?.queueName || 'bullmq'
-    return {
-      resource: queueName,
-      meta: {
-        'messaging.destination.name': flow?.queueName,
-      },
+  const allowedJobs = []
+  const queueName = context.self?.name
+  try {
+    for (const job of jobs) {
+      if (job && filter({ name: job.name, data: job.data, opts: job.opts, queueName })) {
+        allowedJobs.push(job)
+      }
+    }
+  } catch (error) {
+    log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
+    for (const job of jobs) {
+      if (job) allowedJobs.push(job)
     }
   }
-
-  injectTraceContext (span, ctx) {
-    const flow = ctx.arguments?.[0]
-    if (!flow) return
-    flow.opts ||= {}
-    ctx._ddMetadata = this._injectIntoOpts(span, flow.opts)
-  }
-
-  getDsmData (ctx) {
-    const flow = ctx.arguments?.[0]
-    if (!flow) {
-      return { queueName: 'bullmq', payloadSize: 0, optsTarget: undefined }
-    }
-    flow.opts ||= {}
-    return {
-      queueName: flow.queueName || 'bullmq',
-      payloadSize: flow.data ? getMessageSize(flow.data) : 0,
-      optsTarget: flow.opts,
-    }
-  }
+  return allowedJobs
 }
 
-module.exports = [QueueAddPlugin, QueueAddBulkPlugin, FlowProducerAddPlugin]
+/**
+ * Resolve the messaging producer service using the existing naming schema.
+ *
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
+ * @returns {string | {name: string, source?: string}}
+ */
+function producerService (frame) {
+  return frame.serviceName({ type: 'messaging', kind: 'producer' })
+}
+
+// Every producer target propagates and checkpoints identically. Only the message set, where its
+// carrier is persisted, and which field holds the payload differ.
+const outboundMessaging = {
+  direction: 'out',
+  system: 'bullmq',
+  topic: data('queueName'),
+  carrier: newCarrier,
+}
+
+const queueMessagingStage = createMessagingStage({
+  ...outboundMessaging,
+  messages: frame => [ensureQueueOpts(frame.invocation)],
+  commit: commitCarrier,
+  payload: (opts, frame) => frame.data.data,
+})
+
+const bulkMessagingStage = createMessagingStage({
+  ...outboundMessaging,
+  messages: frame => frame.data.jobs,
+  commit: commitNodeCarrier,
+  payload: job => job.data,
+})
+
+const flowMessagingStage = createMessagingStage({
+  ...outboundMessaging,
+  messages: frame => [frame.data.flow],
+  commit: commitNodeCarrier,
+  payload: flow => flow.data,
+})
+
+const operations = [
+  {
+    target: { module: 'bullmq', name: 'Queue_add' },
+    lifecycle: 'async',
+    extract: {
+      start: {
+        name: argument(0),
+        data: argument(1),
+        opts: argument(2),
+        queueName: context => context.self?.name || 'bullmq',
+      },
+    },
+    when: frame => shouldInstrument(frame, {
+      name: frame.data.name,
+      data: frame.data.data,
+      opts: frame.data.opts,
+      queueName: frame.invocation.self?.name,
+    }) || 'noop',
+    span: {
+      name: 'bullmq.add',
+      service: producerService,
+      resource: data('queueName'),
+      kind: 'producer',
+      tags: {
+        ...producerTags,
+        'messaging.destination.name': data('queueName'),
+      },
+    },
+    stages: [exitCodeOrigin, queueMessagingStage],
+  },
+  {
+    target: { module: 'bullmq', name: 'Queue_addBulk' },
+    lifecycle: 'async',
+    extract: {
+      start: {
+        rawJobs: argument(0),
+        jobs: extractBulkJobs,
+        queueName: context => context.self?.name || 'bullmq',
+      },
+    },
+    when: frame =>
+      frame.data.jobs === undefined || frame.data.jobs.length > 0 || frame.data.rawJobs.length === 0 || 'noop',
+    span: {
+      name: 'bullmq.addBulk',
+      service: producerService,
+      resource: data('queueName'),
+      kind: 'producer',
+      tags: {
+        ...producerTags,
+        'messaging.destination.name': data('queueName'),
+        'messaging.batch.message_count': frame => frame.data.rawJobs?.length,
+      },
+    },
+    stages: [exitCodeOrigin, bulkMessagingStage],
+  },
+  {
+    target: { module: 'bullmq', name: 'FlowProducer_add' },
+    lifecycle: 'async',
+    extract: {
+      start: {
+        flow: argument(0),
+        queueName: context => context.arguments[0]?.queueName || 'bullmq',
+      },
+    },
+    when: frame => shouldInstrument(frame, {
+      name: frame.data.flow?.name,
+      data: frame.data.flow?.data,
+      opts: frame.data.flow?.opts,
+      queueName: frame.data.flow?.queueName,
+    }) || 'noop',
+    span: {
+      name: 'bullmq.add',
+      service: producerService,
+      resource: data('queueName'),
+      kind: 'producer',
+      tags: {
+        ...producerTags,
+        'messaging.destination.name': frame => frame.data.flow?.queueName,
+      },
+    },
+    stages: [exitCodeOrigin, flowMessagingStage],
+  },
+]
+
+module.exports = operations
+module.exports.parseTelemetryMetadata = parseTelemetryMetadata

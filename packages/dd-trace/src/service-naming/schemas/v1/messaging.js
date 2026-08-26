@@ -1,6 +1,16 @@
 'use strict'
 
-const { identityService } = require('../util')
+const { identityService, optionServiceSource } = require('../util')
+
+function bullmqServiceName ({ tracerService, pluginConfig }) {
+  return pluginConfig.service || tracerService
+}
+
+const bullmq = {
+  opName: () => 'bullmq.add',
+  serviceName: bullmqServiceName,
+  serviceSource: optionServiceSource,
+}
 
 const amqpInbound = {
   opName: () => 'amqp.process',
@@ -57,10 +67,7 @@ const messaging = {
       opName: () => 'aws.sns.send',
       serviceName: identityService,
     },
-    bullmq: {
-      opName: () => 'bullmq.add',
-      serviceName: identityService,
-    },
+    bullmq,
   },
   consumer: {
     amqplib: amqpInbound,
@@ -103,8 +110,8 @@ const messaging = {
       serviceName: identityService,
     },
     bullmq: {
+      ...bullmq,
       opName: () => 'bullmq.processJob',
-      serviceName: identityService,
     },
   },
   client: {

@@ -2,19 +2,13 @@
 
 const {
   CLIENT_PORT_KEY,
-  PEER_SERVICE_KEY,
   PEER_SERVICE_SOURCE_KEY,
-  PEER_SERVICE_REMAP_KEY,
 } = require('../constants')
 const { exitTags } = require('../../../datadog-code-origin')
 const { storage } = require('../../../datadog-core')
 const { IS_SERVERLESS } = require('../serverless')
 const TracingPlugin = require('./tracing')
-
-const COMMON_PEER_SVC_SOURCE_TAGS = [
-  'net.peer.name',
-  'out.host',
-]
+const { getPeerService, remapPeerService } = require('./util/peer-service')
 
 // TODO: Exit span on finish when AsyncResource instances are removed.
 class OutboundPlugin extends TracingPlugin {
@@ -63,26 +57,7 @@ class OutboundPlugin extends TracingPlugin {
      * - If `peer.service` was defined _before_ we compute it (for example in custom instrumentation),
      *   `_dd.peer.service.source`'s value is `peer.service`
      */
-    if (tags[PEER_SERVICE_KEY] !== undefined) {
-      return {
-        [PEER_SERVICE_KEY]: tags[PEER_SERVICE_KEY],
-        [PEER_SERVICE_SOURCE_KEY]: PEER_SERVICE_KEY,
-      }
-    }
-
-    const sourceTags = [
-      ...this.constructor.peerServicePrecursors,
-      ...COMMON_PEER_SVC_SOURCE_TAGS,
-    ]
-
-    for (const sourceTag of sourceTags) {
-      if (tags[sourceTag]) {
-        return {
-          [PEER_SERVICE_KEY]: tags[sourceTag],
-          [PEER_SERVICE_SOURCE_KEY]: sourceTag,
-        }
-      }
-    }
+    return getPeerService(tags, this.constructor.peerServicePrecursors)
   }
 
   /**
@@ -93,16 +68,7 @@ class OutboundPlugin extends TracingPlugin {
      * If DD_TRACE_PEER_SERVICE_MAPPING is matched, we need to override the existing
      * peer service and add the value we overrode.
      */
-    const peerService = peerData[PEER_SERVICE_KEY]
-    const mappedService = this._tracerConfig.peerServiceMapping?.[peerService]
-    if (peerService && mappedService) {
-      return {
-        ...peerData,
-        [PEER_SERVICE_KEY]: mappedService,
-        [PEER_SERVICE_REMAP_KEY]: peerService,
-      }
-    }
-    return peerData
+    return remapPeerService(peerData, this._tracerConfig.peerServiceMapping)
   }
 
   /**

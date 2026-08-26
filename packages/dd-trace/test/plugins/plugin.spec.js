@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 
 const { describe, it, after } = require('mocha')
 const { channel } = require('dc-polyfill')
@@ -123,5 +123,26 @@ describe('Plugin', () => {
 
     channel('apm:noopAware:start').publish({ outside: 'again' })
     sinon.assert.calledOnce(handler)
+  })
+
+  it('should allow lifecycle subscribers to run inside a noop scope when requested', () => {
+    const handler = sinon.spy()
+
+    class NoopLifecyclePlugin extends Plugin {
+      static id = 'noopLifecycle'
+
+      constructor () {
+        super()
+        this.addSub('apm:noopLifecycle:end', handler, { allowNoop: true })
+      }
+    }
+
+    plugin = new NoopLifecyclePlugin()
+    plugin.configure({ enabled: true })
+
+    storage('legacy').run({ noop: true }, () => {
+      channel('apm:noopLifecycle:end').publish({ inside: true })
+    })
+    sinon.assert.calledOnceWithExactly(handler, { inside: true }, 'apm:noopLifecycle:end')
   })
 })
