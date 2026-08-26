@@ -309,8 +309,19 @@ class CiVisibilityExporter extends BufferingExporter {
       // final (post-git-upload) configuration is cached, so the cross-process
       // filesystem cache never serves a pre-git-upload response that would skip
       // the git upload in other processes.
+      //
+      // The live-fetch and cache-hit paths resolve the git upload promise
+      // differently, so they must not share a single apply path:
+      //   - Live fetch: `sendGitMetadata` is started in `_fetchLibraryConfigurationFromBackend`
+      //     and resolves `_gitUploadPromise` itself (with the upload result). We must NOT call
+      //     `_resolveGit()` here, or we would race the in-flight upload and mask its error.
+      //   - Filesystem cache hit: no upload was started in this process, so `_applyCachedSettings`
+      //     resolves the git promise locally (starting an upload only if the cached config still
+      //     requires git and we lack valid cached skippable suites).
+      let liveFetchStarted = false
       const fsCacheKey = buildSettingsCacheKey(configuration)
       withCache(fsCacheKey, (activeCacheKey, cb) => {
+        liveFetchStarted = true
         this._fetchLibraryConfigurationFromBackend(configuration, repositoryUrl, activeCacheKey, cb)
       }, (err, libraryConfig) => {
         /**
@@ -319,9 +330,22 @@ class CiVisibilityExporter extends BufferingExporter {
          * because `getLibraryConfiguration` is called only once in the main process.
          */
         if (err) {
-          this._libraryConfig = this.filterConfiguration()
+          // On the live path `_libraryConfig` was already set inside
+          // `_fetchLibraryConfigurationFromBackend` (to the phase-1 config, matching the
+          // original behavior), so only reset it for a cache-hit error.
+          if (!liveFetchStarted) {
+            this._libraryConfig = this.filterConfiguration()
+          }
           return callback(err, {})
         }
+        if (liveFetchStarted) {
+          // Live fetch: the git upload was already started and resolves
+          // `_gitUploadPromise` itself. Do not call `_resolveGit()`.
+          writeSettingsToCache(libraryConfig)
+          this._libraryConfig = this.filterConfiguration(libraryConfig)
+          return callback(null, this._libraryConfig)
+        }
+        // Filesystem cache hit: no git upload was started in this process.
         this._applyCachedSettings(libraryConfig, configuration, repositoryUrl, callback)
       })
     })
@@ -368,18 +392,22 @@ class CiVisibilityExporter extends BufferingExporter {
   _fetchLibraryConfigurationFromBackend (configuration, repositoryUrl, cacheKey, done) {
     this.sendGitMetadata(repositoryUrl)
     getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
+      // Mirror the original live path: keep the phase-1 config on `_libraryConfig` even
+      // before the git upload resolves, so `shouldRequestSkippableSuites()` and the
+      // skippable path's `_gitUploadPromise` await behave identically to the uncached flow.
+      this._libraryConfig = this.filterConfiguration(libraryConfig)
       if (err) {
-        return done(err)
+        return done(err, libraryConfig)
       }
       if (libraryConfig?.requireGit) {
         // If the backend requires git, wait for the upload to finish and request settings again
         this._gitUploadPromise.then(gitUploadError => {
           if (gitUploadError) {
-            return done(gitUploadError)
+            return done(gitUploadError, libraryConfig)
           }
-          getLibraryConfigurationRequest(configuration, (err, finalLibraryConfig) => {
-            if (err) {
-              return done(err)
+          getLibraryConfigurationRequest(configuration, (finalErr, finalLibraryConfig) => {
+            if (finalErr) {
+              return done(finalErr, libraryConfig)
             }
             writeToCache(cacheKey, finalLibraryConfig)
             done(null, finalLibraryConfig)

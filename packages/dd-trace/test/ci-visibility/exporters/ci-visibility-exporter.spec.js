@@ -416,6 +416,52 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       })
+      it('does not request skippable suites when git metadata upload fails with require_git false', (done) => {
+        // Regression: the live settings path starts `sendGitMetadata` even when the
+        // backend returns `require_git: false`. `getSkippableSuites` awaits
+        // `_gitUploadPromise`, so a failed upload must resolve that promise with the
+        // error and suppress the skippable request. The settings fs-cache apply path
+        // must NOT call `_resolveGit()` on the live path, or it races the in-flight
+        // upload and masks its error.
+        nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                itr_enabled: true,
+                require_git: false,
+                code_coverage: true,
+                tests_skipping: true,
+              },
+            },
+          }))
+
+        const skippableScope = nock(url)
+          .post('/api/v2/ci/tests/skippable')
+          .reply(200, JSON.stringify({ data: [] }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+        })
+        // Simulate a failed git metadata upload: resolve the git promise with an error,
+        // as the real `sendGitMetadata` would on a non-2xx response.
+        ciVisibilityExporter.sendGitMetadata = function () {
+          setImmediate(() => this._resolveGit(new Error('git metadata upload failed')))
+        }
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+
+        ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+          assert.strictEqual(settingsErr, null)
+          assert.strictEqual(ciVisibilityExporter.shouldRequestSkippableSuites(), true)
+          ciVisibilityExporter.getSkippableSuites({}, (skippableErr, skippableSuites) => {
+            assert.ok(skippableErr instanceof Error, 'skippable should surface the git upload error')
+            assert.deepStrictEqual(skippableSuites, [])
+            assert.strictEqual(skippableScope.isDone(), false, 'should NOT request skippable when git upload fails')
+            done()
+          })
+        })
+      })
       it('will retry ITR configuration request if require_git is true', (done) => {
         const TIME_TO_UPLOAD_GIT = 50
         let hasUploadedGit = false
