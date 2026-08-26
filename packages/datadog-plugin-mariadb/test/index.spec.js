@@ -343,6 +343,28 @@ describe('Plugin', () => {
             ])
           })
 
+          it('publishes the IAST stage lifecycle around the original query', async () => {
+            const sql = 'SELECT 7 AS iast_probe'
+            const statements = []
+            let finishes = 0
+            const startChannel = dc.channel('datadog:iast:mariadb:query:start')
+            const finishChannel = dc.channel('datadog:iast:mariadb:query:finish')
+            const onStart = context => statements.push(context.sql)
+            const onFinish = () => finishes++
+
+            startChannel.subscribe(onStart)
+            finishChannel.subscribe(onFinish)
+            try {
+              await connection.query(sql)
+            } finally {
+              startChannel.unsubscribe(onStart)
+              finishChannel.unsubscribe(onFinish)
+            }
+
+            assert.deepStrictEqual(statements, [sql])
+            assert.strictEqual(finishes, 1)
+          })
+
           it('should work without a callback', async () => {
             await Promise.all([
               agent.assertFirstTraceSpan({ resource: 'SELECT 1 + 1 AS solution' }),
@@ -663,6 +685,46 @@ describe('Plugin', () => {
               }, { spanResourceMatch: /SELECT 1 \+ 1 AS solution/ }),
               connection.query('SELECT 1 + 1 AS solution'),
             ])
+          })
+        })
+
+        describe('with DBM propagation - promises', () => {
+          const queryLog = []
+          let connection
+          let mariadb
+
+          afterEach(async () => {
+            await connection.end()
+            await agent.close()
+            queryLog.length = 0
+          })
+
+          beforeEach(async () => {
+            tracer = await agent.load('mariadb', {
+              dbmPropagationMode: 'service',
+              service: 'dbm-service',
+            })
+            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+
+            connection = await mariadb.createConnection({
+              database: 'db',
+              host: 'localhost',
+              logger: { query: message => queryLog.push(message) },
+              user: 'root',
+            })
+          })
+
+          it('writes the injected query to the driver while retaining the original span resource', async () => {
+            const sql = 'SELECT 11 AS dbm_probe'
+
+            await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: /SELECT 11 AS dbm_probe/ }),
+              connection.query(sql),
+            ])
+
+            const message = queryLog.find(message => message.includes(sql))
+            assert.match(message, /^QUERY: \/\*dddb='db',dddbs='dbm-service'/)
+            assert.match(message, /\*\/ SELECT 11 AS dbm_probe(?: - parameters:\[\])?$/)
           })
         })
       }

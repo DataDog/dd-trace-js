@@ -124,4 +124,46 @@ describe('Plugin', () => {
     channel('apm:noopAware:start').publish({ outside: 'again' })
     sinon.assert.calledOnce(handler)
   })
+
+  it('should allow lifecycle subscribers to run inside a noop scope when requested', () => {
+    const handler = sinon.spy()
+
+    class NoopLifecyclePlugin extends Plugin {
+      static id = 'noopLifecycle'
+
+      constructor () {
+        super()
+        this.addSub('apm:noopLifecycle:end', handler, { allowNoop: true })
+      }
+    }
+
+    plugin = new NoopLifecyclePlugin()
+    plugin.configure({ enabled: true })
+
+    storage('legacy').run({ noop: true }, () => {
+      channel('apm:noopLifecycle:end').publish({ inside: true })
+    })
+    sinon.assert.calledOnceWithExactly(handler, { inside: true }, 'apm:noopLifecycle:end')
+  })
+
+  it('should bind and restore a non-legacy store', () => {
+    const contextStorage = storage('plugin-test-context')
+
+    class ContextPlugin extends Plugin {
+      static id = 'contextPlugin'
+
+      constructor () {
+        super()
+        this.addStoreBind('apm:contextPlugin:start', contextStorage, data => data.context)
+      }
+    }
+
+    plugin = new ContextPlugin()
+    plugin.configure({ enabled: true })
+
+    channel('apm:contextPlugin:start').runStores({ context: { id: 42 } }, () => {
+      assert.deepStrictEqual(contextStorage.getStore(), { id: 42 })
+    })
+    assert.strictEqual(contextStorage.getStore(), undefined)
+  })
 })

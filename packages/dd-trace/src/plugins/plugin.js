@@ -27,10 +27,10 @@ const legacyStorage = storage('legacy')
  */
 
 class Subscription {
-  constructor (event, handler) {
+  constructor (event, handler, allowNoop) {
     this._channel = dc.channel(event)
     this._handler = (message, name) => {
-      if (!legacyStorage.getHandle()?.noop) {
+      if (allowNoop || !legacyStorage.getHandle()?.noop) {
         handler(message, name)
       }
     }
@@ -48,23 +48,24 @@ class Subscription {
 }
 
 class StoreBinding {
-  constructor (event, transform) {
+  constructor (event, store, transform, allowNoop) {
     this._channel = dc.channel(event)
+    this._store = store
     this._transform = data => {
-      const handle = legacyStorage.getHandle()
+      const handle = store.getHandle()
 
-      return !handle?.noop || (data && Object.hasOwn(data, 'currentStore'))
+      return allowNoop || store !== legacyStorage || !handle?.noop || (data && Object.hasOwn(data, 'currentStore'))
         ? transform(data)
-        : legacyStorage.getStore()
+        : store.getStore()
     }
   }
 
   enable () {
-    this._channel.bindStore(legacyStorage, this._transform)
+    this._channel.bindStore(this._store, this._transform)
   }
 
   disable () {
-    this._channel.unbindStore(legacyStorage)
+    this._channel.unbindStore(this._store)
   }
 }
 
@@ -112,9 +113,10 @@ module.exports = class Plugin {
    *
    * @param {string} channelName Diagnostic channel name.
    * @param {(message: unknown, name: string) => unknown} handler Handler invoked on messages.
+   * @param {{ allowNoop?: boolean }} [options] Subscription behavior.
    * @returns {void}
    */
-  addSub (channelName, handler) {
+  addSub (channelName, handler, options) {
     const wrappedHandler = (message, name) => {
       try {
         return handler.call(this, message, name)
@@ -124,18 +126,32 @@ module.exports = class Plugin {
         this.configure(false)
       }
     }
-    this._subscriptions.push(new Subscription(channelName, wrappedHandler))
+    this._subscriptions.push(new Subscription(channelName, wrappedHandler, options?.allowNoop))
   }
 
   /**
    * Bind the tracer store to a diagnostic channel with a transform function.
    *
    * @param {string} channelName Diagnostic channel name.
-   * @param {(data: unknown) => object} transform Transform to compute the bound store.
+   * @param {(data: unknown) => object | undefined} transform Transform to compute the bound store.
+   * @param {{ allowNoop?: boolean }} [options] Binding behavior.
    * @returns {void}
    */
-  addBind (channelName, transform) {
-    this._bindings.push(new StoreBinding(channelName, transform))
+  addBind (channelName, transform, options) {
+    this.addStoreBind(channelName, legacyStorage, transform, options)
+  }
+
+  /**
+   * Bind a named product store to a diagnostic channel.
+   *
+   * @param {string} channelName Diagnostic channel name.
+   * @param {import('async_hooks').AsyncLocalStorage} store Store to bind.
+   * @param {(data: unknown) => object | undefined} transform Transform to compute the bound store.
+   * @param {{ allowNoop?: boolean }} [options] Binding behavior.
+   * @returns {void}
+   */
+  addStoreBind (channelName, store, transform, options) {
+    this._bindings.push(new StoreBinding(channelName, store, transform, options?.allowNoop))
   }
 
   /**

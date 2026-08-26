@@ -6,7 +6,7 @@ const { storage } = require('../../../../../datadog-core')
 const { getNodeModulesPaths } = require('../path-line')
 const StoredInjectionAnalyzer = require('./stored-injection-analyzer')
 
-const EXCLUDED_PATHS = getNodeModulesPaths('mysql', 'mysql2', 'sequelize', 'pg-pool', 'knex')
+const EXCLUDED_PATHS = getNodeModulesPaths('mariadb', 'mysql', 'mysql2', 'sequelize', 'pg-pool', 'knex')
 
 class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   constructor () {
@@ -32,6 +32,9 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
 
     this.addSub('datadog:mysql:pool:query:start', ({ sql }) => this.setStoreAndAnalyze(sql, 'MYSQL'))
     this.addSub('datadog:mysql:pool:query:finish', () => this.returnToParentStore())
+
+    this.addSub('datadog:iast:mariadb:query:start', ({ sql }) => this.setStoreAndAnalyze(sql, 'MYSQL'))
+    this.addSub('datadog:iast:mariadb:query:finish', () => this.returnToParentStore())
 
     this.addBind('datadog:knex:raw:start', (context) => {
       const { sql, dialect: knexDialect } = context
