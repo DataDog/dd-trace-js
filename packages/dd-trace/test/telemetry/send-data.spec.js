@@ -17,16 +17,11 @@ describe('sendData', () => {
   const host = { hostname: 'test-host' }
 
   let sendDataModule
-  let getTestOptimizationAgent
   let request
-  let testOptimizationAgent
 
   beforeEach(() => {
     request = sinon.stub()
-    testOptimizationAgent = {}
-    getTestOptimizationAgent = sinon.stub().returns(testOptimizationAgent)
     sendDataModule = proxyquire('../../src/telemetry/send-data', {
-      '../ci-visibility/exporters/agents': { getTelemetryAgent: getTestOptimizationAgent },
       '../exporters/common/request': request,
     })
   })
@@ -56,8 +51,6 @@ describe('sendData', () => {
       hostname: '',
       port: '12345',
     })
-    assert.strictEqual(options.agent, undefined)
-    sinon.assert.notCalled(getTestOptimizationAgent)
   })
 
   it('sends telemetry to the configured socket url', () => {
@@ -185,8 +178,6 @@ describe('sendData', () => {
     })
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
-    assert.strictEqual(options.agent, testOptimizationAgent)
-    sinon.assert.calledOnceWithExactly(getTestOptimizationAgent, url)
   })
 
   it('uses DD_CIVISIBILITY_AGENTLESS_URL for telemetry when the agentless intake is overridden', () => {
@@ -209,40 +200,6 @@ describe('sendData', () => {
     const options = request.getCall(0).args[1]
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://my-intake.example/'))
-    assert.strictEqual(options.agent, testOptimizationAgent)
-    sinon.assert.calledOnceWithExactly(getTestOptimizationAgent, url)
-  })
-
-  it('re-selects the HTTPS Test Optimization agent when an HTTP override falls back to the backend', () => {
-    const overrideUrl = new URL('http://localhost:8126')
-    const backendUrl = new URL('https://instrumentation-telemetry-intake.datadoghq.eu')
-    const httpAgent = {}
-    const httpsAgent = {}
-    getTestOptimizationAgent.withArgs(overrideUrl).returns(httpAgent)
-    getTestOptimizationAgent.withArgs(backendUrl).returns(httpsAgent)
-    request.onFirstCall().yields(new Error('override unavailable'))
-    request.onSecondCall().yields(null)
-
-    sendDataModule.sendData(
-      {
-        DD_API_KEY: 'secret-key',
-        isCiVisibility: true,
-        testOptimization: {
-          DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
-          DD_CIVISIBILITY_AGENTLESS_URL: overrideUrl,
-        },
-        tags: { 'runtime-id': '123' },
-        site: 'datadoghq.eu',
-      },
-      application,
-      host,
-      'req-type'
-    )
-
-    assert.strictEqual(request.callCount, 2)
-    assert.strictEqual(request.getCall(0).args[1].agent, httpAgent)
-    assert.strictEqual(request.getCall(1).args[1].agent, httpsAgent)
-    assert.deepStrictEqual(request.getCall(1).args[1].url, backendUrl)
   })
 
   it('sends the agentless backend telemetry with a URL object when the agent request fails', () => {

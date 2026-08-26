@@ -32,11 +32,11 @@ let uploadCoverageReportRequest = actualUploadCoverageReportRequest
 let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
 let formatSpan = actualSpanFormat
 let incrementCountMetric
-let isOriginSaturatedStub = (_writerUrl) => false
+
 const formatSpanStub = (...args) => formatSpan(...args)
 formatSpanStub.addError = actualSpanFormat.addError
 const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
-  './agents': { isOriginSaturated: (writerUrl) => isOriginSaturatedStub(writerUrl) },
+
   '../requests/upload-coverage-report': {
     uploadCoverageReport (...args) {
       return uploadCoverageReportRequest(...args)
@@ -86,7 +86,6 @@ describe('CI Visibility Exporter', () => {
     uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
     formatSpan = actualSpanFormat
     incrementCountMetric = sinon.stub()
-    isOriginSaturatedStub = (_writerUrl) => false
   })
 
   afterEach(() => {
@@ -942,65 +941,6 @@ describe('CI Visibility Exporter', () => {
 
         sinon.assert.calledOnceWithExactly(writer.append, [testEvent, suiteEvent])
       })
-    })
-  })
-
-  describe('periodic flush coalescing', () => {
-    it('holds the periodic flush while the intake origin is saturated', () => {
-      const clock = sinon.useFakeTimers()
-      try {
-        const writer = {
-          _url: url,
-          append: sinon.spy(),
-          flush: sinon.spy(),
-          setUrl: sinon.spy(),
-        }
-        const ciVisibilityExporter = new CiVisibilityExporter({
-          url,
-          flushInterval: 50,
-        })
-        ciVisibilityExporter._isInitialized = true
-        ciVisibilityExporter._writer = writer
-        isOriginSaturatedStub = (writerUrl) => {
-          assert.strictEqual(writerUrl, url)
-          return true
-        }
-
-        ciVisibilityExporter.export([{ span_id: '1' }])
-        clock.tick(150)
-
-        sinon.assert.called(writer.append)
-        sinon.assert.notCalled(writer.flush)
-      } finally {
-        clock.restore()
-        isOriginSaturatedStub = (_writerUrl) => false
-      }
-    })
-
-    it('flushes on the periodic timer once the intake origin is idle', () => {
-      const clock = sinon.useFakeTimers()
-      try {
-        const writer = {
-          _url: url,
-          append: sinon.spy(),
-          flush: sinon.spy(),
-          setUrl: sinon.spy(),
-        }
-        const ciVisibilityExporter = new CiVisibilityExporter({
-          url,
-          flushInterval: 50,
-        })
-        ciVisibilityExporter._isInitialized = true
-        ciVisibilityExporter._writer = writer
-        isOriginSaturatedStub = () => false
-
-        ciVisibilityExporter.export([{ span_id: '1' }])
-        clock.tick(150)
-
-        sinon.assert.called(writer.flush)
-      } finally {
-        clock.restore()
-      }
     })
   })
 

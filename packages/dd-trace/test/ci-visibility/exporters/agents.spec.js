@@ -16,13 +16,11 @@ const {
   httpAgent: commonHttpAgent,
   httpsAgent: commonHttpsAgent,
 } = require('../../../src/exporters/common/agents')
-const { getAgent, getTelemetryAgent, isOriginSaturated } = require('../../../src/ci-visibility/exporters/agents')
+const { getAgent } = require('../../../src/ci-visibility/exporters/agents')
 
 describe('Test Optimization exporter agents', () => {
   const httpAgent = getAgent('http://localhost')
   const httpsAgent = getAgent('https://localhost')
-  const telemetryHttpAgent = getTelemetryAgent('http://localhost')
-  const telemetryHttpsAgent = getTelemetryAgent('https://localhost')
 
   it('keeps the shared exporter agents serialized at one socket', () => {
     assert.strictEqual(commonHttpAgent.keepAlive, true)
@@ -48,15 +46,6 @@ describe('Test Optimization exporter agents', () => {
   it('returns a stable singleton per protocol', () => {
     assert.strictEqual(getAgent('http://a.example'), getAgent('http://b.example'))
     assert.strictEqual(getAgent('https://a.example'), getAgent('https://b.example'))
-  })
-
-  it('isolates telemetry on a separate pool from payload writers', () => {
-    assert.strictEqual(getTelemetryAgent('http://localhost'), telemetryHttpAgent)
-    assert.strictEqual(getTelemetryAgent('https://localhost'), telemetryHttpsAgent)
-    assert.notStrictEqual(telemetryHttpAgent, httpAgent)
-    assert.notStrictEqual(telemetryHttpsAgent, httpsAgent)
-    assert.strictEqual(telemetryHttpAgent.maxSockets, 16)
-    assert.strictEqual(telemetryHttpsAgent.maxSockets, 16)
   })
 
   it('manages the keep-alive socket lifecycle', () => {
@@ -92,156 +81,5 @@ describe('Test Optimization exporter agents', () => {
       for (const request of requests) request.destroy()
       agent.destroy()
     }
-  })
-
-  describe('isOriginSaturated', () => {
-    it('is not saturated when the pool is idle', () => {
-      const agent = new httpAgent.constructor()
-      try {
-        assert.strictEqual(isOriginSaturated('http://idle.example:8080', agent), false)
-      } finally {
-        agent.destroy()
-      }
-    })
-
-    it('is saturated once sixteen same-origin requests are in flight', async () => {
-      const agent = new httpAgent.constructor()
-      const lookup = () => {} // never resolves, so requests stay in flight
-      const requests = new Array(16)
-      const url = 'http://saturated.example:8080'
-
-      for (let index = 0; index < requests.length; index++) {
-        const request = createRequest({ agent, hostname: 'saturated.example', port: 8080, lookup })
-        request.on('error', () => {})
-        request.end()
-        requests[index] = request
-      }
-
-      await new Promise(resolve => setImmediate(resolve))
-
-      try {
-        assert.strictEqual(isOriginSaturated(url, agent), true)
-      } finally {
-        for (const request of requests) request.destroy()
-        agent.destroy()
-      }
-    })
-
-    it('detects saturation for a default-port URL that omits an explicit port', async () => {
-      const agent = new httpsAgent.constructor()
-      const lookup = () => {} // never resolves, so requests stay in flight
-      const requests = new Array(16)
-      const url = 'https://saturated.example' // no explicit port; Node normalizes to 443
-
-      for (let index = 0; index < requests.length; index++) {
-        const request = createRequest({
-          agent,
-          ...require('node:url').urlToHttpOptions(new URL(url)),
-          lookup,
-        })
-        request.on('error', () => {})
-        request.end()
-        requests[index] = request
-      }
-
-      await new Promise(resolve => setImmediate(resolve))
-
-      try {
-        assert.strictEqual(isOriginSaturated(url, agent), true)
-      } finally {
-        for (const request of requests) request.destroy()
-        agent.destroy()
-      }
-    })
-
-    it('detects saturation for an IPv6 literal URL', async () => {
-      const agent = new httpAgent.constructor()
-      const lookup = () => {}
-      const requests = new Array(16)
-      const url = 'http://[::1]:8126' // Node keys the pool as ::1:8126:
-
-      for (let index = 0; index < requests.length; index++) {
-        const request = createRequest({
-          agent,
-          ...require('node:url').urlToHttpOptions(new URL(url)),
-          lookup,
-        })
-        request.on('error', () => {})
-        request.end()
-        requests[index] = request
-      }
-
-      await new Promise(resolve => setImmediate(resolve))
-
-      try {
-        assert.strictEqual(isOriginSaturated(url, agent), true)
-      } finally {
-        for (const request of requests) request.destroy()
-        agent.destroy()
-      }
-    })
-
-    it('detects saturation for a Unix-domain socket URL', async function () {
-      // Unix-domain sockets are not available on Windows.
-      if (process.platform === 'win32') this.skip()
-
-      const net = require('node:net')
-      const fs = require('node:fs')
-      const socketPath = `/tmp/dd-test-agents-${process.pid}.sock`
-      try { fs.unlinkSync(socketPath) } catch {}
-      const server = net.createServer((socket) => socket.resume())
-      const openSockets = new Set()
-      server.on('connection', (socket) => openSockets.add(socket))
-      await new Promise(resolve => server.listen(socketPath, resolve))
-
-      const agent = new httpAgent.constructor()
-      const url = `unix://${socketPath}`
-      const requests = new Array(16)
-
-      try {
-        for (let index = 0; index < requests.length; index++) {
-          const request = createRequest({ agent, socketPath })
-          request.on('error', () => {})
-          request.end()
-          requests[index] = request
-        }
-
-        await new Promise(resolve => setImmediate(resolve))
-
-        assert.strictEqual(isOriginSaturated(url, agent), true)
-      } finally {
-        for (const request of requests) request.destroy()
-        for (const socket of openSockets) socket.destroy()
-        agent.destroy()
-        await new Promise(resolve => server.close(() => { try { fs.unlinkSync(socketPath) } catch {} resolve() }))
-      }
-    })
-
-    it('is saturated once a request is queued behind the active sockets', async () => {
-      const agent = new http.Agent({ keepAlive: true, maxSockets: 1 })
-      const lookup = () => {}
-      const requests = new Array(2)
-      const url = 'http://queued.example:8080'
-
-      for (let index = 0; index < requests.length; index++) {
-        const request = createRequest({ agent, hostname: 'queued.example', port: 8080, lookup })
-        request.on('error', () => {})
-        request.end()
-        requests[index] = request
-      }
-
-      await new Promise(resolve => setImmediate(resolve))
-
-      try {
-        assert.strictEqual(isOriginSaturated(url, agent), true)
-      } finally {
-        for (const request of requests) request.destroy()
-        agent.destroy()
-      }
-    })
-
-    it('fails open for an unparseable URL', () => {
-      assert.strictEqual(isOriginSaturated('not a url'), false)
-    })
   })
 })

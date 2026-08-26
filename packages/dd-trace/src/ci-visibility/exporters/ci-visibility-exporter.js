@@ -25,7 +25,6 @@ const {
   FINAL_FLUSH_TIMEOUT,
 } = require('../final-flush')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
-const { isOriginSaturated } = require('./agents')
 
 const hostname = getHostname()
 const EMPTY_SETTINGS = Object.freeze({})
@@ -97,18 +96,6 @@ class CiVisibilityExporter extends BufferingExporter {
   #deferredTestSessionTraces = []
   #pendingScreenshotUploads = new Set()
   #screenshotFlushWaiters = new Set()
-
-  /**
-   * Holds periodic timer flushes while the writer's intake origin is saturated so
-   * events coalesce instead of stacking behind in-flight requests. The encoder's
-   * size gate and the bounded final flush still deliver payloads.
-   *
-   * @param {object} writer
-   * @returns {boolean}
-   */
-  _shouldFlush (writer) {
-    return !isOriginSaturated(writer._url)
-  }
 
   constructor (config, options = {}) {
     super(config)

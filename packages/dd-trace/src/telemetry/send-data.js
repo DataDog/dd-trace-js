@@ -1,6 +1,5 @@
 'use strict'
 
-const { getTelemetryAgent: getTestOptimizationAgent } = require('../ci-visibility/exporters/agents')
 const request = require('../exporters/common/request')
 const log = require('../log')
 
@@ -165,12 +164,6 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     headers: getHeaders(config, application, reqType),
   }
 
-  if (isCiVisibilityAgentlessMode) {
-    // Test Optimization sends lifecycle telemetry alongside final payloads; keep both
-    // off the shared single-socket pool so telemetry never queues behind payload traffic.
-    options.agent = getTestOptimizationAgent(url)
-  }
-
   const data = JSON.stringify({
     api_version: 'v2',
     naming_schema_version: config.spanAttributeSchema ?? '',
@@ -203,9 +196,6 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         url: backendUrl,
         headers: backendHeader,
         path: '/api/v2/apmtelemetry',
-      }
-      if (isCiVisibilityAgentlessMode) {
-        backendOptions.agent = getTestOptimizationAgent(backendUrl)
       }
       request(data, backendOptions, (error) => {
         if (error) {

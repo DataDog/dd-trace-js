@@ -2145,26 +2145,25 @@ moduleTypes.forEach(({
       sinon.assert.calledOnceWithExactly(init, tracer, cypressConfig)
     })
 
-    for (const [description, cypressConfig, shouldDefer] of [
-      ['does not retain completed suites without an after:run boundary', {
+    for (const [description, cypressConfig] of [
+      ['finishes completed suites without an after:run boundary', {
         isTextTerminal: false,
         isInteractive: true,
         experimentalInteractiveRunEvents: false,
-      }, false],
-      ['retains completed suites in terminal runs', {
+      }],
+      ['finishes completed suites in terminal runs', {
         isTextTerminal: true,
         // Cypress 12 can leave this true during `cypress run`.
         isInteractive: true,
         experimentalInteractiveRunEvents: false,
-      }, true],
-      ['retains completed suites when interactive run events are enabled', {
+      }],
+      ['finishes completed suites when interactive run events are enabled', {
         isTextTerminal: false,
         isInteractive: true,
         experimentalInteractiveRunEvents: true,
-      }, true],
+      }],
     ]) {
       it(description, () => {
-        const deferTestSuiteSpan = sinon.stub()
         const testSuiteSpan = {
           finish: sinon.stub(),
           setTag: sinon.stub(),
@@ -2174,14 +2173,13 @@ moduleTypes.forEach(({
         cypressPlugin.testsToSkip = []
         cypressPlugin.testSuiteSpan = testSuiteSpan
         cypressPlugin.finishedTestSuiteSpans = []
-        cypressPlugin.tracer = { _tracer: { _exporter: { deferTestSuiteSpan } } }
+        cypressPlugin.tracer = { _tracer: { _exporter: {} } }
         sinon.stub(cypressPlugin, 'ciVisEvent')
 
         cypressPlugin.afterSpec({ relative: 'cypress/e2e/basic-pass.js' }, { stats: { tests: 1 } })
 
         sinon.assert.calledOnce(testSuiteSpan.finish)
-        assert.strictEqual(deferTestSuiteSpan.calledOnceWithExactly(testSuiteSpan), shouldDefer)
-        assert.strictEqual(cypressPlugin.finishedTestSuiteSpans.length, shouldDefer ? 1 : 0)
+        assert.strictEqual(cypressPlugin.finishedTestSuiteSpans.length, 1)
       })
     }
 

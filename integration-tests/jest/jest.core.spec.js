@@ -1972,11 +1972,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(tests.length, 1)
 
         const [testSuite] = testSuites
-        for (const event of [testSession, testModule, testSuite]) {
+        for (const event of [testSession, testModule]) {
           assert.strictEqual(event.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.error, 1)
           assert.match(event.meta[ERROR_MESSAGE], /custom reporter failed/)
         }
+        // The suite retains its actual status; only the session and module are marked as failed.
+        assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
         assert.strictEqual(testSuite.test_session_id.toString(), testSession.test_session_id.toString())
         assert.strictEqual(testSuite.test_module_id.toString(), testModule.test_module_id.toString())
         assert.strictEqual(tests[0].test_suite_id.toString(), testSuite.test_suite_id.toString())

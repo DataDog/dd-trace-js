@@ -15,9 +15,8 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
 } = require('../../../ci-visibility/telemetry')
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
-const { MAX_SIZE } = require('../../../msgpack')
 const BaseWriter = require('../../../exporters/common/writer')
-const { getAgent, isOriginSaturated } = require('../agents')
+const { getAgent } = require('../agents')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
 
@@ -34,25 +33,13 @@ class Writer extends BaseWriter {
   }
 
   /**
-   * Flushes buffered events, coalescing size-gated flushes while the intake is busy.
-   *
-   * The encoder's size gate calls this without a deadline. When the intake origin is
-   * saturated, defer so events coalesce instead of stacking another request behind
-   * the in-flight ones; the periodic timer (which re-arms while saturated) and the
-   * bounded final flush still deliver. Flush unconditionally near the encoder hard
-   * cap so a saturated intake cannot grow the buffer into an `OverflowError` that
-   * drops the whole payload.
+   * Flushes buffered events, waiting for tracked requests during finalization.
    *
    * @param {(error?: Error) => void} [done]
    * @param {{ deadline?: number }} [options]
    * @returns {void}
    */
   flush (done, options) {
-    if (options?.deadline === undefined && isOriginSaturated(this._url) &&
-        (this._encoder?._traceBytes?.length ?? 0) < MAX_SIZE * 0.8) {
-      done?.()
-      return
-    }
     this.#requestTracker.flush(done, options)
   }
 
