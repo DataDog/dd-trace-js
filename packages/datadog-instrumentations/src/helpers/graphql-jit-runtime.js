@@ -303,7 +303,7 @@ function createDescriptor (context, compilerPath, input, fieldNode, createFieldM
  * @returns {string}
  */
 function compileArgumentFactory (context, descriptor, missing, argumentSource) {
-  if (missing.length === 0 && Object.keys(descriptor.staticArguments)[0] === undefined) return 'undefined'
+  if (missing.length === 0 && Object.keys(descriptor.staticArguments).length === 0) return 'undefined'
 
   const name = `ddTraceArguments${descriptor.id}`
   let source = `function ${name} (variableValues, cloneValue) {\n  const args = ${argumentSource}\n`

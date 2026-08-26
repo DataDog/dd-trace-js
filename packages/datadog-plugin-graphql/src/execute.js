@@ -920,14 +920,32 @@ function getJitDefaultArguments (rootCtx, descriptor, argumentFactory, mutable) 
 function cloneArgumentValue (value, clones) {
   if (value === null || typeof value !== 'object') return value
 
+  // Lists get their own branch: Object.keys materializes the index strings and
+  // the clone is then filled through them instead of by index.
+  if (Array.isArray(value)) {
+    const { length } = value
+    if (length === 0) return value
+
+    clones ??= new WeakMap()
+    const cached = clones.get(value)
+    if (cached !== undefined) return cached
+
+    const clone = new Array(length)
+    clones.set(value, clone)
+    for (let index = 0; index < length; index++) {
+      clone[index] = cloneArgumentValue(value[index], clones)
+    }
+    return clone
+  }
+
   const keys = Object.keys(value)
-  if (keys[0] === undefined) return value
+  if (keys.length === 0) return value
 
   clones ??= new WeakMap()
   const cached = clones.get(value)
   if (cached !== undefined) return cached
 
-  const clone = Array.isArray(value) ? new Array(value.length) : {}
+  const clone = {}
   clones.set(value, clone)
   for (const name of keys) {
     clone[name] = cloneArgumentValue(value[name], clones)
@@ -1051,6 +1069,20 @@ function callInAsyncScope (fn, thisArg, args, store, callback, isJit) {
 }
 
 /**
+ * Observes settlement without standing between the consumer and the resolver's
+ * own `then`. Three constraints hold at once, each with its own regression test:
+ * the foreign `then` runs exactly once (`should not re-execute thenables from
+ * resolvers` — a Mongoose `Query` throws on the second call), the return value
+ * stays then-able, and the consumer receives whatever the foreign `then` returned.
+ *
+ * `return thenable.then(onSettled)` satisfies the first two and breaks the third:
+ * only `Promise.prototype.then` is guaranteed to return a promise, and
+ * `await`/`Promise.resolve` discard that return value, so a thenable returning
+ * `this` or a plain value is legal and invisible everywhere except here — see
+ * `CustomThenableSuccess` in jit.spec.js, which resolves with 'actual' but returns
+ * 'wrong'. Forwarding `then` lets the consumer make that single call itself and
+ * get its real return value, while the settlement callbacks pass through us.
+ *
  * @param {Thenable} thenable
  * @param {(error: unknown, result?: unknown) => void} callback
  * @returns {Thenable}
