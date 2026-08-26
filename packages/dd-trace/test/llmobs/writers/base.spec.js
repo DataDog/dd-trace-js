@@ -192,6 +192,21 @@ describe('BaseLLMObsWriter', () => {
       assert.strictEqual(writer._buffer.events.length, 0)
       sinon.assert.calledOnce(request)
     })
+
+    it('flushes an event appended before the agent strategy resolves', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.makePayload = (events) => ({ events })
+
+      writer.append({ foo: 'bar' })
+
+      assert.strictEqual(writer._buffer.events.length, 1)
+      sinon.assert.notCalled(request)
+
+      writer.setAgentless(true)
+
+      assert.strictEqual(writer._buffer.events.length, 0)
+      sinon.assert.calledOnce(request)
+    })
   })
 
   describe('flush', () => {

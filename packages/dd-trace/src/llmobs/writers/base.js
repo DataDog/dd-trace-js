@@ -15,8 +15,8 @@ const {
   EVP_SUBDOMAIN_HEADER_NAME,
   EVP_PROXY_AGENT_BASE_PATH,
 } = require('../constants/writers')
-const { parseResponseAndLog } = require('./util')
 const { DATADOG_MINI_AGENT_PATH } = require('../../constants')
+const { parseResponseAndLog } = require('./util')
 
 // In Lambda, the execution environment can freeze between invocations, so a buffered
 // flush (interval timer or process 'beforeExit', which only ever fires once per
@@ -217,6 +217,13 @@ class BaseLLMObsWriter {
     this._endpoint = endpoint
 
     logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
+
+    // In Lambda mode there's no periodic/beforeExit fallback, so events appended
+    // before this resolves (e.g. while fetchAgentInfo() is in flight) would
+    // otherwise never get flushed.
+    if (this._flushOnAppend) {
+      this.flush()
+    }
   }
 
   _getUrlAndPath () {
