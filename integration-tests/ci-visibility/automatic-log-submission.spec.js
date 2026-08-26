@@ -3,6 +3,7 @@
 const assert = require('assert')
 const { exec } = require('child_process')
 const { once } = require('events')
+const http = require('http')
 
 const {
   sandboxCwd,
@@ -19,6 +20,7 @@ const webAppServer = require('./web-app-server')
 
 const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 const playwrightDependency = `@playwright/test@${getLatestPlaywrightSpecifier()}`
+const vitestDependency = NODE_MAJOR <= 18 ? 'vitest@3.2.6' : 'vitest'
 
 describe('test optimization automatic log submission', () => {
   let cwd, receiver, childProcess, webAppPort
@@ -29,6 +31,7 @@ describe('test optimization automatic log submission', () => {
     ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
     'bunyan',
     'jest',
+    vitestDependency,
     'winston',
     playwrightDependency,
   ], true)
@@ -70,6 +73,14 @@ describe('test optimization automatic log submission', () => {
       loggerNames: ['winston', 'bunyan'],
     },
     {
+      name: 'vitest',
+      command: './node_modules/.bin/vitest run --config ./ci-visibility/automatic-log-submission-vitest/config.mjs',
+      loggerNames: ['bunyan'],
+      getExtraEnvVars: () => ({
+        NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+      }),
+    },
+    {
       name: 'jest',
       command: 'node ./node_modules/jest/bin/jest --config ./ci-visibility/automatic-log-submission/config-jest.js',
     },
@@ -81,6 +92,7 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'playwright',
       command: './node_modules/.bin/playwright test -c playwright.config.js',
+      loggerNames: ['bunyan'],
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
         TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
@@ -263,6 +275,103 @@ describe('test optimization automatic log submission', () => {
         assert.match(testOutput, /Hello simple log!/)
         assert.match(testOutput, /no automatic log submission will be performed/)
       })
+    })
+  })
+
+  context('with bunyan and multiple playwright test groups', () => {
+    it('waits for pending requests only when the worker exits', async () => {
+      const logMessages = []
+      let firstLogResponse
+      let firstLogRequestAborted = false
+      let waitingTestResponse
+
+      const respond = (response) => {
+        if (response.destroyed || response.writableEnded) return
+
+        response.writeHead(200)
+        response.end('OK')
+      }
+      const logsServer = http.createServer((request, response) => {
+        if (request.method === 'GET' && request.url === '/wait-for-first-log') {
+          if (firstLogResponse) respond(response)
+          else waitingTestResponse = () => respond(response)
+          return
+        }
+        if (request.method === 'GET' && request.url === '/second-group-started') {
+          firstLogResponse()
+          respond(response)
+          return
+        }
+        if (request.method !== 'POST' || !request.url.startsWith('/api/v2/logs')) {
+          response.writeHead(404)
+          response.end()
+          return
+        }
+
+        let body = ''
+        request.setEncoding('utf8')
+        request.on('data', chunk => {
+          body += chunk
+        })
+        request.on('end', () => {
+          logMessages.push(...JSON.parse(body))
+          if (firstLogResponse) {
+            respond(response)
+            return
+          }
+
+          response.once('close', () => {
+            if (!response.writableEnded) firstLogRequestAborted = true
+          })
+          firstLogResponse = () => respond(response)
+          waitingTestResponse?.()
+        })
+      })
+      await new Promise((resolve, reject) => {
+        logsServer.once('error', reject)
+        logsServer.listen(0, resolve)
+      })
+
+      try {
+        const { port } = logsServer.address()
+        childProcess = exec('./node_modules/.bin/playwright test -c playwright.config.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+            DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${port}`,
+            DD_API_KEY: '1',
+            DD_SERVICE: 'my-service',
+            LOG_SUBMISSION_CONTROL_URL: `http://localhost:${port}`,
+            PLAYWRIGHT_WORKERS: '1',
+            TEST_DIR: 'ci-visibility/automatic-log-submission-playwright-multiple-groups',
+            TEST_LOGGER: 'bunyan',
+          },
+        })
+        childProcess.stdout?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+        ])
+      } finally {
+        firstLogResponse?.()
+        waitingTestResponse?.()
+        await new Promise(resolve => logsServer.close(resolve))
+      }
+
+      assert.equal(childProcess.exitCode, 0, testOutput)
+      assert.equal(firstLogRequestAborted, false)
+      assert.deepStrictEqual(logMessages.map(({ msg }) => msg).sort(), [
+        'first group log',
+        'second group log',
+      ])
     })
   })
 })

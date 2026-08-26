@@ -22,6 +22,11 @@ const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 const { TEST_STATUS } = require('../../plugins/util/test')
+const {
+  createFinalFlushTimeoutError,
+  FINAL_FLUSH_FALLBACK_DELAY,
+  FINAL_FLUSH_TIMEOUT,
+} = require('../final-flush')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 
 const hostname = getHostname()
@@ -60,17 +65,6 @@ function getIsTestSessionTrace (trace) {
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 const MAX_COVERAGE_REPORT_FLAGS = 32
-const FINAL_FLUSH_TIMEOUT = 10_000
-const FINAL_FLUSH_FALLBACK_DELAY = 100
-
-/**
- * @returns {Error}
- */
-function createFinalFlushTimeoutError () {
-  const error = new Error('Timed out waiting for Test Optimization to flush')
-  error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
-  return error
-}
 
 function appendLogTag (tags, key, value) {
   if (value !== undefined) {

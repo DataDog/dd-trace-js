@@ -3,6 +3,8 @@
 const request = require('../../exporters/common/request')
 const log = require('../../log')
 const Plugin = require('../../plugins/plugin')
+const { FinalFlushRequestTracker } = require('../exporters/agentless/request-tracker')
+const { FINAL_FLUSH_TIMEOUT } = require('../final-flush')
 
 const MAX_BATCH_BYTES = 5 * 1024 * 1024
 const MAX_BATCH_LOGS = 1000
@@ -82,11 +84,16 @@ class LogSubmissionPlugin extends Plugin {
   #batchBytes = 2
   #batchSource
   #logSubmissionUrl
+  #requestTracker
   #timer
   #beforeExitHandler = () => this.#flushLogs()
 
   constructor (...args) {
     super(...args)
+    this.#requestTracker = new FinalFlushRequestTracker((done) => {
+      this.#flushLogs()
+      done?.()
+    })
 
     this.addSub('ci:log-submission:winston:configure', (httpClass) => {
       this.HttpClass = httpClass
@@ -98,6 +105,16 @@ class LogSubmissionPlugin extends Plugin {
 
     this.addSub('ci:log-submission:log', (payload) => {
       this.#enqueueLog(payload)
+    })
+    this.addSub('ci:log-submission:flush', ({ onDone } = {}) => {
+      if (!onDone) {
+        this.#flushLogs()
+        return
+      }
+
+      this.#requestTracker.flush(onDone, {
+        deadline: Date.now() + FINAL_FLUSH_TIMEOUT,
+      })
     })
   }
 
@@ -188,7 +205,7 @@ class LogSubmissionPlugin extends Plugin {
     }
 
     try {
-      request(data, options, error => {
+      this.#requestTracker.send(request, data, options, error => {
         if (error) log.error('Error submitting %s logs', source, error)
       })
     } catch (error) {
