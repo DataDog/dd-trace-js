@@ -273,11 +273,11 @@
 /packages/dd-trace/test/plugins/util/llm.spec.js @DataDog/dd-trace-js @DataDog/ml-observability
 
 # Data Streams Monitoring
-/benchmark/sirun/datastreams/ @DataDog/dd-trace-js @DataDog/data-streams-monitoring
-/packages/dd-trace/src/datastreams/ @DataDog/dd-trace-js @DataDog/data-streams-monitoring
-/packages/dd-trace/test/datastreams/ @DataDog/dd-trace-js @DataDog/data-streams-monitoring
-/packages/**/dsm.spec.js @DataDog/dd-trace-js @DataDog/data-streams-monitoring
-/packages/**/*.dsm.spec.js @DataDog/dd-trace-js @DataDog/data-streams-monitoring
+/benchmark/sirun/datastreams/ @DataDog/data-streams-monitoring
+/packages/dd-trace/src/datastreams/ @DataDog/data-streams-monitoring
+/packages/dd-trace/test/datastreams/ @DataDog/data-streams-monitoring
+/packages/**/dsm.spec.js @DataDog/data-streams-monitoring
+/packages/**/*.dsm.spec.js @DataDog/data-streams-monitoring
 
 # API SDK Capabilities
 /eslint-rules/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
@@ -536,9 +536,9 @@
 /.gitlab/benchmarks/ @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/ecosystems-performance
 /eslint-rules/* @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js
 /ext/exporters.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/ci-app-libraries @DataDog/lang-platform-js
-/ext/formats.* @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
-/ext/index.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-serverless @DataDog/ci-app-libraries @DataDog/data-streams-monitoring @DataDog/lang-platform-js
-/ext/tags.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
+/ext/formats.* @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
+/ext/index.* @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-serverless @DataDog/ci-app-libraries @DataDog/data-streams-monitoring @DataDog/lang-platform-js
+/ext/tags.* @DataDog/apm-idm-js @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
 /ext/types.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/apm-serverless
 /packages/dd-trace/src/plugin_manager.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-idm-js
 
