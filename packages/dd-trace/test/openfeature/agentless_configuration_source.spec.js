@@ -149,6 +149,10 @@ describe('AgentlessConfigurationSource', () => {
     assert.strictEqual(requests[0].options.retry, false)
     assert.strictEqual(requests[0].options.timeout, 2000)
     assert.strictEqual(requests[0].options.headers['DD-API-KEY'], 'test-api-key')
+    assert.strictEqual(
+      requests[0].options.headers['DD-API-KEY-FINGERPRINT'],
+      'rijn_i8Jug5ocjALL7JZiV1a8HzXqkwDRKcE7hK9IouPQwio'
+    )
     assert.strictEqual(requests[0].options.headers['Accept-Encoding'], 'gzip')
     assert.strictEqual(requests[0].options.headers['DD-Client-Library-Language'], 'nodejs')
     assert.strictEqual(requests[0].options.headers['DD-Client-Library-Version'], VERSION)
@@ -184,7 +188,7 @@ describe('AgentlessConfigurationSource', () => {
     config.endpoint = new URL('http://flags.dev.internal:8080/custom/ufc')
     delete config.apiKey
     nock('http://flags.dev.internal:8080', {
-      badheaders: ['dd-api-key'],
+      badheaders: ['dd-api-key', 'dd-api-key-fingerprint'],
       reqheaders: {
         'accept-encoding': 'gzip',
       },
@@ -501,6 +505,7 @@ describe('AgentlessConfigurationSource', () => {
     await flush()
 
     assert.strictEqual(Object.hasOwn(requests[0].options.headers, 'DD-API-KEY'), false)
+    assert.strictEqual(Object.hasOwn(requests[0].options.headers, 'DD-API-KEY-FINGERPRINT'), false)
     sinon.assert.calledOnceWithExactly(
       log.warn,
       'Feature Flagging agentless endpoint returned HTTP %d; verify endpoint authentication',

@@ -4,6 +4,7 @@
 
 const { setTimeout: sleep } = require('node:timers/promises')
 
+const { createAPIKeyFingerprint } = require('../api-key-fingerprint')
 const request = require('../exporters/common/request')
 const { getClientLibraryHeaders } = require('../exporters/common/client-library-headers')
 const log = require('../log')
@@ -138,7 +139,10 @@ class AgentlessConfigurationSource {
   #request (signal) {
     const headers = getClientLibraryHeaders()
     headers['Accept-Encoding'] = 'gzip'
-    if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
+    if (this.#config.apiKey) {
+      headers['DD-API-KEY'] = this.#config.apiKey
+      headers['DD-API-KEY-FINGERPRINT'] = createAPIKeyFingerprint(this.#config.apiKey)
+    }
     if (this.#etag) headers['If-None-Match'] = this.#etag
 
     /**
