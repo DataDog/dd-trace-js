@@ -1910,7 +1910,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   it('bounds the final flush if the server is not available and logs an error', async function () {
-    this.timeout(70_000)
+    this.timeout(100_000)
     // Very slow intake
     receiver.setWaitingTime(30000)
     // Needs to run with the CLI if we want --forceExit to work

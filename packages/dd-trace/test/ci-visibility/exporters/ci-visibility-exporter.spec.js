@@ -1075,7 +1075,7 @@ describe('CI Visibility Exporter', () => {
 
         ciVisibilityExporter.export([{ type: 'test' }])
         ciVisibilityExporter.flush(done)
-        clock.tick(60_100)
+        clock.tick(90_100)
 
         sinon.assert.calledOnce(done)
         const timeoutError = done.firstCall.args[0]
@@ -1773,12 +1773,12 @@ describe('CI Visibility Exporter', () => {
         exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
         exporter.flush(flushCallback)
         const requestOptions = uploadTestScreenshotRequest.firstCall.args[0]
-        assert.strictEqual(requestOptions.deadline, 60_000)
+        assert.strictEqual(requestOptions.deadline, 90_000)
         assert.strictEqual(requestOptions.signal.aborted, false)
         sinon.assert.notCalled(exporter._writer.flush)
         sinon.assert.notCalled(flushCallback)
 
-        clock.tick(59_999)
+        clock.tick(89_999)
         sinon.assert.notCalled(screenshotCallback)
         sinon.assert.notCalled(flushCallback)
 

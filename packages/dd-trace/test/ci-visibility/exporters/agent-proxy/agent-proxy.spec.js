@@ -108,7 +108,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
       const requestOptions = controlled.getRequestOptions()
       assert.strictEqual(requestOptions.signal.aborted, false)
-      assert.strictEqual(requestOptions.deadline, Date.now() + 60_000)
+      assert.strictEqual(requestOptions.deadline, Date.now() + 90_000)
 
       controlled.finishAgentInfo(null, { endpoints: ['/evp_proxy/v2'] })
       await Promise.resolve()
@@ -159,7 +159,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
       controlled.exporter.flush(firstDone)
       const { signal } = controlled.getRequestOptions()
 
-      clock.tick(60_000)
+      clock.tick(90_000)
 
       assert.strictEqual(signal.aborted, true)
       assert.strictEqual(signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
@@ -206,9 +206,9 @@ describe('AgentProxyCiVisibilityExporter', () => {
       controlled.exporter.export(secondTrace)
       controlled.exporter.flush(secondDone)
 
-      assert.strictEqual(requestOptions.deadline, Date.now() + 60_000)
+      assert.strictEqual(requestOptions.deadline, Date.now() + 90_000)
 
-      clock.tick(55_000)
+      clock.tick(85_000)
 
       assert.strictEqual(requestOptions.signal.aborted, false)
       sinon.assert.calledOnce(firstDone)

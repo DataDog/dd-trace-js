@@ -66,8 +66,9 @@ class FinalFlushRequestTracker {
           // process can exit once all detached requests settle.
           // Remove the deadline so the detached request runs as a background
           // request (no finalization deadline) instead of immediately failing.
+          // Keep it in #pendingRequests so a later final flush can still attach
+          // to it; it is removed when the request's callback settles.
           delete pendingRequest.options.deadline
-          this.#pendingRequests.delete(pendingRequest)
         } else {
           this.#updateRequestDeadline(pendingRequest)
         }
