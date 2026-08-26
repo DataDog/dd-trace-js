@@ -282,6 +282,25 @@ describe('Span', () => {
       assert.strictEqual(parent.getBaggageItem('child'), undefined)
       assert.strictEqual(parent.getBaggageItem('parent'), 'value')
     })
+
+    for (const [restriction, restrict] of [['frozen', Object.freeze], ['sealed', Object.seal]]) {
+      it(`should isolate baggage when creating a child from a ${restriction} parent context`, () => {
+        const parent = new Span(tracer, processor, prioritySampler, { operationName: 'parent' })
+        parent.setBaggageItem('shared', 'parent')
+        restrict(parent.context())
+
+        const child = new Span(tracer, processor, prioritySampler, {
+          operationName: 'child',
+          parent: parent.context(),
+        })
+
+        child.setBaggageItem('child', 'value')
+        parent.setBaggageItem('parent', 'value')
+
+        assert.deepStrictEqual(child.context()._baggageItems, { shared: 'parent', child: 'value' })
+        assert.deepStrictEqual(parent.context()._baggageItems, { shared: 'parent', parent: 'value' })
+      })
+    }
   })
 
   // TODO are these tests trivial?
@@ -750,6 +769,25 @@ describe('Span', () => {
         assert.deepStrictEqual(span._spanContext._baggageItems, { foo: 'bar', child: 'value' })
         assert.deepStrictEqual(parent._baggageItems, { foo: 'bar' })
       })
+
+      for (const [restriction, restrict] of [['frozen', Object.freeze], ['sealed', Object.seal]]) {
+        it(`should isolate baggage when restarting from a ${restriction} extracted context`, () => {
+          tracer = { _config: { ...getConfig(), DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart' } }
+          const propagator = new TextMapPropagator(tracer._config)
+          parent = propagator.extract({
+            'x-datadog-trace-id': '1234',
+            'x-datadog-parent-id': '5678',
+            'ot-baggage-foo': 'bar',
+          })
+          restrict(parent)
+
+          span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
+          span.setBaggageItem('child', 'value')
+
+          assert.deepStrictEqual(span._spanContext._baggageItems, { foo: 'bar', child: 'value' })
+          assert.deepStrictEqual(parent._baggageItems, { foo: 'bar' })
+        })
+      }
 
       it('should start with empty baggage on restart when there is no parent to inherit from', () => {
         tracer = { _config: { ...getConfig(), DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart' } }

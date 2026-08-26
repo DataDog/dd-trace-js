@@ -405,7 +405,15 @@ class DatadogSpan {
     if (parent && parent._isRemote && propagationBehavior !== 'continue') {
       baggage = parent._baggageItems
       baggageShared = propagationBehavior === 'restart' && baggage !== undefined && baggage !== null
-      if (baggageShared) parent._baggageItemsShared = true
+      if (baggageShared) {
+        try {
+          parent._baggageItemsShared = true
+        } catch {
+          // Keep the mutable-parent path free of an eager copy or extensibility check.
+          baggage = { ...baggage }
+          baggageShared = false
+        }
+      }
       parent = null
     }
 
@@ -415,14 +423,22 @@ class DatadogSpan {
         startTime = dateNow()
       }
     } else if (parent) {
-      parent._baggageItemsShared = true
+      let baggageItems = parent._baggageItems
+      let isBaggageShared = true
+      try {
+        parent._baggageItemsShared = true
+      } catch {
+        // Keep the mutable-parent path free of an eager copy or extensibility check.
+        baggageItems = { ...baggageItems }
+        isBaggageShared = false
+      }
       spanContext = new SpanContext({
         traceId: parent._traceId,
         spanId: id(),
         parentId: parent._spanId,
         sampling: parent._sampling,
-        baggageItems: parent._baggageItems,
-        baggageItemsShared: true,
+        baggageItems,
+        baggageItemsShared: isBaggageShared,
         trace: parent._trace,
         tracestate: parent._tracestate,
       })
