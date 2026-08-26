@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/5645ffb8-c97e-4ce4-89f2-c41931318fd9/datasets/78a7925a-6924-4bd4-9b6e-0e2fcc61a747/records",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "193"
+    },
+    "body": "{\"data\":{\"type\":\"datasets\",\"attributes\":{\"records\":[{\"input\":{\"q\":\"apple\"},\"expected_output\":\"APPLE\",\"metadata\":{\"row\":0}},{\"input\":{\"q\":\"car\"},\"expected_output\":\"CAR\",\"metadata\":{\"row\":1}}]}}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "930",
+      "date": "Fri, 31 Jul 2026 21:35:35 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": "{\"data\":[{\"id\":\"72c42c47-1949-4b6c-8d5f-dc89d1116b53\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"canonical_id\":\"51c31587-1a18-4223-a97d-3848243f5188\",\"created_at\":\"2026-07-31T21:35:35.677877925Z\",\"dataset_id\":\"78a7925a-6924-4bd4-9b6e-0e2fcc61a747\",\"expected_output\":\"APPLE\",\"input\":{\"q\":\"apple\"},\"metadata\":{\"row\":0},\"tags\":[],\"ttl\":\"2029-07-30T21:35:35.690708723Z\",\"updated_at\":\"2026-07-31T21:35:35.677877925Z\",\"version\":1}},{\"id\":\"8139a365-5aa4-41c0-aa39-7b13a49f5301\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"canonical_id\":\"5d7b6520-054b-4e28-9105-15698bed0789\",\"created_at\":\"2026-07-31T21:35:35.677877925Z\",\"dataset_id\":\"78a7925a-6924-4bd4-9b6e-0e2fcc61a747\",\"expected_output\":\"CAR\",\"input\":{\"q\":\"car\"},\"metadata\":{\"row\":1},\"tags\":[],\"ttl\":\"2029-07-30T21:35:35.690715599Z\",\"updated_at\":\"2026-07-31T21:35:35.677877925Z\",\"version\":1}}]}"
+  }
+}

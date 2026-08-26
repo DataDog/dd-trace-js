@@ -896,6 +896,25 @@ describe('Config', () => {
     })
   })
 
+  describe('HTTP client error statuses', () => {
+    it('should default to 400-499', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '400-499')
+    })
+
+    it('should initialize from DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', () => {
+      process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '500-599'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '500-599')
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', value: '500-599', origin: 'env_var' },
+      ])
+    })
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = getConfig()
 
@@ -3903,6 +3922,35 @@ describe('Config', () => {
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
         name: 'DD_LLMOBS_ENABLED', value: true, origin: 'calculated',
       }])
+    })
+
+    it('should configure the experiments project name from options and enable llmobs', () => {
+      const config = getConfig({ llmobs: { projectName: 'experiments-project' } })
+      assert.strictEqual(config.llmobs.projectName, 'experiments-project')
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+    })
+
+    context('DD_LLMOBS_PROJECT_NAME', () => {
+      let savedEnv
+
+      beforeEach(() => {
+        savedEnv = process.env
+        process.env.DD_LLMOBS_PROJECT_NAME = 'env-project'
+      })
+
+      afterEach(() => {
+        process.env = savedEnv
+      })
+
+      it('should configure the experiments project name from the environment', () => {
+        const config = getConfig()
+        assert.strictEqual(config.llmobs.projectName, 'env-project')
+        assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+
+        assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
+          name: 'DD_LLMOBS_PROJECT_NAME', value: 'env-project', origin: 'env_var',
+        }])
+      })
     })
 
     it('should have DD_LLMOBS_ENABLED take priority over options', () => {
