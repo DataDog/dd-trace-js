@@ -133,6 +133,21 @@ describe('Test Optimization exporter request', () => {
 
     assert.strictEqual(pendingRequests.length, 1)
     sinon.assert.calledOnce(done)
+    // The original network error is surfaced instead of the abort error so the
+    // telemetry reports the root cause (ECONNRESET), not the deadline giving up.
+    assert.strictEqual(done.firstCall.args[0], requestError)
+  })
+
+  it('reports the abort error when no prior attempt failed', () => {
+    const controller = new AbortController()
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 10_000, signal: controller.signal }, done)
+
+    const abortError = Object.assign(new Error('finalization expired'), { code: 'ABORT_ERR' })
+    controller.abort(abortError)
+    clock.tick(10_000)
+
+    sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0], abortError)
   })
 
