@@ -40,7 +40,7 @@ describe('OpenFeature Exposures Writer transport', () => {
           'content-type': 'application/json',
           'x-datadog-evp-subdomain': 'event-platform-intake',
         },
-        badheaders: ['dd-api-key', 'dd-api-key-fingerprint'],
+        badheaders: ['dd-api-key'],
       })
         .post('/evp_proxy/v4/api/v2/exposures')
         .reply(202, (uri, body) => {
@@ -104,7 +104,6 @@ describe('OpenFeature Exposures Writer transport', () => {
         reqheaders: {
           'content-type': 'application/json',
           'dd-api-key': 'test-api-key',
-          'dd-api-key-fingerprint': 'rijn_i8Jug5ocjALL7JZiV1a8HzXqkwDRKcE7hK9IouPQwio',
         },
       })
         .post('/api/v2/exposures')
@@ -160,7 +159,6 @@ describe('OpenFeature Exposures Writer transport', () => {
         reqheaders: {
           'content-type': 'application/json',
           'dd-api-key': 'test-api-key',
-          'dd-api-key-fingerprint': 'rijn_i8Jug5ocjALL7JZiV1a8HzXqkwDRKcE7hK9IouPQwio',
         },
       })
         .post('/api/v2/exposures')

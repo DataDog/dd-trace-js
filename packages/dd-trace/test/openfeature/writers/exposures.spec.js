@@ -395,7 +395,6 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(options.headers['Content-Type'], 'application/json')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
       assert.strictEqual(options.headers['DD-API-KEY'], undefined)
-      assert.strictEqual(options.headers['DD-API-KEY-FINGERPRINT'], undefined)
 
       const parsedPayload = JSON.parse(payload)
       assert.ok(
@@ -427,7 +426,6 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(options.path, '/evp_proxy/v4/api/v2/exposures')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
       assert.strictEqual(options.headers['DD-API-KEY'], undefined)
-      assert.strictEqual(options.headers['DD-API-KEY-FINGERPRINT'], undefined)
     })
 
     it('should use a caller-supplied route without performing discovery', () => {
@@ -454,7 +452,6 @@ describe('OpenFeature Exposures Writer', () => {
         agent,
         headers: {
           'DD-API-KEY': 'test-api-key',
-          'DD-API-KEY-FINGERPRINT': 'rijn_i8Jug5ocjALL7JZiV1a8HzXqkwDRKcE7hK9IouPQwio',
         },
       })
       writer.append(exposureEvent)
@@ -467,10 +464,6 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(options.retry, true)
       assert.strictEqual(options.agent, agent)
       assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
-      assert.strictEqual(
-        options.headers['DD-API-KEY-FINGERPRINT'],
-        'rijn_i8Jug5ocjALL7JZiV1a8HzXqkwDRKcE7hK9IouPQwio'
-      )
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], undefined)
     })
 
