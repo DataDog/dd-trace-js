@@ -31,9 +31,9 @@ describe('Test Optimization exporter agents', () => {
 
   it('configures dedicated agents with bounded concurrency and keep-alive', () => {
     assert.strictEqual(httpAgent.keepAlive, true)
-    assert.strictEqual(httpAgent.maxSockets, 8)
+    assert.strictEqual(httpAgent.maxSockets, 16)
     assert.strictEqual(httpsAgent.keepAlive, true)
-    assert.strictEqual(httpsAgent.maxSockets, 8)
+    assert.strictEqual(httpsAgent.maxSockets, 16)
   })
 
   it('selects the agent by protocol for URL objects and strings', () => {
@@ -58,11 +58,11 @@ describe('Test Optimization exporter agents', () => {
     socket.destroy()
   })
 
-  it('opens eight same-origin connections and queues the ninth', async () => {
+  it('opens sixteen same-origin connections and queues the seventeenth', async () => {
     const agent = new httpAgent.constructor()
     const lookupCallbacks = []
     const lookup = (hostname, options, callback) => lookupCallbacks.push(callback)
-    const requests = new Array(9)
+    const requests = new Array(17)
 
     for (let index = 0; index < requests.length; index++) {
       const request = createRequest({ agent, hostname: 'test.local', lookup })
@@ -74,8 +74,8 @@ describe('Test Optimization exporter agents', () => {
     await new Promise(resolve => setImmediate(resolve))
 
     try {
-      assert.strictEqual(lookupCallbacks.length, 8)
-      assert.deepStrictEqual(Object.values(agent.sockets).map(sockets => sockets.length), [8])
+      assert.strictEqual(lookupCallbacks.length, 16)
+      assert.deepStrictEqual(Object.values(agent.sockets).map(sockets => sockets.length), [16])
       assert.deepStrictEqual(Object.values(agent.requests).map(requests => requests.length), [1])
     } finally {
       for (const request of requests) request.destroy()
@@ -93,10 +93,10 @@ describe('Test Optimization exporter agents', () => {
       }
     })
 
-    it('is saturated once eight same-origin requests are in flight', async () => {
+    it('is saturated once sixteen same-origin requests are in flight', async () => {
       const agent = new httpAgent.constructor()
       const lookup = () => {} // never resolves, so requests stay in flight
-      const requests = new Array(8)
+      const requests = new Array(16)
       const url = 'http://saturated.example:8080'
 
       for (let index = 0; index < requests.length; index++) {
@@ -119,7 +119,7 @@ describe('Test Optimization exporter agents', () => {
     it('detects saturation for a default-port URL that omits an explicit port', async () => {
       const agent = new httpsAgent.constructor()
       const lookup = () => {} // never resolves, so requests stay in flight
-      const requests = new Array(8)
+      const requests = new Array(16)
       const url = 'https://saturated.example' // no explicit port; Node normalizes to 443
 
       for (let index = 0; index < requests.length; index++) {
@@ -146,7 +146,7 @@ describe('Test Optimization exporter agents', () => {
     it('detects saturation for an IPv6 literal URL', async () => {
       const agent = new httpAgent.constructor()
       const lookup = () => {}
-      const requests = new Array(8)
+      const requests = new Array(16)
       const url = 'http://[::1]:8126' // Node keys the pool as ::1:8126:
 
       for (let index = 0; index < requests.length; index++) {
@@ -185,7 +185,7 @@ describe('Test Optimization exporter agents', () => {
 
       const agent = new httpAgent.constructor()
       const url = `unix://${socketPath}`
-      const requests = new Array(8)
+      const requests = new Array(16)
 
       try {
         for (let index = 0; index < requests.length; index++) {
