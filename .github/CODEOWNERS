@@ -533,7 +533,7 @@
 /docs/ @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/lang-platform-js
 /docs/API.md @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-idm-js
 /docs/test.ts @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-idm-js
-/.gitlab/benchmarks/ @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/ecosystems-performance
+/.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
 /eslint-rules/* @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js
 /ext/exporters.* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/ci-app-libraries @DataDog/lang-platform-js
 /ext/formats.* @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/data-streams-monitoring
