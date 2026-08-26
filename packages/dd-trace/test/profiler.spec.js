@@ -103,6 +103,18 @@ describe('profiler', () => {
       assert.strictEqual(profiler.started, false)
     })
 
+    it('logs and does not propagate when stopping the profiler throws', () => {
+      publishConfig('true')
+      profilingModule.profiler.stop = sinon.stub().throws(new Error('boom'))
+
+      publishConfig('false')
+
+      assert.strictEqual(profiler.started, false)
+      sinon.assert.calledOnce(log.error)
+
+      profilingModule.profiler.stop = sinon.spy()
+    })
+
     it('arms the SSI heuristics when set to auto, and starts on trigger', () => {
       publishConfig('auto')
 

@@ -47,7 +47,14 @@ module.start = function (config) {
 }
 
 module.stop = function () {
-  getProfilingModule().profiler.stop()
+  try {
+    getProfilingModule().profiler.stop()
+  } catch (error) {
+    log.error(
+      'Error stopping profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
+      error
+    )
+  }
 }
 
 /**
