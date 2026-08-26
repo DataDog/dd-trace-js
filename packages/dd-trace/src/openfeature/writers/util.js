@@ -67,6 +67,7 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
   const directRoute = createDirectEVPRoute(config, EVP_EVENT_PLATFORM_SUBDOMAIN)
 
   discoverEVPProxy(config.url, {
+    retry: false,
     supportedPaths: [EVP_PROXY_PATH_V4, EVP_PROXY_PATH_V2],
   }, (error, localRoute) => {
     if (localRoute) {

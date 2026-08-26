@@ -1,10 +1,35 @@
 'use strict'
 
+const { createHash } = require('node:crypto')
 const { format } = require('node:url')
 
 const { HttpsProxyAgent } = require('../../../../vendor/dist/https-proxy-agent')
 const { getProxyForUrl } = require('../../../../vendor/dist/proxy-from-env')
 const log = require('../log')
+
+const API_KEY_FINGERPRINT_HEADER_NAME = 'DD-API-KEY-FINGERPRINT'
+const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const BASE62_RADIX = 62n
+const SHA256_BASE62_LENGTH = 43
+
+/**
+ * Creates the stable identifier used alongside direct intake authentication.
+ *
+ * @param {string} apiKey - Datadog API key
+ * @returns {string} Prefixed, fixed-width SHA-256 fingerprint
+ */
+function createAPIKeyFingerprint (apiKey) {
+  const digest = createHash('sha256').update(apiKey).digest()
+  let value = BigInt(`0x${digest.toString('hex')}`)
+  let encoded = ''
+
+  do {
+    encoded = BASE62_ALPHABET[Number(value % BASE62_RADIX)] + encoded
+    value /= BASE62_RADIX
+  } while (value > 0n)
+
+  return `rijn_${encoded.padStart(SHA256_BASE62_LENGTH, '0')}`
+}
 
 /**
  * @typedef {object} DirectEVPRoute
@@ -53,6 +78,7 @@ function createDirectEVPRoute (config, intake) {
       basePath: '',
       headers: {
         'DD-API-KEY': apiKey,
+        [API_KEY_FINGERPRINT_HEADER_NAME]: createAPIKeyFingerprint(apiKey),
       },
       ...(agent && { agent }),
     }

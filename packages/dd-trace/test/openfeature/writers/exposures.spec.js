@@ -394,6 +394,8 @@ describe('OpenFeature Exposures Writer', () => {
       assert.match(options.path, /\/evp_proxy\/v2\//)
       assert.strictEqual(options.headers['Content-Type'], 'application/json')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
+      assert.strictEqual(options.headers['DD-API-KEY'], undefined)
+      assert.strictEqual(options.headers['DD-API-KEY-FINGERPRINT'], undefined)
 
       const parsedPayload = JSON.parse(payload)
       assert.ok(
@@ -424,6 +426,8 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(options.url, url)
       assert.strictEqual(options.path, '/evp_proxy/v4/api/v2/exposures')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
+      assert.strictEqual(options.headers['DD-API-KEY'], undefined)
+      assert.strictEqual(options.headers['DD-API-KEY-FINGERPRINT'], undefined)
     })
 
     it('should use a caller-supplied route without performing discovery', () => {
@@ -450,6 +454,7 @@ describe('OpenFeature Exposures Writer', () => {
         agent,
         headers: {
           'DD-API-KEY': 'test-api-key',
+          'DD-API-KEY-FINGERPRINT': 'rijn_i8Jug5ocjALL7JZiV1a8HzXqkwDRKcE7hK9IouPQwio',
         },
       })
       writer.append(exposureEvent)
@@ -462,6 +467,10 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(options.retry, true)
       assert.strictEqual(options.agent, agent)
       assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
+      assert.strictEqual(
+        options.headers['DD-API-KEY-FINGERPRINT'],
+        'rijn_i8Jug5ocjALL7JZiV1a8HzXqkwDRKcE7hK9IouPQwio'
+      )
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], undefined)
     })
 
@@ -523,7 +532,7 @@ describe('OpenFeature Exposures Writer', () => {
       ['broken pipe', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' })],
       ['timeout', Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' })],
     ]) {
-      it(`should retry ambiguous local ${name} through direct intake and switch future batches`, async () => {
+      it(`should not replay ambiguous local ${name} and should switch future batches to direct intake`, async () => {
         const localUrl = new URL('http://serverless-init:8126')
         const directUrl = new URL('https://event-platform-intake.datadoghq.com')
         request.onFirstCall().yieldsAsync(error, null, statusCode)
@@ -546,15 +555,21 @@ describe('OpenFeature Exposures Writer', () => {
         writer.flush()
         await clock.tickAsync(0)
 
-        sinon.assert.calledTwice(request)
+        sinon.assert.calledOnce(request)
         assert.strictEqual(request.firstCall.args[1].url, localUrl)
-        assert.strictEqual(request.secondCall.args[1].url, directUrl)
+        sinon.assert.calledWithExactly(
+          log.error,
+          'Failed to send events to %s%s: %s',
+          'http://serverless-init:8126/',
+          '/evp_proxy/v4/api/v2/exposures',
+          error.message
+        )
 
         writer.append(exposureEvent)
         writer.flush()
 
-        sinon.assert.calledThrice(request)
-        assert.strictEqual(request.thirdCall.args[1].url, directUrl)
+        sinon.assert.calledTwice(request)
+        assert.strictEqual(request.secondCall.args[1].url, directUrl)
       })
     }
 
