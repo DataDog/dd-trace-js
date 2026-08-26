@@ -103,7 +103,10 @@ class RCClientManager {
     if (confPayload != null) {
       sdkConfig = {}
       for (const key of sdkConfigAllowlist) {
-        if (Object.hasOwn(confPayload, key)) sdkConfig[key] = confPayload[key]
+        // Env-style parsers (e.g. BOOLEAN, DECIMAL) assume a string and don't guard against
+        // null/non-string input the way programmatic option coercion does, so drop it here
+        // rather than let it reach setRemoteConfig and crash or silently miscoerce (e.g. Number(null) === 0).
+        if (typeof confPayload[key] === 'string') sdkConfig[key] = confPayload[key]
       }
     }
 

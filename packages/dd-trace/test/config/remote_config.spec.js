@@ -140,6 +140,28 @@ describe('Tracing Remote Config', () => {
         // A large number of unsupported keys must not crowd out an allowlisted one
         sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_ENABLED: 'true' })
       })
+
+      it('should drop non-string allowlisted values instead of forwarding them', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+
+        const transaction = createTransaction([
+          {
+            id: 'config-1',
+            file: {
+              sdk_config: {
+                DD_TRACE_ENABLED: null,
+                DD_TRACE_SAMPLE_RATE: '0.5',
+              },
+            },
+          },
+        ])
+
+        handler(transaction)
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.5' })
+      })
     })
   })
 
