@@ -546,6 +546,49 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter._resolveGit()
       })
+      it('clears phase-one settings when the post-upload settings request fails', (done) => {
+        // Regression: when the backend returns require_git:true and the second (post-upload)
+        // settings request fails, _libraryConfig must be reset to empty settings so stale
+        // phase-one feature flags don't stay installed (shouldRequestSkippableSuites etc.).
+        const scope = nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                require_git: true,
+                code_coverage: true,
+                tests_skipping: true,
+                itr_enabled: true,
+              },
+            },
+          }))
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(400, JSON.stringify({ errors: [{ detail: 'backend error' }] }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
+        })
+        sinon.stub(ciVisibilityExporter, 'sendGitMetadata')
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
+          assert.strictEqual(scope.isDone(), true, 'both phases should have hit the API')
+          assert.ok(err, 'should surface the second-request error')
+          // Phase-1 had tests_skipping:true and itr_enabled:true; after the failure these
+          // must NOT remain installed on _libraryConfig.
+          assert.strictEqual(
+            ciVisibilityExporter.shouldRequestSkippableSuites(),
+            false,
+            'stale phase-1 flags must not enable skippable after a failed negotiation'
+          )
+          done()
+        })
+        // Simulate the git upload finishing so the phase-2 request can proceed.
+        setImmediate(() => ciVisibilityExporter._resolveGit())
+      })
     })
   })
 

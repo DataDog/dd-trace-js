@@ -430,7 +430,11 @@ class CiVisibilityExporter extends BufferingExporter {
           }
           getLibraryConfigurationRequest(configuration, (finalErr, finalLibraryConfig) => {
             if (finalErr) {
-              return done(finalErr, libraryConfig)
+              // Match the original live path: reset `_libraryConfig` from the final
+              // (failed) response so stale phase-1 feature flags don't stay installed.
+              // On error `finalLibraryConfig` is undefined, so this resolves to empty settings.
+              this._libraryConfig = this.filterConfiguration(finalLibraryConfig)
+              return done(finalErr, finalLibraryConfig)
             }
             writeToCache(cacheKey, finalLibraryConfig)
             done(null, finalLibraryConfig)
