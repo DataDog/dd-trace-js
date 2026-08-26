@@ -144,7 +144,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('<name>', '<module-name>', version => {
     useSandbox([`'<module-name>@${version}'`], false, [
@@ -154,8 +153,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', '<module-name>', '<namedExport>')
+    const variants = varySandbox('server.mjs', {
+      bindingName: '<binding-name>',
+      packageName: '<module-name>',
+      defaultExport: true,
+      namedExports: ['<named-export>'],
+      namedExportBinding: 'namespace',
     })
 
     afterEach(async () => {
@@ -163,7 +166,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
@@ -182,9 +185,9 @@ describe('esm', () => {
 
 ### Key ESM Test Concepts
 
-- `varySandbox(filename, bindingName, namedExport, packageName, byPassDefault)` generates three import-style variants (default, star, destructure) to verify all ESM import patterns
-- `varySandbox.VARIANTS` is `['default', 'star', 'destructure']`
-- Pass `byPassDefault: true` as fifth argument when the module has no default export
+- `varySandbox(filename, options)` generates the import variants supported by the package's export shape.
+- Set `defaultExport`, `namedExports`, and `namedExportBinding` from the installed package's real exports.
+- Iterate over `Object.keys(variants)`; the returned object maps each generated variant to its filename.
 - `useSandbox` installs package versions into a temp sandbox directory
 - `spawnPluginIntegrationTestProcAndExpectExit` spawns `node <script>` with `DD_TRACE_AGENT_PORT` set to FakeAgent port
 - Each `it` needs generous timeout (e.g., `20000`) for sandbox setup and process spawning
@@ -201,8 +204,8 @@ PLUGINS="<name>" npm run test:plugins:ci
 PLUGINS="<name>" npm run test:plugins
 
 # With external services (e.g., databases, message brokers)
-SERVICES="rabbitmq" PLUGINS="amqplib" docker compose up -d $SERVICES
-PLUGINS="amqplib" npm run test:plugins:ci
+docker compose up -d rabbitmq
+SERVICES="rabbitmq" PLUGINS="amqplib" npm run test:plugins:ci
 
 # Filter within plugin tests
 PLUGINS="<name>" SPEC="specific.spec.js" npm run test:plugins:ci

@@ -67,6 +67,9 @@ unrelated flake fix from the feature change and base it on the appropriate clean
 A deterministic failure—such as an assertion mismatch, missing fixture or cassette, stale path, or version
 incompatibility—is not flaky and should be fixed with the change that exposed it when related.
 
+If a confirmed unrelated flake cannot be fixed immediately, a temporary skip requires a tracked reason and a
+separate authorized change. Do not silently weaken or remove the assertion.
+
 ## Hung Jobs
 
 Treat a hang as a potentially masked failure. Inspect the last meaningful error and leaked handles such as tracer or

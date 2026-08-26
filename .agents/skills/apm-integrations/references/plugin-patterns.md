@@ -2,7 +2,9 @@
 
 ## Automatic Channel Subscriptions
 
-**Never manually subscribe to channels.** The `TracingPlugin` base class automatically subscribes to all events (`start`, `end`, `asyncStart`, `asyncEnd`, `error`, `finish`) and routes them to plugin methods (`bindStart`, `bindEnd`, `start`, `asyncStart`, etc.).
+Do not manually subscribe for an ordinary single-prefix plugin. `TracingPlugin` automatically subscribes to all
+lifecycle events and routes them to matching plugin methods. Multiple module prefixes are the documented exception;
+see [Orchestrion Plugin Subscription](orchestrion.md#plugin-subscription).
 
 The channel prefix is determined by the instrumentation type. Node.js `tracingChannel` automatically adds a `tracing:` prefix to all sub-channel names.
 
@@ -14,7 +16,7 @@ The channel prefix is determined by the instrumentation type. Node.js `tracingCh
 
 When using shimmer, prefer `tracingChannel` over manual channels — it provides `start/end/asyncStart/asyncEnd/error` events automatically, consistent with how orchestrion works internally.
 
-This means the plugin only needs to define static properties and implement `bindStart`:
+Define static properties, `bindStart`, and the completion handler matching the instrumentation lifecycle:
 
 ### Orchestrion Plugin (preferred)
 ```javascript
@@ -28,6 +30,10 @@ class MyPlugin extends TracingPlugin {
       meta: { component: '<name>' }
     }, ctx)
     return ctx.currentStore
+  }
+
+  asyncEnd (ctx) {
+    this.finish(ctx)
   }
 }
 ```
@@ -48,7 +54,9 @@ class MyPlugin extends DatabasePlugin {
 }
 ```
 
-Both patterns: no manual `addSub`, `addTraceSub`, or `addBind` calls needed. The base class handles it.
+For synchronous Orchestrion targets, implement `end` instead of `asyncEnd`. Legacy manual-channel plugins normally
+finish through the inherited `finish` handler. No manual subscription is needed unless one plugin serves multiple
+channel prefixes.
 
 ## startSpan() API
 

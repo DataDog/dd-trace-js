@@ -1,5 +1,7 @@
 # AGENTS.md
 
+dd-trace-js is Datadog's tracing and observability library for Node.js.
+
 These instructions apply repository-wide. More specific instructions may exist in nested directories and take
 precedence within their scope. Read the relevant implementation and tests before editing; keep changes focused and
 do not modify unrelated behavior.
@@ -64,6 +66,7 @@ Use `SPEC` to narrow plugin specs. For service-backed plugins, find `SERVICES` i
 
 - Use `node:assert/strict`; use `assertObjectContains` from `integration-tests/helpers/index.js` for partial objects.
 - Prefer `assert.throws`/`assert.rejects` and pin the relevant error fields.
+- Await independently started promises with `Promise.all` so one cannot reject while another is awaited.
 - For boundaries, test the last accepted and first rejected values.
 - Never rely on real time in unit tests; use sinon fake timers.
 - Test real entry points and observable output, not prototype-created instances or test-only production hooks.
@@ -139,8 +142,8 @@ Use unit suffixes for size and time options, such as `timeoutMs`, `maxBytes`, an
 ## Debugging Failures
 
 Treat a failure on your change as caused by the change until you can name evidence proving otherwise. “Flaky”,
-“pre-existing”, and “unrelated” require evidence such as a passing rerun, the same failure on `master`, or a tracked
-known flake. Otherwise the cause is unknown and still under investigation.
+“pre-existing”, and “unrelated” require evidence such as the same failure on the unchanged target branch, a
+tracked known flake, or a passing rerun plus a credible nondeterminism mechanism. Otherwise the cause remains unknown.
 
 Fix causes, not symptoms: do not loosen assertions, filter inputs, or increase timeouts to hide failures. Search for
 sibling occurrences of deterministic problems and fix the shared cause. For a hung job, inspect the last meaningful
@@ -159,12 +162,13 @@ never weaken or delete assertions to make them pass.
 
 Load the relevant repository skill when the task matches:
 
-- Third-party instrumentation or plugins: `apm-integrations`
-- Non-trivial architecture or shared-abstraction changes: `architecture-review`
-- Suspected flaky or unrelated test failures: `flaky-test-investigation`
-- LLMObs integrations: `llmobs-integration`
-- LLMObs tests and VCR cassettes: `llmobs-testing`
-- Serverless platform integrations: `serverless-integrations`
+- [Third-party instrumentation or plugins](.agents/skills/apm-integrations/SKILL.md)
+- Shared abstractions, duplicated behavior across types, module boundaries, class hierarchies, or public APIs:
+  [`architecture-review`](.agents/skills/architecture-review/SKILL.md)
+- [Suspected flaky or unrelated test failures](.agents/skills/flaky-test-investigation/SKILL.md)
+- [LLMObs integrations](.agents/skills/llmobs-integration/SKILL.md)
+- [LLMObs tests and VCR cassettes](.agents/skills/llmobs-testing/SKILL.md)
+- [Serverless platform integrations](.agents/skills/serverless-integrations/SKILL.md)
 
 New instrumentations belong in `packages/datadog-instrumentations/` and communicate with plugins through diagnostic
 channels. Validate new plugin structure with
