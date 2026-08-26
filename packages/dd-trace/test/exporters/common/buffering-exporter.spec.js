@@ -216,4 +216,33 @@ describe('BufferingExporter', () => {
       clock.restore()
     }
   })
+
+  it('clears the timer when a negative interval is suppressed by saturation', () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const flushingWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy(),
+        setUrl: sinon.spy(),
+      }
+      const exporter = new BufferingExporter({ port, flushInterval: -5 })
+      exporter._writer = flushingWriter
+      exporter._isInitialized = true
+      let saturated = true
+      exporter._shouldFlush = () => !saturated
+
+      exporter.export([{ span_id: '1' }])
+      // First tick: saturated, flush suppressed, timer cleared (not re-armed).
+      clock.tick(1)
+      sinon.assert.notCalled(flushingWriter.flush)
+      assert.strictEqual(exporter._timer, undefined)
+      // A later export re-schedules; once idle, it flushes.
+      saturated = false
+      exporter.export([{ span_id: '2' }])
+      clock.tick(1)
+      sinon.assert.called(flushingWriter.flush)
+    } finally {
+      clock.restore()
+    }
+  })
 })

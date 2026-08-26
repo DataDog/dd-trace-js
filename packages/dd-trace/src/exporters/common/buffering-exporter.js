@@ -57,6 +57,10 @@ class BufferingExporter {
               // encoder's size threshold is still delivered once the origin becomes idle,
               // rather than waiting indefinitely for another event.
               scheduleFlush()
+            } else {
+              // Non-schedulable interval (e.g. negative) suppressed by saturation: clear
+              // the timer so a later export can re-schedule once the origin is idle.
+              this[timerKey] = undefined
             }
           }, flushInterval)
           this[timerKey].unref?.()

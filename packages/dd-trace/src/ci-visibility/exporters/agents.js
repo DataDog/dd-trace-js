@@ -86,6 +86,12 @@ const HttpsAgent = createAgentClass(https.Agent)
 const httpAgent = new HttpAgent()
 const httpsAgent = new HttpsAgent()
 
+// Telemetry gets its own pool so lifecycle telemetry cannot occupy sockets that
+// the bounded final flush waits on, and vice versa, when a custom intake URL
+// would otherwise route both through the same origin singleton.
+const telemetryHttpAgent = new HttpAgent()
+const telemetryHttpsAgent = new HttpsAgent()
+
 /**
  * Normalizes a URL-like value to a `URL` object.
  *
@@ -101,19 +107,45 @@ function toURL (url) {
 }
 
 /**
- * Selects the dedicated Test Optimization agent for an intake URL.
+ * Selects the dedicated Test Optimization payload agent for an intake URL.
  *
  * @param {string|URL|object} url
  * @returns {http.Agent|https.Agent}
  */
 function getAgent (url) {
+  return selectAgent(url, httpAgent, httpsAgent)
+}
+
+/**
+ * Selects the dedicated Test Optimization telemetry agent for an intake URL.
+ *
+ * Telemetry uses a separate pool from payload writers so lifecycle telemetry
+ * cannot occupy sockets the bounded final flush waits on when a custom intake
+ * URL would otherwise route both through the same origin singleton.
+ *
+ * @param {string|URL|object} url
+ * @returns {http.Agent|https.Agent}
+ */
+function getTelemetryAgent (url) {
+  return selectAgent(url, telemetryHttpAgent, telemetryHttpsAgent)
+}
+
+/**
+ * Selects between an HTTP and HTTPS agent by protocol.
+ *
+ * @param {string|URL|object} url
+ * @param {http.Agent} httpPool
+ * @param {https.Agent} httpsPool
+ * @returns {http.Agent|https.Agent}
+ */
+function selectAgent (url, httpPool, httpsPool) {
   const protocol = url?.protocol
-  if (protocol === 'https:' || protocol === 'https') return httpsAgent
-  if (protocol === 'http:' || protocol === 'http') return httpAgent
+  if (protocol === 'https:' || protocol === 'https') return httpsPool
+  if (protocol === 'http:' || protocol === 'http') return httpPool
 
   const parsed = toURL(url)
   const isSecure = parsed ? parsed.protocol === 'https:' : String(url).startsWith('https:')
-  return isSecure ? httpsAgent : httpAgent
+  return isSecure ? httpsPool : httpPool
 }
 
 /**
@@ -162,4 +194,4 @@ function isOriginSaturated (url, agent = getAgent(url)) {
   return activeSockets >= agent.maxSockets || queuedRequests > 0
 }
 
-module.exports = { getAgent, isOriginSaturated }
+module.exports = { getAgent, getTelemetryAgent, isOriginSaturated }

@@ -26,7 +26,7 @@ describe('sendData', () => {
     testOptimizationAgent = {}
     getTestOptimizationAgent = sinon.stub().returns(testOptimizationAgent)
     sendDataModule = proxyquire('../../src/telemetry/send-data', {
-      '../ci-visibility/exporters/agents': { getAgent: getTestOptimizationAgent },
+      '../ci-visibility/exporters/agents': { getTelemetryAgent: getTestOptimizationAgent },
       '../exporters/common/request': request,
     })
   })

@@ -1,6 +1,6 @@
 'use strict'
 
-const { getAgent: getTestOptimizationAgent } = require('../ci-visibility/exporters/agents')
+const { getTelemetryAgent: getTestOptimizationAgent } = require('../ci-visibility/exporters/agents')
 const request = require('../exporters/common/request')
 const log = require('../log')
 

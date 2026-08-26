@@ -16,11 +16,13 @@ const {
   httpAgent: commonHttpAgent,
   httpsAgent: commonHttpsAgent,
 } = require('../../../src/exporters/common/agents')
-const { getAgent, isOriginSaturated } = require('../../../src/ci-visibility/exporters/agents')
+const { getAgent, getTelemetryAgent, isOriginSaturated } = require('../../../src/ci-visibility/exporters/agents')
 
 describe('Test Optimization exporter agents', () => {
   const httpAgent = getAgent('http://localhost')
   const httpsAgent = getAgent('https://localhost')
+  const telemetryHttpAgent = getTelemetryAgent('http://localhost')
+  const telemetryHttpsAgent = getTelemetryAgent('https://localhost')
 
   it('keeps the shared exporter agents serialized at one socket', () => {
     assert.strictEqual(commonHttpAgent.keepAlive, true)
@@ -46,6 +48,15 @@ describe('Test Optimization exporter agents', () => {
   it('returns a stable singleton per protocol', () => {
     assert.strictEqual(getAgent('http://a.example'), getAgent('http://b.example'))
     assert.strictEqual(getAgent('https://a.example'), getAgent('https://b.example'))
+  })
+
+  it('isolates telemetry on a separate pool from payload writers', () => {
+    assert.strictEqual(getTelemetryAgent('http://localhost'), telemetryHttpAgent)
+    assert.strictEqual(getTelemetryAgent('https://localhost'), telemetryHttpsAgent)
+    assert.notStrictEqual(telemetryHttpAgent, httpAgent)
+    assert.notStrictEqual(telemetryHttpsAgent, httpsAgent)
+    assert.strictEqual(telemetryHttpAgent.maxSockets, 16)
+    assert.strictEqual(telemetryHttpsAgent.maxSockets, 16)
   })
 
   it('manages the keep-alive socket lifecycle', () => {
