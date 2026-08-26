@@ -6,6 +6,7 @@ const URL = require('url').URL
 const { version: tracerVersion } = require('../../../../../package.json')
 const { EMPTY_EFD_RETRY_POLICY, createEfdRetryPolicy } = require('../efd-retry-policy')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
+const { buildCacheKey, withCache, writeToCache } = require('../requests/fs-cache')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const { getTestManagementTests: getTestManagementTestsRequest } =
@@ -60,6 +61,32 @@ function getIsTestSessionTrace (trace) {
   return trace.some(span =>
     span.type === 'test_session_end' || span.type === 'test_suite_end' || span.type === 'test_module_end'
   )
+}
+
+/**
+ * Builds the cross-process filesystem cache key for the settings request from the
+ * request configuration. The key covers every attribute sent to the settings
+ * endpoint so that responses are only shared between identical requests.
+ *
+ * @param {object} configuration - Request configuration for the settings endpoint.
+ * @returns {string}
+ */
+function buildSettingsCacheKey (configuration) {
+  return buildCacheKey('settings', [
+    configuration.sha,
+    configuration.service,
+    configuration.env,
+    configuration.repositoryUrl,
+    configuration.branch,
+    configuration.tag,
+    configuration.testLevel,
+    configuration.osPlatform,
+    configuration.osVersion,
+    configuration.osArchitecture,
+    configuration.runtimeName,
+    configuration.runtimeVersion,
+    configuration.custom,
+  ])
 }
 
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
@@ -270,51 +297,98 @@ class CiVisibilityExporter extends BufferingExporter {
       const cachedLibraryConfig = this._testOptimizationHttpCache.readSettings()
       if (cachedLibraryConfig !== CACHE_MISS) {
         log.debug('Test Optimization HTTP cache settings found, skipping settings request')
-        writeSettingsToCache(cachedLibraryConfig)
-        this._libraryConfig = this.filterConfiguration(cachedLibraryConfig)
-        const canUseCachedSkippableSuites = !this.shouldRequestSkippableSuites() ||
-          this._testOptimizationHttpCache.hasValidSkippableSuites({
-            testLevel: configuration.testLevel,
-            isCoverageReportUploadEnabled: configuration.isCoverageReportUploadEnabled,
-          })
-        if (this._libraryConfig.requireGit && !canUseCachedSkippableSuites) {
-          this.sendGitMetadata(repositoryUrl)
-        } else {
-          this._resolveGit()
-        }
-        return callback(null, this._libraryConfig)
+        return this._applyCachedSettings(cachedLibraryConfig, configuration, repositoryUrl, callback)
       }
 
       if (this._isTestOptimizationCacheOnly) {
         return callback(this._getCacheOnlyError('settings'), {})
       }
 
-      this.sendGitMetadata(repositoryUrl)
-      getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
+      // The settings request has a two-phase shape: when the backend returns
+      // `require_git`, we upload git metadata and re-request settings. Only the
+      // final (post-git-upload) configuration is cached, so the cross-process
+      // filesystem cache never serves a pre-git-upload response that would skip
+      // the git upload in other processes.
+      const fsCacheKey = buildSettingsCacheKey(configuration)
+      withCache(fsCacheKey, (activeCacheKey, cb) => {
+        this._fetchLibraryConfigurationFromBackend(configuration, repositoryUrl, activeCacheKey, cb)
+      }, (err, libraryConfig) => {
         /**
          * **Important**: this._libraryConfig remains empty in testing frameworks
          * where the tests run in a subprocess, like Jest,
          * because `getLibraryConfiguration` is called only once in the main process.
          */
-        this._libraryConfig = this.filterConfiguration(libraryConfig)
-
         if (err) {
-          callback(err, {})
-        } else if (libraryConfig?.requireGit) {
-          // If the backend requires git, we'll wait for the upload to finish and request settings again
-          this._gitUploadPromise.then(gitUploadError => {
-            if (gitUploadError) {
-              return callback(gitUploadError, {})
-            }
-            getLibraryConfigurationRequest(configuration, (err, finalLibraryConfig) => {
-              this._libraryConfig = this.filterConfiguration(finalLibraryConfig)
-              callback(err, this._libraryConfig)
-            })
-          })
-        } else {
-          callback(null, this._libraryConfig)
+          this._libraryConfig = this.filterConfiguration()
+          return callback(err, {})
         }
+        this._applyCachedSettings(libraryConfig, configuration, repositoryUrl, callback)
       })
+    })
+  }
+
+  /**
+   * Applies a resolved (cached or freshly fetched) library configuration: writes it to the
+   * shared settings cache, filters it through local kill switches, and resolves the git
+   * upload promise according to whether git metadata still needs to be uploaded.
+   *
+   * @param {Record<string, unknown>} settings - Resolved library configuration.
+   * @param {object} configuration - Request configuration used to evaluate cached skippable suites.
+   * @param {string} repositoryUrl - Repository URL for git metadata upload.
+   * @param {Function} callback - Completion callback.
+   * @returns {void}
+   */
+  _applyCachedSettings (settings, configuration, repositoryUrl, callback) {
+    writeSettingsToCache(settings)
+    this._libraryConfig = this.filterConfiguration(settings)
+    const canUseCachedSkippableSuites = !this.shouldRequestSkippableSuites() ||
+      this._testOptimizationHttpCache.hasValidSkippableSuites({
+        testLevel: configuration.testLevel,
+        isCoverageReportUploadEnabled: configuration.isCoverageReportUploadEnabled,
+      })
+    if (this._libraryConfig.requireGit && !canUseCachedSkippableSuites) {
+      this.sendGitMetadata(repositoryUrl)
+    } else {
+      this._resolveGit()
+    }
+    callback(null, this._libraryConfig)
+  }
+
+  /**
+   * Fetches library configuration from the backend, performing the two-phase
+   * `require_git` re-request, and writes only the final configuration to the
+   * filesystem cache when this process owns the cache lock.
+   *
+   * @param {object} configuration - Request configuration for the settings endpoint.
+   * @param {string} repositoryUrl - Repository URL for git metadata upload.
+   * @param {string|null} cacheKey - Filesystem cache key when this process owns the lock, null otherwise.
+   * @param {Function} done - Completion callback.
+   * @returns {void}
+   */
+  _fetchLibraryConfigurationFromBackend (configuration, repositoryUrl, cacheKey, done) {
+    this.sendGitMetadata(repositoryUrl)
+    getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
+      if (err) {
+        return done(err)
+      }
+      if (libraryConfig?.requireGit) {
+        // If the backend requires git, wait for the upload to finish and request settings again
+        this._gitUploadPromise.then(gitUploadError => {
+          if (gitUploadError) {
+            return done(gitUploadError)
+          }
+          getLibraryConfigurationRequest(configuration, (err, finalLibraryConfig) => {
+            if (err) {
+              return done(err)
+            }
+            writeToCache(cacheKey, finalLibraryConfig)
+            done(null, finalLibraryConfig)
+          })
+        })
+      } else {
+        writeToCache(cacheKey, libraryConfig)
+        done(null, libraryConfig)
+      }
     })
   }
 
