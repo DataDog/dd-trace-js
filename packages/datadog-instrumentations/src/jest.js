@@ -49,6 +49,8 @@ const {
   getJestSuitesToRun,
   removeSeedSuffixFromTestName,
 } = require('../../dd-trace/src/plugins/util/jest')
+const { FINAL_FLUSH_FALLBACK_DELAY, FINAL_FLUSH_TIMEOUT } =
+  require('../../dd-trace/src/ci-visibility/final-flush')
 const {
   addCoverageBackfillUntestedFiles,
   getCoverageBackfillFiles,
@@ -95,10 +97,11 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
 const CHILD_MESSAGE_CALL = 1
 
-// Maximum time we'll wait for the tracer to flush
-// The exporter has a 10-second bounded final-flush deadline. Leave enough time
-// for its completion callback before Jest's --forceExit fallback takes over.
-const FLUSH_TIMEOUT = 12_000
+// Maximum time we'll wait for the tracer to flush.
+// The exporter's bounded final-flush deadline (FINAL_FLUSH_TIMEOUT +
+// FINAL_FLUSH_FALLBACK_DELAY) must elapse before this fires, so the exporter
+// can complete or time out with its own error before Jest gives up.
+const FLUSH_TIMEOUT = FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY + 5000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
