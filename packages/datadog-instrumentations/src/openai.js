@@ -6,7 +6,7 @@ const { addHook } = require('./helpers/instrument')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
-const apiPromiseContexts = new WeakMap()
+const responsePromiseContexts = new WeakMap()
 
 // Provider lifecycle channels. Payloads stay OpenAI-native:
 // before { args, parentSpan, abortController, pending }
@@ -263,23 +263,6 @@ function wrapStreamIterator (response, options, ctx) {
   }
 }
 
-/**
- * Propagates instrumentation state to the APIPromise returned by `_thenUnwrap`.
- *
- * @param {(...args: unknown[]) => object} thenUnwrap
- * @returns {(...args: unknown[]) => object}
- */
-function wrapThenUnwrap (thenUnwrap) {
-  return function (...args) {
-    const unwrappedPromise = thenUnwrap.apply(this, args)
-    const state = apiPromiseContexts.get(this)
-
-    if (state) apiPromiseContexts.set(unwrappedPromise, state)
-
-    return unwrappedPromise
-  }
-}
-
 const extensions = ['.js', '.mjs']
 
 for (const extension of extensions) {
@@ -294,10 +277,8 @@ for (const extension of extensions) {
     addHook({ name: 'openai', file, versions }, exports => {
       const { prototype } = exports.APIPromise
 
-      shimmer.wrap(prototype, '_thenUnwrap', wrapThenUnwrap)
-
       shimmer.wrap(prototype, 'parse', parse => function (...args) {
-        const state = apiPromiseContexts.get(this)
+        const state = responsePromiseContexts.get(this.responsePromise)
         if (!state) return parse.apply(this, args)
 
         const parsedPromise = parse.apply(this, args)
@@ -307,7 +288,7 @@ for (const extension of extensions) {
       })
 
       shimmer.wrap(prototype, 'asResponse', asResponse => function (...args) {
-        const state = apiPromiseContexts.get(this)
+        const state = responsePromiseContexts.get(this.responsePromise)
         const responsePromise = asResponse.apply(this, args)
 
         if (!state?.getBeforeVerdict) return responsePromise
@@ -366,23 +347,7 @@ for (const extension of extensions) {
               : null
 
             const state = { ctx, stream, getBeforeVerdict, afterChannel, parentSpan }
-            apiPromiseContexts.set(apiProm, state)
-
-            if (Object.hasOwn(apiProm, '_thenUnwrap')) {
-              shimmer.wrap(apiProm, '_thenUnwrap', wrapThenUnwrap)
-            }
-
-            // OpenAI 7.5+ replaces pagination promise methods with functions bound to a hidden APIPromise.
-            // Wrap the existing instance method so the context remains associated with the returned object.
-            if (Object.hasOwn(apiProm, 'then')) {
-              shimmer.wrap(apiProm, 'then', then => function (onfulfilled, onrejected) {
-                const state = apiPromiseContexts.get(this)
-                if (!state) return then.call(this, onfulfilled, onrejected)
-
-                const parsedPromise = then.call(this, body => Promise.all([this.responsePromise, body]))
-                return handleUnwrappedAPIPromise(parsedPromise, state).then(onfulfilled, onrejected)
-              })
-            }
+            responsePromiseContexts.set(apiProm.responsePromise, state)
 
             ch.end.publish(ctx)
 

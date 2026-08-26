@@ -521,7 +521,17 @@ describe('Plugin', () => {
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
-          const result = await openai.models.list()
+          const promise = openai.models.list()
+          let result
+
+          if (semver.satisfies(realVersion, '>=7.5.0')) {
+            const responseResult = await promise.withResponse()
+            result = responseResult.data
+            assert.strictEqual(responseResult.response.status, 200)
+          } else {
+            result = await promise
+          }
+
           assert.deepStrictEqual(result.object, 'list')
           assert.ok(result.data.length)
         } else {

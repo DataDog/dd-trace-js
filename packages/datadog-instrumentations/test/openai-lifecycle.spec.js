@@ -25,7 +25,7 @@ class FakeAPIPromise {
   }
 
   _thenUnwrap (cb) {
-    return new FakeAPIPromise(cb(this._body))
+    return new FakeAPIPromise(cb(this._body), this.responsePromise)
   }
 
   then (onFulfilled, onRejected) {
