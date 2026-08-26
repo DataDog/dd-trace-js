@@ -294,4 +294,39 @@ describe('ci-visibility settings filesystem cache', () => {
     // Simulate the git upload finishing so the phase-2 request can proceed.
     setImmediate(() => exporter._resolveGit())
   })
+
+  // Regression: a syntactically valid cache file with a null `data` payload must be
+  // treated as a miss, not a hit. Otherwise the null flows into filterConfiguration,
+  // which dereferences it and throws an unhandled rejection in the test process.
+  it('treats a malformed cache entry with null data as a miss and falls back to the API', (done) => {
+    const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
+    exporter._resolveCanUseCiVisProtocol(true)
+    cleanup(exporter, TEST_CONFIGURATION)
+
+    // Seed a malformed but syntactically valid cache entry.
+    const key = cacheKeyForConfiguration(exporter, TEST_CONFIGURATION)
+    fs.writeFileSync(
+      getCachePath(key),
+      JSON.stringify({ timestamp: Date.now(), data: null }),
+      'utf8'
+    )
+
+    const scope = nock(url)
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, JSON.stringify(SETTINGS_NO_GIT))
+
+    exporter.getLibraryConfiguration(TEST_CONFIGURATION, (err, libraryConfig) => {
+      try {
+        assert.strictEqual(err, null, 'malformed cache must not surface an error')
+        assert.ok(libraryConfig, 'malformed cache must fall back to a real config, not null')
+        assert.strictEqual(libraryConfig.requireGit, false)
+        assert.strictEqual(scope.isDone(), true, 'malformed cache should fall back to the API')
+        cleanup(exporter, TEST_CONFIGURATION)
+        done()
+      } catch (err) {
+        cleanup(exporter, TEST_CONFIGURATION)
+        done(err)
+      }
+    })
+  })
 })

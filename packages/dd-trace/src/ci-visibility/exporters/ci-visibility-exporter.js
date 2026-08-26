@@ -1,12 +1,13 @@
 'use strict'
 
+const fs = require('node:fs')
 const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
 
 const { version: tracerVersion } = require('../../../../../package.json')
 const { EMPTY_EFD_RETRY_POLICY, createEfdRetryPolicy } = require('../efd-retry-policy')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
-const { buildCacheKey, withCache, writeToCache } = require('../requests/fs-cache')
+const { buildCacheKey, getCachePath, withCache, writeToCache } = require('../requests/fs-cache')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const { getTestManagementTests: getTestManagementTestsRequest } =
@@ -346,6 +347,28 @@ class CiVisibilityExporter extends BufferingExporter {
           return callback(null, this._libraryConfig)
         }
         // Filesystem cache hit: no git upload was started in this process.
+        if (!libraryConfig || typeof libraryConfig !== 'object') {
+          // A syntactically valid cache file with a null/non-object payload is corrupt.
+          // Settings never writes such a value, so this is external corruption. Remove the
+          // file and fall back to the backend so we never serve a garbage config that would
+          // crash filterConfiguration or silently disable every feature.
+          try { fs.unlinkSync(getCachePath(fsCacheKey)) } catch { /* ignore */ }
+          return this._fetchLibraryConfigurationFromBackend(
+            configuration, repositoryUrl, fsCacheKey,
+            (fetchErr, fetchedConfig) => {
+              if (fetchErr) {
+                // `_libraryConfig` was already set to the phase-1 config inside the fetch,
+                // matching the live path; the git upload resolves `_gitUploadPromise` itself.
+                return callback(fetchErr, {})
+              }
+              // Live-path apply: the git upload was already started and owns the promise,
+              // so do not call `_resolveGit()` (unlike `_applyCachedSettings`).
+              writeSettingsToCache(fetchedConfig)
+              this._libraryConfig = this.filterConfiguration(fetchedConfig)
+              callback(null, this._libraryConfig)
+            }
+          )
+        }
         this._applyCachedSettings(libraryConfig, configuration, repositoryUrl, callback)
       })
     })
