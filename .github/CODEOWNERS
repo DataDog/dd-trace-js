@@ -246,31 +246,31 @@
 /benchmark/e2e-test-optimization/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 
 # LLM Observability
-/.agents/skills/llmobs-integration/ @DataDog/dd-trace-js @DataDog/ml-observability
-/.agents/skills/llmobs-testing/ @DataDog/dd-trace-js @DataDog/ml-observability
-/.claude/skills/llmobs-integration @DataDog/dd-trace-js @DataDog/ml-observability
-/.claude/skills/llmobs-testing @DataDog/dd-trace-js @DataDog/ml-observability
-/benchmark/sirun/llmobs/ @DataDog/dd-trace-js @DataDog/ml-observability
-/benchmark/sirun/llmobs-evaluations/ @DataDog/dd-trace-js @DataDog/ml-observability
-/benchmark/sirun/llmobs-span-processor/ @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-instrumentations/src/ai.js @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-instrumentations/src/anthropic.js @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-instrumentations/src/claude-agent-sdk.js @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-instrumentations/src/langchain.js @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-instrumentations/src/openai.js @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-plugin-ai/ @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-plugin-anthropic/ @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-plugin-claude-agent-sdk/ @DataDog/dd-trace-js @DataDog/ml-observability
-/benchmark/sirun/plugin-claude-agent-sdk/ @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-plugin-aws-sdk/src/services/bedrockruntime/ @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-plugin-google-cloud-vertexai/ @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-plugin-langchain/ @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/datadog-plugin-openai/ @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/dd-trace/src/llmobs/ @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/dd-trace/test/llmobs/ @DataDog/dd-trace-js @DataDog/ml-observability
-/packages/dd-trace/test/plugins/util/llm.spec.js @DataDog/dd-trace-js @DataDog/ml-observability
+/.agents/skills/llmobs-integration/ @DataDog/ml-observability
+/.agents/skills/llmobs-testing/ @DataDog/ml-observability
+/.claude/skills/llmobs-integration @DataDog/ml-observability
+/.claude/skills/llmobs-testing @DataDog/ml-observability
+/benchmark/sirun/llmobs/ @DataDog/ml-observability
+/benchmark/sirun/llmobs-evaluations/ @DataDog/ml-observability
+/benchmark/sirun/llmobs-span-processor/ @DataDog/ml-observability
+/packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/anthropic.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/claude-agent-sdk.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/langchain.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
+/packages/datadog-plugin-ai/ @DataDog/ml-observability
+/packages/datadog-plugin-anthropic/ @DataDog/ml-observability
+/packages/datadog-plugin-claude-agent-sdk/ @DataDog/ml-observability
+/benchmark/sirun/plugin-claude-agent-sdk/ @DataDog/ml-observability
+/packages/datadog-plugin-aws-sdk/src/services/bedrockruntime/ @DataDog/ml-observability
+/packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
+/packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability
+/packages/datadog-plugin-langchain/ @DataDog/ml-observability
+/packages/datadog-plugin-openai/ @DataDog/ml-observability
+/packages/dd-trace/src/llmobs/ @DataDog/ml-observability
+/packages/dd-trace/test/llmobs/ @DataDog/ml-observability
+/packages/dd-trace/test/plugins/util/llm.spec.js @DataDog/ml-observability
 
 # Data Streams Monitoring
 /benchmark/sirun/datastreams/ @DataDog/dd-trace-js @DataDog/data-streams-monitoring
@@ -386,7 +386,7 @@
 /.github/workflows/electron.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /.github/workflows/release.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/serverless.yml @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless @dd-octo-sts
-/.github/workflows/llmobs.yml @DataDog/dd-trace-js @DataDog/ml-observability @dd-octo-sts
+/.github/workflows/llmobs.yml @DataDog/ml-observability @dd-octo-sts
 /.github/workflows/openfeature.yml @DataDog/dd-trace-js @DataDog/feature-flagging-and-experimentation-sdk @dd-octo-sts
 /.github/workflows/pr-title.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/profiling.yml @DataDog/dd-trace-js @DataDog/profiling-js @dd-octo-sts
