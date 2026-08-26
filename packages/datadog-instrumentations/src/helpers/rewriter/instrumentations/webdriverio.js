@@ -56,6 +56,34 @@ module.exports = [
   },
   {
     module: {
+      name: '@wdio/runner',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    functionQuery: {
+      className: 'BaseReporter',
+      methodName: 'waitForSync',
+      kind: 'Async',
+    },
+    channelName: 'BaseReporter_waitForSync',
+  },
+  {
+    module: {
+      name: '@wdio/runner',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'VariableDeclarator[id.name="BaseReporter"] > ClassExpression > ClassBody > ' +
+      'MethodDefinition[key.name="waitForSync"] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"], ' +
+      'ClassDeclaration[id.name="BaseReporter"] > ClassBody > ' +
+      'MethodDefinition[key.name="waitForSync"] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'BaseReporter_waitForSync',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
       name: '@wdio/jasmine-framework',
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
