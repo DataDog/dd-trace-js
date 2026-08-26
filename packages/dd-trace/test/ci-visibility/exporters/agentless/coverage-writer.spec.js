@@ -6,6 +6,7 @@ const proxyquire = require('proxyquire')
 
 require('../../../../../dd-trace/test/setup/core')
 const id = require('../../../../src/id')
+const { getAgent } = require('../../../../src/ci-visibility/exporters/agents')
 
 let CoverageWriter
 let coverageWriter
@@ -45,6 +46,7 @@ describe('CI Visibility Coverage Writer', () => {
 
     CoverageWriter = proxyquire('../../../../src/ci-visibility/exporters/agentless/coverage-writer.js', {
       '../request': request,
+      '../agents': { getAgent },
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
       '../../../ci-visibility/telemetry': { incrementCountMetric },
       '../../../log': log,
@@ -94,6 +96,7 @@ describe('CI Visibility Coverage Writer', () => {
           url,
           path: '/api/v2/citestcov',
           method: 'POST',
+          agent: getAgent(url),
         })
         done()
       })

@@ -16,6 +16,7 @@ const {
 } = require('../../../ci-visibility/telemetry')
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
+const { getAgent } = require('../agents')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
 
@@ -52,6 +53,7 @@ class Writer extends BaseWriter {
       },
       timeout: 15_000,
       url: this._url,
+      agent: getAgent(this._url),
       deadline: flushOptions?.deadline,
     }
 
@@ -61,8 +63,9 @@ class Writer extends BaseWriter {
       options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'citestcycle-intake'
     }
 
+    // Agents carry live socket state while requests are active; omit them from debug output.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
+    log.debug(() => `Request to the intake: ${safeJSONStringify({ ...options, agent: undefined })}`)
 
     const startRequestTime = Date.now()
 

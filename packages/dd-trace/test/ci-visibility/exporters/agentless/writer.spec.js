@@ -6,6 +6,8 @@ const proxyquire = require('proxyquire')
 
 require('../../../../../dd-trace/test/setup/core')
 
+const { getAgent } = require('../../../../src/ci-visibility/exporters/agents')
+
 let Writer
 let writer
 let span
@@ -54,6 +56,7 @@ describe('CI Visibility Writer', () => {
 
     Writer = proxyquire('../../../../src/ci-visibility/exporters/agentless/writer', {
       '../request': request,
+      '../agents': { getAgent },
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
       '../../../ci-visibility/telemetry': { incrementCountMetric },
@@ -103,6 +106,7 @@ describe('CI Visibility Writer', () => {
           headers: {
             'Content-Type': 'application/msgpack',
           },
+          agent: getAgent(url),
         })
         done()
       })

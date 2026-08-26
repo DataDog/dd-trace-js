@@ -6,6 +6,7 @@ const { JSONEncoder } = require('../../encode/json-encoder')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 const BaseWriter = require('../../../exporters/common/writer')
 
+const { getAgent } = require('../agents')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
 
@@ -46,6 +47,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       },
       timeout: this.timeout,
       url: this._url,
+      agent: getAgent(this._url),
       deadline: flushOptions?.deadline,
     }
 
@@ -54,8 +56,9 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       options.path = DEBUGGER_INPUT_V1
     }
 
+    // Agents carry live socket state while requests are active; omit them from debug output.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Request to the logs intake: ${safeJSONStringify(options)}`)
+    log.debug(() => `Request to the logs intake: ${safeJSONStringify({ ...options, agent: undefined })}`)
 
     this.#requestTracker.send(request, data, options, (err, res) => {
       if (err) {

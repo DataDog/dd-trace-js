@@ -75,4 +75,43 @@ describe('BufferingExporter', () => {
     exporter.resetUncodedTraces()
     assert.deepStrictEqual(exporter.getUncodedTraces(), [])
   })
+
+  it('skips the periodic flush when _shouldFlush returns false', (done) => {
+    const flushingWriter = {
+      append: sinon.spy(),
+      flush: sinon.spy(),
+      setUrl: sinon.spy(),
+    }
+    const exporter = new BufferingExporter({ port, flushInterval })
+    exporter._writer = flushingWriter
+    exporter._isInitialized = true
+    exporter._shouldFlush = () => false
+
+    exporter.export([{ span_id: '1' }])
+
+    setTimeout(() => {
+      sinon.assert.called(flushingWriter.append)
+      sinon.assert.notCalled(flushingWriter.flush)
+      done()
+    }, flushInterval * 2)
+  })
+
+  it('flushes on the periodic timer when _shouldFlush returns true', (done) => {
+    const flushingWriter = {
+      append: sinon.spy(),
+      flush: sinon.spy(),
+      setUrl: sinon.spy(),
+    }
+    const exporter = new BufferingExporter({ port, flushInterval })
+    exporter._writer = flushingWriter
+    exporter._isInitialized = true
+    exporter._shouldFlush = () => true
+
+    exporter.export([{ span_id: '1' }])
+
+    setTimeout(() => {
+      sinon.assert.called(flushingWriter.flush)
+      done()
+    }, flushInterval * 2)
+  })
 })

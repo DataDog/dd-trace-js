@@ -36,13 +36,27 @@ class BufferingExporter {
       writer.flush()
     } else if (flushInterval !== 0 && this[timerKey] === undefined) {
       this[timerKey] = setTimeout(() => {
-        writer.flush()
         this[timerKey] = undefined
+        // The periodic timer is a latency backstop; the encoder's size gate and the
+        // final flush still deliver payloads. Subclasses can suppress it (e.g. while
+        // the intake origin is saturated) so events coalesce instead of queueing.
+        if (this._shouldFlush(writer)) writer.flush()
       }, flushInterval)
       this[timerKey].unref?.()
     }
 
     return appended
+  }
+
+  /**
+   * Decides whether a periodic timer flush should fire. Defaults to `true`; Test
+   * Optimization overrides it to hold flushes while the intake origin is busy.
+   *
+   * @param {object} _writer
+   * @returns {boolean}
+   */
+  _shouldFlush (_writer) {
+    return true
   }
 
   getUncodedTraces () {
