@@ -2,9 +2,85 @@
 
 const assert = require('assert')
 const { inspect } = require('node:util')
+
 const { assertObjectContains, assertUUID } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const { pollInterval, setup } = require('./utils')
+
+/**
+ * @param {import('node:events').EventEmitter} agent
+ * @param {string} configId
+ * @param {Array<object>} expectedPayloads
+ * @param {number} expectedAckUpdates
+ * @param {() => void} [onInstalled]
+ */
+function expectProbeEvents (agent, configId, expectedPayloads, expectedAckUpdates, onInstalled) {
+  return new Promise((resolve, reject) => {
+    let ackUpdates = 0
+    let quietPeriod
+
+    /** @param {Error} [error] */
+    function finish (error) {
+      clearTimeout(quietPeriod)
+      agent.removeListener('debugger-diagnostics', handleDiagnostics)
+      agent.removeListener('remote-config-ack-update', handleAckUpdate)
+      if (error) reject(error)
+      else resolve()
+    }
+
+    function observeQuietPeriod () {
+      if (expectedPayloads.length !== 0) return
+      clearTimeout(quietPeriod)
+      quietPeriod = setTimeout(() => {
+        try {
+          assert.strictEqual(ackUpdates, expectedAckUpdates)
+          finish()
+        } catch (error) {
+          finish(error)
+        }
+      }, pollInterval * 2 * 1000)
+    }
+
+    /**
+     * @param {string} id
+     * @param {number} version
+     * @param {number} state
+     * @param {string} error
+     */
+    function handleAckUpdate (id, version, state, error) {
+      if (state === UNACKNOWLEDGED) return
+
+      try {
+        assert.strictEqual(id, configId)
+        assert.strictEqual(version, ++ackUpdates)
+        assert.strictEqual(state, ACKNOWLEDGED)
+        assert.ok(!error)
+        observeQuietPeriod()
+      } catch (error) {
+        finish(error)
+      }
+    }
+
+    /** @param {{ payload: Array<object> }} event */
+    function handleDiagnostics ({ payload }) {
+      try {
+        for (const event of payload) {
+          const expected = expectedPayloads.shift()
+          assert.ok(expected, 'Received an unexpected diagnostics payload')
+          assertObjectContains(event, expected)
+          assertUUID(event.debugger.diagnostics.runtimeId)
+          if (event.debugger.diagnostics.status === 'INSTALLED') onInstalled?.()
+        }
+        observeQuietPeriod()
+      } catch (error) {
+        finish(error)
+      }
+    }
+
+    agent.on('debugger-diagnostics', handleDiagnostics)
+    agent.on('remote-config-ack-update', handleAckUpdate)
+  })
+}
 
 describe('Dynamic Instrumentation', function () {
   const t = setup({ testApp: 'target-app/basic.js', dependencies: ['fastify'] })
@@ -14,8 +90,7 @@ describe('Dynamic Instrumentation', function () {
   })
 
   describe('diagnostics messages', function () {
-    it('should send expected diagnostics messages if probe is received and triggered', function (done) {
-      let receivedAckUpdate = false
+    it('should send expected diagnostics messages if probe is received and triggered', async function () {
       const probeId = t.rcConfig.config.id
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
@@ -31,48 +106,15 @@ describe('Dynamic Instrumentation', function () {
         debugger: { diagnostics: { probeId, probeVersion: 0, status: 'EMITTING' } },
       }]
 
-      t.agent.on('remote-config-ack-update', (id, version, state, error) => {
-        // Due to the very short DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS, there's a race condition in which we might
-        // get an UNACKNOWLEDGED state first before the ACKNOWLEDGED state.
-        if (state === UNACKNOWLEDGED) return
-
-        assert.strictEqual(id, t.rcConfig.id)
-        assert.strictEqual(version, 1)
-        assert.strictEqual(state, ACKNOWLEDGED)
-        assert.ok(!error) // falsy check since error will be an empty string, but that's an implementation detail
-
-        receivedAckUpdate = true
-        endIfDone()
-      })
-
-      t.agent.on('debugger-diagnostics', ({ payload }) => {
-        payload.forEach((event) => {
-          const expected = expectedPayloads.shift()
-          assertObjectContains(event, expected)
-          assertUUID(event.debugger.diagnostics.runtimeId)
-
-          if (event.debugger.diagnostics.status === 'INSTALLED') {
-            t.axios.get(t.breakpoint.url)
-              .then((response) => {
-                assert.strictEqual(response.status, 200)
-                assert.deepStrictEqual(response.data, { hello: 'bar' })
-              })
-              .catch(done)
-          } else {
-            endIfDone()
-          }
-        })
-      })
-
+      const breakpointTriggered = t.triggerBreakpoint()
+      const probeEvents = expectProbeEvents(t.agent, t.rcConfig.id, expectedPayloads, 1)
       t.agent.addRemoteConfig(t.rcConfig)
-
-      function endIfDone () {
-        if (receivedAckUpdate && expectedPayloads.length === 0) done()
-      }
+      const [response] = await Promise.all([breakpointTriggered, probeEvents])
+      assert.strictEqual(response.status, 200)
+      assert.deepStrictEqual(response.data, { hello: 'bar' })
     })
 
-    it('should send expected diagnostics messages if probe is first received and then updated', function (done) {
-      let receivedAckUpdates = 0
+    it('should send expected diagnostics messages if probe is first received and then updated', async function () {
       const probeId = t.rcConfig.config.id
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
@@ -99,43 +141,17 @@ describe('Dynamic Instrumentation', function () {
         () => {},
       ]
 
-      t.agent.on('remote-config-ack-update', (id, version, state, error) => {
-        // Due to the very short DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS, there's a race condition in which we might
-        // get an UNACKNOWLEDGED state first before the ACKNOWLEDGED state.
-        if (state === UNACKNOWLEDGED) return
-
-        assert.strictEqual(id, t.rcConfig.id)
-        assert.strictEqual(version, ++receivedAckUpdates)
-        assert.strictEqual(state, ACKNOWLEDGED)
-        assert.ok(!error) // falsy check since error will be an empty string, but that's an implementation detail
-
-        endIfDone()
-      })
-
-      t.agent.on('debugger-diagnostics', ({ payload }) => {
-        payload.forEach((event) => {
-          const expected = expectedPayloads.shift()
-          assertObjectContains(event, expected)
-          assertUUID(event.debugger.diagnostics.runtimeId)
-          if (event.debugger.diagnostics.status === 'INSTALLED') {
-            const trigger = triggers.shift()
-            assert.ok(trigger, 'expecting a trigger function to be defined')
-            trigger()
-          }
-          endIfDone()
-        })
+      const probeEvents = expectProbeEvents(t.agent, t.rcConfig.id, expectedPayloads, 2, () => {
+        const trigger = triggers.shift()
+        assert.ok(trigger, 'expecting a trigger function to be defined')
+        trigger()
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
-
-      function endIfDone () {
-        if (receivedAckUpdates === 2 && expectedPayloads.length === 0) done()
-      }
+      await probeEvents
     })
 
-    it('should send expected diagnostics messages if probe is first received and then deleted', function (done) {
-      let receivedAckUpdate = false
-      let payloadsProcessed = false
+    it('should send expected diagnostics messages if probe is first received and then deleted', async function () {
       const probeId = t.rcConfig.config.id
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
@@ -147,42 +163,12 @@ describe('Dynamic Instrumentation', function () {
         debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } },
       }]
 
-      t.agent.on('remote-config-ack-update', (id, version, state, error) => {
-        // Due to the very short DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS, there's a race condition in which we might
-        // get an UNACKNOWLEDGED state first before the ACKNOWLEDGED state.
-        if (state === UNACKNOWLEDGED) return
-
-        assert.strictEqual(id, t.rcConfig.id)
-        assert.strictEqual(version, 1)
-        assert.strictEqual(state, ACKNOWLEDGED)
-        assert.ok(!error) // falsy check since error will be an empty string, but that's an implementation detail
-
-        receivedAckUpdate = true
-        endIfDone()
-      })
-
-      t.agent.on('debugger-diagnostics', ({ payload }) => {
-        payload.forEach((event) => {
-          const expected = expectedPayloads.shift()
-          assertObjectContains(event, expected)
-          assertUUID(event.debugger.diagnostics.runtimeId)
-
-          if (event.debugger.diagnostics.status === 'INSTALLED') {
-            t.agent.removeRemoteConfig(t.rcConfig.id)
-            // Wait a little to see if we get any follow-up `debugger-diagnostics` messages
-            setTimeout(() => {
-              payloadsProcessed = true
-              endIfDone()
-            }, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
-          }
-        })
+      const probeEvents = expectProbeEvents(t.agent, t.rcConfig.id, expectedPayloads, 1, () => {
+        t.agent.removeRemoteConfig(t.rcConfig.id)
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
-
-      function endIfDone () {
-        if (receivedAckUpdate && payloadsProcessed) done()
-      }
+      await probeEvents
     })
 
     it(

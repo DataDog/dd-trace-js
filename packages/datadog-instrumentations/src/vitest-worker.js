@@ -5,6 +5,7 @@ const { performance } = require('node:perf_hooks')
 const { fileURLToPath } = require('node:url')
 const { isMainThread, parentPort } = require('node:worker_threads')
 
+const { channel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const { getEfdRetryCountForDuration } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
@@ -40,10 +41,12 @@ const {
 } = require('./vitest-util')
 
 const EFD_SUITE_ADMISSION_TIMEOUT_MS = 5000
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const taskToCtx = new WeakMap()
 const taskToTestProperties = new WeakMap()
 const taskToStatuses = new WeakMap()
 const taskToReportedErrorCount = new WeakMap()
+const runnersWithLogSubmissionCleanup = new WeakSet()
 const attemptToFixTaskToStatuses = new WeakMap()
 const fileToHasConcurrentTests = new WeakMap()
 const fileToEfdSuiteAdmission = new WeakMap()
@@ -953,6 +956,14 @@ addHook({
     let testSuiteError = null
     if (!testSuiteFinishCh.hasSubscribers) {
       return startTests.apply(this, arguments)
+    }
+    const runner = arguments[1]
+    // Vitest 3+ exposes the only awaited worker-shutdown boundary; older versions keep timer/before-exit behavior.
+    if (logSubmissionFlushCh.hasSubscribers &&
+        typeof runner?.onCleanupWorkerContext === 'function' &&
+        !runnersWithLogSubmissionCleanup.has(runner)) {
+      runnersWithLogSubmissionCleanup.add(runner)
+      runner.onCleanupWorkerContext(() => getChannelPromise(logSubmissionFlushCh))
     }
     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]

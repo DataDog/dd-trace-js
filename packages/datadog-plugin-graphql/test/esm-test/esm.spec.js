@@ -70,8 +70,9 @@ describe('Plugin (ESM)', () => {
       // Extract version number from range strings like ">=0.10" or "^15.2.0"
       const cleanVersion = resolvedVersion.replace(/^[>=^~]+/, '')
       const coercedVersion = semver.coerce(cleanVersion)
-      if (coercedVersion && semver.gte(coercedVersion, '15.0.0')) {
-        it('should instrument GraphQL Yoga execution with ESM', async () => {
+      {
+        const yogaTest = coercedVersion && semver.gte(coercedVersion, '15.0.0') ? it : it.skip
+        yogaTest('should instrument GraphQL Yoga execution with ESM', async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
             assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
@@ -103,7 +104,7 @@ describe('Plugin (ESM)', () => {
           await res
         }).timeout(50000)
 
-        it('should instrument GraphQL Yoga subscriptions with ESM', async () => {
+        yogaTest('should instrument GraphQL Yoga subscriptions with ESM', async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
             assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)

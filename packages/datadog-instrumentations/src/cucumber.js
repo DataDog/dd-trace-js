@@ -1482,12 +1482,12 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     this.options.retry = originalRetry
 
-    if (isNewerCucumberVersion && shouldRunEarlyFlakeDetection() && (isNew || isModified)) {
-      return shouldBePassedByEFD
-    }
-
     if (isNewerCucumberVersion && isTestManagementTestsEnabled && !isAttemptToFix && (isQuarantined || isDisabled)) {
       return shouldBePassedByTestManagement
+    }
+
+    if (isNewerCucumberVersion && shouldRunEarlyFlakeDetection() && (isNew || isModified)) {
+      return shouldBePassedByEFD
     }
 
     if (isNewerCucumberVersion && isAttemptToFix && shouldBeFailedByAttemptToFix) {

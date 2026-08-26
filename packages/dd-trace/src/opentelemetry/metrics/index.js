@@ -6,12 +6,12 @@ const { metrics } = require('@opentelemetry/api')
 
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
+const { registerTelemetryFlusher } = require('../../flush')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
 
 const RESERVED_TRACER_TAGS = new Set(['service', 'env', 'version', 'runtime_id', 'runtime-id'])
-
 /**
  * @typedef {import('../../config')} Config
  */
@@ -78,6 +78,8 @@ function initializeOpenTelemetryMetrics (config) {
 
   const meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
+  // Include the final metric collection and export in lifecycle retention.
+  registerTelemetryFlusher(done => meterProvider.forceFlush(done))
 }
 
 /**

@@ -1,6 +1,8 @@
 'use strict'
 
 const getConfig = require('../../config')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const id = require('../../id')
 const log = require('../../log')
 const { EARLY_FLAKE_DETECTION_RETRY_BUCKETS, createEfdRetryPolicy } = require('../efd-retry-policy')
@@ -238,8 +240,8 @@ function getLibraryConfiguration ({
   }
 
   if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/libraries/tests/services/setting')
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
   } else {
     if (!config.DD_API_KEY) {
       return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))

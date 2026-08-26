@@ -294,12 +294,16 @@ const openSearchOptions: plugins.opensearch = {
 };
 
 tracer.use('ai', true)
+tracer.use('ai', { llmobs: false })
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
+tracer.use('anthropic', { llmobs: false });
 tracer.use('claude-agent-sdk');
+tracer.use('claude-agent-sdk', { llmobs: false });
 tracer.use('avsc');
 tracer.use('aws-sdk');
+tracer.use('aws-sdk', { llmobs: false });
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('aws-sdk', awsSdkServiceFunctionOptions);
 tracer.use('azure-cosmos');
@@ -331,7 +335,9 @@ tracer.use('fetch');
 tracer.use('fetch', httpClientOptions);
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
+tracer.use('google-cloud-vertexai', { llmobs: false });
 tracer.use('google-genai');
+tracer.use('google-genai', { llmobs: false });
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
@@ -376,6 +382,7 @@ tracer.use('langchain');
 tracer.use('langchain', { llmobs: false });
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('langgraph');
+tracer.use('langgraph', { llmobs: false });
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);
@@ -395,6 +402,8 @@ tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
 tracer.use('openai-agents');
+tracer.use('openai-agents', { llmobs: false });
+tracer.use('openai', { llmobs: false });
 tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
@@ -783,6 +792,7 @@ tracer.init({
       endpoint: 'http://localhost',
       maxMessagesLength: 22,
       maxContentSize: 1024,
+      redactionEnabled: true,
       timeout: 1000
     }
   }
@@ -796,6 +806,14 @@ aiguard.evaluate([
   result.action && result.reason && result.tags
 })
 
+aiguard.evaluate([{
+  role: 'user',
+  content: [
+    { type: 'input_text', text: 'Describe this image' },
+    { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
+  ],
+}])
+
 aiguard.evaluate([
   {
     role: 'assistant',
@@ -807,11 +825,18 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds && result.messages
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
   result.action && result.reason && result.tags && result.tagProbabilities && result.sds
+})
+
+aiguard.evaluate([
+  { role: 'user', content: 'My SSN is 123-45-6789' },
+]).then(result => {
+  const replacements: ddTrace.aiguard.RedactionReplacement[] = result.redactionReplacements
+  replacements.map(({ path, replacement }) => `${path}=${replacement}`)
 })

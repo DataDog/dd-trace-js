@@ -268,6 +268,48 @@ describe('OpenFeature Exposures Writer', () => {
       })
     })
 
+    it('should include serial_id when present', () => {
+      const payload = writer.makePayload([{ ...exposureEvent, serial_id: 340132 }])
+
+      assert.deepStrictEqual(payload.exposures[0], {
+        timestamp: 1672531200000,
+        allocation: { key: 'allocation_123' },
+        flag: { key: 'test_flag' },
+        variant: { key: 'A' },
+        serial_id: 340132,
+        subject: {
+          id: 'user_123',
+          type: 'user',
+          attributes: { plan: 'premium' },
+        },
+      })
+    })
+
+    it('should include a serial_id of zero', () => {
+      const payload = writer.makePayload([{ ...exposureEvent, serial_id: 0 }])
+
+      assert.strictEqual(payload.exposures[0].serial_id, 0)
+    })
+
+    // The intake declares serial_id as an integer and rejects the whole exposure on a type
+    // mismatch, so anything non-numeric has to leave the encoded payload entirely.
+    for (const [label, serialId] of [
+      ['absent', undefined],
+      ['null', null],
+      ['a string', '340132'],
+      ['a boolean', true],
+    ]) {
+      it(`should omit serial_id when it is ${label}`, () => {
+        const event = { ...exposureEvent }
+        if (serialId !== undefined) {
+          event.serial_id = serialId
+        }
+        const encoded = JSON.stringify(writer.makePayload([event]))
+
+        assert.ok(!encoded.includes('serial_id'), `Encoded payload: ${encoded}`)
+      })
+    }
+
     it('should handle optional config values', () => {
       const writerWithoutOptionals = new ExposuresWriter({
         ...config,

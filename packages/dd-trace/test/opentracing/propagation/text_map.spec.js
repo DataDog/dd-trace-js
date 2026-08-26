@@ -1010,6 +1010,35 @@ describe('TextMapPropagator', () => {
       })
     })
 
+    it('should preserve separators and empty trace tag values', () => {
+      textMap['x-datadog-tags'] = '_dd.p.empty,_dd.p.also_empty,_dd.p.foo=bar=baz'
+
+      const spanContext = propagator.extract(textMap)
+
+      assertObjectContains(spanContext._trace.tags, {
+        '_dd.p.empty': '',
+        '_dd.p.also_empty': '',
+        '_dd.p.foo': 'bar=baz',
+      })
+    })
+
+    it('should continue extracting trace tags after a malformed trace id tag', () => {
+      textMap['x-datadog-tags'] = '_dd.p.tid=malformed,_dd.p.foo=bar'
+
+      const spanContext = propagator.extract(textMap)
+
+      assert.ok(!('_dd.p.tid' in spanContext._trace.tags))
+      assert.strictEqual(spanContext._trace.tags['_dd.p.foo'], 'bar')
+    })
+
+    it('should reject a trailing empty trace tag member', () => {
+      textMap['x-datadog-tags'] = '_dd.p.foo=bar,'
+
+      const spanContext = propagator.extract(textMap)
+
+      assert.ok(!('_dd.p.foo' in spanContext._trace.tags))
+    })
+
     it('should not extract trace tags if the value is too long', () => {
       textMap['x-datadog-tags'] = `_dd.p.foo=${'a'.repeat(512)}`
 
