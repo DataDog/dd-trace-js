@@ -482,19 +482,7 @@ class MochaPlugin extends CiPlugin {
         if (!testSuiteSpan.context().getTag(TEST_STATUS)) {
           testSuiteSpan.setTag(TEST_STATUS, status)
         }
-        const exporter = this.tracer._exporter
-        if (exporter.deferTestSuiteSpan) {
-          exporter.deferTestSuiteSpan(testSuiteSpan)
-          testSuiteSpan.finish()
-        } else if (exporter.exportDeferredTestSuiteSpans) {
-          const finishTime = this._now()
-          this._pendingTestSuiteSpans.push({
-            span: testSuiteSpan,
-            finishTime,
-          })
-        } else {
-          testSuiteSpan.finish()
-        }
+        testSuiteSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
     })
@@ -738,7 +726,6 @@ class MochaPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled,
       isParallel,
-      isFrameworkError,
       onDone,
     }) => {
       this._exportPendingWorkerTraces()
@@ -754,13 +741,6 @@ class MochaPlugin extends CiPlugin {
         if (error) {
           this.testSessionSpan.setTag('error', error)
           this.testModuleSpan.setTag('error', error)
-          if (isFrameworkError) {
-            this.tracer._exporter.setDeferredTestSuiteError?.(error)
-            for (const testSuiteSpan of this._testSuiteSpansByTestSuite.values()) {
-              testSuiteSpan.setTag(TEST_STATUS, 'fail')
-              testSuiteSpan.setTag('error', error)
-            }
-          }
         }
 
         this._finishPendingTestSuiteSpans()
@@ -802,7 +782,6 @@ class MochaPlugin extends CiPlugin {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
         }
 
-        this.tracer._exporter.exportDeferredTestSuiteSpans?.()
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
