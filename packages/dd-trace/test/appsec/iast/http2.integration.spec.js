@@ -8,6 +8,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { engines, nodeMaxMajor } = require('../../../../../package.json')
+const { NODE_MAJOR, NODE_MINOR } = require('../../../../../version')
 const agent = require('../../plugins/agent')
 const { getWebSpan } = require('../utils')
 const { storage } = require('../../../../datadog-core')
@@ -26,6 +27,10 @@ const { getConfigFresh } = require('../../helpers/config')
 const runtimeSupported = Boolean(process.env.DD_INJECT_FORCE) ||
   semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
 const describeSupported = runtimeSupported ? describe : describe.skip
+const supportsRawResponseHeaders = NODE_MAJOR >= 25 ||
+  (NODE_MAJOR === 24 && NODE_MINOR >= 7) ||
+  (NODE_MAJOR === 22 && NODE_MINOR >= 20)
+const describeRawResponseHeaders = supportsRawResponseHeaders ? describe : describe.skip
 
 function sourceTypeOf (value) {
   const iastContext = getIastContext(storage('legacy').getStore())
@@ -250,6 +255,13 @@ describeSupported('IAST HTTP/2 server', () => {
     it('reports a response-side vulnerability (cookie without HttpOnly)', async () => {
       handler = (req, stream) => stream.respond({ ':status': 200, 'set-cookie': 'session=abc' })
       await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+    })
+
+    describeRawResponseHeaders('raw response headers', () => {
+      it('reports a response-side vulnerability (cookie without HttpOnly)', async () => {
+        handler = (req, stream) => stream.respond([':status', 200, 'set-cookie', 'session=abc'])
+        await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+      })
     })
 
     it('reports no response-side vulnerability when respond carries no headers', async () => {

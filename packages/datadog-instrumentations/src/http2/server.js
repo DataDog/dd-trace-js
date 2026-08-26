@@ -23,6 +23,7 @@ const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
 const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+const LOWERCASE_HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/
 const ILLEGAL_CONNECTION_HEADERS = new Set([
   'connection',
   'http2-settings',
@@ -72,6 +73,9 @@ const SINGLE_VALUE_HEADERS = new Set([
 const PRESERVES_DUPLICATE_HEADERS = NODE_MAJOR >= 22 ||
   (NODE_MAJOR === 21 && NODE_MINOR >= 7) ||
   (NODE_MAJOR === 20 && NODE_MINOR >= 12)
+const SUPPORTS_RAW_RESPONSE_HEADERS = NODE_MAJOR >= 25 ||
+  (NODE_MAJOR === 24 && NODE_MINOR >= 7) ||
+  (NODE_MAJOR === 22 && NODE_MINOR >= 20)
 
 // The compatibility layer emits 'request' from the same stream, so remember
 // streams already traced by the mixed-server branch.
@@ -374,7 +378,9 @@ function wrapStreamRespond (respond) {
       return Reflect.apply(respond, this, args)
     }
 
-    const responseHeaders = getValidatedResponseHeaders(args[0], args[1])
+    if (!hasValidResponseOptions(args[1])) return Reflect.apply(respond, this, args)
+
+    const responseHeaders = getValidatedResponseHeaders(args[0])
     if (!responseHeaders) return Reflect.apply(respond, this, args)
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
@@ -625,54 +631,122 @@ function getResponseStatusCode (responseHeaders) {
 }
 
 /**
- * @param {object | unknown[] | undefined} headers
- * @param {object | undefined} [options]
+ * @param {unknown} headers
  * @returns {Record<string, unknown> | undefined}
  */
-function getValidatedResponseHeaders (headers, options) {
-  if (!hasValidResponseOptions(options)) return
-  if (headers !== undefined) {
-    if (!hasOnlyDataProperties(headers)) return
+function getValidatedResponseHeaders (headers) {
+  if (headers === undefined) return {}
 
-    if (Array.isArray(headers)) return
-    const prototype = Object.getPrototypeOf(headers)
-    if (prototype !== Object.prototype && prototype !== null) return
+  let responseHeaders
+  let responseHeaderNames
+  let canReturnFast = true
+  let isValid = true
+  let requiresNormalization = false
 
-    const sensitiveDescriptor = sensitiveHeadersSymbol &&
-      Object.getOwnPropertyDescriptor(headers, sensitiveHeadersSymbol)
-    if (sensitiveDescriptor && !Object.hasOwn(sensitiveDescriptor, 'value')) return
+  if (headers === null || typeof headers !== 'object') return
 
-    const sensitiveHeaders = sensitiveHeadersSymbol && headers[sensitiveHeadersSymbol]
-    if (sensitiveHeaders !== undefined) {
-      if (!Array.isArray(sensitiveHeaders)) return
-      for (const name of sensitiveHeaders) {
-        if (typeof name !== 'string') return
+  const headersAreRaw = Array.isArray(headers)
+  if (headersAreRaw) {
+    if (!SUPPORTS_RAW_RESPONSE_HEADERS ||
+      headers.length % 2 !== 0 ||
+      headers.unshift !== Array.prototype.unshift ||
+      headers.push !== Array.prototype.push ||
+      !Object.isExtensible(headers) ||
+      !Object.getOwnPropertyDescriptor(headers, 'length')?.writable) {
+      return
+    }
+    for (let i = 0; i < headers.length; i += 2) {
+      if (typeof headers[i] !== 'string') return
+    }
+  } else {
+    responseHeaders = {}
+    responseHeaderNames = Object.keys(headers)
+    for (const rawName of responseHeaderNames) {
+      const value = headers[rawName]
+      if (rawName === '__proto__') {
+        Object.defineProperty(responseHeaders, rawName, {
+          configurable: true,
+          enumerable: true,
+          value,
+          writable: true,
+        })
+      } else {
+        responseHeaders[rawName] = value
+      }
+      if (value === undefined || rawName === '' || (Array.isArray(value) && value.length === 0)) {
+        canReturnFast = false
+        if (rawName !== rawName.toLowerCase()) requiresNormalization = true
+      } else {
+        const headerIsValid = isValidResponseHeader(rawName, value, LOWERCASE_HTTP_HEADER_NAME_PATTERN)
+        if (!headerIsValid) {
+          if (rawName === rawName.toLowerCase()) {
+            isValid = false
+          } else {
+            requiresNormalization = true
+          }
+        }
       }
     }
   }
 
-  const responseHeaders = addResponseHeaders({}, headers, true)
+  const sensitiveHeaders = sensitiveHeadersSymbol && headers[sensitiveHeadersSymbol]
+  if (sensitiveHeaders !== undefined) {
+    if (!Array.isArray(sensitiveHeaders)) return
+    for (const name of sensitiveHeaders) {
+      if (typeof name !== 'string') return
+    }
+  }
+
+  if (requiresNormalization) {
+    responseHeaders = addResponseHeaders({ __proto__: null }, responseHeaders, true)
+    responseHeaderNames = Object.keys(responseHeaders)
+  } else if (responseHeaders && canReturnFast) {
+    if (!isValid || getResponseStatusCode(responseHeaders) === undefined) return
+    return responseHeaders
+  }
+
+  if (!responseHeaders) {
+    responseHeaders = addResponseHeaders({ __proto__: null }, headers, true)
+    responseHeaderNames = Object.keys(responseHeaders)
+  }
+
+  return validateResponseHeaders(responseHeaders, responseHeaderNames)
+}
+
+/**
+ * @param {Record<string, unknown>} responseHeaders
+ * @param {string[]} responseHeaderNames
+ * @returns {Record<string, unknown> | undefined}
+ */
+function validateResponseHeaders (responseHeaders, responseHeaderNames) {
   if (getResponseStatusCode(responseHeaders) === undefined) return
 
-  for (const name of Object.keys(responseHeaders)) {
+  for (const name of responseHeaderNames) {
     const value = responseHeaders[name]
     if (value === undefined || name === '' || (Array.isArray(value) && value.length === 0)) {
       delete responseHeaders[name]
       continue
     }
-    if (!isStableHeaderValue(value)) return
-    if (name[0] === ':') {
-      if (name !== HTTP2_HEADER_STATUS) return
-      continue
-    }
-    if (!HTTP_HEADER_NAME_PATTERN.test(name) || ILLEGAL_CONNECTION_HEADERS.has(name)) return
-    if (Array.isArray(value) && value.length > 1 && SINGLE_VALUE_HEADERS.has(name)) return
-
-    const normalizedValue = Array.isArray(value) ? value[0] : value
-    if (name === 'te' && normalizedValue !== 'trailers') return
+    if (!isValidResponseHeader(name, value, HTTP_HEADER_NAME_PATTERN)) return
   }
 
   return responseHeaders
+}
+
+/**
+ * @param {string} name
+ * @param {unknown} value
+ * @param {RegExp} namePattern
+ * @returns {boolean}
+ */
+function isValidResponseHeader (name, value, namePattern) {
+  if (!isStableHeaderValue(value)) return false
+  if (name[0] === ':') return name === HTTP2_HEADER_STATUS
+  if (!namePattern.test(name) || ILLEGAL_CONNECTION_HEADERS.has(name)) return false
+  if (Array.isArray(value) && value.length > 1 && SINGLE_VALUE_HEADERS.has(name)) return false
+
+  const normalizedValue = Array.isArray(value) ? value[0] : value
+  return name !== 'te' || normalizedValue === 'trailers'
 }
 
 /**

@@ -26,6 +26,12 @@ const { blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 const PRESERVES_DUPLICATE_HEADERS = NODE_MAJOR >= 22 ||
   (NODE_MAJOR === 21 && NODE_MINOR >= 7) ||
   (NODE_MAJOR === 20 && NODE_MINOR >= 12)
+const REQUIRES_STRING_SENSITIVE_HEADER_NAMES = NODE_MAJOR >= 23 ||
+  (NODE_MAJOR === 22 && NODE_MINOR >= 5) ||
+  (NODE_MAJOR === 20 && NODE_MINOR >= 18)
+const SUPPORTS_RAW_RESPONSE_HEADERS = NODE_MAJOR >= 25 ||
+  (NODE_MAJOR === 24 && NODE_MINOR >= 7) ||
+  (NODE_MAJOR === 22 && NODE_MINOR >= 20)
 const runtimeSupported = Boolean(process.env.DD_INJECT_FORCE) ||
   semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
 const describeSupported = runtimeSupported ? describe : describe.skip
@@ -349,6 +355,16 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
           () => stream.respond({ ':status': 404, connection: 'close', k: '404' }),
           { code: 'ERR_HTTP2_INVALID_CONNECTION_HEADERS' }
         )
+      } else if (requestPath === '/header-type') {
+        assert.throws(
+          () => stream.respond('invalid'),
+          { code: 'ERR_INVALID_ARG_TYPE' }
+        )
+      } else if (requestPath === '/header-null') {
+        assert.throws(
+          () => stream.respond(null),
+          { code: 'ERR_INVALID_ARG_TYPE' }
+        )
       } else if (requestPath === '/options') {
         assert.throws(
           () => stream.respond({ ':status': 200 }, null),
@@ -390,7 +406,7 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
         )
       } else if (requestPath === '/te') {
         assert.throws(
-          () => stream.respond({ ':status': 404, k: '404', te: 'gzip' }),
+          () => stream.respond({ ':status': 404, k: '404', TE: 'gzip' }),
           { code: 'ERR_HTTP2_INVALID_CONNECTION_HEADERS' }
         )
       } else if (requestPath === '/sensitive-headers') {
@@ -403,7 +419,13 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
       } else if (requestPath === '/sensitive-header-name') {
         const responseHeaders = { ':status': 404, k: '404' }
         responseHeaders[http2.sensitiveHeaders] = [1]
-        assert.throws(() => stream.respond(responseHeaders), TypeError)
+        if (REQUIRES_STRING_SENSITIVE_HEADER_NAMES) {
+          assert.throws(() => stream.respond(responseHeaders), TypeError)
+        } else {
+          stream.respond(responseHeaders)
+          stream.end('ignored')
+          return
+        }
       } else if (requestPath === '/sensitive-header-accessor') {
         const responseHeaders = { ':status': 404, k: '404' }
         Object.defineProperty(responseHeaders, http2.sensitiveHeaders, {
@@ -430,11 +452,44 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
           () => stream.respond([[':status', 404], ['k', '404']]),
           TypeError
         )
+      } else if (requestPath === '/flat-raw-headers') {
+        const responseHeaders = [':status', 404, 'k', '404']
+        if (SUPPORTS_RAW_RESPONSE_HEADERS) {
+          stream.respond(responseHeaders)
+          stream.end('ignored')
+          return
+        }
+        assert.throws(() => stream.respond(responseHeaders), TypeError)
       } else if (requestPath === '/raw-header-name') {
         assert.throws(
           () => stream.respond([1, 'value', ':status', 404, 'k', '404']),
           TypeError
         )
+      } else if (requestPath === '/raw-header-accessor') {
+        const responseHeaders = [':status', 404, 'x-test', 'value', 'k', '404']
+        Object.defineProperty(responseHeaders, 2, {
+          get () {
+            throw new Error('invalid raw header getter')
+          },
+        })
+        assert.throws(
+          () => stream.respond(responseHeaders),
+          SUPPORTS_RAW_RESPONSE_HEADERS ? { message: 'invalid raw header getter' } : TypeError
+        )
+      } else if (requestPath === '/raw-sensitive-header-accessor') {
+        const responseHeaders = [':status', 404, 'k', '404']
+        Object.defineProperty(responseHeaders, http2.sensitiveHeaders, {
+          get () {
+            throw new Error('invalid raw sensitive header getter')
+          },
+        })
+        assert.throws(
+          () => stream.respond(responseHeaders),
+          SUPPORTS_RAW_RESPONSE_HEADERS ? { message: 'invalid raw sensitive header getter' } : TypeError
+        )
+      } else if (requestPath === '/frozen-raw-headers') {
+        const responseHeaders = Object.freeze([':status', 404, 'k', '404'])
+        assert.throws(() => stream.respond(responseHeaders), TypeError)
       } else if (requestPath === '/single-value-header') {
         assert.throws(
           () => stream.respond({ ':status': 404, k: '404', 'content-type': ['a', 'b'] }),
@@ -445,7 +500,7 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
         responseHeaders[http2.sensitiveHeaders] = []
         stream.respond(responseHeaders)
       } else if (requestPath === '/ignored-headers') {
-        stream.respond({ ':status': 404, k: '404', '': 'ignored', empty: [], missing: undefined })
+        stream.respond({ ':status': 404, k: '404', '': 'ignored', empty: [], MiSsInG: undefined })
       } else if (requestPath === '/fd-offset') {
         assertInvalidFileDescriptorResponse(
           stream,
@@ -505,6 +560,8 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     const requestPaths = [
       '/status',
       '/header',
+      '/header-type',
+      '/header-null',
       '/options',
       '/options-accessor',
       '/header-accessor',
@@ -516,7 +573,11 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
       '/sensitive-header-accessor',
       '/header-value',
       '/raw-headers',
+      '/flat-raw-headers',
       '/raw-header-name',
+      '/raw-header-accessor',
+      '/raw-sensitive-header-accessor',
+      '/frozen-raw-headers',
       '/single-value-header',
       '/sensitive-empty',
       '/ignored-headers',
@@ -529,8 +590,10 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     ]
     for (const requestPath of requestPaths) {
       const { body, headers } = await request(requestPath)
-      assert.strictEqual(headers[':status'], 403)
-      assert.strictEqual(body, blockedTemplateJson)
+      const preservesNonStringSensitiveHeader = requestPath === '/sensitive-header-name' &&
+        !REQUIRES_STRING_SENSITIVE_HEADER_NAMES
+      assert.strictEqual(headers[':status'], preservesNonStringSensitiveHeader ? 404 : 403)
+      assert.strictEqual(body, preservesNonStringSensitiveHeader ? 'ignored' : blockedTemplateJson)
     }
   })
 
@@ -540,25 +603,16 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
         stream.respond({ ':status': {}, k: '404' })
       } else if (headers[':path'] === '/value') {
         stream.respond({ ':status': 404, k: '404', value: [{}] })
-      } else if (headers[':path'] === '/default') {
-        stream.respond({ k: '404' })
       } else {
-        class ResponseHeaders {
-          constructor () {
-            this[':status'] = 404
-            this.k = '404'
-          }
-        }
-        stream.respond(new ResponseHeaders())
+        stream.respond({ k: '404' })
       }
       stream.end('body')
     })
 
-    const [statusResponse, valueResponse, defaultResponse, prototypeResponse] = await Promise.all([
+    const [statusResponse, valueResponse, defaultResponse] = await Promise.all([
       request('/status'),
       request('/value'),
       request('/default'),
-      request('/prototype'),
     ])
 
     assert.strictEqual(statusResponse.headers[':status'], 200)
@@ -567,11 +621,72 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(valueResponse.body, 'body')
     assert.strictEqual(defaultResponse.headers[':status'], 200)
     assert.strictEqual(defaultResponse.body, 'body')
-    assert.strictEqual(prototypeResponse.headers[':status'], 404)
-    assert.strictEqual(prototypeResponse.body, 'body')
   })
 
-  it('leaves exotic statCheck headers to Node without analyzing them', async () => {
+  it('blocks class instance response headers with own data properties', async () => {
+    await listenCore(stream => {
+      class ResponseHeaders {
+        constructor () {
+          this[':status'] = 404
+          this.k = '404'
+        }
+      }
+      stream.respond(new ResponseHeaders())
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('preserves response headers named __proto__', async () => {
+    await listenCore(stream => {
+      const responseHeaders = JSON.parse('{":status":200,"__proto__":"value"}')
+      stream.respond(responseHeaders)
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 200)
+    assert.strictEqual(Object.getOwnPropertyDescriptor(headers, '__proto__')?.value, 'value')
+    assert.strictEqual(body, 'body')
+  })
+
+  it('allows responses without explicit headers', async () => {
+    await listenCore(stream => {
+      stream.respond()
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 200)
+    assert.strictEqual(body, 'body')
+  })
+
+  it('blocks response headers exposed through accessors', async () => {
+    await listenCore(stream => {
+      const responseHeaders = { ':status': 404 }
+      Object.defineProperty(responseHeaders, 'k', {
+        enumerable: true,
+        get () {
+          return '404'
+        },
+      })
+      stream.respond(responseHeaders)
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('blocks statCheck headers after their prototype changes', async () => {
     await listenCore(stream => {
       stream.respondWithFile(__filename, { ':status': 404, k: '404' }, {
         statCheck (stat, headers) {
@@ -583,8 +698,8 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
     const { body, headers } = await request()
 
-    assert.strictEqual(headers[':status'], 404)
-    assert.notStrictEqual(body, blockedTemplateJson)
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
   })
 
   it('does not affect untracked core stream response methods after wrapping their prototype', async () => {
