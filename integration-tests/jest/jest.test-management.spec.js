@@ -3673,6 +3673,76 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     }
   })
 
+  context('ESM logger loading', () => {
+    for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
+      onlyLatestIt(`respects Jest ESM ${resolutionType}`, async () => {
+        let testOutput = ''
+        const resolutionConfig = resolutionType === 'moduleNameMapper'
+          ? {
+              CONFIG_MODULE_NAME_MAPPER: JSON.stringify({
+                '^winston$': '<rootDir>/ci-visibility/jest-mock-bypass-require/mapped-logger.js',
+              }),
+            }
+          : {
+              CONFIG_RESOLVER: '<rootDir>/ci-visibility/jest-mock-bypass-require/logger-resolver.js',
+            }
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              ...resolutionConfig,
+              CONFIG_TEST_MATCH: '**/ci-visibility/jest-mock-bypass-require/esm-mapped-logger-test.mjs',
+              NODE_OPTIONS: '--experimental-vm-modules',
+              TEST_LOGGER: 'winston',
+              USE_CONFIG_FILE: '1',
+              USE_JEST_RUN: '1',
+            },
+          }
+        )
+        childProcess.stdout.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+
+        const [code] = await once(childProcess, 'exit')
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+      })
+    }
+
+    for (const loggerName of ['winston', 'pino', 'bunyan']) {
+      onlyLatestIt(`respects Jest ESM mocks for ${loggerName}`, async () => {
+        let testOutput = ''
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--experimental-vm-modules',
+              TEST_LOGGER: loggerName,
+              TESTS_TO_RUN: 'jest-mock-bypass-require/esm-mock-test.mjs',
+              USE_JEST_RUN: '1',
+            },
+          }
+        )
+        childProcess.stdout.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+
+        const [code] = await once(childProcess, 'exit')
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+      })
+    }
+  })
+
   context('seed suffix normalization', () => {
     onlyLatestIt('should remove seed suffix from reported test names', async () => {
       const eventsPromise = receiver

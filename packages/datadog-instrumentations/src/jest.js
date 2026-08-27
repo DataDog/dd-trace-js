@@ -176,6 +176,7 @@ const wrappedJestGlobals = new WeakSet()
 const wrappedJestObjects = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
+const jestEsmBypassModulePathsByRuntime = new WeakMap()
 const wrappedCoverageReporters = new WeakSet()
 const coverageReporterRequires = new WeakMap()
 const handledJestEvents = new WeakSet()
@@ -3726,9 +3727,13 @@ if (DD_MAJOR < 6) {
   }, jestConfigSyncWrapper)
 }
 
-const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
+const LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
   'bunyan',
   'pino',
+  'winston',
+]
+const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
+  ...LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE,
   'selenium-webdriver',
   'selenium-webdriver/chrome',
   'selenium-webdriver/edge',
@@ -3736,7 +3741,6 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver/firefox',
   'selenium-webdriver/ie',
   'selenium-webdriver/chromium',
-  'winston',
 ])
 
 function recordMockedFile (suiteFilePath, moduleName) {
@@ -3871,11 +3875,47 @@ function requireOutsideJestRequireEngine (runtime, moduleName) {
 /**
  * @param {object} runtime
  * @param {string} from
+ * @returns {Set<string>}
+ */
+function getJestEsmBypassModulePaths (runtime, from) {
+  let pathsByParent = jestEsmBypassModulePathsByRuntime.get(runtime)
+  if (!pathsByParent) {
+    pathsByParent = new Map()
+    jestEsmBypassModulePathsByRuntime.set(runtime, pathsByParent)
+  }
+
+  let modulePaths = pathsByParent.get(from)
+  if (modulePaths) return modulePaths
+
+  modulePaths = new Set()
+  const nativeRequire = createRequire(from)
+  for (const moduleName of LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE) {
+    try {
+      modulePaths.add(nativeRequire.resolve(moduleName))
+    } catch {
+      // The logger is not installed from this module's resolution context.
+    }
+  }
+  pathsByParent.set(from, modulePaths)
+  return modulePaths
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
  * @param {string} moduleName
  * @returns {string | undefined}
  */
 function getJestBypassModulePath (runtime, from, moduleName) {
-  if (!LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) return
+  if (typeof from !== 'string' || typeof moduleName !== 'string') return
+
+  if (!LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+    // Jest passes the resolved path when a CommonJS package is imported from an ESM test.
+    if (path.isAbsolute(moduleName) && getJestEsmBypassModulePaths(runtime, from).has(moduleName)) {
+      return moduleName
+    }
+    return
+  }
 
   try {
     let jestModulePath
