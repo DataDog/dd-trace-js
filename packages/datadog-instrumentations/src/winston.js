@@ -12,12 +12,15 @@ const patched = new WeakSet()
 const configureCh = channel('ci:log-submission:winston:configure')
 const addTransport = channel('ci:log-submission:winston:add-transport')
 
-addHook({ name: 'winston', file: 'lib/winston/transports/index.js', versions: ['>=3'] }, transportsPackage => {
+addHook({ name: 'winston', versions: ['>=3'] }, winston => {
   if (configureCh.hasSubscribers) {
-    configureCh.publish(transportsPackage.Http)
+    configureCh.publish({
+      createJsonFormat: winston.format.json,
+      StreamTransport: winston.transports.Stream,
+    })
   }
 
-  return transportsPackage
+  return winston
 })
 
 addHook({ name: 'winston', file: 'lib/winston/logger.js', versions: ['>=3'] }, Logger => {
