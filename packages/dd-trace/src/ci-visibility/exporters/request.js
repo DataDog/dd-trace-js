@@ -9,6 +9,7 @@ const {
   getRetryDelay,
   isRetriableNetworkError,
 } = require('../../exporters/common/retry')
+const { FINAL_FLUSH_TIMEOUT_CODE } = require('../final-flush')
 const { getRateLimitResetDelay } = require('../requests/rate-limit')
 
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024
@@ -27,6 +28,18 @@ function getPayloadSize (data) {
 function createQueueFullError () {
   const error = new Error('Test Optimization request queue reached its payload limit')
   error.code = 'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL'
+  return error
+}
+
+function createBackpressureTimeoutError () {
+  const error = new Error('Test Optimization request remained blocked by exporter backpressure')
+  error.code = 'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT'
+  return error
+}
+
+function createRequestTimeoutError () {
+  const error = new Error('Test Optimization transport attempt timed out')
+  error.code = 'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT'
   return error
 }
 
@@ -132,8 +145,11 @@ function requestBuffered (data, options, callback) {
   const timeout = options.timeout || 2000
   const payloadSize = getPayloadSize(data)
   let retryTimer
+  let attemptTimer
+  let attemptController
   let settled = false
   let lastError
+  let waitingForBackpressure = false
 
   if (payloadSize > MAX_BUFFERED_BYTES - bufferedBytes) {
     callback(createQueueFullError())
@@ -145,13 +161,23 @@ function requestBuffered (data, options, callback) {
     if (settled) return
     settled = true
     clearTimeout(retryTimer)
+    clearTimeout(attemptTimer)
     signal?.removeEventListener('abort', onAbort)
     bufferedBytes -= payloadSize
     callback(error, result, statusCode, headers)
   }
   const onAbort = () => {
-    if (lastError) complete(lastError, null, lastError.status)
-    else complete(getAbortError(signal))
+    const abortError = getAbortError(signal)
+    const controller = attemptController
+    let error = lastError || abortError
+
+    if (abortError.code === FINAL_FLUSH_TIMEOUT_CODE) {
+      if (waitingForBackpressure) error = createBackpressureTimeoutError()
+      else if (controller) error = createRequestTimeoutError()
+    }
+
+    complete(error, null, error.status)
+    controller?.abort(abortError)
   }
 
   signal?.addEventListener('abort', onAbort, { once: true })
@@ -165,7 +191,9 @@ function requestBuffered (data, options, callback) {
     const deadline = options.deadline
     const remaining = deadline === undefined ? Infinity : deadline - Date.now()
     if (remaining <= 0) {
-      if (lastError) {
+      if (waitingForBackpressure) {
+        complete(createBackpressureTimeoutError())
+      } else if (lastError) {
         complete(lastError, null, lastError.status)
       } else {
         const error = new Error('Test Optimization request reached its finalization deadline')
@@ -176,10 +204,12 @@ function requestBuffered (data, options, callback) {
     }
 
     if (!commonRequest.writable) {
+      waitingForBackpressure = true
       retryTimer = setTimeout(attempt, Math.min(BACKPRESSURE_RETRY_MS, remaining), attemptIndex)
       retryTimer.unref?.()
       return
     }
+    waitingForBackpressure = false
 
     const attemptOptions = {
       ...options,
@@ -188,22 +218,37 @@ function requestBuffered (data, options, callback) {
     }
     if (deadline !== undefined) attemptOptions.timeout = Math.max(1, Math.min(timeout, remaining))
 
+    const controller = new AbortController()
+    const attemptTimeout = attemptOptions.timeout || timeout
+    let attemptTimedOut = false
+
+    attemptController = controller
+    attemptOptions.signal = controller.signal
+    attemptTimer = setTimeout(() => {
+      attemptTimedOut = true
+      controller.abort(createRequestTimeoutError())
+    }, attemptTimeout)
+    attemptTimer.unref?.()
+
     commonRequest(data, attemptOptions, (error, result, statusCode, headers) => {
+      clearTimeout(attemptTimer)
+      if (attemptController === controller) attemptController = undefined
       if (settled) return
       if (!error) {
         complete(null, result, statusCode, headers)
         return
       }
 
-      lastError = error
+      const requestError = attemptTimedOut ? createRequestTimeoutError() : error
+      lastError = requestError
 
       const responseStatus = statusCode ?? error.status
       const isRetriableHttpError = isRetriableHttpStatusCode(responseStatus)
-      const isRetriableError = isRetriableNetworkError(error) || isRetriableHttpError
+      const isRetriableError = attemptTimedOut || isRetriableNetworkError(error) || isRetriableHttpError
       const reachedBackgroundAttemptLimit =
         options.deadline === undefined && attemptIndex >= getMaxAttempts(attemptOptions)
       if (options.retry === false || !isRetriableError || reachedBackgroundAttemptLimit) {
-        complete(error, result, statusCode, headers)
+        complete(requestError, result, statusCode, headers)
         return
       }
 
@@ -214,11 +259,11 @@ function requestBuffered (data, options, callback) {
           if (options.deadline !== undefined) {
             const retryRemaining = options.deadline - Date.now()
             if (resetDelay >= retryRemaining) {
-              complete(error, result, statusCode, headers)
+              complete(requestError, result, statusCode, headers)
               return
             }
           } else if (resetDelay > RATE_LIMIT_MAX_WAIT_MS) {
-            complete(error, result, statusCode, headers)
+            complete(requestError, result, statusCode, headers)
             return
           }
           retryDelay = resetDelay
@@ -229,7 +274,7 @@ function requestBuffered (data, options, callback) {
       if (options.deadline !== undefined && retryDelay === undefined) {
         const retryRemaining = options.deadline - Date.now()
         if (retryRemaining <= 0) {
-          complete(error, result, statusCode, headers)
+          complete(requestError, result, statusCode, headers)
           return
         }
         const retryAttemptTimeout = timeout < retryRemaining ? timeout : Math.ceil(retryRemaining / 2)
