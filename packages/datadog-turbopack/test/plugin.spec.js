@@ -24,9 +24,7 @@ describe('datadog-turbopack loader', () => {
     const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-')))
     directories.push(directory)
     const source = write(directory, 'module.mjs', 'export const value = 1')
-    const proxyDirectory = fs.mkdtempSync(path.join(process.cwd(), 'node_modules/.cache/dd-turbopack-'))
-    directories.push(proxyDirectory)
-    const proxyPath = path.join(proxyDirectory, 'proxy.mjs')
+    const proxyPath = path.join(directory, 'proxy.mjs')
     const proxy = await createEsmProxy(source, proxyPath, 'ai', 'ai', '7.0.0')
 
     assert.match(proxy, /import \{ channel \} from 'node:diagnostics_channel'/)
