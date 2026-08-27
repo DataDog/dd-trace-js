@@ -66,6 +66,7 @@
 /packages/dd-trace/src/flush.js @DataDog/dd-trace-js @DataDog/apm-serverless @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/lambda/ @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/test/azure_metadata.spec.js @DataDog/dd-trace-js @DataDog/apm-serverless
+/packages/dd-trace/test/fixtures/vercel-telemetry-coalescing.js @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/test/serverless.spec.js @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/test/plugins/util/inferred_proxy.spec.js @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
 

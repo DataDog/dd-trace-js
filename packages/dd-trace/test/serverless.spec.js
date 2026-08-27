@@ -554,42 +554,11 @@ describe('Vercel telemetry retention', () => {
     }
   })
 
-  it('coalesces overlapping Vercel responses into one queued flush', async () => {
-    const retained = []
-    const flushes = []
-    globalThis[requestContext] = {
-      get: () => ({ waitUntil: promise => { retained.push(promise) } }),
-    }
-    const unregister = registerVercelTelemetryRetention({
-      flushAll (done) {
-        flushes.push(done)
-      },
-    })
-    try {
-      channel('apm:http:server:request:finish').publish({ req: {} })
-      await new Promise(resolve => setImmediate(resolve))
-      channel('apm:http:server:request:finish').publish({ req: {} })
-      channel('apm:http:server:request:finish').publish({ req: {} })
-      await new Promise(resolve => setImmediate(resolve))
+  it('coalesces overlapping Vercel responses into one queued flush', () => {
+    const fixture = require.resolve('./fixtures/vercel-telemetry-coalescing')
+    const result = spawnSync(process.execPath, [fixture], { encoding: 'utf8', timeout: 5_000 })
 
-      // Other tracers initialized by this file can share this request context;
-      // the callback count below isolates this test's tracer.
-      assert.ok(retained.length >= 3)
-      assert.strictEqual(flushes.length, 1)
-      flushes[0]()
-      await new Promise(resolve => setImmediate(resolve))
-      assert.strictEqual(flushes.length, 2)
-      flushes[1]()
-      await Promise.all(retained)
-
-      channel('apm:http:server:request:finish').publish({ req: {} })
-      await new Promise(resolve => setImmediate(resolve))
-      assert.strictEqual(flushes.length, 3)
-      flushes[2]()
-      await Promise.all(retained)
-    } finally {
-      unregister()
-    }
+    assert.strictEqual(result.status, 0, result.stderr)
   })
 
   it('passes Vercel retention timeout to the telemetry flush barrier', async () => {
