@@ -131,13 +131,13 @@ function createGraphqlJitRuntime ({
   startExecution,
   wrapResolver,
 }) {
-  const runtime = Object.freeze({
+  const runtime = {
     compileDefaultField,
     finalizeCompilation,
     registerField,
     resolveDefaultInvocation,
     startExecution,
-  })
+  }
 
   /**
    * @param {{ result?: JitCompilationContext }} message
@@ -323,10 +323,11 @@ function compileArgumentFactory (context, descriptor, missing, argumentSource) {
   for (const [variableName, paths] of pathsByVariable) {
     const variableSource = `ddTraceVariable${variableIndex++}`
     const quotedName = quoteString(variableName)
-    source += `  if (variableValues !== undefined && Object.hasOwn(variableValues, ${quotedName})) {\n`
-    source += `    const ${variableSource} = cloneValue === undefined\n`
-    source += `      ? variableValues[${quotedName}]\n`
-    source += `      : cloneValue(variableValues[${quotedName}])\n`
+    source += `  if (variableValues !== undefined && Object.hasOwn(variableValues, ${quotedName})) {
+    const ${variableSource} = cloneValue === undefined
+      ? variableValues[${quotedName}]
+      : cloneValue(variableValues[${quotedName}])
+`
     for (const path of paths) {
       source += `    ${compileArgumentPath(path)} = ${variableSource}\n`
     }

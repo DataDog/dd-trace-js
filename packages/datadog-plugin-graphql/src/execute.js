@@ -1319,6 +1319,7 @@ function observeIncrementalIterator (iterator, observe) {
     callback(result, error, cancelled, complete)
   }
 
+  // Orchestrion cannot reach Promise-resolved or nested iterators. Shimmer adds measurable work to each execution.
   wrapIteratorMethod(iterator, 'next', false, notify)
   wrapIteratorMethod(iterator, 'return', true, notify)
   wrapIteratorMethod(iterator, 'throw', true, notify)
