@@ -97,7 +97,7 @@ describe('Test Optimization validation initialization', () => {
     assert.deepStrictEqual(tracer.init.firstCall.args[0], {
       startupLogs: false,
       isCiVisibility: true,
-      flushInterval: 10_000,
+      flushInterval: 5000,
       experimental: { exporter: 'ci_validation' },
     })
   })

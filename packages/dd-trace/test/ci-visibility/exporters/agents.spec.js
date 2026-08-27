@@ -31,9 +31,9 @@ describe('Test Optimization exporter agents', () => {
 
   it('configures dedicated agents with bounded concurrency and keep-alive', () => {
     assert.strictEqual(httpAgent.keepAlive, true)
-    assert.strictEqual(httpAgent.maxSockets, 4)
+    assert.strictEqual(httpAgent.maxSockets, 16)
     assert.strictEqual(httpsAgent.keepAlive, true)
-    assert.strictEqual(httpsAgent.maxSockets, 4)
+    assert.strictEqual(httpsAgent.maxSockets, 16)
   })
 
   it('selects the agent by protocol for URL objects and strings', () => {
@@ -58,11 +58,11 @@ describe('Test Optimization exporter agents', () => {
     socket.destroy()
   })
 
-  it('opens four same-origin connections and queues the fifth', async () => {
+  it('opens sixteen same-origin connections and queues the seventeenth', async () => {
     const agent = new httpAgent.constructor()
     const lookupCallbacks = []
     const lookup = (hostname, options, callback) => lookupCallbacks.push(callback)
-    const requests = new Array(5)
+    const requests = new Array(17)
 
     for (let index = 0; index < requests.length; index++) {
       const request = createRequest({ agent, hostname: 'test.local', lookup })
@@ -74,8 +74,8 @@ describe('Test Optimization exporter agents', () => {
     await new Promise(resolve => setImmediate(resolve))
 
     try {
-      assert.strictEqual(lookupCallbacks.length, 4)
-      assert.deepStrictEqual(Object.values(agent.sockets).map(sockets => sockets.length), [4])
+      assert.strictEqual(lookupCallbacks.length, 16)
+      assert.deepStrictEqual(Object.values(agent.sockets).map(sockets => sockets.length), [16])
       assert.deepStrictEqual(Object.values(agent.requests).map(requests => requests.length), [1])
     } finally {
       for (const request of requests) request.destroy()
