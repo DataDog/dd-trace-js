@@ -17,6 +17,64 @@ const { withVersions } = require('../setup/mocha')
 const { getConfigFresh } = require('../helpers/config')
 const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
+/**
+ * @param {string} cookieVersion
+ * @param {string} fastifyVersion
+ */
+function isCookieVersionUnsupported (cookieVersion, fastifyVersion) {
+  return (
+    semver.intersects(cookieVersion, '6') &&
+      semver.intersects(fastifyVersion, '<3 || 3.9.2')
+  ) || (
+    semver.intersects(cookieVersion, '>=7 <10') &&
+      semver.intersects(fastifyVersion, '<4 || >=5')
+  ) || (
+    semver.intersects(cookieVersion, '>=10 <12') &&
+      semver.intersects(fastifyVersion, '<5 || >=6')
+  )
+}
+
+/**
+ * @param {string} multipartVersion
+ * @param {string} fastifyVersion
+ */
+function isMultipartVersionUnsupported (multipartVersion, fastifyVersion) {
+  return (
+    semver.intersects(multipartVersion, '6') &&
+      semver.intersects(fastifyVersion, '<3 || >=5')
+  ) || (
+    semver.intersects(multipartVersion, '>=7 <9') &&
+      semver.intersects(fastifyVersion, '<4 || >=5')
+  ) || (
+    semver.intersects(multipartVersion, '>=9 <11') &&
+      semver.intersects(fastifyVersion, '<5 || >=6')
+  )
+}
+
+describe('Fastify plugin version compatibility', () => {
+  it('identifies unsupported cookie pairs without closing future majors', () => {
+    assert.strictEqual(isCookieVersionUnsupported('6.0.0', '2.0.0'), true)
+    assert.strictEqual(isCookieVersionUnsupported('6.0.0', '3.9.2'), true)
+    assert.strictEqual(isCookieVersionUnsupported('6.0.0', '4.0.0'), false)
+    assert.strictEqual(isCookieVersionUnsupported('9.0.0', '5.0.0'), true)
+    assert.strictEqual(isCookieVersionUnsupported('9.0.0', '4.0.0'), false)
+    assert.strictEqual(isCookieVersionUnsupported('11.0.0', '6.0.0'), true)
+    assert.strictEqual(isCookieVersionUnsupported('11.0.0', '5.0.0'), false)
+    assert.strictEqual(isCookieVersionUnsupported('12.0.0', '6.0.0'), false)
+  })
+
+  it('identifies unsupported multipart pairs without closing future majors', () => {
+    assert.strictEqual(isMultipartVersionUnsupported('6.0.0', '2.0.0'), true)
+    assert.strictEqual(isMultipartVersionUnsupported('6.0.0', '4.0.0'), false)
+    assert.strictEqual(isMultipartVersionUnsupported('6.0.0', '5.0.0'), true)
+    assert.strictEqual(isMultipartVersionUnsupported('8.0.0', '3.0.0'), true)
+    assert.strictEqual(isMultipartVersionUnsupported('8.0.0', '4.0.0'), false)
+    assert.strictEqual(isMultipartVersionUnsupported('10.0.0', '6.0.0'), true)
+    assert.strictEqual(isMultipartVersionUnsupported('10.0.0', '5.0.0'), false)
+    assert.strictEqual(isMultipartVersionUnsupported('11.0.0', '6.0.0'), false)
+  })
+})
+
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
     let app, server, requestBody, axios
@@ -420,13 +478,6 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
   describe('Suspicious request blocking - cookie', () => {
     withVersions('fastify', '@fastify/cookie', (cookieVersion, _, cookieLoadedVersion) => {
-      // Cookie majors 6, 7-9, and 10+ support Fastify majors 3, 4, and 5 respectively.
-      const supported =
-        semver.intersects(cookieLoadedVersion, '6') && semver.intersects(fastifyLoadedVersion, '>=3 <4') ||
-        semver.intersects(cookieLoadedVersion, '>=7 <10') && semver.intersects(fastifyLoadedVersion, '4') ||
-        semver.intersects(cookieLoadedVersion, '>=10') && semver.intersects(fastifyLoadedVersion, '5')
-      if (!supported || semver.intersects(fastifyLoadedVersion, '3.9.2')) return
-
       const hookConfigurations = [
         'onRequest',
         'preParsing',
@@ -439,6 +490,11 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           let server, requestCookie, axios
 
           before(async function () {
+            if (isCookieVersionUnsupported(cookieLoadedVersion, fastifyLoadedVersion)) {
+              // eslint-disable-next-line mocha/no-pending-tests -- Keep unsupported matrix rows visible.
+              this.skip()
+            }
+
             await agent.load(['fastify', '@fastify/cookie', 'http'], { client: false })
             const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
             const fastifyCookie = require(`../../../../versions/@fastify/cookie@${cookieVersion}`).get()
@@ -516,16 +572,14 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
   describe('Suspicious request blocking - multipart', () => {
     withVersions('fastify', '@fastify/multipart', (multipartVersion, _, multipartLoadedVersion) => {
-      // Multipart 6 works with Fastify 3-4, 7-8 support Fastify 4, and 9+ supports Fastify 5.
-      const supported = semver.intersects(multipartLoadedVersion, '6') &&
-          semver.intersects(fastifyLoadedVersion, '>=3 <5') ||
-        semver.intersects(multipartLoadedVersion, '>=7 <9') && semver.intersects(fastifyLoadedVersion, '4') ||
-        semver.intersects(multipartLoadedVersion, '>=9') && semver.intersects(fastifyLoadedVersion, '5')
-      if (!supported) return
-
       let server, uploadSpy, axios
 
       before(async function () {
+        if (isMultipartVersionUnsupported(multipartLoadedVersion, fastifyLoadedVersion)) {
+          // eslint-disable-next-line mocha/no-pending-tests -- Keep unsupported matrix rows visible.
+          this.skip()
+        }
+
         await agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
         const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
         const fastifyMultipart = require(`../../../../versions/@fastify/multipart@${multipartVersion}`).get()
