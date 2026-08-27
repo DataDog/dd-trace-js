@@ -587,9 +587,9 @@ describe('TracerProxy', () => {
       it('keeps OpenFeature active while tracing is disabled and re-enabled', () => {
         config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
         config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
-        /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
+        /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
-          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
+          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
         }
 
         proxy.init()
@@ -605,9 +605,9 @@ describe('TracerProxy', () => {
       })
 
       it('should re-enable AI Guard when remote config re-enables tracing', () => {
-        /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
+        /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
-          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
+          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
         }
 
         proxy.init()
@@ -666,7 +666,7 @@ describe('TracerProxy', () => {
         config.appsec.enabled = true
         config.iast.enabled = true
         config.setRemoteConfig = conf => {
-          config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED
+          config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED === 'true'
         }
 
         const remoteConfigProxy = new RemoteConfigProxy()
