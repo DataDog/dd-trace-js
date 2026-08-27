@@ -290,6 +290,25 @@ async function handle () {
 
 Any error from the awaited handler will automatically be added to the span.
 
+<h3 id="recording-handled-exceptions">Recording handled exceptions</h3>
+
+Use `span.recordException()` to add a handled exception as an event without marking the span as failed.
+
+```javascript
+tracer.trace('checkout', span => {
+  try {
+    authorizePayment()
+  } catch (error) {
+    span.recordException(error, {
+      handled: true,
+      'payment.provider': 'example',
+    })
+  }
+})
+```
+
+If the exception leaves the traced callback, `tracer.trace()` records it as a span error automatically.
+
 <h3 id="tracer-wrap">tracer.wrap(name[, options], fn)</h3>
 
 This method works very similarly to `tracer.trace()` except it wraps a function so that `tracer.trace()` is called automatically every time the function is called. This makes it easier to patch entire functions that have already been defined, or that are returned from code that cannot be edited easily.

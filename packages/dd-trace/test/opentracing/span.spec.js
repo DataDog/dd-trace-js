@@ -27,6 +27,7 @@ describe('Span', () => {
   let now
   let id
   let tagger
+  let log
 
   beforeEach(() => {
     sinon.stub(Date, 'now').returns(1500000000000)
@@ -51,6 +52,10 @@ describe('Span', () => {
       add: sinon.spy(),
     }
 
+    log = {
+      warn: sinon.spy(),
+    }
+
     Span = proxyquire('../../src/opentracing/span', {
       perf_hooks: {
         performance: {
@@ -58,6 +63,7 @@ describe('Span', () => {
         },
       },
       '../id': id,
+      '../log': log,
       '../tagger': tagger,
     })
   })
@@ -403,6 +409,46 @@ describe('Span', () => {
       ]
       assert.deepStrictEqual(events, expectedEvents)
     })
+
+    it('should record exceptions as events', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const error = new TypeError('payment declined')
+
+      span.recordException(error, {
+        handled: true,
+        'exception.type': 'PaymentError',
+        'exception.message': 'redacted',
+        'exception.stacktrace': 'redacted',
+      })
+
+      assert.deepStrictEqual(span._events, [{
+        name: 'exception',
+        attributes: {
+          'exception.type': 'PaymentError',
+          'exception.message': 'redacted',
+          'exception.stacktrace': 'redacted',
+          handled: true,
+        },
+        startTime: 1500000000000,
+      }])
+      assert.strictEqual(span.context().getTag('error'), undefined)
+      assert.strictEqual(span.context().getTag('error.type'), undefined)
+    })
+
+    it('should record exception objects without optional fields', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.recordException({ message: 'payment declined' })
+
+      assert.deepStrictEqual(span._events, [{
+        name: 'exception',
+        attributes: {
+          'exception.message': 'payment declined',
+        },
+        startTime: 1500000000000,
+      }])
+      sinon.assert.notCalled(log.warn)
+    })
   })
 
   describe('empty event and link attributes (end to end)', () => {
@@ -460,6 +506,34 @@ describe('Span', () => {
         assert.ok('attributes' in events[2], 'kept event attributes must be present')
       })
     }
+
+    it('encodes recorded exceptions without marking the span as errored', () => {
+      const error = new TypeError('payment declined')
+      const exceptionSpan = new RealSpan(tracer, processor, prioritySampler, { operationName: 'operation' })
+      exceptionSpan.recordException(error, { handled: true })
+      exceptionSpan.finish()
+
+      const formatted = format(exceptionSpan)
+      assert.strictEqual(formatted.error, 0)
+
+      const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
+        '../config': () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false }),
+      })
+      const encoder = new AgentEncoder({ flush () {} })
+      encoder.encode([formatted])
+
+      const encoded = msgpack.decode(encoder.makePayload(), { useBigInt64: true })[0][0]
+      const events = JSON.parse(encoded.meta.events)
+      assert.strictEqual(events.length, 1)
+      assert.strictEqual(events[0].name, 'exception')
+      assert.strictEqual(typeof events[0].time_unix_nano, 'number')
+      assert.deepStrictEqual(events[0].attributes, {
+        'exception.type': 'TypeError',
+        'exception.message': 'payment declined',
+        'exception.stacktrace': error.stack,
+        handled: true,
+      })
+    })
   })
 
   describe('getBaggageItem', () => {
