@@ -1338,4 +1338,36 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       },
     ])
   })
+
+  it('validates the entire addRecords batch before mutating the dataset', () => {
+    const dataset = new Dataset(client(), 'demo')
+      .addRecord(new DatasetRecord('existing', null, {}, 'existing'))
+
+    assert.throws(
+      () => dataset.addRecords([
+        { id: 'new', inputData: 'first' },
+        { id: 'existing', inputData: 'duplicate' },
+      ]),
+      /Duplicate record id 'existing'/
+    )
+    assert.deepEqual(dataset.recordIds(), ['existing'])
+
+    assert.throws(
+      () => dataset.addRecords([
+        { id: 'same', inputData: 'first' },
+        { id: 'same', inputData: 'duplicate' },
+      ]),
+      /Duplicate record id 'same'/
+    )
+    assert.deepEqual(dataset.recordIds(), ['existing'])
+
+    assert.throws(
+      () => dataset.addRecords([
+        { id: 'new', inputData: 'first' },
+        { id: 'bad', inputData: 'invalid', tags: ['malformed'] },
+      ]),
+      /Tag 'malformed' is malformed/
+    )
+    assert.deepEqual(dataset.recordIds(), ['existing'])
+  })
 })

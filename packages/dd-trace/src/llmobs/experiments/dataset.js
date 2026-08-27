@@ -191,18 +191,27 @@ class Dataset {
    * @returns {Dataset} This dataset for chaining.
    */
   addRecords (records) {
+    const newRecords = []
+    const recordIds = new Set(this.#recordsById.keys())
+
+    // Construct and validate the entire batch before mutating the dataset.
     for (const record of records) {
       if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
         throw new Error('record id must be a non-empty string')
       }
-      this.addRecord(new DatasetRecord(
+      const newRecord = new DatasetRecord(
         record.inputData,
         record.expectedOutput,
         record.metadata,
         record.id,
         record.tags
-      ))
+      )
+      if (recordIds.has(newRecord.id)) throw new Error(`Duplicate record id '${newRecord.id}'`)
+      recordIds.add(newRecord.id)
+      newRecords.push(newRecord)
     }
+
+    for (const record of newRecords) this.#addRecord(record)
     return this
   }
 
