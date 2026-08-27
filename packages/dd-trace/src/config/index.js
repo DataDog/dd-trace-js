@@ -4,6 +4,8 @@ const fs = require('node:fs')
 const os = require('node:os')
 const { URL, format } = require('node:url')
 
+const dc = require('dc-polyfill')
+
 const exporters = require('../../../../ext/exporters')
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
@@ -79,6 +81,10 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 /** @type {Config | null} */
 let configInstance = null
+
+// Fires whenever remote config applies a new value; profiling and other RC-driven consumers
+// subscribe here instead of proxy.js hardcoding a call into each of them.
+const configUpdateChannel = dc.channel('datadog:config:update')
 
 // An entry that is undefined means it is the default value.
 /** @type {Map<ConfigPath, TelemetrySource>} */
@@ -332,6 +338,7 @@ class Config extends ConfigBase {
     }
 
     this.#applyCalculated()
+    configUpdateChannel.publish(this)
   }
 
   /**
