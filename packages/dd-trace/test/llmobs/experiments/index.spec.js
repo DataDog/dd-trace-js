@@ -140,6 +140,7 @@ describe('LLMObs Experiments facade', () => {
         records: [{ inputData: 'in', expectedOutput: 'out', metadata: { source: 'test' } }],
       })
       assert.equal(typeof dataset.addRecord, 'function')
+      assert.equal(typeof dataset.addRecords, 'function')
       assert.equal(dataset.records()[0].input, 'in')
       const experiment = exp.experiment({ name: 'n', dataset, task: (i) => i })
       assert.equal(typeof experiment.run, 'function')
@@ -342,6 +343,38 @@ describe('LLMObs Experiments facade', () => {
       dataset.removeTags(0)
       dataset.replaceTags(0)
       assert.deepEqual(dataset.records()[0].tags, [])
+    })
+
+    it('adds multiple records to a no-op dataset', () => {
+      const dataset = new NoopExperiments().createDataset('d')
+      const returned = dataset.addRecords([
+        {
+          id: 'custom-record',
+          inputData: 'first',
+          expectedOutput: 'one',
+          metadata: { row: 0 },
+          tags: ['tag:first'],
+        },
+        { inputData: 'second' },
+      ])
+
+      assert.equal(returned, dataset)
+      assert.deepEqual(dataset.records(), [
+        {
+          id: 'custom-record',
+          input: 'first',
+          expectedOutput: 'one',
+          metadata: { row: 0 },
+          tags: ['tag:first'],
+        },
+        {
+          id: null,
+          input: 'second',
+          expectedOutput: null,
+          metadata: {},
+          tags: [],
+        },
+      ])
     })
   })
 
