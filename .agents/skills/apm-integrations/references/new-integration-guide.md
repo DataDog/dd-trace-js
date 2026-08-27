@@ -198,6 +198,7 @@ class MyPlugin extends DatabasePlugin {
     return ctx.currentStore
   }
 
+  // Choose `end` (sync), `asyncEnd` (promise/callback), or `finish` (legacy manual channel).
   asyncEnd (ctx) {
     this.finish(ctx)
   }

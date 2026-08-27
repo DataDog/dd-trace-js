@@ -154,7 +154,7 @@ describe('esm', () => {
     })
 
     const variants = varySandbox('server.mjs', {
-      bindingName: '<binding-name>',
+      bindingName: 'myLib',
       packageName: '<module-name>',
       defaultExport: true,
       namedExports: ['<named-export>'],
