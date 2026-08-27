@@ -283,28 +283,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          for (const eventType of ['test_session_end', 'test_module_end']) {
+          const hierarchyEventTypes = ['test_session_end', 'test_module_end']
+          if (reporterEvent !== 'start') hierarchyEventTypes.push('test_suite_end')
+          for (const eventType of hierarchyEventTypes) {
             const event = events.find(event => event.type === eventType)
             assert.ok(event, `expected ${eventType} event`)
             assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
-          }
-          if (reporterEvent !== 'start') {
-            const suiteEvent = events.find(event => event.type === 'test_suite_end')
-            assert.ok(suiteEvent, 'expected test_suite_end event')
-            if (reporterEvent === 'fail') {
-              assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(suiteEvent.content.error, 1)
-              assert.match(suiteEvent.content.meta[ERROR_MESSAGE], /Expected values to be strictly equal/)
-            } else if (reporterEvent === 'hook end') {
-              assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], undefined)
-              assert.strictEqual(suiteEvent.content.error, 0)
-            } else {
-              assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(suiteEvent.content.error, 0)
-            }
-            assert.doesNotMatch(suiteEvent.content.meta[ERROR_MESSAGE] || '', /custom Mocha reporter failed/)
           }
           if (reporterEvent === 'fail') {
             const testEvent = events.find(event =>
@@ -400,15 +386,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ({ url }) => url.endsWith('/api/v2/citestcycle'),
       (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
-        for (const eventType of ['test_session_end', 'test_module_end']) {
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
           const event = events.find(event => event.type === eventType)
           assert.ok(event, `expected ${eventType} event`)
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
         }
-        const suiteEvent = events.find(event => event.type === 'test_suite_end')
-        assert.ok(suiteEvent, 'expected test_suite_end event')
-        assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suiteEvent.content.error, 0)
       },
       { hardTimeout: 20_000 }
     )
@@ -437,16 +419,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ({ url }) => url.endsWith('/api/v2/citestcycle'),
       (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
-        for (const eventType of ['test_session_end', 'test_module_end']) {
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
           const event = events.find(event => event.type === eventType)
           assert.ok(event, `expected ${eventType} event`)
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.content.meta[ERROR_MESSAGE], 'Mocha reporter failed')
         }
-        const suiteEvent = events.find(event => event.type === 'test_suite_end')
-        assert.ok(suiteEvent, 'expected test_suite_end event')
-        assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suiteEvent.content.error, 0)
       },
       { hardTimeout: 20_000 }
     )
@@ -475,16 +453,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ({ url }) => url.endsWith('/api/v2/citestcycle'),
       (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
-        for (const eventType of ['test_session_end', 'test_module_end']) {
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
           const event = events.find(event => event.type === eventType)
           assert.ok(event, `expected ${eventType} event`)
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.content.meta[ERROR_MESSAGE], 'Mocha reporter failed')
         }
-        const suiteEvent = events.find(event => event.type === 'test_suite_end')
-        assert.ok(suiteEvent, 'expected test_suite_end event')
-        assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suiteEvent.content.error, 0)
       },
       { hardTimeout: 20_000 }
     )
@@ -551,17 +525,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ({ url }) => url.endsWith('/api/v2/citestcycle'),
       (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
-        for (const eventType of ['test_session_end', 'test_module_end']) {
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
           const event = events.find(event => event.type === eventType)
           assert.ok(event, `expected ${eventType} event`)
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.content.error, 1)
           assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
         }
-        const suiteEvent = events.find(event => event.type === 'test_suite_end')
-        assert.ok(suiteEvent, 'expected test_suite_end event')
-        assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suiteEvent.content.error, 0)
         const testEvent = events.find(event => event.type === 'test')
         assert.ok(testEvent, 'expected aborted test event')
         assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'skip')
@@ -609,16 +579,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.ok(testEvent, 'expected completed test event')
         assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
         assert.strictEqual(testEvent.content.error, 0)
-        for (const eventType of ['test_session_end', 'test_module_end']) {
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
           const event = events.find(event => event.type === eventType)
           assert.ok(event, `expected ${eventType} event`)
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
         }
-        const suiteEvent = events.find(event => event.type === 'test_suite_end')
-        assert.ok(suiteEvent, 'expected test_suite_end event')
-        assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suiteEvent.content.error, 0)
       },
       { hardTimeout: 20_000 }
     )
@@ -674,20 +640,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           } else {
             assert.strictEqual(testEvent.content.error, 0)
           }
-          for (const eventType of ['test_session_end', 'test_module_end']) {
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
             const event = events.find(event => event.type === eventType)
             assert.ok(event, `expected ${eventType} event`)
             assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
-          }
-          const suiteEvent = events.find(event => event.type === 'test_suite_end')
-          assert.ok(suiteEvent, 'expected test_suite_end event')
-          assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], status)
-          assert.strictEqual(suiteEvent.content.error, status === 'fail' ? 1 : 0)
-          if (status === 'fail') {
-            assert.match(suiteEvent.content.meta[ERROR_MESSAGE], /Expected values to be strictly equal/)
-            assert.doesNotMatch(suiteEvent.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
           }
         },
         { hardTimeout: 20_000 }
@@ -730,16 +688,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(testEvents.length, 1)
         assert.strictEqual(testEvents[0].content.meta[TEST_STATUS], 'pass')
         assert.strictEqual(testEvents[0].content.error, 0)
-        for (const eventType of ['test_session_end', 'test_module_end']) {
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
           const event = events.find(event => event.type === eventType)
           assert.ok(event, `expected ${eventType} event`)
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
         }
-        const suiteEvent = events.find(event => event.type === 'test_suite_end')
-        assert.ok(suiteEvent, 'expected test_suite_end event')
-        assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suiteEvent.content.error, 0)
       },
       { hardTimeout: 20_000 }
     )
@@ -750,7 +704,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     assert.notStrictEqual(exitCode, 0, testOutput)
   })
 
-  onlyLatestIt('keeps completed parallel worker suites passed when the coordinator reporter throws', async function () {
+  onlyLatestIt('marks parallel worker suites as failed when the coordinator reporter throws', async function () {
     this.timeout(20_000)
     childProcess = exec(
       'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
@@ -786,14 +740,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(sessionEvent.content.meta[MOCHA_IS_PARALLEL], 'true')
         assert.strictEqual(suiteEvents.length, 2)
         assert.strictEqual(hierarchyEvents.length, 4)
-        for (const event of [sessionEvent, hierarchyEvents.find(event => event.type === 'test_module_end')]) {
+        for (const event of hierarchyEvents) {
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.content.error, 1)
           assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
-        }
-        for (const suiteEvent of suiteEvents) {
-          assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], 'pass')
-          assert.strictEqual(suiteEvent.content.error, 0)
         }
       },
       { hardTimeout: 20_000 }

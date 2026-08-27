@@ -903,7 +903,7 @@ describe('CI Visibility Exporter', () => {
         assert.strictEqual(typeof writer.flush.firstCall.args[1].deadline, 'number')
       })
 
-      it('exports a suite event immediately', () => {
+      it('exports a suite trace without retaining it', () => {
         const writer = {
           append: sinon.spy(),
           flush: sinon.spy(done => done?.()),
