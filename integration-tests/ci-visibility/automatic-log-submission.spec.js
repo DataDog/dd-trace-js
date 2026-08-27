@@ -31,6 +31,7 @@ describe('test optimization automatic log submission', () => {
     ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
     'bunyan',
     'jest',
+    'pino',
     vitestDependency,
     'winston',
     playwrightDependency,
@@ -70,12 +71,12 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'mocha',
       command: './node_modules/.bin/mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js',
-      loggerNames: ['winston', 'bunyan'],
+      loggerNames: ['winston', 'bunyan', 'pino'],
     },
     {
       name: 'vitest',
       command: './node_modules/.bin/vitest run --config ./ci-visibility/automatic-log-submission-vitest/config.mjs',
-      loggerNames: ['bunyan'],
+      loggerNames: ['winston', 'bunyan', 'pino'],
       getExtraEnvVars: () => ({
         NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
       }),
@@ -87,7 +88,7 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'cucumber',
       command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature',
-      loggerNames: ['winston', 'bunyan'],
+      loggerNames: ['winston', 'bunyan', 'pino'],
     },
     {
       name: 'playwright',
@@ -103,6 +104,7 @@ describe('test optimization automatic log submission', () => {
 
   const loggers = {
     bunyan: { level: 30, messageKey: 'msg' },
+    pino: { level: 30, messageKey: 'msg' },
     winston: { level: 'info', messageKey: 'message' },
   }
 
