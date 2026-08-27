@@ -2,6 +2,8 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
+const isVercelAtStartup = getEnvironmentVariable('VERCEL') === '1'
+
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
     getEnvironmentVariable('FUNCTION_NAME') !== undefined &&
@@ -59,7 +61,7 @@ function getServerlessPlatformTags (platform = getServerlessPlatform()) {
  * @returns {{ isVercel: boolean }}
  */
 function getServerlessPlatform () {
-  return { isVercel: getEnvironmentVariable('VERCEL') === '1' }
+  return { isVercel: supportsServerlessTelemetryRetention() }
 }
 
 /**
@@ -69,7 +71,7 @@ function getServerlessPlatform () {
  * @returns {boolean}
  */
 function supportsServerlessTelemetryRetention () {
-  return getServerlessPlatform().isVercel
+  return isVercelAtStartup
 }
 
 /**
