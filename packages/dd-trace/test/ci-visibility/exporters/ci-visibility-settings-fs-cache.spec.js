@@ -101,7 +101,7 @@ function cacheKeyForConfiguration (exporter, testConfiguration) {
       .digest('hex')
   return buildCacheKey('settings', [
     tracerVersion,
-    configuration.url?.origin,
+    configuration.url?.href,
     configuration.isEvpProxy,
     configuration.evpProxyPrefix,
     accountNamespace,
@@ -321,6 +321,29 @@ describe('ci-visibility settings filesystem cache', () => {
     }
   })
 
+  it('isolates Unix agent endpoints by socket path', () => {
+    const firstExporter = makeExporter(
+      { DD_CIVISIBILITY_ITR_ENABLED: true },
+      new URL('unix:///tmp/dd-agent-one.sock')
+    )
+    const secondExporter = makeExporter(
+      { DD_CIVISIBILITY_ITR_ENABLED: true },
+      new URL('unix:///tmp/dd-agent-two.sock')
+    )
+
+    const firstConfiguration = firstExporter.getRequestConfiguration(TEST_CONFIGURATION)
+    const secondConfiguration = secondExporter.getRequestConfiguration(TEST_CONFIGURATION)
+    assert.strictEqual(firstConfiguration.url.origin, 'null')
+    assert.strictEqual(secondConfiguration.url.origin, 'null')
+    assert.notStrictEqual(
+      cacheKeyForConfiguration(firstExporter, TEST_CONFIGURATION),
+      cacheKeyForConfiguration(secondExporter, TEST_CONFIGURATION)
+    )
+
+    firstExporter._resolveCanUseCiVisProtocol(false)
+    secondExporter._resolveCanUseCiVisProtocol(false)
+  })
+
   it('isolates parsed settings by local override flags', async () => {
     const firstExporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
     const secondExporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
@@ -526,10 +549,41 @@ describe('ci-visibility settings filesystem cache', () => {
     }
   })
 
+  const validCachedSettings = parseLibraryConfigurationResponse(SETTINGS_NO_GIT)
   for (const [description, data] of [
     ['null', null],
     ['an array', []],
     ['an incomplete object', {}],
+    ['an incomplete EFD retry policy', {
+      ...validCachedSettings,
+      isEarlyFlakeDetectionEnabled: true,
+      earlyFlakeDetectionRetryPolicy: { schedulingRetryCount: 1 },
+    }],
+    ['a null EFD retry policy', {
+      ...validCachedSettings,
+      earlyFlakeDetectionRetryPolicy: null,
+    }],
+    ['an invalid EFD scheduling retry count', {
+      ...validCachedSettings,
+      earlyFlakeDetectionRetryPolicy: {
+        ...validCachedSettings.earlyFlakeDetectionRetryPolicy,
+        schedulingRetryCount: -1,
+      },
+    }],
+    ['an invalid EFD duration retry entry', {
+      ...validCachedSettings,
+      earlyFlakeDetectionRetryPolicy: {
+        ...validCachedSettings.earlyFlakeDetectionRetryPolicy,
+        durationRetryCounts: [
+          null,
+          ...validCachedSettings.earlyFlakeDetectionRetryPolicy.durationRetryCounts.slice(1),
+        ],
+      },
+    }],
+    ['an invalid EFD faulty threshold', {
+      ...validCachedSettings,
+      earlyFlakeDetectionFaultyThreshold: 101,
+    }],
   ]) {
     it(`treats malformed cache data (${description}) as a miss and falls back to the API`, (done) => {
       const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
@@ -562,4 +616,36 @@ describe('ci-visibility settings filesystem cache', () => {
       })
     })
   }
+
+  it('bypasses an invalid cache entry that cannot be deleted', async () => {
+    const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
+    exporter._resolveCanUseCiVisProtocol(true)
+    cleanup(exporter, TEST_CONFIGURATION)
+
+    const key = cacheKeyForConfiguration(exporter, TEST_CONFIGURATION)
+    const cachePath = getCachePath(key)
+    fs.writeFileSync(cachePath, JSON.stringify({ timestamp: Date.now(), data: null }), 'utf8')
+
+    const unlinkSync = fs.unlinkSync
+    const unlinkStub = sinon.stub(fs, 'unlinkSync').callsFake(path => {
+      if (path === cachePath) {
+        const err = new Error('permission denied')
+        err.code = 'EACCES'
+        throw err
+      }
+      return unlinkSync(path)
+    })
+    const scope = nock(url)
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, JSON.stringify(SETTINGS_NO_GIT))
+
+    try {
+      const libraryConfig = await requestLibraryConfiguration(exporter)
+      assert.strictEqual(libraryConfig.requireGit, false)
+      assert.strictEqual(scope.isDone(), true, 'an undeletable invalid entry should be bypassed')
+    } finally {
+      unlinkStub.restore()
+      cleanup(exporter, TEST_CONFIGURATION)
+    }
+  })
 })

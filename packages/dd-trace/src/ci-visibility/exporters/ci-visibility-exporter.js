@@ -35,6 +35,20 @@ const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata'
 
 const hostname = getHostname()
 const EMPTY_SETTINGS = Object.freeze({})
+const SETTINGS_BOOLEAN_FIELDS = Object.freeze([
+  'isCodeCoverageEnabled',
+  'isSuitesSkippingEnabled',
+  'isItrEnabled',
+  'requireGit',
+  'isEarlyFlakeDetectionEnabled',
+  'isFlakyTestRetriesEnabled',
+  'isDiEnabled',
+  'isKnownTestsEnabled',
+  'isTestManagementEnabled',
+  'isImpactedTestsEnabled',
+  'isCoverageReportUploadEnabled',
+])
+const EFD_RETRY_DURATION_LIMITS = Object.freeze([5000, 10_000, 30_000, 300_000])
 
 /**
  * Test session identity sent with every request. Fields are optional because the CI provider,
@@ -95,7 +109,7 @@ function buildSettingsCacheKey (configuration) {
   const { testOptimization } = config
   return buildCacheKey('settings', [
     tracerVersion,
-    configuration.url?.origin,
+    configuration.url?.href,
     configuration.isEvpProxy,
     configuration.evpProxyPrefix,
     getBackendAccountCacheNamespace(configuration, config.DD_API_KEY),
@@ -119,18 +133,60 @@ function buildSettingsCacheKey (configuration) {
 }
 
 /**
- * Checks whether a filesystem cache value has the minimum shape produced by
+ * Checks whether a value is a non-negative safe integer.
+ *
+ * @param {unknown} value - Candidate integer.
+ * @returns {value is number}
+ */
+function isNonNegativeSafeInteger (value) {
+  return Number.isSafeInteger(value) && value >= 0
+}
+
+/**
+ * Checks whether a cached EFD retry policy has the complete parsed shape.
+ *
+ * @param {unknown} retryPolicy - Candidate retry policy.
+ * @returns {boolean}
+ */
+function isValidCachedEfdRetryPolicy (retryPolicy) {
+  if (retryPolicy === null || typeof retryPolicy !== 'object' || Array.isArray(retryPolicy)) return false
+  if (!isNonNegativeSafeInteger(retryPolicy.schedulingRetryCount)) return false
+  if (!Array.isArray(retryPolicy.durationRetryCounts) ||
+    retryPolicy.durationRetryCounts.length !== EFD_RETRY_DURATION_LIMITS.length) {
+    return false
+  }
+
+  for (let index = 0; index < EFD_RETRY_DURATION_LIMITS.length; index++) {
+    const durationRetryCount = retryPolicy.durationRetryCounts[index]
+    if (durationRetryCount === null || typeof durationRetryCount !== 'object' ||
+      Array.isArray(durationRetryCount) ||
+      durationRetryCount.durationLimitMs !== EFD_RETRY_DURATION_LIMITS[index] ||
+      !isNonNegativeSafeInteger(durationRetryCount.retryCount)) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Checks whether a filesystem cache value has the complete shape produced by
  * parseLibraryConfigurationResponse.
  *
  * @param {unknown} settings - Cached settings value.
  * @returns {settings is Record<string, unknown>}
  */
 function isValidCachedSettings (settings) {
-  return settings !== null &&
-    typeof settings === 'object' &&
-    !Array.isArray(settings) &&
-    typeof settings.requireGit === 'boolean' &&
-    typeof settings.isItrEnabled === 'boolean'
+  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) return false
+  for (const field of SETTINGS_BOOLEAN_FIELDS) {
+    if (typeof settings[field] !== 'boolean') return false
+  }
+  if (!isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy)) return false
+  if (!isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
+    settings.earlyFlakeDetectionFaultyThreshold > 100) {
+    return false
+  }
+  return settings.testManagementAttemptToFixRetries === undefined ||
+    isNonNegativeSafeInteger(settings.testManagementAttemptToFixRetries)
 }
 
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
@@ -387,7 +443,13 @@ class CiVisibilityExporter extends BufferingExporter {
           // Settings never writes such a value, so this is external corruption. Remove the
           // file and fall back to the backend so we never serve a garbage config that would
           // crash filterConfiguration or silently disable every feature.
-          try { fs.unlinkSync(getCachePath(fsCacheKey)) } catch { /* ignore */ }
+          try {
+            fs.unlinkSync(getCachePath(fsCacheKey))
+          } catch (err) {
+            if (err.code !== 'ENOENT') {
+              return fetchSettings(null, applySettings)
+            }
+          }
           liveFetchStarted = false
           return withCache(fsCacheKey, fetchSettings, applySettings)
         }
