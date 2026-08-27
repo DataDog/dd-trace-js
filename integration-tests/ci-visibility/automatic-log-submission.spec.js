@@ -87,6 +87,15 @@ describe('test optimization automatic log submission', () => {
       loggerNames: ['winston', 'bunyan', 'pino'],
     },
     {
+      name: 'jest ESM',
+      command: 'node --experimental-vm-modules ./node_modules/jest/bin/jest ' +
+        '--config ./ci-visibility/automatic-log-submission/config-jest.js',
+      loggerNames: ['winston', 'bunyan', 'pino'],
+      getExtraEnvVars: () => ({
+        TEST_MODULE_TYPE: 'esm',
+      }),
+    },
+    {
       name: 'cucumber',
       command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature',
       loggerNames: ['winston', 'bunyan', 'pino'],
@@ -144,7 +153,7 @@ describe('test optimization automatic log submission', () => {
               'Hello simple log!',
               'sum function being called',
             ])
-            if (loggerName === 'winston' && (name === 'mocha' || name === 'jest')) {
+            if (loggerName === 'winston' && (name === 'mocha' || name.startsWith('jest'))) {
               const circularLog = logMessages.find(({ message }) => message === 'Hello simple log!')
               assert.equal(circularLog.circular.self, '[Circular]')
             }
