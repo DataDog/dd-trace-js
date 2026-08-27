@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { createHmac } = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -93,12 +94,17 @@ function cacheKeyForConfiguration (exporter, testConfiguration) {
   const configuration = exporter.getRequestConfiguration(testConfiguration)
   const config = getConfig()
   const { testOptimization } = config
+  const accountNamespace = configuration.isEvpProxy || config.DD_API_KEY === undefined
+    ? undefined
+    : createHmac('sha256', config.DD_API_KEY)
+      .update('dd-trace-js:test-optimization-settings-cache')
+      .digest('hex')
   return buildCacheKey('settings', [
     tracerVersion,
     configuration.url?.origin,
     configuration.isEvpProxy,
     configuration.evpProxyPrefix,
-    configuration.isEvpProxy ? undefined : config.DD_API_KEY,
+    accountNamespace,
     configuration.sha,
     configuration.service,
     configuration.env,

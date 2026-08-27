@@ -1,5 +1,6 @@
 'use strict'
 
+const { createHmac } = require('node:crypto')
 const fs = require('node:fs')
 const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
@@ -66,6 +67,22 @@ function getIsTestSessionTrace (trace) {
 }
 
 /**
+ * Derives a non-secret namespace for the direct API account. EVP requests are
+ * already scoped by their agent origin and proxy path.
+ *
+ * @param {object} configuration - Request configuration for the settings endpoint.
+ * @param {string|undefined} apiKey - Direct API credential.
+ * @returns {string|undefined}
+ */
+function getBackendAccountCacheNamespace (configuration, apiKey) {
+  if (configuration.isEvpProxy || apiKey === undefined) return
+
+  return createHmac('sha256', apiKey)
+    .update('dd-trace-js:test-optimization-settings-cache')
+    .digest('hex')
+}
+
+/**
  * Builds the cross-process filesystem cache key for the settings request from the
  * request configuration. The key also isolates the backend account, tracer
  * version, and local flags applied while parsing the response.
@@ -81,7 +98,7 @@ function buildSettingsCacheKey (configuration) {
     configuration.url?.origin,
     configuration.isEvpProxy,
     configuration.evpProxyPrefix,
-    configuration.isEvpProxy ? undefined : config.DD_API_KEY,
+    getBackendAccountCacheNamespace(configuration, config.DD_API_KEY),
     configuration.sha,
     configuration.service,
     configuration.env,
