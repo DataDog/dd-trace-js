@@ -198,6 +198,24 @@ describe('CI Visibility Exporter', () => {
       assert.strictEqual(scope.isDone(), false)
     })
 
+    it('should start the git upload timeout when an upload is requested', async () => {
+      const clock = sinon.useFakeTimers()
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true },
+      })
+
+      try {
+        ciVisibilityExporter.sendGitMetadata()
+        await clock.tickAsync(60_000)
+
+        const err = await ciVisibilityExporter._gitUploadPromise
+        assert.match(err.message, /Timeout while uploading git metadata/)
+      } finally {
+        clock.restore()
+      }
+    })
+
     it('should resolve _gitUploadPromise when git metadata is fetched', (done) => {
       const scope = nock(url)
         .post('/api/v2/git/repository/search_commits')

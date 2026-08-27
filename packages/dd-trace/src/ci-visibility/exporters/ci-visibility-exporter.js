@@ -17,6 +17,7 @@ const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../telemetry')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
+const getConfig = require('../../config')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
 const spanFormat = require('../../span_format')
@@ -66,14 +67,21 @@ function getIsTestSessionTrace (trace) {
 
 /**
  * Builds the cross-process filesystem cache key for the settings request from the
- * request configuration. The key covers every attribute sent to the settings
- * endpoint so that responses are only shared between identical requests.
+ * request configuration. The key also isolates the backend account, tracer
+ * version, and local flags applied while parsing the response.
  *
  * @param {object} configuration - Request configuration for the settings endpoint.
  * @returns {string}
  */
 function buildSettingsCacheKey (configuration) {
+  const config = getConfig()
+  const { testOptimization } = config
   return buildCacheKey('settings', [
+    tracerVersion,
+    configuration.url?.origin,
+    configuration.isEvpProxy,
+    configuration.evpProxyPrefix,
+    configuration.isEvpProxy ? undefined : config.DD_API_KEY,
     configuration.sha,
     configuration.service,
     configuration.env,
@@ -87,7 +95,25 @@ function buildSettingsCacheKey (configuration) {
     configuration.runtimeName,
     configuration.runtimeVersion,
     configuration.custom,
+    testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE,
+    testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING,
+    testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED,
   ])
+}
+
+/**
+ * Checks whether a filesystem cache value has the minimum shape produced by
+ * parseLibraryConfigurationResponse.
+ *
+ * @param {unknown} settings - Cached settings value.
+ * @returns {settings is Record<string, unknown>}
+ */
+function isValidCachedSettings (settings) {
+  return settings !== null &&
+    typeof settings === 'object' &&
+    !Array.isArray(settings) &&
+    typeof settings.requireGit === 'boolean' &&
+    typeof settings.isItrEnabled === 'boolean'
 }
 
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
@@ -128,6 +154,7 @@ class CiVisibilityExporter extends BufferingExporter {
   #pendingScreenshotUploads = new Set()
   #screenshotFlushWaiters = new Set()
   #deferredTestSuiteSpans = new Map()
+  #gitUploadTimeoutId
 
   constructor (config, options = {}) {
     super(config)
@@ -154,11 +181,6 @@ class CiVisibilityExporter extends BufferingExporter {
     this._isTestFailureScreenshotsEnabled =
       Boolean(config?.testOptimization?.DD_TEST_FAILURE_SCREENSHOTS_ENABLED)
 
-    const gitUploadTimeoutId = setTimeout(() => {
-      this._resolveGit(new Error('Timeout while uploading git metadata'))
-    }, GIT_UPLOAD_TIMEOUT)
-    gitUploadTimeoutId.unref?.()
-
     const canUseCiVisProtocolTimeoutId = setTimeout(() => {
       this._resolveCanUseCiVisProtocol(false)
     }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT)
@@ -166,7 +188,8 @@ class CiVisibilityExporter extends BufferingExporter {
 
     this._gitUploadPromise = new Promise(resolve => {
       this._resolveGit = (err) => {
-        clearTimeout(gitUploadTimeoutId)
+        clearTimeout(this.#gitUploadTimeoutId)
+        this.#gitUploadTimeoutId = null
         resolve(err)
       }
     })
@@ -298,7 +321,7 @@ class CiVisibilityExporter extends BufferingExporter {
       const cachedLibraryConfig = this._testOptimizationHttpCache.readSettings()
       if (cachedLibraryConfig !== CACHE_MISS) {
         log.debug('Test Optimization HTTP cache settings found, skipping settings request')
-        return this._applyCachedSettings(cachedLibraryConfig, configuration, repositoryUrl, callback)
+        return this._applyCachedSettings(cachedLibraryConfig, configuration, repositoryUrl, false, callback)
       }
 
       if (this._isTestOptimizationCacheOnly) {
@@ -321,22 +344,17 @@ class CiVisibilityExporter extends BufferingExporter {
       //     requires git and we lack valid cached skippable suites).
       let liveFetchStarted = false
       const fsCacheKey = buildSettingsCacheKey(configuration)
-      withCache(fsCacheKey, (activeCacheKey, cb) => {
+      const fetchSettings = (activeCacheKey, done) => {
         liveFetchStarted = true
-        this._fetchLibraryConfigurationFromBackend(configuration, repositoryUrl, activeCacheKey, cb)
-      }, (err, libraryConfig) => {
+        this._fetchLibraryConfigurationFromBackend(configuration, repositoryUrl, activeCacheKey, done)
+      }
+      const applySettings = (err, libraryConfig) => {
         /**
          * **Important**: this._libraryConfig remains empty in testing frameworks
          * where the tests run in a subprocess, like Jest,
          * because `getLibraryConfiguration` is called only once in the main process.
          */
         if (err) {
-          // On the live path `_libraryConfig` was already set inside
-          // `_fetchLibraryConfigurationFromBackend` (to the phase-1 config, matching the
-          // original behavior), so only reset it for a cache-hit error.
-          if (!liveFetchStarted) {
-            this._libraryConfig = this.filterConfiguration()
-          }
           return callback(err, {})
         }
         if (liveFetchStarted) {
@@ -347,30 +365,18 @@ class CiVisibilityExporter extends BufferingExporter {
           return callback(null, this._libraryConfig)
         }
         // Filesystem cache hit: no git upload was started in this process.
-        if (!libraryConfig || typeof libraryConfig !== 'object') {
-          // A syntactically valid cache file with a null/non-object payload is corrupt.
+        if (!isValidCachedSettings(libraryConfig)) {
+          // A syntactically valid cache file with an invalid settings payload is corrupt.
           // Settings never writes such a value, so this is external corruption. Remove the
           // file and fall back to the backend so we never serve a garbage config that would
           // crash filterConfiguration or silently disable every feature.
           try { fs.unlinkSync(getCachePath(fsCacheKey)) } catch { /* ignore */ }
-          return this._fetchLibraryConfigurationFromBackend(
-            configuration, repositoryUrl, fsCacheKey,
-            (fetchErr, fetchedConfig) => {
-              if (fetchErr) {
-                // `_libraryConfig` was already set to the phase-1 config inside the fetch,
-                // matching the live path; the git upload resolves `_gitUploadPromise` itself.
-                return callback(fetchErr, {})
-              }
-              // Live-path apply: the git upload was already started and owns the promise,
-              // so do not call `_resolveGit()` (unlike `_applyCachedSettings`).
-              writeSettingsToCache(fetchedConfig)
-              this._libraryConfig = this.filterConfiguration(fetchedConfig)
-              callback(null, this._libraryConfig)
-            }
-          )
+          liveFetchStarted = false
+          return withCache(fsCacheKey, fetchSettings, applySettings)
         }
-        this._applyCachedSettings(libraryConfig, configuration, repositoryUrl, callback)
-      })
+        this._applyCachedSettings(libraryConfig, configuration, repositoryUrl, true, callback)
+      }
+      withCache(fsCacheKey, fetchSettings, applySettings)
     })
   }
 
@@ -382,10 +388,11 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {Record<string, unknown>} settings - Resolved library configuration.
    * @param {object} configuration - Request configuration used to evaluate cached skippable suites.
    * @param {string} repositoryUrl - Repository URL for git metadata upload.
+   * @param {boolean} isFilesystemCache - Whether settings came from the cross-process cache.
    * @param {Function} callback - Completion callback.
    * @returns {void}
    */
-  _applyCachedSettings (settings, configuration, repositoryUrl, callback) {
+  _applyCachedSettings (settings, configuration, repositoryUrl, isFilesystemCache, callback) {
     writeSettingsToCache(settings)
     this._libraryConfig = this.filterConfiguration(settings)
     const canUseCachedSkippableSuites = !this.shouldRequestSkippableSuites() ||
@@ -393,7 +400,7 @@ class CiVisibilityExporter extends BufferingExporter {
         testLevel: configuration.testLevel,
         isCoverageReportUploadEnabled: configuration.isCoverageReportUploadEnabled,
       })
-    if (this._libraryConfig.requireGit && !canUseCachedSkippableSuites) {
+    if (!canUseCachedSkippableSuites && (this._libraryConfig.requireGit || isFilesystemCache)) {
       this.sendGitMetadata(repositoryUrl)
     } else {
       this._resolveGit()
@@ -509,6 +516,13 @@ class CiVisibilityExporter extends BufferingExporter {
     if (!this._config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED) {
       this._resolveGit()
       return
+    }
+    if (this.#gitUploadTimeoutId === null) return
+    if (this.#gitUploadTimeoutId === undefined) {
+      this.#gitUploadTimeoutId = setTimeout(() => {
+        this._resolveGit(new Error('Timeout while uploading git metadata'))
+      }, GIT_UPLOAD_TIMEOUT)
+      this.#gitUploadTimeoutId.unref?.()
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
