@@ -906,10 +906,8 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "configurationNames": [
-          "experimental.flaggingProvider.evaluationCountsEnabled"
-        ],
-        "default": "true"
+        "default": "true",
+        "namespace": "featureFlags"
       }
     ],
     "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": [

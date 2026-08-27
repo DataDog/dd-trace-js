@@ -36,10 +36,12 @@ describe('FlaggingProvider', () => {
       service: 'test-service',
       version: '1.0.0',
       env: 'test',
+      featureFlags: {
+        DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true,
+      },
       experimental: {
         flaggingProvider: {
           enabled: true,
-          evaluationCountsEnabled: true,
           initializationTimeoutMs: 30_000,
           spanEnrichment: {
             enabled: true,
@@ -162,7 +164,7 @@ describe('FlaggingProvider', () => {
     })
 
     it('should not register FlagEvalEVPHook when DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED=false', () => {
-      mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false
+      mockConfig.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
       assert.ok(!provider.hooks.includes(mockFlagEvalEVPHook),
         'EVP hook must not be registered when killswitch is false')
@@ -192,7 +194,7 @@ describe('FlaggingProvider', () => {
     })
 
     it('OTel EvalMetricsHook is always registered regardless of killswitch', () => {
-      mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false
+      mockConfig.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
       assert.ok(provider.hooks.includes(mockEvalMetricsHook),
         'OTel EvalMetricsHook must always be registered')

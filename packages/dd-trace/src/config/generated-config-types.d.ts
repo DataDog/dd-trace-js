@@ -432,7 +432,6 @@ export interface GeneratedConfig {
     exporter: string;
     flaggingProvider: {
       enabled: boolean;
-      evaluationCountsEnabled: boolean;
       initializationTimeoutMs: number;
       spanEnrichment: {
         enabled: boolean;
@@ -445,6 +444,7 @@ export interface GeneratedConfig {
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
     DD_FEATURE_FLAGS_ENABLED: boolean;
+    DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: boolean;
   };
   flushInterval: number;
   flushMinSpans: number;
