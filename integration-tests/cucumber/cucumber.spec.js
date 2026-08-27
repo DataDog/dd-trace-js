@@ -9,7 +9,7 @@ const os = require('node:os')
 const path = require('path')
 const { inspect } = require('node:util')
 
-const { assertObjectContains, assertUnorderedArrayContains } = require('../helpers')
+const { assertObjectContains } = require('../helpers')
 
 const {
   sandboxCwd,
@@ -296,7 +296,7 @@ describe(`cucumber@${version} commonJS`, () => {
     ])
   })
 
-  rejectsFormatterErrorsIt('does not add formatter errors to completed suites', async () => {
+  rejectsFormatterErrorsIt('marks completed suites failed when a custom formatter throws', async () => {
     childProcess = exec(
       './node_modules/.bin/cucumber-js ci-visibility/features/greetings.feature ' +
       '--format ./ci-visibility/cucumber-formatter-throws.js',
@@ -312,18 +312,13 @@ describe(`cucumber@${version} commonJS`, () => {
       (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
-        for (const eventType of ['test_session_end', 'test_module_end']) {
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
           const event = events.find(event => event.type === eventType)
           assert.ok(event, `expected ${eventType} event`)
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.content.error, 1, `${eventType} should contain the formatter error`)
           assert.match(event.content.meta[ERROR_MESSAGE], /custom Cucumber formatter failed/)
         }
-        const testSuite = events.find(event => event.type === 'test_suite_end')
-        assert.ok(testSuite, 'expected test_suite_end event')
-        assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'fail')
-        assert.strictEqual(testSuite.content.error, 0)
-        assert.strictEqual(testSuite.content.meta[ERROR_MESSAGE], undefined)
       }
     )
 
@@ -923,7 +918,7 @@ describe(`cucumber@${version} commonJS`, () => {
             }
 
             const eventTypes = eventsRequest.payload.events.map(event => event.type)
-            assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
@@ -997,7 +992,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
             const eventTypes = eventsRequest.payload.events.map(event => event.type)
-            assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
@@ -1038,7 +1033,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
           receiver.assertPayloadReceived(({ payload }) => {
             const eventTypes = payload.events.map(event => event.type)
-            assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
             const testSession = payload.events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
             assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
@@ -1103,10 +1098,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
               assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
 
-              assertUnorderedArrayContains(
-                eventTypes,
-                ['test', 'test_suite_end', 'test_session_end', 'test_module_end']
-              )
+              assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
               const numSuites = eventTypes.reduce(
                 (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
               )
@@ -1199,7 +1191,7 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.assertPayloadReceived(({ payload }) => {
             const eventTypes = payload.events.map(event => event.type)
             // because they are not skipped
-            assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
@@ -1246,7 +1238,7 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.assertPayloadReceived(({ payload }) => {
             const eventTypes = payload.events.map(event => event.type)
             // because they are not skipped
-            assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )

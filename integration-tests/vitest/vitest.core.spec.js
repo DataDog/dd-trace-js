@@ -175,7 +175,6 @@ versions.forEach((version) => {
             assert.strictEqual(event.error, 1)
             assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
           }
-          // The suite retains its actual status; only the session and module are marked as failed.
           assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
           assert.deepStrictEqual(
             [...new Set(tests.map(test => test.meta[TEST_STATUS]))].sort(),
@@ -221,7 +220,6 @@ versions.forEach((version) => {
             assert.strictEqual(event.error, 1)
             assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
           }
-          // The suite retains its actual status; only the session and module are marked as failed.
           assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
         },
         { hardTimeout: 20_000 }
