@@ -44,7 +44,7 @@ describe('AgentlessWriter', () => {
     }
 
     AgentlessWriter = proxyquire('../../../src/exporters/agentless/writer', {
-      '@datadog/apm-data-pipeline': { createAgentlessExporter },
+      '@datadog/libdatadog': { createAgentlessExporter },
       '../../../../../package.json': { version: 'tracer-version' },
       '../../config': () => ({
         DD_API_KEY: apiKey,
