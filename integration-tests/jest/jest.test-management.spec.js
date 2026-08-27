@@ -61,9 +61,9 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+const esmIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28 ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
-// TODO: add ESM tests
 describe(`jest@${JEST_VERSION} commonJS`, () => {
   let receiver
   let childProcess
@@ -3675,7 +3675,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
   context('ESM logger loading', () => {
     for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
-      onlyLatestIt(`respects Jest ESM ${resolutionType}`, async () => {
+      esmIt(`respects Jest ESM ${resolutionType}`, async () => {
         let testOutput = ''
         const resolutionConfig = resolutionType === 'moduleNameMapper'
           ? {
@@ -3714,7 +3714,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     }
 
-    onlyLatestIt('does not resolve loggers for unrelated CommonJS ESM imports', async () => {
+    esmIt('does not resolve loggers for unrelated CommonJS ESM imports', async () => {
       let testOutput = ''
       childProcess = exec(
         runTestsCommand,
@@ -3742,7 +3742,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
     })
 
-    onlyLatestIt('instruments a statically imported logger through a renamed symlink', async () => {
+    esmIt('instruments a statically imported logger through a renamed symlink', async () => {
       const loggerModulePath = path.join(cwd, 'node_modules', 'winston')
       const linkedLoggerPath = path.join(cwd, 'linked-logger')
       const linkedLoggerModulePath = path.join(linkedLoggerPath, 'node_modules', 'winston')
@@ -3815,7 +3815,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     for (const loggerName of ['winston', 'pino', 'bunyan']) {
-      onlyLatestIt(`respects Jest ESM mocks for ${loggerName}`, async () => {
+      esmIt(`respects Jest ESM mocks for ${loggerName}`, async () => {
         let testOutput = ''
         childProcess = exec(
           runTestsCommand,

@@ -4001,6 +4001,7 @@ addHook({
     })
   }
 
+  // Jest 28 through 30.3 keeps ESM dependency resolution on Runtime itself.
   if (typeof Runtime.prototype.resolveModule === 'function') {
     shimmer.wrap(Runtime.prototype, 'resolveModule', resolveModule => function (moduleName, from) {
       recordJestEsmBypassModulePath(this, from, moduleName)
