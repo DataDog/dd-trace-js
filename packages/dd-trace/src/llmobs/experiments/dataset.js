@@ -1,6 +1,7 @@
 'use strict'
 
 const { randomUUID } = require('node:crypto')
+const snapshotPayload = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
 /** @typedef {{add?: string[], remove?: string[], replace?: string[]}} TagOperations */
 /**
@@ -114,6 +115,9 @@ function updateFromInsertedRecord (recordId, record, payload) {
     update.expectedOutput = record.expectedOutput
   }
   if (!valuesAreEqual(record.metadata, payload.metadata)) update.metadata = record.metadata
+  if (!valuesAreEqual(record.tags, payload.tags ?? [])) {
+    update.tagOperations = { replace: [...record.tags] }
+  }
   return update
 }
 
@@ -336,6 +340,10 @@ class Dataset {
     return this.#projectId
   }
 
+  projectName () {
+    return this.#client.projectName
+  }
+
   version () {
     return this.#version
   }
@@ -416,7 +424,7 @@ class Dataset {
     const insertRecords = []
     const insertPayloads = new Map()
     for (const [recordId, record] of this.#newRecordsById) {
-      const payload = serializedRecord(record)
+      const payload = snapshotPayload(serializedRecord(record))
       insertRecords.push(payload)
       insertPayloads.set(recordId, payload)
     }
@@ -427,7 +435,7 @@ class Dataset {
       const tagOperations = this.#pendingTagOperations.get(recordId)
       if (tagOperations) update.tagOperations = tagOperations
       else delete update.tagOperations
-      const payload = serializedRecordUpdate(update)
+      const payload = snapshotPayload(serializedRecordUpdate(update))
       updateRecords.push(payload)
       updatePayloads.set(recordId, payload)
     }
@@ -522,6 +530,9 @@ class Dataset {
         updateFromInsertedRecord(recordId, current, payload)
       const queuedOperations = this.#pendingTagOperations.get(recordId)
       if (queuedOperations) update.tagOperations = queuedOperations
+      if (update.tagOperations) {
+        this.#pendingTagOperations.set(recordId, copyTagOperations(update.tagOperations))
+      }
       this.#updatedRecordsById.set(recordId, update)
     }
 

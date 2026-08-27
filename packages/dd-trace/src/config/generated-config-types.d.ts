@@ -272,6 +272,7 @@ export interface GeneratedConfig {
   DD_TRACE_HAPI_ENABLED: boolean;
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HONO_ENABLED: boolean;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;
@@ -474,6 +475,7 @@ export interface GeneratedConfig {
     agentlessEnabled: boolean | undefined;
     DD_LLMOBS_ENABLED: boolean;
     mlApp: string | undefined;
+    projectName: string | undefined;
     sampleRate: number;
   };
   logInjection: boolean;
@@ -760,6 +762,7 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
   DD_LLMOBS_ENABLED: boolean;
   DD_LLMOBS_ML_APP: string | undefined;
+  DD_LLMOBS_PROJECT_NAME: string | undefined;
   DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
@@ -972,6 +975,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HEADER_TAGS: string[];
   DD_TRACE_HONO_ENABLED: boolean;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;
