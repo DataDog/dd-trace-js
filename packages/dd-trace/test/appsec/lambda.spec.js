@@ -307,6 +307,163 @@ describe('AppSec Lambda handler', () => {
       assert.deepStrictEqual(startKey, { headers: { host: 'example.com' } })
     })
   })
+
+  describe('API Security', () => {
+    let apiSecurity
+    let telemetry
+
+    // The real sampler is used here on purpose: the sampling key is built from the method and
+    // route published on the start-invocation channel, and that plumbing is what these cases
+    // are about. Only the telemetry sink is stubbed.
+    beforeEach(() => {
+      telemetry = {
+        incrementApiSecRequestSchemaMetric: sinon.stub(),
+        incrementApiSecRequestNoSchemaMetric: sinon.stub(),
+        incrementApiSecMissingRouteMetric: sinon.stub(),
+      }
+
+      apiSecurity = proxyquire('../../src/appsec/api_security', {
+        '../telemetry': telemetry,
+      })
+
+      apiSecurity.configure({
+        appsec: { DD_API_SECURITY_ENABLED: true, DD_API_SECURITY_SAMPLE_DELAY: 30 },
+        apmTracingEnabled: true,
+      })
+
+      lambda = proxyquire('../../src/appsec/lambda', {
+        '../log': log,
+        './waf': waf,
+        './reporter': Reporter,
+        '../priority_sampler': { keepTrace },
+        './api_security': apiSecurity,
+      })
+    })
+
+    afterEach(() => {
+      // The sampler holds module-level state, so the TTL cache has to be cleared between cases.
+      apiSecurity.disable()
+    })
+
+    const invoke = (span, options = {}) => {
+      const { method = 'GET', statusCode = '200' } = options
+      // Not a destructuring default: these cases need to pass an explicit undefined route.
+      const route = 'route' in options ? options.route : '/api/{id}'
+
+      lambda.onLambdaStartInvocation({ span, headers: {}, method, path: '/api/1', route })
+      waf.run.resetHistory()
+      lambda.onLambdaEndInvocation({ span, statusCode })
+      return waf.run.firstCall?.args[0].persistent
+    }
+
+    it('should add the extract-schema processor when the invocation is sampled', () => {
+      const persistent = invoke(fakeSpan())
+
+      assert.deepStrictEqual(persistent[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+    })
+
+    it('should not add the processor when API Security is disabled', () => {
+      apiSecurity.disable()
+
+      const persistent = invoke(fakeSpan())
+
+      assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
+      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+    })
+
+    it('should not add the processor on a second invocation of the same endpoint', () => {
+      const first = invoke(fakeSpan())
+      const second = invoke(fakeSpan())
+
+      assert.deepStrictEqual(first[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+      assert.equal(second[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+    })
+
+    it('should sample again when the route differs', () => {
+      invoke(fakeSpan(), { route: '/api/{id}' })
+      const other = invoke(fakeSpan(), { route: '/other/{id}' })
+
+      assert.deepStrictEqual(other[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+    })
+
+    it('should sample again when the status code differs', () => {
+      invoke(fakeSpan(), { statusCode: '200' })
+      const other = invoke(fakeSpan(), { statusCode: '201' })
+
+      assert.deepStrictEqual(other[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+    })
+
+    it('should report missing_route when the event carried no route', () => {
+      const span = fakeSpan()
+      span.setTag('component', 'aws-lambda')
+
+      const persistent = invoke(span, { route: undefined })
+
+      assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+      sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecMissingRouteMetric, 'aws-lambda')
+    })
+
+    it('should not report missing_route on a 404 without route', () => {
+      const persistent = invoke(fakeSpan(), { route: undefined, statusCode: '404' })
+
+      assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+    })
+
+    it('should skip sampling when the invocation has no status code', () => {
+      const span = fakeSpan()
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/', route: '/api/{id}' })
+      waf.run.resetHistory()
+
+      lambda.onLambdaEndInvocation({ span })
+
+      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
+    })
+
+    it('should emit request.schema when the WAF returned schema attributes', () => {
+      const span = fakeSpan()
+      span.setTag('component', 'aws-lambda')
+      waf.run.returns({ attributes: { '_dd.appsec.s.req.body': [] } })
+
+      invoke(span)
+
+      sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestSchemaMetric, 'aws-lambda')
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
+    })
+
+    it('should emit request.no_schema when the WAF returned no schema attributes', () => {
+      const span = fakeSpan()
+      span.setTag('component', 'aws-lambda')
+
+      invoke(span)
+
+      sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, 'aws-lambda')
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
+    })
+
+    it('should keep the response addresses alongside the processor', () => {
+      const span = fakeSpan()
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/', route: '/api/{id}' })
+      waf.run.resetHistory()
+
+      lambda.onLambdaEndInvocation({
+        span,
+        statusCode: '200',
+        responseHeaders: { 'content-type': 'application/json', 'set-cookie': 'foo=bar' },
+      })
+
+      const { persistent } = waf.run.firstCall.args[0]
+      assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_CODE], '200')
+      assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS], {
+        'content-type': 'application/json',
+      })
+      assert.deepStrictEqual(persistent[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+    })
+  })
 })
 
 // ─── WAF path safety: contract enforcement for non-HTTP req ───────────────────
