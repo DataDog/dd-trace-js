@@ -3582,6 +3582,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
         it(`respects Jest ${resolutionType} for ${loggerName}`, async () => {
           let testOutput = ''
+          // Ensure the native bypass still defers to Jest when its resolution is customized.
           const resolutionConfig = resolutionType === 'moduleNameMapper'
             ? {
                 CONFIG_MODULE_NAME_MAPPER: JSON.stringify({
@@ -3648,6 +3649,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               DD_API_KEY: 'api-key',
               DD_SERVICE: 'my-service',
               TEST_LOGGER: loggerName,
+              // Run the mocked suite first to expose bypass state leaking between Jest runtimes.
               TEST_SEQUENCER: './ci-visibility/jest-mock-bypass-require/test-sequencer.js',
               TESTS_TO_RUN: `jest-mock-bypass-require/(${loggerName}-mock|z-real-logger)-test`,
               USE_JEST_RUN: '1',
