@@ -36,7 +36,15 @@ module.exports = function loader (source) {
 
   if (!target) return source
 
-  source = rewrite(source, this.resourcePath, esm ? 'module' : 'commonjs', undefined, true)
+  const rewriteTarget = target.esm === undefined
+    ? undefined
+    : {
+        moduleName: target.name,
+        filePath: target.moduleBaseDir
+          ? path.relative(target.moduleBaseDir, normalizePath(this.resourcePath)).replaceAll('\\', '/')
+          : target.path.slice(target.name.length + 1),
+      }
+  source = rewrite(source, this.resourcePath, esm ? 'module' : 'commonjs', rewriteTarget, true)
   if (esm) return source
 
   return `${source}

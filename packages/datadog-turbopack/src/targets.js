@@ -13,6 +13,7 @@ const {
   getDisabledInstrumentations,
   matchVersion,
 } = require('../../datadog-instrumentations/src/helpers/instrumentation-utils')
+const { isBuiltinModuleName } = require('../../datadog-instrumentations/src/helpers/shared-utils')
 const { isESMFile, processModule } = require('../../datadog-esbuild/src/utils')
 
 const CACHE_DIRECTORY = path.join('node_modules', '.cache', 'dd-trace', 'turbopack')
@@ -135,12 +136,12 @@ function loadInstrumentations () {
 function getTargets (appRequire, disabledInstrumentations = new Set(), projectDir) {
   const targets = new Map()
   const packageNames = new Set(
-    Object.keys(instrumentations).filter(name => !name.startsWith('node:') && !name.startsWith('.'))
+    Object.keys(instrumentations).filter(name => !isBuiltinModuleName(name) && !name.startsWith('.'))
   )
   const packageRootsByName = projectDir ? findPackageRoots(projectDir, packageNames) : new Map()
 
   for (const [name, entries] of Object.entries(instrumentations)) {
-    if (name.startsWith('node:') || name.startsWith('.') || disabledInstrumentations.has(name)) continue
+    if (isBuiltinModuleName(name) || name.startsWith('.') || disabledInstrumentations.has(name)) continue
 
     const packageRoots = [...(packageRootsByName.get(name) ?? [])]
     if (packageRoots.length === 0) {

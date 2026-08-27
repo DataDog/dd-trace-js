@@ -248,6 +248,36 @@ describe('datadog-turbopack loader', () => {
     assert.match(result, /from "node:diagnostics_channel"/)
     assert.doesNotMatch(result, /from "file:\/\//)
   })
+
+  it('applies existing rewriter instrumentation to a symlinked ESM target', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const packageDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-package-'))
+    directories.push(packageDirectory)
+    const packagePath = createPackageIn(packageDirectory, 'ai', {
+      main: 'dist/index.js',
+      type: 'module',
+      version: '6.0.0',
+    })
+    const target = write(packagePath, 'dist/index.js', [
+      'export function resolveLanguageModel (model) {',
+      '  return model',
+      '}',
+      '',
+    ].join('\n'))
+    fs.mkdirSync(path.join(directory, 'node_modules'), { recursive: true })
+    fs.symlinkSync(packagePath, path.join(directory, 'node_modules', 'ai'), 'dir')
+    const manifest = await createManifest(directory)
+
+    const result = loader.call({
+      getOptions: () => ({ manifestPath: manifest.path }),
+      resourcePath: target,
+    }, fs.readFileSync(target, 'utf8'))
+
+    assert.notEqual(result, fs.readFileSync(target, 'utf8'))
+    assert.match(result, /sourceMappingURL=data:application\/json;base64,/)
+  })
 })
 
 describe('datadog-turbopack configuration', () => {
