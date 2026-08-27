@@ -11,7 +11,6 @@ require('../../../setup/core')
 
 const BaseWriter = require('../../../../src/exporters/common/writer')
 const TestOptimizationRequestTracker = require('../../../../src/ci-visibility/exporters/agentless/request-tracker')
-const { FINAL_FLUSH_DRAIN_TIMEOUT } = require('../../../../src/ci-visibility/final-flush')
 
 describe('Test Optimization request tracker', () => {
   let clock
@@ -61,63 +60,21 @@ describe('Test Optimization request tracker', () => {
     sinon.assert.calledOnceWithExactly(done, undefined)
   })
 
-  it('detaches pending requests at the soft deadline and aborts them at the hard deadline', () => {
+  it('aborts pending requests at the final flush deadline', () => {
     const writer = getWriter()
     writer._encoder.count.returns(1)
     const done = sinon.spy()
 
     writer.flush(done, { deadline: Date.now() + 1000 })
-    clock.tick(1000)
-
+    clock.tick(999)
+    sinon.assert.notCalled(done)
     assert.strictEqual(pendingRequests[0].options.signal.aborted, false)
-    assert.strictEqual(pendingRequests[0].options.deadline, Date.now() + FINAL_FLUSH_DRAIN_TIMEOUT)
+    clock.tick(1)
+
     sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
-
-    clock.tick(FINAL_FLUSH_DRAIN_TIMEOUT - 1)
-    assert.strictEqual(pendingRequests[0].options.signal.aborted, false)
-    clock.tick(1)
     assert.strictEqual(pendingRequests[0].options.signal.aborted, true)
-  })
-
-  it('keeps a detached request visible to a later final flush without extending its hard deadline', () => {
-    const writer = getWriter()
-    writer._encoder.count.onFirstCall().returns(1).returns(0)
-
-    writer.flush(sinon.spy(), { deadline: Date.now() + 1000 })
-    clock.tick(1000)
-    const hardDeadline = Date.now() + FINAL_FLUSH_DRAIN_TIMEOUT
-
-    const done = sinon.spy()
-    writer.flush(done, { deadline: Date.now() + 1000 })
-
-    sinon.assert.notCalled(done)
-    assert.strictEqual(pendingRequests[0].options.deadline, Date.now() + 1000)
-    clock.tick(1000)
-    sinon.assert.calledOnce(done)
-    assert.strictEqual(pendingRequests[0].options.deadline, hardDeadline)
-    assert.strictEqual(pendingRequests[0].options.signal.aborted, false)
-
-    clock.tick(FINAL_FLUSH_DRAIN_TIMEOUT - 1001)
-    assert.strictEqual(pendingRequests[0].options.signal.aborted, false)
-    clock.tick(1)
-    assert.strictEqual(pendingRequests[0].options.signal.aborted, true)
-  })
-
-  it('stops the detached drain when the request settles', () => {
-    const writer = getWriter()
-    writer._encoder.count.onFirstCall().returns(1).returns(0)
-
-    writer.flush(sinon.spy(), { deadline: Date.now() + 1000 })
-    clock.tick(1000)
-    pendingRequests[0].callback(null)
-
-    const done = sinon.spy()
-    writer.flush(done, { deadline: Date.now() + 1000 })
-
-    sinon.assert.calledOnceWithExactly(done, undefined)
-    clock.tick(FINAL_FLUSH_DRAIN_TIMEOUT)
-    assert.strictEqual(pendingRequests[0].options.signal.aborted, false)
+    assert.strictEqual(pendingRequests[0].options.signal.reason, done.firstCall.args[0])
   })
 
   it('does not let an older deadline abort requests owned by a newer final flush', () => {

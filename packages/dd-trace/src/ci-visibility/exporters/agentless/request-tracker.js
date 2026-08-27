@@ -1,7 +1,7 @@
 'use strict'
 
 const BaseWriter = require('../../../exporters/common/writer')
-const { createFinalFlushTimeoutError, FINAL_FLUSH_DRAIN_TIMEOUT } = require('../../final-flush')
+const { createFinalFlushTimeoutError } = require('../../final-flush')
 
 class FinalFlushRequestTracker {
   #flush
@@ -57,7 +57,8 @@ class FinalFlushRequestTracker {
       for (const pendingRequest of finalFlush.requests) {
         pendingRequest.finalFlushes.delete(finalFlush)
         if (pendingRequest.finalFlushes.size === 0) {
-          this.#startDetachedDrain(pendingRequest, error)
+          pendingRequest.controller.abort(error)
+          this.#pendingRequests.delete(pendingRequest)
         } else {
           this.#updateRequestDeadline(pendingRequest)
         }
@@ -93,13 +94,7 @@ class FinalFlushRequestTracker {
   send (request, data, options, callback) {
     const controller = new AbortController()
     const requestOptions = { ...options, signal: controller.signal }
-    const pendingRequest = {
-      controller,
-      finalFlushes: new Set(),
-      options: requestOptions,
-      drainDeadline: undefined,
-      drainTimeoutId: undefined,
-    }
+    const pendingRequest = { controller, finalFlushes: new Set(), options: requestOptions }
     this.#pendingRequests.add(pendingRequest)
     if (this.#activeFinalFlush) this.#attachRequest(this.#activeFinalFlush, pendingRequest)
 
@@ -128,7 +123,6 @@ class FinalFlushRequestTracker {
    * @returns {void}
    */
   #dropRequest (pendingRequest) {
-    clearTimeout(pendingRequest.drainTimeoutId)
     this.#pendingRequests.delete(pendingRequest)
     for (const finalFlush of pendingRequest.finalFlushes) {
       finalFlush.requests.delete(pendingRequest)
@@ -161,31 +155,7 @@ class FinalFlushRequestTracker {
     for (const finalFlush of pendingRequest.finalFlushes) {
       deadline = Math.max(deadline, finalFlush.deadline)
     }
-    pendingRequest.options.deadline = pendingRequest.drainDeadline === undefined
-      ? deadline
-      : Math.min(deadline, pendingRequest.drainDeadline)
-  }
-
-  /**
-   * Lets a timed-out request drain for a bounded period after finalization stops waiting for it.
-   *
-   * @param {object} pendingRequest
-   * @param {Error} error
-   * @returns {void}
-   */
-  #startDetachedDrain (pendingRequest, error) {
-    if (pendingRequest.drainDeadline !== undefined) {
-      pendingRequest.options.deadline = pendingRequest.drainDeadline
-      return
-    }
-
-    pendingRequest.drainDeadline = Date.now() + FINAL_FLUSH_DRAIN_TIMEOUT
-    pendingRequest.options.deadline = pendingRequest.drainDeadline
-    pendingRequest.drainTimeoutId = setTimeout(() => {
-      pendingRequest.controller.abort(error)
-      this.#dropRequest(pendingRequest)
-    }, FINAL_FLUSH_DRAIN_TIMEOUT)
-    pendingRequest.drainTimeoutId.unref?.()
+    pendingRequest.options.deadline = deadline
   }
 
   /**

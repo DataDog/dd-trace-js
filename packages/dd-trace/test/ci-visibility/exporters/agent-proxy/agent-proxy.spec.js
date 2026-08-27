@@ -12,6 +12,7 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../../../dd-trace/test/setup/core')
 const AgentProxyCiVisibilityExporterBase = require('../../../../src/ci-visibility/exporters/agent-proxy')
+const { FINAL_FLUSH_TIMEOUT } = require('../../../../src/ci-visibility/final-flush')
 const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentless/writer')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
@@ -108,7 +109,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
       const requestOptions = controlled.getRequestOptions()
       assert.strictEqual(requestOptions.signal.aborted, false)
-      assert.strictEqual(requestOptions.deadline, Date.now() + 10_000)
+      assert.strictEqual(requestOptions.deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
 
       controlled.finishAgentInfo(null, { endpoints: ['/evp_proxy/v2'] })
       await Promise.resolve()
@@ -159,7 +160,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
       controlled.exporter.flush(firstDone)
       const { signal } = controlled.getRequestOptions()
 
-      clock.tick(10_000)
+      clock.tick(FINAL_FLUSH_TIMEOUT)
 
       assert.strictEqual(signal.aborted, true)
       assert.strictEqual(signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
@@ -194,21 +195,22 @@ describe('AgentProxyCiVisibilityExporter', () => {
       const controlled = createControlledExporter()
       const firstDone = sinon.spy()
       const firstTrace = [{ type: 'test', name: 'first session' }]
+      const overlapDelay = FINAL_FLUSH_TIMEOUT / 2
 
       controlled.exporter.export(firstTrace)
       controlled.exporter.flush(firstDone)
       const requestOptions = controlled.getRequestOptions()
 
-      clock.tick(5_000)
+      clock.tick(overlapDelay)
 
       const secondDone = sinon.spy()
       const secondTrace = [{ type: 'test', name: 'second session' }]
       controlled.exporter.export(secondTrace)
       controlled.exporter.flush(secondDone)
 
-      assert.strictEqual(requestOptions.deadline, Date.now() + 10_000)
+      assert.strictEqual(requestOptions.deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
 
-      clock.tick(5_000)
+      clock.tick(overlapDelay)
 
       assert.strictEqual(requestOptions.signal.aborted, false)
       sinon.assert.calledOnce(firstDone)

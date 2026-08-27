@@ -53,6 +53,7 @@ const {
   TEST_COMMAND,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { FINAL_FLUSH_TIMEOUT } = require('../../packages/dd-trace/src/ci-visibility/final-flush')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR } = require('../../version')
 const { version: ddTraceVersion } = require('../../package.json')
@@ -1910,9 +1911,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   it('bounds the final flush if the server is not available and logs an error', async function () {
-    this.timeout(20_000)
+    this.timeout(FINAL_FLUSH_TIMEOUT + 20_000)
     // Very slow intake
-    receiver.setWaitingTime(30000)
+    receiver.setWaitingTime(FINAL_FLUSH_TIMEOUT + 30_000)
     // Needs to run with the CLI if we want --forceExit to work
     childProcess = exec(
       'node ./node_modules/jest/bin/jest --config config-jest.js --forceExit',
