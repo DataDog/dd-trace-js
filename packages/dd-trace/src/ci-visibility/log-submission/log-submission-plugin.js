@@ -1,5 +1,7 @@
 'use strict'
 
+const { Writable } = require('node:stream')
+
 const request = require('../../exporters/common/request')
 const log = require('../../log')
 const Plugin = require('../../plugins/plugin')
@@ -9,37 +11,6 @@ const { FINAL_FLUSH_TIMEOUT } = require('../final-flush')
 const MAX_BATCH_BYTES = 5 * 1024 * 1024
 const MAX_BATCH_LOGS = 1000
 const BATCH_FLUSH_INTERVAL = 1000
-
-function getWinstonLogSubmissionParameters (config) {
-  const { site, service, DD_API_KEY, DD_AGENTLESS_LOG_SUBMISSION_URL } = config
-
-  const defaultParameters = {
-    host: `http-intake.logs.${site}`,
-    path: `/api/v2/logs?ddsource=winston&service=${service}`,
-    ssl: true,
-    headers: {
-      'DD-API-KEY': DD_API_KEY,
-    },
-  }
-
-  if (!DD_AGENTLESS_LOG_SUBMISSION_URL) {
-    return defaultParameters
-  }
-
-  try {
-    const url = new URL(DD_AGENTLESS_LOG_SUBMISSION_URL)
-    return {
-      host: url.hostname,
-      port: url.port,
-      ssl: url.protocol === 'https:',
-      path: defaultParameters.path,
-      headers: defaultParameters.headers,
-    }
-  } catch {
-    log.error('Could not parse DD_AGENTLESS_LOG_SUBMISSION_URL')
-    return defaultParameters
-  }
-}
 
 /**
  * @param {import('../../config/config-base')} config
@@ -87,6 +58,18 @@ class LogSubmissionPlugin extends Plugin {
   #requestTracker
   #timer
   #beforeExitHandler = () => this.#flushLogs()
+  #createWinstonJsonFormat
+  #winstonStreamClass
+  // Winston formats records inside its transports, not at logger.write time, so (unlike Bunyan/Pino)
+  // the instrumentation can't publish a post-format line. A Stream transport pipes format.json()
+  // output through this Writable into the shared sender, reusing Winston's own cycle-safe serializer.
+  #winstonOutput = new Writable({
+    decodeStrings: false,
+    write: (message, encoding, callback) => {
+      this.#enqueueLog({ source: 'winston', message })
+      callback()
+    },
+  })
 
   constructor (...args) {
     super(...args)
@@ -95,13 +78,32 @@ class LogSubmissionPlugin extends Plugin {
       done?.()
     })
 
-    this.addSub('ci:log-submission:winston:configure', (httpClass) => {
-      this.HttpClass = httpClass
+    // The main-module hook (configure) and the logger.js hook (add-transport) can fire in either
+    // order depending on how Winston is required, so buffer loggers that arrive before configure.
+    const pendingWinstonLoggers = new Set()
+    const addWinstonTransport = (logger) => {
+      if (!this.#winstonStreamClass || !this.#createWinstonJsonFormat) {
+        pendingWinstonLoggers.add(logger)
+        return
+      }
+
+      logger.add(new this.#winstonStreamClass({
+        format: this.#createWinstonJsonFormat(),
+        stream: this.#winstonOutput,
+      }))
+    }
+
+    this.addSub('ci:log-submission:winston:configure', ({ StreamTransport, createJsonFormat }) => {
+      this.#winstonStreamClass = StreamTransport
+      this.#createWinstonJsonFormat = createJsonFormat
+
+      for (const logger of pendingWinstonLoggers) {
+        addWinstonTransport(logger)
+      }
+      pendingWinstonLoggers.clear()
     })
 
-    this.addSub('ci:log-submission:winston:add-transport', (logger) => {
-      logger.add(new this.HttpClass(getWinstonLogSubmissionParameters(this.config)))
-    })
+    this.addSub('ci:log-submission:winston:add-transport', addWinstonTransport)
 
     this.addSub('ci:log-submission:log', (payload) => {
       this.#enqueueLog(payload)
