@@ -20,6 +20,12 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 
 const DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')
 
+/**
+ * @typedef {import('./config/config-base') & {
+ *   getOrigin: (name: import('./config/config-types').ConfigPath) => string
+ * }} TracerConfigWithOrigin
+ */
+
 const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
 )
@@ -155,11 +161,7 @@ module.exports = class PluginManager {
 
   // TODO: figure out a better way to handle this
   #getSharedConfig (name) {
-    const tracerConfig = /** @type {
-      import('./config/config-base') & {
-        getOrigin: (name: import('./config/config-types').ConfigPath) => string
-      }
-    } */ (this._tracerConfig)
+    const tracerConfig = /** @type {TracerConfigWithOrigin} */ (this._tracerConfig)
     const {
       logInjection,
       serviceMapping,
