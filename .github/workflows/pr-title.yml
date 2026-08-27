@@ -78,6 +78,16 @@ jobs:
                 'Use test, bench, ci, or chore.')
             }
 
+      # Everything in a PR must serve its title (AGENTS.md, "Scope discipline"). These checks look at
+      # evidence the author already supplied - commit types, file status, whitespace-only hunks - so they
+      # can't see semantic creep inside an otherwise relevant hunk. Apply the scope-exception label when a
+      # violation is deliberate, and say why in the PR description.
+      - name: Validate PR scope
+        if: steps.rename.outputs.renamed != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: await require('./scripts/pr-scope.js').reportScopeViolations({ context, core, github })
+
       - name: Sync labels with PR title
         if: >-
           steps.rename.outputs.renamed != 'true' &&
