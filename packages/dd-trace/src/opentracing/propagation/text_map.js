@@ -338,7 +338,10 @@ class TextMapPropagator {
    * @returns {DatadogSpanContext | null}
    */
   extract (carrier) {
-    if (!carrier || typeof carrier !== 'object') return null
+    if (!carrier || typeof carrier !== 'object') {
+      if (this.#config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT !== 'ignore') removeAllBaggageItems()
+      return null
+    }
 
     const spanContext = this.#extractSpanContext(carrier)
     if (spanContext === undefined) return null
