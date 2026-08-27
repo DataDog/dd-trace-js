@@ -509,7 +509,7 @@ function makeDegradedKey (flagKey, variant, allocationKey, errorMessage) {
  *
  * Aggregation caps: globalCap=131072 / perFlagCap=10000 / degradedCap=32768
  * Context bounds: 256 fields / 256 chars (pruned before keying).
- * Killswitch: DD_FLAGGING_EVALUATION_COUNTS_ENABLED (checked by the provider).
+ * Killswitch: DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED (checked by the provider).
  */
 class FlagEvaluationsWriter extends BaseFFEWriter {
   /** @type {Record<string, unknown>} */

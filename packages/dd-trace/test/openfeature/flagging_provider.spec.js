@@ -164,7 +164,7 @@ describe('FlaggingProvider', () => {
       assert.strictEqual(provider.hooks[1], mockFlagEvalEVPHook)
     })
 
-    it('should not register FlagEvalEVPHook when DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false', () => {
+    it('should not register FlagEvalEVPHook when DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED=false', () => {
       mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
       assert.ok(!provider.hooks.includes(mockFlagEvalEVPHook),

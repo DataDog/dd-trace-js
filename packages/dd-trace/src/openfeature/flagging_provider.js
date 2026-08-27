@@ -39,7 +39,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // OTel feature_flag.evaluations hook — ALWAYS registered; untouched
     this.hooks.push(new FlagEvalMetricsHook(config))
 
-    // EVP flagevaluation hook — gated by killswitch DD_FLAGGING_EVALUATION_COUNTS_ENABLED
+    // EVP flagevaluation hook — gated by killswitch DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED
     // Default: enabled (only explicit false disables); routed through config system.
     if (config.experimental.flaggingProvider.evaluationCountsEnabled) {
       this.#flagEvalEVPWriter = new FlagEvaluationsWriter(config)
@@ -51,7 +51,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       })
       log.debug('%s EVP flagevaluation writer enabled', this.constructor.name)
     } else {
-      log.debug('%s EVP flagevaluation writer disabled (DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false)',
+      log.debug('%s EVP flagevaluation writer disabled (DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED=false)',
         this.constructor.name)
     }
 

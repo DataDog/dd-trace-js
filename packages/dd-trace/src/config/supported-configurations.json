@@ -854,16 +854,6 @@
         "default": "false"
       }
     ],
-    "DD_FLAGGING_EVALUATION_COUNTS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "configurationNames": [
-          "experimental.flaggingProvider.evaluationCountsEnabled"
-        ],
-        "default": "true"
-      }
-    ],
     "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE": [
       {
         "implementation": "A",
@@ -910,6 +900,16 @@
         "type": "boolean",
         "default": "true",
         "namespace": "featureFlags"
+      }
+    ],
+    "DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.flaggingProvider.evaluationCountsEnabled"
+        ],
+        "default": "true"
       }
     ],
     "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": [
