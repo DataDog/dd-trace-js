@@ -41,6 +41,8 @@ Prefer composition and explicit contracts. Avoid new public APIs unless the use 
 Do not expose internals or bend production code solely to make a test possible. Fix upstream issues upstream rather
 than maintaining a local workaround when practical.
 
+Every change in a PR must serve that PR's title. See "Scope discipline".
+
 ## Testing
 
 Run individual tests with:
@@ -160,6 +162,39 @@ never weaken or delete assertions to make them pass.
 - Commit format: `type(scope): description`.
 - Before opening or updating a PR, read and follow `.github/pull_request_template.md`.
 - All required tests must pass; the repository follows an all-green policy.
+
+### Scope discipline
+
+**Every line in a PR must serve the PR title.** The title is the contract: a reviewer reading only the
+title should be able to predict the diff. If a hunk can't be justified by pointing at the title, it does
+not belong in this PR.
+
+Defer to a follow-up PR, even when the change is obviously correct and the diff is one line:
+
+- Refactors, renames, and file moves not required by the fix or feature
+- Drive-by typo, comment, formatting, lint, and style fixes in untouched code
+- Unrelated bug fixes noticed while reading nearby code
+- Dependency bumps, config tweaks, and tooling changes the change doesn't need
+- Test cleanup or added coverage for behaviour this PR doesn't touch
+- Type/JSDoc improvements outside the changed functions
+- Debug logging, scratch scripts, benchmark files kept from development
+
+When you notice one of these, do not fix it inline. Note it in the PR description under a
+"Follow-ups" heading (or open an issue), finish the scoped change, then land the deferred work as its own
+PR. Two focused PRs always beat one mixed PR — never bundle to "save a round trip".
+
+Exceptions, each narrow:
+
+- A prerequisite refactor the change genuinely cannot be built on. Land it as a **separate preparatory PR**
+  first; only inline it when splitting is truly impossible, and then say so explicitly in the PR description.
+- Mechanical fallout that must move with the change to keep the tree green (call sites of a renamed
+  internal, updated snapshots, a lint fix on a line you already had to edit).
+- A repeating shape being fixed across siblings, per "Debugging Failures" — grep for all instances of the
+  *same* bug and fix them together. That is one purpose, not several.
+
+Before opening or updating a PR, re-read the diff (`git diff <base>...HEAD` / `jj diff -r <base>::@`) and
+drop or split out anything the title doesn't cover. If the title needs "and" to describe the diff, the PR
+needs splitting — don't broaden the title to fit the diff.
 
 ## Specialized Workflows
 
