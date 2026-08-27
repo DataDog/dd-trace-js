@@ -1,6 +1,6 @@
 'use strict'
 
-const { createAgentlessExporter } = require('@datadog/apm-data-pipeline')
+const { createAgentlessExporter } = require('@datadog/libdatadog')
 
 const { storage } = require('../../../../datadog-core')
 const getConfig = require('../../config')
