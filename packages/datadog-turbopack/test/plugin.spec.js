@@ -20,16 +20,17 @@ afterEach(() => {
 })
 
 describe('datadog-turbopack loader', () => {
-  it('uses CommonJS-compatible diagnostics channel imports in ESM proxies', async () => {
+  it('uses standard diagnostics channel imports in ESM proxies', async () => {
     const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-')))
     directories.push(directory)
     const source = write(directory, 'module.mjs', 'export const value = 1')
-    const proxyPath = path.join(directory, 'proxy.mjs')
+    const proxyDirectory = fs.mkdtempSync(path.join(process.cwd(), 'node_modules/.cache/dd-turbopack-'))
+    directories.push(proxyDirectory)
+    const proxyPath = path.join(proxyDirectory, 'proxy.mjs')
     const proxy = await createEsmProxy(source, proxyPath, 'ai', 'ai', '7.0.0')
 
-    assert.match(proxy, /import dc from /)
-    assert.match(proxy, /dc\.channel\('dd-trace:bundler:load'\)/)
-    assert.doesNotMatch(proxy, /import \{ channel \} from /)
+    assert.match(proxy, /import \{ channel \} from 'node:diagnostics_channel'/)
+    assert.match(proxy, /channel\('dd-trace:bundler:load'\)/)
 
     fs.writeFileSync(proxyPath, proxy)
     await import(pathToFileURL(proxyPath).href)
@@ -126,6 +127,20 @@ describe('datadog-turbopack loader', () => {
     assert.equal(result, source)
   })
 
+  it('rewrites the real require when a destructuring key is named require', () => {
+    const directory = createPackage('ai', { main: 'index.mjs', type: 'module' })
+    const target = write(directory, 'index.mjs', 'export const generateText = () => {}')
+    const proxy = write(directory, '../.cache/dd-trace/turbopack/ai.mjs', 'export {}')
+    const appPath = write(path.dirname(path.dirname(directory)), 'route.js', '')
+    const source = "const { require: load } = helpers\nconst client = require('ai')"
+
+    const result = loader.rewriteImports(source, appPath, {
+      [realpath(target)]: { esm: true, proxyPath: realpath(proxy) },
+    })
+
+    assert.match(result, /require\("\.\/node_modules\/\.cache\/dd-trace\/turbopack\/ai\.mjs"\)/)
+  })
+
   it('preserves configured aliases for instrumented packages', () => {
     const directory = createPackage('ai', { main: 'index.mjs', type: 'module' })
     const target = write(directory, 'index.mjs', 'export const generateText = () => {}')
@@ -172,9 +187,7 @@ describe('datadog-turbopack loader', () => {
     assert.match(result, /dd-trace:bundler:load/)
     assert.match(result, /package: "ioredis"/)
     assert.match(result, /path: "ioredis"/)
-    assert.ok(result.includes(`require(${JSON.stringify(relativeImport(
-      path.dirname(resourcePath), require.resolve('dc-polyfill')
-    ))})`))
+    assert.match(result, /require\('node:diagnostics_channel'\)\.channel/)
   })
 
   it('publishes supported relative runtime modules through the bundler channel', () => {
@@ -207,9 +220,7 @@ describe('datadog-turbopack loader', () => {
 
     const result = await createEsmProxy(resourcePath, proxyPath, 'openai', 'openai', '5.0.0')
 
-    assert.ok(result.includes(`from ${JSON.stringify(relativeImport(
-      path.dirname(proxyPath), require.resolve('dc-polyfill')
-    ))}`))
+    assert.match(result, /import \{ channel \} from 'node:diagnostics_channel'/)
     assert.match(result, /dd-trace:bundler:load/)
     assert.match(result, /apply \(exports, patchDefault\)/)
     assert.match(result, /set\.default\?\.\(exports\)/)
@@ -236,6 +247,8 @@ describe('datadog-turbopack loader', () => {
 
     assert.notEqual(result, fs.readFileSync(target, 'utf8'))
     assert.match(result, /sourceMappingURL=data:application\/json;base64,/)
+    assert.match(result, /from "node:diagnostics_channel"/)
+    assert.doesNotMatch(result, /from "file:\/\//)
   })
 })
 
@@ -287,6 +300,25 @@ describe('datadog-turbopack configuration', () => {
     const targets = JSON.parse(fs.readFileSync(manifest.path, 'utf8')).targets
 
     assert.equal(targets[realpath(path.join(target, 'index.js'))].name, 'ioredis')
+  })
+
+  it('matches targets in symlinked package roots', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const linkedPackage = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-package-'))
+    directories.push(linkedPackage)
+    const packagePath = createPackageIn(linkedPackage, 'ioredis', { main: 'index.js', version: '5.0.0' })
+    const target = write(packagePath, 'index.js', 'module.exports = {}')
+    fs.mkdirSync(path.join(directory, 'node_modules'), { recursive: true })
+    fs.symlinkSync(packagePath, path.join(directory, 'node_modules', 'ioredis'), 'dir')
+
+    const manifest = await createManifest(directory)
+    const config = await withDatadogTurbopack({}, directory)
+    const rule = [config.rules['*.js']].flat().find(rule => rule.condition?.all?.includes('foreign'))
+
+    assert.equal(JSON.parse(fs.readFileSync(manifest.path, 'utf8')).targets[realpath(target)].name, 'ioredis')
+    assert.match(realpath(target), rule.condition.all[2].path)
   })
 
   it('isolates artifacts between concurrent manifest generations', async () => {
@@ -471,10 +503,4 @@ function write (directory, relativePath, content) {
 
 function realpath (file) {
   return fs.realpathSync(file).replaceAll('\\', '/')
-}
-
-function relativeImport (from, to) {
-  let value = path.relative(from, to).replaceAll('\\', '/')
-  if (!value.startsWith('.')) value = `./${value}`
-  return value
 }

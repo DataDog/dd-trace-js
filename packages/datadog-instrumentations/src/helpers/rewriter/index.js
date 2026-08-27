@@ -33,8 +33,10 @@ const moduleVersions = {}
 const disabled = new Set()
 const matcherCjs = create(instrumentations, dcPolyfillCjs)
 const matcherEsm = create(instrumentations, dcPolyfillEsm)
+const matcherCjsNative = create(instrumentations, 'node:diagnostics_channel')
+const matcherEsmNative = create(instrumentations, 'node:diagnostics_channel')
 
-for (const matcher of [matcherCjs, matcherEsm]) {
+for (const matcher of [matcherCjs, matcherEsm, matcherCjsNative, matcherEsmNative]) {
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
 }
@@ -49,9 +51,10 @@ const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base6
  * @param {string} filename
  * @param {string} [format]
  * @param {{ moduleName: string, filePath: string }} [target]
+ * @param {boolean} [useNativeDiagnosticsChannel] Use the native channel for bundled output.
  * @returns {string|Buffer|ArrayBuffer|Uint8Array}
  */
-function rewrite (content, filename, format, target) {
+function rewrite (content, filename, format, target, useNativeDiagnosticsChannel = false) {
   if (!content) return content
 
   target ||= getRewriteTarget(filename)
@@ -65,7 +68,9 @@ function rewrite (content, filename, format, target) {
 
   if (disabled.has(moduleName)) return content
 
-  const matcher = moduleType === 'esm' ? matcherEsm : matcherCjs
+  const matcher = useNativeDiagnosticsChannel
+    ? moduleType === 'esm' ? matcherEsmNative : matcherCjsNative
+    : moduleType === 'esm' ? matcherEsm : matcherCjs
   const transformer = matcher.getTransformer(moduleName, version, filePath)
 
   if (!transformer) return content

@@ -83,9 +83,10 @@ async function createManifest (projectDir) {
   }
 
   const packageNames = [...new Set(targets.map(target => target.name))]
-  const packagePathPattern = new RegExp(
-    `(?:^|/)node_modules/(?:${packageNames.map(escapeRegExp).join('|')})(?:/|$)`
-  )
+  const packagePathPattern = new RegExp([
+    `(?:^|/)node_modules/(?:${packageNames.map(escapeRegExp).join('|')})(?:/|$)`,
+    ...new Set(targets.map(target => `${escapeRegExp(target.moduleBaseDir)}(?:/|$)`)),
+  ].join('|'))
   const esmPackageNames = [...new Set(targets.filter(target => target.esm).map(target => target.name))]
   const esmPackagePattern = esmPackageNames.map(escapeRegExp).join('|')
   const importGap = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\r\n]*)*`
@@ -396,17 +397,13 @@ async function createEsmProxy (sourcePath, proxyPath, name, specifier, version, 
     context: { format: 'module' },
     nonEvaluating: true,
   })
-  const dcPolyfillPath = relativeImport(
-    path.dirname(proxyPath),
-    require.resolve('dc-polyfill')
-  )
-  return `import dc from ${JSON.stringify(dcPolyfillPath)};
+  return `import { channel } from 'node:diagnostics_channel';
 import * as namespace from ${JSON.stringify(relativeImport(path.dirname(proxyPath), sourcePath))};
 const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
 const set = {};
 const get = {};
 ${[...setters.values()].join(';\n')};
-dc.channel('dd-trace:bundler:load').publish({
+channel('dd-trace:bundler:load').publish({
   package: ${JSON.stringify(name)},
   module: _,
   moduleBaseDir: ${JSON.stringify(moduleBaseDir)},

@@ -75,6 +75,32 @@ describe('esbuild utils', () => {
         fs.rmSync(directory, { force: true, recursive: true })
       }
     })
+
+    it('does not evaluate re-exported ESM modules during discovery', async () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-'))
+      const marker = path.join(directory, 'evaluated')
+      const source = path.join(directory, 'module.mjs')
+      const reexport = path.join(directory, 'reexport.mjs')
+      fs.writeFileSync(source, "export * from './reexport.mjs'")
+      fs.writeFileSync(reexport, [
+        "import fs from 'node:fs'",
+        `fs.writeFileSync(${JSON.stringify(marker)}, 'yes')`,
+        'export const value = 1',
+      ].join('; '))
+
+      try {
+        const setters = await processModule({
+          context: { format: 'module' },
+          nonEvaluating: true,
+          path: source,
+        })
+
+        assert.deepStrictEqual([...setters.keys()], ['value'])
+        assert.strictEqual(fs.existsSync(marker), false)
+      } finally {
+        fs.rmSync(directory, { force: true, recursive: true })
+      }
+    })
   })
 
   describe('isESM', () => {

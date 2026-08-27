@@ -31,18 +31,12 @@ module.exports = function loader (source) {
 
   if (!target) return source
 
-  source = rewrite(source, this.resourcePath, esm ? 'module' : 'commonjs')
+  source = rewrite(source, this.resourcePath, esm ? 'module' : 'commonjs', undefined, true)
   if (esm) return source
-
-  const dcPolyfillPath = relativeImport(
-    path.dirname(this.resourcePath),
-    require.resolve('dc-polyfill')
-  )
 
   return `${source}
 ;{
-  const __dd_dc = require(${JSON.stringify(dcPolyfillPath)})
-  const __dd_ch = __dd_dc.channel('${CHANNEL}')
+  const __dd_ch = require('node:diagnostics_channel').channel('${CHANNEL}')
   const __dd_payload = {
     module: module.exports,
     moduleBaseDir: ${JSON.stringify(target.moduleBaseDir)},
@@ -157,9 +151,16 @@ function declaresRequire (node) {
 function bindingIncludesRequire (node) {
   if (!node || typeof node !== 'object') return false
   if (node.type === 'Identifier') return node.name === 'require'
-  return Object.values(node).some(value => Array.isArray(value)
-    ? value.some(bindingIncludesRequire)
-    : bindingIncludesRequire(value))
+  if (node.type === 'RestElement' || node.type === 'AssignmentPattern') {
+    return bindingIncludesRequire(node.argument ?? node.left)
+  }
+  if (node.type === 'ArrayPattern') return node.elements.some(bindingIncludesRequire)
+  if (node.type === 'ObjectPattern') {
+    return node.properties.some(property => property.type === 'RestElement'
+      ? bindingIncludesRequire(property)
+      : bindingIncludesRequire(property.value))
+  }
+  return false
 }
 
 function isStringLiteral (node) {

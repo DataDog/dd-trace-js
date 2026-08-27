@@ -220,6 +220,7 @@ async function processModule ({ path, internal = false, context, excludeDefault 
         path: fileURLToPath(result.url),
         context: { ...context, format: result.format },
         excludeDefault: true,
+        nonEvaluating,
       })
 
       for (const [name, setter] of subSetters.entries()) {
