@@ -560,8 +560,8 @@ provider.register();
 
 const otelTracer: opentelemetry.Tracer = provider.getTracer("name", "version")
 const otelMeterProvider = {} as opentelemetry.MeterProvider
-promise = otelMeterProvider.forceFlush()
-promise = otelMeterProvider.shutdown()
+const otelForceFlush: () => Promise<void> = otelMeterProvider.forceFlush
+const otelShutdown: () => Promise<void> = otelMeterProvider.shutdown
 
 // OTel supports several time input formats
 otelTracer.startSpan("name", { startTime: new Date() })
