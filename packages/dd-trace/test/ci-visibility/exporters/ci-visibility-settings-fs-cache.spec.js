@@ -570,6 +570,13 @@ describe('ci-visibility settings filesystem cache', () => {
         schedulingRetryCount: -1,
       },
     }],
+    ['an inconsistent EFD scheduling retry count', {
+      ...validCachedSettings,
+      earlyFlakeDetectionRetryPolicy: {
+        ...validCachedSettings.earlyFlakeDetectionRetryPolicy,
+        schedulingRetryCount: 1,
+      },
+    }],
     ['an invalid EFD duration retry entry', {
       ...validCachedSettings,
       earlyFlakeDetectionRetryPolicy: {
@@ -580,9 +587,26 @@ describe('ci-visibility settings filesystem cache', () => {
         ],
       },
     }],
+    ['an excessive EFD duration retry count', {
+      ...validCachedSettings,
+      earlyFlakeDetectionRetryPolicy: {
+        schedulingRetryCount: 101,
+        durationRetryCounts: [
+          {
+            ...validCachedSettings.earlyFlakeDetectionRetryPolicy.durationRetryCounts[0],
+            retryCount: 101,
+          },
+          ...validCachedSettings.earlyFlakeDetectionRetryPolicy.durationRetryCounts.slice(1),
+        ],
+      },
+    }],
     ['an invalid EFD faulty threshold', {
       ...validCachedSettings,
       earlyFlakeDetectionFaultyThreshold: 101,
+    }],
+    ['an excessive test management retry count', {
+      ...validCachedSettings,
+      testManagementAttemptToFixRetries: 101,
     }],
   ]) {
     it(`treats malformed cache data (${description}) as a miss and falls back to the API`, (done) => {

@@ -15,6 +15,7 @@ const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
 const { writeSettingsToCache } = require('../test-optimization-cache')
 const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
+const { MAX_RETRIES } = require('../test-optimization-http-cache-schema')
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../telemetry')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
@@ -143,6 +144,16 @@ function isNonNegativeSafeInteger (value) {
 }
 
 /**
+ * Checks whether a value is a retry count accepted by the settings parser.
+ *
+ * @param {unknown} value - Candidate retry count.
+ * @returns {value is number}
+ */
+function isValidRetryCount (value) {
+  return isNonNegativeSafeInteger(value) && value <= MAX_RETRIES
+}
+
+/**
  * Checks whether a cached EFD retry policy has the complete parsed shape.
  *
  * @param {unknown} retryPolicy - Candidate retry policy.
@@ -150,22 +161,26 @@ function isNonNegativeSafeInteger (value) {
  */
 function isValidCachedEfdRetryPolicy (retryPolicy) {
   if (retryPolicy === null || typeof retryPolicy !== 'object' || Array.isArray(retryPolicy)) return false
-  if (!isNonNegativeSafeInteger(retryPolicy.schedulingRetryCount)) return false
+  if (!isValidRetryCount(retryPolicy.schedulingRetryCount)) return false
   if (!Array.isArray(retryPolicy.durationRetryCounts) ||
     retryPolicy.durationRetryCounts.length !== EFD_RETRY_DURATION_LIMITS.length) {
     return false
   }
 
+  let schedulingRetryCount = 0
   for (let index = 0; index < EFD_RETRY_DURATION_LIMITS.length; index++) {
     const durationRetryCount = retryPolicy.durationRetryCounts[index]
     if (durationRetryCount === null || typeof durationRetryCount !== 'object' ||
       Array.isArray(durationRetryCount) ||
       durationRetryCount.durationLimitMs !== EFD_RETRY_DURATION_LIMITS[index] ||
-      !isNonNegativeSafeInteger(durationRetryCount.retryCount)) {
+      !isValidRetryCount(durationRetryCount.retryCount)) {
       return false
     }
+    if (durationRetryCount.retryCount > schedulingRetryCount) {
+      schedulingRetryCount = durationRetryCount.retryCount
+    }
   }
-  return true
+  return retryPolicy.schedulingRetryCount === schedulingRetryCount
 }
 
 /**
@@ -186,7 +201,7 @@ function isValidCachedSettings (settings) {
     return false
   }
   return settings.testManagementAttemptToFixRetries === undefined ||
-    isNonNegativeSafeInteger(settings.testManagementAttemptToFixRetries)
+    isValidRetryCount(settings.testManagementAttemptToFixRetries)
 }
 
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
