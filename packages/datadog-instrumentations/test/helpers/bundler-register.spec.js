@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const Module = require('node:module')
 
 const sinon = require('sinon')
@@ -45,6 +46,29 @@ describe('bundler register', () => {
       name: 'test-default-export',
       version: '1.0.0',
     })
+  })
+
+  it('patches a CommonJS object when its hook does not use a default export', () => {
+    const Original = class Original {}
+    const Patched = class Patched {}
+    const hook = sinon.stub().returns(Patched)
+    const { publish } = loadBundlerRegister({
+      hooks: { 'test-commonjs-export': sinon.stub() },
+      instrumentations: {
+        'test-commonjs-export': [{ file: 'index.js', hook, patchDefault: false }],
+      },
+    })
+    const payload = {
+      module: { Original },
+      package: 'test-commonjs-export',
+      path: 'test-commonjs-export/index.js',
+      version: '1.0.0',
+    }
+
+    publish(payload)
+
+    sinon.assert.calledOnceWithExactly(hook, { Original }, '1.0.0')
+    assert.equal(payload.module, Patched)
   })
 
   it('does not activate explicitly disabled bundled integrations', () => {
