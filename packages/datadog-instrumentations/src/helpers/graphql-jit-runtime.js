@@ -303,8 +303,7 @@ function createDescriptor (context, compilerPath, input, fieldNode, createFieldM
  * @returns {string}
  */
 function compileArgumentFactory (context, descriptor, missing, argumentSource) {
-  // eslint-disable-next-line no-restricted-syntax -- compiler result has no presence flag; execution does not run this
-  if (missing.length === 0 && Object.keys(descriptor.staticArguments).length === 0) return 'undefined'
+  if (missing.length === 0 && argumentSource === '{}') return 'undefined'
 
   const name = `ddTraceArguments${descriptor.id}`
   let source = `function ${name} (variableValues, cloneValue) {\n  const args = ${argumentSource}\n`

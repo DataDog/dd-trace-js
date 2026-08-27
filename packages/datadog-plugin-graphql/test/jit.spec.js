@@ -528,11 +528,15 @@ describe('Plugin', () => {
         delete nested.arguments
         delete nested.directives
 
-        const compiled = compileQuery(nestedSchema, document)
+        const compiled = compileQuery(nestedSchema, document, undefined, { debug: true })
         assert.strictEqual(
           typeof compiled.query,
           'function',
           `Compilation failed: ${compiled.errors?.[0]?.message}`
+        )
+        assert.doesNotMatch(
+          compiled.__DO_NOT_USE_THIS_OR_YOU_WILL_BE_FIRED_compilation,
+          /^function ddTraceArguments\d+/m
         )
 
         const result = await executeWithTrace(() => compiled.query(undefined, {}, {}), /OmittedArgumentLists/, traces => {
