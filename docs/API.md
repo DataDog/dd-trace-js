@@ -20,6 +20,36 @@ const tracer = require('dd-trace').init({
 
 The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
 
+<h2 id="llmobs-prompt-management">LLM Observability Prompt Management</h2>
+
+Prompt Management is available through `tracer.init().llmobs` even when LLM Observability span export is disabled. Set `DD_API_KEY` for all operations. Set `DD_APP_KEY` for prompt mutations and HTTP environment resolution; successful local OpenFeature resolution does not require it.
+
+```javascript
+const tracer = require('dd-trace').init()
+
+const prompt = await tracer.llmobs.getPrompt('greeting', {
+  targetingKey: user.id,
+  attributes: { tier: user.tier },
+  fallback: [{ role: 'user', content: 'Hello {name}' }],
+})
+const variables = { name: user.name }
+
+return tracer.llmobs.annotationContext(
+  { prompt: prompt.toAnnotation(variables) },
+  () => client.chat.completions.create({ messages: prompt.format(variables) })
+)
+```
+
+Without `DD_ENV`, `getPrompt()` fetches the latest registry version; pass `{ version: 3 }` for an exact version. With `DD_ENV`, it first evaluates `__llmobs__.prompt.<id>` through the tracer's existing Datadog OpenFeature provider, then falls through to the Prompt resolve API when local evaluation is unavailable or misses. `targetingKey` and `attributes` apply only to environment resolution; attributes must be flat string, number, or boolean values. A fallback may be a string, chat-message array, prompt-like object, or synchronous function returning one of those.
+
+`ManagedPrompt.format()` safely renders `{name}` and `{{ name }}` placeholders and leaves missing variables unchanged. JavaScript primitive strings cannot safely carry hidden prompt metadata, so rendered values are not tracked automatically: use `toAnnotation()` with `annotationContext()` as shown above.
+
+Use `createPrompt()`, `createPromptVersion()`, `updatePrompt()`, `updatePromptVersion()`, `deletePrompt()`, `listPrompts()`, and `listPromptVersions()` for registry management. Creation and version updates accept `envIds` to assign versions to Feature Flag environments. Successful mutations evict cached selectors for that prompt.
+
+The in-memory cache holds up to 1024 selectors and defaults to a 60-second TTL. Configure it with `DD_LLMOBS_PROMPTS_CACHE_TTL`; set the TTL to `0` to disable caching. The optional persistent cache is enabled with `DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED` and relocated with `DD_LLMOBS_PROMPTS_CACHE_DIR`. `DD_LLMOBS_PROMPTS_TIMEOUT` controls API timeouts in seconds. `clearPromptCache()` clears both cache levels by default.
+
+Prompt Management reuses the Feature Flags [configuration source](https://docs.datadoghq.com/feature_flags/concepts/configuration_sources/) selected for the [Node.js SDK](https://docs.datadoghq.com/feature_flags/server/nodejs/); it does not create a provider or polling source. The Node agentless source currently delivers configuration for local evaluation but does not publish exposures or experimentation telemetry. Use a supported Agent-backed source when those signals are required.
+
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.

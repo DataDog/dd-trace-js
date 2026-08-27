@@ -205,6 +205,22 @@ function recordLLMObsUserProcessorCalled (error, value = 1) {
   llmobsMetrics.count('user_processor_called', tags).inc(value)
 }
 
+function recordPromptSource (source, value = 1) {
+  llmobsMetrics.count('prompt.source', { from: source }).inc(value)
+}
+
+function recordPromptFetchError (errorType, value = 1) {
+  llmobsMetrics.count('prompt.fetch.error', { error_type: errorType }).inc(value)
+}
+
+function recordPromptCrudError (method, errorType, status, value = 1) {
+  llmobsMetrics.count('prompt.crud.error', {
+    method,
+    error_type: errorType,
+    status: String(status),
+  }).inc(value)
+}
+
 module.exports = {
   recordLLMObsEnabled,
   incrementLLMObsSpanStartCount,
@@ -220,4 +236,7 @@ module.exports = {
   recordSubmitEvaluation,
   recordSubmitFeedback,
   recordLLMObsUserProcessorCalled,
+  recordPromptSource,
+  recordPromptFetchError,
+  recordPromptCrudError,
 }

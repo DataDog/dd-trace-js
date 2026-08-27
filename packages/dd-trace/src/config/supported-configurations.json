@@ -1361,6 +1361,34 @@
         "default": null
       }
     ],
+    "DD_LLMOBS_PROMPTS_CACHE_DIR": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_CACHE_TTL": [
+      {
+        "implementation": "A",
+        "type": "decimal",
+        "default": "60"
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_TIMEOUT": [
+      {
+        "implementation": "A",
+        "type": "decimal",
+        "default": "5.0"
+      }
+    ],
     "DD_LLMOBS_SAMPLE_RATE": [
       {
         "implementation": "A",

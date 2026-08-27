@@ -3862,6 +3862,39 @@ declare namespace tracer {
        */
       experiments: Experiments,
 
+      /** Resolve an exact, environment-targeted, or latest managed prompt. */
+      getPrompt (promptId: string, options?: GetPromptOptions): Promise<ManagedPrompt>
+      /** Refresh the prompt selected by the current environment. */
+      refreshPrompt (promptId: string): Promise<ManagedPrompt | undefined>
+      /** Clear the in-memory and/or persistent prompt caches. */
+      clearPromptCache (options?: ClearPromptCacheOptions): void
+      /** Create a prompt and its first version. */
+      createPrompt (
+        promptId: string,
+        template: PromptTemplateMessage[],
+        options?: CreatePromptOptions
+      ): Promise<PromptResponse>
+      /** Add a version to an existing prompt. */
+      createPromptVersion (
+        promptId: string,
+        template: PromptTemplateMessage[],
+        options?: CreatePromptVersionOptions
+      ): Promise<PromptVersionResponse>
+      /** Update prompt metadata. */
+      updatePrompt (promptId: string, options: UpdatePromptOptions): Promise<PromptResponse>
+      /** Update prompt-version metadata or environment assignments. */
+      updatePromptVersion (
+        promptId: string,
+        version: number,
+        options: UpdatePromptVersionOptions
+      ): Promise<PromptVersionResponse>
+      /** Delete a prompt. */
+      deletePrompt (promptId: string): Promise<DeletedPromptResponse>
+      /** List prompts. */
+      listPrompts (): Promise<PromptResponse[]>
+      /** List versions for a prompt. */
+      listPromptVersions (promptId: string): Promise<PromptVersionResponse[]>
+
       /**
        * Enable LLM Observability tracing.
        *
@@ -4011,6 +4044,100 @@ declare namespace tracer {
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
+    }
+
+    interface PromptTemplateMessage {
+      role: string,
+      content: string
+    }
+
+    type PromptFallbackValue =
+      | string
+      | PromptTemplateMessage[]
+      | { template: string | PromptTemplateMessage[], version?: string }
+    type PromptFallback = PromptFallbackValue | (() => PromptFallbackValue)
+
+    interface GetPromptOptions {
+      version?: number,
+      fallback?: PromptFallback,
+      targetingKey?: string,
+      attributes?: Record<string, string | number | boolean>
+    }
+
+    interface ClearPromptCacheOptions {
+      hot?: boolean,
+      warm?: boolean
+    }
+
+    interface CreatePromptOptions {
+      title?: string,
+      description?: string,
+      userVersion?: string,
+      envIds?: string[]
+    }
+
+    interface CreatePromptVersionOptions {
+      description?: string,
+      userVersion?: string,
+      envIds?: string[]
+    }
+
+    interface UpdatePromptOptions {
+      title?: string,
+      description?: string
+    }
+
+    interface UpdatePromptVersionOptions {
+      description?: string,
+      envIds?: string[]
+    }
+
+    interface ManagedPrompt {
+      readonly id: string,
+      readonly version: string,
+      readonly source: 'registry' | 'cache' | 'fallback' | 'ff' | 'resolve',
+      readonly template: string | ReadonlyArray<Readonly<PromptTemplateMessage>>,
+      readonly promptUuid?: string,
+      readonly promptVersionUuid?: string,
+      format (variables?: Record<string, unknown>): string | PromptTemplateMessage[]
+      toAnnotation (variables?: Record<string, unknown>): Prompt
+    }
+
+    interface PromptResponse {
+      id?: string,
+      prompt_id?: string,
+      title?: string,
+      description?: string,
+      created_at?: string,
+      source?: string,
+      num_versions?: number,
+      in_registry?: boolean,
+      created_from?: string,
+      author?: string,
+      ml_app?: string,
+      ml_apps?: string[],
+      last_version_created_at?: string,
+      extracted_from?: string
+    }
+
+    interface PromptVersionResponse {
+      id?: string,
+      prompt_uuid?: string,
+      prompt_id?: string,
+      template?: string | PromptTemplateMessage[],
+      version?: number,
+      user_version?: string,
+      created_at?: string,
+      version_created_at?: string,
+      author?: string,
+      description?: string,
+      ml_app?: string
+    }
+
+    interface DeletedPromptResponse {
+      id?: string,
+      prompt_id?: string,
+      deleted_at?: string
     }
 
     /** JSON-serializable value accepted by LLMObs Experiments. */
@@ -4610,6 +4737,12 @@ declare namespace tracer {
        * A template string or chat message template list.
        */
       template?: string | Message[]
+
+      /** Internal Datadog prompt identity. */
+      promptUuid?: string,
+
+      /** Internal Datadog prompt-version identity. */
+      promptVersionUuid?: string
     }
 
     interface ToolDefinition {

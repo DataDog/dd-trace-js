@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const { inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
@@ -16,6 +19,8 @@ const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
 const { removeDestroyHandler } = require('../util')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const { WarmCache, cacheKey } = require('../../../src/llmobs/prompts/cache')
+const ManagedPrompt = require('../../../src/llmobs/prompts/prompt')
 
 const injectCh = channel('dd-trace:span:inject')
 
@@ -94,6 +99,47 @@ describe('sdk', () => {
     it('exposes dataset operations only through the experiments facade', () => {
       assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
       assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
+    })
+  })
+
+  describe('prompts', () => {
+    it('works through the configured SDK while LLMObs span export is disabled', async () => {
+      const config = getConfigFresh({})
+      config.DD_API_KEY = 'api-key'
+      config.env = 'production'
+      const provider = {
+        resolveObjectEvaluation: sinon.stub().resolves({
+          value: { prompt_id: 'greeting', version: 1, template: 'Hello' },
+        }),
+      }
+      const providerGetter = sinon.stub().returns(provider)
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, { disable () {} }, config, providerGetter)
+
+      sinon.assert.notCalled(providerGetter)
+
+      const prompt = await disabledLLMObs.getPrompt('greeting')
+
+      assert.strictEqual(disabledLLMObs.enabled, false)
+      assert.strictEqual(prompt.source, 'ff')
+      sinon.assert.calledOnce(providerGetter)
+      sinon.assert.calledOnce(provider.resolveObjectEvaluation)
+    })
+
+    it('clears the warm cache before the lazy manager is created', () => {
+      const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-sdk-prompts-'))
+      const config = getConfigFresh({})
+      config.DD_LLMOBS_PROMPTS_CACHE_DIR = cacheDir
+      config.DD_LLMOBS_PROMPTS_CACHE_TTL = 60
+      const cache = new WarmCache({ cacheDir, ttlMs: 60_000 })
+      cache.set(cacheKey('greeting', ['latest']), new ManagedPrompt({
+        id: 'greeting', version: '1', source: 'cache', template: 'Hello',
+      }))
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, { disable () {} }, config)
+
+      disabledLLMObs.clearPromptCache({ hot: false })
+
+      assert.deepStrictEqual(fs.readdirSync(cacheDir), [])
+      fs.rmSync(cacheDir, { recursive: true, force: true })
     })
   })
 

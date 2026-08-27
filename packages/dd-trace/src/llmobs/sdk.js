@@ -45,12 +45,17 @@ class LLMObs extends NoopLLMObs {
    */
   #hasUserSpanProcessor = false
 
+  #promptManager
+
+  #provider
+
   /**
    * @param {import('../tracer')} tracer - Tracer instance
    * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base')} config - Tracer configuration
+   * @param {() => object} provider - Lazy getter for the tracer's existing OpenFeature provider
    */
-  constructor (tracer, llmobsModule, config) {
+  constructor (tracer, llmobsModule, config, provider = () => {}) {
     super(tracer)
 
     /** @type {import('../config/config-base')} */
@@ -58,6 +63,7 @@ class LLMObs extends NoopLLMObs {
 
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
+    this.#provider = provider
   }
 
   get enabled () {
@@ -71,6 +77,124 @@ class LLMObs extends NoopLLMObs {
    */
   get experiments () {
     return createExperiments(this._config, this)
+  }
+
+  /**
+   * Get the lazily-created Prompt Management owner.
+   * @returns {import('./prompts/manager')}
+   */
+  #getPromptManager () {
+    if (!this.#promptManager) {
+      const PromptManager = require('./prompts/manager')
+      this.#promptManager = new PromptManager(this._config, this.#provider)
+    }
+    return this.#promptManager
+  }
+
+  /**
+   * Retrieve and resolve a managed prompt.
+   * @param {string} promptId
+   * @param {object} [options]
+   * @returns {Promise<import('./prompts/prompt')>}
+   */
+  getPrompt (promptId, options) {
+    return this.#getPromptManager().getPrompt(promptId, options)
+  }
+
+  /**
+   * Refresh the selector implied by the current environment.
+   * @param {string} promptId
+   * @returns {Promise<import('./prompts/prompt') | undefined>}
+   */
+  refreshPrompt (promptId) {
+    return this.#getPromptManager().refreshPrompt(promptId)
+  }
+
+  /**
+   * Clear managed prompt caches.
+   * @param {{hot?: boolean, warm?: boolean}} [options]
+   * @returns {void}
+   */
+  clearPromptCache (options = {}) {
+    if (this.#promptManager) {
+      this.#promptManager.clearCache(options)
+    } else if (options.warm !== false) {
+      const { WarmCache } = require('./prompts/cache')
+      new WarmCache({
+        cacheDir: this._config.DD_LLMOBS_PROMPTS_CACHE_DIR,
+        enabled: true,
+        ttlMs: Math.max(this._config.DD_LLMOBS_PROMPTS_CACHE_TTL * 1000, 1),
+      }).clear()
+    }
+  }
+
+  /**
+   * Create a prompt.
+   * @param {string} promptId
+   * @param {Array<{role: string, content: string}>} template
+   * @param {object} [options]
+   * @returns {Promise<object>}
+   */
+  createPrompt (promptId, template, options) {
+    return this.#getPromptManager().createPrompt(promptId, template, options)
+  }
+
+  /**
+   * Create a prompt version.
+   * @param {string} promptId
+   * @param {Array<{role: string, content: string}>} template
+   * @param {object} [options]
+   * @returns {Promise<object>}
+   */
+  createPromptVersion (promptId, template, options) {
+    return this.#getPromptManager().createPromptVersion(promptId, template, options)
+  }
+
+  /**
+   * Update prompt metadata.
+   * @param {string} promptId
+   * @param {object} options
+   * @returns {Promise<object>}
+   */
+  updatePrompt (promptId, options) {
+    return this.#getPromptManager().updatePrompt(promptId, options)
+  }
+
+  /**
+   * Update prompt-version metadata.
+   * @param {string} promptId
+   * @param {number} version
+   * @param {object} options
+   * @returns {Promise<object>}
+   */
+  updatePromptVersion (promptId, version, options) {
+    return this.#getPromptManager().updatePromptVersion(promptId, version, options)
+  }
+
+  /**
+   * Delete a prompt.
+   * @param {string} promptId
+   * @returns {Promise<object>}
+   */
+  deletePrompt (promptId) {
+    return this.#getPromptManager().deletePrompt(promptId)
+  }
+
+  /**
+   * List prompts.
+   * @returns {Promise<object[]>}
+   */
+  listPrompts () {
+    return this.#getPromptManager().listPrompts()
+  }
+
+  /**
+   * List prompt versions.
+   * @param {string} promptId
+   * @returns {Promise<object[]>}
+   */
+  listPromptVersions (promptId) {
+    return this.#getPromptManager().listPromptVersions(promptId)
   }
 
   enable (options = {}) {

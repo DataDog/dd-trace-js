@@ -1330,6 +1330,27 @@ describe('tagger', () => {
     })
 
     describe('tagPrompt', () => {
+      it('serializes managed prompt UUIDs under backend keys', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          id: 'managed',
+          version: '1',
+          template: 'Hello {name}',
+          variables: { name: 'Ada' },
+          promptUuid: 'prompt-uuid',
+          promptVersionUuid: 'version-uuid',
+        })
+
+        assertObjectContains(Tagger.tagMap.get(span)[INPUT_PROMPT], {
+          id: 'managed',
+          version: '1',
+          template: 'Hello {name}',
+          variables: { name: 'Ada' },
+          prompt_uuid: 'prompt-uuid',
+          prompt_version_uuid: 'version-uuid',
+        })
+      })
+
       it('tags a span with a string prompt template', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
         tagger.tagPrompt(span, {

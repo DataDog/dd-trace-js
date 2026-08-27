@@ -415,6 +415,8 @@ class LLMObsTagger {
       template,
       contextVariables,
       queryVariables,
+      promptUuid,
+      promptVersionUuid,
     } = prompt
 
     if (strictValidation) {
@@ -471,6 +473,16 @@ class LLMObsTagger {
       return
     }
 
+    if (promptUuid != null && typeof promptUuid !== 'string') {
+      this.#handleFailure('Prompt UUID must be a string.', 'invalid_prompt')
+      return
+    }
+
+    if (promptVersionUuid != null && typeof promptVersionUuid !== 'string') {
+      this.#handleFailure('Prompt version UUID must be a string.', 'invalid_prompt')
+      return
+    }
+
     // validate prompt tags
     if (tags && (typeof tags !== 'object' || tags instanceof Map)) {
       this.#handleFailure('Prompt tags must be an non-Map object.', 'invalid_prompt')
@@ -524,6 +536,8 @@ class LLMObsTagger {
     const validatedPrompt = {}
     if (finalPromptId) validatedPrompt.id = finalPromptId
     if (version) validatedPrompt.version = version
+    if (promptUuid) validatedPrompt.prompt_uuid = promptUuid
+    if (promptVersionUuid) validatedPrompt.prompt_version_uuid = promptVersionUuid
     if (variables) validatedPrompt.variables = variables
     if (finalTemplate) validatedPrompt.template = finalTemplate
     if (finalChatTemplate?.length) validatedPrompt.chat_template = finalChatTemplate
