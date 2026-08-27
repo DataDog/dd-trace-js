@@ -11,6 +11,25 @@ const {
 } = require('../../exporters/common/retry')
 const { getRateLimitResetDelay } = require('../requests/rate-limit')
 
+const MAX_BUFFERED_BYTES = 64 * 1024 * 1024
+const BACKPRESSURE_RETRY_MS = 50
+
+let bufferedBytes = 0
+
+function getPayloadSize (data) {
+  if (!Array.isArray(data)) return Buffer.byteLength(data)
+
+  let size = 0
+  for (const chunk of data) size += Buffer.byteLength(chunk)
+  return size
+}
+
+function createQueueFullError () {
+  const error = new Error('Test Optimization request queue reached its payload limit')
+  error.code = 'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL'
+  return error
+}
+
 /**
  * @param {number} statusCode
  * @returns {boolean}
@@ -111,15 +130,23 @@ function request (data, options, callback) {
 function requestBuffered (data, options, callback) {
   const { signal } = options
   const timeout = options.timeout || 2000
+  const payloadSize = getPayloadSize(data)
   let retryTimer
   let settled = false
   let lastError
+
+  if (payloadSize > MAX_BUFFERED_BYTES - bufferedBytes) {
+    callback(createQueueFullError())
+    return
+  }
+  bufferedBytes += payloadSize
 
   const complete = (error, result, statusCode, headers) => {
     if (settled) return
     settled = true
     clearTimeout(retryTimer)
     signal?.removeEventListener('abort', onAbort)
+    bufferedBytes -= payloadSize
     callback(error, result, statusCode, headers)
   }
   const onAbort = () => {
@@ -148,8 +175,8 @@ function requestBuffered (data, options, callback) {
       return
     }
 
-    if (deadline !== undefined && !commonRequest.writable) {
-      retryTimer = setTimeout(attempt, Math.min(50, remaining), attemptIndex)
+    if (!commonRequest.writable) {
+      retryTimer = setTimeout(attempt, Math.min(BACKPRESSURE_RETRY_MS, remaining), attemptIndex)
       retryTimer.unref?.()
       return
     }
@@ -172,13 +199,10 @@ function requestBuffered (data, options, callback) {
 
       const responseStatus = statusCode ?? error.status
       const isRetriableHttpError = isRetriableHttpStatusCode(responseStatus)
-      if (options.retry === false || (attemptIndex >= getMaxAttempts(attemptOptions) &&
-        (isRetriableNetworkError(error) || isRetriableHttpError))) {
-        complete(error, result, statusCode, headers)
-        return
-      }
-
-      if (!isRetriableNetworkError(error) && !isRetriableHttpError) {
+      const isRetriableError = isRetriableNetworkError(error) || isRetriableHttpError
+      const reachedBackgroundAttemptLimit =
+        options.deadline === undefined && attemptIndex >= getMaxAttempts(attemptOptions)
+      if (options.retry === false || !isRetriableError || reachedBackgroundAttemptLimit) {
         complete(error, result, statusCode, headers)
         return
       }
@@ -189,7 +213,7 @@ function requestBuffered (data, options, callback) {
         if (Number.isFinite(resetDelay)) {
           if (options.deadline !== undefined) {
             const retryRemaining = options.deadline - Date.now()
-            if (resetDelay > RATE_LIMIT_MAX_WAIT_MS || resetDelay >= retryRemaining) {
+            if (resetDelay >= retryRemaining) {
               complete(error, result, statusCode, headers)
               return
             }

@@ -53,6 +53,37 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
   })
 
+  it('keeps retrying retriable responses while the finalization deadline has capacity', () => {
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 30_000 }, done)
+    const error = Object.assign(new Error('unavailable'), { status: 503 })
+
+    pendingRequests[0].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[1].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[2].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[3].callback(null, 'ok', 200, {})
+
+    assert.strictEqual(pendingRequests.length, 4)
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('keeps the ordinary attempt cap for background retries', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+    const error = Object.assign(new Error('unavailable'), { status: 503 })
+
+    pendingRequests[0].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[1].callback(error, null, 503, {})
+    clock.tick(6000)
+
+    assert.strictEqual(pendingRequests.length, 2)
+    sinon.assert.calledOnceWithExactly(done, error, null, 503, {})
+  })
+
   it('retries a 408 response within the finalization deadline', () => {
     const done = sinon.spy()
     request('payload', { deadline: Date.now() + 10_000 }, done)
@@ -213,6 +244,21 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, error, null, 429, { 'x-ratelimit-reset': '31' })
   })
 
+  it('uses a rate-limit reset over the background cap when the finalization deadline allows it', () => {
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 45_000 }, done)
+
+    const error = Object.assign(new Error('rate limited'), { status: 429 })
+    pendingRequests[0].callback(error, null, 429, { 'x-ratelimit-reset': '31' })
+    clock.tick(30_999)
+    assert.strictEqual(pendingRequests.length, 1)
+    clock.tick(1)
+    assert.strictEqual(pendingRequests.length, 2)
+
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
   it('preserves ordinary background retry scheduling without a deadline', () => {
     request('payload', {}, sinon.spy())
 
@@ -291,6 +337,40 @@ describe('Test Optimization exporter request', () => {
 
     pendingRequests[0].callback(null, 'ok', 200, {})
     sinon.assert.calledOnce(done)
+  })
+
+  it('waits for exporter backpressure to clear during a background flush', () => {
+    commonRequest.writable = false
+    const done = sinon.spy()
+    request('payload', {}, done)
+
+    clock.tick(49)
+    assert.strictEqual(pendingRequests.length, 0)
+    commonRequest.writable = true
+    clock.tick(1)
+    assert.strictEqual(pendingRequests.length, 1)
+
+    pendingRequests[0].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('accepts exactly 64 MiB of payloads and rejects the first byte over the cap', () => {
+    const firstDone = sinon.spy()
+    const secondDone = sinon.spy()
+    const rejectedDone = sinon.spy()
+
+    request(Buffer.alloc(32 * 1024 * 1024), {}, firstDone)
+    request(Buffer.alloc(32 * 1024 * 1024), {}, secondDone)
+    request(Buffer.alloc(1), {}, rejectedDone)
+
+    assert.strictEqual(pendingRequests.length, 2)
+    sinon.assert.calledOnce(rejectedDone)
+    assert.strictEqual(rejectedDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL')
+
+    pendingRequests[0].callback(null, 'ok', 200, {})
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(firstDone, null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(secondDone, null, 'ok', 200, {})
   })
 
   it('fails at the deadline while exporter backpressure remains active', () => {
