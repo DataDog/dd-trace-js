@@ -66,8 +66,14 @@ function readFromCache (cacheKey) {
       return
     }
     const { timestamp, data } = parsed
-    if (Date.now() - timestamp > CACHE_TTL_MS) {
-      log.debug('%s cache expired (age: %d ms)', cacheKey, Date.now() - timestamp)
+    const now = Date.now()
+    if (!Number.isSafeInteger(timestamp) || timestamp < 0 || timestamp > now) {
+      log.debug('%s cache file has an invalid timestamp, ignoring', cacheKey)
+      return
+    }
+    const age = now - timestamp
+    if (age > CACHE_TTL_MS) {
+      log.debug('%s cache expired (age: %d ms)', cacheKey, age)
       return
     }
     log.debug('%s cache hit', cacheKey)

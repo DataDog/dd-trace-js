@@ -1,6 +1,5 @@
 'use strict'
 
-const { createHmac } = require('node:crypto')
 const fs = require('node:fs')
 const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
@@ -8,7 +7,7 @@ const URL = require('url').URL
 const { version: tracerVersion } = require('../../../../../package.json')
 const { EMPTY_EFD_RETRY_POLICY, createEfdRetryPolicy } = require('../efd-retry-policy')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
-const { buildCacheKey, getCachePath, withCache, writeToCache } = require('../requests/fs-cache')
+const { getCachePath, withCache, writeToCache } = require('../requests/fs-cache')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const { getTestManagementTests: getTestManagementTestsRequest } =
@@ -19,7 +18,6 @@ const { MAX_RETRIES } = require('../test-optimization-http-cache-schema')
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../telemetry')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
-const getConfig = require('../../config')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
 const spanFormat = require('../../span_format')
@@ -33,6 +31,7 @@ const {
   FINAL_FLUSH_TIMEOUT,
 } = require('../final-flush')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
+const buildSettingsCacheKey = require('./settings-cache-key')
 
 const hostname = getHostname()
 const EMPTY_SETTINGS = Object.freeze({})
@@ -78,58 +77,6 @@ function getIsTestSessionTrace (trace) {
   return trace.some(span =>
     span.type === 'test_session_end' || span.type === 'test_suite_end' || span.type === 'test_module_end'
   )
-}
-
-/**
- * Derives a non-secret namespace for the direct API account. EVP requests are
- * already scoped by their agent origin and proxy path.
- *
- * @param {object} configuration - Request configuration for the settings endpoint.
- * @param {string|undefined} apiKey - Direct API credential.
- * @returns {string|undefined}
- */
-function getBackendAccountCacheNamespace (configuration, apiKey) {
-  if (configuration.isEvpProxy || apiKey === undefined) return
-
-  return createHmac('sha256', apiKey)
-    .update('dd-trace-js:test-optimization-settings-cache')
-    .digest('hex')
-}
-
-/**
- * Builds the cross-process filesystem cache key for the settings request from the
- * request configuration. The key also isolates the backend account, tracer
- * version, and local flags applied while parsing the response.
- *
- * @param {object} configuration - Request configuration for the settings endpoint.
- * @returns {string}
- */
-function buildSettingsCacheKey (configuration) {
-  const config = getConfig()
-  const { testOptimization } = config
-  return buildCacheKey('settings', [
-    tracerVersion,
-    configuration.url?.href,
-    configuration.isEvpProxy,
-    configuration.evpProxyPrefix,
-    getBackendAccountCacheNamespace(configuration, config.DD_API_KEY),
-    configuration.sha,
-    configuration.service,
-    configuration.env,
-    configuration.repositoryUrl,
-    configuration.branch,
-    configuration.tag,
-    configuration.testLevel,
-    configuration.osPlatform,
-    configuration.osVersion,
-    configuration.osArchitecture,
-    configuration.runtimeName,
-    configuration.runtimeVersion,
-    configuration.custom,
-    testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE,
-    testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING,
-    testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED,
-  ])
 }
 
 /**

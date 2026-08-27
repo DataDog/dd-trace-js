@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { createHmac } = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -10,7 +9,6 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
 const sinon = require('sinon')
 
-const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
 const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
@@ -20,6 +18,7 @@ const { buildCacheKey, getCachePath, getLockPath, withCache } =
   require('../../../src/ci-visibility/requests/fs-cache')
 const CiVisibilityExporter =
   require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
+const buildSettingsCacheKey = require('../../../src/ci-visibility/exporters/settings-cache-key')
 
 const url = new URL(`http://${hostname}:${port}`)
 
@@ -88,40 +87,9 @@ const SETTINGS_NO_SKIPPING = {
   },
 }
 
-// Replicates buildSettingsCacheKey from the exporter so tests can locate and
-// clean up the deterministic cache file in tmpdir().
 function cacheKeyForConfiguration (exporter, testConfiguration) {
   const configuration = exporter.getRequestConfiguration(testConfiguration)
-  const config = getConfig()
-  const { testOptimization } = config
-  const accountNamespace = configuration.isEvpProxy || config.DD_API_KEY === undefined
-    ? undefined
-    : createHmac('sha256', config.DD_API_KEY)
-      .update('dd-trace-js:test-optimization-settings-cache')
-      .digest('hex')
-  return buildCacheKey('settings', [
-    tracerVersion,
-    configuration.url?.href,
-    configuration.isEvpProxy,
-    configuration.evpProxyPrefix,
-    accountNamespace,
-    configuration.sha,
-    configuration.service,
-    configuration.env,
-    configuration.repositoryUrl,
-    configuration.branch,
-    configuration.tag,
-    configuration.testLevel,
-    configuration.osPlatform,
-    configuration.osVersion,
-    configuration.osArchitecture,
-    configuration.runtimeName,
-    configuration.runtimeVersion,
-    configuration.custom,
-    testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE,
-    testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING,
-    testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED,
-  ])
+  return buildSettingsCacheKey(configuration)
 }
 
 function cleanup (exporter, testConfiguration) {
@@ -155,6 +123,8 @@ function setApiKey (apiKey) {
 
 describe('ci-visibility settings filesystem cache', () => {
   let originalApiKey
+  let originalEnvApiKey
+  let originalEnvFsCache
   let originalFsCache
   let originalSettingsCachePath
   let originalForceCoverage
@@ -165,6 +135,8 @@ describe('ci-visibility settings filesystem cache', () => {
 
   beforeEach(() => {
     originalApiKey = getConfig().DD_API_KEY
+    originalEnvApiKey = process.env.DD_API_KEY
+    originalEnvFsCache = process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
     originalFsCache = getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
     originalSettingsCachePath = process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE
     originalForceCoverage = getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE
@@ -199,9 +171,16 @@ describe('ci-visibility settings filesystem cache', () => {
       process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE = originalSettingsCachePath
     }
 
-    delete process.env.DD_API_KEY
-
-    delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+    if (originalEnvApiKey === undefined) {
+      delete process.env.DD_API_KEY
+    } else {
+      process.env.DD_API_KEY = originalEnvApiKey
+    }
+    if (originalEnvFsCache === undefined) {
+      delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+    } else {
+      process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = originalEnvFsCache
+    }
     if (settingsCacheDir) {
       fs.rmSync(settingsCacheDir, { recursive: true, force: true })
     }
@@ -641,6 +620,42 @@ describe('ci-visibility settings filesystem cache', () => {
           assert.ok(libraryConfig, 'malformed cache must fall back to a real config')
           assert.strictEqual(libraryConfig.requireGit, false)
           assert.strictEqual(scope.isDone(), true, 'malformed cache should fall back to the API')
+          cleanup(exporter, TEST_CONFIGURATION)
+          done()
+        } catch (err) {
+          cleanup(exporter, TEST_CONFIGURATION)
+          done(err)
+        }
+      })
+    })
+  }
+
+  for (const [description, getTimestamp] of [
+    ['a missing timestamp', () => undefined],
+    ['a nonnumeric timestamp', () => 'not-a-number'],
+    ['a future timestamp', () => Date.now() + 60_000],
+  ]) {
+    it(`treats cache data with ${description} as a miss and falls back to the API`, (done) => {
+      const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
+      exporter._resolveCanUseCiVisProtocol(true)
+      cleanup(exporter, TEST_CONFIGURATION)
+
+      const key = cacheKeyForConfiguration(exporter, TEST_CONFIGURATION)
+      fs.writeFileSync(
+        getCachePath(key),
+        JSON.stringify({ timestamp: getTimestamp(), data: validCachedSettings }),
+        'utf8'
+      )
+
+      const scope = nock(url)
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify(SETTINGS_NO_GIT))
+
+      exporter.getLibraryConfiguration(TEST_CONFIGURATION, (err, libraryConfig) => {
+        try {
+          assert.strictEqual(err, null, 'invalid timestamp must not surface an error')
+          assert.strictEqual(libraryConfig.requireGit, false)
+          assert.strictEqual(scope.isDone(), true, 'invalid timestamp should fall back to the API')
           cleanup(exporter, TEST_CONFIGURATION)
           done()
         } catch (err) {
