@@ -9,7 +9,7 @@ const { afterEach, describe, it } = require('mocha')
 
 const { withDatadogTurbopack } = require('..')
 const loader = require('../src/loader')
-const { createEsmProxy, createManifest } = require('../src/targets')
+const { createEsmProxy, createManifest, getRelativeTargets } = require('../src/targets')
 
 const directories = []
 
@@ -95,6 +95,34 @@ describe('datadog-turbopack loader', () => {
     assert.match(result, /require\("\.\.\/\.\.\/node_modules\/\.cache\/dd-trace\/turbopack\/0\.mjs"\)/)
   })
 
+  it('does not rewrite an application-defined require function', () => {
+    const directory = createPackage('ai', { main: 'index.mjs', type: 'module' })
+    const target = write(directory, 'index.mjs', 'export const generateText = () => {}')
+    const proxy = write(directory, '../.cache/dd-trace/turbopack/ai.mjs', 'export {}')
+    const appPath = write(path.dirname(path.dirname(directory)), 'route.js', '')
+    const source = "function load (require) { return require('ai') }"
+
+    const result = loader.rewriteImports(source, appPath, {
+      [realpath(target)]: { esm: true, proxyPath: realpath(proxy) },
+    })
+
+    assert.equal(result, source)
+  })
+
+  it('preserves configured aliases for instrumented packages', () => {
+    const directory = createPackage('ai', { main: 'index.mjs', type: 'module' })
+    const target = write(directory, 'index.mjs', 'export const generateText = () => {}')
+    const proxy = write(directory, '../.cache/dd-trace/turbopack/ai.mjs', 'export {}')
+    const appPath = write(path.dirname(path.dirname(directory)), 'route.js', '')
+    const source = "import { generateText } from 'ai'"
+
+    const result = loader.rewriteImports(source, appPath, {
+      [realpath(target)]: { esm: true, proxyPath: realpath(proxy) },
+    }, ['ai'])
+
+    assert.equal(result, source)
+  })
+
   it('preserves ESM modules without an instrumented import', () => {
     const directory = createPackage('openai', { type: 'module' })
     const client = write(directory, 'client.mjs', "import { Models } from './resources/models.mjs'\nexport { Models }")
@@ -132,6 +160,29 @@ describe('datadog-turbopack loader', () => {
     ))})`))
   })
 
+  it('publishes supported relative runtime modules through the bundler channel', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    const resourcePath = write(directory, 'generated/prisma/runtime/library.js', 'module.exports = {}')
+    const manifestPath = write(directory, 'manifest.json', JSON.stringify({
+      relativeTargets: [{
+        file: 'runtime/library.js',
+        name: './runtime/library.js',
+        path: './runtime/library.js',
+        version: '6.1.0',
+      }],
+      targets: {},
+    }))
+
+    const result = loader.call({
+      getOptions: () => ({ manifestPath }),
+      resourcePath,
+    }, 'module.exports = {}')
+
+    assert.match(result, /package: "\.\/runtime\/library\.js"/)
+    assert.match(result, /path: "\.\/runtime\/library\.js"/)
+  })
+
   it('publishes generated ESM proxies through the existing bundler channel', async () => {
     const directory = createPackage('openai', { type: 'module' })
     const resourcePath = write(directory, 'index.mjs', 'export const client = true')
@@ -143,16 +194,77 @@ describe('datadog-turbopack loader', () => {
       path.dirname(proxyPath), require.resolve('dc-polyfill')
     ))}`))
     assert.match(result, /dd-trace:bundler:load/)
-    assert.match(result, /apply \(exports\)/)
+    assert.match(result, /apply \(exports, patchDefault\)/)
+    assert.match(result, /set\.default\?\.\(exports\)/)
     assert.doesNotMatch(result, /import-in-the-middle/)
   })
 })
 
 describe('datadog-turbopack configuration', () => {
+  it('limits relative runtime rules to compatible package versions', () => {
+    require('../../datadog-instrumentations/src/prisma')
+
+    const supported = getRelativeTargets([{ name: '@prisma/client', version: '6.1.0' }], new Set())
+    const unsupported = getRelativeTargets([{ name: '@prisma/client', version: '7.0.0' }], new Set())
+
+    assert.deepEqual(supported, [{
+      file: 'runtime/library.js',
+      name: './runtime/library.js',
+      path: './runtime/library.js',
+      version: '6.1.0',
+    }])
+    assert.deepEqual(unsupported, [])
+  })
+
+  it('discovers nested copies of supported packages', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const nested = createPackageIn(directory, 'parent/node_modules/ioredis', {
+      main: 'index.js',
+      version: '5.0.0',
+    })
+    const target = write(nested, 'index.js', 'module.exports = {}')
+
+    const manifest = await createManifest(directory)
+    const targets = JSON.parse(fs.readFileSync(manifest.path, 'utf8')).targets
+
+    assert.equal(targets[realpath(target)].name, 'ioredis')
+  })
+
+  it('does not generate targets for disabled integrations', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const packagePath = createPackageIn(directory, 'ioredis', { main: 'index.js', version: '5.0.0' })
+    write(packagePath, 'index.js', 'module.exports = {}')
+    const previous = process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+    process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'ioredis'
+
+    try {
+      assert.deepEqual(await createManifest(directory), {})
+    } finally {
+      if (previous === undefined) delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+      else process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = previous
+    }
+  })
+
   it('does not add rules when no supported package is installed', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
     directories.push(directory)
     fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const config = { rules: { '*.js': { loaders: ['existing-loader'] } } }
+
+    assert.strictEqual(await withDatadogTurbopack(config, directory), config)
+  })
+
+  it('leaves configuration unchanged when its cache directory cannot be created', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const packagePath = createPackageIn(directory, 'ioredis', { main: 'index.js', version: '5.0.0' })
+    write(packagePath, 'index.js', 'module.exports = {}')
+    fs.writeFileSync(path.join(directory, 'node_modules', '.cache'), '')
     const config = { rules: { '*.js': { loaders: ['existing-loader'] } } }
 
     assert.strictEqual(await withDatadogTurbopack(config, directory), config)
@@ -186,7 +298,7 @@ describe('datadog-turbopack configuration', () => {
     const once = await withDatadogTurbopack({}, directory)
     const twice = await withDatadogTurbopack(once, directory)
 
-    for (const extension of ['*.js', '*.cjs', '*.mjs']) {
+    for (const extension of ['*.js', '*.cjs', '*.mjs', '*.jsx', '*.ts', '*.tsx']) {
       const rules = [twice.rules[extension]].flat()
       assert.equal(rules.filter(rule => rule.loaders.some(item => item.loader.includes('datadog-turbopack'))).length, 1)
     }
@@ -208,6 +320,10 @@ describe('datadog-turbopack configuration', () => {
     assert.match('const { generateText } = require("ai")', applicationRule.condition.all[2].content)
     assert.doesNotMatch('import { something } from "unrelated"', applicationRule.condition.all[2].content)
     assert.equal(applicationRule.loaders[0].options.rewriteApplicationImports, true)
+    assert.match(applicationRule.loaders[0].options.manifestHash, /^[a-f0-9]{64}$/)
+    assert.deepEqual(applicationRule.loaders[0].options.aliases, [])
+    assert.ok(config.rules['*.ts'])
+    assert.ok(config.rules['*.tsx'])
   })
 })
 
