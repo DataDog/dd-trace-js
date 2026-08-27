@@ -665,6 +665,46 @@ describe('Plugin', () => {
             ])
           })
         })
+
+        describe('with DBM propagation - promises', () => {
+          const queryLog = []
+          let connection
+          let mariadb
+
+          afterEach(async () => {
+            await connection.end()
+            await agent.close()
+            queryLog.length = 0
+          })
+
+          beforeEach(async () => {
+            tracer = await agent.load('mariadb', {
+              dbmPropagationMode: 'service',
+              service: 'dbm-service',
+            })
+            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+
+            connection = await mariadb.createConnection({
+              database: 'db',
+              host: 'localhost',
+              logger: { query: message => queryLog.push(message) },
+              user: 'root',
+            })
+          })
+
+          it('writes the injected query to the driver while retaining the original span resource', async () => {
+            const sql = 'SELECT 11 AS dbm_probe'
+
+            await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: /SELECT 11 AS dbm_probe/ }),
+              connection.query(sql),
+            ])
+
+            const message = queryLog.find(message => message.includes(sql))
+            assert.match(message, /^QUERY: \/\*dddb='db',dddbs='dbm-service'/)
+            assert.match(message, /\*\/ SELECT 11 AS dbm_probe(?: - parameters:\[\])?$/)
+          })
+        })
       }
 
       describe('with a connection pool - callbacks', () => {

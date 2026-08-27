@@ -15,6 +15,7 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 
 const SpanContext = require('./span_context')
+const createSpanContext = require('./span_context_factory')
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
@@ -70,9 +71,11 @@ class DatadogTracer {
   }
 
   startSpan (name, options = {}) {
-    const parent = options.childOf
-      ? getContext(options.childOf)
-      : getParent(options.references)
+    const parent = options.context
+      ? null
+      : options.childOf
+        ? getContext(options.childOf)
+        : getParent(options.references)
 
     const span = new Span(this, this._processor, this._prioritySampler, {
       operationName: options.operationName || name,
@@ -82,6 +85,7 @@ class DatadogTracer {
       traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled,
       integrationName: options.integrationName,
       links: options.links,
+      ...(options.context ? { context: options.context } : undefined),
     }, this._debug)
 
     // As per unified service tagging spec if a span is created with a service name different from the global
@@ -102,6 +106,18 @@ class DatadogTracer {
     span.addTags(options.tags)
 
     return span
+  }
+
+  /**
+   * Reserve a local propagation context without allocating a span.
+   *
+   * @param {Span|SpanContext|null|undefined} parent
+   * @returns {SpanContext}
+   */
+  createSpanContext (parent) {
+    return createSpanContext(this, parent ? getContext(parent) : null, {
+      traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled,
+    })
   }
 
   /**

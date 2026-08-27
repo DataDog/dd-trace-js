@@ -28,6 +28,7 @@ describe('Tracer', () => {
   let exporter
   let agentExporter
   let spanContext
+  let createSpanContext
   let fields
   let carrier
   let TextMapPropagator
@@ -67,6 +68,7 @@ describe('Tracer', () => {
     SpanProcessor = sinon.stub().returns(processor)
 
     spanContext = {}
+    createSpanContext = sinon.stub().returns(spanContext)
     carrier = {}
 
     TextMapPropagator = sinon.stub()
@@ -100,6 +102,7 @@ describe('Tracer', () => {
     Tracer = proxyquire('../../src/opentracing/tracer', {
       './span': Span,
       './span_context': SpanContext,
+      './span_context_factory': createSpanContext,
       '../priority_sampler': PrioritySampler,
       '../span_processor': SpanProcessor,
       './propagation/text_map': TextMapPropagator,
@@ -151,6 +154,20 @@ describe('Tracer', () => {
 
       sinon.assert.calledWith(spanCtx.setTag, 'service.name', 'service')
       assert.strictEqual(testSpan, span)
+    })
+
+    it('should materialize a previously reserved context', () => {
+      const reserved = new SpanContext()
+      fields.context = reserved
+
+      tracer = new Tracer(config)
+      tracer.startSpan('name', fields)
+
+      sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
+        operationName: 'name',
+        parent: null,
+        context: reserved,
+      })
     })
 
     it('should start a span that is the child of a span', () => {
@@ -338,6 +355,19 @@ describe('Tracer', () => {
       })
 
       assert.strictEqual(testSpan, span)
+    })
+  })
+
+  describe('createSpanContext', () => {
+    it('should reserve a context without creating a span', () => {
+      const parent = new SpanContext()
+      tracer = new Tracer(config)
+
+      assert.strictEqual(tracer.createSpanContext(parent), spanContext)
+      sinon.assert.calledWith(createSpanContext, tracer, parent, {
+        traceId128BitGenerationEnabled: undefined,
+      })
+      sinon.assert.notCalled(Span)
     })
   })
 

@@ -13,6 +13,35 @@ const parseTags = require('../../../datadog-core/src/utils/src/parse-tags')
 const { getNextLineNumber } = require('./helpers')
 
 describe('OuboundPlugin', () => {
+  it('applies outbound policy before finishing an externally owned span', () => {
+    const instance = new OutboundPlugin()
+    sinon.stub(instance, '_tracerConfig').value({ spanComputePeerService: true })
+    const tags = { 'out.host': 'database.example.com' }
+    const span = {
+      addTags: sinon.stub(),
+      context: () => ({ getTags: () => tags }),
+      finish: sinon.stub(),
+    }
+
+    instance.finishSpan(span)
+
+    sinon.assert.calledOnceWithExactly(span.addTags, {
+      'peer.service': 'database.example.com',
+      '_dd.peer.service.source': 'out.host',
+    })
+    sinon.assert.calledOnce(span.finish)
+  })
+
+  it('can suppress the connect subscription for exact lifecycle processors', () => {
+    class ExactLifecyclePlugin extends OutboundPlugin {
+      static traceConnect = false
+
+      addTraceSubs () {}
+    }
+
+    assert.strictEqual(new ExactLifecyclePlugin()._subscriptions.length, 0)
+  })
+
   describe('peer service decision', () => {
     let instance = null
     let computePeerServiceStub = null

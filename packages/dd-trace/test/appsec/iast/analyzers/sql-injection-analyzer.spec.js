@@ -57,8 +57,13 @@ describe('sql-injection-analyzer', () => {
   const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
     './injection-analyzer': InjectionAnalyzer,
   })
+  const sourceRegistry = {
+    registerContributor: sinon.stub(),
+    unregisterContributor: sinon.stub(),
+  }
   const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
     './stored-injection-analyzer': StoredInjectionAnalyzer,
+    '../../../events/source-registry': { getEventSourceRegistry: () => sourceRegistry },
   })
 
   afterEach(() => {
@@ -83,6 +88,49 @@ describe('sql-injection-analyzer', () => {
     assert.strictEqual(sqlInjectionAnalyzer._bindings[2]._channel.name, 'datadog:knex:raw:start')
     assert.strictEqual(sqlInjectionAnalyzer._bindings[3]._channel.name, 'datadog:knex:raw:subscribes')
     assert.strictEqual(sqlInjectionAnalyzer._bindings[4]._channel.name, 'datadog:knex:raw:finish')
+  })
+
+  it('should register MariaDB analysis as a sanitized database contributor', () => {
+    sourceRegistry.registerContributor.resetHistory()
+    sourceRegistry.unregisterContributor.resetHistory()
+    sqlInjectionAnalyzer.configure(false)
+    sqlInjectionAnalyzer.configure(true)
+
+    sinon.assert.calledOnceWithExactly(
+      sourceRegistry.unregisterContributor,
+      'db.query',
+      'iast.sql-injection'
+    )
+    sinon.assert.calledOnce(sourceRegistry.registerContributor)
+    const [operation, id, contributor] = sourceRegistry.registerContributor.firstCall.args
+    assert.strictEqual(operation, 'db.query')
+    assert.strictEqual(id, 'iast.sql-injection')
+    assert.deepStrictEqual(contributor.sources, new Set(['mariadb']))
+
+    const analyze = sinon.stub(sqlInjectionAnalyzer, 'analyze')
+    const store = { iastContext: true }
+    const nextStore = contributor.start({
+      facts: { statement: 'SELECT 1' },
+      source: { system: 'mariadb' },
+    }, store)
+
+    sinon.assert.calledOnceWithExactly(analyze, 'SELECT 1', store, 'MYSQL')
+    assert.deepStrictEqual(nextStore, {
+      iastContext: true,
+      sqlAnalyzed: true,
+      sqlParentStore: store,
+    })
+
+    analyze.resetHistory()
+    assert.strictEqual(contributor.start({
+      facts: { statement: 'SELECT 2' },
+      source: { system: 'mariadb' },
+    }), undefined)
+    assert.strictEqual(contributor.start({
+      facts: { statement: 'SELECT 3' },
+      source: { system: 'cosmosdb' },
+    }, store), undefined)
+    sinon.assert.notCalled(analyze)
   })
 
   it('should not detect vulnerability when no query', () => {
@@ -201,6 +249,12 @@ describe('sql-injection-analyzer', () => {
 
       sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
         './injection-analyzer': InjectionAnalyzer,
+        '../../../events/source-registry': {
+          getEventSourceRegistry: () => ({
+            registerContributor: sinon.stub(),
+            unregisterContributor: sinon.stub(),
+          }),
+        },
       })
       analyze = sinon.stub(sqlInjectionAnalyzer, 'analyze')
       sqlInjectionAnalyzer.configure(true)

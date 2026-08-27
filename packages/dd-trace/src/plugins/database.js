@@ -31,7 +31,7 @@ class DatabasePlugin extends StoragePlugin {
 
   /**
    * @override
-   * @param {boolean | import('../config/config-base') & {enabled: boolean}} config
+   * @param {boolean | Record<string, unknown> & {enabled: boolean}} config
    */
   configure (config) {
     super.configure(config)
@@ -83,9 +83,11 @@ class DatabasePlugin extends StoragePlugin {
    * @param {import('../../../..').Span} span
    * @param {string} serviceName
    * @param {boolean} disableFullMode
+   * @param {Record<string, unknown>} [config] Database source configuration.
+   * @returns {string | null | undefined} DBM propagation comment.
    */
-  createDbmComment (span, serviceName, disableFullMode = false) {
-    const mode = this.config.dbmPropagationMode
+  createDbmComment (span, serviceName, disableFullMode = false, config = this.config) {
+    const mode = config.dbmPropagationMode
 
     if (mode === 'disabled') {
       return null
@@ -99,7 +101,7 @@ class DatabasePlugin extends StoragePlugin {
 
     // Add propagation hash if process tags are enabled and either SQL base hash injection is enabled
     // or dynamic_service mode implicitly enables it
-    if (propagationHash.isEnabled() && (this.config['dbm.injectSqlBaseHash'] || mode === 'dynamic_service')) {
+    if (propagationHash.isEnabled() && (config['dbm.injectSqlBaseHash'] || mode === 'dynamic_service')) {
       const hashBase64 = propagationHash.getHashBase64()
       if (hashBase64) {
         dbmComment += `,ddsh='${hashBase64}'`
@@ -123,16 +125,17 @@ class DatabasePlugin extends StoragePlugin {
    * @param {string} query
    * @param {string} serviceName
    * @param {boolean} disableFullMode
+   * @param {Record<string, unknown>} [config] Database source configuration.
    * @returns {string}
    */
-  injectDbmQuery (span, query, serviceName, disableFullMode = false) {
-    const dbmTraceComment = this.createDbmComment(span, serviceName, disableFullMode)
+  injectDbmQuery (span, query, serviceName, disableFullMode = false, config = this.config) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName, disableFullMode, config)
 
     if (!dbmTraceComment) {
       return query
     }
 
-    return this.config.appendComment
+    return config.appendComment
       ? `${query} /*${dbmTraceComment}*/`
       : `/*${dbmTraceComment}*/ ${query}`
   }

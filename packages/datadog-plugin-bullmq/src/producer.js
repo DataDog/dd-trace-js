@@ -1,295 +1,214 @@
 'use strict'
 
 const log = require('../../dd-trace/src/log')
-const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
-const { getFilter } = require('./filter')
 
-const filteredJobs = Symbol('bullmq.filteredJobs')
-
-// Customer-controlled metadata may be malformed JSON. Returning a fresh `{}`
-// on parse failure keeps the publish path alive instead of throwing into
-// `Queue.add` / `Queue.addBulk`.
+/**
+ * Parse BullMQ telemetry metadata without allowing customer-controlled JSON to break publishing.
+ *
+ * @param {unknown} raw Serialized BullMQ telemetry metadata.
+ * @returns {Record<string, unknown>} Parsed customer metadata.
+ */
 function parseTelemetryMetadata (raw) {
-  if (!raw) return {}
+  if (typeof raw !== 'string' || raw.length === 0) return {}
   try {
-    return JSON.parse(raw)
+    const metadata = JSON.parse(raw)
+    return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {}
   } catch (error) {
     log.warn('bullmq: ignoring malformed telemetry.metadata: %s', error.message)
     return {}
   }
 }
 
-class BaseBullmqProducerPlugin extends ProducerPlugin {
-  static id = 'bullmq'
-
-  asyncEnd (ctx) {
-    ctx.currentStore?.span?.finish()
-  }
-
-  start (ctx) {
-    if (!this.config.dsmEnabled) return
-    const { span } = ctx.currentStore
-    this.setProducerCheckpoint(span, ctx)
-  }
-
-  bindStart (ctx) {
-    let instrument = true
-    if (this.config.producerFilter) {
-      try {
-        instrument = this.shouldInstrument(ctx)
-      } catch (error) {
-        log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
-      }
-    }
-
-    if (!instrument) {
-      return { noop: true }
-    }
-
-    const { resource, meta } = this.getSpanData(ctx)
-    const span = this.startSpan({
-      resource,
-      meta: {
-        component: 'bullmq',
-        'span.kind': 'producer',
-        'messaging.system': 'bullmq',
-        'messaging.operation': 'publish',
-        ...meta,
-      },
-    }, ctx)
-
-    this.injectTraceContext(span, ctx)
-
-    return ctx.currentStore
-  }
-
-  configure (config) {
-    if (typeof config === 'boolean') {
-      return super.configure(config)
-    }
-    return super.configure({ ...config, producerFilter: getFilter(config) })
-  }
-
-  shouldInstrument (ctx) {
-    throw new Error('shouldInstrument must be implemented by subclass')
-  }
-
-  getSpanData (ctx) {
-    throw new Error('getSpanData must be implemented by subclass')
-  }
-
-  injectTraceContext (span, ctx) {
-    throw new Error('injectTraceContext must be implemented by subclass')
-  }
-
-  // Returned so setProducerCheckpoint can mutate it without a second parse.
-  _injectIntoOpts (span, opts) {
-    const carrier = {}
-    this.tracer.inject(span, 'text_map', carrier)
-    const metadata = parseTelemetryMetadata(opts.telemetry?.metadata)
-    metadata._datadog = carrier
-    opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
-    return metadata
-  }
-
-  setProducerCheckpoint (span, ctx) {
-    const { queueName, payloadSize, optsTarget } = this.getDsmData(ctx)
-    const edgeTags = ['direction:out', `topic:${queueName}`, 'type:bullmq']
-    const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-
-    if (optsTarget && typeof optsTarget === 'object') {
-      const metadata = ctx._ddMetadata ?? parseTelemetryMetadata(optsTarget.telemetry?.metadata)
-      DsmPathwayCodec.encode(dataStreamsContext, metadata._datadog || metadata)
-      if (!metadata._datadog) metadata._datadog = {}
-      optsTarget.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
-    }
-  }
-
-  getDsmData (ctx) {
-    throw new Error('getDsmData must be implemented by subclass')
-  }
-}
-
-class QueueAddPlugin extends BaseBullmqProducerPlugin {
-  static prefix = 'tracing:orchestrion:bullmq:Queue_add'
-
-  shouldInstrument (ctx) {
-    return this.config.producerFilter({
-      name: ctx.arguments?.[0],
-      data: ctx.arguments?.[1],
-      opts: ctx.arguments?.[2],
-      queueName: ctx.self?.name,
-    })
-  }
-
-  getSpanData (ctx) {
-    const queueName = ctx.self?.name || 'bullmq'
-    return {
-      resource: queueName,
-      meta: {
-        'messaging.destination.name': ctx.self?.name,
-      },
-    }
-  }
-
-  #ensureOpts (ctx) {
-    let opts = ctx.arguments?.[2]
-    if (!opts || typeof opts !== 'object') {
-      opts = {}
-      if (ctx.arguments.length <= 2) {
-        Array.prototype.push.call(ctx.arguments, opts)
-      } else {
-        ctx.arguments[2] = opts
-      }
-    }
-    return opts
-  }
-
-  injectTraceContext (span, ctx) {
-    const opts = this.#ensureOpts(ctx)
-    ctx._ddMetadata = this._injectIntoOpts(span, opts)
-  }
-
-  getDsmData (ctx) {
-    const data = ctx.arguments?.[1]
-    return {
-      queueName: ctx.self?.name || 'bullmq',
-      payloadSize: data ? getMessageSize(data) : 0,
-      optsTarget: this.#ensureOpts(ctx),
-    }
-  }
-}
-
-class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
-  static prefix = 'tracing:orchestrion:bullmq:Queue_addBulk'
-
-  shouldInstrument (ctx) {
-    const jobs = this.#getFilteredJobs(ctx)
-    // Empty bulk calls are publish attempts and should keep producing a span.
-    return jobs === undefined || jobs.length > 0 || ctx.arguments?.[0].length === 0
-  }
-
-  #getFilteredJobs (ctx) {
-    if (Object.hasOwn(ctx, filteredJobs)) return ctx[filteredJobs]
-
-    const jobs = ctx.arguments?.[0]
-    if (!Array.isArray(jobs)) return
-
-    let allowedJobs
-    if (this.config.producerFilter) {
-      const queueName = ctx.self?.name
-      try {
-        allowedJobs = []
-        for (const job of jobs) {
-          if (job && this.config.producerFilter({ name: job.name, data: job.data, opts: job.opts, queueName })) {
-            allowedJobs.push(job)
-          }
-        }
-      } catch (error) {
-        log.error('bullmq: producerFilter threw, filtering is disabled: %s', error.message)
-        allowedJobs = jobs.filter(Boolean)
-      }
+/**
+ * Ensure Queue.add has a mutable options argument.
+ *
+ * @param {object} context Raw Queue.add invocation.
+ * @returns {object} Mutable job options.
+ */
+function ensureQueueOpts (context) {
+  let opts = context.arguments[2]
+  if (!opts || typeof opts !== 'object') {
+    opts = {}
+    if (context.arguments.length <= 2) {
+      Array.prototype.push.call(context.arguments, opts)
     } else {
-      allowedJobs = jobs
-    }
-
-    ctx[filteredJobs] = allowedJobs
-    return allowedJobs
-  }
-
-  operationName () {
-    return 'bullmq.addBulk'
-  }
-
-  getSpanData (ctx) {
-    const queueName = ctx.self?.name || 'bullmq'
-    const jobs = ctx.arguments?.[0]
-    return {
-      resource: queueName,
-      meta: {
-        'messaging.destination.name': ctx.self?.name,
-        'messaging.batch.message_count': jobs?.length,
-      },
+      context.arguments[2] = opts
     }
   }
+  return opts
+}
 
-  injectTraceContext (span, ctx) {
-    const jobs = this.#getFilteredJobs(ctx)
-    if (!jobs) return
+/**
+ * Preserve customer telemetry metadata while writing one Datadog carrier.
+ *
+ * @param {object} opts Mutable BullMQ job options.
+ * @param {Record<string, unknown>} carrier Datadog propagation carrier.
+ * @returns {void}
+ */
+function writeCarrier (opts, carrier) {
+  const metadata = parseTelemetryMetadata(opts.telemetry?.metadata)
+  metadata._datadog = carrier
+  opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
+}
 
-    const cache = []
-    for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i]
-      if (!job) continue
-      job.opts ||= {}
-      cache[i] = this._injectIntoOpts(span, job.opts)
-    }
-    ctx._ddMetadata = cache
-  }
+/**
+ * Normalize one Queue.add invocation.
+ *
+ * @param {object} context Raw Queue.add invocation.
+ * @returns {object} Semantic messaging facts.
+ */
+function startQueue (context) {
+  const [name, data, opts] = context.arguments
+  const queueName = context.self?.name
 
-  setProducerCheckpoint (span, ctx) {
-    const jobs = this.#getFilteredJobs(ctx) || []
-    const queueName = ctx.self?.name || 'bullmq'
-    const edgeTags = ['direction:out', `topic:${queueName}`, 'type:bullmq']
-    const cache = ctx._ddMetadata
-
-    for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i]
-      if (!job?.data) continue
-      const payloadSize = getMessageSize(job.data)
-      const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-      const metadata = cache?.[i] ?? parseTelemetryMetadata(job.opts.telemetry?.metadata)
-      DsmPathwayCodec.encode(dataStreamsContext, metadata._datadog || metadata)
-      if (!metadata._datadog) metadata._datadog = {}
-      job.opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
-    }
+  return {
+    action: 'add',
+    destination: queueName || 'bullmq',
+    filterCount: 1,
+    messages: [{
+      body: data,
+      filter: { data, name, opts, queueName },
+      index: 0,
+    }],
   }
 }
 
-class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
-  static prefix = 'tracing:orchestrion:bullmq:FlowProducer_add'
+/**
+ * Write Queue.add propagation back to its options argument.
+ *
+ * @param {object} context Raw Queue.add invocation.
+ * @param {object} facts Normalized messaging facts.
+ * @param {{carriers: Array<{carrier: object}>}} updates Processor-owned carrier updates.
+ * @returns {void}
+ */
+function updateQueue (context, facts, updates) {
+  writeCarrier(ensureQueueOpts(context), updates.carriers[0].carrier)
+}
 
-  shouldInstrument (ctx) {
-    const flow = ctx.arguments?.[0]
-    return this.config.producerFilter({
-      name: flow?.name,
-      data: flow?.data,
-      opts: flow?.opts,
-      queueName: flow?.queueName,
+/**
+ * Normalize one Queue.addBulk invocation.
+ *
+ * @param {object} context Raw Queue.addBulk invocation.
+ * @returns {object} Semantic messaging facts.
+ */
+function startBulk (context) {
+  const jobs = context.arguments[0]
+  const queueName = context.self?.name
+  if (!Array.isArray(jobs)) {
+    return {
+      action: 'addBulk',
+      destination: queueName || 'bullmq',
+      messages: undefined,
+    }
+  }
+
+  const messages = []
+  for (let index = 0; index < jobs.length; index++) {
+    const job = jobs[index]
+    if (!job) continue
+    messages.push({
+      body: job.data,
+      filter: {
+        data: job.data,
+        name: job.name,
+        opts: job.opts,
+        queueName,
+      },
+      index,
     })
   }
 
-  getSpanData (ctx) {
-    const flow = ctx.arguments?.[0]
-    const queueName = flow?.queueName || 'bullmq'
-    return {
-      resource: queueName,
-      meta: {
-        'messaging.destination.name': flow?.queueName,
-      },
-    }
-  }
-
-  injectTraceContext (span, ctx) {
-    const flow = ctx.arguments?.[0]
-    if (!flow) return
-    flow.opts ||= {}
-    ctx._ddMetadata = this._injectIntoOpts(span, flow.opts)
-  }
-
-  getDsmData (ctx) {
-    const flow = ctx.arguments?.[0]
-    if (!flow) {
-      return { queueName: 'bullmq', payloadSize: 0, optsTarget: undefined }
-    }
-    flow.opts ||= {}
-    return {
-      queueName: flow.queueName || 'bullmq',
-      payloadSize: flow.data ? getMessageSize(flow.data) : 0,
-      optsTarget: flow.opts,
-    }
+  return {
+    action: 'addBulk',
+    destination: queueName || 'bullmq',
+    filterCount: jobs.length,
+    messageCount: jobs.length,
+    messages,
   }
 }
 
-module.exports = [QueueAddPlugin, QueueAddBulkPlugin, FlowProducerAddPlugin]
+/**
+ * Write Queue.addBulk propagation back to accepted job options.
+ *
+ * @param {object} context Raw Queue.addBulk invocation.
+ * @param {object} facts Normalized messaging facts.
+ * @param {{carriers: Array<{carrier: object, index: number}>}} updates Processor-owned carrier updates.
+ * @returns {void}
+ */
+function updateBulk (context, facts, updates) {
+  const jobs = context.arguments[0]
+  for (const { carrier, index } of updates.carriers) {
+    const job = jobs[index]
+    job.opts ||= {}
+    writeCarrier(job.opts, carrier)
+  }
+}
+
+/**
+ * Normalize one FlowProducer.add invocation.
+ *
+ * @param {object} context Raw FlowProducer.add invocation.
+ * @returns {object} Semantic messaging facts.
+ */
+function startFlow (context) {
+  const flow = context.arguments[0]
+  const queueName = flow?.queueName
+
+  return {
+    action: 'add',
+    destination: queueName || 'bullmq',
+    filterCount: 1,
+    messages: [{
+      body: flow?.data,
+      filter: {
+        data: flow?.data,
+        name: flow?.name,
+        opts: flow?.opts,
+        queueName,
+      },
+      index: 0,
+      writable: Boolean(flow),
+    }],
+  }
+}
+
+/**
+ * Write FlowProducer.add propagation back to its root job options.
+ *
+ * @param {object} context Raw FlowProducer.add invocation.
+ * @param {object} facts Normalized messaging facts.
+ * @param {{carriers: Array<{carrier: object}>}} updates Processor-owned carrier updates.
+ * @returns {void}
+ */
+function updateFlow (context, facts, updates) {
+  const flow = context.arguments[0]
+  flow.opts ||= {}
+  writeCarrier(flow.opts, updates.carriers[0].carrier)
+}
+
+module.exports = {
+  targets: [
+    {
+      lifecycle: 'async',
+      module: 'bullmq',
+      name: 'Queue_add',
+      start: startQueue,
+      updateSource: updateQueue,
+    },
+    {
+      lifecycle: 'async',
+      module: 'bullmq',
+      name: 'Queue_addBulk',
+      start: startBulk,
+      updateSource: updateBulk,
+    },
+    {
+      lifecycle: 'async',
+      module: 'bullmq',
+      name: 'FlowProducer_add',
+      start: startFlow,
+      updateSource: updateFlow,
+    },
+  ],
+}
+module.exports.parseTelemetryMetadata = parseTelemetryMetadata

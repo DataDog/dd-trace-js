@@ -27,9 +27,11 @@ class OutboundPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('connect', ctx => {
-      this.connect(ctx)
-    })
+    if (this.constructor.traceConnect !== false) {
+      this.addTraceSub('connect', ctx => {
+        this.connect(ctx)
+      })
+    }
   }
 
   /**
@@ -106,10 +108,12 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {{ currentStore?: { span: import('../../../..').Span } }} ctx
+   * Apply outbound finalization to a span owned by an external lifecycle manager.
+   *
+   * @param {import('../../../..').Span | undefined} span Span to finish.
+   * @returns {void}
    */
-  finish (ctx) {
-    const span = ctx?.currentStore?.span || this.activeSpan
+  finishSpan (span) {
     this.tagPeerService(span)
 
     if (IS_SERVERLESS) {
@@ -117,7 +121,7 @@ class OutboundPlugin extends TracingPlugin {
       if (peerHostname) span.setTag('peer.service', peerHostname)
     }
 
-    super.finish(...arguments)
+    super.finishSpan(span)
   }
 
   /**

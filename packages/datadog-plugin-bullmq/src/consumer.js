@@ -1,83 +1,53 @@
 'use strict'
 
 const log = require('../../dd-trace/src/log')
-const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { getMessageSize } = require('../../dd-trace/src/datastreams')
 
-class BullmqConsumerPlugin extends ConsumerPlugin {
-  static id = 'bullmq'
-  static prefix = 'tracing:orchestrion:bullmq:Worker_callProcessJob'
+/**
+ * Remove and return Datadog propagation fields from BullMQ telemetry metadata.
+ *
+ * @param {object | undefined} job BullMQ job.
+ * @returns {object | undefined} Extracted Datadog carrier.
+ */
+function extractDatadog (job) {
+  const metadataString = job?.opts?.telemetry?.metadata
+  if (!metadataString) return
 
-  asyncEnd (ctx) {
-    ctx.currentStore?.span?.finish()
-  }
+  try {
+    const metadata = JSON.parse(metadataString)
+    const carrier = metadata._datadog
+    if (!carrier) return
 
-  start (ctx) {
-    if (!this.config.dsmEnabled) return
-    const { span } = ctx.currentStore
-    this.setConsumerCheckpoint(span, ctx)
-  }
-
-  bindStart (ctx) {
-    const job = ctx.arguments?.[0]
-    const queueName = job?.queueName || job?.queue?.name || 'bullmq'
-
-    let childOf
-    const ddCarrier = this._extractDatadog(job)
-    if (ddCarrier) {
-      ctx._ddCarrier = ddCarrier
-      childOf = this.tracer.extract('text_map', ddCarrier)
-    }
-
-    this.startSpan({
-      childOf,
-      resource: queueName,
-      meta: {
-        component: 'bullmq',
-        'span.kind': 'consumer',
-        'messaging.system': 'bullmq',
-        'messaging.destination.name': queueName,
-        'messaging.operation': 'process',
-      },
-    }, ctx)
-
-    return ctx.currentStore
-  }
-
-  setConsumerCheckpoint (span, ctx) {
-    const job = ctx.arguments?.[0]
-    if (!job) return
-
-    const queueName = job.queueName || job.queue?.name || 'bullmq'
-    const payloadSize = job.data ? getMessageSize(job.data) : 0
-
-    const ddCarrier = ctx._ddCarrier
-    if (ddCarrier) {
-      this.tracer.decodeDataStreamsContext(ddCarrier)
-    }
-
-    const edgeTags = ['direction:in', `topic:${queueName}`, 'type:bullmq']
-    this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-  }
-
-  _extractDatadog (job) {
-    const metadataStr = job?.opts?.telemetry?.metadata
-    if (!metadataStr) return
-
-    try {
-      const metadata = JSON.parse(metadataStr)
-      const ddCarrier = metadata._datadog
-      if (!ddCarrier) return
-
-      // Avoid `delete`'s hidden-class transition; JSON.stringify also omits undefined values.
-      metadata._datadog = undefined
-      job.opts.telemetry.metadata = JSON.stringify(metadata)
-
-      return ddCarrier
-    } catch (error) {
-      log.warn('bullmq: skipping _datadog extract on malformed telemetry.metadata: %s', error.message)
-    }
+    metadata._datadog = undefined
+    job.opts.telemetry.metadata = JSON.stringify(metadata)
+    return carrier
+  } catch (error) {
+    log.warn('bullmq: skipping _datadog extract on malformed telemetry.metadata: %s', error.message)
   }
 }
 
-module.exports = BullmqConsumerPlugin
+/**
+ * Normalize one Worker.callProcessJob invocation.
+ *
+ * @param {object} context Raw Worker.callProcessJob invocation.
+ * @returns {object} Semantic messaging facts.
+ */
+function startConsumer (context) {
+  const job = context.arguments[0]
+
+  return {
+    action: 'processJob',
+    body: job?.data,
+    carrier: extractDatadog(job),
+    destination: job?.queueName || job?.queue?.name || 'bullmq',
+  }
+}
+
+module.exports = {
+  targets: [{
+    lifecycle: 'async',
+    module: 'bullmq',
+    name: 'Worker_callProcessJob',
+    start: startConsumer,
+  }],
+}
+module.exports.extractDatadog = extractDatadog

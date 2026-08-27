@@ -45,6 +45,22 @@ const wrappedPools = new WeakSet()
 let currentPoolAcquireTiming
 let explicitPoolAcquire = false
 
+/**
+ * Apply source write-back before starting a MariaDB v3 command.
+ *
+ * MariaDB resolves query completion through command `resolve` / `reject` callbacks, so the command wrapper remains
+ * the lifecycle owner instead of treating `start()` as an async method.
+ *
+ * @param {Function} start Original command start method.
+ * @param {unknown[]} args Command start arguments.
+ * @param {{sql: unknown}} ctx Query lifecycle context.
+ * @returns {unknown} Original command result.
+ */
+function runCommandStart (start, args, ctx) {
+  this.sql = ctx.sql
+  return start.apply(this, args)
+}
+
 function wrapCommandStart (start, ctx) {
   return shimmer.wrapFunction(start, start => function (...args) {
     if (!startCh.hasSubscribers) return start.apply(this, args)
@@ -71,7 +87,7 @@ function wrapCommandStart (start, ctx) {
       }
     })
 
-    return startCh.runStores(ctx, start, this, ...args)
+    return startCh.runStores(ctx, runCommandStart, this, start, args, ctx)
   })
 }
 
@@ -91,6 +107,19 @@ function wrapCommand (Command) {
   }
 }
 
+/**
+ * Apply source write-back before starting a MariaDB v2 query.
+ *
+ * @param {Function} query Original query method.
+ * @param {ArgumentsLike} args Query arguments.
+ * @param {{sql: unknown}} ctx Query lifecycle context.
+ * @returns {unknown} Original query result.
+ */
+function runQuery (query, args, ctx) {
+  args[0] = ctx.sql
+  return query.apply(this, args)
+}
+
 function createWrapQuery (options) {
   return function wrapQuery (query) {
     return function (sql) {
@@ -98,7 +127,7 @@ function createWrapQuery (options) {
 
       const ctx = { sql, conf: options }
 
-      return startCh.runStores(ctx, query, this, ...arguments)
+      return startCh.runStores(ctx, runQuery, this, query, arguments, ctx)
         .then(result => {
           ctx.result = result
           finishCh.publish(ctx)
@@ -138,7 +167,7 @@ function createWrapQueryCallback (options) {
         arguments[arguments.length - 1] = wrapper()
       }
 
-      return startCh.runStores(ctx, query, this, ...arguments)
+      return startCh.runStores(ctx, runQuery, this, query, arguments, ctx)
     }
   }
 }

@@ -114,6 +114,18 @@ describe('DatabasePlugin DBM caching', () => {
     assert.match(plugin.createDbmComment(span, 'svc'), /dde='newenv'/)
   })
 
+  it('uses an explicit source configuration without replacing the plugin configuration', () => {
+    plugin.configure({ dbmPropagationMode: 'disabled', enabled: true })
+    const span = makeSpan({ 'db.name': 'mydb', 'out.host': 'host1' })
+    const sourceConfig = { appendComment: true, dbmPropagationMode: 'service' }
+
+    assert.strictEqual(
+      plugin.injectDbmQuery(span, 'SELECT 1', 'svc', false, sourceConfig),
+      "SELECT 1 /*dddb='mydb',dddbs='svc',dde='tester',ddh='host1',ddps='svc',ddpv='1.0.0'*/"
+    )
+    assert.strictEqual(plugin.config.dbmPropagationMode, 'disabled')
+  })
+
   it('appends ddprs= when peer-service is in scope', () => {
     const span = makeSpan({ 'db.name': 'mydb', 'out.host': 'host1' })
     plugin.getPeerService = () => ({
