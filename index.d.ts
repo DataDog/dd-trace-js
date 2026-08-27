@@ -831,15 +831,6 @@ declare namespace tracer {
          */
         initializationTimeoutMs?: number
         /**
-         * Whether to emit server-side flag evaluation counts to the EVP flagevaluation track.
-         * Can be configured via DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED environment variable.
-         *
-         * @default true
-         * @env DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        evaluationCountsEnabled?: boolean
-        /**
          * Configuration for span enrichment with feature flag evaluation data.
          */
         spanEnrichment?: {

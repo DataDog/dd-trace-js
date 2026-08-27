@@ -38,7 +38,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
     this.hooks.push(new EvalMetricsHook(config))
 
-    if (config.experimental.flaggingProvider.evaluationCountsEnabled) {
+    if (config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED) {
       this.#flagEvalEVPWriter = new FlagEvaluationsWriter(config)
       const writer = this.#flagEvalEVPWriter
       this.hooks.push(new FlagEvalEVPHook(writer))
