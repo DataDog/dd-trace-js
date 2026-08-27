@@ -31,6 +31,7 @@ describe('TracerProxy', () => {
   let Config
   let config
   let runtimeMetrics
+  let dynamicInstrumentation
   let log
   let profiler
   let appsec
@@ -180,7 +181,7 @@ describe('TracerProxy', () => {
       runtimeMetrics: {
         enabled: false,
       },
-      setRemoteConfig: sinon.spy(),
+      setRemoteConfig: sinon.stub(),
       llmobs: {},
     }
     Config = sinon.stub().returns(config)
@@ -188,6 +189,13 @@ describe('TracerProxy', () => {
     runtimeMetrics = {
       start: sinon.spy(),
       flush: sinon.spy(),
+    }
+
+    dynamicInstrumentation = {
+      configure: sinon.spy(),
+      isStarted: sinon.stub().returns(false),
+      start: sinon.spy(),
+      stop: sinon.spy(),
     }
 
     registerTelemetryFlusher = sinon.stub().returns(() => {})
@@ -273,6 +281,7 @@ describe('TracerProxy', () => {
       './config': Config,
       './plugin_manager': PluginManager,
       './runtime_metrics': runtimeMetrics,
+      './debugger': dynamicInstrumentation,
       './log': log,
       './profiler': profiler,
       './appsec': appsec,
@@ -300,6 +309,25 @@ describe('TracerProxy', () => {
   })
 
   describe('uninitialized', () => {
+    it('does not load inactive feature modules when required', () => {
+      const entry = require.resolve('..')
+      const optionalModules = [
+        require.resolve('../src/debugger'),
+        require.resolve('../src/llmobs/experiments/noop'),
+        require.resolve('../src/service-naming/schemas/v0'),
+        require.resolve('../src/service-naming/schemas/v1'),
+      ]
+      const script = `
+        const optionalModules = ${JSON.stringify(optionalModules)}
+        require(${JSON.stringify(entry)})
+        process.stdout.write(JSON.stringify(optionalModules.map(path => require.cache[path] !== undefined)))
+      `
+      const result = spawnSync(process.execPath, ['--eval', script], { encoding: 'utf8', timeout: 5_000 })
+
+      assert.strictEqual(result.status, 0, result.stderr)
+      assert.deepStrictEqual(JSON.parse(result.stdout), [false, false, false, false])
+    })
+
     describe('init', () => {
       it('should return itself', () => {
         assert.strictEqual(proxy.init(), proxy)
@@ -392,6 +420,24 @@ describe('TracerProxy', () => {
         }
       })
 
+      it('does not load Dynamic Instrumentation while disabled', () => {
+        proxy.init()
+
+        sinon.assert.notCalled(dynamicInstrumentation.configure)
+        sinon.assert.notCalled(dynamicInstrumentation.isStarted)
+        sinon.assert.notCalled(dynamicInstrumentation.start)
+        sinon.assert.notCalled(dynamicInstrumentation.stop)
+      })
+
+      it('starts and configures Dynamic Instrumentation when enabled', () => {
+        config.dynamicInstrumentation.enabled = true
+
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, rc)
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.configure, config)
+      })
+
       it('should enable the IAST rewriter when IAST is enabled', () => {
         config.iast.enabled = true
 
@@ -441,6 +487,38 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(config.setRemoteConfig, conf)
         sinon.assert.calledWith(tracer.configure, config)
         sinon.assert.calledWith(pluginManager.configure, config)
+      })
+
+      it('does not load Dynamic Instrumentation for a disabled remote config update', () => {
+        config.setRemoteConfig.callsFake(conf => {
+          config.dynamicInstrumentation.enabled = conf['dynamicInstrumentation.enabled']
+        })
+        proxy.init()
+
+        handlers.get('APM_TRACING')(createApmTracingTransaction('debugger-disabled', {
+          dynamic_instrumentation_enabled: false,
+        }))
+
+        sinon.assert.notCalled(dynamicInstrumentation.configure)
+        sinon.assert.notCalled(dynamicInstrumentation.isStarted)
+        sinon.assert.notCalled(dynamicInstrumentation.start)
+        sinon.assert.notCalled(dynamicInstrumentation.stop)
+      })
+
+      it('loads Dynamic Instrumentation when remote config enables it', () => {
+        config.setRemoteConfig.callsFake(conf => {
+          config.dynamicInstrumentation.enabled = conf['dynamicInstrumentation.enabled']
+        })
+        proxy.init()
+
+        handlers.get('APM_TRACING')(createApmTracingTransaction('debugger-enabled', {
+          dynamic_instrumentation_enabled: true,
+        }))
+
+        sinon.assert.calledOnce(dynamicInstrumentation.isStarted)
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, rc)
+        sinon.assert.notCalled(dynamicInstrumentation.configure)
+        sinon.assert.notCalled(dynamicInstrumentation.stop)
       })
 
       it('should support enabling debug logs for tracer flares', () => {

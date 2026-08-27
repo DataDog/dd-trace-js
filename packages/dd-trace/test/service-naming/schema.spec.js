@@ -31,6 +31,28 @@ describe('Service naming', () => {
       assert.strictEqual(singleton.version, 'MyShinyNewVersion')
     })
 
+    it('uses the configured schema on first operation name resolution', () => {
+      singleton.configure({ spanAttributeSchema: 'v0' })
+      assert.strictEqual(singleton.opName('messaging', 'producer', 'kafkajs', {}), 'kafka.produce')
+
+      singleton.configure({ spanAttributeSchema: 'v1' })
+      assert.strictEqual(singleton.opName('messaging', 'producer', 'kafkajs', {}), 'kafka.send')
+    })
+
+    it('uses v1 service naming with a v0 operation schema when configured', () => {
+      singleton.configure({
+        service: 'test-service',
+        spanAttributeSchema: 'v0',
+        spanRemoveIntegrationFromService: true,
+      })
+
+      assert.deepStrictEqual(
+        singleton.serviceName('messaging', 'producer', 'kafkajs', {}),
+        { name: 'test-service', source: undefined }
+      )
+      assert.strictEqual(singleton.opName('messaging', 'producer', 'kafkajs', {}), 'kafka.produce')
+    })
+
     describe('Name resolution proxy', () => {
       let singleton
       let versions

@@ -7,7 +7,6 @@ const { getEnvironmentVariable } = require('./config/helper')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager, startupLog } = require('./startup-log')
-const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
@@ -41,6 +40,13 @@ const OFFLINE_VALIDATION_EXPORTERS = new Set([
 const OPENFEATURE_STATE_NOOP = 0
 const OPENFEATURE_STATE_LAZY = 1
 const OPENFEATURE_STATE_ACTIVE = 2
+
+let dynamicInstrumentation
+
+function getDynamicInstrumentation () {
+  dynamicInstrumentation ??= require('./debugger')
+  return dynamicInstrumentation
+}
 
 class LazyModule {
   constructor (provider) {
@@ -215,7 +221,7 @@ class Tracer extends NoopProxy {
         }
 
         if (config.dynamicInstrumentation.enabled) {
-          DynamicInstrumentation.start(config, rc)
+          getDynamicInstrumentation().start(config, rc)
         }
 
         const openfeatureRemoteConfig = require('./openfeature/remote_config')
@@ -406,7 +412,7 @@ class Tracer extends NoopProxy {
     if (this._tracingInitialized) {
       this._tracer.configure(config)
       this._pluginManager.configure(config)
-      DynamicInstrumentation.configure(config)
+      dynamicInstrumentation?.configure(config)
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
     }
@@ -423,6 +429,9 @@ class Tracer extends NoopProxy {
    */
   #updateDebugger (config, rc) {
     const shouldBeEnabled = config.dynamicInstrumentation.enabled
+    if (!shouldBeEnabled && dynamicInstrumentation === undefined) return
+
+    const DynamicInstrumentation = getDynamicInstrumentation()
     const isCurrentlyStarted = DynamicInstrumentation.isStarted()
 
     if (shouldBeEnabled) {

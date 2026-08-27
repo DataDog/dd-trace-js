@@ -1,5 +1,27 @@
 'use strict'
 
+/** @typedef {import('./schemas/definition')} SchemaDefinition */
+
+/**
+ * @param {Record<string, SchemaDefinition | undefined>} schemas
+ * @param {string} version
+ * @returns {SchemaDefinition | undefined}
+ */
+function getSchema (schemas, version) {
+  const schema = schemas[version]
+  if (schema !== undefined) return schema
+
+  if (version === 'v0') {
+    schemas.v0 = require('./schemas/v0')
+    return schemas.v0
+  }
+
+  if (version === 'v1') {
+    schemas.v1 = require('./schemas/v1')
+    return schemas.v1
+  }
+}
+
 class SchemaManager {
   /**
    * @type {object}
@@ -9,12 +31,11 @@ class SchemaManager {
     spanRemoveIntegrationFromService: false,
   }
 
-  schemas = {
-    v0: require('./schemas/v0'),
-  }
+  /** @type {Record<string, SchemaDefinition | undefined>} */
+  schemas = {}
 
   get schema () {
-    return this.schemas[this.version]
+    return getSchema(this.schemas, this.version)
   }
 
   get version () {
@@ -44,9 +65,8 @@ class SchemaManager {
    * @returns {object} {name, source}
    */
   serviceName (type, kind, plugin, opts) {
-    const schema = this.shouldUseConsistentServiceNaming
-      ? this.schemas.v1
-      : this.schema
+    const version = this.shouldUseConsistentServiceNaming ? 'v1' : this.version
+    const schema = getSchema(this.schemas, version)
 
     return schema.getServiceName(type, kind, plugin, { ...opts, tracerService: this.config.service })
   }
@@ -58,16 +78,6 @@ class SchemaManager {
    * @param {string} [config.service]
    */
   configure (config) {
-    const { spanAttributeSchema, spanRemoveIntegrationFromService } = config
-
-    if (!this.schemas.v0 && spanAttributeSchema === 'v0') {
-      this.schemas.v0 = require('./schemas/v0')
-    }
-
-    if (!this.schemas.v1 && (spanAttributeSchema === 'v1' || spanRemoveIntegrationFromService)) {
-      this.schemas.v1 = require('./schemas/v1')
-    }
-
     this.config = config
   }
 }
