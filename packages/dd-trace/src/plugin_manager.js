@@ -155,6 +155,11 @@ module.exports = class PluginManager {
 
   // TODO: figure out a better way to handle this
   #getSharedConfig (name) {
+    const tracerConfig = /** @type {
+      import('./config/config-base') & {
+        getOrigin: (name: import('./config/config-types').ConfigPath) => string
+      }
+    } */ (this._tracerConfig)
     const {
       logInjection,
       serviceMapping,
@@ -185,7 +190,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       experimental,
       DD_TRACE_RESOURCE_RENAMING_ENABLED,
-    } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
+    } = tracerConfig
 
     const sharedConfig = {
       codeOriginForSpans,
@@ -208,6 +213,11 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       experimental,
       resourceRenamingEnabled: DD_TRACE_RESOURCE_RENAMING_ENABLED,
+    }
+
+    if (DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      sharedConfig.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES_ORIGIN =
+        tracerConfig.getOrigin('DD_TRACE_HTTP_CLIENT_ERROR_STATUSES')
     }
 
     if (logInjection !== undefined) {

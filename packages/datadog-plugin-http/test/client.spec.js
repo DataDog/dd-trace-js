@@ -175,6 +175,42 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with OTel semantics and an explicit default client error range', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '400-499'
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+        })
+
+        it('does not mark a 5xx client response as an error', done => {
+          const app = express()
+          app.get('/broken', (req, res) => {
+            res.status(503).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'http.response.status_code': '503' },
+                error: 0,
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/broken`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+      })
+
       describe('without configuration', () => {
         beforeEach(async () => {
           tracer = await agent.load('http', { server: false })

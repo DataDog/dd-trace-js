@@ -947,6 +947,15 @@ describe('Config', () => {
         { name: 'DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', value: '500-599', origin: 'env_var' },
       ])
     })
+
+    it('should retain the env_var origin when explicitly configured to the default value', () => {
+      process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '400-499'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '400-499')
+      assert.strictEqual(config.getOrigin('DD_TRACE_HTTP_CLIENT_ERROR_STATUSES'), 'env_var')
+    })
   })
 
   it('should initialize with the correct defaults', () => {
