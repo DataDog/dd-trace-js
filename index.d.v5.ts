@@ -358,6 +358,16 @@ declare namespace tracer {
     links?: { context: SpanContext, attributes?: Object }[]
   }
 
+  export interface Exception {
+    message: string;
+    name?: string;
+    stack?: string;
+  }
+
+  export type SpanEventAttributeValue =
+    string | number | boolean | Array<string> | Array<number> | Array<boolean>;
+  export type SpanEventAttributes = Record<string, SpanEventAttributeValue>;
+
   /**
    * Span represents a logical unit of work as part of a broader Trace.
    * Examples of span might include remote procedure calls or a in-process
@@ -367,6 +377,14 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
+
+    /**
+     * Records an exception as a span event without marking the span as failed.
+     *
+     * @param exception The exception to record.
+     * @param attributes Additional attributes for the exception event.
+     */
+    recordException (exception: Exception, attributes?: SpanEventAttributes): void;
 
     /**
      * Causally links another span to the current span
@@ -2368,7 +2386,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) module.
      */
-    interface ai extends Instrumentation {}
+    interface ai extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
@@ -2386,13 +2404,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) module.
      */
-    interface claude_agent_sdk extends Instrumentation {}
+    interface claude_agent_sdk extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
      * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
      */
-    interface anthropic extends Instrumentation {}
+    interface anthropic extends Instrumentation, LLMObsIntegration {}
 
     /**
      * Currently this plugin automatically instruments
@@ -2453,7 +2471,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
-    interface aws_sdk extends Instrumentation {
+    interface aws_sdk extends Instrumentation, LLMObsIntegration {
       /**
        * The service name to be used for this plugin. When a function is used it is called with the AWS
        * request parameters (e.g. `{ TableName }` for DynamoDB, `{ Bucket }` for S3) and its return value
@@ -2688,13 +2706,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
     */
-  interface google_cloud_vertexai extends Integration {}
+  interface google_cloud_vertexai extends Integration, LLMObsIntegration {}
 
   /**
     * This plugin automatically instruments the
     * [@google-genai](https://github.com/googleapis/js-genai) module.
     */
-  interface google_genai extends Integration {}
+  interface google_genai extends Integration, LLMObsIntegration {}
 
   /** @hidden */
   interface ExecutionArgs {
@@ -3052,7 +3070,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [langgraph](https://github.com/npmjs/package/langgraph) library.
      */
-    interface langgraph extends Instrumentation {}
+    interface langgraph extends Instrumentation, LLMObsIntegration {}
 
       /**
      * This plugin automatically instruments the
@@ -3212,13 +3230,13 @@ declare namespace tracer {
      * [DogStatsD](https://docs.datadoghq.com/developers/dogstatsd/?tab=hostagent#setup)
      * in the agent.
      */
-    interface openai extends Instrumentation {}
+    interface openai extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
      * [@openai/agents](https://www.npmjs.com/package/@openai/agents) library.
      */
-    interface openai_agents extends Instrumentation {}
+    interface openai_agents extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
@@ -3867,7 +3885,7 @@ declare namespace tracer {
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
        */
-      enable (options: LLMObsEnableOptions): void,
+      enable (options: LLMObsRuntimeEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
@@ -4047,6 +4065,8 @@ declare namespace tracer {
     ) => any | Promise<any>
 
     interface CreateDatasetOptions {
+      /** Override the configured project for this dataset. */
+      projectName?: string
       description?: string
       records?: Array<{
         id?: string,
@@ -4061,6 +4081,8 @@ declare namespace tracer {
       name: string
       dataset: Dataset
       task: ExperimentTask
+      /** Override the configured project for this experiment. */
+      projectName?: string
       /** Evaluators keyed by metric label, or named functions. */
       evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
       /** Summary evaluators keyed by metric label, or named functions. */
@@ -4068,6 +4090,8 @@ declare namespace tracer {
       description?: string
       config?: Record<string, JSONType>
       tags?: Record<string, string>
+      /** Number of full experiment runs to execute. Default 1. */
+      runs?: number
     }
 
     interface ExperimentRunOptions {
@@ -4077,9 +4101,13 @@ declare namespace tracer {
       retryDelay?: (attempt: number) => number
       /** Reject on the first task/evaluator error instead of capturing it. Default false. */
       throwOnErrors?: boolean
+      /** Maximum number of task/evaluator executions to process concurrently. Default 10. */
+      concurrency?: number
     }
 
     interface PullDatasetOptions {
+      /** Override the configured project for this dataset pull. */
+      projectName?: string
       /** Dataset version to pull. Defaults to latest. */
       version?: number
       /** Wait until at least this many records are readable (absorbs write lag). */
@@ -4108,17 +4136,21 @@ declare namespace tracer {
 
     interface ExperimentRun {
       runId: string
+      /** 1-based run iteration. */
       runIteration: number
+      /** Whether this run had a task, row-evaluator, or summary-evaluator error. */
+      hasError: boolean
       rows: ExperimentResultRow[]
       summaryEvaluations: Record<string, { value: any, error: string | null }>
     }
 
     interface ExperimentResult {
       experimentId: string
+      /** Rows from the first run, kept as a compatibility alias. */
       rows: ExperimentResultRow[]
-      /** Single-run summary evaluator results. */
+      /** Summary evaluator results from the first run, kept as a compatibility alias. */
       summaryEvaluations: Record<string, { value: any, error: string | null }>
-      /** Experiment runs. P0 Node experiments currently return one run. */
+      /** All experiment runs. */
       runs: ExperimentRun[]
       /** Dashboard URL for the experiment. */
       url: string
@@ -4231,6 +4263,8 @@ declare namespace tracer {
       description (): string
       id (): string | null
       projectId (): string | null
+      /** Project associated with the client used to create or pull this dataset. */
+      projectName (): string | null | undefined
       version (): number | null
       latestVersion (): number | null
       records (): Array<{
@@ -4758,6 +4792,13 @@ declare namespace tracer {
      */
     interface LLMObsEnableOptions {
       /**
+       * The name of the LLM Observability project used for experiments.
+       * @env DD_LLMOBS_PROJECT_NAME
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      projectName?: string,
+
+      /**
        * The name of your ML application.
        * @env DD_LLMOBS_ML_APP
        * Programmatic configuration takes precedence over the environment variables listed above.
@@ -4780,6 +4821,10 @@ declare namespace tracer {
        */
       sampleRate?: number,
     }
+
+    /** Options accepted by the deprecated runtime `llmobs.enable()` method. */
+    type LLMObsRuntimeEnableOptions = Omit<LLMObsEnableOptions, 'projectName'>
+
     /** @hidden */
     type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm'
   }

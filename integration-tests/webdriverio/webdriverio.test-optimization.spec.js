@@ -9,6 +9,7 @@ const path = require('node:path')
 
 const {
   getCiVisAgentlessConfig,
+  getCiVisEvpProxyConfig,
   sandboxCwd,
   useSandbox,
 } = require('../helpers')
@@ -139,6 +140,16 @@ function countRequests (payloads, requestPath) {
   return payloads.filter(({ url }) => url.endsWith(requestPath)).length
 }
 
+/**
+ * Gets automatic log-submission requests from intake payloads.
+ *
+ * @param {object[]} payloads
+ * @returns {object[]}
+ */
+function getLogRequests (payloads) {
+  return payloads.filter(({ url }) => url.startsWith('/api/v2/logs?'))
+}
+
 for (const version of versions) {
   describe(`webdriverio@${version} Test Optimization`, function () {
     this.timeout(90_000)
@@ -154,6 +165,9 @@ for (const version of versions) {
       `@wdio/jasmine-framework@${version}`,
       `@wdio/local-runner@${version}`,
       `@wdio/mocha-framework@${version}`,
+      'bunyan',
+      'pino',
+      'winston',
     ], true, [
       './integration-tests/webdriverio/fixtures/*',
       './integration-tests/ci-visibility/dynamic-instrumentation/dependency.js',
@@ -287,6 +301,93 @@ for (const version of versions) {
             expectedExitCode,
             workingDirectory
           )
+        }
+
+        if (version === 'latest') {
+          describe('automatic log submission', () => {
+            const loggers = {
+              bunyan: { level: 30, messageKey: 'msg' },
+              pino: { level: 30, messageKey: 'msg' },
+              winston: { level: 'info', messageKey: 'message' },
+            }
+
+            for (const [loggerName, { level: expectedLevel, messageKey }] of Object.entries(loggers)) {
+              describe(`with ${loggerName}`, () => {
+                it('submits correlated logs', async () => {
+                  await runScenario('automaticLogSubmission', 1, payloads => {
+                    const logRequests = getLogRequests(payloads)
+
+                    assert.ok(logRequests.length > 0)
+                    for (const logRequest of logRequests) {
+                      assert.strictEqual(logRequest.headers['dd-api-key'], '1')
+                      assert.strictEqual(logRequest.headers['content-type'], 'application/json')
+                      assert.strictEqual(
+                        logRequest.url,
+                        `/api/v2/logs?ddsource=${loggerName}&service=my-service`
+                      )
+                    }
+
+                    const logMessages = logRequests.flatMap(({ logMessage }) => logMessage)
+                    assert.strictEqual(logMessages.length, 2)
+
+                    const logMessage = logMessages.find(
+                      logMessage => logMessage[messageKey] === 'Hello from WebdriverIO!'
+                    )
+                    const afterHookLogMessage = logMessages.find(
+                      logMessage => logMessage[messageKey] === 'Hello from WebdriverIO after hook!'
+                    )
+                    const test = getEvents(payloads).find(event => event.type === 'test').content
+
+                    assert.ok(logMessage)
+                    assert.strictEqual(logMessage.level, expectedLevel)
+                    assert.deepStrictEqual(Object.keys(logMessage.dd).sort(), ['service', 'span_id', 'trace_id'])
+                    assert.strictEqual(logMessage.dd.service, 'my-service')
+                    assert.strictEqual(logMessage.dd.span_id, test.span_id.toString())
+                    assert.strictEqual(logMessage.dd.trace_id, test.trace_id.toString())
+                    assert.ok(afterHookLogMessage)
+                    assert.strictEqual(afterHookLogMessage.level, expectedLevel)
+                  }, {
+                    DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                    DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                    DD_SERVICE: 'my-service',
+                    TEST_LOGGER: loggerName,
+                  })
+
+                  assert.match(testOutput, /Hello from WebdriverIO!/)
+                })
+
+                it('does not submit logs when automatic submission is disabled', async () => {
+                  await runScenario('automaticLogSubmission', 1, payloads => {
+                    assert.strictEqual(getLogRequests(payloads).length, 0)
+                  }, {
+                    DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                    DD_SERVICE: 'my-service',
+                    TEST_LOGGER: loggerName,
+                  })
+
+                  assert.match(testOutput, /Hello from WebdriverIO!/)
+                  assert.match(testOutput, /span_id/)
+                })
+
+                it('does not submit logs when the API key is missing', async () => {
+                  await runScenario('automaticLogSubmission', 1, payloads => {
+                    assert.strictEqual(getLogRequests(payloads).length, 0)
+                  }, {
+                    ...getCiVisEvpProxyConfig(receiver.port),
+                    DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                    DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                    DD_API_KEY: '',
+                    DD_SERVICE: 'my-service',
+                    NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
+                    TEST_LOGGER: loggerName,
+                  })
+
+                  assert.match(testOutput, /Hello from WebdriverIO!/)
+                  assert.match(testOutput, /span_id/)
+                })
+              })
+            }
+          })
         }
 
         it('requests enabled data once and keeps TIA disabled across parallel workers', async () => {

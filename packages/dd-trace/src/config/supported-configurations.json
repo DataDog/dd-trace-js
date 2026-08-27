@@ -1351,6 +1351,16 @@
         "default": null
       }
     ],
+    "DD_LLMOBS_PROJECT_NAME": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "llmobs.projectName"
+        ],
+        "default": null
+      }
+    ],
     "DD_LLMOBS_SAMPLE_RATE": [
       {
         "implementation": "A",
@@ -3007,6 +3017,13 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true"
+      }
+    ],
+    "DD_TRACE_HTTP_CLIENT_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "400-499"
       }
     ],
     "DD_TRACE_HTTP_ENABLED": [

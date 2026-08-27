@@ -141,7 +141,7 @@ function setInputPath (newPath) {
  * @returns {string} The serialized tags.
  */
 function buildTags (tags) {
-  const serializedTags = []
+  let serializedTags = ''
 
   for (const [key, rawValue] of tags) {
     if (rawValue === undefined) continue
@@ -151,8 +151,9 @@ function buildTags (tags) {
       continue
     }
 
-    serializedTags.push(`${key}:${rawValue}`)
+    if (serializedTags) serializedTags += ','
+    serializedTags += `${key}:${rawValue}`
   }
 
-  return serializedTags.join(',')
+  return serializedTags
 }

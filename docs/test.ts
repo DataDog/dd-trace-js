@@ -294,12 +294,16 @@ const openSearchOptions: plugins.opensearch = {
 };
 
 tracer.use('ai', true)
+tracer.use('ai', { llmobs: false })
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
+tracer.use('anthropic', { llmobs: false });
 tracer.use('claude-agent-sdk');
+tracer.use('claude-agent-sdk', { llmobs: false });
 tracer.use('avsc');
 tracer.use('aws-sdk');
+tracer.use('aws-sdk', { llmobs: false });
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('aws-sdk', awsSdkServiceFunctionOptions);
 tracer.use('azure-cosmos');
@@ -331,7 +335,9 @@ tracer.use('fetch');
 tracer.use('fetch', httpClientOptions);
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
+tracer.use('google-cloud-vertexai', { llmobs: false });
 tracer.use('google-genai');
+tracer.use('google-genai', { llmobs: false });
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
@@ -376,6 +382,7 @@ tracer.use('langchain');
 tracer.use('langchain', { llmobs: false });
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('langgraph');
+tracer.use('langgraph', { llmobs: false });
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);
@@ -395,6 +402,8 @@ tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
 tracer.use('openai-agents');
+tracer.use('openai-agents', { llmobs: false });
+tracer.use('openai', { llmobs: false });
 tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
@@ -450,6 +459,13 @@ span = tracer.startSpan('test', {
 });
 span = tracer.startSpan('test', { childOf: null })
 span = tracer.startSpan('test', { integrationName: 'testIntegration' })
+span.recordException(new Error('payment declined'), {
+  handled: true,
+  attempt: 1,
+  stages: ['authorize', 'capture']
+})
+// @ts-expect-error Span event attribute arrays must be homogeneous.
+span.recordException(new Error('payment declined'), { stages: ['authorize', 1] })
 
 tracer.trace('test', () => { })
 tracer.trace('test', { tags: { foo: 'bar' } }, () => { })

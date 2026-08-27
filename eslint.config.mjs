@@ -22,10 +22,12 @@ import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
 import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
+import eslintNoUnnecessaryArrayJoin from './eslint-rules/eslint-no-unnecessary-array-join.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
 import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
 import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+import eslintRequireAgentStop from './eslint-rules/eslint-require-agent-stop.mjs'
 import eslintRequireBooleanAssertMessage from './eslint-rules/eslint-require-boolean-assert-message.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
@@ -469,11 +471,13 @@ export default [
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
           'eslint-no-process-env-disable': eslintNoProcessEnvDisable,
+          'eslint-no-unnecessary-array-join': eslintNoUnnecessaryArrayJoin,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
           'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
+          'eslint-require-agent-stop': eslintRequireAgentStop,
           'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
           'eslint-require-export-exists': eslintRequireExportExists,
           'eslint-timer-unref': eslintTimerUnref,
@@ -671,6 +675,7 @@ export default [
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
       'eslint-rules/eslint-non-prefix-env-names': 'error',
+      'eslint-rules/eslint-no-unnecessary-array-join': 'error',
       'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 
@@ -987,6 +992,7 @@ export default [
     },
     rules: {
       'eslint-rules/eslint-prefer-assert-match': 'error',
+      'eslint-rules/eslint-require-agent-stop': 'error',
       // TODO: Re-enable this rule once we have a way to fix the false positives or have Node.js report better errors.
       'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',

@@ -53,6 +53,16 @@ const fixtureModulePath = path.join(
   'build',
   'index.js'
 )
+const runnerFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-runner.mjs')
+const runnerFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'runner',
+  'build',
+  'index.js'
+)
 const jasmineFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-jasmine-framework.mjs')
 const jasmineFixtureModulePath = path.join(
   __dirname,
@@ -111,6 +121,16 @@ describe('webdriverio instrumentation', () => {
     assert.notStrictEqual(rewrittenSource, source)
     assert.match(rewrittenSource, /orchestrion:@wdio\/local-runner:LocalRunner_run/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/local-runner:LocalRunner_shutdown/)
+    assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+  })
+
+  it('rewrites the ESM worker runner and waits before worker exit', () => {
+    const source = fs.readFileSync(runnerFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, runnerFixtureModulePath, 'module')
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/runner:BaseReporter_waitForSync/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
   })
@@ -291,6 +311,44 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(steps, ['asyncEnd', 'coordinator', 'rejected'])
     } finally {
       shutdownCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('waits for worker completion before Runner._shutdown emits exit', async () => {
+    const source = fs.readFileSync(runnerFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, runnerFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-runner-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const reporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync')
+    const steps = []
+    const subscriber = {
+      asyncEnd (context) {
+        steps.push('asyncEnd')
+        context.resolveCallback = onDone => {
+          setImmediate(() => {
+            steps.push('logs')
+            onDone()
+          })
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    reporterWaitForSyncCh.subscribe(subscriber)
+
+    try {
+      const { Runner } = await import(pathToFileURL(outputPath))
+      const runner = new Runner()
+      runner.onEvent = (event, code) => steps.push(`${event}:${code}`)
+      const resultPromise = runner._shutdown(0)
+
+      await Promise.resolve()
+
+      assert.deepStrictEqual(steps, ['asyncEnd'])
+      assert.strictEqual(await resultPromise, 0)
+      assert.deepStrictEqual(steps, ['asyncEnd', 'logs', 'exit:0'])
+    } finally {
+      reporterWaitForSyncCh.unsubscribe(subscriber)
     }
   })
 

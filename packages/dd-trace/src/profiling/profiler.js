@@ -95,6 +95,10 @@ class Profiler extends EventEmitter {
     for (const key of keys) {
       this.#customLabelKeys.add(key)
     }
+    this.#applyCustomLabelKeys()
+  }
+
+  #applyCustomLabelKeys () {
     if (this.#profilers) {
       for (const profiler of this.#profilers) {
         profiler.setCustomLabelKeys?.(this.#customLabelKeys)
@@ -180,6 +184,9 @@ class Profiler extends EventEmitter {
     this.#profilers = profilers
     this.#uploadCompression = uploadCompression
     this.#systemInfoReport = systemInfoReport
+    if (this.#customLabelKeys.size > 0) {
+      this.#applyCustomLabelKeys()
+    }
 
     this._setInterval()
     // Log errors if the source map finder fails, but don't prevent the rest
