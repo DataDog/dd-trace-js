@@ -446,25 +446,24 @@ function sentenceCase (subject) {
  * @param {Change[]} breakingChanges
  */
 function renderMarkdown (sections, contributors, breakingChanges) {
-  const lines = []
+  let markdown = ''
 
   if (breakingChanges.length > 0) {
-    lines.push('### Breaking Changes')
+    markdown = '### Breaking Changes\n'
     for (const change of breakingChanges.sort(compareChanges)) {
-      lines.push(renderChange(change))
+      markdown += `${renderChange(change)}\n`
     }
-    lines.push('')
   }
 
   for (const category of CATEGORY_ORDER) {
     const changes = sections.get(category)
     if (!changes?.length) continue
 
-    lines.push(renderHeading(category))
+    if (markdown) markdown += '\n'
+    markdown += `${renderHeading(category)}\n`
     for (const change of changes.sort(compareChanges)) {
-      lines.push(renderChange(change))
+      markdown += `${renderChange(change)}\n`
     }
-    lines.push('')
   }
 
   if (contributors.size > 0) {
@@ -474,13 +473,17 @@ function renderMarkdown (sections, contributors, breakingChanges) {
     }
     if (iconContributors.length > 0) {
       iconContributors.sort(compareContributors)
-      const avatars = []
-      for (const contributor of iconContributors) avatars.push(renderContributor(contributor))
-      lines.push('### Contributors', '', avatars.join(' '), '')
+      let avatars = ''
+      for (const contributor of iconContributors) {
+        if (avatars) avatars += ' '
+        avatars += renderContributor(contributor)
+      }
+      if (markdown) markdown += '\n'
+      markdown += `### Contributors\n\n${avatars}\n`
     }
   }
 
-  return lines.join('\n')
+  return markdown
 }
 
 /**
