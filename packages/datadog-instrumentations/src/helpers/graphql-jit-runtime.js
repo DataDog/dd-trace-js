@@ -264,15 +264,18 @@ function createGraphqlJitRuntime ({
     context.resolvers[resolverName] = unwrapResolver(context.resolvers[resolverName])
 
     const args = resolverCall.slice(openParenthesis + 1, -1)
-    return `__context.ddTrace === undefined
-      ? ${resolverCall}
-      : __context.ddTrace.jitRuntime.resolveField(
+    return `__context.ddTrace !== undefined &&
+      (!__context.ddTrace.depthDisabled ||
+        __context.ddTrace.hasIastSub ||
+        __context.ddTrace.hasResolverSub)
+      ? __context.ddTrace.jitRuntime.resolveField(
         __context.ddTrace,
         ${descriptorId},
         ${resolver},
         __context.resolvers,
         ${args}
-      )`
+      )
+      : ${resolverCall}`
   }
 
   /**

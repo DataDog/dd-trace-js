@@ -310,6 +310,7 @@ describe('Plugin', () => {
       const resolverCall = runtime.compileResolverCall(context, resolverCallSource, 0)
       assert.strictEqual(context.resolvers.resolver, resolver)
       assert.match(resolverCall, /jitRuntime\.resolveField/)
+      assert.match(resolverCall, /depthDisabled/)
 
       if (generatedCodeLinter === undefined) return
 
@@ -1366,6 +1367,32 @@ void generatedResolver
                 items: [{ value: 'one' }, { value: 'two' }],
               })
               assert.deepStrictEqual(hookCalls, [{ error: undefined, result: 'one' }])
+
+              let releaseFirstResolver = () => {}
+              const firstResolver = new Promise(resolve => {
+                releaseFirstResolver = resolve
+              })
+              hookCalls.length = 0
+              items = [
+                { value: firstResolver },
+                { error: 'later resolver error' },
+              ]
+              const pendingResult = executeWithTrace(
+                () => query({}, {}, {}),
+                new RegExp(operationName)
+              )
+              releaseFirstResolver('one')
+              const delayedResult = await pendingResult
+              assert.deepStrictEqual(delayedResult.data, {
+                items: [{ value: 'one' }, { value: null }],
+              })
+              assert.deepStrictEqual(delayedResult.errors.map(error => error.message), [
+                'later resolver error',
+              ])
+              assert.deepStrictEqual(hookCalls, [{
+                error: 'later resolver error',
+                result: undefined,
+              }])
             }
           }
         } finally {
