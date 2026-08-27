@@ -1190,6 +1190,17 @@ const assertObjectContains = function assertObjectContains (actual, expected, ms
 }
 
 /**
+ * @param {unknown[]} actual
+ * @param {unknown[]} expected
+ * @param {string} [msg]
+ */
+function assertUnorderedArrayContains (actual, expected, msg) {
+  for (const expectedItem of expected) {
+    assert.ok(actual.includes(expectedItem), `${msg ?? ''}Expected array to contain ${inspect(expectedItem)}`)
+  }
+}
+
+/**
  * @param {string} actual
  * @param {string} [msg]
  */
@@ -1348,6 +1359,7 @@ module.exports = {
   FakeAgent,
   hookFile,
   assertObjectContains,
+  assertUnorderedArrayContains,
   assertUUID,
   deepFreeze,
   stopProc,

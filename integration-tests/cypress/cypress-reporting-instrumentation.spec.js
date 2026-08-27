@@ -549,13 +549,17 @@ moduleTypes.forEach(({
           ({ url }) => url.endsWith('/api/v2/citestcycle'),
           (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
-            for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            for (const eventType of ['test_session_end', 'test_module_end']) {
               const event = events.find(event => event.type === eventType)
               assert.ok(event, `expected ${eventType} event`)
               assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
               assert.strictEqual(event.content.error, 1)
               assert.match(event.content.meta[ERROR_MESSAGE], expectedError)
             }
+            const testSuite = events.find(event => event.type === 'test_suite_end')
+            assert.ok(testSuite, 'expected test_suite_end event')
+            assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(testSuite.content.error, 0)
           },
           { hardTimeout: 60000 }
         )
@@ -929,13 +933,17 @@ moduleTypes.forEach(({
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          for (const eventType of ['test_session_end', 'test_module_end']) {
             const event = events.find(event => event.type === eventType)
             assert.ok(event, `expected ${eventType} event`)
             assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /manual after:run failed after Datadog/)
           }
+          const testSuite = events.find(event => event.type === 'test_suite_end')
+          assert.ok(testSuite, 'expected test_suite_end event')
+          assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testSuite.content.error, 0)
         },
         { hardTimeout: 60000 }
       )
@@ -1130,12 +1138,20 @@ moduleTypes.forEach(({
             ({ url }) => url.endsWith('/api/v2/citestcycle'),
             (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+              const hierarchyEventTypes = ['test_session_end', 'test_module_end']
+              if (lifecycle === 'afterSpec') hierarchyEventTypes.push('test_suite_end')
+              for (const eventType of hierarchyEventTypes) {
                 const testSessionTraceEvents = events.filter(event => event.type === eventType)
                 assert.strictEqual(testSessionTraceEvents.length, 1, `expected one ${eventType} event`)
                 assert.strictEqual(testSessionTraceEvents[0].content.meta[TEST_STATUS], 'fail')
                 assert.strictEqual(testSessionTraceEvents[0].content.error, 1)
                 assert.match(testSessionTraceEvents[0].content.meta[ERROR_MESSAGE], new RegExp(errorMessage))
+              }
+              if (lifecycle === 'afterRun') {
+                const testSuite = events.find(event => event.type === 'test_suite_end')
+                assert.ok(testSuite, 'expected test_suite_end event')
+                assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'pass')
+                assert.strictEqual(testSuite.content.error, 0)
               }
 
               const testEvent = events.find(event =>
@@ -2097,7 +2113,6 @@ moduleTypes.forEach(({
       finishedTestsByFile: cypressPlugin.finishedTestsByFile,
       testsToSkip: cypressPlugin.testsToSkip,
       testSuiteSpan: cypressPlugin.testSuiteSpan,
-      finishedTestSuiteSpans: cypressPlugin.finishedTestSuiteSpans,
     }
 
     afterEach(() => {
@@ -2110,7 +2125,6 @@ moduleTypes.forEach(({
       cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
       cypressPlugin.testsToSkip = originalState.testsToSkip
       cypressPlugin.testSuiteSpan = originalState.testSuiteSpan
-      cypressPlugin.finishedTestSuiteSpans = originalState.finishedTestSuiteSpans
       sinon.restore()
     })
 
@@ -2145,26 +2159,25 @@ moduleTypes.forEach(({
       sinon.assert.calledOnceWithExactly(init, tracer, cypressConfig)
     })
 
-    for (const [description, cypressConfig, shouldDefer] of [
-      ['does not retain completed suites without an after:run boundary', {
+    for (const [description, cypressConfig] of [
+      ['finishes completed suites without an after:run boundary', {
         isTextTerminal: false,
         isInteractive: true,
         experimentalInteractiveRunEvents: false,
-      }, false],
-      ['retains completed suites in terminal runs', {
+      }],
+      ['finishes completed suites in terminal runs', {
         isTextTerminal: true,
         // Cypress 12 can leave this true during `cypress run`.
         isInteractive: true,
         experimentalInteractiveRunEvents: false,
-      }, true],
-      ['retains completed suites when interactive run events are enabled', {
+      }],
+      ['finishes completed suites when interactive run events are enabled', {
         isTextTerminal: false,
         isInteractive: true,
         experimentalInteractiveRunEvents: true,
-      }, true],
+      }],
     ]) {
       it(description, () => {
-        const deferTestSuiteSpan = sinon.stub()
         const testSuiteSpan = {
           finish: sinon.stub(),
           setTag: sinon.stub(),
@@ -2173,15 +2186,12 @@ moduleTypes.forEach(({
         cypressPlugin.finishedTestsByFile = {}
         cypressPlugin.testsToSkip = []
         cypressPlugin.testSuiteSpan = testSuiteSpan
-        cypressPlugin.finishedTestSuiteSpans = []
-        cypressPlugin.tracer = { _tracer: { _exporter: { deferTestSuiteSpan } } }
+        cypressPlugin.tracer = { _tracer: { _exporter: {} } }
         sinon.stub(cypressPlugin, 'ciVisEvent')
 
         cypressPlugin.afterSpec({ relative: 'cypress/e2e/basic-pass.js' }, { stats: { tests: 1 } })
 
         sinon.assert.calledOnce(testSuiteSpan.finish)
-        assert.strictEqual(deferTestSuiteSpan.calledOnceWithExactly(testSuiteSpan), shouldDefer)
-        assert.strictEqual(cypressPlugin.finishedTestSuiteSpans.length, shouldDefer ? 1 : 0)
       })
     }
 
