@@ -9,8 +9,11 @@ const {
   loadChannel,
   matchVersion,
 } = require('./register.js')
+const { getDisabledInstrumentations } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
+const { isRelativeRequire } = require('./shared-utils')
+const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
 // environments (webpack, esbuild), Node.js built-in modules required by
@@ -81,6 +84,7 @@ const instrumentedNodeModules = new Set()
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
+  if (disabledInstrumentations.has(name)) return
 
   const isPrefixedWithNode = name.startsWith('node:')
 
@@ -104,8 +108,8 @@ dc.subscribe(CHANNEL, (message) => {
     return
   }
 
-  for (const { file, filePattern, versions, hook } of instrumentation) {
-    const matchesFile = payload.path === filename(name, file) ||
+  for (const { file, filePattern, patchDefault, versions, hook } of instrumentation) {
+    const matchesFile = isRelativeRequire(name) || payload.path === filename(name, file) ||
       (filePattern && new RegExp(filename(name, filePattern)).test(payload.path))
     if (!matchesFile || !matchVersion(payload.version, versions)) {
       continue
@@ -113,9 +117,14 @@ dc.subscribe(CHANNEL, (message) => {
 
     try {
       loadChannel.publish({ name, version: payload.version, file })
-      const exports = hook(payload.module, payload.version) ?? payload.module
+      let exports = payload.module
+      if (patchDefault === !!exports.default) {
+        if (patchDefault) exports = exports.default
+        else continue
+      }
+      exports = hook(exports, payload.version) ?? exports
       payload.module = exports
-      payload.apply?.(exports)
+      payload.apply?.(exports, patchDefault)
     } catch (e) {
       log.error('Error executing bundler hook', e)
     }

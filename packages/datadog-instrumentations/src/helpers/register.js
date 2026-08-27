@@ -1,20 +1,21 @@
 'use strict'
 
-const { builtinModules } = require('module')
 const path = require('path')
 const { channel } = require('dc-polyfill')
-const satisfies = require('../../../../vendor/dist/semifies')
 const log = require('../../../dd-trace/src/log')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
 const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
 const checkRequireCache = require('./check-require-cache')
 const Hook = require('./hook')
+const {
+  filename,
+  getDisabledInstrumentations,
+  matchVersion,
+} = require('./instrumentation-utils')
 const { isRelativeRequire } = require('./shared-utils')
 const rewriter = require('./rewriter')
 
-const DD_TRACE_DISABLED_INSTRUMENTATIONS =
-  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
 const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
 
 const hooks = require('./hooks')
@@ -22,9 +23,7 @@ const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
-const disabledInstrumentations = new Set(
-  DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',')
-)
+const disabledInstrumentations = getDisabledInstrumentations()
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -53,29 +52,6 @@ const instrumentedNodeModules = new Map()
 const instrumentedIntegrationsSuccess = new Map()
 /** @type {Set<string>} */
 const alreadyLoggedIncompatibleIntegrations = new Set()
-
-// Always disable prefixed and unprefixed node modules if one is disabled.
-if (disabledInstrumentations.size) {
-  const builtinsSet = new Set(builtinModules)
-  const disabledBuiltinCounterparts = []
-  for (const name of disabledInstrumentations) {
-    const hasPrefix = name.startsWith('node:')
-    if (hasPrefix || builtinsSet.has(name)) {
-      if (hasPrefix) {
-        const unprefixedName = name.slice(5)
-        if (!disabledInstrumentations.has(unprefixedName)) {
-          disabledBuiltinCounterparts.push(unprefixedName)
-        }
-      } else if (!disabledInstrumentations.has(`node:${name}`)) {
-        disabledBuiltinCounterparts.push(`node:${name}`)
-      }
-    }
-  }
-  for (const name of disabledBuiltinCounterparts) {
-    disabledInstrumentations.add(name)
-  }
-  builtinsSet.clear()
-}
 
 for (const name of names) {
   if (disabledInstrumentations.has(name)) continue
@@ -186,23 +162,6 @@ function logAbortedIntegrations () {
   }
   // Clear the map to avoid reporting the same integration version again.
   instrumentedIntegrationsSuccess.clear()
-}
-
-/**
- * @param {string|undefined} version
- * @param {string[]|undefined} ranges
- */
-function matchVersion (version, ranges) {
-  return !version || !ranges || ranges.some(range => satisfies(version, range))
-}
-
-/**
- * @param {string} name
- * @param {string} [file]
- * @returns {string}
- */
-function filename (name, file) {
-  return file ? `${name}/${file}` : name
 }
 
 module.exports = {
