@@ -3,6 +3,12 @@
 const log = require('../../log')
 const { storage: llmobsStorage } = require('../storage')
 const telemetry = require('../telemetry')
+const {
+  INPUT_PROMPT,
+  INSTRUMENTATION_METHOD_AUTO,
+  PROMPT_TRACKING_INSTRUMENTATION_METHOD,
+} = require('../constants/tags')
+const { getTrackedPrompt } = require('../prompts/tracking')
 
 const TracingPlugin = require('../../plugins/tracing')
 const LLMObsTagger = require('../tagger')
@@ -81,6 +87,24 @@ class LLMObsPlugin extends TracingPlugin {
     }
 
     this.setLLMObsTags(ctx)
+
+    if (LLMObsTagger.getSpanKind(span) !== 'llm' || LLMObsTagger.tagMap.get(span)?.[INPUT_PROMPT]) return
+
+    try {
+      const prompt = getTrackedPrompt(
+        ctx.args?.[0], ctx.arguments?.[0], ctx.options, ctx.request, ctx.event
+      )
+      if (!prompt) return
+
+      this._tagger.tagPrompt(span, prompt, true)
+      if (LLMObsTagger.tagMap.get(span)?.[INPUT_PROMPT]) {
+        this._tagger.tagSpanTags(span, {
+          [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: INSTRUMENTATION_METHOD_AUTO,
+        })
+      }
+    } catch (error) {
+      log.debug('Failed to automatically track managed prompt: %s', error.message)
+    }
   }
 
   configure (config) {

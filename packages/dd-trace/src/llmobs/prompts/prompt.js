@@ -1,5 +1,7 @@
 'use strict'
 
+const { trackPrompt } = require('./tracking')
+
 const VARIABLE_PATTERN = /\{\{?\s*(\w+)\s*\}\}?/g
 const PROMPT_SOURCES = new Set(['registry', 'cache', 'fallback', 'ff', 'resolve'])
 
@@ -52,7 +54,11 @@ class ManagedPrompt {
    */
   format (variables = {}) {
     if (typeof this.template === 'string') return render(this.template, variables)
-    return this.template.map(message => ({ role: message.role, content: render(message.content, variables) }))
+    const rendered = this.template.map(message => ({
+      role: message.role,
+      content: render(message.content, variables),
+    }))
+    return trackPrompt(rendered, this.toAnnotation(variables))
   }
 
   /**

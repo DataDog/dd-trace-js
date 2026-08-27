@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
 const ManagedPrompt = require('../../../src/llmobs/prompts/prompt')
+const promptTracking = require('../../../src/llmobs/prompts/tracking')
 
 describe('ManagedPrompt', () => {
   it('renders text safely and builds a string-valued annotation', () => {
@@ -51,6 +52,38 @@ describe('ManagedPrompt', () => {
     const annotation = prompt.toAnnotation()
     annotation.template[0].content = 'changed annotation'
     assert.strictEqual(prompt.template[0].content, 'You are {{ persona }}.')
+  })
+
+  it('tracks the exact rendered chat value without changing its JavaScript shape', () => {
+    const first = new ManagedPrompt({
+      id: 'first',
+      version: '1',
+      source: 'registry',
+      template: [{ role: 'user', content: 'Hello {name}' }],
+    })
+    const second = new ManagedPrompt({
+      id: 'second',
+      version: '2',
+      source: 'registry',
+      template: [{ role: 'user', content: 'Hello {name}' }],
+    })
+
+    const firstRendered = first.format({ name: 'Ada' })
+    const secondRendered = second.format({ name: 'Ada' })
+
+    assert.ok(Array.isArray(firstRendered))
+    assert.deepStrictEqual(firstRendered, [{ role: 'user', content: 'Hello Ada' }])
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(firstRendered)), firstRendered)
+    assert.deepStrictEqual(promptTracking.getTrackedPrompt(firstRendered), first.toAnnotation({ name: 'Ada' }))
+    assert.deepStrictEqual(promptTracking.getTrackedPrompt(secondRendered), second.toAnnotation({ name: 'Ada' }))
+    assert.deepStrictEqual(
+      promptTracking.getTrackedPrompt({ messages: secondRendered }),
+      second.toAnnotation({ name: 'Ada' })
+    )
+    assert.strictEqual(promptTracking.getTrackedPrompt([...firstRendered]), undefined)
+    assert.strictEqual(promptTracking.getTrackedPrompt(new Proxy({}, {
+      ownKeys () { throw new Error('nope') },
+    })), undefined)
   })
 
   it('supports string, chat, object, and synchronous callable fallbacks', () => {
