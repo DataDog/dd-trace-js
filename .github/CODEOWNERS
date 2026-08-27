@@ -416,9 +416,9 @@
 /packages/dd-trace/test/web-tags-cache.spec.js @DataDog/dd-trace-js @DataDog/profiling-js
 
 # Language Platform
-/.agents/skills/flaky-test-investigation/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.claude/skills/flaky-test-investigation @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.cursor/skills/flaky-test-investigation @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.agents/skills/flaky-test-fixer/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.claude/skills/flaky-test-fixer @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.cursor/skills/flaky-test-fixer @DataDog/dd-trace-js @DataDog/lang-platform-js
 /* @DataDog/dd-trace-js @DataDog/lang-platform-js
 /AGENTS.md @DataDog/dd-trace-js @DataDog/lang-platform-js
 /openfeature.d.ts @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk

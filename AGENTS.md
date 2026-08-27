@@ -165,7 +165,7 @@ Load the relevant repository skill when the task matches:
 - [Third-party instrumentation or plugins](.agents/skills/apm-integrations/SKILL.md)
 - Shared abstractions, duplicated behavior across types, module boundaries, class hierarchies, or public APIs:
   [`architecture-review`](.agents/skills/architecture-review/SKILL.md)
-- [Suspected flaky or unrelated test failures](.agents/skills/flaky-test-investigation/SKILL.md)
+- [Suspected flaky or unrelated test failures](.agents/skills/flaky-test-fixer/SKILL.md)
 - [LLMObs integrations](.agents/skills/llmobs-integration/SKILL.md)
 - [LLMObs tests and VCR cassettes](.agents/skills/llmobs-testing/SKILL.md)
 - [Serverless platform integrations](.agents/skills/serverless-integrations/SKILL.md)
