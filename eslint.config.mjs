@@ -1116,8 +1116,6 @@ export default [
       promise: eslintPluginPromise,
     },
     files: [
-      'benchmark/openfeature.js',
-      'benchmark/sirun/openfeature/**/*.js',
       'packages/dd-trace/src/openfeature/**/*.js',
       'packages/dd-trace/test/openfeature/**/*.js',
     ],

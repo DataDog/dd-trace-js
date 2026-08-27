@@ -1,18 +1,8 @@
 'use strict'
 
-const {
-  EVP_PROXY_AGENT_BASE_PATH,
-  EVP_SUBDOMAIN_HEADER_NAME,
-  EVP_PAYLOAD_SIZE_LIMIT,
-} = require('../../evp_proxy/constants')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
 
 module.exports = {
-  /**
-   * @constant
-   * @type {string} Base path for EVP proxy agent endpoint
-   */
-  EVP_PROXY_AGENT_BASE_PATH,
-
   /**
    * @constant
    * @type {string} HTTP header name for EVP subdomain routing
@@ -41,7 +31,7 @@ module.exports = {
    * @constant
    * @type {number} Maximum payload size for EVP intake (5MB, actual limit is 5.1MB)
    */
-  EVP_PAYLOAD_SIZE_LIMIT,
+  EVP_PAYLOAD_SIZE_LIMIT: 5 << 20,
 
   /**
    * @constant
