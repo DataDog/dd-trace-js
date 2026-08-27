@@ -45,6 +45,35 @@ describe('bundler register', () => {
     assert.equal(payload.module, Patched)
   })
 
+  it('honors patchDefault when applying an ESM proxy update', () => {
+    const Original = class Original {}
+    const Patched = class Patched {}
+    const hook = sinon.stub().returns(Patched)
+    const apply = sinon.stub()
+    const { loadChannel, publish } = loadBundlerRegister({
+      hooks: { 'test-default-export': sinon.stub() },
+      instrumentations: {
+        'test-default-export': [{ file: 'index.mjs', hook, patchDefault: true }],
+      },
+    })
+
+    publish({
+      apply,
+      module: { default: Original },
+      package: 'test-default-export',
+      path: 'test-default-export/index.mjs',
+      version: '1.0.0',
+    })
+
+    sinon.assert.calledOnceWithExactly(hook, Original, '1.0.0')
+    sinon.assert.calledOnceWithExactly(apply, Patched, true)
+    sinon.assert.calledOnceWithExactly(loadChannel.publish, {
+      file: 'index.mjs',
+      name: 'test-default-export',
+      version: '1.0.0',
+    })
+  })
+
   it('does not activate explicitly disabled bundled integrations', () => {
     const hook = sinon.stub()
     const integrationHook = sinon.stub()
@@ -91,6 +120,45 @@ describe('bundler register', () => {
     })
 
     sinon.assert.notCalled(integrationHook)
+  })
+
+  it('matches bundled file-pattern hooks', () => {
+    const integrationHook = sinon.stub()
+    const { publish } = loadBundlerRegister({
+      hooks: { 'test-pattern-hook': sinon.stub() },
+      instrumentations: {
+        'test-pattern-hook': [{ filePattern: 'dist/cli.*', hook: integrationHook }],
+      },
+    })
+
+    publish({
+      module: {},
+      package: 'test-pattern-hook',
+      path: 'test-pattern-hook/dist/cli-123.js',
+      version: '1.0.0',
+    })
+
+    sinon.assert.calledOnceWithExactly(integrationHook, {}, '1.0.0')
+  })
+
+  it('matches bundled relative-module hooks', () => {
+    const name = './runtime/library.js'
+    const integrationHook = sinon.stub()
+    const { publish } = loadBundlerRegister({
+      hooks: { [name]: sinon.stub() },
+      instrumentations: {
+        [name]: [{ file: 'runtime/library.js', hook: integrationHook }],
+      },
+    })
+
+    publish({
+      module: {},
+      package: name,
+      path: name,
+      version: '6.1.0',
+    })
+
+    sinon.assert.calledOnceWithExactly(integrationHook, {}, '6.1.0')
   })
 
   it('contains non-Error loader and instrumentation failures', () => {

@@ -12,6 +12,7 @@ const {
 } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
+const { isRelativeRequire } = require('./shared-utils')
 const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
@@ -76,7 +77,14 @@ function doHook (name) {
   }
 }
 
-/** @typedef {{ package: string, module: unknown, version: string, path: string }} Payload */
+/**
+ * @typedef {object} Payload
+ * @property {string} package
+ * @property {unknown} module
+ * @property {string} version
+ * @property {string} path
+ * @property {(exports: unknown, patchDefault: boolean) => void} [apply]
+ */
 
 /** @type {Set<string>} */
 const instrumentedNodeModules = new Set()
@@ -107,8 +115,8 @@ dc.subscribe(CHANNEL, (message) => {
     return
   }
 
-  for (const { file, filePattern, versions, hook } of instrumentation) {
-    const matchesFile = payload.path === filename(name, file) ||
+  for (const { file, filePattern, patchDefault, versions, hook } of instrumentation) {
+    const matchesFile = isRelativeRequire(name) || payload.path === filename(name, file) ||
       (filePattern && new RegExp(filename(name, filePattern)).test(payload.path))
     if (!matchesFile || !matchVersion(payload.version, versions)) {
       continue
@@ -116,9 +124,15 @@ dc.subscribe(CHANNEL, (message) => {
 
     try {
       loadChannel.publish({ name, version: payload.version, file })
-      const exports = hook(payload.module, payload.version) ?? payload.module
+      let exports = payload.module
+      const namespace = /** @type {Record<string, unknown>} */ (exports)
+      if (patchDefault === !!namespace.default) {
+        if (patchDefault) exports = namespace.default
+        else continue
+      }
+      exports = hook(exports, payload.version) ?? exports
       payload.module = exports
-      payload.apply?.(exports)
+      payload.apply?.(exports, patchDefault)
     } catch (error) {
       log.error('Error executing bundler hook: %s', String(error?.message ?? error), error)
     }

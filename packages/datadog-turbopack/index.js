@@ -27,7 +27,8 @@ async function addRules (turbopack = {}, projectDir = process.cwd()) {
   if (!manifest.packagePathPattern || !manifest.path) return turbopack
 
   const rules = { ...turbopack.rules }
-  for (const extension of ['*.js', '*.cjs', '*.mjs']) {
+  const aliases = Object.keys(turbopack.resolveAlias ?? {})
+  for (const extension of ['*.js', '*.cjs', '*.mjs', '*.jsx', '*.ts', '*.tsx']) {
     const existing = rules[extension]
     if (hasDatadogLoader(existing)) continue
 
@@ -35,14 +36,30 @@ async function addRules (turbopack = {}, projectDir = process.cwd()) {
       condition: {
         all: ['foreign', 'node', { path: manifest.packagePathPattern }],
       },
-      loaders: [{ loader, options: { manifestPath: manifest.path } }],
+      loaders: [{ loader, options: { manifestHash: manifest.hash, manifestPath: manifest.path } }],
     }]
     if (manifest.esmImportPattern) {
       datadogRules.push({
         condition: {
           all: ['node', { not: 'foreign' }, { content: manifest.esmImportPattern }],
         },
-        loaders: [{ loader, options: { manifestPath: manifest.path, rewriteApplicationImports: true } }],
+        loaders: [{
+          loader,
+          options: {
+            aliases,
+            manifestHash: manifest.hash,
+            manifestPath: manifest.path,
+            rewriteApplicationImports: true,
+          },
+        }],
+      })
+    }
+    if (manifest.relativePathPattern) {
+      datadogRules.push({
+        condition: {
+          all: ['node', { not: 'foreign' }, { path: manifest.relativePathPattern }],
+        },
+        loaders: [{ loader, options: { manifestHash: manifest.hash, manifestPath: manifest.path } }],
       })
     }
     rules[extension] = existing
