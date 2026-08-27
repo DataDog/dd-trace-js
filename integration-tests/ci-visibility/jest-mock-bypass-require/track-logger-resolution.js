@@ -11,7 +11,7 @@ const resolveFilename = Module._resolveFilename
  * @returns {string}
  */
 Module._resolveFilename = function (request, parent) {
-  if (loggerNames.has(request) && parent?.filename?.endsWith('esm-mapped-logger-test.mjs')) {
+  if (loggerNames.has(request) && parent?.filename?.endsWith('esm-unrelated-cjs-test.mjs')) {
     process.stderr.write(`[unexpected logger resolution] ${request}\n`)
   }
   return resolveFilename.apply(this, arguments)

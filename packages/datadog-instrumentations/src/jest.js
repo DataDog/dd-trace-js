@@ -173,6 +173,7 @@ const newTests = new Set()
 const testSuiteJestObjects = new Map()
 const testSuiteDatadogEnvironments = new Map()
 const wrappedJestGlobals = new WeakSet()
+const wrappedJestEsmLoaders = new WeakSet()
 const wrappedJestObjects = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
@@ -3727,13 +3728,11 @@ if (DD_MAJOR < 6) {
   }, jestConfigSyncWrapper)
 }
 
-const LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
+const LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'bunyan',
   'pino',
   'winston',
-]
-const LOGGING_LIBRARY_PATH_SEGMENTS = LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE
-  .map(moduleName => `${path.sep}${moduleName}${path.sep}`)
+])
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   ...LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE,
   'selenium-webdriver',
@@ -3875,22 +3874,14 @@ function requireOutsideJestRequireEngine (runtime, moduleName) {
 }
 
 /**
- * @param {string} modulePath
- * @returns {boolean}
- */
-function isLoggingLibraryModulePath (modulePath) {
-  for (const pathSegment of LOGGING_LIBRARY_PATH_SEGMENTS) {
-    if (modulePath.includes(pathSegment)) return true
-  }
-  return false
-}
-
-/**
  * @param {object} runtime
  * @param {string} from
- * @returns {Set<string>}
+ * @param {string} moduleName
+ * @returns {void}
  */
-function getJestEsmBypassModulePaths (runtime, from) {
+function recordJestEsmBypassModulePath (runtime, from, moduleName) {
+  if (typeof from !== 'string' || !LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) return
+
   let pathsByParent = jestEsmBypassModulePathsByRuntime.get(runtime)
   if (!pathsByParent) {
     pathsByParent = new Map()
@@ -3898,19 +3889,60 @@ function getJestEsmBypassModulePaths (runtime, from) {
   }
 
   let modulePaths = pathsByParent.get(from)
-  if (modulePaths) return modulePaths
-
-  modulePaths = new Set()
-  const nativeRequire = createRequire(from)
-  for (const moduleName of LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE) {
-    try {
-      modulePaths.add(nativeRequire.resolve(moduleName))
-    } catch {
-      // The logger is not installed from this module's resolution context.
-    }
+  if (!modulePaths) {
+    modulePaths = new Map()
+    pathsByParent.set(from, modulePaths)
   }
-  pathsByParent.set(from, modulePaths)
-  return modulePaths
+  if (modulePaths.has(moduleName)) return
+
+  try {
+    modulePaths.set(moduleName, createRequire(from).resolve(moduleName))
+  } catch {
+    modulePaths.set(moduleName, undefined)
+  }
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} modulePath
+ * @returns {boolean}
+ */
+function hasJestEsmBypassModulePath (runtime, from, modulePath) {
+  const modulePaths = jestEsmBypassModulePathsByRuntime.get(runtime)?.get(from)
+  if (!modulePaths) return false
+
+  for (const resolvedPath of modulePaths.values()) {
+    if (resolvedPath === modulePath) return true
+  }
+  return false
+}
+
+/**
+ * @param {object} runtime
+ * @returns {void}
+ */
+function wrapJestEsmLoader (runtime) {
+  const esmLoader = runtime?.esmLoader
+  if (!esmLoader || wrappedJestEsmLoaders.has(esmLoader)) return
+
+  wrappedJestEsmLoaders.add(esmLoader)
+  if (typeof esmLoader.resolveModule === 'function') {
+    shimmer.wrap(esmLoader, 'resolveModule', resolveModule => function (moduleName, from) {
+      recordJestEsmBypassModulePath(runtime, from, moduleName)
+      return resolveModule.apply(this, arguments)
+    })
+  }
+  if (typeof esmLoader.resolveSpecifierForSyncGraph === 'function') {
+    shimmer.wrap(
+      esmLoader,
+      'resolveSpecifierForSyncGraph',
+      resolveSpecifier => function (from, moduleName) {
+        recordJestEsmBypassModulePath(runtime, from, moduleName)
+        return resolveSpecifier.apply(this, arguments)
+      }
+    )
+  }
 }
 
 /**
@@ -3924,9 +3956,7 @@ function getJestBypassModulePath (runtime, from, moduleName) {
 
   if (!LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
     // Jest passes the resolved path when a CommonJS package is imported from an ESM test.
-    if (path.isAbsolute(moduleName) &&
-      isLoggingLibraryModulePath(moduleName) &&
-      getJestEsmBypassModulePaths(runtime, from).has(moduleName)) {
+    if (path.isAbsolute(moduleName) && hasJestEsmBypassModulePath(runtime, from, moduleName)) {
       return moduleName
     }
     return
@@ -3968,6 +3998,20 @@ addHook({
 
       wrapJestObject(result, suiteFilePath)
       return result
+    })
+  }
+
+  if (typeof Runtime.prototype.resolveModule === 'function') {
+    shimmer.wrap(Runtime.prototype, 'resolveModule', resolveModule => function (moduleName, from) {
+      recordJestEsmBypassModulePath(this, from, moduleName)
+      return resolveModule.apply(this, arguments)
+    })
+  }
+
+  if (typeof Runtime.prototype.unstable_importModule === 'function') {
+    shimmer.wrap(Runtime.prototype, 'unstable_importModule', importModule => function () {
+      wrapJestEsmLoader(this)
+      return importModule.apply(this, arguments)
     })
   }
 

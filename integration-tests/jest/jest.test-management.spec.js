@@ -3695,9 +3695,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               ...resolutionConfig,
               CONFIG_TEST_MATCH: '**/ci-visibility/jest-mock-bypass-require/esm-mapped-logger-test.mjs',
-              NODE_OPTIONS: '-r dd-trace/ci/init ' +
-                '--require ./ci-visibility/jest-mock-bypass-require/track-logger-resolution.js ' +
-                '--experimental-vm-modules',
+              NODE_OPTIONS: '-r dd-trace/ci/init --experimental-vm-modules',
               TEST_LOGGER: 'winston',
               USE_CONFIG_FILE: '1',
               USE_JEST_RUN: '1',
@@ -3712,10 +3710,109 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
 
         const [code] = await once(childProcess, 'exit')
-        assert.doesNotMatch(testOutput, /\[unexpected logger resolution\]/)
         assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
       })
     }
+
+    onlyLatestIt('does not resolve loggers for unrelated CommonJS ESM imports', async () => {
+      let testOutput = ''
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '-r dd-trace/ci/init ' +
+              '--require ./ci-visibility/jest-mock-bypass-require/track-logger-resolution.js ' +
+              '--experimental-vm-modules',
+            TESTS_TO_RUN: 'jest-mock-bypass-require/esm-unrelated-cjs-test.mjs',
+            USE_JEST_RUN: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.doesNotMatch(testOutput, /\[unexpected logger resolution\]/)
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
+    onlyLatestIt('instruments a statically imported logger through a renamed symlink', async () => {
+      const loggerModulePath = path.join(cwd, 'node_modules', 'winston')
+      const linkedLoggerPath = path.join(cwd, 'linked-logger')
+      const linkedLoggerModulePath = path.join(linkedLoggerPath, 'node_modules', 'winston')
+      const linkedLoggerIndexPath = path.join(linkedLoggerPath, 'index.js')
+      const linkedLoggerPackagePath = path.join(linkedLoggerPath, 'package.json')
+      fs.mkdirSync(path.dirname(linkedLoggerModulePath), { recursive: true })
+      fs.renameSync(loggerModulePath, linkedLoggerModulePath)
+      fs.writeFileSync(linkedLoggerIndexPath, "module.exports = require('./node_modules/winston')\n")
+      fs.writeFileSync(linkedLoggerPackagePath, '{"name":"winston","main":"index.js"}\n')
+
+      try {
+        fs.symlinkSync(linkedLoggerPath, loggerModulePath, 'junction')
+        assert.strictEqual(fs.realpathSync(loggerModulePath), fs.realpathSync(linkedLoggerPath))
+
+        let testOutput = ''
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+            assert.strictEqual(payloads.length, 1, testOutput)
+
+            const [{ headers, logMessage, url }] = payloads
+            assert.strictEqual(headers['content-type'], 'application/json')
+            assert.strictEqual(headers['dd-api-key'], 'api-key')
+            assert.strictEqual(url, '/api/v2/logs?ddsource=winston&service=my-service')
+            assert.strictEqual(logMessage.length, 1)
+
+            const [{ dd, message }] = logMessage
+            assert.strictEqual(message, 'linked logger')
+            assert.strictEqual(dd.service, 'my-service')
+            assert.match(dd.trace_id, /^\d+$/)
+            assert.match(dd.span_id, /^\d+$/)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+              DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+              DD_API_KEY: 'api-key',
+              DD_SERVICE: 'my-service',
+              NODE_OPTIONS: '-r dd-trace/ci/init --experimental-vm-modules',
+              TESTS_TO_RUN: 'jest-mock-bypass-require/esm-linked-logger-test.mjs',
+              USE_JEST_RUN: '1',
+            },
+          }
+        )
+        childProcess.stdout.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+
+        const [[code]] = await Promise.all([
+          once(childProcess, 'exit'),
+          logsPromise,
+        ])
+
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+      } finally {
+        if (fs.existsSync(loggerModulePath)) fs.unlinkSync(loggerModulePath)
+        fs.renameSync(linkedLoggerModulePath, loggerModulePath)
+        fs.unlinkSync(linkedLoggerIndexPath)
+        fs.unlinkSync(linkedLoggerPackagePath)
+        fs.rmdirSync(path.join(linkedLoggerPath, 'node_modules'))
+        fs.rmdirSync(linkedLoggerPath)
+      }
+    })
 
     for (const loggerName of ['winston', 'pino', 'bunyan']) {
       onlyLatestIt(`respects Jest ESM mocks for ${loggerName}`, async () => {
