@@ -321,7 +321,7 @@ describe('datadog-turbopack configuration', () => {
     const once = await withDatadogTurbopack({}, directory)
     const twice = await withDatadogTurbopack(once, directory)
 
-    for (const extension of ['*.js', '*.cjs', '*.mjs', '*.jsx', '*.ts', '*.tsx']) {
+    for (const extension of ['*.js', '*.cjs', '*.mjs']) {
       const rules = [twice.rules[extension]].flat()
       assert.equal(rules.filter(rule => rule.loaders.some(item => item.loader.includes('datadog-turbopack'))).length, 1)
     }
@@ -345,8 +345,24 @@ describe('datadog-turbopack configuration', () => {
     assert.equal(applicationRule.loaders[0].options.rewriteApplicationImports, true)
     assert.match(applicationRule.loaders[0].options.manifestHash, /^[a-f0-9]{64}$/)
     assert.deepEqual(applicationRule.loaders[0].options.aliases, [])
-    assert.ok(config.rules['*.ts'])
-    assert.ok(config.rules['*.tsx'])
+    assert.equal(config.rules['*.ts'], undefined)
+    assert.equal(config.rules['*.jsx'], undefined)
+    assert.equal(config.rules['*.tsx'], undefined)
+  })
+
+  it('does not add rules for unsupported source formats', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const packagePath = createPackageIn(directory, 'ai', { main: 'index.mjs', type: 'module', version: '7.0.0' })
+    write(packagePath, 'index.mjs', 'export const generateText = () => {}')
+
+    const config = await withDatadogTurbopack({}, directory)
+
+    assert.deepEqual(
+      Object.keys(config.rules).sort(),
+      ['*.cjs', '*.js', '*.mjs']
+    )
   })
 })
 

@@ -28,7 +28,7 @@ async function addRules (turbopack = {}, projectDir = process.cwd()) {
 
   const rules = { ...turbopack.rules }
   const aliases = Object.keys(turbopack.resolveAlias ?? {})
-  for (const extension of ['*.js', '*.cjs', '*.mjs', '*.jsx', '*.ts', '*.tsx']) {
+  for (const extension of ['*.js', '*.cjs', '*.mjs']) {
     const existing = rules[extension]
     if (hasDatadogLoader(existing)) continue
 
