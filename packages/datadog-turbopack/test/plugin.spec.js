@@ -76,6 +76,7 @@ describe('datadog-turbopack loader', () => {
     }, fs.readFileSync(appPath, 'utf8'))
 
     assert.match(result, /from "\.\.\/node_modules\/\.cache\/dd-trace\/turbopack\/0\.mjs"/)
+    assert.match(result, /sourceMappingURL=data:application\/json;base64,/)
   })
 
   it('routes an application CommonJS require through its generated proxy', async () => {
@@ -197,6 +198,28 @@ describe('datadog-turbopack loader', () => {
     assert.match(result, /apply \(exports, patchDefault\)/)
     assert.match(result, /set\.default\?\.\(exports\)/)
     assert.doesNotMatch(result, /import-in-the-middle/)
+  })
+
+  it('applies existing rewriter instrumentation to an ESM target', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const packagePath = createPackageIn(directory, 'ai', { main: 'dist/index.js', type: 'module', version: '6.0.0' })
+    const target = write(packagePath, 'dist/index.js', [
+      'export function resolveLanguageModel (model) {',
+      '  return model',
+      '}',
+      '',
+    ].join('\n'))
+    const manifest = await createManifest(directory)
+
+    const result = loader.call({
+      getOptions: () => ({ manifestPath: manifest.path }),
+      resourcePath: target,
+    }, fs.readFileSync(target, 'utf8'))
+
+    assert.notEqual(result, fs.readFileSync(target, 'utf8'))
+    assert.match(result, /sourceMappingURL=data:application\/json;base64,/)
   })
 })
 
