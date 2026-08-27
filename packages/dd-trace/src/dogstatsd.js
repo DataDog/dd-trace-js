@@ -64,7 +64,7 @@ const TYPE_LABELS = ['count', 'gauge', 'distribution', 'histogram']
 /**
  * @typedef {object} MetricNode
  * @property {Map<string, MetricNode>} nodes
- * @property {boolean} touched
+ * @property {number} submissions
  * @property {number|Histogram|null} value
  */
 
@@ -600,7 +600,6 @@ class MetricsAggregationClient {
     }
 
     node.value.record(value)
-    this.#metricsByType[TYPE_HISTOGRAM_INDEX]++
   }
 
   count (name, count, tags = [], monotonic = true) {
@@ -613,14 +612,12 @@ class MetricsAggregationClient {
     const node = this._ensureTree(container, name, tags, 0)
 
     node.value += count
-    this.#metricsByType[monotonic ? TYPE_COUNTER_INDEX : TYPE_GAUGE_INDEX]++
   }
 
   gauge (name, value, tags) {
     const node = this._ensureTree(this._gauges, name, tags, 0)
 
     node.value = value
-    this.#metricsByType[TYPE_GAUGE_INDEX]++
   }
 
   increment (name, count = 1, tags) {
@@ -635,10 +632,13 @@ class MetricsAggregationClient {
    * @returns {number} Number of gauge contexts flushed
    */
   _captureGauges () {
+    let metrics = 0
     const contexts = this._captureTree(this._gauges, (node, name, tags) => {
+      metrics += node.submissions
       this._client.gauge(name, node.value, tags)
     })
 
+    this.#metricsByType[TYPE_GAUGE_INDEX] += metrics
     this._gauges.clear()
 
     return contexts
@@ -648,10 +648,13 @@ class MetricsAggregationClient {
    * @returns {number} Number of counter contexts flushed
    */
   _captureCounters () {
+    let metrics = 0
     const contexts = this._captureTree(this._counters, (node, name, tags) => {
+      metrics += node.submissions
       this._client.increment(name, node.value, tags)
     })
 
+    this.#metricsByType[TYPE_COUNTER_INDEX] += metrics
     this._counters.clear()
 
     return contexts
@@ -661,7 +664,9 @@ class MetricsAggregationClient {
    * @returns {number} Number of histogram contexts flushed
    */
   _captureHistograms () {
+    let metrics = 0
     const contexts = this._captureTree(this._histograms, (node, name, tags) => {
+      metrics += node.submissions
       const stats = node.value
 
       this._client.gauge(`${name}.min`, stats.min, tags)
@@ -674,6 +679,7 @@ class MetricsAggregationClient {
       this._client.gauge(`${name}.95percentile`, stats.p95, tags)
     })
 
+    this.#metricsByType[TYPE_HISTOGRAM_INDEX] += metrics
     this._histograms.clear()
 
     return contexts
@@ -681,8 +687,8 @@ class MetricsAggregationClient {
 
   /**
    * @param {Map<string, MetricNode>} tree - Metric context tree
-   * @param {CaptureMetric} fn - Called for every touched context
-   * @returns {number} Number of touched contexts
+   * @param {CaptureMetric} fn - Called for every context with submissions
+   * @returns {number} Number of contexts with submissions
    */
   _captureTree (tree, fn) {
     let contexts = 0
@@ -698,13 +704,13 @@ class MetricsAggregationClient {
    * @param {MetricNode} node - Current metric context node
    * @param {string} name - Metric name
    * @param {string[]} tags - Current metric tags
-   * @param {CaptureMetric} fn - Called for every touched context
-   * @returns {number} Number of touched contexts
+   * @param {CaptureMetric} fn - Called for every context with submissions
+   * @returns {number} Number of contexts with submissions
    */
   _captureNode (node, name, tags, fn) {
     let contexts = 0
 
-    if (node.touched) {
+    if (node.submissions !== 0) {
       fn(node, name, tags)
       contexts++
     }
@@ -729,7 +735,7 @@ class MetricsAggregationClient {
       node = this._ensureNode(node.nodes, tag, value)
     }
 
-    node.touched = true
+    node.submissions++
 
     return node
   }
@@ -738,7 +744,7 @@ class MetricsAggregationClient {
     let node = container.get(key)
 
     if (!node) {
-      node = { nodes: new Map(), touched: false, value }
+      node = { nodes: new Map(), submissions: 0, value }
 
       if (typeof key === 'string') {
         container.set(key, node)

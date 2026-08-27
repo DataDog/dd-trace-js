@@ -218,8 +218,10 @@ describe('dogstatsd', () => {
         client.increment('test.count')
         client.count('test.delta', 1, [], false)
         client.gauge('test.gauge', 5)
+        client.gauge('test.gauge', 6)
         client.distribution('test.distribution', 3)
         client.histogram('test.histogram', 7)
+        client.histogram('test.histogram', 8)
         client.flush()
 
         const userPacketCount = udp4.send.callCount
@@ -243,11 +245,11 @@ describe('dogstatsd', () => {
         assert.match(telemetry, /client:nodejs/)
         assert.match(telemetry, /client_version:\d+\.\d+\.\d+/)
         assert.match(telemetry, /client_transport:udp/)
-        assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics:6\|c\|/)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics:8\|c\|/)
         assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:2\|c\|.*metrics_type:count/)
-        assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:2\|c\|.*metrics_type:gauge/)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:3\|c\|.*metrics_type:gauge/)
         assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:distribution/)
-        assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:histogram/)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics_by_type:2\|c\|.*metrics_type:histogram/)
         assert.match(telemetry, /datadog\.dogstatsd\.client\.aggregated_context:4\|c\|/)
         assert.match(
           telemetry,
