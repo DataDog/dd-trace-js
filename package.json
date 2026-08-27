@@ -153,6 +153,7 @@
     "cypress/**/*",
     "esbuild.js",
     "turbopack.js",
+    "turbopack.d.ts",
     "webpack.js",
     "ext/**/*",
     "index.d.ts",

@@ -17,13 +17,14 @@ const CHANNEL = 'dd-trace:bundler:load'
  * @returns {string}
  */
 module.exports = function loader (source) {
-  const { manifestPath, rewriteApplicationImports } = this.getOptions()
+  const { aliases, manifestPath, rewriteApplicationImports } = this.getOptions()
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
-  const target = manifest.targets[normalizePath(this.resourcePath)]
+  const target = manifest.targets[normalizePath(this.resourcePath)] ||
+    getRelativeTarget(this.resourcePath, manifest.relativeTargets)
   const esm = isESMFile(this.resourcePath)
 
   if (rewriteApplicationImports || esm) {
-    const rewritten = rewriteImports(source, this.resourcePath, manifest.targets)
+    const rewritten = rewriteImports(source, this.resourcePath, manifest.targets, aliases)
     if (rewritten !== source || esm) return rewritten
   }
 
@@ -54,9 +55,10 @@ module.exports = function loader (source) {
  * @param {string} source
  * @param {string} resourcePath
  * @param {Record<string, {esm: boolean, proxyPath?: string}>} targets
+ * @param {string[]} [aliases]
  * @returns {string}
  */
-function rewriteImports (source, resourcePath, targets) {
+function rewriteImports (source, resourcePath, targets, aliases = []) {
   resourcePath = normalizePath(resourcePath)
   let rewritten = false
   const matcher = create([{
@@ -66,9 +68,11 @@ function rewriteImports (source, resourcePath, targets) {
   }])
 
   matcher.addTransform('rewriteImports', (_state, program) => {
+    const hasLocalRequire = declaresRequire(program)
     visit(program, node => {
-      const source = getModuleSource(node)
-      if (!source) return
+      const source = getModuleSource(node, hasLocalRequire)
+
+      if (!source || matchesAlias(source.value, aliases)) return
 
       const resolved = resolveFrom(resourcePath, source.value)
       const target = resolved && targets[resolved]
@@ -94,7 +98,7 @@ function rewriteImports (source, resourcePath, targets) {
   }
 }
 
-function getModuleSource (node) {
+function getModuleSource (node, hasLocalRequire) {
   if (node.type === 'ImportDeclaration' ||
     node.type === 'ExportNamedDeclaration' ||
     node.type === 'ExportAllDeclaration' ||
@@ -105,8 +109,46 @@ function getModuleSource (node) {
   if (node.type === 'CallExpression' &&
     node.callee?.type === 'Identifier' && node.callee.name === 'require' &&
     node.arguments?.length === 1) {
-    return isStringLiteral(node.arguments[0]) && node.arguments[0]
+    return !hasLocalRequire && isStringLiteral(node.arguments[0]) && node.arguments[0]
   }
+}
+
+function matchesAlias (specifier, aliases) {
+  return aliases.some(alias => specifier === alias || specifier.startsWith(`${alias}/`))
+}
+
+function getRelativeTarget (resourcePath, targets = []) {
+  const normalizedPath = normalizePath(resourcePath)
+  return targets.find(target => normalizedPath.endsWith(`/${target.file}`))
+}
+
+// We deliberately decline all CommonJS rewrites in a file with a lexical
+// `require` binding. Rewriting an application-defined function is worse than
+// leaving an uncommon module load uninstrumented.
+function declaresRequire (node) {
+  let declared = false
+  visit(node, child => {
+    if (child.type === 'VariableDeclarator' || child.type === 'CatchClause') {
+      declared ||= bindingIncludesRequire(child.id ?? child.param)
+    } else if (child.type === 'FunctionDeclaration' ||
+      child.type === 'FunctionExpression' || child.type === 'ArrowFunctionExpression') {
+      declared ||= child.params.some(bindingIncludesRequire) || child.id?.name === 'require'
+    } else if (child.type === 'ImportSpecifier' || child.type === 'ImportDefaultSpecifier' ||
+      child.type === 'ImportNamespaceSpecifier') {
+      declared ||= child.local?.name === 'require'
+    } else if (child.type === 'ClassDeclaration') {
+      declared ||= child.id?.name === 'require'
+    }
+  })
+  return declared
+}
+
+function bindingIncludesRequire (node) {
+  if (!node || typeof node !== 'object') return false
+  if (node.type === 'Identifier') return node.name === 'require'
+  return Object.values(node).some(value => Array.isArray(value)
+    ? value.some(bindingIncludesRequire)
+    : bindingIncludesRequire(value))
 }
 
 function isStringLiteral (node) {
