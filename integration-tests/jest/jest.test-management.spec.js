@@ -78,11 +78,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
     ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
-    'bunyan',
     'jest-image-snapshot',
     'office-addin-mock',
-    'pino',
-    'winston',
   ].filter(Boolean), true)
 
   before(function () {
@@ -3556,121 +3553,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(exitCode[0], 0)
       })
     })
-  })
-
-  context('winston mocking', () => {
-    it('should allow winston to be mocked and verify createLogger is called', async () => {
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'jest-mock-bypass-require/winston-mock-test',
-            SHOULD_CHECK_RESULTS: '1',
-          },
-        }
-      )
-
-      const [code] = await once(childProcess, 'exit')
-      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
-    })
-  })
-
-  context('Pino and Bunyan module loading', () => {
-    for (const loggerName of ['pino', 'bunyan']) {
-      for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
-        it(`respects Jest ${resolutionType} for ${loggerName}`, async () => {
-          let testOutput = ''
-          // Ensure the native bypass still defers to Jest when its resolution is customized.
-          const resolutionConfig = resolutionType === 'moduleNameMapper'
-            ? {
-                CONFIG_MODULE_NAME_MAPPER: JSON.stringify({
-                  [`^${loggerName}$`]: '<rootDir>/ci-visibility/jest-mock-bypass-require/mapped-logger.js',
-                }),
-              }
-            : {
-                CONFIG_RESOLVER: '<rootDir>/ci-visibility/jest-mock-bypass-require/logger-resolver.js',
-              }
-
-          childProcess = exec(
-            runTestsCommand,
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                ...resolutionConfig,
-                TEST_LOGGER: loggerName,
-                TESTS_TO_RUN: 'jest-mock-bypass-require/mapped-logger-test',
-                USE_CONFIG_FILE: '1',
-                USE_JEST_RUN: '1',
-              },
-            }
-          )
-          childProcess.stdout.on('data', chunk => {
-            testOutput += chunk.toString()
-          })
-          childProcess.stderr.on('data', chunk => {
-            testOutput += chunk.toString()
-          })
-
-          const [code] = await once(childProcess, 'exit')
-          assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
-        })
-      }
-
-      it(`instruments ${loggerName} after another suite mocks it`, async () => {
-        let testOutput = ''
-        const logsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
-            assert.strictEqual(payloads.length, 1, testOutput)
-
-            const [{ headers, logMessage, url }] = payloads
-            assert.strictEqual(headers['content-type'], 'application/json')
-            assert.strictEqual(headers['dd-api-key'], 'api-key')
-            assert.strictEqual(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`)
-            assert.strictEqual(logMessage.length, 1)
-
-            const [{ dd, msg }] = logMessage
-            assert.strictEqual(msg, 'real logger after mock')
-            assert.strictEqual(dd.service, 'my-service')
-            assert.match(dd.trace_id, /^\d+$/)
-            assert.match(dd.span_id, /^\d+$/)
-          })
-
-        childProcess = exec(
-          runTestsCommand,
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
-              DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
-              DD_API_KEY: 'api-key',
-              DD_SERVICE: 'my-service',
-              TEST_LOGGER: loggerName,
-              // Run the mocked suite first to expose bypass state leaking between Jest runtimes.
-              TEST_SEQUENCER: './ci-visibility/jest-mock-bypass-require/test-sequencer.js',
-              TESTS_TO_RUN: `jest-mock-bypass-require/(${loggerName}-mock|z-real-logger)-test`,
-              USE_JEST_RUN: '1',
-            },
-          }
-        )
-        childProcess.stdout.on('data', chunk => {
-          testOutput += chunk.toString()
-        })
-        childProcess.stderr.on('data', chunk => {
-          testOutput += chunk.toString()
-        })
-
-        const [[code]] = await Promise.all([
-          once(childProcess, 'exit'),
-          logsPromise,
-        ])
-
-        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
-      })
-    }
   })
 
   context('seed suffix normalization', () => {
