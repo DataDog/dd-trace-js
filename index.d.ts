@@ -356,6 +356,16 @@ declare namespace tracer {
     links?: { context: SpanContext, attributes?: Object }[]
   }
 
+  export interface Exception {
+    message: string;
+    name?: string;
+    stack?: string;
+  }
+
+  export type SpanEventAttributeValue =
+    string | number | boolean | Array<string> | Array<number> | Array<boolean>;
+  export type SpanEventAttributes = Record<string, SpanEventAttributeValue>;
+
   /**
    * Span represents a logical unit of work as part of a broader Trace.
    * Examples of span might include remote procedure calls or a in-process
@@ -365,6 +375,14 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
+
+    /**
+     * Records an exception as a span event without marking the span as failed.
+     *
+     * @param exception The exception to record.
+     * @param attributes Additional attributes for the exception event.
+     */
+    recordException (exception: Exception, attributes?: SpanEventAttributes): void;
 
     /**
      * Adds a single link to the span.
@@ -3875,6 +3893,8 @@ declare namespace tracer {
       description?: string
       config?: Record<string, JSONType>
       tags?: Record<string, string>
+      /** Number of full experiment runs to execute. Default 1. */
+      runs?: number
     }
 
     interface ExperimentRunOptions {
@@ -3884,6 +3904,8 @@ declare namespace tracer {
       retryDelay?: (attempt: number) => number
       /** Reject on the first task/evaluator error instead of capturing it. Default false. */
       throwOnErrors?: boolean
+      /** Maximum number of task/evaluator executions to process concurrently. Default 10. */
+      concurrency?: number
     }
 
     interface PullDatasetOptions {
@@ -3917,17 +3939,21 @@ declare namespace tracer {
 
     interface ExperimentRun {
       runId: string
+      /** 1-based run iteration. */
       runIteration: number
+      /** Whether this run had a task, row-evaluator, or summary-evaluator error. */
+      hasError: boolean
       rows: ExperimentResultRow[]
       summaryEvaluations: Record<string, { value: any, error: string | null }>
     }
 
     interface ExperimentResult {
       experimentId: string
+      /** Rows from the first run, kept as a compatibility alias. */
       rows: ExperimentResultRow[]
-      /** Single-run summary evaluator results. */
+      /** Summary evaluator results from the first run, kept as a compatibility alias. */
       summaryEvaluations: Record<string, { value: any, error: string | null }>
-      /** Experiment runs. P0 Node experiments currently return one run. */
+      /** All experiment runs. */
       runs: ExperimentRun[]
       /** Dashboard URL for the experiment. */
       url: string

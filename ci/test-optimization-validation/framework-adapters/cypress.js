@@ -40,20 +40,18 @@ function getTestExtension (filename) {
  * @returns {string} canonical generated Cypress source
  */
 function getGeneratedTestContent ({ scenarioId, testName }) {
-  const lines = []
+  let content = ''
   if (scenarioId === 'atr-fail-once') {
-    lines.push('let attempt = 0', '')
+    content = 'let attempt = 0\n\n'
   }
-  lines.push(
-    "describe('dd-test-optimization-validation', () => {",
-    `  it(${JSON.stringify(testName)}, () => {`,
-    scenarioId === 'atr-fail-once'
-      ? '    expect(attempt++).to.equal(1)'
-      : '    expect(true).to.equal(true)',
-    '  })',
+  content += "describe('dd-test-optimization-validation', () => {\n" +
+    `  it(${JSON.stringify(testName)}, () => {\n` +
+    (scenarioId === 'atr-fail-once'
+      ? '    expect(attempt++).to.equal(1)\n'
+      : '    expect(true).to.equal(true)\n') +
+    '  })\n' +
     '})'
-  )
-  return lines.join('\n')
+  return content
 }
 
 /**

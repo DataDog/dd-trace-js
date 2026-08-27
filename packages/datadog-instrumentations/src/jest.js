@@ -173,9 +173,11 @@ const newTests = new Set()
 const testSuiteJestObjects = new Map()
 const testSuiteDatadogEnvironments = new Map()
 const wrappedJestGlobals = new WeakSet()
+const wrappedJestEsmLoaders = new WeakSet()
 const wrappedJestObjects = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
+const jestEsmBypassModulePathsByRuntime = new WeakMap()
 const wrappedCoverageReporters = new WeakSet()
 const coverageReporterRequires = new WeakMap()
 const handledJestEvents = new WeakSet()
@@ -3726,7 +3728,13 @@ if (DD_MAJOR < 6) {
   }, jestConfigSyncWrapper)
 }
 
+const LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
+  'bunyan',
+  'pino',
+  'winston',
+])
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
+  ...LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE,
   'selenium-webdriver',
   'selenium-webdriver/chrome',
   'selenium-webdriver/edge',
@@ -3734,7 +3742,6 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver/firefox',
   'selenium-webdriver/ie',
   'selenium-webdriver/chromium',
-  'winston',
 ])
 
 function recordMockedFile (suiteFilePath, moduleName) {
@@ -3784,8 +3791,6 @@ function wrapJestObject (jestObject, suiteFilePath) {
   wrappedJestObjects.add(jestObject)
 
   shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
-    // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
     recordMockedFile(suiteFilePath, moduleName)
     return mock.apply(this, arguments)
   })
@@ -3868,6 +3873,111 @@ function requireOutsideJestRequireEngine (runtime, moduleName) {
   return require(moduleName)
 }
 
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} moduleName
+ * @returns {void}
+ */
+function recordJestEsmBypassModulePath (runtime, from, moduleName) {
+  if (typeof from !== 'string' || !LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) return
+
+  let pathsByParent = jestEsmBypassModulePathsByRuntime.get(runtime)
+  if (!pathsByParent) {
+    pathsByParent = new Map()
+    jestEsmBypassModulePathsByRuntime.set(runtime, pathsByParent)
+  }
+
+  let modulePaths = pathsByParent.get(from)
+  if (!modulePaths) {
+    modulePaths = new Map()
+    pathsByParent.set(from, modulePaths)
+  }
+  if (modulePaths.has(moduleName)) return
+
+  try {
+    modulePaths.set(moduleName, createRequire(from).resolve(moduleName))
+  } catch {
+    modulePaths.set(moduleName, undefined)
+  }
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} modulePath
+ * @returns {boolean}
+ */
+function hasJestEsmBypassModulePath (runtime, from, modulePath) {
+  const modulePaths = jestEsmBypassModulePathsByRuntime.get(runtime)?.get(from)
+  if (!modulePaths) return false
+
+  for (const resolvedPath of modulePaths.values()) {
+    if (resolvedPath === modulePath) return true
+  }
+  return false
+}
+
+/**
+ * @param {object} runtime
+ * @returns {void}
+ */
+function wrapJestEsmLoader (runtime) {
+  const esmLoader = runtime?.esmLoader
+  if (!esmLoader || wrappedJestEsmLoaders.has(esmLoader)) return
+
+  wrappedJestEsmLoaders.add(esmLoader)
+  if (typeof esmLoader.resolveModule === 'function') {
+    shimmer.wrap(esmLoader, 'resolveModule', resolveModule => function (moduleName, from) {
+      recordJestEsmBypassModulePath(runtime, from, moduleName)
+      return resolveModule.apply(this, arguments)
+    })
+  }
+  if (typeof esmLoader.resolveSpecifierForSyncGraph === 'function') {
+    shimmer.wrap(
+      esmLoader,
+      'resolveSpecifierForSyncGraph',
+      resolveSpecifier => function (from, moduleName) {
+        recordJestEsmBypassModulePath(runtime, from, moduleName)
+        return resolveSpecifier.apply(this, arguments)
+      }
+    )
+  }
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} moduleName
+ * @returns {string | undefined}
+ */
+function getJestBypassModulePath (runtime, from, moduleName) {
+  if (typeof from !== 'string' || typeof moduleName !== 'string') return
+
+  if (!LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+    // Jest passes the resolved path when a CommonJS package is imported from an ESM test.
+    if (path.isAbsolute(moduleName) && hasJestEsmBypassModulePath(runtime, from, moduleName)) {
+      return moduleName
+    }
+    return
+  }
+
+  try {
+    let jestModulePath
+    if (typeof runtime._resolveCjsModule === 'function') {
+      jestModulePath = runtime._resolveCjsModule(from, moduleName)
+    } else if (typeof runtime.cjsLoader?.resolution?.resolveCjs === 'function') {
+      jestModulePath = runtime.cjsLoader.resolution.resolveCjs(from, moduleName)
+    } else {
+      // Jest 24-27 uses this name for its synchronous CommonJS resolver.
+      jestModulePath = runtime._resolveModule(from, moduleName)
+    }
+    if (jestModulePath === createRequire(from).resolve(moduleName)) return jestModulePath
+  } catch {
+    // Let Jest produce its own resolution error or load a resolver-only module.
+  }
+}
+
 function formatDefaultStackTrace (error, structuredStackTrace) {
   const errorString = Error.prototype.toString.call(error)
   if (structuredStackTrace.length === 0) return errorString
@@ -3891,10 +4001,29 @@ addHook({
     })
   }
 
+  // Jest 28 through 30.3 keeps ESM dependency resolution on Runtime itself.
+  if (typeof Runtime.prototype.resolveModule === 'function') {
+    shimmer.wrap(Runtime.prototype, 'resolveModule', resolveModule => function (moduleName, from) {
+      recordJestEsmBypassModulePath(this, from, moduleName)
+      return resolveModule.apply(this, arguments)
+    })
+  }
+
+  if (typeof Runtime.prototype.unstable_importModule === 'function') {
+    shimmer.wrap(Runtime.prototype, 'unstable_importModule', importModule => function () {
+      wrapJestEsmLoader(this)
+      return importModule.apply(this, arguments)
+    })
+  }
+
   shimmer.wrap(Runtime.prototype, 'requireModule', requireModule => function (from, moduleName) {
     wrapJestGlobalsForRuntime(this)
     try {
-      const returnedValue = requireModule.apply(this, arguments)
+      // Jest calls requireModule only after deciding that the module should not be mocked.
+      const bypassModulePath = getJestBypassModulePath(this, from, moduleName)
+      const returnedValue = bypassModulePath
+        ? requireOutsideJestRequireEngine(this, bypassModulePath)
+        : requireModule.apply(this, arguments)
       if (moduleName === '@jest/globals') {
         wrapConcurrentJestGlobalsForRuntime(this, returnedValue)
       }
@@ -3923,11 +4052,6 @@ addHook({
       return formatDefaultStackTrace(error, filteredStackTrace)
     }
     try {
-      // TODO: do this for every library that we instrument
-      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-        // To bypass jest's own require engine
-        return requireOutsideJestRequireEngine(this, moduleName)
-      }
       let returnedValue
       try {
         returnedValue = requireModuleOrMock.apply(this, arguments)
