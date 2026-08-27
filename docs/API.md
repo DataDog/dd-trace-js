@@ -517,6 +517,31 @@ cpuGauge.addCallback((result) => {
 })
 ```
 
+Short-lived processes can wait for pending metrics to reach the configured OTLP endpoint before exiting:
+
+Set `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` to bound each export. The value is in milliseconds.
+
+```javascript
+const meterProvider = metrics.getMeterProvider()
+
+await meterProvider.forceFlush()
+```
+
+Call `shutdown()` when the application is finished recording metrics. It performs one final export and then stops the
+provider. Calls to `forceFlush()` after shutdown have no effect.
+
+```javascript
+await meterProvider.shutdown()
+```
+
+For TypeScript, cast the provider to the Datadog implementation type:
+
+```typescript
+import type { opentelemetry as DatadogOpenTelemetry } from 'dd-trace'
+
+const meterProvider = metrics.getMeterProvider() as DatadogOpenTelemetry.MeterProvider
+```
+
 #### Supported Configuration
 
 The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:

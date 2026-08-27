@@ -50,12 +50,18 @@ class MeterProvider {
     return meter
   }
 
-  /**
-   * @param {Function} [done] Called after the metric export completes
-   */
-  forceFlush (done) {
-    if (this.reader) this.reader.forceFlush(done)
-    else done?.()
+  forceFlush () {
+    return new Promise((resolve, reject) => {
+      if (this.reader) this.reader.forceFlush(error => error ? reject(error) : resolve())
+      else resolve()
+    })
+  }
+
+  shutdown () {
+    return new Promise((resolve, reject) => {
+      if (this.reader) this.reader.shutdown(error => error ? reject(error) : resolve())
+      else resolve()
+    })
   }
 }
 

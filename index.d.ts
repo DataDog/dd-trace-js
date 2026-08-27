@@ -3261,6 +3261,11 @@ declare namespace tracer {
   }
 
   export namespace opentelemetry {
+    export interface MeterProvider extends otel.MeterProvider {
+      forceFlush(): Promise<void>;
+      shutdown(): Promise<void>;
+    }
+
     /**
      * A registry for creating named {@link Tracer}s.
      */

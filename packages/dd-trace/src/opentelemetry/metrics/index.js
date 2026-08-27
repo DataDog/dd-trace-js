@@ -79,7 +79,7 @@ function initializeOpenTelemetryMetrics (config) {
   const meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
   // Include the final metric collection and export in lifecycle retention.
-  registerTelemetryFlusher(done => meterProvider.forceFlush(done))
+  registerTelemetryFlusher(done => reader.forceFlush(done))
 }
 
 /**

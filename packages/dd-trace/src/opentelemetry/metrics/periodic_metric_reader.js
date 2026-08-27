@@ -8,6 +8,15 @@ const {
 const { ObservableInstrument } = require('./instruments')
 const { nowUnixNano } = require('./time')
 
+function invokeLifecycleCallback (callback, error) {
+  if (!callback) return
+  try {
+    callback(error)
+  } catch (callbackError) {
+    log.error('Error completing OTLP metrics lifecycle:', callbackError)
+  }
+}
+
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
@@ -105,6 +114,11 @@ class PeriodicMetricReader {
   #exportInterval
   #aggregator
   #batchCallbacks = []
+  #exportQueue = []
+  #isExporting = false
+  #periodicExportPending = false
+  #shutdownCallbacks = []
+  #shutdownComplete = false
 
   /**
    * Creates a new PeriodicMetricReader instance.
@@ -202,42 +216,31 @@ class PeriodicMetricReader {
   forceFlush (done) {
     if (this.#isShutdown) {
       log.warn('PeriodicMetricReader is shutdown. %d measurement(s) were dropped', this.#droppedCount)
-      done?.()
+      invokeLifecycleCallback(done)
       return
     }
-    let pending = 2
-    const complete = () => {
-      if (--pending === 0) done?.()
-    }
-
-    // Snapshot requests already active before starting this flush's export.
-    try {
-      if (typeof this.exporter.flush === 'function') this.exporter.flush(complete)
-      else complete()
-    } catch (error) {
-      log.error('Error flushing OTLP metrics:', error)
-      complete()
-    }
-    try {
-      this.#collectAndExport(complete)
-    } catch (error) {
-      log.error('Error exporting OTLP metrics:', error)
-      complete()
-    }
+    this.#enqueueExport(done)
   }
 
   /**
    * Shuts down the reader and stops periodic collection.
-   * @returns {void}
+   *
+   * @param {Function} [done] Called after the final export and exporter shutdown complete
    */
-  shutdown () {
+  shutdown (done) {
     if (this.#isShutdown) {
-      log.warn('PeriodicMetricReader is already shutdown')
+      if (this.#shutdownComplete) {
+        log.warn('PeriodicMetricReader is already shutdown')
+        invokeLifecycleCallback(done)
+      } else if (done) {
+        this.#shutdownCallbacks.push(done)
+      }
       return
     }
     this.#isShutdown = true
+    if (done) this.#shutdownCallbacks.push(done)
     this.#clearTimer()
-    this.forceFlush()
+    this.#enqueueExport(error => this.#shutdownExporter(error))
   }
 
   /**
@@ -248,7 +251,7 @@ class PeriodicMetricReader {
     if (this.#timer) return
 
     this.#timer = setInterval(() => {
-      this.#collectAndExport()
+      this.#schedulePeriodicExport()
     }, this.#exportInterval)
     this.#timer.unref?.()
   }
@@ -261,6 +264,69 @@ class PeriodicMetricReader {
     if (this.#timer) {
       clearInterval(this.#timer)
       this.#timer = null
+    }
+  }
+
+  #schedulePeriodicExport () {
+    if (this.#periodicExportPending) return
+
+    this.#periodicExportPending = true
+    this.#enqueueExport(error => {
+      this.#periodicExportPending = false
+      if (error) log.error('Error exporting OTLP metrics:', error)
+    })
+  }
+
+  #enqueueExport (callback) {
+    this.#exportQueue.push(callback)
+    this.#drainExportQueue()
+  }
+
+  #drainExportQueue () {
+    if (this.#isExporting || this.#exportQueue.length === 0) return
+
+    this.#isExporting = true
+    const callback = this.#exportQueue.shift()
+    let completed = false
+    const complete = error => {
+      if (completed) return
+      completed = true
+      this.#isExporting = false
+      try {
+        invokeLifecycleCallback(callback, error)
+      } finally {
+        queueMicrotask(() => this.#drainExportQueue())
+      }
+    }
+
+    try {
+      this.#collectAndExport(complete)
+    } catch (error) {
+      log.error('Error exporting OTLP metrics:', error)
+      complete(error)
+    }
+  }
+
+  #shutdownExporter (exportError) {
+    let completed = false
+    const complete = shutdownError => {
+      if (completed) return
+      completed = true
+      this.#shutdownComplete = true
+      const error = exportError || shutdownError
+      const callbacks = this.#shutdownCallbacks
+      this.#shutdownCallbacks = []
+      for (const callback of callbacks) {
+        invokeLifecycleCallback(callback, error)
+      }
+    }
+
+    try {
+      if (typeof this.exporter.shutdown === 'function') this.exporter.shutdown(complete)
+      else complete()
+    } catch (error) {
+      log.error('Error shutting down OTLP metrics exporter:', error)
+      complete(error)
     }
   }
 
@@ -322,7 +388,13 @@ class PeriodicMetricReader {
       this.#lastExportedState
     )
 
-    this.exporter.export(metrics, callback)
+    this.exporter.export(metrics, result => {
+      if (result?.code === 1) {
+        callback?.(result.error || new Error('OTLP metrics export failed'))
+      } else {
+        callback?.()
+      }
+    })
   }
 }
 
