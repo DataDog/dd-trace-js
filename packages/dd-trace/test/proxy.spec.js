@@ -1243,11 +1243,12 @@ describe('TracerProxy', () => {
   })
 })
 
-// Helper function to create APM_TRACING batch transaction objects
+// Helper function to create APM_TRACING batch transaction objects. Accepts a flat
+// { KEY: value } map and mirrors the wire shape RC actually delivers: { config: [{ key, value }, ...] }
 function createApmTracingTransaction (configId, sdkConfig, action = 'apply') {
   const item = {
     id: configId,
-    file: { sdk_config: sdkConfig },
+    file: { sdk_config: { config: Object.entries(sdkConfig).map(([key, value]) => ({ key, value })) } },
     path: `datadog/1/APM_TRACING/${configId}`,
   }
 

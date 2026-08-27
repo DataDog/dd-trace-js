@@ -57,7 +57,7 @@ describe('Tracing Remote Config', () => {
         const sdkConfig = { DD_TRACE_SAMPLE_RATE: '0.5' }
 
         const transaction = createTransaction([
-          { id: 'config-1', file: { sdk_config: sdkConfig } },
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload(sdkConfig) } },
         ])
 
         handler(transaction)
@@ -73,7 +73,7 @@ describe('Tracing Remote Config', () => {
 
         // First apply a config
         let transaction = createTransaction([
-          { id: 'config-1', file: { sdk_config: { DD_TRACE_ENABLED: 'true' } } },
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload({ DD_TRACE_ENABLED: 'true' }) } },
         ])
         handler(transaction)
 
@@ -82,7 +82,7 @@ describe('Tracing Remote Config', () => {
 
         // Then unapply it
         transaction = createTransaction([], [], [
-          { id: 'config-1', file: { sdk_config: { DD_TRACE_ENABLED: 'true' } } },
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload({ DD_TRACE_ENABLED: 'true' }) } },
         ])
         handler(transaction)
 
@@ -98,9 +98,9 @@ describe('Tracing Remote Config', () => {
 
         // Apply multiple configs in a single batch
         const transaction = createTransaction([
-          { id: 'config-1', file: { sdk_config: { DD_TRACE_SAMPLE_RATE: '0.5' } } },
-          { id: 'config-2', file: { sdk_config: { DD_LOGS_INJECTION: 'true' } } },
-          { id: 'config-3', file: { sdk_config: { DD_TRACE_ENABLED: 'true' } } },
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.5' }) } },
+          { id: 'config-2', file: { sdk_config: sdkConfigPayload({ DD_LOGS_INJECTION: 'true' }) } },
+          { id: 'config-3', file: { sdk_config: sdkConfigPayload({ DD_TRACE_ENABLED: 'true' }) } },
         ])
 
         handler(transaction)
@@ -132,7 +132,7 @@ describe('Tracing Remote Config', () => {
         const sdkConfig = buildPayloadWithKeyCount(1000)
 
         const transaction = createTransaction([
-          { id: 'config-1', file: { sdk_config: sdkConfig } },
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload(sdkConfig) } },
         ])
 
         handler(transaction)
@@ -141,7 +141,54 @@ describe('Tracing Remote Config', () => {
         sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_ENABLED: 'true' })
       })
 
-      it('should drop non-string allowlisted values instead of forwarding them', () => {
+      it('should drop non-string, non-boolean, non-number allowlisted values instead of forwarding them', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+
+        const transaction = createTransaction([
+          {
+            id: 'config-1',
+            file: {
+              sdk_config: sdkConfigPayload({
+                DD_TRACE_ENABLED: null,
+                DD_TRACE_SAMPLE_RATE: '0.5',
+              }),
+            },
+          },
+        ])
+
+        handler(transaction)
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.5' })
+      })
+
+      it('should normalize boolean and number allowlisted values to strings', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+
+        const transaction = createTransaction([
+          {
+            id: 'config-1',
+            file: {
+              sdk_config: sdkConfigPayload({
+                DD_TRACE_ENABLED: false,
+                DD_TRACE_SAMPLE_RATE: 0.5,
+              }),
+            },
+          },
+        ])
+
+        handler(transaction)
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, {
+          DD_TRACE_ENABLED: 'false',
+          DD_TRACE_SAMPLE_RATE: '0.5',
+        })
+      })
+
+      it('should ignore malformed entries in the sdk_config array', () => {
         enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
@@ -151,8 +198,10 @@ describe('Tracing Remote Config', () => {
             id: 'config-1',
             file: {
               sdk_config: {
-                DD_TRACE_ENABLED: null,
-                DD_TRACE_SAMPLE_RATE: '0.5',
+                config: [
+                  null,
+                  { key: 'DD_TRACE_ENABLED', value: 'true' },
+                ],
               },
             },
           },
@@ -160,7 +209,7 @@ describe('Tracing Remote Config', () => {
 
         handler(transaction)
 
-        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.5' })
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_ENABLED: 'true' })
       })
     })
   })
@@ -176,14 +225,14 @@ describe('Tracing Remote Config', () => {
           id: 'config-org',
           file: {
             service_target: { service: '*', env: '*' },
-            sdk_config: { DD_TRACE_SAMPLE_RATE: '0.5' },
+            sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.5' }),
           },
         },
         {
           id: 'config-service',
           file: {
             service_target: { service: 'test-service', env: '*' },
-            sdk_config: { DD_TRACE_SAMPLE_RATE: '0.8' },
+            sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.8' }),
           },
         },
       ])
@@ -203,13 +252,13 @@ describe('Tracing Remote Config', () => {
         id: 'config-1',
         file: {
           service_target: { service: '*', env: '*' },
-          sdk_config: { DD_TRACE_SAMPLE_RATE: '0.5' },
+          sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.5' }),
         },
       }, {
         id: 'config-2',
         file: {
           service_target: { service: 'test-service', env: '*' },
-          sdk_config: { DD_TRACE_SAMPLE_RATE: '0.8' },
+          sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.8' }),
         },
       }])
       handler(transaction)
@@ -222,7 +271,7 @@ describe('Tracing Remote Config', () => {
           id: 'config-2',
           file: {
             service_target: { service: 'test-service', env: '*' },
-            sdk_config: { DD_TRACE_SAMPLE_RATE: '0.8' },
+            sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.8' }),
           },
         },
       ])
@@ -241,7 +290,7 @@ describe('Tracing Remote Config', () => {
         id: 'config-other',
         file: {
           service_target: { service: 'other-service', env: '*' },
-          sdk_config: { DD_TRACE_SAMPLE_RATE: '0.9' },
+          sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.9' }),
         },
       }])
 
@@ -281,18 +330,18 @@ describe('Tracing Remote Config', () => {
         id: 'config-org',
         file: {
           service_target: { service: '*', env: '*' },
-          sdk_config: {
+          sdk_config: sdkConfigPayload({
             DD_TRACE_SAMPLE_RATE: '0.5',
             DD_LOGS_INJECTION: 'true',
-          },
+          }),
         },
       }, {
         id: 'config-service',
         file: {
           service_target: { service: 'test-service', env: '*' },
-          sdk_config: {
+          sdk_config: sdkConfigPayload({
             DD_TRACE_SAMPLE_RATE: '0.8',
-          },
+          }),
         },
       }])
 
@@ -313,6 +362,11 @@ function buildPayloadWithKeyCount (keyCount) {
     payload[`KEY_${i}`] = 'value'
   }
   return payload
+}
+
+// Mirrors the wire shape RC actually delivers: { service_name, env, config: [{ key, value }, ...] }
+function sdkConfigPayload (values) {
+  return { config: Object.entries(values).map(([key, value]) => ({ key, value })) }
 }
 
 function createTransaction (toApply = [], toModify = [], toUnapply = []) {

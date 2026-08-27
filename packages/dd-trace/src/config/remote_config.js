@@ -96,23 +96,26 @@ class RCClientManager {
       return
     }
 
-    // Filter to the allowlist here, at ingestion, so only a bounded (allowlist-sized) subset of
-    // an otherwise untrusted, potentially very large sdk_config payload is ever retained in memory.
-    const confPayload = conf.sdk_config
+    // sdk_config is delivered as { service_name, env, config: [{ key, value }, ...] } rather than a
+    // flat map, so entries can only be matched against the allowlist by scanning the array; only the
+    // allowlisted subset is ever retained, but the scan itself is O(payload size), not O(allowlist size).
+    const entries = conf.sdk_config?.config
     let sdkConfig
-    if (confPayload != null) {
+    if (Array.isArray(entries)) {
       sdkConfig = {}
-      for (const key of sdkConfigAllowlist) {
+      for (const entry of entries) {
+        if (entry == null || !sdkConfigAllowlist.has(entry.key)) continue
+
         // Env-style parsers (e.g. BOOLEAN, DECIMAL) assume a string and don't guard against
         // null/non-string input the way programmatic option coercion does, so normalize
         // booleans/numbers to their string form and drop everything else (e.g. null) here,
         // rather than let it reach setRemoteConfig and crash or silently miscoerce (Number(null) === 0).
-        const value = confPayload[key]
+        const { value } = entry
         const type = typeof value
         if (type === 'string') {
-          sdkConfig[key] = value
+          sdkConfig[entry.key] = value
         } else if (type === 'boolean' || type === 'number') {
-          sdkConfig[key] = String(value)
+          sdkConfig[entry.key] = String(value)
         }
       }
     }
