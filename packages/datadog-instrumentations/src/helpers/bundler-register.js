@@ -80,7 +80,15 @@ function doHook (name) {
 /** @type {Set<string>} */
 const instrumentedNodeModules = new Set()
 
-/** @typedef {{ package: string, module: unknown, version: string, path: string }} Payload */
+/**
+ * @typedef {object} Payload
+ * @property {string} package
+ * @property {unknown} module
+ * @property {string} [moduleBaseDir]
+ * @property {string} [moduleName]
+ * @property {string} version
+ * @property {string} path
+ */
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
@@ -123,7 +131,10 @@ dc.subscribe(CHANNEL, (message) => {
         if (patchDefault) exports = exports.default
         else continue
       }
-      exports = hook(exports, payload.version) ?? exports
+      exports = hook(exports, payload.version, undefined, {
+        moduleBaseDir: payload.moduleBaseDir,
+        moduleName: payload.moduleName,
+      }) ?? exports
       payload.module = exports
       payload.apply?.(exports, patchDefault)
     } catch (e) {

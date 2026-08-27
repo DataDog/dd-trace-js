@@ -37,16 +37,19 @@ async function createManifest (projectDir) {
 
   if (targets.length === 0 && relativeTargets.length === 0) return {}
 
+  let artifactDirectory
   try {
     await fs.mkdir(cacheDirectory, { recursive: true })
+    artifactDirectory = await fs.mkdtemp(path.join(cacheDirectory, 'build-'))
   } catch {
     return {}
   }
-  const realCacheDirectory = normalizePath(cacheDirectory)
+  const realCacheDirectory = normalizePath(artifactDirectory)
 
   for (const [index, target] of targets.entries()) {
     const entry = {
       esm: target.esm,
+      moduleBaseDir: target.moduleBaseDir,
       name: target.name,
       path: target.instrumentationPath,
       version: target.version,
@@ -58,7 +61,7 @@ async function createManifest (projectDir) {
         // Proxies are build-time artifacts; preserve source order for stable paths.
         // eslint-disable-next-line no-await-in-loop
         await fs.writeFile(proxyPath, await createEsmProxy(
-          target.path, proxyPath, target.name, target.specifier, target.version
+          target.path, proxyPath, target.name, target.specifier, target.version, target.moduleBaseDir
         ))
       } catch {
         // An unsupported dependency must not prevent the customer's build. Its
@@ -85,9 +88,13 @@ async function createManifest (projectDir) {
   )
   const esmPackageNames = [...new Set(targets.filter(target => target.esm).map(target => target.name))]
   const esmPackagePattern = esmPackageNames.map(escapeRegExp).join('|')
-  const esmImportPattern = esmPackageNames.length > 0 && new RegExp(
-    String.raw`\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)["'](?:${esmPackagePattern})(?:/[^"']*)?["']`
-  )
+  const importGap = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\r\n]*)*`
+  const esmImportPattern = esmPackageNames.length > 0 && new RegExp([
+    String.raw`\b(?:from${importGap}`,
+    String.raw`|import${importGap}(?:\(${importGap})?`,
+    String.raw`|require${importGap}\(${importGap}`,
+    `)["'](?:${esmPackagePattern})(?:/[^"']*)?["']`,
+  ].join(''))
 
   const relativePathPattern = relativeTargets.length > 0 && new RegExp(
     `(?:^|/)(?:${relativeTargets.map(target => escapeRegExp(target.file)).join('|')})$`
@@ -120,7 +127,7 @@ function loadInstrumentations () {
  * @param {Set<string>} [disabledInstrumentations]
  * @param {string} [projectDir]
  * @returns {Array<{
- *   esm: boolean, instrumentationPath: string, name: string,
+ *   esm: boolean, instrumentationPath: string, moduleBaseDir: string, name: string,
  *   path: string, specifier: string, version: string
  * }>}
  */
@@ -212,6 +219,7 @@ function addTargets (targets, packageRoot, name, entries) {
       targets.set(normalizePath(file), {
         esm: isESMFile(file, path.join(packageRoot, 'package.json'), packageJson),
         instrumentationPath: filename(name, modulePath),
+        moduleBaseDir: packageRoot,
         name,
         path: file,
         specifier: modulePath ? `${name}/${modulePath}` : name,
@@ -292,7 +300,13 @@ function addPackageRoot (packageRoot, packageName, names, packageRoots, pending)
     roots.add(realPackageRoot)
     packageRoots.set(packageName, roots)
   }
-  pending.push(path.join(realPackageRoot, 'node_modules'))
+  // pnpm stores a package's dependencies beside the real package directory,
+  // not beneath it. Traversing the containing node_modules reaches those
+  // virtual-store siblings while remaining a no-op for ordinary installs.
+  const pendingDirectories = [path.join(realPackageRoot, 'node_modules')]
+  const containingNodeModules = path.dirname(realPackageRoot)
+  if (path.basename(containingNodeModules) === 'node_modules') pendingDirectories.push(containingNodeModules)
+  pending.push(...pendingDirectories)
 }
 
 function createPackageRequire (packageRoot) {
@@ -314,7 +328,7 @@ function findNodeModulesRoot (packageRoot) {
 function resolvePackageEntrypoint (packageRoot, name) {
   const packageRequire = createPackageRequire(packageRoot)
   try {
-    return resolveImport(packageRequire, name)
+    return packageRequire.resolve(name, { conditions: new Set(['import', 'node']) })
   } catch {
     return resolveImport(Module.createRequire(path.join(packageRoot, 'package.json')), '.')
   }
@@ -373,10 +387,15 @@ function findMatchingFiles (directory, pattern) {
  * @param {string} name
  * @param {string} specifier
  * @param {string} version
+ * @param {string} moduleBaseDir
  * @returns {Promise<string>}
  */
-async function createEsmProxy (sourcePath, proxyPath, name, specifier, version) {
-  const setters = await processModule({ path: sourcePath, context: { format: 'module' } })
+async function createEsmProxy (sourcePath, proxyPath, name, specifier, version, moduleBaseDir) {
+  const setters = await processModule({
+    path: sourcePath,
+    context: { format: 'module' },
+    nonEvaluating: true,
+  })
   const dcPolyfillPath = relativeImport(
     path.dirname(proxyPath),
     require.resolve('dc-polyfill')
@@ -390,6 +409,8 @@ ${[...setters.values()].join(';\n')};
 dc.channel('dd-trace:bundler:load').publish({
   package: ${JSON.stringify(name)},
   module: _,
+  moduleBaseDir: ${JSON.stringify(moduleBaseDir)},
+  moduleName: ${JSON.stringify(sourcePath)},
   path: ${JSON.stringify(specifier)},
   version: ${JSON.stringify(version)},
   apply (exports, patchDefault) {

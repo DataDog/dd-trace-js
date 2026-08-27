@@ -45,6 +45,8 @@ module.exports = function loader (source) {
   const __dd_ch = __dd_dc.channel('${CHANNEL}')
   const __dd_payload = {
     module: module.exports,
+    moduleBaseDir: ${JSON.stringify(target.moduleBaseDir)},
+    moduleName: ${JSON.stringify(this.resourcePath)},
     version: ${JSON.stringify(target.version)},
     package: ${JSON.stringify(target.name)},
     path: ${JSON.stringify(target.path)},

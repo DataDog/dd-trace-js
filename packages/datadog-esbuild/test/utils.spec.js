@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const os = require('os')
 const path = require('path')
 const fs = require('fs')
 const sinon = require('sinon')
@@ -49,6 +50,30 @@ describe('esbuild utils', () => {
       assert.strictEqual(setters.has('default'), true)
       assert.strictEqual(setters.has('createServer'), true)
       assert.strictEqual(setters.has('METHODS'), true)
+    })
+
+    it('can discover ESM exports without evaluating the module', async () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-'))
+      const marker = path.join(directory, 'evaluated')
+      const source = path.join(directory, 'module.mjs')
+      fs.writeFileSync(source, [
+        "import fs from 'node:fs'",
+        `fs.writeFileSync(${JSON.stringify(marker)}, 'yes')`,
+        'export const value = 1',
+      ].join('; '))
+
+      try {
+        const setters = await processModule({
+          context: { format: 'module' },
+          nonEvaluating: true,
+          path: source,
+        })
+
+        assert.deepStrictEqual([...setters.keys()], ['value'])
+        assert.strictEqual(fs.existsSync(marker), false)
+      } finally {
+        fs.rmSync(directory, { force: true, recursive: true })
+      }
     })
   })
 

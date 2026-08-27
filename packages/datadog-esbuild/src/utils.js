@@ -30,6 +30,18 @@ const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
   }
   : getExportsImporting
 
+// Unlike the legacy fallback above, this path only parses module source and
+// never evaluates the target. Turbopack uses it while generating proxies so
+// loading a customer's dependency cannot run application code during config.
+const getExportsWithoutEvaluation = async (srcUrl, context, getSource) => {
+  const mod = await loadGetExportsModule()
+  const exportNames = mod.getExports(srcUrl, context, getSource)
+  if (exportNames?.next) {
+    return driveGetExportsGenerator(exportNames, getSource)
+  }
+  return exportNames
+}
+
 function isStarExportLine (line) {
   return /^\* from /.test(line)
 }
@@ -144,16 +156,17 @@ function driveGetExportsGenerator (exportsGenerator, getSource) {
  * @param {boolean} [moduleData.internal]
  * @param {object} moduleData.context
  * @param {boolean} [moduleData.excludeDefault]
+ * @param {boolean} [moduleData.nonEvaluating]
  * @returns {Promise<Map>}
  */
-async function processModule ({ path, internal = false, context, excludeDefault = false }) {
+async function processModule ({ path, internal = false, context, excludeDefault = false, nonEvaluating = false }) {
   let exportNames, srcUrl
   if (internal) {
     // we can not read and parse of internal modules
     exportNames = await getExportsImporting(path)
   } else {
     srcUrl = pathToFileURL(path)
-    exportNames = await getExports(srcUrl, context, getSource)
+    exportNames = await (nonEvaluating ? getExportsWithoutEvaluation : getExports)(srcUrl, context, getSource)
   }
 
   const starExports = new Set()

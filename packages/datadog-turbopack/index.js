@@ -29,8 +29,9 @@ async function addRules (turbopack = {}, projectDir = process.cwd()) {
   const rules = { ...turbopack.rules }
   const aliases = Object.keys(turbopack.resolveAlias ?? {})
   for (const extension of ['*.js', '*.cjs', '*.mjs']) {
-    const existing = rules[extension]
-    if (hasDatadogLoader(existing)) continue
+    const configured = rules[extension] ? [rules[extension]].flat() : []
+    if (configured.some(rule => isCurrentDatadogLoader(rule, manifest.hash))) continue
+    const existing = configured.filter(rule => !isDatadogLoader(rule))
 
     const datadogRules = [{
       condition: {
@@ -62,8 +63,8 @@ async function addRules (turbopack = {}, projectDir = process.cwd()) {
         loaders: [{ loader, options: { manifestHash: manifest.hash, manifestPath: manifest.path } }],
       })
     }
-    rules[extension] = existing
-      ? [...(Array.isArray(existing) ? existing : [existing]), ...datadogRules]
+    rules[extension] = existing.length > 0
+      ? [...existing, ...datadogRules]
       : datadogRules.length === 1 ? datadogRules[0] : datadogRules
   }
 
@@ -73,8 +74,12 @@ async function addRules (turbopack = {}, projectDir = process.cwd()) {
   }
 }
 
-function hasDatadogLoader (rules) {
-  return [rules].flat().some(rule => rule?.loaders?.some(item => item?.loader === loader))
+function isDatadogLoader (rule) {
+  return rule?.loaders?.some(item => item?.loader === loader)
+}
+
+function isCurrentDatadogLoader (rule, manifestHash) {
+  return rule?.loaders?.some(item => item?.loader === loader && item.options?.manifestHash === manifestHash)
 }
 
 module.exports = {

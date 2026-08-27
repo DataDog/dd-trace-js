@@ -39,7 +39,10 @@ describe('bundler register', () => {
       version: '1.0.0',
     })
 
-    sinon.assert.calledOnceWithExactly(hook, Original, '1.0.0')
+    sinon.assert.calledOnceWithExactly(hook, Original, '1.0.0', undefined, {
+      moduleBaseDir: undefined,
+      moduleName: undefined,
+    })
     sinon.assert.calledOnceWithExactly(apply, Patched, true)
     sinon.assert.calledOnceWithExactly(loadChannel.publish, {
       file: 'index.mjs',
@@ -67,8 +70,35 @@ describe('bundler register', () => {
 
     publish(payload)
 
-    sinon.assert.calledOnceWithExactly(hook, { Original }, '1.0.0')
+    sinon.assert.calledOnceWithExactly(hook, { Original }, '1.0.0', undefined, {
+      moduleBaseDir: undefined,
+      moduleName: undefined,
+    })
     assert.equal(payload.module, Patched)
+  })
+
+  it('passes bundled module metadata to instrumentation hooks', () => {
+    const hook = sinon.stub()
+    const { publish } = loadBundlerRegister({
+      hooks: { 'test-module-metadata': sinon.stub() },
+      instrumentations: {
+        'test-module-metadata': [{ file: 'index.js', hook }],
+      },
+    })
+
+    publish({
+      module: {},
+      moduleBaseDir: '/app/node_modules/test-module-metadata',
+      moduleName: '/app/node_modules/test-module-metadata/index.js',
+      package: 'test-module-metadata',
+      path: 'test-module-metadata/index.js',
+      version: '1.0.0',
+    })
+
+    sinon.assert.calledOnceWithExactly(hook, {}, '1.0.0', undefined, {
+      moduleBaseDir: '/app/node_modules/test-module-metadata',
+      moduleName: '/app/node_modules/test-module-metadata/index.js',
+    })
   })
 
   it('does not activate explicitly disabled bundled integrations', () => {
@@ -110,7 +140,10 @@ describe('bundler register', () => {
       version: '1.0.0',
     })
 
-    sinon.assert.calledOnceWithExactly(integrationHook, {}, '1.0.0')
+    sinon.assert.calledOnceWithExactly(integrationHook, {}, '1.0.0', undefined, {
+      moduleBaseDir: undefined,
+      moduleName: undefined,
+    })
   })
 
   it('matches bundled relative-module hooks', () => {
@@ -130,7 +163,10 @@ describe('bundler register', () => {
       version: '6.1.0',
     })
 
-    sinon.assert.calledOnceWithExactly(integrationHook, {}, '6.1.0')
+    sinon.assert.calledOnceWithExactly(integrationHook, {}, '6.1.0', undefined, {
+      moduleBaseDir: undefined,
+      moduleName: undefined,
+    })
   })
 })
 
