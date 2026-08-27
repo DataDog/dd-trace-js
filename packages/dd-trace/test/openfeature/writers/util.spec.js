@@ -84,6 +84,7 @@ describe('OpenFeature exposure delivery strategy', () => {
     setExposureDeliveryStrategy(config, setWriterEnabledValue)
 
     sinon.assert.calledOnceWithExactly(discoverEVPProxy, config.url, {
+      retry: false,
       supportedPaths: ['/evp_proxy/v4', '/evp_proxy/v2'],
     }, sinon.match.func)
     sinon.assert.calledOnceWithExactly(setWriterEnabledValue, true, {
@@ -108,6 +109,7 @@ describe('OpenFeature exposure delivery strategy', () => {
     setExposureDeliveryStrategy(config, setWriterEnabledValue)
 
     sinon.assert.calledOnceWithExactly(discoverEVPProxy, config.url, {
+      retry: false,
       supportedPaths: ['/evp_proxy/v4', '/evp_proxy/v2'],
     }, sinon.match.func)
     sinon.assert.calledOnceWithMatch(setWriterEnabledValue, true, {
