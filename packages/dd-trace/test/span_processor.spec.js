@@ -9,7 +9,6 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
-const { SPAN_TYPE } = require('../../../ext/tags')
 const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
 
 describe('SpanProcessor', () => {
@@ -111,43 +110,6 @@ describe('SpanProcessor', () => {
   it('should not flush a partial trace below the flushMinSpans threshold', () => {
     trace.started = [activeSpan, finishedSpan]
     trace.finished = [finishedSpan]
-    processor.process(finishedSpan)
-
-    sinon.assert.notCalled(exporter.export)
-    assert.deepStrictEqual(trace.started, [activeSpan, finishedSpan])
-    assert.deepStrictEqual(trace.finished, [finishedSpan])
-  })
-
-  it('should flush a completed test suite while its parents remain active', () => {
-    config.isCiVisibility = true
-    finishedSpan.context().setTag(SPAN_TYPE, 'test_suite_end')
-    const finishedTestSpan = { ...finishedSpan }
-    spanFormat.callsFake(span => ({ span }))
-    trace.started = [activeSpan, finishedTestSpan, finishedSpan]
-    trace.finished = [finishedTestSpan, finishedSpan]
-
-    processor.process(finishedSpan)
-
-    sinon.assert.calledOnceWithExactly(exporter.export, [
-      { span: finishedTestSpan },
-      { span: finishedSpan },
-    ])
-    assert.deepStrictEqual(trace.started, [activeSpan])
-    assert.deepStrictEqual(trace.finished, [])
-
-    activeSpan._duration = 100
-    trace.finished = [activeSpan]
-    processor.process(activeSpan)
-
-    sinon.assert.calledTwice(exporter.export)
-    sinon.assert.calledWithExactly(exporter.export.secondCall, [{ span: activeSpan }])
-  })
-
-  it('should not flush a test suite early outside Test Optimization', () => {
-    finishedSpan.context().setTag(SPAN_TYPE, 'test_suite_end')
-    trace.started = [activeSpan, finishedSpan]
-    trace.finished = [finishedSpan]
-
     processor.process(finishedSpan)
 
     sinon.assert.notCalled(exporter.export)

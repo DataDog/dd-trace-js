@@ -149,17 +149,13 @@ versions.forEach((version) => {
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
-          for (const eventType of ['test_session_end', 'test_module_end']) {
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
             const event = events.find(event => event.type === eventType)
             assert.ok(event, `expected ${eventType} event`)
             assert.strictEqual(event.content.meta[TEST_STATUS], 'fail', `${eventType} should fail`)
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /custom Playwright reporter failed/)
           }
-          const testSuite = events.find(event => event.type === 'test_suite_end')
-          assert.ok(testSuite, 'expected test_suite_end event')
-          assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'pass')
-          assert.strictEqual(testSuite.content.error, 0)
           const testEvent = events.find(event => event.type === 'test')
           assert.ok(testEvent, 'expected completed test event')
           assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
@@ -188,17 +184,13 @@ versions.forEach((version) => {
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          for (const eventType of ['test_session_end', 'test_module_end']) {
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
             const event = events.find(event => event.type === eventType)
             assert.ok(event, `expected ${eventType} event`)
             assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /undefined/)
           }
-          const testSuite = events.find(event => event.type === 'test_suite_end')
-          assert.ok(testSuite, 'expected test_suite_end event')
-          assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'pass')
-          assert.strictEqual(testSuite.content.error, 0)
         }
       )
       const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
@@ -283,16 +275,12 @@ versions.forEach((version) => {
           ({ url }) => url.endsWith('/api/v2/citestcycle'),
           (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
-            for (const eventType of ['test_session_end', 'test_module_end']) {
+            for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
               const event = events.find(event => event.type === eventType)
               assert.ok(event, `expected ${eventType} event`)
               assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
               assert.match(event.content.meta[ERROR_MESSAGE], /custom Playwright reporter onExit failed/)
             }
-            const testSuite = events.find(event => event.type === 'test_suite_end')
-            assert.ok(testSuite, 'expected test_suite_end event')
-            assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(testSuite.content.error, 0)
           }
         )
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])

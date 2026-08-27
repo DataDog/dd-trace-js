@@ -1,7 +1,5 @@
 'use strict'
 
-const { SPAN_TYPE } = require('../../../ext/tags')
-
 const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
@@ -52,8 +50,7 @@ class SpanProcessor {
       this._erase(trace, active)
       return
     }
-    const isFinishedTestSuite = this._config.isCiVisibility && spanContext.getTag(SPAN_TYPE) === 'test_suite_end'
-    if (started.length === finished.length || finished.length >= flushMinSpans || isFinishedTestSuite) {
+    if (started.length === finished.length || finished.length >= flushMinSpans) {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
