@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
+const path = require('node:path')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -312,6 +314,58 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(DatadogTracer, config)
         sinon.assert.calledOnceWithExactly(RemoteConfig, config)
         sinon.assert.notCalled(rewriter.enable)
+      })
+
+      it('only loads Test Optimization startup modules through ci/init', () => {
+        const repoRoot = path.resolve(__dirname, '../../..')
+        const modules = [
+          require.resolve('../src/ci-visibility/test-api-manual/test-api-manual-plugin'),
+          require.resolve('../src/ci-visibility/dynamic-instrumentation'),
+        ]
+        const script = `
+          const tracer = require(process.env.DD_TRACE_TEST_ENTRYPOINT)
+          if (process.env.DD_TRACE_TEST_CALL_INIT === 'true') {
+            tracer.init()
+          }
+          const modules = ${JSON.stringify(modules)}
+          const loaded = modules.map(module => require.cache[module] !== undefined)
+          process.stdout.write(JSON.stringify(loaded), () => process.exit())
+        `
+        const cases = [
+          { entrypoint: repoRoot, callInit: 'true', expected: [false, false] },
+          { entrypoint: path.join(repoRoot, 'ci/init'), callInit: 'false', expected: [true, true] },
+          {
+            entrypoint: path.join(repoRoot, 'ci/init'),
+            callInit: 'false',
+            environment: {
+              DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false',
+              DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
+            },
+            expected: [false, false],
+          },
+        ]
+
+        for (const testCase of cases) {
+          const result = spawnSync(process.execPath, ['--eval', script], {
+            encoding: 'utf8',
+            env: {
+              ...process.env,
+              DD_CIVISIBILITY_ENABLED: 'true',
+              DD_CIVISIBILITY_MANUAL_API_ENABLED: 'true',
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+              DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+              DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'true',
+              DD_TRACE_ENABLED: 'true',
+              DD_TRACE_STARTUP_LOGS: 'false',
+              DD_TRACE_TEST_CALL_INIT: testCase.callInit,
+              DD_TRACE_TEST_ENTRYPOINT: testCase.entrypoint,
+              ...testCase.environment,
+            },
+          })
+
+          assert.strictEqual(result.status, 0, result.stderr)
+          assert.deepStrictEqual(JSON.parse(result.stdout), testCase.expected)
+        }
       })
 
       it('should enable the IAST rewriter when IAST is enabled', () => {
