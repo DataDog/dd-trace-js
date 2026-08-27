@@ -11,6 +11,7 @@ const CHANNEL = 'dd-trace:bundler:load'
 // Keep the marker split so source-map scanners do not treat this file as mapped.
 // eslint-disable-next-line unicorn/no-useless-concat -- Keep the marker non-contiguous.
 const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
+const manifestCache = new Map()
 
 /**
  * Instruments bundled modules known to dd-trace. CommonJS modules publish
@@ -22,7 +23,11 @@ const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base6
  */
 module.exports = function loader (source) {
   const { aliases, manifestPath, rewriteApplicationImports } = this.getOptions()
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+  let manifest = manifestCache.get(manifestPath)
+  if (!manifest) {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    manifestCache.set(manifestPath, manifest)
+  }
   const target = manifest.targets[normalizePath(this.resourcePath)] ||
     getRelativeTarget(this.resourcePath, manifest.relativeTargets)
   const esm = isESMFile(this.resourcePath)

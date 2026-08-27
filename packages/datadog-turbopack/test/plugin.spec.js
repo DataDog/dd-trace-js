@@ -302,6 +302,24 @@ describe('datadog-turbopack configuration', () => {
     assert.equal(targets[realpath(path.join(target, 'index.js'))].name, 'ioredis')
   })
 
+  it('discovers dependencies beside scoped pnpm virtual-store packages', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const virtualStore = path.join(directory, 'node_modules', '.pnpm', '@scope+parent@1', 'node_modules')
+    const parent = createPackageIn(virtualStore, '@scope/parent', { main: 'index.js', version: '1.0.0' })
+    const target = createPackageIn(virtualStore, 'ioredis', { main: 'index.js', version: '5.0.0' })
+    write(parent, 'index.js', 'module.exports = require("ioredis")')
+    write(target, 'index.js', 'module.exports = {}')
+    fs.mkdirSync(path.join(directory, 'node_modules', '@scope'), { recursive: true })
+    fs.symlinkSync(parent, path.join(directory, 'node_modules', '@scope', 'parent'), 'dir')
+
+    const manifest = await createManifest(directory)
+    const targets = JSON.parse(fs.readFileSync(manifest.path, 'utf8')).targets
+
+    assert.equal(targets[realpath(path.join(target, 'index.js'))].name, 'ioredis')
+  })
+
   it('matches targets in symlinked package roots', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
     directories.push(directory)

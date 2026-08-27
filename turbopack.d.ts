@@ -1,4 +1,5 @@
 export interface TurbopackConfiguration {
+  [key: string]: unknown
   rules?: Record<string, unknown>
   resolveAlias?: Record<string, unknown>
 }

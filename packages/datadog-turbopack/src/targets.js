@@ -305,8 +305,8 @@ function addPackageRoot (packageRoot, packageName, names, packageRoots, pending)
   // not beneath it. Traversing the containing node_modules reaches those
   // virtual-store siblings while remaining a no-op for ordinary installs.
   const pendingDirectories = [path.join(realPackageRoot, 'node_modules')]
-  const containingNodeModules = path.dirname(realPackageRoot)
-  if (path.basename(containingNodeModules) === 'node_modules') pendingDirectories.push(containingNodeModules)
+  const containingNodeModules = findNodeModulesRoot(realPackageRoot)
+  if (containingNodeModules) pendingDirectories.push(containingNodeModules)
   pending.push(...pendingDirectories)
 }
 
