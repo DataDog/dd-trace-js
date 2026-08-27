@@ -6,7 +6,7 @@ const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/
 const log = require('../log')
 const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
-const FlagEvalMetricsHook = require('./flag-eval-metrics-hook')
+const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
 const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
 const FlagEvaluationsWriter = require('./writers/flag-evaluations')
@@ -36,11 +36,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
     })
 
-    // OTel feature_flag.evaluations hook — ALWAYS registered; untouched
-    this.hooks.push(new FlagEvalMetricsHook(config))
+    this.hooks.push(new EvalMetricsHook(config))
 
-    // EVP flagevaluation hook — gated by killswitch DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED
-    // Default: enabled (only explicit false disables); routed through config system.
     if (config.experimental.flaggingProvider.evaluationCountsEnabled) {
       this.#flagEvalEVPWriter = new FlagEvaluationsWriter(config)
       const writer = this.#flagEvalEVPWriter
