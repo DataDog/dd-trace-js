@@ -739,7 +739,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(sessionEvent.content.meta[MOCHA_IS_PARALLEL], 'true')
         assert.strictEqual(suiteEvents.length, 2)
         assert.strictEqual(hierarchyEvents.length, 4)
-        for (const event of hierarchyEvents) {
+        // Session and module are marked as failed; suites retain their actual status.
+        for (const event of [sessionEvent, hierarchyEvents.find(event => event.type === 'test_module_end')]) {
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.content.error, 1)
           assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
