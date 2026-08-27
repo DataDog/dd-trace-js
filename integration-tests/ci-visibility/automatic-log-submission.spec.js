@@ -84,6 +84,7 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'jest',
       command: 'node ./node_modules/jest/bin/jest --config ./ci-visibility/automatic-log-submission/config-jest.js',
+      loggerNames: ['winston', 'bunyan', 'pino'],
     },
     {
       name: 'cucumber',
