@@ -1,6 +1,7 @@
 'use strict'
 
 const FINAL_FLUSH_TIMEOUT = 10_000
+const FINAL_FLUSH_DRAIN_TIMEOUT = 30_000
 const FINAL_FLUSH_FALLBACK_DELAY = 100
 const FINAL_FLUSH_TIMEOUT_CODE = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
 
@@ -15,6 +16,7 @@ function createFinalFlushTimeoutError () {
 
 module.exports = {
   createFinalFlushTimeoutError,
+  FINAL_FLUSH_DRAIN_TIMEOUT,
   FINAL_FLUSH_FALLBACK_DELAY,
   FINAL_FLUSH_TIMEOUT,
 }

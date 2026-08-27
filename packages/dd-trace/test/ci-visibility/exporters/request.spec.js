@@ -237,7 +237,32 @@ describe('Test Optimization exporter request', () => {
 
     assert.strictEqual(pendingRequests.length, 1)
     sinon.assert.calledOnce(done)
+    assert.strictEqual(done.firstCall.args[0], requestError)
+  })
+
+  it('reports the abort error when no prior attempt failed', () => {
+    const controller = new AbortController()
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 10_000, signal: controller.signal }, done)
+
+    const abortError = Object.assign(new Error('finalization expired'), { code: 'ABORT_ERR' })
+    controller.abort(abortError)
+    clock.tick(10_000)
+
+    sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0], abortError)
+  })
+
+  it('preserves the HTTP status when a retry is aborted', () => {
+    const controller = new AbortController()
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 10_000, signal: controller.signal }, done)
+
+    const requestError = Object.assign(new Error('unavailable'), { status: 503 })
+    pendingRequests[0].callback(requestError, null, 503, {})
+    controller.abort(new Error('finalization expired'))
+
+    sinon.assert.calledOnceWithExactly(done, requestError, null, 503, undefined)
   })
 
   it('stops buffering a readable body when finalization aborts', () => {

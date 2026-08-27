@@ -9,7 +9,7 @@ const sinon = require('sinon')
 require('../setup/core')
 
 const { publishWithCompletion } = require('../../../datadog-instrumentations/src/helpers/channel')
-const { FINAL_FLUSH_TIMEOUT } = require('../../src/ci-visibility/final-flush')
+const { FINAL_FLUSH_DRAIN_TIMEOUT, FINAL_FLUSH_TIMEOUT } = require('../../src/ci-visibility/final-flush')
 
 const logSubmissionCh = channel('ci:log-submission:log')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
@@ -146,7 +146,7 @@ describe('LogSubmissionPlugin', () => {
     sinon.assert.calledWith(log.error, 'Error submitting %s logs', 'bunyan', error)
   })
 
-  it('aborts pending requests and releases the final flush at the deadline', () => {
+  it('detaches pending requests and aborts them after the bounded drain window', () => {
     request.callsFake(() => {})
     publishLog('{"msg":"hello"}')
     const onDone = sinon.spy()
@@ -159,6 +159,12 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(signal.aborted, false)
     clock.tick(1)
     sinon.assert.calledOnce(onDone)
+    assert.strictEqual(signal.aborted, false)
+    assert.strictEqual(onDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+
+    clock.tick(FINAL_FLUSH_DRAIN_TIMEOUT - 1)
+    assert.strictEqual(signal.aborted, false)
+    clock.tick(1)
     assert.strictEqual(signal.aborted, true)
     assert.strictEqual(signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
   })

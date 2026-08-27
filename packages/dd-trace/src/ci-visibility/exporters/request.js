@@ -113,6 +113,7 @@ function requestBuffered (data, options, callback) {
   const timeout = options.timeout || 2000
   let retryTimer
   let settled = false
+  let lastError
 
   const complete = (error, result, statusCode, headers) => {
     if (settled) return
@@ -121,7 +122,10 @@ function requestBuffered (data, options, callback) {
     signal?.removeEventListener('abort', onAbort)
     callback(error, result, statusCode, headers)
   }
-  const onAbort = () => complete(getAbortError(signal))
+  const onAbort = () => {
+    if (lastError) complete(lastError, null, lastError.status)
+    else complete(getAbortError(signal))
+  }
 
   signal?.addEventListener('abort', onAbort, { once: true })
   if (signal?.aborted) return onAbort()
@@ -134,9 +138,13 @@ function requestBuffered (data, options, callback) {
     const deadline = options.deadline
     const remaining = deadline === undefined ? Infinity : deadline - Date.now()
     if (remaining <= 0) {
-      const error = new Error('Test Optimization request reached its finalization deadline')
-      error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
-      complete(error)
+      if (lastError) {
+        complete(lastError, null, lastError.status)
+      } else {
+        const error = new Error('Test Optimization request reached its finalization deadline')
+        error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
+        complete(error)
+      }
       return
     }
 
@@ -159,6 +167,8 @@ function requestBuffered (data, options, callback) {
         complete(null, result, statusCode, headers)
         return
       }
+
+      lastError = error
 
       const responseStatus = statusCode ?? error.status
       const isRetriableHttpError = isRetriableHttpStatusCode(responseStatus)
