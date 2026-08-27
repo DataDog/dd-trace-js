@@ -35,6 +35,7 @@ const buildSettingsCacheKey = require('./settings-cache-key')
 
 const hostname = getHostname()
 const EMPTY_SETTINGS = Object.freeze({})
+const SETTINGS_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 const SETTINGS_BOOLEAN_FIELDS = Object.freeze([
   'isCodeCoverageEnabled',
   'isSuitesSkippingEnabled',
@@ -415,11 +416,11 @@ class CiVisibilityExporter extends BufferingExporter {
             }
           }
           liveFetchStarted = false
-          return withCache(fsCacheKey, fetchSettings, applySettings)
+          return withCache(fsCacheKey, fetchSettings, applySettings, SETTINGS_CACHE_TTL_MS)
         }
         this._applyCachedSettings(libraryConfig, configuration, repositoryUrl, true, callback)
       }
-      withCache(fsCacheKey, fetchSettings, applySettings)
+      withCache(fsCacheKey, fetchSettings, applySettings, SETTINGS_CACHE_TTL_MS)
     })
   }
 

@@ -21,6 +21,7 @@ const CiVisibilityExporter =
 const buildSettingsCacheKey = require('../../../src/ci-visibility/exporters/settings-cache-key')
 
 const url = new URL(`http://${hostname}:${port}`)
+const SETTINGS_CACHE_TTL_MS = 5 * 60 * 1000
 
 const TEST_CONFIGURATION = {
   repositoryUrl: 'git@github.com:Datadog/dd-trace-js.git',
@@ -232,6 +233,49 @@ describe('ci-visibility settings filesystem cache', () => {
       done()
     })
   })
+
+  for (const { description, age, shouldFetch } of [
+    {
+      description: 'accepts settings at the five-minute cache TTL boundary',
+      age: SETTINGS_CACHE_TTL_MS,
+      shouldFetch: false,
+    },
+    {
+      description: 'refreshes settings immediately after the five-minute cache TTL boundary',
+      age: SETTINGS_CACHE_TTL_MS + 1,
+      shouldFetch: true,
+    },
+  ]) {
+    it(description, async () => {
+      const clock = sinon.useFakeTimers({
+        now: SETTINGS_CACHE_TTL_MS * 2,
+        toFake: ['Date'],
+      })
+      const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
+      exporter._resolveCanUseCiVisProtocol(true)
+      cleanup(exporter, TEST_CONFIGURATION)
+
+      const key = cacheKeyForConfiguration(exporter, TEST_CONFIGURATION)
+      const cachedSettings = parseLibraryConfigurationResponse(SETTINGS_NO_SKIPPING)
+      fs.writeFileSync(
+        getCachePath(key),
+        JSON.stringify({ timestamp: Date.now() - age, data: cachedSettings }),
+        'utf8'
+      )
+      const scope = nock(url)
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify(SETTINGS_NO_GIT))
+
+      try {
+        const libraryConfig = await requestLibraryConfiguration(exporter)
+        assert.strictEqual(scope.isDone(), shouldFetch)
+        assert.strictEqual(libraryConfig.isSuitesSkippingEnabled, shouldFetch)
+      } finally {
+        clock.restore()
+        cleanup(exporter, TEST_CONFIGURATION)
+      }
+    })
+  }
 
   it('isolates filesystem settings by backend origin', async () => {
     const otherUrl = new URL(`http://localhost:${port}`)

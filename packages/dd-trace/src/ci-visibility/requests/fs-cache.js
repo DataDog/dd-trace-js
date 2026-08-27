@@ -65,9 +65,10 @@ function isValidTimestamp (timestamp, now) {
  * Attempts to read cached data from the filesystem.
  *
  * @param {string} cacheKey
+ * @param {number} [cacheTtlMs] - Maximum cache age in milliseconds.
  * @returns {{ data: unknown } | undefined}
  */
-function readFromCache (cacheKey) {
+function readFromCache (cacheKey, cacheTtlMs = CACHE_TTL_MS) {
   const cachePath = getCachePath(cacheKey)
   try {
     const raw = fs.readFileSync(cachePath, 'utf8')
@@ -83,7 +84,7 @@ function readFromCache (cacheKey) {
       return
     }
     const age = now - timestamp
-    if (age > CACHE_TTL_MS) {
+    if (age > cacheTtlMs) {
       log.debug('%s cache expired (age: %d ms)', cacheKey, age)
       return
     }
@@ -203,10 +204,11 @@ function isLockStale (cacheKey) {
  * @param {string} cacheKey
  * @param {Function} fetchFn - function(cacheKey, done) that fetches from the API
  * @param {Function} done - callback(err, ...results)
+ * @param {number} cacheTtlMs - Maximum cache age in milliseconds.
  */
-function waitForCache (cacheKey, fetchFn, done) {
+function waitForCache (cacheKey, fetchFn, done, cacheTtlMs) {
   const poll = () => {
-    const cached = readFromCache(cacheKey)
+    const cached = readFromCache(cacheKey, cacheTtlMs)
     if (cached) {
       return done(null, cached.data)
     }
@@ -223,7 +225,7 @@ function waitForCache (cacheKey, fetchFn, done) {
         return setTimeout(poll, CACHE_LOCK_POLL_MS)
       }
 
-      const cachedAfterTakeover = readFromCache(cacheKey)
+      const cachedAfterTakeover = readFromCache(cacheKey, cacheTtlMs)
       if (cachedAfterTakeover) {
         releaseLock(cacheKey)
         return done(null, cachedAfterTakeover.data)
@@ -250,14 +252,15 @@ function waitForCache (cacheKey, fetchFn, done) {
  * @param {Function} fetchFn - function(cacheKey, done) that performs the API request.
  *   Must call writeToCache(cacheKey, data) on success before calling done(null, data).
  * @param {Function} done - callback(err, ...results)
+ * @param {number} [cacheTtlMs] - Maximum cache age in milliseconds.
  */
-function withCache (cacheKey, fetchFn, done) {
+function withCache (cacheKey, fetchFn, done, cacheTtlMs = CACHE_TTL_MS) {
   if (!isCacheEnabled()) {
     return fetchFn(null, done)
   }
 
   // Fast path: cache hit
-  const cached = readFromCache(cacheKey)
+  const cached = readFromCache(cacheKey, cacheTtlMs)
   if (cached) {
     return done(null, cached.data)
   }
@@ -271,7 +274,7 @@ function withCache (cacheKey, fetchFn, done) {
 
   if (!isLockOwner) {
     log.debug('%s lock held by another process, waiting for cache', cacheKey)
-    return waitForCache(cacheKey, fetchFn, done)
+    return waitForCache(cacheKey, fetchFn, done, cacheTtlMs)
   }
 
   // This process owns the lock — start heartbeat and fetch
