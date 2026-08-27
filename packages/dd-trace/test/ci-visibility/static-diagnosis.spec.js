@@ -12,6 +12,7 @@ const {
 } = require('../../../../ci/test-optimization-validation/static-diagnosis')
 
 describe('test optimization validation static diagnosis', () => {
+  const itUnlessWindows = process.platform === 'win32' ? it.skip : it
   it('recognizes Better Node Test scripts as node:test diagnostics', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
@@ -101,12 +102,7 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
-  it('ignores a root package.json symbolic link that escapes the repository', function () {
-    if (process.platform === 'win32') {
-      // Windows does not expose the symbolic-link behavior exercised here.
-      this.skip()
-    }
-
+  itUnlessWindows('ignores a root package.json symbolic link that escapes the repository', function () {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-outside-'))
     const outsidePackageJson = path.join(outside, 'package.json')
@@ -141,12 +137,7 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
-  it('does not execute git from a repository-controlled PATH directory', function () {
-    if (process.platform === 'win32') {
-      // Windows does not use the PATH lookup behavior exercised here.
-      this.skip()
-    }
-
+  itUnlessWindows('does not execute git from a repository-controlled PATH directory', function () {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
     const bin = path.join(root, 'node_modules', '.bin')
     const marker = path.join(root, 'repository-git-executed')
