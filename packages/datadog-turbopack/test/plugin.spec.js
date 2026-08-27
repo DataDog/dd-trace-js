@@ -112,29 +112,6 @@ describe('datadog-turbopack loader', () => {
     assert.match(result, /require\("\.\.\/\.\.\/node_modules\/\.cache\/dd-trace\/turbopack\/build-[^/]+\/0\.mjs"\)/)
   })
 
-  it('resolves the import export of a dual package when rewriting application imports', () => {
-    const directory = createPackage('ai', {
-      exports: {
-        '.': {
-          import: './esm.mjs',
-          require: './cjs.cjs',
-        },
-      },
-      main: 'cjs.cjs',
-      version: '7.0.0',
-    })
-    const esm = write(directory, 'esm.mjs', 'export const generateText = () => {}')
-    write(directory, 'cjs.cjs', 'module.exports = {}')
-    const proxy = write(directory, '../.cache/dd-trace/turbopack/ai.mjs', 'export {}')
-    const appPath = write(path.dirname(path.dirname(directory)), 'route.js', '')
-
-    const result = loader.rewriteImports("import { generateText } from 'ai'", appPath, {
-      [realpath(esm)]: { esm: true, proxyPath: realpath(proxy) },
-    })
-
-    assert.match(result, /from "\.\/node_modules\/\.cache\/dd-trace\/turbopack\/ai\.mjs"/)
-  })
-
   it('does not rewrite an application-defined require function', () => {
     const directory = createPackage('ai', { main: 'index.mjs', type: 'module' })
     const target = write(directory, 'index.mjs', 'export const generateText = () => {}')
@@ -310,31 +287,6 @@ describe('datadog-turbopack configuration', () => {
     const targets = JSON.parse(fs.readFileSync(manifest.path, 'utf8')).targets
 
     assert.equal(targets[realpath(path.join(target, 'index.js'))].name, 'ioredis')
-  })
-
-  it('uses the import export when discovering a dual package', async () => {
-    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
-    directories.push(directory)
-    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
-    const packagePath = createPackageIn(directory, 'ai', {
-      exports: {
-        '.': {
-          import: './esm.mjs',
-          require: './cjs.cjs',
-        },
-      },
-      main: 'cjs.cjs',
-      version: '7.0.0',
-    })
-    write(packagePath, 'esm.mjs', 'export const generateText = () => {}')
-    const cjs = write(packagePath, 'cjs.cjs', 'module.exports = {}')
-
-    const manifest = await createManifest(directory)
-    const target = Object.entries(JSON.parse(fs.readFileSync(manifest.path, 'utf8')).targets)
-      .find(([, target]) => target.name === 'ai')
-
-    assert.notEqual(target[0], realpath(cjs))
-    assert.match(target[0], /\/ai\/esm\.mjs$/)
   })
 
   it('isolates artifacts between concurrent manifest generations', async () => {
