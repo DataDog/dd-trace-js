@@ -40,26 +40,26 @@ passing rerun by itself is evidence of nondeterminism, not proof that the curren
 ## Investigate and fix the cause
 
 1. Re-read the current diff and state a one-line candidate mechanism: “X fails because Y causes Z.” Reproduce
-   through the smallest real test entry point, preserving relevant environment variables and services. Stress a
-   suspected boundary or use focused repeated runs only when testing a concrete nondeterminism hypothesis. When safe
-   and practical, compare against the unchanged target branch in an isolated worktree or equivalent clean
-   environment. Use the actual target branch for backports, not automatically `master`.
+    through the smallest real test entry point, preserving relevant environment variables and services. Stress a
+    suspected boundary or use focused repeated runs only when testing a concrete nondeterminism hypothesis. When safe
+    and practical, compare against the unchanged target branch in an isolated worktree or equivalent clean
+    environment. Use the actual target branch for backports, not automatically `master`.
 2. Write one mechanistic sentence naming the producer, consumer, state or event, and invalid ordering or lifetime. It
-   must explain both the pass and failure for a flake. Do not design a fix before this sentence holds.
+    must explain both the pass and failure for a flake. Do not design a fix before this sentence holds.
 3. Before editing, search for every test with the same violated invariant and lifecycle owner. Inventory, count, and
-   list each member and exclusion; state the shared failure mechanism and lifecycle or completion owner. A range is
-   not an enumeration. Callback versus promise does not split a cohort; similar syntax under a different contract
-   does not join it.
+    list each member and exclusion; state the shared failure mechanism and lifecycle or completion owner. A range is
+    not an enumeration. Callback versus promise does not split a cohort; similar syntax under a different contract
+    does not join it.
 4. Design the proof, then trace success, error, retry, cleanup, and concurrent paths. Fix the narrowest canonical
-   owner that restores the invariant for the whole cohort without a new public or test-only surface or production
-   work added solely for tests.
+    owner that restores the invariant for the whole cohort without a new public or test-only surface or production
+    work added solely for tests.
 5. Apply the fix to the complete cohort. Stop stray requests, close leaked resources, restore hooks, and remove shared
-   mutable state. Use fake timers instead of real-time waits, proper resource allocation instead of arbitrary delays,
-   and lifecycle ownership instead of forced ordering. Do not substitute retries, skips, sleeps, timeout or tolerance
-   increases, filtered assertions, or broader mocks for a cause. Keep unrelated mechanisms in separate changes.
+    mutable state. Use fake timers instead of real-time waits, proper resource allocation instead of arbitrary delays,
+    and lifecycle ownership instead of forced ordering. Do not substitute retries, skips, sleeps, timeout or tolerance
+    increases, filtered assertions, or broader mocks for a cause. Keep unrelated mechanisms in separate changes.
 6. Verify the original failure without the fix or with a deterministic regression when practical. List every changed
-   sibling individually in the verification plan, then run them, a targeted repeat or stress run, the complete specs,
-   and the required coverage and lint from `AGENTS.md`. Report commands, iteration counts, and unproved claims.
+    sibling individually in the verification plan, then run them, a targeted repeat or stress run, the complete specs,
+    and the required coverage and lint from `AGENTS.md`. Report commands, iteration counts, and unproved claims.
 
 ## Hung jobs
 
@@ -93,7 +93,7 @@ authorized change; never silently weaken an assertion.
 Report:
 
 1. Classification: caused by the current change, deterministic pre-existing defect, genuine unrelated flake,
-   infrastructure, or unknown
+    infrastructure, or unknown
 2. Reproduction command and observed frequency
 3. Evidence and one-line mechanism
 4. Root-cause fix or next investigation step
