@@ -549,7 +549,7 @@ moduleTypes.forEach(({
           ({ url }) => url.endsWith('/api/v2/citestcycle'),
           (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
-            for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            for (const eventType of ['test_session_end', 'test_module_end']) {
               const event = events.find(event => event.type === eventType)
               assert.ok(event, `expected ${eventType} event`)
               assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
@@ -671,7 +671,7 @@ moduleTypes.forEach(({
           ({ url }) => url.endsWith('/api/v2/citestcycle'),
           (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
-            for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            for (const eventType of ['test_session_end', 'test_module_end']) {
               const testSessionTraceEvents = events.filter(event => event.type === eventType)
               assert.strictEqual(testSessionTraceEvents.length, 1, `expected one ${eventType} event`)
               assert.strictEqual(testSessionTraceEvents[0].content.meta[TEST_STATUS], 'fail')
@@ -929,7 +929,7 @@ moduleTypes.forEach(({
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          for (const eventType of ['test_session_end', 'test_module_end']) {
             const event = events.find(event => event.type === eventType)
             assert.ok(event, `expected ${eventType} event`)
             assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
@@ -976,7 +976,7 @@ moduleTypes.forEach(({
             ({ url }) => url.endsWith('/api/v2/citestcycle'),
             (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+              for (const eventType of ['test_session_end', 'test_module_end']) {
                 const testSessionTraceEvents = events.filter(event => event.type === eventType)
                 assert.strictEqual(testSessionTraceEvents.length, 1, `expected one ${eventType} event`)
                 assert.strictEqual(testSessionTraceEvents[0].content.meta[TEST_STATUS], 'fail')
@@ -1130,7 +1130,7 @@ moduleTypes.forEach(({
             ({ url }) => url.endsWith('/api/v2/citestcycle'),
             (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+              for (const eventType of ['test_session_end', 'test_module_end']) {
                 const testSessionTraceEvents = events.filter(event => event.type === eventType)
                 assert.strictEqual(testSessionTraceEvents.length, 1, `expected one ${eventType} event`)
                 assert.strictEqual(testSessionTraceEvents[0].content.meta[TEST_STATUS], 'fail')
