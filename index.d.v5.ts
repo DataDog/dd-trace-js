@@ -902,7 +902,6 @@ declare namespace tracer {
         initializationTimeoutMs?: number
         /**
          * Whether to emit server-side flag evaluation counts to the EVP flagevaluation track.
-         * Does not affect the OpenTelemetry `feature_flag.evaluations` metric, which is independent.
          * Can be configured via DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED environment variable.
          *
          * @default true

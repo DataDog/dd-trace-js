@@ -17,8 +17,8 @@ describe('FlaggingProvider', () => {
   let log
   let channelStub
   let configurationSource
-  let mockFlagEvalMetricsHook
-  let mockFlagEvalMetricsHookClass
+  let mockEvalMetricsHook
+  let mockEvalMetricsHookClass
   let mockSpanEnrichmentHook
   let mockSpanEnrichmentHookClass
   let mockFlagEvalWriter
@@ -64,10 +64,10 @@ describe('FlaggingProvider', () => {
       warn: sinon.spy(),
     }
 
-    mockFlagEvalMetricsHook = {
+    mockEvalMetricsHook = {
       record: sinon.spy(),
     }
-    mockFlagEvalMetricsHookClass = sinon.stub().returns(mockFlagEvalMetricsHook)
+    mockEvalMetricsHookClass = sinon.stub().returns(mockEvalMetricsHook)
 
     mockSpanEnrichmentHook = {
       destroy: sinon.spy(),
@@ -85,16 +85,13 @@ describe('FlaggingProvider', () => {
 
     setEventDeliveryStrategyStub = sinon.stub()
 
-    // evaluationCountsEnabled defaults to true in mockConfig; tests that need the killswitch
-    // set mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false directly.
-
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
       },
       '../log': log,
       './configuration_source': configurationSource,
-      './flag-eval-metrics-hook': mockFlagEvalMetricsHookClass,
+      './eval-metrics-hook': mockEvalMetricsHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
       './writers/flag-evaluations': mockFlagEvalWriterClass,
       './writers/flag-eval-evp-hook': mockFlagEvalEVPHookClass,
@@ -120,10 +117,10 @@ describe('FlaggingProvider', () => {
   })
 
   describe('hooks', () => {
-    it('should create FlagEvalMetricsHook with config', () => {
+    it('should create EvalMetricsHook with config', () => {
       new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
 
-      sinon.assert.calledOnceWithExactly(mockFlagEvalMetricsHookClass, mockConfig)
+      sinon.assert.calledOnceWithExactly(mockEvalMetricsHookClass, mockConfig)
     })
 
     it('should create SpanEnrichmentHook with tracer when span enrichment is enabled', () => {
@@ -146,21 +143,21 @@ describe('FlaggingProvider', () => {
       sinon.assert.notCalled(mockSpanEnrichmentHookClass)
     })
 
-    it('should register FlagEvalMetricsHook, FlagEvalEVPHook and SpanEnrichmentHook when all enabled', () => {
+    it('should register EvalMetricsHook, FlagEvalEVPHook and SpanEnrichmentHook when all enabled', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.strictEqual(provider.hooks.length, 3)
-      assert.strictEqual(provider.hooks[0], mockFlagEvalMetricsHook)
+      assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
       assert.strictEqual(provider.hooks[1], mockFlagEvalEVPHook)
       assert.strictEqual(provider.hooks[2], mockSpanEnrichmentHook)
     })
 
-    it('should only register FlagEvalMetricsHook + FlagEvalEVPHook when span enrichment is disabled', () => {
+    it('should only register EvalMetricsHook + FlagEvalEVPHook when span enrichment is disabled', () => {
       mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.strictEqual(provider.hooks.length, 2)
-      assert.strictEqual(provider.hooks[0], mockFlagEvalMetricsHook)
+      assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
       assert.strictEqual(provider.hooks[1], mockFlagEvalEVPHook)
     })
 
@@ -194,11 +191,11 @@ describe('FlaggingProvider', () => {
       sinon.assert.calledWith(setEnabled, false)
     })
 
-    it('OTel FlagEvalMetricsHook is always registered regardless of killswitch', () => {
+    it('OTel EvalMetricsHook is always registered regardless of killswitch', () => {
       mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
-      assert.ok(provider.hooks.includes(mockFlagEvalMetricsHook),
-        'OTel FlagEvalMetricsHook must always be registered')
+      assert.ok(provider.hooks.includes(mockEvalMetricsHook),
+        'OTel EvalMetricsHook must always be registered')
     })
 
     it('should log info message when span enrichment is enabled', () => {

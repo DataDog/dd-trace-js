@@ -1,20 +1,6 @@
 'use strict'
 
-const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
-
 module.exports = {
-  /**
-   * @constant
-   * @type {string} HTTP header name for EVP subdomain routing
-   */
-  EVP_SUBDOMAIN_HEADER_NAME,
-
-  /**
-   * @constant
-   * @type {string} EVP subdomain value for event platform intake
-   */
-  EVP_SUBDOMAIN_VALUE: 'event-platform-intake',
-
   /**
    * @constant
    * @type {string} API endpoint for exposure events EVP track

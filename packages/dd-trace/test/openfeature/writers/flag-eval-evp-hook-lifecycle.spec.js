@@ -10,9 +10,6 @@ require('../../setup/core')
 
 const FlagEvalEVPHook = require('../../../src/openfeature/writers/flag-eval-evp-hook')
 
-// Proves the EVP hook actually fires through the REAL OpenFeature server-SDK evaluation
-// lifecycle (not just a unit call of finally() in isolation), and that it covers the
-// success, error, and runtime-default exit paths.
 describe('FlagEvalEVPHook - real OpenFeature eval-path lifecycle', () => {
   let writer
   let hook
