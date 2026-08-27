@@ -229,7 +229,7 @@
     "sqlite3": "6.0.1",
     "stripe": "22.5.0",
     "tedious": "20.0.0",
-    "tinypool": "2.1.0",
+    "tinypool": "2.1.2",
     "typescript": "7.0.2",
     "undici": "8.10.0",
     "vitest": "4.1.11",
