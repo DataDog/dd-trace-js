@@ -3,6 +3,26 @@
 const { isMap, isRegExp } = require('node:util').types
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const {
+  configuredIntegrationService,
+  configuredService,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'mongodb.query',
+    serviceName: configuredIntegrationService('mongodb'),
+    serviceSource: storageServiceSource('mongodb'),
+  },
+  v1: {
+    operationName: () => 'mongodb.query',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class MongodbCoreQueryPlugin extends DatabasePlugin {
   static id = 'mongodb-core'
@@ -13,6 +33,11 @@ class MongodbCoreQueryPlugin extends DatabasePlugin {
    * @override
    */
   static peerServicePrecursors = []
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   /**
    * @override

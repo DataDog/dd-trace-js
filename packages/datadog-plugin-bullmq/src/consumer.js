@@ -3,10 +3,35 @@
 const log = require('../../dd-trace/src/log')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'bullmq.processJob',
+    serviceName: integrationService('bullmq'),
+    serviceSource: integrationServiceSource('bullmq'),
+  },
+  v1: {
+    operationName: () => 'bullmq.processJob',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class BullmqConsumerPlugin extends ConsumerPlugin {
   static id = 'bullmq'
   static prefix = 'tracing:orchestrion:bullmq:Worker_callProcessJob'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   asyncEnd (ctx) {
     ctx.currentStore?.span?.finish()

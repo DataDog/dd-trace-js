@@ -12,14 +12,37 @@ const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/st
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const {
+  httpPluginClientService,
+  optionServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'http.request',
+    serviceName: httpPluginClientService,
+    serviceSource: optionServiceSource,
+  },
+  v1: {
+    operationName: () => 'http.client.request',
+    serviceName: httpPluginClientService,
+    serviceSource: optionServiceSource,
+  },
+}
+
 class HttpClientPlugin extends ClientPlugin {
   static id = 'http'
   static prefix = 'apm:http:client:request'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (message) {
     const { args, http = {} } = message

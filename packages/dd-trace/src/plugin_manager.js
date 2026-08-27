@@ -130,7 +130,6 @@ module.exports = class PluginManager {
    */
   configure (config) {
     this._tracerConfig = config
-    this._tracer._nomenclature.configure(config)
 
     for (const name in pluginClasses) {
       this.loadPlugin(name)

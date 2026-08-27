@@ -5,6 +5,10 @@ const tags = require('../../../ext/tags.js')
 const { HTTP_HEADERS } = require('../../../ext/formats')
 const { getSegment } = require('../../dd-trace/src/util')
 const {
+  configuredService,
+  optionServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+const {
   createWebSocketSpanContext,
   hasTraceHeaders,
   initWebSocketMessageCounters,
@@ -12,11 +16,30 @@ const {
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'web.request',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+  v1: {
+    operationName: () => 'web.request',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
+
 class WSServerPlugin extends TracingPlugin {
   static get id () { return 'ws' }
   static get prefix () { return 'tracing:ws:server:connect' }
   static get type () { return 'websocket' }
   static get kind () { return 'request' }
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

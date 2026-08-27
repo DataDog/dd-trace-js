@@ -18,7 +18,6 @@ const { engines, nodeMaxMajor } = require('../../../../package.json')
 const externals = require('../plugins/externals')
 const { resolvePluginVersions, brokenVersionReason } = require('../plugins/versions')
 const runtimeMetrics = require('../../src/runtime_metrics')
-const Nomenclature = require('../../src/service-naming')
 const { SVC_SRC_KEY } = require('../../src/constants')
 const extraServices = require('../../src/service-naming/extra-services')
 const { storage } = require('../../../datadog-core')
@@ -54,27 +53,28 @@ function withNamingSchema (
     selectSpan = (traces) => traces[0][0],
   } = opts
   let fullConfig
+  let originalSpanAttributeSchema
+  let originalSpanRemoveIntegrationFromService
 
   const testTitle = 'service and operation naming' + (desc !== '' ? ` (${desc})` : '')
 
   describe(testTitle, () => {
     ['v0', 'v1'].forEach(versionName => {
       describe(`in version ${versionName}`, () => {
-        // `beforeEach` / `afterEach`: every outer `agent.load` runs
-        // `tracer.init` → `pluginManager.configure` → resets
-        // `Nomenclature.config` back to defaults. The override has
-        // to land after that, per test.
         beforeEach(() => {
-          fullConfig = Nomenclature.config
-          Nomenclature.configure({
-            spanAttributeSchema: versionName,
-            spanRemoveIntegrationFromService: false,
-            service: fullConfig.service, // Hack: only way to retrieve the test agent configuration
-          })
+          const pluginManager = global._ddtrace._pluginManager
+          fullConfig = pluginManager._tracerConfig
+          originalSpanAttributeSchema = fullConfig.spanAttributeSchema
+          originalSpanRemoveIntegrationFromService = fullConfig.spanRemoveIntegrationFromService
+          fullConfig.spanAttributeSchema = versionName
+          fullConfig.spanRemoveIntegrationFromService = false
+          pluginManager.configure(fullConfig)
         })
 
         afterEach(() => {
-          Nomenclature.configure(fullConfig)
+          fullConfig.spanAttributeSchema = originalSpanAttributeSchema
+          fullConfig.spanRemoveIntegrationFromService = originalSpanRemoveIntegrationFromService
+          global._ddtrace._pluginManager.configure(fullConfig)
         })
 
         hooks(versionName, false)
@@ -100,7 +100,7 @@ function withNamingSchema (
                 assert.strictEqual(span.name, expectedOpName)
                 assert.strictEqual(span.service, expectedServiceName)
 
-                const tracerService = defaultTracerService || Nomenclature.config.service
+                const tracerService = defaultTracerService || fullConfig.service
 
                 if (span.service !== tracerService) {
                   assert.notStrictEqual(
@@ -127,16 +127,19 @@ function withNamingSchema (
 
     describe('service naming short-circuit in v0', () => {
       beforeEach(() => {
-        fullConfig = Nomenclature.config
-        Nomenclature.configure({
-          spanAttributeSchema: 'v0',
-          service: fullConfig.service,
-          spanRemoveIntegrationFromService: true,
-        })
+        const pluginManager = global._ddtrace._pluginManager
+        fullConfig = pluginManager._tracerConfig
+        originalSpanAttributeSchema = fullConfig.spanAttributeSchema
+        originalSpanRemoveIntegrationFromService = fullConfig.spanRemoveIntegrationFromService
+        fullConfig.spanAttributeSchema = 'v0'
+        fullConfig.spanRemoveIntegrationFromService = true
+        pluginManager.configure(fullConfig)
       })
 
       afterEach(() => {
-        Nomenclature.configure(fullConfig)
+        fullConfig.spanAttributeSchema = originalSpanAttributeSchema
+        fullConfig.spanRemoveIntegrationFromService = originalSpanRemoveIntegrationFromService
+        global._ddtrace._pluginManager.configure(fullConfig)
       })
 
       hooks('v0', true)
@@ -157,7 +160,7 @@ function withNamingSchema (
                 : serviceName
               assert.strictEqual(span.service, expectedServiceName)
 
-              const tracerService = defaultTracerService || Nomenclature.config.service
+              const tracerService = defaultTracerService || fullConfig.service
               if (span.service !== tracerService) {
                 assert.notStrictEqual(
                   span.meta[SVC_SRC_KEY],

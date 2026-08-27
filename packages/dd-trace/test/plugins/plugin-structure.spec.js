@@ -8,6 +8,7 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
+const TracingPlugin = require('../../src/plugins/tracing')
 
 const abstractPlugins = [
   'web', // web is an abstract plugin, and will not have an instrumentation file
@@ -47,6 +48,8 @@ const missingInstrumentationHooks = [
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
 ]
 
+/** @typedef {Function & { plugins?: PluginClass[] | Record<string, PluginClass> }} PluginClass */
+
 function extractPluginIds (source, re, index) {
   const ids = new Set()
   let m
@@ -85,6 +88,69 @@ function extractDocsApiH5PluginAnchors (apiMdSource) {
   return new Set([...allAnchors].filter(id => !id.endsWith('-tags') && !id.endsWith('-config')))
 }
 
+/**
+ * @param {PluginClass} Plugin
+ * @param {Set<PluginClass>} plugins
+ */
+function collectTracingPlugins (Plugin, plugins) {
+  if (TracingPlugin.prototype.isPrototypeOf(Plugin?.prototype)) {
+    plugins.add(Plugin)
+  }
+
+  const children = Plugin?.plugins
+  if (Array.isArray(children)) {
+    for (const ChildPlugin of children) {
+      collectTracingPlugins(ChildPlugin, plugins)
+    }
+  } else if (children) {
+    for (const ChildPlugin of Object.values(children)) {
+      collectTracingPlugins(ChildPlugin, plugins)
+    }
+  }
+}
+
+/**
+ * @param {Function} Plugin
+ */
+function usesNamingSchema (Plugin) {
+  let usesOperationName = false
+  let usesServiceName = false
+  let prototype = Plugin.prototype
+  while (prototype && prototype !== TracingPlugin.prototype) {
+    for (const name of Object.getOwnPropertyNames(prototype)) {
+      const method = Object.getOwnPropertyDescriptor(prototype, name)?.value
+      if (typeof method === 'function') {
+        const source = method.toString()
+        usesOperationName ||= /this\.operationName\(/.test(source)
+        usesServiceName ||= /this\.serviceName\(/.test(source)
+      }
+    }
+    prototype = Object.getPrototypeOf(prototype)
+  }
+  return (usesOperationName && Plugin.prototype.operationName === TracingPlugin.prototype.operationName) ||
+    (usesServiceName && Plugin.prototype.serviceName === TracingPlugin.prototype.serviceName)
+}
+
+/**
+ * @param {Function} Plugin
+ */
+function assertCompleteNamingSchema (Plugin) {
+  if (!usesNamingSchema(Plugin)) return
+
+  assert.notStrictEqual(
+    Plugin.prototype.getNamingSchema,
+    TracingPlugin.prototype.getNamingSchema,
+    `${Plugin.name} must override getNamingSchema()`
+  )
+
+  const schema = Plugin.prototype.getNamingSchema()
+  for (const version of ['v0', 'v1']) {
+    assert.strictEqual(typeof schema?.[version]?.operationName, 'function', `${Plugin.name}.${version}.operationName`)
+    assert.strictEqual(typeof schema?.[version]?.serviceName, 'function', `${Plugin.name}.${version}.serviceName`)
+    assert.strictEqual(typeof schema?.[version]?.serviceSource, 'function', `${Plugin.name}.${version}.serviceSource`)
+  }
+}
+
 describe('Plugin Structure Validation', () => {
   const packagesDir = path.join(__dirname, '..', '..', '..')
   const instrumentationsDir = path.join(packagesDir, 'datadog-instrumentations', 'src')
@@ -121,6 +187,15 @@ describe('Plugin Structure Validation', () => {
         }
 
         assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation file: ${pluginId}.js`)
+      })
+
+      it('should define a complete naming schema when it uses service naming', () => {
+        const tracingPlugins = new Set()
+        collectTracingPlugins(Plugin, tracingPlugins)
+
+        for (const PluginClass of tracingPlugins) {
+          assertCompleteNamingSchema(PluginClass)
+        }
       })
     })
   })

@@ -23,7 +23,10 @@ const tracerConfig = {
     },
   },
   peerServiceMapping: {},
+  service: 'test',
   spanComputePeerService: false,
+  spanAttributeSchema: 'v0',
+  spanRemoveIntegrationFromService: false,
 }
 const TRACE_CONTEXT = {
   'x-datadog-trace-id': '123',
@@ -86,10 +89,6 @@ function buildChannelPlugin ({
   setCheckpoint = () => undefined,
 } = {}) {
   const tracer = {
-    _nomenclature: {
-      opName: () => 'aws.request',
-      serviceName: () => 'test-aws-eventbridge',
-    },
     _service: 'test',
     inject,
     setCheckpoint,

@@ -31,9 +31,7 @@ class DispatchPlugin extends TracingPlugin {
   }
 }
 
-const tracer = {
-  _nomenclature: { serviceName: () => 'bench', opName: () => 'bench.op', config: {} },
-}
+const tracer = {}
 const plugin = new DispatchPlugin(tracer, {})
 plugin.configure({ enabled: true })
 

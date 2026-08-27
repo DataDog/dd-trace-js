@@ -2,15 +2,40 @@
 
 const dc = require('dc-polyfill')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { convertToTextMap, getKafkaMessageSize } = require('./utils')
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 const beforeFinishCh = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'kafka.consume',
+    serviceName: integrationService('kafka'),
+    serviceSource: integrationServiceSource('kafka'),
+  },
+  v1: {
+    operationName: () => 'kafka.process',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
 class KafkajsConsumerPlugin extends ConsumerPlugin {
   static id = 'kafkajs'
   static operation = 'consume'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor () {
     super(...arguments)

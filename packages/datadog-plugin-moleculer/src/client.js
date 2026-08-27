@@ -1,11 +1,31 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
 const { moleculerTags } = require('./util')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'moleculer.call',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'moleculer.client.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class MoleculerClientPlugin extends ClientPlugin {
   static id = 'moleculer'
   static operation = 'call'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const { actionName, opts } = ctx

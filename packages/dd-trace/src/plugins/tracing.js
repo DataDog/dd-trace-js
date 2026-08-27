@@ -8,7 +8,57 @@ const Plugin = require('./plugin')
 
 const legacyStorage = storage('legacy')
 
+/**
+ * @typedef {object} NamingPluginConfig
+ * @property {string | ((params?: object) => string | undefined)} [service]
+ * @property {boolean} [splitByDomain]
+ * @property {boolean} [splitByInstance]
+ */
+
+/**
+ * @typedef {object} NamingOptions
+ * @property {string} [awsService]
+ * @property {string} [connectionName]
+ * @property {object} [dbConfig]
+ * @property {string} [operation]
+ * @property {object} [params]
+ * @property {NamingPluginConfig} [pluginConfig]
+ * @property {string | { host?: string, port?: string | number }} [sessionDetails]
+ * @property {string} [system]
+ */
+
+/**
+ * @typedef {object} NamingDefinition
+ * @property {(options: NamingOptions) => string} operationName
+ * @property {(tracerService: string, options: NamingOptions) => string | undefined} serviceName
+ * @property {(tracerService: string, options: NamingOptions) => string | undefined} serviceSource
+ */
+
+/**
+ * @typedef {object} NamingSchema
+ * @property {NamingDefinition} v0
+ * @property {NamingDefinition} v1
+ */
+
+/** @returns {never} */
+function missingOperationName () {
+  throw new Error('The plugin must implement getNamingSchema() before it uses operationName()')
+}
+
+/** @returns {never} */
+function missingServiceName () {
+  throw new Error('The plugin must implement getNamingSchema() before it uses serviceName()')
+}
+
 class TracingPlugin extends Plugin {
+  /** @type {NamingDefinition['operationName']} */
+  #operationName = missingOperationName
+  /** @type {NamingDefinition['serviceName']} */
+  #serviceName = missingServiceName
+  /** @type {NamingDefinition['serviceSource']} */
+  #serviceSource = missingServiceName
+  #tracerService = ''
+
   constructor (...args) {
     super(...args)
 
@@ -25,37 +75,30 @@ class TracingPlugin extends Plugin {
   }
 
   /**
-   * @param {object} opts
-   * @param {string} [opts.type]
-   * @param {string} [opts.id]
-   * @param {string} [opts.kind]
-   * @returns {{ name: string, source: string | undefined }}
+   * @abstract
+   * @returns {NamingSchema}
    */
-  serviceName (opts = {}) {
-    const {
-      type = this.constructor.type,
-      id = this.constructor.id,
-      kind = this.constructor.kind,
-    } = opts
-
-    return this._tracer._nomenclature.serviceName(type, kind, id, opts)
+  getNamingSchema () {
+    throw new Error(`${this.constructor.name} must implement getNamingSchema()`)
   }
 
   /**
-   * @param {object} opts
-   * @param {string} [opts.type]
-   * @param {string} [opts.id]
-   * @param {string} [opts.kind]
+   * @param {NamingOptions} opts
+   * @returns {{ name: string, source: string | undefined }}
+   */
+  serviceName (opts = {}) {
+    return {
+      name: /** @type {string} */ (this.#serviceName(this.#tracerService, opts)),
+      source: this.#serviceSource(this.#tracerService, opts),
+    }
+  }
+
+  /**
+   * @param {NamingOptions} opts
    * @returns {string}
    */
   operationName (opts = {}) {
-    const {
-      type = this.constructor.type,
-      id = this.constructor.id,
-      kind = this.constructor.kind,
-    } = opts
-
-    return this._tracer._nomenclature.opName(type, kind, id, opts)
+    return this.#operationName(opts)
   }
 
   /**
@@ -63,6 +106,20 @@ class TracingPlugin extends Plugin {
    * @returns {object}
    */
   configure (config) {
+    if (this.getNamingSchema !== TracingPlugin.prototype.getNamingSchema) {
+      const namingSchema = this.getNamingSchema()
+      const { service, spanAttributeSchema, spanRemoveIntegrationFromService } = this._tracerConfig
+      const operationDefinition = namingSchema[spanAttributeSchema]
+      const serviceDefinition = spanAttributeSchema === 'v0' && spanRemoveIntegrationFromService
+        ? namingSchema.v1
+        : operationDefinition
+
+      this.#operationName = operationDefinition.operationName
+      this.#serviceName = serviceDefinition.serviceName
+      this.#serviceSource = serviceDefinition.serviceSource
+      this.#tracerService = service
+    }
+
     return super.configure({
       ...config,
       hooks: {

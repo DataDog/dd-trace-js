@@ -3,13 +3,14 @@
 const { inspect } = require('util')
 const { AsyncResource } = require('../../../datadog-instrumentations/src/helpers/instrument')
 
-const Nomenclature = require('../../src/service-naming')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 function resolveNaming (namingSchema) {
   return new Proxy(namingSchema, {
     get (target, prop, receiver) {
-      return target[prop][Nomenclature.version]
+      const version = global._ddtrace?._pluginManager?._tracerConfig?.spanAttributeSchema ??
+        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA ?? 'v0'
+      return target[prop][version]
     },
   })
 }

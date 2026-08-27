@@ -12,10 +12,35 @@ const {
 const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastreams')
 const id = require('../../dd-trace/src/id')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'pubsub.request',
+    serviceName: integrationService('pubsub'),
+    serviceSource: integrationServiceSource('google-cloud-pubsub'),
+  },
+  v1: {
+    operationName: () => 'gcp.pubsub.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   static id = 'google-cloud-pubsub'
   static operation = 'request'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

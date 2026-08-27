@@ -1,13 +1,38 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 
 const spanContexts = new WeakMap()
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'azure.eventhubs.send',
+    serviceName: integrationService('azure-event-hubs'),
+    serviceSource: integrationServiceSource('azure-event-hubs'),
+  },
+  v1: {
+    operationName: () => 'azure.eventhubs.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class AzureEventHubsProducerPlugin extends ProducerPlugin {
   static get id () { return 'azure-event-hubs' }
   static get operation () { return 'send' }
   static get prefix () { return 'tracing:apm:azure-event-hubs:send' }
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const batchLinksEnabled = this._tracerConfig.DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED

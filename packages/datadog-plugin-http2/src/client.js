@@ -11,6 +11,10 @@ const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const {
+  httpPluginClientService,
+  optionServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -24,9 +28,28 @@ const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
 const HTTP2_METHOD_GET = 'GET'
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'http.request',
+    serviceName: httpPluginClientService,
+    serviceSource: optionServiceSource,
+  },
+  v1: {
+    operationName: () => 'http.client.request',
+    serviceName: httpPluginClientService,
+    serviceSource: optionServiceSource,
+  },
+}
+
 class Http2ClientPlugin extends ClientPlugin {
   static id = 'http2'
   static prefix = 'apm:http2:client:request'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (message) {
     const { authority, options, headers = {} } = message

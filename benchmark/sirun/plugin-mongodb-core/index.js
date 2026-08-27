@@ -38,17 +38,22 @@ const tracer = {
   _env: 'production',
   _service: 'web-app',
   _version: '1.2.3',
-  _nomenclature: { opName: () => 'mongodb.query' },
 }
-const tracerConfig = { spanComputePeerService: false }
+const tracerConfig = {
+  service: 'web-app',
+  spanAttributeSchema: 'v0',
+  spanComputePeerService: false,
+  spanRemoveIntegrationFromService: false,
+}
 const plugin = new BenchedMongoPlugin(tracer, tracerConfig)
-plugin.config = {
+plugin.configure({
   heartbeatEnabled: true,
   dbmPropagationMode: 'service',
   appendComment: false,
   queryInResourceName: false,
   obfuscateQuery: 'none',
-}
+  enabled: true,
+})
 
 const OPTIONS = { host: 'mongo-primary.internal', port: 27017 }
 

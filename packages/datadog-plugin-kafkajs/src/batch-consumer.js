@@ -1,11 +1,36 @@
 'use strict'
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { convertToTextMap, getKafkaMessageSize } = require('./utils')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'kafka.consume',
+    serviceName: integrationService('kafka'),
+    serviceSource: integrationServiceSource('kafka'),
+  },
+  v1: {
+    operationName: () => 'kafka.process',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   static id = 'kafkajs'
   static operation = 'consume-batch'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const { topic, partition, messages, groupId, clusterId } = ctx.extractedArgs || ctx

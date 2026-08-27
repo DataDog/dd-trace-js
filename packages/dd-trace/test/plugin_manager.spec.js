@@ -10,8 +10,6 @@ const proxyquire = require('proxyquire')
 require('./setup/core')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
-const nomenclature = require('../../dd-trace/src/service-naming')
-
 describe('Plugin Manager', () => {
   let tracer
   let instantiated
@@ -38,9 +36,7 @@ describe('Plugin Manager', () => {
   }
 
   beforeEach(() => {
-    tracer = {
-      _nomenclature: nomenclature,
-    }
+    tracer = {}
     instantiated = []
     class FakePlugin {
       constructor (aTracer) {
@@ -344,27 +340,6 @@ describe('Plugin Manager', () => {
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       assert.deepStrictEqual(instantiated, ['two', 'four'])
-    })
-
-    describe('service naming schema manager', () => {
-      const config = makeTracerConfig({
-        foo: { bar: 1 },
-        baz: 2,
-      })
-      let configureSpy
-
-      beforeEach(() => {
-        configureSpy = sinon.spy(tracer._nomenclature, 'configure')
-      })
-
-      afterEach(() => {
-        configureSpy.restore()
-      })
-
-      it('is configured when plugin manager is configured', () => {
-        pm.configure(config)
-        sinon.assert.calledWith(configureSpy, config)
-      })
     })
 
     it('disables plugins globally when plugins is false', () => {

@@ -18,7 +18,93 @@ const {
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
+/** @param {string} tracerService */
+function v0ServiceName (tracerService) {
+  return `${tracerService}-v0`
+}
+
+/** @param {string} tracerService */
+function v1ServiceName (tracerService) {
+  return `${tracerService}-v1`
+}
+
+/** @param {string} tracerService */
+function v0ServiceSource (tracerService) {
+  return `${tracerService}.v0`
+}
+
+/** @param {string} tracerService */
+function v1ServiceSource (tracerService) {
+  return `${tracerService}.v1`
+}
+
+/** @type {import('../../src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'operation.v0',
+    serviceName: v0ServiceName,
+    serviceSource: v0ServiceSource,
+  },
+  v1: {
+    operationName: () => 'operation.v1',
+    serviceName: v1ServiceName,
+    serviceSource: v1ServiceSource,
+  },
+}
+
+class NamingPlugin extends TracingPlugin {
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
+}
+
 describe('TracingPlugin', () => {
+  describe('service naming', () => {
+    /** @param {object} [overrides] */
+    function makeTracerConfig (overrides = {}) {
+      return {
+        service: 'tracer',
+        spanAttributeSchema: 'v0',
+        spanRemoveIntegrationFromService: false,
+        ...overrides,
+      }
+    }
+
+    it('fails when a plugin uses naming without overriding getNamingSchema()', () => {
+      const plugin = new TracingPlugin({}, makeTracerConfig())
+      plugin.configure({})
+
+      assert.throws(() => plugin.getNamingSchema(), /TracingPlugin must implement getNamingSchema/)
+      assert.throws(() => plugin.operationName(), /must implement getNamingSchema/)
+      assert.throws(() => plugin.serviceName(), /must implement getNamingSchema/)
+    })
+
+    it('selects the complete v0 definition during configuration', () => {
+      const plugin = new NamingPlugin({}, makeTracerConfig())
+      plugin.configure({})
+
+      assert.strictEqual(plugin.operationName(), 'operation.v0')
+      assert.deepStrictEqual(plugin.serviceName(), { name: 'tracer-v0', source: 'tracer.v0' })
+    })
+
+    it('selects the complete v1 definition during configuration', () => {
+      const plugin = new NamingPlugin({}, makeTracerConfig({ spanAttributeSchema: 'v1' }))
+      plugin.configure({})
+
+      assert.strictEqual(plugin.operationName(), 'operation.v1')
+      assert.deepStrictEqual(plugin.serviceName(), { name: 'tracer-v1', source: 'tracer.v1' })
+    })
+
+    it('uses v0 operations with v1 services for consistent service naming', () => {
+      const plugin = new NamingPlugin({}, makeTracerConfig({ spanRemoveIntegrationFromService: true }))
+      plugin.configure({})
+
+      assert.strictEqual(plugin.operationName(), 'operation.v0')
+      assert.deepStrictEqual(plugin.serviceName(), { name: 'tracer-v1', source: 'tracer.v1' })
+    })
+  })
+
   describe('startSpan method', () => {
     let startSpanSpy
     let plugin

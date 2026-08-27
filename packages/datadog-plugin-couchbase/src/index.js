@@ -1,10 +1,35 @@
 'use strict'
 
 const StoragePlugin = require('../../dd-trace/src/plugins/storage')
+const {
+  configuredIntegrationService,
+  configuredService,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: ({ operation }) => `couchbase.${operation}`,
+    serviceName: configuredIntegrationService('couchbase'),
+    serviceSource: storageServiceSource('couchbase'),
+  },
+  v1: {
+    operationName: () => 'couchbase.query',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class CouchBasePlugin extends StoragePlugin {
   static id = 'couchbase'
   static peerServicePrecursors = ['db.couchbase.seed.nodes']
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

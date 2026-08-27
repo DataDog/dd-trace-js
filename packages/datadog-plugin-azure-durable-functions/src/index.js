@@ -1,6 +1,21 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'azure.functions.invoke',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'azure.functions.invoke',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get id () { return 'azure-durable-functions' }
@@ -8,6 +23,11 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get prefix () { return 'tracing:datadog:azure:durable-functions:invoke' }
   static get type () { return 'serverless' }
   static get kind () { return 'server' }
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const span = this.startSpan(this.operationName(), {

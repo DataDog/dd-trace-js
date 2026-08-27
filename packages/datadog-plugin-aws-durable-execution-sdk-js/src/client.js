@@ -1,13 +1,33 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
 const { addOpMeta, getStepDataForNext, unwrapDurableError } = require('./util')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'aws.durable.invoke',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'aws.durable.invoke',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   static id = 'aws-durable-execution-sdk-js'
   static type = 'serverless'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_invoke'
   static settleChannel = 'apm:aws-durable-execution-sdk-js:invoke:settle'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

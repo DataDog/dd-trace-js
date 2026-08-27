@@ -9,35 +9,9 @@ require('../../dd-trace/test/setup/core')
 
 const RedisPlugin = require('../src')
 
-function makeNomenclatureStub () {
-  return {
-    config: { spanAttributeSchema: 'v0', spanRemoveIntegrationFromService: false },
-    opName () {
-      return 'redis.command'
-    },
-    serviceName (type, kind, id, opts) {
-      const { pluginConfig, system, connectionName } = opts
-      if (pluginConfig.splitByInstance && connectionName) {
-        if (this.config.spanAttributeSchema === 'v1') {
-          return { name: pluginConfig.service || 'tracer-svc', source: 'opt.plugin' }
-        }
-        return {
-          name: pluginConfig.service ? `${pluginConfig.service}-${connectionName}` : connectionName,
-          source: 'opt.split_by_instance',
-        }
-      }
-      return {
-        name: pluginConfig.service || `tracer-svc-${system}`,
-        source: pluginConfig.service ? 'opt.plugin' : system,
-      }
-    },
-  }
-}
-
-function makeTracerStub (nomenclature, startSpan) {
+function makeTracerStub (startSpan) {
   return {
     _service: 'tracer-svc',
-    _nomenclature: nomenclature,
     startSpan,
   }
 }
@@ -56,20 +30,23 @@ function makeCtx (connectionName) {
 
 describe('RedisPlugin bindStart service caching', () => {
   let plugin
-  let nomenclature
   let startSpan
+  let tracerConfig
 
   beforeEach(() => {
-    nomenclature = makeNomenclatureStub()
     startSpan = sinon.stub().returns({
       _spanContext: { _tags: {} },
       setTag () {},
       finish () {},
       addLink () {},
     })
-    plugin = new RedisPlugin(makeTracerStub(nomenclature, startSpan), {
+    tracerConfig = {
       codeOriginForSpans: { enabled: false, experimental: { exit_spans: { enabled: false } } },
-    })
+      service: 'tracer-svc',
+      spanAttributeSchema: 'v0',
+      spanRemoveIntegrationFromService: false,
+    }
+    plugin = new RedisPlugin(makeTracerStub(startSpan), tracerConfig)
     plugin.configure({
       service: 'custom',
       splitByInstance: true,
@@ -85,15 +62,16 @@ describe('RedisPlugin bindStart service caching', () => {
     assert.strictEqual(startSpan.secondCall.args[1].tags['service.name'], 'custom-test')
   })
 
-  it('re-derives the service name when the nomenclature config flips (schema v0 -> v1)', () => {
+  it('re-derives the service name when the schema changes', () => {
     plugin.bindStart(makeCtx('test'))
     assert.strictEqual(startSpan.firstCall.args[1].tags['service.name'], 'custom-test')
 
-    // Replace the object the way `SchemaManager.configure` does -- not mutate.
-    nomenclature.config = {
-      spanAttributeSchema: 'v1',
-      spanRemoveIntegrationFromService: false,
-    }
+    tracerConfig.spanAttributeSchema = 'v1'
+    plugin.configure({
+      service: 'custom',
+      splitByInstance: true,
+      enabled: false,
+    })
 
     plugin.bindStart(makeCtx('test'))
     assert.strictEqual(startSpan.secondCall.args[1].tags['service.name'], 'custom')

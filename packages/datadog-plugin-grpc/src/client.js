@@ -2,14 +2,34 @@
 
 const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
 const { TEXT_MAP } = require('../../../ext/formats')
 const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'grpc.client',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'grpc.client.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class GrpcClientPlugin extends ClientPlugin {
   static id = 'grpc'
   static operation = 'client:request'
   static prefix = 'apm:grpc:client:request'
   static peerServicePrecursors = ['rpc.service']
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

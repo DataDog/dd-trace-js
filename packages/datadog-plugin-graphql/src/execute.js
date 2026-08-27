@@ -4,6 +4,7 @@ const dc = require('dc-polyfill')
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
 const GraphQLParsePlugin = require('./parse')
 const { extractErrorIntoSpanEvent, getOperation, getSignature, isApolloHealthCheck } = require('./utils')
 
@@ -44,6 +45,20 @@ let depthDisabled = false
 // operation's variableValues is undefined.
 const NO_VARIABLES_CACHED = Symbol('noVariablesCached')
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'graphql.execute',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'graphql.server.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
 class AbortError extends Error {
   constructor (message) {
     super(message)
@@ -64,6 +79,11 @@ class GraphQLExecutePlugin extends TracingPlugin {
   static extraPrefixes = [
     'tracing:orchestrion:@graphql-tools/executor:apm:graphql:execute',
   ]
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   /**
    * @param {{ depth?: number }} config

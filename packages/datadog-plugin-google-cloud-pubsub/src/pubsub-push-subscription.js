@@ -4,14 +4,39 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const SpanContext = require('../../dd-trace/src/opentracing/span_context')
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 
 // WeakMap to track push receive spans by request
 const pushReceiveSpans = new WeakMap()
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'pubsub.receive',
+    serviceName: integrationService('pubsub'),
+    serviceSource: integrationServiceSource('google-cloud-pubsub'),
+  },
+  v1: {
+    operationName: () => 'gcp.pubsub.process',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   static get id () { return 'google-cloud-pubsub-push-subscription' }
   static type = 'messaging'
   static kind = 'consumer'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

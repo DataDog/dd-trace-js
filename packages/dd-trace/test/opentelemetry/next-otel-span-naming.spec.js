@@ -3,17 +3,16 @@
 const assert = require('node:assert/strict')
 
 const api = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
 require('../setup/core')
 
 const tracer = require('../../').init()
 
-// Requiring the Next.js instrumentation registers the bridge pre-finish hook that corrects Next's
-// own OTel root request span. In OTel-bridge mode Next emits these spans directly, so the
-// correction lives in the instrumentation (loaded regardless of `plugins: false`) rather than in
-// the bridge, which owns no Next knowledge.
 require('../../../datadog-instrumentations/src/next')
+// Next emits this event when a matched module loads. Publish it without loading the full Next.js graph.
+channel('dd-trace:instrumentation:load').publish({ name: 'next' })
 
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 
@@ -78,6 +77,10 @@ function finishNextRootSpan (span, { method, route, rsc = false } = {}) {
 }
 
 describe('Next.js OTel bridge span naming', () => {
+  beforeEach(() => {
+    tracer.use('next', true)
+  })
+
   it('rewrites a routed Next root request span to next.request + "GET /route" resource', () => {
     const exported = captureExportedRootSpan(() => {
       finishNextRootSpan(startNextRootSpan({ method: 'GET' }), { method: 'GET', route: '/products/[slug]' })
@@ -127,6 +130,20 @@ describe('Next.js OTel bridge span naming', () => {
     assert.strictEqual(exported.resource, 'GET')
   })
 
+  it('does not rewrite the span while the Next plugin is disabled', () => {
+    tracer.use('next', false)
+
+    try {
+      const exported = captureExportedRootSpan(() => {
+        finishNextRootSpan(startNextRootSpan({ method: 'GET' }), { method: 'GET', route: '/products/[slug]' })
+      })
+      assert.strictEqual(exported.name, 'GET /products/[slug]')
+      assert.strictEqual(exported.resource, 'GET')
+    } finally {
+      tracer.use('next', true)
+    }
+  })
+
   describe('when next.span_name is absent', () => {
     // A Next build that marks the root span and sets the route tags but never writes
     // `next.span_name` still has to yield the route-bearing resource the issue describes.
@@ -174,15 +191,19 @@ describe('Next.js OTel bridge span naming', () => {
   })
 
   describe('with the v1 span attribute schema', () => {
-    let previousConfig
+    let previousSpanAttributeSchema
+    let tracerConfig
 
     beforeEach(() => {
-      previousConfig = tracer._nomenclature.config
-      tracer._nomenclature.configure({ ...previousConfig, spanAttributeSchema: 'v1' })
+      tracerConfig = tracer._pluginManager._tracerConfig
+      previousSpanAttributeSchema = tracerConfig.spanAttributeSchema
+      tracerConfig.spanAttributeSchema = 'v1'
+      tracer._pluginManager.configure(tracerConfig)
     })
 
     afterEach(() => {
-      tracer._nomenclature.configure(previousConfig)
+      tracerConfig.spanAttributeSchema = previousSpanAttributeSchema
+      tracer._pluginManager.configure(tracerConfig)
     })
 
     it('resolves the operation name to http.server.request', () => {

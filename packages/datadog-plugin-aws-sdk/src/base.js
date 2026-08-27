@@ -4,13 +4,45 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const getConfig = require('../../dd-trace/src/config')
+const {
+  awsServiceSource,
+  awsServiceV0,
+  awsServiceV1,
+  optionServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
 
 const RESPONSE_SKIP_KEYS = new Set(['request', 'requestId', 'error', '$metadata'])
 
+/**
+ * @param {import('../../dd-trace/src/plugins/tracing').NamingOptions} options
+ */
+function awsOperationName ({ awsService }) {
+  return `aws.${awsService}.request`
+}
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'aws.request',
+    serviceName: awsServiceV0,
+    serviceSource: awsServiceSource,
+  },
+  v1: {
+    operationName: awsOperationName,
+    serviceName: awsServiceV1,
+    serviceSource: optionServiceSource,
+  },
+}
+
 class BaseAwsSdkPlugin extends ClientPlugin {
   static id = 'aws'
   static isPayloadReporter = false
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   /**
    * Append `"<key>": <JSON.stringify(value)>` to a JSON-encoded object
@@ -209,22 +241,17 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   operationFromRequest (request) {
     // can be overriden by subclasses
     return this.operationName({
-      id: 'aws',
-      type: 'web',
-      kind: 'client',
       awsService: this.serviceIdentifier,
     })
   }
 
   /**
-   * @param {{ params?: object }} request
+   * @param {{ operation: string, params?: object }} request
    */
   serviceName (request) {
     return super.serviceName({
-      id: 'aws',
-      type: 'web',
-      kind: 'client',
       awsService: this.serviceIdentifier,
+      operation: request.operation,
       pluginConfig: this.config,
       params: request.params,
     })

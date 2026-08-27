@@ -3,9 +3,29 @@
 const log = require('../../dd-trace/src/log')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { getFilter } = require('./filter')
 
 const filteredJobs = Symbol('bullmq.filteredJobs')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'bullmq.add',
+    serviceName: integrationService('bullmq'),
+    serviceSource: integrationServiceSource('bullmq'),
+  },
+  v1: {
+    operationName: () => 'bullmq.add',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 // Customer-controlled metadata may be malformed JSON. Returning a fresh `{}`
 // on parse failure keeps the publish path alive instead of throwing into
@@ -22,6 +42,11 @@ function parseTelemetryMetadata (raw) {
 
 class BaseBullmqProducerPlugin extends ProducerPlugin {
   static id = 'bullmq'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   asyncEnd (ctx) {
     ctx.currentStore?.span?.finish()

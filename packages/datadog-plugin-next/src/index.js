@@ -4,15 +4,55 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+const spanEndingHook = require('../../dd-trace/src/opentelemetry/span-ending-hook')
 const web = require('../../dd-trace/src/plugins/util/web')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
 const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 const reusedNextRequestStores = new WeakSet()
 const nextParentRoutes = new WeakMap()
+const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
+
+/** @type {string} */
+let nextOperationName = 'next.request'
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'next.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'http.server.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
+/**
+ * @param {import('../../dd-trace/src/opentracing/span')} span
+ */
+function finishOtelSpan (span) {
+  const tags = span.context().getTags()
+  if (tags['next.span_type'] !== NEXT_BASE_SERVER_HANDLE_REQUEST) return
+
+  const method = tags['http.method']
+  const route = tags['next.route'] ?? tags['http.route']
+  const resource = tags['next.span_name'] ?? (route ? `${method} ${route}` : method)
+
+  span.setOperationName(nextOperationName)
+  span.setTag(RESOURCE_NAME, resource)
+}
 
 class NextPlugin extends ServerPlugin {
   static id = 'next'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)
@@ -145,7 +185,17 @@ class NextPlugin extends ServerPlugin {
   }
 
   configure (config) {
-    return super.configure(web.normalizeConfig(config))
+    const normalizedConfig = web.normalizeConfig(config)
+    const result = super.configure(normalizedConfig)
+
+    if (normalizedConfig.enabled) {
+      nextOperationName = this.operationName()
+      spanEndingHook.hook = finishOtelSpan
+    } else if (spanEndingHook.hook === finishOtelSpan) {
+      spanEndingHook.hook = undefined
+    }
+
+    return result
   }
 }
 

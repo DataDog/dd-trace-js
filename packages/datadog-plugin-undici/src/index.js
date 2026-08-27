@@ -9,6 +9,11 @@ const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/st
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const {
+  httpPluginClientService,
+  noServiceSource,
+  optionServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 
 const {
   HTTP_STATUS_CODE,
@@ -19,9 +24,28 @@ const {
 // WeakMap to store span context for native undici request objects
 const requestContexts = new WeakMap()
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'undici.request',
+    serviceName: httpPluginClientService,
+    serviceSource: optionServiceSource,
+  },
+  v1: {
+    operationName: () => 'undici.request',
+    serviceName: httpPluginClientService,
+    serviceSource: noServiceSource,
+  },
+}
+
 class UndiciPlugin extends HttpClientPlugin {
   static id = 'undici'
   static prefix = 'tracing:apm:undici:fetch'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

@@ -3,11 +3,36 @@
 const { TEXT_MAP } = require('../../../ext/formats')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { getResourceName } = require('./util')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'amqp.command',
+    serviceName: integrationService('amqp'),
+    serviceSource: integrationServiceSource('amqp'),
+  },
+  v1: {
+    operationName: () => 'amqp.process',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {
   static id = 'amqplib'
   static operation = 'consume'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   start (ctx) {
     if (!this.config.dsmEnabled) return

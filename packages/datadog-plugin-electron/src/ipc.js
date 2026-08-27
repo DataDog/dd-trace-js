@@ -3,6 +3,77 @@
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const rendererReceiveNamingSchema = {
+  v0: {
+    operationName: () => 'electron.renderer.receive',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'electron.renderer.receive',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const rendererSendNamingSchema = {
+  v0: {
+    operationName: () => 'electron.renderer.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'electron.renderer.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const mainReceiveNamingSchema = {
+  v0: {
+    operationName: () => 'electron.main.receive',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'electron.main.receive',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const mainHandleNamingSchema = {
+  v0: {
+    operationName: () => 'electron.main.handle',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'electron.main.handle',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const mainSendNamingSchema = {
+  v0: {
+    operationName: () => 'electron.main.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'electron.main.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class ElectronIpcPlugin extends CompositePlugin {
   static id = 'electron:ipc'
@@ -41,6 +112,11 @@ class ElectronRendererReceivePlugin extends ConsumerPlugin {
   static operation = 'receive'
   static prefix = 'tracing:apm:electron:ipc:renderer:receive'
 
+  /** @override */
+  getNamingSchema () {
+    return rendererReceiveNamingSchema
+  }
+
   bindStart (ctx) {
     const { args, channel } = ctx
 
@@ -72,6 +148,11 @@ class ElectronRendererSendPlugin extends ProducerPlugin {
   static component = 'electron'
   static operation = 'send'
   static prefix = 'tracing:apm:electron:ipc:renderer:send'
+
+  /** @override */
+  getNamingSchema () {
+    return rendererSendNamingSchema
+  }
 
   bindStart (ctx) {
     const { args, channel } = ctx
@@ -113,16 +194,31 @@ class ElectronRendererSendPlugin extends ProducerPlugin {
 class ElectronMainReceivePlugin extends ElectronRendererReceivePlugin {
   static id = 'electron:ipc:main:receive'
   static prefix = 'tracing:apm:electron:ipc:main:receive'
+
+  /** @override */
+  getNamingSchema () {
+    return mainReceiveNamingSchema
+  }
 }
 
 class ElectronMainHandlePlugin extends ElectronMainReceivePlugin {
   static id = 'electron:ipc:main:handle'
   static prefix = 'tracing:apm:electron:ipc:main:handle'
+
+  /** @override */
+  getNamingSchema () {
+    return mainHandleNamingSchema
+  }
 }
 
 class ElectronMainSendPlugin extends ElectronRendererSendPlugin {
   static id = 'electron:ipc:main:send'
   static prefix = 'tracing:apm:electron:ipc:main:send'
+
+  /** @override */
+  getNamingSchema () {
+    return mainSendNamingSchema
+  }
 
   constructor (...args) {
     super(...args)

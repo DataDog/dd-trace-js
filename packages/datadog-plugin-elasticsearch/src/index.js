@@ -1,9 +1,34 @@
 'use strict'
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const {
+  configuredIntegrationService,
+  configuredService,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'elasticsearch.query',
+    serviceName: configuredIntegrationService('elasticsearch'),
+    serviceSource: storageServiceSource('elasticsearch'),
+  },
+  v1: {
+    operationName: () => 'elasticsearch.query',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class ElasticsearchPlugin extends DatabasePlugin {
   static id = 'elasticsearch'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   #urlTag
   #methodTag

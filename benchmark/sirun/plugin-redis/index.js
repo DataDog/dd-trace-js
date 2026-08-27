@@ -25,9 +25,13 @@ class BenchedRedisPlugin extends RedisPlugin {
 
 const tracer = {
   _service: 'web-app',
-  _nomenclature: { config: {}, opName: () => 'redis.command' },
 }
-const tracerConfig = { spanComputePeerService: false }
+const tracerConfig = {
+  service: 'web-app',
+  spanAttributeSchema: 'v0',
+  spanComputePeerService: false,
+  spanRemoveIntegrationFromService: false,
+}
 const plugin = new BenchedRedisPlugin(tracer, tracerConfig)
 plugin.configure({ enabled: true, service: 'redis-prod' })
 

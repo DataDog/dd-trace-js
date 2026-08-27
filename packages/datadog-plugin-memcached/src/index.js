@@ -2,9 +2,34 @@
 
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const CachePlugin = require('../../dd-trace/src/plugins/cache')
+const {
+  configuredService,
+  configuredSystemService,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'memcached.command',
+    serviceName: configuredSystemService,
+    serviceSource: storageServiceSource('memcached'),
+  },
+  v1: {
+    operationName: () => 'memcached.command',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class MemcachedPlugin extends CachePlugin {
   static id = 'memcached'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const { client, server, query } = ctx

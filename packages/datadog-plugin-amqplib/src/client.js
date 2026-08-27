@@ -3,12 +3,37 @@
 const { TEXT_MAP } = require('../../../ext/formats')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { getResourceName } = require('./util')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'amqp.command',
+    serviceName: integrationService('amqp'),
+    serviceSource: integrationServiceSource('amqp'),
+  },
+  v1: {
+    operationName: () => 'amqp.command',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class AmqplibClientPlugin extends ClientPlugin {
   static id = 'amqplib'
   static type = 'messaging'
   static operation = 'command'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const { channel = {}, method, fields } = ctx

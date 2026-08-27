@@ -2,8 +2,28 @@
 
 const { storage } = require('../../datadog-core')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const {
+  configuredIntegrationService,
+  configuredService,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 
 const AEROSPIKE_PEER_SERVICE = 'aerospike.namespace'
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'aerospike.command',
+    serviceName: configuredIntegrationService('aerospike'),
+    serviceSource: storageServiceSource('aerospike'),
+  },
+  v1: {
+    operationName: () => 'aerospike.command',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class AerospikePlugin extends DatabasePlugin {
   static id = 'aerospike'
@@ -12,6 +32,11 @@ class AerospikePlugin extends DatabasePlugin {
   static prefix = 'tracing:apm:aerospike:command'
 
   static peerServicePrecursors = [AEROSPIKE_PEER_SERVICE]
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const { commandName, commandArgs } = ctx

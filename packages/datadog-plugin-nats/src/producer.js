@@ -3,14 +3,39 @@
 const { TEXT_MAP } = require('../../../ext/formats')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { getOperationName } = require('./util')
 
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'nats.publish',
+    serviceName: integrationService('nats'),
+    serviceSource: integrationServiceSource('nats'),
+  },
+  v1: {
+    operationName: () => 'nats.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class NatsProducerPlugin extends ProducerPlugin {
   static id = 'nats'
   static operation = 'publish'
   static peerServicePrecursors = [MESSAGING_DESTINATION_KEY]
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const { subject, options, connection, type, createHeaders } = ctx

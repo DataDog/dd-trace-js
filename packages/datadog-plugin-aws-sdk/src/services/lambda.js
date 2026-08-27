@@ -1,10 +1,42 @@
 'use strict'
 
 const log = require('../../../dd-trace/src/log')
+const {
+  awsServiceSource,
+  awsServiceV0,
+  awsServiceV1,
+  optionServiceSource,
+} = require('../../../dd-trace/src/service-naming/helpers')
 const BaseAwsSdkPlugin = require('../base')
+
+/**
+ * @param {import('../../../dd-trace/src/plugins/tracing').NamingOptions} options
+ */
+function lambdaOperationName ({ operation }) {
+  return operation === 'invoke' ? 'aws.lambda.invoke' : 'aws.lambda.request'
+}
+
+/** @type {import('../../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'aws.request',
+    serviceName: awsServiceV0,
+    serviceSource: awsServiceSource,
+  },
+  v1: {
+    operationName: lambdaOperationName,
+    serviceName: awsServiceV1,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class Lambda extends BaseAwsSdkPlugin {
   static id = 'lambda'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   generateTags (params, operation, response) {
     if (!params?.FunctionName) return
@@ -59,18 +91,9 @@ class Lambda extends BaseAwsSdkPlugin {
   }
 
   operationFromRequest (request) {
-    if (request.operation === 'invoke') {
-      return this.operationName({
-        type: 'web',
-        kind: 'client',
-      })
-    }
-
     return this.operationName({
-      id: 'aws',
-      type: 'web',
-      kind: 'client',
       awsService: 'lambda',
+      operation: request.operation,
     })
   }
 }

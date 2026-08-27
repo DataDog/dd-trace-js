@@ -2,15 +2,40 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { getKafkaMessageSize } = require('./utils')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'kafka.produce',
+    serviceName: integrationService('kafka'),
+    serviceSource: integrationServiceSource('kafka'),
+  },
+  v1: {
+    operationName: () => 'kafka.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
 class KafkajsProducerPlugin extends ProducerPlugin {
   static id = 'kafkajs'
   static operation = 'produce'
   static peerServicePrecursors = [BOOTSTRAP_SERVERS_KEY]
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor () {
     super(...arguments)

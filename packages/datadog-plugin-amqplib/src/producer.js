@@ -4,11 +4,36 @@ const { TEXT_MAP } = require('../../../ext/formats')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { getResourceName } = require('./util')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'amqp.command',
+    serviceName: integrationService('amqp'),
+    serviceSource: integrationServiceSource('amqp'),
+  },
+  v1: {
+    operationName: () => 'amqp.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class AmqplibProducerPlugin extends ProducerPlugin {
   static id = 'amqplib'
   static operation = 'publish'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   start (ctx) {
     if (!this.config.dsmEnabled) return

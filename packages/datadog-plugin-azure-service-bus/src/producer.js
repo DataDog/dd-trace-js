@@ -1,12 +1,37 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const spanContexts = new WeakMap()
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'azure.servicebus.send',
+    serviceName: integrationService('azure-service-bus'),
+    serviceSource: integrationServiceSource('azure-service-bus'),
+  },
+  v1: {
+    operationName: () => 'azure.servicebus.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class AzureServiceBusProducerPlugin extends ProducerPlugin {
   static get id () { return 'azure-service-bus' }
   static get operation () { return 'send' }
   static get prefix () { return 'tracing:apm:azure-service-bus:send' }
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const batchLinksEnabled = this._tracerConfig.DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED

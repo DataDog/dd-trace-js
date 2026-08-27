@@ -1,6 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
 const { extractErrorIntoSpanEvent, getCachedRequestOperation, isApolloHealthCheckSource } = require('./utils')
 
 /**
@@ -35,12 +36,31 @@ const { extractErrorIntoSpanEvent, getCachedRequestOperation, isApolloHealthChec
 // available, so we never re-parse on the hot path. On the JIT warm path no
 // sub-span fires, so we recover the same tags from the cache the cold path
 // populated, keyed by source + operationName.
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'graphql.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'graphql.server.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
 class GraphQLRequestPlugin extends TracingPlugin {
   static id = 'graphql'
   static operation = 'request'
   static type = 'graphql'
   static kind = 'server'
   static prefix = 'tracing:orchestrion:mercurius:apm:graphql:request'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   /**
    * @param {GraphQLRequestContext} ctx
@@ -68,7 +88,7 @@ class GraphQLRequestPlugin extends TracingPlugin {
     // span is refined from the parsed document instead.
     const cached = getCachedRequestOperation(source, operationName)
 
-    const span = this.startSpan(this.operationName({ id: 'request' }), {
+    const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
       // The cached signature is the precise resource; otherwise provisional and
       // refined by the validate sub-plugin once the document is parsed.

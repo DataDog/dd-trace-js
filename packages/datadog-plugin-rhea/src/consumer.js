@@ -2,9 +2,29 @@
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'amqp.receive',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'amqp.process',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class RheaConsumerPlugin extends ConsumerPlugin {
   static id = 'rhea'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

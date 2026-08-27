@@ -3,10 +3,35 @@
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { getAmqpMessageSize, DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'amqp.send',
+    serviceName: integrationService('amqp-producer'),
+    serviceSource: integrationServiceSource('amqp'),
+  },
+  v1: {
+    operationName: () => 'amqp.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class RheaProducerPlugin extends ProducerPlugin {
   static id = 'rhea'
   static operation = 'send'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

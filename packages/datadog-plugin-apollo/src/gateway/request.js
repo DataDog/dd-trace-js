@@ -16,8 +16,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     const childOf = store ? store.span : null
     const spanData = {
       childOf,
-      service: this.serviceName(
-        { id: `${this.constructor.id}.${this.constructor.operation}`, pluginConfig: this.config }),
+      service: this.serviceName({ pluginConfig: this.config }),
       type: this.constructor.type,
       kind: this.constructor.kind,
       meta: {},
@@ -43,7 +42,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
       spanData.resource = getSignature(document, name, type, this?.config?.signature)
       spanData.meta['graphql.operation.type'] = type
     }
-    const span = this.startSpan(this.operationName({ id: `${this.constructor.id}.${this.constructor.operation}` }),
+    const span = this.startSpan(this.operationName({ operation: this.constructor.operation }),
       spanData, false)
 
     ctx.parentStore = store

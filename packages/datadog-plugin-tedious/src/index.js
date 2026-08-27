@@ -2,11 +2,36 @@
 
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const {
+  configuredService,
+  configuredSystemService,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'tedious.request',
+    serviceName: configuredSystemService,
+    serviceSource: storageServiceSource('tedious'),
+  },
+  v1: {
+    operationName: () => 'mssql.query',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class TediousPlugin extends DatabasePlugin {
   static id = 'tedious'
   static operation = 'request' // TODO: change to match other database plugins
   static system = 'mssql'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const service = this.serviceName({ pluginConfig: this.config, system: this.system })

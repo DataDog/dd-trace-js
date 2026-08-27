@@ -6,13 +6,33 @@ const { withRequest } = require('../../dd-trace/src/appsec/store')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
 
 const legacyStorage = storage('legacy')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'web.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'http.server.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class HttpServerPlugin extends ServerPlugin {
   static id = 'http'
 
   static prefix = 'apm:http:server:request'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   /** @type {string | undefined} */
   #operationName

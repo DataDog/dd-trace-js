@@ -1,14 +1,44 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
+const {
+  configuredService,
+  optionServiceSource,
+} = require('../service-naming/helpers')
 const TracingPlugin = require('./tracing')
 
 const legacyStorage = storage('legacy')
+
+/**
+ * @param {import('./tracing').NamingOptions} options
+ */
+function operationName ({ operation }) {
+  return `apollo.gateway.${operation}`
+}
+
+/** @type {import('./tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName,
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+  v1: {
+    operationName,
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class ApolloBasePlugin extends TracingPlugin {
   static id = 'apollo.gateway'
   static type = 'web'
   static kind = 'server'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const store = legacyStorage.getStore()
@@ -46,14 +76,13 @@ class ApolloBasePlugin extends TracingPlugin {
 
   getServiceName () {
     return this.serviceName({
-      id: `${this.constructor.id}.${this.constructor.operation}`,
       pluginConfig: this.config,
     })
   }
 
   getOperationName () {
     return this.operationName({
-      id: `${this.constructor.id}.${this.constructor.operation}`,
+      operation: this.constructor.operation,
     })
   }
 }

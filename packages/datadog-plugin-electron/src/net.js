@@ -2,6 +2,24 @@
 
 const HttpClientPlugin = require('../../datadog-plugin-http/src/client')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
+const {
+  httpPluginClientService,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'http.request',
+    serviceName: httpPluginClientService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'http.client.request',
+    serviceName: httpPluginClientService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class ElectronNetPlugin extends CompositePlugin {
   static id = 'electron:net'
@@ -17,6 +35,11 @@ class ElectronRequestPlugin extends HttpClientPlugin {
   static component = 'electron'
   static operation = 'request'
   static prefix = 'tracing:apm:electron:net:request'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const args = ctx.args

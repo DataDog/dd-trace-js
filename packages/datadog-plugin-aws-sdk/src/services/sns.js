@@ -1,12 +1,44 @@
 'use strict'
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
+const {
+  awsServiceSource,
+  awsServiceV0,
+  awsServiceV1,
+  optionServiceSource,
+} = require('../../../dd-trace/src/service-naming/helpers')
 const BaseAwsSdkPlugin = require('../base')
+
+/**
+ * @param {import('../../../dd-trace/src/plugins/tracing').NamingOptions} options
+ */
+function snsOperationName ({ operation }) {
+  return operation === 'publish' || operation === 'publishBatch' ? 'aws.sns.send' : 'aws.sns.request'
+}
+
+/** @type {import('../../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'aws.request',
+    serviceName: awsServiceV0,
+    serviceSource: awsServiceSource,
+  },
+  v1: {
+    operationName: snsOperationName,
+    serviceName: awsServiceV1,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class Sns extends BaseAwsSdkPlugin {
   static id = 'sns'
   static peerServicePrecursors = ['topicname']
   static isPayloadReporter = true
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   generateTags (params, operation, response) {
     if (!params) return
@@ -31,20 +63,9 @@ class Sns extends BaseAwsSdkPlugin {
   }
 
   operationFromRequest (request) {
-    switch (request.operation) {
-      case 'publish':
-      case 'publishBatch':
-        return this.operationName({
-          type: 'messaging',
-          kind: 'producer',
-        })
-    }
-
     return this.operationName({
-      id: 'aws',
-      type: 'web',
-      kind: 'client',
       awsService: 'sns',
+      operation: request.operation,
     })
   }
 

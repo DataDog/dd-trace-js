@@ -3,11 +3,71 @@
 const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const {
+  configServiceName,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @typedef {import('../../dd-trace/src/plugins/tracing').NamingOptions} NamingOptions */
+
+/**
+ * @param {NamingOptions} options
+ * @returns {string}
+ */
+function operationNameV0 ({ operation = 'query' } = {}) {
+  return `pg.${operation}`
+}
+
+/**
+ * @param {NamingOptions} options
+ * @returns {string}
+ */
+function operationNameV1 ({ operation = 'query' } = {}) {
+  return `postgresql.${operation}`
+}
+
+/**
+ * @param {string} tracerService
+ * @param {NamingOptions} options
+ * @returns {string}
+ */
+function serviceNameV0 (tracerService, { params, pluginConfig } = {}) {
+  return configServiceName(pluginConfig, params, `${tracerService}-postgres`)
+}
+
+/**
+ * @param {string} tracerService
+ * @param {NamingOptions} options
+ * @returns {string}
+ */
+function serviceNameV1 (tracerService, { params, pluginConfig } = {}) {
+  return configServiceName(pluginConfig, params, tracerService)
+}
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: operationNameV0,
+    serviceName: serviceNameV0,
+    serviceSource: storageServiceSource('pg'),
+  },
+  v1: {
+    operationName: operationNameV1,
+    serviceName: serviceNameV1,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class PGPlugin extends DatabasePlugin {
   static id = 'pg'
   static operation = 'query'
   static system = 'postgres'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor () {
     super(...arguments)

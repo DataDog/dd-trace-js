@@ -1,12 +1,37 @@
 'use strict'
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const {
+  configuredService,
+  configuredSystemService,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const CASSANDRA_CONTACT_POINTS_KEY = 'db.cassandra.contact.points'
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'cassandra.query',
+    serviceName: configuredSystemService,
+    serviceSource: storageServiceSource('cassandra-driver'),
+  },
+  v1: {
+    operationName: () => 'cassandra.query',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class CassandraDriverPlugin extends DatabasePlugin {
   static id = 'cassandra-driver'
   static system = 'cassandra'
   static peerServicePrecursors = [CASSANDRA_CONTACT_POINTS_KEY]
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     let { keyspace, query, contactPoints = {} } = ctx

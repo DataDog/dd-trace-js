@@ -4,6 +4,12 @@ const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const SpanContext = require('../../dd-trace/src/opentracing/span_context')
 const id = require('../../dd-trace/src/id')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { storage } = require('../../datadog-core')
 
 /**
@@ -19,6 +25,20 @@ const { storage } = require('../../datadog-core')
 const messageToContext = new WeakMap() // Message -> context (auto-cleanup on GC)
 const ackIdToMessage = new Map() // ackId -> WeakRef<Message> (needs cleanup)
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'pubsub.receive',
+    serviceName: integrationService('pubsub'),
+    serviceSource: integrationServiceSource('google-cloud-pubsub'),
+  },
+  v1: {
+    operationName: () => 'gcp.pubsub.process',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
 const ackMapCleanup = new FinalizationRegistry((ackId) => {
   ackIdToMessage.delete(ackId) // Remove orphaned ackId when Message is GC'd
 })
@@ -26,6 +46,11 @@ const ackMapCleanup = new FinalizationRegistry((ackId) => {
 class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   static id = 'google-cloud-pubsub'
   static operation = 'receive'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

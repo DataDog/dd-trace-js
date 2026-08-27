@@ -3,10 +3,35 @@
 const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const {
+  configuredDatabaseService,
+  configuredServiceWithFunction,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'mysql.query',
+    serviceName: configuredDatabaseService,
+    serviceSource: storageServiceSource('mysql'),
+  },
+  v1: {
+    operationName: () => 'mysql.query',
+    serviceName: configuredServiceWithFunction,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class MySQLPlugin extends DatabasePlugin {
   static id = 'mysql'
   static system = 'mysql'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor () {
     super(...arguments)

@@ -3,7 +3,36 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
+const {
+  awsServiceSource,
+  awsServiceV0,
+  awsServiceV1,
+  optionServiceSource,
+} = require('../../../dd-trace/src/service-naming/helpers')
 const { extractQueueMetadata } = require('../util')
+
+/**
+ * @param {import('../../../dd-trace/src/plugins/tracing').NamingOptions} options
+ */
+function sqsOperationName ({ operation }) {
+  if (operation === 'receiveMessage') return 'aws.sqs.process'
+  if (operation === 'sendMessage' || operation === 'sendMessageBatch') return 'aws.sqs.send'
+  return 'aws.sqs.request'
+}
+
+/** @type {import('../../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'aws.request',
+    serviceName: awsServiceV0,
+    serviceSource: awsServiceSource,
+  },
+  v1: {
+    operationName: sqsOperationName,
+    serviceName: awsServiceV1,
+    serviceSource: optionServiceSource,
+  },
+}
 
 /**
  * @typedef {{
@@ -46,6 +75,11 @@ class Sqs extends BaseAwsSdkPlugin {
   static id = 'sqs'
   static peerServicePrecursors = ['queuename']
   static isPayloadReporter = true
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)
@@ -124,25 +158,9 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   operationFromRequest (request) {
-    switch (request.operation) {
-      case 'receiveMessage':
-        return this.operationName({
-          type: 'messaging',
-          kind: 'consumer',
-        })
-      case 'sendMessage':
-      case 'sendMessageBatch':
-        return this.operationName({
-          type: 'messaging',
-          kind: 'producer',
-        })
-    }
-
     return this.operationName({
-      id: 'aws',
-      type: 'web',
-      kind: 'client',
       awsService: 'sqs',
+      operation: request.operation,
     })
   }
 

@@ -2,6 +2,7 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const web = require('../../dd-trace/src/plugins/util/web')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
 
 const triggerMap = {
   deleteRequest: 'Http',
@@ -16,12 +17,31 @@ const triggerMap = {
   cosmosDB: 'CosmosDB',
 }
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'azure.functions.invoke',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'azure.functions.invoke',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
 class AzureFunctionsPlugin extends TracingPlugin {
   static id = 'azure-functions'
   static operation = 'invoke'
   static kind = 'server'
   static type = 'serverless'
   static prefix = 'tracing:datadog:azure:functions:invoke'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const meta = getMetaForTrigger(ctx)

@@ -3,6 +3,21 @@
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'web.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'http.server.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class Http2ServerPlugin extends ServerPlugin {
   constructor (tracer, config) {
@@ -14,6 +29,11 @@ class Http2ServerPlugin extends ServerPlugin {
   static id = 'http2'
 
   static prefix = 'apm:http2:server:request'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const { req, res } = ctx

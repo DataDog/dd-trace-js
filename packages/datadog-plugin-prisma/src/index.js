@@ -2,7 +2,46 @@
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const {
+  configServiceName,
+  configuredService,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const DatadogTracingHelper = require('./datadog-tracing-helper')
+
+/** @typedef {import('../../dd-trace/src/plugins/tracing').NamingOptions} NamingOptions */
+
+/**
+ * @param {NamingOptions} options
+ * @returns {string}
+ */
+function operationNameV0 ({ operation } = {}) {
+  return `prisma.${operation}`
+}
+
+/**
+ * @param {string} tracerService
+ * @param {NamingOptions} options
+ * @returns {string}
+ */
+function serviceNameV0 (tracerService, { params, pluginConfig } = {}) {
+  return configServiceName(pluginConfig, params, `${tracerService}-prisma`)
+}
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: operationNameV0,
+    serviceName: serviceNameV0,
+    serviceSource: storageServiceSource('prisma'),
+  },
+  v1: {
+    operationName: operationNameV0,
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
 
 const databaseDriverMapper = {
   postgresql: {
@@ -27,6 +66,11 @@ class PrismaPlugin extends DatabasePlugin {
   static id = 'prisma'
   static system = 'prisma'
   static prefix = 'tracing:apm:prisma'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)

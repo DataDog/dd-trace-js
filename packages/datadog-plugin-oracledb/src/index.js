@@ -2,13 +2,57 @@
 
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const {
+  configServiceName,
+  optionServiceSource,
+  storageServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 
 let parser
+
+/** @typedef {import('../../dd-trace/src/plugins/tracing').NamingOptions} NamingOptions */
+
+/**
+ * @param {string} tracerService
+ * @param {NamingOptions} options
+ * @returns {string}
+ */
+function serviceNameV0 (tracerService, { params, pluginConfig } = {}) {
+  return configServiceName(pluginConfig, params, `${tracerService}-oracle`)
+}
+
+/**
+ * @param {string} tracerService
+ * @param {NamingOptions} options
+ * @returns {string}
+ */
+function serviceNameV1 (tracerService, { params, pluginConfig } = {}) {
+  return configServiceName(pluginConfig, params, tracerService)
+}
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'oracle.query',
+    serviceName: serviceNameV0,
+    serviceSource: storageServiceSource('oracledb'),
+  },
+  v1: {
+    operationName: () => 'oracle.query',
+    serviceName: serviceNameV1,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class OracledbPlugin extends DatabasePlugin {
   static id = 'oracledb'
   static system = 'oracle'
   static peerServicePrecursors = ['db.instance', 'db.hostname']
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     let { query, connAttrs, port, hostname, dbInstance } = ctx

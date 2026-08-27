@@ -2,13 +2,38 @@
 
 const { TEXT_MAP } = require('../../../ext/formats')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { headersToTextMap } = require('./util')
 
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'nats.consume',
+    serviceName: integrationService('nats'),
+    serviceSource: integrationServiceSource('nats'),
+  },
+  v1: {
+    operationName: () => 'nats.process',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
 class NatsConsumerPlugin extends ConsumerPlugin {
   static id = 'nats'
   static operation = 'consume'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const { subject: filter, message } = ctx

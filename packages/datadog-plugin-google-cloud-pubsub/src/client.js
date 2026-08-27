@@ -1,11 +1,36 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'pubsub.request',
+    serviceName: integrationService('pubsub'),
+    serviceSource: integrationServiceSource('google-cloud-pubsub'),
+  },
+  v1: {
+    operationName: () => 'gcp.pubsub.request',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class GoogleCloudPubsubClientPlugin extends ClientPlugin {
   static id = 'google-cloud-pubsub'
   static type = 'messaging'
   static operation = 'request'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   start (ctx) {
     const { request, api, projectId, storedContext } = ctx

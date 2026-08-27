@@ -8,16 +8,39 @@ const {
 } = require('../../dd-trace/src/constants')
 const { getSegment } = require('../../dd-trace/src/util')
 const {
+  configuredService,
+  optionServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
+const {
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
   hasDistributedTracingContext,
 } = require('./util')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'websocket.close',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+  v1: {
+    operationName: () => 'websocket.close',
+    serviceName: configuredService,
+    serviceSource: optionServiceSource,
+  },
+}
 
 class WSClosePlugin extends TracingPlugin {
   static get id () { return 'ws' }
   static get prefix () { return 'tracing:ws:close' }
   static get type () { return 'websocket' }
   static get kind () { return 'close' }
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const {

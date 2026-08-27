@@ -2,12 +2,37 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const {
+  identityService,
+  integrationService,
+  integrationServiceSource,
+  noServiceSource,
+} = require('../../dd-trace/src/service-naming/helpers')
 const { getAddress, getShortName } = require('./util')
+
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'amqp.send',
+    serviceName: integrationService('amqp'),
+    serviceSource: integrationServiceSource('amqp'),
+  },
+  v1: {
+    operationName: () => 'amqp.send',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
 
 class Amqp10ProducerPlugin extends ProducerPlugin {
   static id = 'amqp10'
   static operation = 'send'
   static system = 'amqp'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   bindStart (ctx) {
     const { link } = ctx

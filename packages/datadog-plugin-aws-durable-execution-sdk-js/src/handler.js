@@ -2,6 +2,7 @@
 
 const log = require('../../dd-trace/src/log')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { identityService, noServiceSource } = require('../../dd-trace/src/service-naming/helpers')
 const { saveTraceContextCheckpointIfUpdated } = require('./trace-checkpoint')
 
 // Termination reasons that indicate the execution is suspending rather than exiting permanently.
@@ -21,11 +22,30 @@ const DEFAULT_TERMINATION_REASON = 'OPERATION_TERMINATED'
 // The instrumentation owns the wrapping; this plugin only reacts.
 const TERMINATE_CHANNEL = 'apm:aws-durable-execution-sdk-js:terminate'
 
+/** @type {import('../../dd-trace/src/plugins/tracing').NamingSchema} */
+const namingSchema = {
+  v0: {
+    operationName: () => 'aws.durable.execute',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+  v1: {
+    operationName: () => 'aws.durable.execute',
+    serviceName: identityService,
+    serviceSource: noServiceSource,
+  },
+}
+
 class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   static id = 'aws-durable-execution-sdk-js'
   static type = 'serverless'
   static kind = 'internal'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:withDurableExecution'
+
+  /** @override */
+  getNamingSchema () {
+    return namingSchema
+  }
 
   constructor (...args) {
     super(...args)
