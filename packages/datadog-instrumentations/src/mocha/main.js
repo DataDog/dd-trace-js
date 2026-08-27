@@ -369,6 +369,7 @@ function getOnEndHandler (isParallel, onDone) {
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
+      isFrameworkError: arguments.length > 0,
     }, () => {
       try {
         onDone()
