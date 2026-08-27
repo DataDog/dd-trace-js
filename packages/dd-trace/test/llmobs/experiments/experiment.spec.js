@@ -1298,4 +1298,44 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(dataset.records()[1].expectedOutput, 'expected')
     assert.deepEqual(dataset.records()[1].metadata, { explicit: true })
   })
+
+  it('adds multiple records with custom and generated ids', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo')
+    const returned = dataset.addRecords([
+      {
+        id: 'custom-record',
+        inputData: 'first',
+        expectedOutput: 'one',
+        metadata: { row: 0 },
+        tags: ['tag:first'],
+      },
+      { inputData: { value: 2 } },
+    ])
+
+    assert.equal(returned, dataset)
+    const records = dataset.records()
+    assert.equal(records.length, 2)
+    assert.equal(records[0].id, 'custom-record')
+    assert.ok(records[1].id)
+
+    await dataset.push()
+
+    const attributes = requests.find(request => request.method === 'batchUpdateDatasetRecords').attributes
+    assert.deepEqual(attributes.insert_records, [
+      {
+        id: 'custom-record',
+        input: 'first',
+        expected_output: 'one',
+        metadata: { row: 0 },
+        tags: ['tag:first'],
+      },
+      {
+        id: records[1].id,
+        input: { value: 2 },
+        expected_output: null,
+        metadata: {},
+      },
+    ])
+  })
 })

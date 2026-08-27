@@ -3867,17 +3867,19 @@ declare namespace tracer {
       metadata?: Array<Record<string, any>>
     ) => any | Promise<any>
 
+    interface DatasetRecordOptions {
+      id?: string
+      inputData: JSONType
+      expectedOutput?: JSONType
+      metadata?: Record<string, JSONType>
+      tags?: string[]
+    }
+
     interface CreateDatasetOptions {
       /** Override the configured project for this dataset. */
       projectName?: string
       description?: string
-      records?: Array<{
-        id?: string,
-        inputData: JSONType,
-        expectedOutput?: JSONType,
-        metadata?: Record<string, JSONType>,
-        tags?: string[]
-      }>
+      records?: DatasetRecordOptions[]
     }
 
     interface ExperimentOptions {
@@ -4046,6 +4048,8 @@ declare namespace tracer {
         metadata?: Record<string, JSONType>,
         tags?: string[]
       ): Dataset
+      /** Add multiple records to the dataset. */
+      addRecords (records: DatasetRecordOptions[]): Dataset
       /** Update fields on an existing dataset record. */
       update (index: number, fields: {
         input?: JSONType

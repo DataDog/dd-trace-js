@@ -5,6 +5,14 @@ const snapshotPayload = require('../../../../../vendor/dist/rfdc')({ proto: fals
 
 /** @typedef {{add?: string[], remove?: string[], replace?: string[]}} TagOperations */
 /**
+ * @typedef {object} DatasetRecordOptions
+ * @property {string} [id]
+ * @property {unknown} inputData
+ * @property {unknown} [expectedOutput]
+ * @property {Record<string, unknown>} [metadata]
+ * @property {string[]} [tags]
+ */
+/**
  * @typedef {object} PendingBatch
  * @property {object} attributes
  * @property {string[]} deleteRecordIds
@@ -174,6 +182,27 @@ class Dataset {
       ? recordOrInput
       : new DatasetRecord(recordOrInput, expectedOutput, metadata, null, tags)
     this.#addRecord(record)
+    return this
+  }
+
+  /**
+   * Add multiple records to a dataset.
+   * @param {DatasetRecordOptions[]} records
+   * @returns {Dataset} This dataset for chaining.
+   */
+  addRecords (records) {
+    for (const record of records) {
+      if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
+        throw new Error('record id must be a non-empty string')
+      }
+      this.addRecord(new DatasetRecord(
+        record.inputData,
+        record.expectedOutput,
+        record.metadata,
+        record.id,
+        record.tags
+      ))
+    }
     return this
   }
 

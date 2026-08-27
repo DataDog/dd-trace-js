@@ -7,6 +7,15 @@ const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
 const NOOP_SPAN_ID = '0000000000000000'
 const NOOP_TRACE_ID = '00000000000000000000000000000000'
 
+/**
+ * @typedef {object} DatasetRecordOptions
+ * @property {string} [id]
+ * @property {unknown} inputData
+ * @property {unknown} [expectedOutput]
+ * @property {Record<string, unknown>} [metadata]
+ * @property {string[]} [tags]
+ */
+
 class NoopDataset {
   #name
   #description
@@ -34,6 +43,24 @@ class NoopDataset {
       metadata: metadata ?? {},
       tags: [...(tags ?? [])],
     })
+    return this
+  }
+
+  /**
+   * Add multiple records to a dataset.
+   * @param {DatasetRecordOptions[]} records
+   * @returns {NoopDataset} This dataset for chaining.
+   */
+  addRecords (records) {
+    for (const record of records) {
+      this.#records.push({
+        id: record.id ?? null,
+        input: record.inputData,
+        expectedOutput: record.expectedOutput ?? null,
+        metadata: record.metadata ?? {},
+        tags: [...(record.tags ?? [])],
+      })
+    }
     return this
   }
 
