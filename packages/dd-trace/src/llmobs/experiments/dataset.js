@@ -5,7 +5,7 @@ const snapshotPayload = require('../../../../../vendor/dist/rfdc')({ proto: fals
 
 /** @typedef {{add?: string[], remove?: string[], replace?: string[]}} TagOperations */
 /**
- * @typedef {object} DatasetRecordOptions
+ * @typedef {object} DatasetRecordNew
  * @property {string} [id]
  * @property {unknown} inputData
  * @property {unknown} [expectedOutput]
@@ -187,7 +187,7 @@ class Dataset {
 
   /**
    * Add multiple records to a dataset.
-   * @param {DatasetRecordOptions[]} records
+   * @param {DatasetRecordNew[]} records
    * @returns {Dataset} This dataset for chaining.
    */
   addRecords (records) {

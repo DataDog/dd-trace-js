@@ -8,7 +8,7 @@ const NOOP_SPAN_ID = '0000000000000000'
 const NOOP_TRACE_ID = '00000000000000000000000000000000'
 
 /**
- * @typedef {object} DatasetRecordOptions
+ * @typedef {object} DatasetRecordNew
  * @property {string} [id]
  * @property {unknown} inputData
  * @property {unknown} [expectedOutput]
@@ -48,7 +48,7 @@ class NoopDataset {
 
   /**
    * Add multiple records to a dataset.
-   * @param {DatasetRecordOptions[]} records
+   * @param {DatasetRecordNew[]} records
    * @returns {NoopDataset} This dataset for chaining.
    */
   addRecords (records) {
