@@ -165,7 +165,7 @@ Follow these steps when creating or modifying an integration:
 1. **Investigate** — Read the upstream library's source (see [Read Upstream Source First](#read-upstream-source-first)). Read 1-2 reference integrations of the same type (see table above). Understand the instrumentation and plugin patterns before writing code.
 2. **Implement instrumentation** — Create the instrumentation in `packages/datadog-instrumentations/src/`. Use orchestrion for instrumentation.
 3. **Implement plugin** — Create the plugin in `packages/datadog-plugin-<name>/src/`. Extend the correct base class.
-4. **Register** — Add entries in `packages/dd-trace/src/plugins/index.js`, both public type surfaces unless v6-only,
+4. **Register** — Add entries in `packages/dd-trace/src/plugins/index.js`, every supported public TypeScript surface,
     `docs/test.ts`, `docs/API.md`, and `.github/workflows/apm-integrations.yml`.
 5. **Write tests** — Add unit tests and ESM integration tests. See [Testing](references/testing.md) for templates.
 6. **Run tests** — Validate with:

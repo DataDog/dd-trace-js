@@ -117,13 +117,7 @@ Node.js 18 APIs unless guarded. Use `version.js` for package-version gates. Neve
 support checks; derive the range from `package.json` fields `engines.node` and `nodeMaxMajor`, and honor
 `DD_INJECT_FORCE` in specs that need a live tracer.
 
-The repository has two public TypeScript surfaces:
-
-- `index.d.ts` — current major
-- `index.d.v5.ts` — frozen v5 surface used by `scripts/release/swap-v5-types.js`
-
-Update both for new public APIs unless the change is explicitly v6-only. Drops, renames, and APIs unavailable in v5
-belong only in `index.d.ts`.
+Update every supported public TypeScript surface for new public APIs unless the change is explicitly version-specific.
 
 ## Cross-Cutting Configuration Changes
 
