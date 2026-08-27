@@ -31,6 +31,7 @@ describe('test optimization automatic log submission', () => {
     ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
     'bunyan',
     'jest',
+    'pino',
     vitestDependency,
     'winston',
     playwrightDependency,
@@ -70,12 +71,12 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'mocha',
       command: './node_modules/.bin/mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js',
-      loggerNames: ['winston', 'bunyan'],
+      loggerNames: ['winston', 'bunyan', 'pino'],
     },
     {
       name: 'vitest',
       command: './node_modules/.bin/vitest run --config ./ci-visibility/automatic-log-submission-vitest/config.mjs',
-      loggerNames: ['bunyan'],
+      loggerNames: ['winston', 'bunyan', 'pino'],
       getExtraEnvVars: () => ({
         NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
       }),
@@ -87,12 +88,12 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'cucumber',
       command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature',
-      loggerNames: ['winston', 'bunyan'],
+      loggerNames: ['winston', 'bunyan', 'pino'],
     },
     {
       name: 'playwright',
       command: './node_modules/.bin/playwright test -c playwright.config.js',
-      loggerNames: ['bunyan'],
+      loggerNames: ['winston', 'bunyan', 'pino'],
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
         TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
@@ -103,6 +104,7 @@ describe('test optimization automatic log submission', () => {
 
   const loggers = {
     bunyan: { level: 30, messageKey: 'msg' },
+    pino: { level: 30, messageKey: 'msg' },
     winston: { level: 'info', messageKey: 'message' },
   }
 
@@ -122,10 +124,9 @@ describe('test optimization automatic log submission', () => {
           .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
             payloads.forEach(({ headers }) => {
               assert.equal(headers['dd-api-key'], '1')
-              if (loggerName !== 'winston') {
-                assert.equal(headers['content-type'], 'application/json')
-              }
+              assert.equal(headers['content-type'], 'application/json')
             })
+            assert.equal(payloads.length, 1)
             const logMessages = payloads.flatMap(({ logMessage }) => logMessage)
             const [url] = payloads.flatMap(({ url }) => url)
 
@@ -142,6 +143,10 @@ describe('test optimization automatic log submission', () => {
               'Hello simple log!',
               'sum function being called',
             ])
+            if (loggerName === 'winston' && (name === 'mocha' || name === 'jest')) {
+              const circularLog = logMessages.find(({ message }) => message === 'Hello simple log!')
+              assert.equal(circularLog.circular.self, '[Circular]')
+            }
 
             logIds = {
               logSpanId: logMessages[0].dd.span_id,
