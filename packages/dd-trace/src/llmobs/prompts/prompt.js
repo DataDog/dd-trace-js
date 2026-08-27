@@ -53,11 +53,12 @@ class ManagedPrompt {
    * @returns {string | Array<{role: string, content: string}>}
    */
   format (variables = {}) {
-    if (typeof this.template === 'string') return render(this.template, variables)
-    const rendered = this.template.map(message => ({
-      role: message.role,
-      content: render(message.content, variables),
-    }))
+    const rendered = typeof this.template === 'string'
+      ? render(this.template, variables)
+      : this.template.map(message => ({
+        role: message.role,
+        content: render(message.content, variables),
+      }))
     return trackPrompt(rendered, this.toAnnotation(variables))
   }
 
