@@ -178,13 +178,12 @@
     "version.js"
   ],
   "dependencies": {
-    "@datadog/libdatadog": "^0.19.0",
     "dc-polyfill": "^0.1.11",
     "import-in-the-middle": "^3.3.2",
     "opentracing": ">=0.14.7"
   },
   "optionalDependencies": {
-    "@datadog/libdatadog": "0.12.1",
+    "@datadog/libdatadog": "^0.19.0",
     "@datadog/native-appsec": "11.0.2",
     "@datadog/native-iast-taint-tracking": "4.2.1",
     "@datadog/native-metrics": "4.0.0",
