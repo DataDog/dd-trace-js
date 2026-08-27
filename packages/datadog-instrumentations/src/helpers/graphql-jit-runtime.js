@@ -58,6 +58,7 @@
  *   ddTraceDefaultResolvers?: boolean,
  *   ddTracePlan?: BuildingJitPlan,
  *   ddTraceRuntime?: GraphqlJitRuntime,
+ *   ddTraceWrapAllResolvers?: boolean,
  *   hoistedFunctions: string[],
  *   resolvers: GraphQLResolverMap
  * }} JitCompilationContext
@@ -86,17 +87,39 @@
  *   path: (string | number)[] | undefined
  * ) => unknown} ReadDefaultInScope
  * @typedef {(variableValues: Record<string, unknown> | undefined) => object | undefined} StartExecution
+ * @typedef {(rootCtx: object, descriptorId: number, error: unknown) => void} RecordResolverError
+ * @typedef {(
+ *   rootCtx: object,
+ *   descriptorId: number,
+ *   resolver: import('graphql').GraphQLFieldResolver<unknown, unknown>,
+ *   self: unknown,
+ *   source: unknown,
+ *   args: Record<string, unknown>,
+ *   contextValue: unknown,
+ *   info: import('graphql').GraphQLResolveInfo
+ * ) => unknown} ResolveField
+ * @typedef {(
+ *   resolver: import('graphql').GraphQLFieldResolver<unknown, unknown>
+ * ) => import('graphql').GraphQLFieldResolver<unknown, unknown>} UnwrapResolver
  * @typedef {(
  *   resolver: import('graphql').GraphQLFieldResolver<unknown, unknown>
  * ) => import('graphql').GraphQLFieldResolver<unknown, unknown>} WrapResolver
  * @typedef {{
  *   createFieldMetadata: CreateFieldMetadata,
  *   readDefaultInScope: ReadDefaultInScope,
+ *   recordResolverError: RecordResolverError,
  *   resolveDefaultInvocation: ResolveDefaultInvocation,
+ *   resolveField: ResolveField,
  *   startExecution: StartExecution,
+ *   unwrapResolver: UnwrapResolver,
  *   wrapResolver: WrapResolver
  * }} GraphqlJitRuntimeOptions
  * @typedef {{
+ *   compileResolverCall: (
+ *     context: JitCompilationContext,
+ *     resolverCall: string,
+ *     descriptorId: number | undefined
+ *   ) => string,
  *   compileDefaultField: (
  *     context: ConfiguredJitCompilationContext,
  *     responsePath: unknown,
@@ -121,7 +144,9 @@
  *     input: DescriptorInput
  *   ) => number | undefined,
  *   readDefaultInScope: ReadDefaultInScope,
+ *   recordResolverError: RecordResolverError,
  *   resolveDefaultInvocation: ResolveDefaultInvocation,
+ *   resolveField: ResolveField,
  *   startExecution: StartExecution
  * }} GraphqlJitRuntime
  */
@@ -136,16 +161,22 @@
 function createGraphqlJitRuntime ({
   createFieldMetadata,
   readDefaultInScope,
+  recordResolverError,
   resolveDefaultInvocation,
+  resolveField,
   startExecution,
+  unwrapResolver,
   wrapResolver,
 }) {
   const runtime = {
     compileDefaultField,
+    compileResolverCall,
     finalizeCompilation,
+    recordResolverError,
     registerField,
     readDefaultInScope,
     resolveDefaultInvocation,
+    resolveField,
     startExecution,
   }
 
@@ -191,13 +222,57 @@ function createGraphqlJitRuntime ({
         field.parentPathKey = undefined
       }
     }
-    for (const name of Object.keys(context.resolvers)) {
-      context.resolvers[name] = wrapResolver(context.resolvers[name])
+    /* istanbul ignore next: this fallback is for an unsupported future compiler source shape. */
+    if (context.ddTraceWrapAllResolvers) {
+      for (const name of Object.keys(context.resolvers)) {
+        context.resolvers[name] = wrapResolver(context.resolvers[name])
+      }
     }
-
     return {
       fields: plan.fields,
     }
+  }
+
+  /**
+   * @param {JitCompilationContext} context
+   * @param {string} resolverCall
+   * @param {number | undefined} descriptorId
+   * @returns {string}
+   */
+  function compileResolverCall (context, resolverCall, descriptorId) {
+    const openParenthesis = resolverCall.indexOf('(')
+    /* istanbul ignore next: a future compiler may change its resolver-call source shape. */
+    if (openParenthesis === -1 || resolverCall.at(-1) !== ')') {
+      context.ddTraceWrapAllResolvers = true
+      return resolverCall
+    }
+
+    const resolver = resolverCall.slice(0, openParenthesis)
+    const resolverPrefix = '__context.resolvers.'
+    /* istanbul ignore next: a future compiler may change its resolver-map access shape. */
+    if (!resolver.startsWith(resolverPrefix)) {
+      context.ddTraceWrapAllResolvers = true
+      return resolverCall
+    }
+
+    const resolverName = resolver.slice(resolverPrefix.length)
+    /* istanbul ignore next: a future compiler may change its private response-path shape. */
+    if (descriptorId === undefined) {
+      context.resolvers[resolverName] = wrapResolver(context.resolvers[resolverName])
+      return resolverCall
+    }
+    context.resolvers[resolverName] = unwrapResolver(context.resolvers[resolverName])
+
+    const args = resolverCall.slice(openParenthesis + 1, -1)
+    return `__context.ddTrace === undefined
+      ? ${resolverCall}
+      : __context.ddTrace.jitRuntime.resolveField(
+        __context.ddTrace,
+        ${descriptorId},
+        ${resolver},
+        __context.resolvers,
+        ${args}
+      )`
   }
 
   /**
