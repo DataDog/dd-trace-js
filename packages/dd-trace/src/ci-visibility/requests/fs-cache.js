@@ -101,7 +101,7 @@ function writeToCache (cacheKey, data) {
  * Attempts to acquire an exclusive lock using O_CREAT|O_EXCL.
  *
  * @param {string} cacheKey
- * @returns {boolean}
+ * @returns {boolean|undefined}
  */
 function tryAcquireLock (cacheKey) {
   const lockPath = getLockPath(cacheKey)
@@ -110,8 +110,9 @@ function tryAcquireLock (cacheKey) {
     fs.writeSync(fd, String(Date.now()))
     fs.closeSync(fd)
     return true
-  } catch {
-    return false
+  } catch (err) {
+    if (err.code === 'EEXIST') return false
+    log.debug('%s lock cannot be created, bypassing cache: %s', cacheKey, err.message)
   }
 }
 
@@ -119,9 +120,15 @@ function tryAcquireLock (cacheKey) {
  * Removes the lock file.
  *
  * @param {string} cacheKey
+ * @returns {boolean}
  */
 function releaseLock (cacheKey) {
-  try { fs.unlinkSync(getLockPath(cacheKey)) } catch { /* ignore */ }
+  try {
+    fs.unlinkSync(getLockPath(cacheKey))
+    return true
+  } catch (err) {
+    return err.code === 'ENOENT'
+  }
 }
 
 /**
@@ -175,7 +182,7 @@ function isLockStale (cacheKey) {
  * Polls until the cache file appears or the timeout is reached.
  *
  * @param {string} cacheKey
- * @param {Function} fetchFn - function(done) that fetches from the API
+ * @param {Function} fetchFn - function(cacheKey, done) that fetches from the API
  * @param {Function} done - callback(err, ...results)
  */
 function waitForCache (cacheKey, fetchFn, done) {
@@ -186,8 +193,14 @@ function waitForCache (cacheKey, fetchFn, done) {
     }
     if (isLockStale(cacheKey)) {
       log.debug('%s lock is stale, attempting takeover', cacheKey)
-      releaseLock(cacheKey)
-      if (!tryAcquireLock(cacheKey)) {
+      if (!releaseLock(cacheKey)) {
+        return fetchFn(null, done)
+      }
+      const isLockOwner = tryAcquireLock(cacheKey)
+      if (isLockOwner === undefined) {
+        return fetchFn(null, done)
+      }
+      if (!isLockOwner) {
         return setTimeout(poll, CACHE_LOCK_POLL_MS)
       }
 
@@ -198,7 +211,7 @@ function waitForCache (cacheKey, fetchFn, done) {
       }
 
       const stopHeartbeat = startLockHeartbeat(cacheKey)
-      return fetchFn((err, ...results) => {
+      return fetchFn(cacheKey, (err, ...results) => {
         stopHeartbeat()
         done(err, ...results)
       })
@@ -233,9 +246,13 @@ function withCache (cacheKey, fetchFn, done) {
   // Try to become the fetcher (lock owner)
   const isLockOwner = tryAcquireLock(cacheKey)
 
+  if (isLockOwner === undefined) {
+    return fetchFn(null, done)
+  }
+
   if (!isLockOwner) {
     log.debug('%s lock held by another process, waiting for cache', cacheKey)
-    return waitForCache(cacheKey, (cb) => fetchFn(cacheKey, cb), done)
+    return waitForCache(cacheKey, fetchFn, done)
   }
 
   // This process owns the lock — start heartbeat and fetch

@@ -49,7 +49,6 @@ const SETTINGS_BOOLEAN_FIELDS = Object.freeze([
   'isImpactedTestsEnabled',
   'isCoverageReportUploadEnabled',
 ])
-const EFD_RETRY_DURATION_LIMITS = Object.freeze([5000, 10_000, 30_000, 300_000])
 
 /**
  * Test session identity sent with every request. Fields are optional because the CI provider,
@@ -163,16 +162,17 @@ function isValidCachedEfdRetryPolicy (retryPolicy) {
   if (retryPolicy === null || typeof retryPolicy !== 'object' || Array.isArray(retryPolicy)) return false
   if (!isValidRetryCount(retryPolicy.schedulingRetryCount)) return false
   if (!Array.isArray(retryPolicy.durationRetryCounts) ||
-    retryPolicy.durationRetryCounts.length !== EFD_RETRY_DURATION_LIMITS.length) {
+    retryPolicy.durationRetryCounts.length !== EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length) {
     return false
   }
 
   let schedulingRetryCount = 0
-  for (let index = 0; index < EFD_RETRY_DURATION_LIMITS.length; index++) {
+  for (let index = 0; index < EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length; index++) {
     const durationRetryCount = retryPolicy.durationRetryCounts[index]
     if (durationRetryCount === null || typeof durationRetryCount !== 'object' ||
       Array.isArray(durationRetryCount) ||
-      durationRetryCount.durationLimitMs !== EFD_RETRY_DURATION_LIMITS[index] ||
+      durationRetryCount.durationLimitMs !==
+        EMPTY_EFD_RETRY_POLICY.durationRetryCounts[index].durationLimitMs ||
       !isValidRetryCount(durationRetryCount.retryCount)) {
       return false
     }
@@ -195,6 +195,8 @@ function isValidCachedSettings (settings) {
   for (const field of SETTINGS_BOOLEAN_FIELDS) {
     if (typeof settings[field] !== 'boolean') return false
   }
+  if (settings.isDiEnabled && !settings.isFlakyTestRetriesEnabled) return false
+  if (settings.isEarlyFlakeDetectionEnabled && !settings.isKnownTestsEnabled) return false
   if (!isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy)) return false
   if (!isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
     settings.earlyFlakeDetectionFaultyThreshold > 100) {

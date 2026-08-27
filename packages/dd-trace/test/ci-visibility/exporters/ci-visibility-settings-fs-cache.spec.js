@@ -16,7 +16,7 @@ const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const { parseLibraryConfigurationResponse } =
   require('../../../src/ci-visibility/requests/get-library-configuration')
-const { buildCacheKey, getCachePath, getLockPath } =
+const { buildCacheKey, getCachePath, getLockPath, withCache } =
   require('../../../src/ci-visibility/requests/fs-cache')
 const CiVisibilityExporter =
   require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
@@ -554,6 +554,16 @@ describe('ci-visibility settings filesystem cache', () => {
     ['null', null],
     ['an array', []],
     ['an incomplete object', {}],
+    ['failed test replay without flaky test retries', {
+      ...validCachedSettings,
+      isDiEnabled: true,
+      isFlakyTestRetriesEnabled: false,
+    }],
+    ['early flake detection without known tests', {
+      ...validCachedSettings,
+      isEarlyFlakeDetectionEnabled: true,
+      isKnownTestsEnabled: false,
+    }],
     ['an incomplete EFD retry policy', {
       ...validCachedSettings,
       isEarlyFlakeDetectionEnabled: true,
@@ -670,6 +680,159 @@ describe('ci-visibility settings filesystem cache', () => {
     } finally {
       unlinkStub.restore()
       cleanup(exporter, TEST_CONFIGURATION)
+    }
+  })
+
+  it('bypasses the filesystem cache when its lock cannot be created', async () => {
+    const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
+    exporter._resolveCanUseCiVisProtocol(true)
+    cleanup(exporter, TEST_CONFIGURATION)
+
+    const lockPath = getLockPath(cacheKeyForConfiguration(exporter, TEST_CONFIGURATION))
+    const openSync = fs.openSync
+    const openStub = sinon.stub(fs, 'openSync').callsFake((filePath, ...args) => {
+      if (filePath === lockPath) {
+        const err = new Error('permission denied')
+        err.code = 'EACCES'
+        throw err
+      }
+      return openSync(filePath, ...args)
+    })
+    const scope = nock(url)
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, JSON.stringify(SETTINGS_NO_GIT))
+
+    try {
+      const libraryConfig = await requestLibraryConfiguration(exporter)
+      assert.strictEqual(libraryConfig.requireGit, false)
+      assert.strictEqual(scope.isDone(), true, 'an unavailable lock should bypass the cache')
+    } finally {
+      openStub.restore()
+      cleanup(exporter, TEST_CONFIGURATION)
+    }
+  })
+
+  it('bypasses the filesystem cache when a stale lock cannot be deleted', async () => {
+    const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
+    exporter._resolveCanUseCiVisProtocol(true)
+    cleanup(exporter, TEST_CONFIGURATION)
+
+    const lockPath = getLockPath(cacheKeyForConfiguration(exporter, TEST_CONFIGURATION))
+    fs.writeFileSync(lockPath, '0', 'utf8')
+    const unlinkSync = fs.unlinkSync
+    const unlinkStub = sinon.stub(fs, 'unlinkSync').callsFake(filePath => {
+      if (filePath === lockPath) {
+        const err = new Error('permission denied')
+        err.code = 'EACCES'
+        throw err
+      }
+      return unlinkSync(filePath)
+    })
+    const scope = nock(url)
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, JSON.stringify(SETTINGS_NO_GIT))
+
+    try {
+      const libraryConfig = await requestLibraryConfiguration(exporter)
+      assert.strictEqual(libraryConfig.requireGit, false)
+      assert.strictEqual(scope.isDone(), true, 'an undeletable stale lock should bypass the cache')
+    } finally {
+      unlinkStub.restore()
+      cleanup(exporter, TEST_CONFIGURATION)
+    }
+  })
+
+  it('takes over a stale filesystem cache lock', async () => {
+    const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
+    exporter._resolveCanUseCiVisProtocol(true)
+    cleanup(exporter, TEST_CONFIGURATION)
+
+    const key = cacheKeyForConfiguration(exporter, TEST_CONFIGURATION)
+    fs.writeFileSync(getLockPath(key), '0', 'utf8')
+    const scope = nock(url)
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, JSON.stringify(SETTINGS_NO_GIT))
+
+    try {
+      const libraryConfig = await requestLibraryConfiguration(exporter)
+      assert.strictEqual(libraryConfig.requireGit, false)
+      assert.strictEqual(scope.isDone(), true, 'the stale lock owner should fetch settings')
+      assert.strictEqual(fs.existsSync(getCachePath(key)), true, 'the stale lock owner should populate the cache')
+      assert.strictEqual(fs.existsSync(getLockPath(key)), false, 'the replacement lock should be released')
+    } finally {
+      cleanup(exporter, TEST_CONFIGURATION)
+    }
+  })
+
+  it('bypasses the cache when a stale lock cannot be replaced', async () => {
+    const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
+    exporter._resolveCanUseCiVisProtocol(true)
+    cleanup(exporter, TEST_CONFIGURATION)
+
+    const lockPath = getLockPath(cacheKeyForConfiguration(exporter, TEST_CONFIGURATION))
+    fs.writeFileSync(lockPath, '0', 'utf8')
+    const openSync = fs.openSync
+    let lockOpenCount = 0
+    const openStub = sinon.stub(fs, 'openSync').callsFake((filePath, ...args) => {
+      if (filePath === lockPath && ++lockOpenCount === 2) {
+        const err = new Error('permission denied')
+        err.code = 'EACCES'
+        throw err
+      }
+      return openSync(filePath, ...args)
+    })
+    const scope = nock(url)
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, JSON.stringify(SETTINGS_NO_GIT))
+
+    try {
+      const libraryConfig = await requestLibraryConfiguration(exporter)
+      assert.strictEqual(libraryConfig.requireGit, false)
+      assert.strictEqual(scope.isDone(), true, 'a failed stale-lock takeover should bypass the cache')
+    } finally {
+      openStub.restore()
+      cleanup(exporter, TEST_CONFIGURATION)
+    }
+  })
+
+  it('retries when another process replaces a stale lock first', async () => {
+    const clock = sinon.useFakeTimers({ now: 1_000_000 })
+    const key = buildCacheKey('settings-lock-race', [process.pid])
+    const lockPath = getLockPath(key)
+    try { fs.unlinkSync(getCachePath(key)) } catch { /* ignore */ }
+    try { fs.unlinkSync(lockPath) } catch { /* ignore */ }
+    fs.writeFileSync(lockPath, '0', 'utf8')
+    const openSync = fs.openSync
+    let lockOpenCount = 0
+    const openStub = sinon.stub(fs, 'openSync').callsFake((filePath, ...args) => {
+      if (filePath === lockPath && ++lockOpenCount === 2) {
+        const fd = openSync(filePath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY)
+        fs.writeSync(fd, '0')
+        fs.closeSync(fd)
+        const err = new Error('lock replaced by another process')
+        err.code = 'EEXIST'
+        throw err
+      }
+      return openSync(filePath, ...args)
+    })
+
+    try {
+      const cacheResult = new Promise((resolve, reject) => {
+        withCache(key, (activeCacheKey, done) => {
+          assert.strictEqual(activeCacheKey, key)
+          done(null, 'fetched')
+        }, (err, result) => {
+          if (err) return reject(err)
+          resolve(result)
+        })
+      })
+      await clock.tickAsync(500)
+      assert.strictEqual(await cacheResult, 'fetched')
+    } finally {
+      openStub.restore()
+      clock.restore()
+      try { fs.unlinkSync(getCachePath(key)) } catch { /* ignore */ }
+      try { fs.unlinkSync(lockPath) } catch { /* ignore */ }
     }
   })
 })
