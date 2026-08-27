@@ -60,9 +60,15 @@ unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
 PLUGINS="<name>" npm run test:plugins
 ```
 
-Use `SPEC` to narrow plugin specs. For service-backed plugins, find `SERVICES` in
-`.github/workflows/apm-integrations.yml`, start Docker services, then run `yarn services`. `aerospike`, `couchbase`,
-`grpc`, and `oracledb` are incompatible with ARM64.
+Use `SPEC` to narrow plugin specs. For service-backed plugins, find `<service>` in
+`.github/workflows/apm-integrations.yml`, then run:
+
+```bash
+docker compose up -d <service>
+SERVICES="<service>" PLUGINS="<name>" npm run test:plugins:ci
+```
+
+`aerospike`, `couchbase`, `grpc`, and `oracledb` are incompatible with ARM64.
 
 - Use `node:assert/strict`; use `assertObjectContains` from `integration-tests/helpers/index.js` for partial objects.
 - Prefer `assert.throws`/`assert.rejects` and pin the relevant error fields.
