@@ -882,6 +882,27 @@ void generatedResolver
 
       it('runs the execute hook before collapsed JIT resolver spans finish', async () => {
         const tracer = require('../../dd-trace')
+        const Item = new graphql.GraphQLObjectType({
+          name: 'HookOrderItem',
+          fields: {
+            value: {
+              type: graphql.GraphQLString,
+              resolve: source => source.value,
+            },
+          },
+        })
+        const hookSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'HookOrderQuery',
+            fields: {
+              items: {
+                type: new graphql.GraphQLList(Item),
+                resolve: () => [{ value: 'one' }, { value: 'two' }],
+              },
+            },
+          }),
+        })
+        const hookOrder = []
         let resolveSpan
         let resolveFinishedAtExecute
 
@@ -890,24 +911,30 @@ void generatedResolver
          * @param {{ fieldName: string }} field
          */
         function resolveHook (span, field) {
-          if (field.fieldName === 'hello') resolveSpan = span
+          if (field.fieldName === 'value') {
+            hookOrder.push('resolve')
+            resolveSpan = span
+          }
         }
 
         function executeHook () {
+          hookOrder.push('execute')
           resolveFinishedAtExecute = resolveSpan?._duration !== undefined
         }
 
         try {
           tracer.use('graphql', {
+            collapse: true,
             variables: ['id', 'name'],
             hooks: { execute: executeHook, resolve: resolveHook },
           })
-          const { query } = compileQuery(schema, graphql.parse('query HookOrder { hello }'))
+          const { query } = compileQuery(hookSchema, graphql.parse('query HookOrder { items { value } }'))
           const result = await executeWithTrace(() => query({}, {}, {}), /HookOrder/)
 
           assert.strictEqual(resolveFinishedAtExecute, false)
           assert.ok(resolveSpan, 'expected the resolve hook to receive the resolver span')
-          assert.deepStrictEqual(result.data, { hello: 'world' })
+          assert.deepStrictEqual(hookOrder, ['resolve', 'execute'])
+          assert.deepStrictEqual(result.data, { items: [{ value: 'one' }, { value: 'two' }] })
         } finally {
           tracer.use('graphql', { variables: ['id', 'name'] })
         }
@@ -1271,6 +1298,7 @@ void generatedResolver
             },
           ]) {
             const hookCalls = []
+            const hookOrder = []
             let items = [
               { value: 'one' },
               { error: testCase.error },
@@ -1303,8 +1331,12 @@ void generatedResolver
             tracer.use('graphql', {
               collapse: true,
               hooks: {
+                execute () {
+                  hookOrder.push('execute')
+                },
                 resolve (_span, field) {
                   if (field.fieldName === 'value') {
+                    hookOrder.push('resolve')
                     hookCalls.push({
                       error: field.error?.message,
                       result: field.result,
@@ -1343,6 +1375,7 @@ void generatedResolver
               error: testCase.hookError,
               result: undefined,
             }])
+            assert.deepStrictEqual(hookOrder, ['resolve', 'execute'])
 
             if (testCase.name === 'Sync') {
               hookCalls.length = 0

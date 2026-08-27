@@ -382,10 +382,15 @@ class GraphQLExecutePlugin extends TracingPlugin {
       instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
 
-    const releaseBeforeExecuteHook = ctx.ddRootCtx?.resolveHooksPending === true
-    if (releaseBeforeExecuteHook) releaseRootContext(ctx.ddRootCtx, finishPendingFields)
+    const rootCtx = ctx.ddRootCtx
+    const releaseBeforeExecuteHook = rootCtx?.resolveHooksPending === true
+    if (releaseBeforeExecuteHook) {
+      releaseRootContext(rootCtx, finishPendingFields)
+    } else if (rootCtx?.jitResolveHooksPending === true) {
+      runResolveHooks(rootCtx)
+    }
     this.config.hooks.execute(span, ctx.ddArgs, res)
-    if (!releaseBeforeExecuteHook) releaseRootContext(ctx.ddRootCtx, finishPendingFields)
+    if (!releaseBeforeExecuteHook) releaseRootContext(rootCtx, finishPendingFields)
     span.finish()
   }
 
@@ -496,6 +501,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
         if (error) recordResolveError(field, error)
         if (this.config.hooks.resolve) {
           field.resolveHookContext = createResolveHookContext(field, field.error, result)
+          rootCtx.jitResolveHooksPending = true
         }
         return
       }
@@ -1492,14 +1498,14 @@ function tagExecutionErrors (config, span, errors) {
 function releaseRootContext (rootCtx, finishPendingFields) {
   const endTime = rootCtx.executeSpan._getTime()
   if (rootCtx.resolveFields !== undefined) {
+    if (rootCtx.resolveHooksPending || rootCtx.jitResolveHooksPending) {
+      runResolveHooks(rootCtx)
+    }
     for (let field = rootCtx.resolveFields; field; field = field.nextResolveField) {
       const holder = field.currentStore?.graphqlResolveField
       if (holder?.field === field) {
         holder.field = undefined
         field.currentStore.graphqlResolveField = undefined
-      }
-      if (field.resolveHookContext) {
-        rootCtx.config.hooks.resolve(field.span, field.resolveHookContext)
       }
       field.span.finish(field.endTime > PENDING_FIELD_END_TIME ? field.endTime : endTime)
     }
@@ -1512,6 +1518,21 @@ function releaseRootContext (rootCtx, finishPendingFields) {
   // Resolver-created async resources retain copied stores that all share this owner.
   for (const key of Object.keys(rootCtx)) {
     rootCtx[key] = undefined
+  }
+}
+
+/**
+ * @param {object} rootCtx
+ */
+function runResolveHooks (rootCtx) {
+  rootCtx.resolveHooksPending = undefined
+  rootCtx.jitResolveHooksPending = undefined
+
+  for (let field = rootCtx.resolveFields; field; field = field.nextResolveField) {
+    if (field.resolveHookContext === undefined) continue
+
+    rootCtx.config.hooks.resolve(field.span, field.resolveHookContext)
+    field.resolveHookContext = undefined
   }
 }
 
