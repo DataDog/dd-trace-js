@@ -354,6 +354,12 @@ as the real error rather than raising the timeout.
 
 ## Pull Requests and CI
 
+### Review Guidelines
+
+Before pushing code or creating a pull request, you must run the [dd-apm-sdk-review](./.agents/skills/dd-apm-sdk-review/) skill on your unpushed changes unless the user specifically says not to. If any `P0` issues are reported, you must either fix them or get explicit authorization from the human you are working with and record the unresolved finding verbatim in the PR description. `P1` and `P2` findings should be fixed before pushing, but can be dismissed by the human.
+
+Exception: security findings route through [SECURITY.md](SECURITY.md) instead. A PR description is a public forum, so posting one there is an improper disclosure.
+
 ### Commit Messages
 
 Conventional format: `type(scope): description`
