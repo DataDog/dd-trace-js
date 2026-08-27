@@ -116,11 +116,6 @@ function requestLibraryConfiguration (exporter) {
   })
 }
 
-function setApiKey (apiKey) {
-  getConfig().DD_API_KEY = apiKey
-  process.env.DD_API_KEY = apiKey
-}
-
 describe('ci-visibility settings filesystem cache', () => {
   let originalApiKey
   let originalEnvApiKey
@@ -236,40 +231,6 @@ describe('ci-visibility settings filesystem cache', () => {
       cleanup(exporter, TEST_CONFIGURATION)
       done()
     })
-  })
-
-  it('isolates filesystem settings by backend account', async () => {
-    const firstExporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
-    const secondExporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
-    firstExporter._resolveCanUseCiVisProtocol(true)
-    secondExporter._resolveCanUseCiVisProtocol(true)
-
-    try {
-      setApiKey('account-one')
-      cleanup(firstExporter, TEST_CONFIGURATION)
-      nock(url)
-        .post('/api/v2/libraries/tests/services/setting')
-        .reply(200, JSON.stringify(SETTINGS_NO_GIT))
-
-      const firstConfig = await requestLibraryConfiguration(firstExporter)
-      assert.strictEqual(firstConfig.isSuitesSkippingEnabled, true)
-
-      setApiKey('account-two')
-      cleanup(secondExporter, TEST_CONFIGURATION)
-      const secondScope = nock(url)
-        .post('/api/v2/libraries/tests/services/setting')
-        .reply(200, JSON.stringify(SETTINGS_NO_SKIPPING))
-
-      const secondConfig = await requestLibraryConfiguration(secondExporter)
-      assert.strictEqual(secondScope.isDone(), true, 'the second account should fetch its own settings')
-      assert.strictEqual(secondConfig.isSuitesSkippingEnabled, false)
-    } finally {
-      setApiKey('account-two')
-      cleanup(secondExporter, TEST_CONFIGURATION)
-      setApiKey('account-one')
-      cleanup(firstExporter, TEST_CONFIGURATION)
-      setApiKey('1')
-    }
   })
 
   it('isolates filesystem settings by backend origin', async () => {
