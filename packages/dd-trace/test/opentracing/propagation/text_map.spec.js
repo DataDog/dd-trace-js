@@ -724,6 +724,12 @@ describe('TextMapPropagator', () => {
       assert.strictEqual(propagator.extract(null), null)
     })
 
+    it('should return null when the carrier is not an object', () => {
+      const carrier = Object.assign(() => {}, textMap)
+
+      assert.strictEqual(propagator.extract(carrier), null)
+    })
+
     it('should extract a span context from the carrier', () => {
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
@@ -1204,6 +1210,10 @@ describe('TextMapPropagator', () => {
 
     it('should return null for an aws-sqsd header that parses to null', () => {
       assert.strictEqual(propagator.extract({ 'x-aws-sqsd-attr-_datadog': 'null' }), null)
+    })
+
+    it('should return null for an aws-sqsd header that parses to a non-object', () => {
+      assert.strictEqual(propagator.extract({ 'x-aws-sqsd-attr-_datadog': '"carrier"' }), null)
     })
 
     it('should return null when the carrier carries a trace id but no parent id', () => {
