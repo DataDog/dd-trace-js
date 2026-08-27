@@ -3732,6 +3732,8 @@ const LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
   'pino',
   'winston',
 ]
+const LOGGING_LIBRARY_PATH_SEGMENTS = LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE
+  .map(moduleName => `${path.sep}${moduleName}${path.sep}`)
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   ...LOGGING_LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE,
   'selenium-webdriver',
@@ -3873,6 +3875,17 @@ function requireOutsideJestRequireEngine (runtime, moduleName) {
 }
 
 /**
+ * @param {string} modulePath
+ * @returns {boolean}
+ */
+function isLoggingLibraryModulePath (modulePath) {
+  for (const pathSegment of LOGGING_LIBRARY_PATH_SEGMENTS) {
+    if (modulePath.includes(pathSegment)) return true
+  }
+  return false
+}
+
+/**
  * @param {object} runtime
  * @param {string} from
  * @returns {Set<string>}
@@ -3911,7 +3924,9 @@ function getJestBypassModulePath (runtime, from, moduleName) {
 
   if (!LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
     // Jest passes the resolved path when a CommonJS package is imported from an ESM test.
-    if (path.isAbsolute(moduleName) && getJestEsmBypassModulePaths(runtime, from).has(moduleName)) {
+    if (path.isAbsolute(moduleName) &&
+      isLoggingLibraryModulePath(moduleName) &&
+      getJestEsmBypassModulePaths(runtime, from).has(moduleName)) {
       return moduleName
     }
     return

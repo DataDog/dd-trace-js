@@ -3695,7 +3695,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               ...getCiVisAgentlessConfig(receiver.port),
               ...resolutionConfig,
               CONFIG_TEST_MATCH: '**/ci-visibility/jest-mock-bypass-require/esm-mapped-logger-test.mjs',
-              NODE_OPTIONS: '--experimental-vm-modules',
+              NODE_OPTIONS: '-r dd-trace/ci/init ' +
+                '--require ./ci-visibility/jest-mock-bypass-require/track-logger-resolution.js ' +
+                '--experimental-vm-modules',
               TEST_LOGGER: 'winston',
               USE_CONFIG_FILE: '1',
               USE_JEST_RUN: '1',
@@ -3710,6 +3712,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
 
         const [code] = await once(childProcess, 'exit')
+        assert.doesNotMatch(testOutput, /\[unexpected logger resolution\]/)
         assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
       })
     }
@@ -3723,7 +3726,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              NODE_OPTIONS: '--experimental-vm-modules',
+              NODE_OPTIONS: '-r dd-trace/ci/init --experimental-vm-modules',
               TEST_LOGGER: loggerName,
               TESTS_TO_RUN: 'jest-mock-bypass-require/esm-mock-test.mjs',
               USE_JEST_RUN: '1',
