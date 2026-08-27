@@ -126,7 +126,8 @@ dc.subscribe(CHANNEL, (message) => {
       loadChannel.publish({ name, version: payload.version, file })
       let exports = payload.module
       const namespace = /** @type {Record<string, unknown>} */ (exports)
-      if (patchDefault === !!namespace.default) {
+      // Only generated ESM proxy payloads need default-export unwrapping.
+      if (typeof payload.apply === 'function' && patchDefault === !!namespace.default) {
         if (patchDefault) exports = namespace.default
         else continue
       }

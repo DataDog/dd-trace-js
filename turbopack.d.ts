@@ -6,7 +6,7 @@ export interface TurbopackConfiguration {
 /**
  * Adds Node.js Turbopack rules for supported dd-trace integrations.
  */
-export function withDatadogTurbopack (
-  turbopack?: TurbopackConfiguration,
+export function withDatadogTurbopack<T extends object> (
+  turbopack?: T,
   projectDir?: string
-): Promise<TurbopackConfiguration>
+): Promise<T & TurbopackConfiguration>

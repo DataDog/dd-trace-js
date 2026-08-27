@@ -5,8 +5,12 @@ const path = require('node:path')
 
 const { create } = require('../../../vendor/dist/@apm-js-collab/code-transformer')
 const { isESMFile } = require('../../datadog-esbuild/src/utils')
+const { rewrite } = require('../../datadog-instrumentations/src/helpers/rewriter')
 
 const CHANNEL = 'dd-trace:bundler:load'
+// Keep the marker split so source-map scanners do not treat this file as mapped.
+// eslint-disable-next-line unicorn/no-useless-concat -- Keep the marker non-contiguous.
+const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
 
 /**
  * Instruments bundled modules known to dd-trace. CommonJS modules publish
@@ -23,12 +27,12 @@ module.exports = function loader (source) {
     getRelativeTarget(this.resourcePath, manifest.relativeTargets)
   const esm = isESMFile(this.resourcePath)
 
-  if (rewriteApplicationImports || esm) {
-    const rewritten = rewriteImports(source, this.resourcePath, manifest.targets, aliases)
-    if (rewritten !== source || esm) return rewritten
-  }
+  if (rewriteApplicationImports || esm) source = rewriteImports(source, this.resourcePath, manifest.targets, aliases)
 
   if (!target) return source
+
+  source = rewrite(source, this.resourcePath, esm ? 'module' : 'commonjs')
+  if (esm) return source
 
   const dcPolyfillPath = relativeImport(
     path.dirname(this.resourcePath),
@@ -90,12 +94,17 @@ function rewriteImports (source, resourcePath, targets, aliases = []) {
   if (!transformer) return source
 
   try {
-    const output = transformer.transform(source, 'esm').code
-    return rewritten ? output : source
+    const { code, map } = transformer.transform(source, 'esm')
+    return rewritten ? withInlineSourceMap(code, map) : source
   } catch {
     // A parser failure must never prevent an application from building.
     return source
   }
+}
+
+function withInlineSourceMap (code, map) {
+  if (!map) return code
+  return `${code}\n${SOURCE_MAP_PREFIX}${Buffer.from(map).toString('base64')}`
 }
 
 function getModuleSource (node, hasLocalRequire) {
