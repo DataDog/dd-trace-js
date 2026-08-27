@@ -76,7 +76,7 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'vitest',
       command: './node_modules/.bin/vitest run --config ./ci-visibility/automatic-log-submission-vitest/config.mjs',
-      loggerNames: ['bunyan'],
+      loggerNames: ['winston', 'bunyan', 'pino'],
       getExtraEnvVars: () => ({
         NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
       }),
