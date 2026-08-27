@@ -779,6 +779,33 @@ describe('ci-visibility settings filesystem cache', () => {
     }
   })
 
+  for (const [description, getTimestamp] of [
+    ['a nonnumeric timestamp', () => 'not-a-number'],
+    ['a future timestamp', () => String(Date.now() + 60_000)],
+  ]) {
+    it(`takes over a filesystem cache lock with ${description}`, async () => {
+      const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
+      exporter._resolveCanUseCiVisProtocol(true)
+      cleanup(exporter, TEST_CONFIGURATION)
+
+      const key = cacheKeyForConfiguration(exporter, TEST_CONFIGURATION)
+      fs.writeFileSync(getLockPath(key), getTimestamp(), 'utf8')
+      const scope = nock(url)
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify(SETTINGS_NO_GIT))
+
+      try {
+        const libraryConfig = await requestLibraryConfiguration(exporter)
+        assert.strictEqual(libraryConfig.requireGit, false)
+        assert.strictEqual(scope.isDone(), true, 'the replacement lock owner should fetch settings')
+        assert.strictEqual(fs.existsSync(getCachePath(key)), true, 'the replacement lock owner should cache settings')
+        assert.strictEqual(fs.existsSync(getLockPath(key)), false, 'the replacement lock should be released')
+      } finally {
+        cleanup(exporter, TEST_CONFIGURATION)
+      }
+    })
+  }
+
   it('bypasses the cache when a stale lock cannot be replaced', async () => {
     const exporter = makeExporter({ DD_CIVISIBILITY_ITR_ENABLED: true })
     exporter._resolveCanUseCiVisProtocol(true)

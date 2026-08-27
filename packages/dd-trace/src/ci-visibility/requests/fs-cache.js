@@ -51,6 +51,17 @@ function getLockPath (cacheKey) {
 }
 
 /**
+ * Checks whether a filesystem cache timestamp can be safely compared with the current time.
+ *
+ * @param {unknown} timestamp - Timestamp read from a cache or lock file.
+ * @param {number} now - Current Unix timestamp in milliseconds.
+ * @returns {timestamp is number}
+ */
+function isValidTimestamp (timestamp, now) {
+  return Number.isSafeInteger(timestamp) && timestamp >= 0 && timestamp <= now
+}
+
+/**
  * Attempts to read cached data from the filesystem.
  *
  * @param {string} cacheKey
@@ -67,7 +78,7 @@ function readFromCache (cacheKey) {
     }
     const { timestamp, data } = parsed
     const now = Date.now()
-    if (!Number.isSafeInteger(timestamp) || timestamp < 0 || timestamp > now) {
+    if (!isValidTimestamp(timestamp, now)) {
       log.debug('%s cache file has an invalid timestamp, ignoring', cacheKey)
       return
     }
@@ -178,7 +189,9 @@ function startLockHeartbeat (cacheKey) {
 function isLockStale (cacheKey) {
   try {
     const content = fs.readFileSync(getLockPath(cacheKey), 'utf8')
-    return Date.now() - Number(content) > CACHE_LOCK_TIMEOUT_MS
+    const timestamp = Number(content)
+    const now = Date.now()
+    return !isValidTimestamp(timestamp, now) || now - timestamp > CACHE_LOCK_TIMEOUT_MS
   } catch {
     return true
   }
