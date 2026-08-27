@@ -21,7 +21,8 @@ describe('BaseLLMObsWriter', () => {
 
   function getBaseLLMObsWriter () {
     const serverless = proxyquire.noPreserveCache()('../../../src/serverless', {})
-    return proxyquire.noPreserveCache()('../../../src/llmobs/writers/base', {
+    proxyquire.preserveCache()
+    return proxyquire('../../../src/llmobs/writers/base', {
       '../../exporters/common/request': request,
       '../../log': logger,
       '../../serverless': serverless,
@@ -310,6 +311,10 @@ describe('BaseLLMObsWriter', () => {
       writer.append({ foo: 'valid' }, { apiKey: 'valid', site: 'valid.site.com' })
 
       writer.flush()
+
+      sinon.assert.calledTwice(request)
+      sinon.assert.calledOnce(logger.error)
+
       writer.flush()
 
       sinon.assert.calledTwice(request)
