@@ -116,16 +116,7 @@ class LLMObs extends NoopLLMObs {
    * @returns {void}
    */
   clearPromptCache (options = {}) {
-    if (this.#promptManager) {
-      this.#promptManager.clearCache(options)
-    } else if (options.warm !== false) {
-      const { WarmCache } = require('./prompts/cache')
-      new WarmCache({
-        cacheDir: this._config.DD_LLMOBS_PROMPTS_CACHE_DIR,
-        enabled: true,
-        ttlMs: Math.max(this._config.DD_LLMOBS_PROMPTS_CACHE_TTL * 1000, 1),
-      }).clear()
-    }
+    this.#getPromptManager().clearCache(options)
   }
 
   /**

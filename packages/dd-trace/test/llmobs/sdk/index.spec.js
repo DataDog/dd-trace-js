@@ -128,9 +128,15 @@ describe('sdk', () => {
     it('clears the warm cache before the lazy manager is created', () => {
       const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-sdk-prompts-'))
       const config = getConfigFresh({})
+      config.DD_API_KEY = 'api-key'
       config.DD_LLMOBS_PROMPTS_CACHE_DIR = cacheDir
       config.DD_LLMOBS_PROMPTS_CACHE_TTL = 60
-      const cache = new WarmCache({ cacheDir, ttlMs: 60_000 })
+      const cache = new WarmCache({
+        cacheDir,
+        ttlMs: 60_000,
+        origin: 'https://api.datadoghq.com',
+        apiKey: config.DD_API_KEY,
+      })
       cache.set(cacheKey('greeting', ['latest']), new ManagedPrompt({
         id: 'greeting', version: '1', source: 'cache', template: 'Hello',
       }))

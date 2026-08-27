@@ -11,6 +11,8 @@ const sinon = require('sinon')
 const { HotCache, WarmCache, cacheKey } = require('../../../src/llmobs/prompts/cache')
 const ManagedPrompt = require('../../../src/llmobs/prompts/prompt')
 
+const WARM_OPTIONS = { ttlMs: 60_000, origin: 'https://api.datadoghq.com', apiKey: 'api-key' }
+
 describe('Prompt caches', () => {
   let cacheDir
 
@@ -59,7 +61,7 @@ describe('Prompt caches', () => {
 
   it('stores collision-safe prompt paths with secure modes and tolerates malformed entries', () => {
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-'))
-    const cache = new WarmCache({ cacheDir, ttlMs: 60_000 })
+    const cache = new WarmCache({ cacheDir, ...WARM_OPTIONS })
     const slashKey = cacheKey('a/b', ['latest'])
     const underscoreKey = cacheKey('a_b', ['latest'])
     cache.set(slashKey, prompt('a/b'))
@@ -68,8 +70,9 @@ describe('Prompt caches', () => {
     assert.strictEqual(cache.get(slashKey).prompt.id, 'a/b')
     assert.strictEqual(cache.get(underscoreKey).prompt.id, 'a_b')
     assert.strictEqual(fs.statSync(cacheDir).mode & 0o777, 0o700)
-    const files = fs.readdirSync(cacheDir).flatMap(directory => {
-      return fs.readdirSync(path.join(cacheDir, directory)).map(file => path.join(cacheDir, directory, file))
+    const files = fs.readdirSync(cache.cacheDir).flatMap(directory => {
+      return fs.readdirSync(path.join(cache.cacheDir, directory))
+        .map(file => path.join(cache.cacheDir, directory, file))
     })
     for (const file of files) assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600)
     assert.strictEqual(files.some(file => file.includes('.tmp.')), false)
@@ -88,9 +91,60 @@ describe('Prompt caches', () => {
     sinon.stub(os, 'homedir').throws(new Error('no home'))
     sinon.stub(os, 'tmpdir').returns(cacheDir)
 
-    const cache = new WarmCache({ ttlMs: 60_000 })
+    const cache = new WarmCache({ ...WARM_OPTIONS })
     cache.set(cacheKey('prompt', ['latest']), prompt('prompt'))
 
-    assert.strictEqual(cache.cacheDir, path.join(cacheDir, 'datadog', 'llmobs', 'prompts'))
+    assert.strictEqual(path.dirname(cache.cacheDir), path.join(cacheDir, 'datadog', 'llmobs', 'prompts'))
+    assert.match(path.basename(cache.cacheDir), /^v1-[a-f0-9]{64}$/)
+  })
+
+  it('isolates tenant-owned files and preserves unrelated cache-root data when clearing', () => {
+    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-tenants-'))
+    const first = new WarmCache({ cacheDir, ...WARM_OPTIONS })
+    const second = new WarmCache({ cacheDir, ...WARM_OPTIONS, apiKey: 'other-api-key' })
+    const key = cacheKey('shared', ['latest'])
+    first.set(key, prompt('first'))
+    second.set(key, prompt('second'))
+    fs.writeFileSync(path.join(cacheDir, 'unrelated.txt'), 'keep')
+
+    assert.strictEqual(first.get(key).prompt.id, 'first')
+    assert.strictEqual(second.get(key).prompt.id, 'second')
+
+    first.clear()
+
+    assert.strictEqual(first.get(key), undefined)
+    assert.strictEqual(second.get(key).prompt.id, 'second')
+    assert.strictEqual(fs.readFileSync(path.join(cacheDir, 'unrelated.txt'), 'utf8'), 'keep')
+  })
+
+  it('clears and evicts owned files even when warm reads and writes are disabled', () => {
+    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-disabled-'))
+    const enabled = new WarmCache({ cacheDir, ...WARM_OPTIONS })
+    const disabled = new WarmCache({ cacheDir, ...WARM_OPTIONS, enabled: false })
+    const key = cacheKey('prompt', ['latest'])
+    enabled.set(key, prompt('prompt'))
+
+    disabled.evictPrompt('prompt')
+    assert.strictEqual(enabled.get(key), undefined)
+
+    enabled.set(key, prompt('prompt'))
+    disabled.clear()
+    assert.strictEqual(enabled.get(key), undefined)
+  })
+
+  it('preserves warm entry age when promoting it to the hot cache', () => {
+    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-age-'))
+    const wallClock = sinon.stub(Date, 'now').returns(1_000)
+    sinon.stub(performance, 'now').returns(100)
+    const warm = new WarmCache({ cacheDir, ...WARM_OPTIONS })
+    const hot = new HotCache({ ttlMs: 60_000 })
+    const key = cacheKey('prompt', ['latest'])
+    warm.set(key, prompt('prompt'))
+    wallClock.returns(60_000)
+
+    const entry = warm.get(key)
+    hot.set(key, entry.prompt, entry.ageMs)
+
+    assert.strictEqual(Math.round(hot.cache.getRemainingTTL(key)), 1_000)
   })
 })

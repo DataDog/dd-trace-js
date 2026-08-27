@@ -47,6 +47,10 @@ describe('ManagedPrompt', () => {
     assert.strictEqual(prompt.template[0].content, 'You are {{ persona }}.')
     assert.ok(Object.isFrozen(prompt.template))
     assert.ok(Object.isFrozen(prompt.template[0]))
+
+    const annotation = prompt.toAnnotation()
+    annotation.template[0].content = 'changed annotation'
+    assert.strictEqual(prompt.template[0].content, 'You are {{ persona }}.')
   })
 
   it('supports string, chat, object, and synchronous callable fallbacks', () => {

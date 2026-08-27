@@ -64,7 +64,7 @@ class ManagedPrompt {
     const annotation = {
       id: this.id,
       version: this.version,
-      template: this.template,
+      template: typeof this.template === 'string' ? this.template : this.template.map(message => ({ ...message })),
     }
     const normalizedVariables = stringifyVariables(variables)
     if (normalizedVariables) annotation.variables = normalizedVariables

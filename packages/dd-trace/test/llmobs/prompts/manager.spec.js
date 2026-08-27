@@ -279,6 +279,30 @@ describe('PromptManager', () => {
     sinon.assert.calledThrice(fetchStub)
   })
 
+  it('does not restore a stale background fetch after a prompt mutation', async () => {
+    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-manager-'))
+    const now = sinon.stub(performance, 'now').returns(100)
+    let resolveRefresh
+    fetchStub.onFirstCall().resolves(response(200, promptResponse({ version: 1 })))
+    fetchStub.onSecondCall().returns(new Promise(resolve => { resolveRefresh = resolve }))
+    fetchStub.onThirdCall().resolves(response(200, {}))
+    const manager = new PromptManager(makeConfig({
+      DD_LLMOBS_PROMPTS_CACHE_DIR: cacheDir,
+      DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: true,
+    }), () => provider)
+    const key = cacheKey('greeting', ['latest'])
+
+    await manager.getPrompt('greeting')
+    now.returns(60_101)
+    assert.strictEqual((await manager.getPrompt('greeting')).version, '1')
+    await manager.updatePrompt('greeting', { title: 'Updated' })
+    resolveRefresh(response(200, promptResponse({ version: 1 })))
+    await new Promise(setImmediate)
+
+    assert.strictEqual(manager.hotCache.get(key), undefined)
+    assert.strictEqual(manager.warmCache.get(key), undefined)
+  })
+
   it('persists static results but never environment resolve results', async () => {
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-manager-'))
     fetchStub.resolves(response(200, promptResponse()))
@@ -290,11 +314,11 @@ describe('PromptManager', () => {
     const resolvingManager = new PromptManager(config, () => provider)
 
     await resolvingManager.getPrompt('greeting')
-    assert.deepStrictEqual(fs.readdirSync(cacheDir), [])
+    assert.deepStrictEqual(fs.readdirSync(resolvingManager.warmCache.cacheDir), [])
 
     const registryManager = new PromptManager({ ...config, env: undefined }, () => provider)
     await registryManager.getPrompt('greeting')
-    assert.notDeepStrictEqual(fs.readdirSync(cacheDir), [])
+    assert.notDeepStrictEqual(fs.readdirSync(registryManager.warmCache.cacheDir), [])
   })
 
   it('clears hot and warm caches independently and together by default', () => {

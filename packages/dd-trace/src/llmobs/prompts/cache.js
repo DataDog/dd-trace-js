@@ -8,11 +8,11 @@ const path = require('node:path')
 /**
  * @typedef {object} PromptLRUCache
  * @property {(key: string, options?: object) => ManagedPrompt | undefined} get
- * @property {(key: string, prompt: ManagedPrompt) => void} set
+ * @property {(key: string, prompt: ManagedPrompt, options?: object) => void} set
  * @property {(key: string, options: object) => Promise<ManagedPrompt | undefined>} fetch
  * @property {(key: string) => void} delete
  * @property {() => void} clear
- * @property {() => string[]} keys
+ * @property {() => Array<[string, object]>} dump
  */
 
 const { LRUCache } = /** @type {{LRUCache: new (options: object) => PromptLRUCache}} */ (
@@ -31,6 +31,11 @@ function promptIdFromKey (key) {
 function cacheKey (promptId, selector) {
   const hash = createHash('sha1').update(JSON.stringify(selector)).digest('hex').slice(0, 16)
   return `${promptId}:${hash}`
+}
+
+function cacheNamespace (origin, apiKey) {
+  const hash = createHash('sha256').update(`${origin}\0${apiKey ?? ''}`).digest('hex')
+  return `v1-${hash}`
 }
 
 function defaultCacheDir () {
@@ -77,10 +82,11 @@ class HotCache {
    * Store a prompt.
    * @param {string} key
    * @param {ManagedPrompt} prompt
+   * @param {number} [ageMs]
    * @returns {void}
    */
-  set (key, prompt) {
-    if (this.enabled) this.cache.set(key, prompt)
+  set (key, prompt, ageMs = 0) {
+    if (this.enabled) this.cache.set(key, prompt, { start: performance.now() - ageMs })
   }
 
   /**
@@ -124,7 +130,7 @@ class HotCache {
    */
   evictPrompt (promptId) {
     if (!this.enabled) return
-    for (const key of this.cache.keys()) {
+    for (const [key] of this.cache.dump()) {
       if (promptIdFromKey(key) === promptId) this.cache.delete(key)
     }
   }
@@ -137,11 +143,13 @@ class WarmCache {
    * @param {string | undefined} options.cacheDir
    * @param {boolean} [options.enabled]
    * @param {number} options.ttlMs
+   * @param {string} options.origin
+   * @param {string | undefined} options.apiKey
    */
-  constructor ({ cacheDir, enabled = true, ttlMs }) {
+  constructor ({ cacheDir, enabled = true, ttlMs, origin, apiKey }) {
     this.enabled = enabled && ttlMs > 0
     this.ttlMs = ttlMs
-    this.cacheDir = cacheDir || defaultCacheDir()
+    this.cacheDir = path.join(cacheDir || defaultCacheDir(), cacheNamespace(origin, apiKey))
     if (this.enabled) this._ensureDir(this.cacheDir)
   }
 
@@ -181,7 +189,7 @@ class WarmCache {
   /**
    * Read a prompt and its freshness.
    * @param {string} key
-   * @returns {{prompt: ManagedPrompt, stale: boolean} | undefined}
+   * @returns {{prompt: ManagedPrompt, stale: boolean, ageMs: number} | undefined}
    */
   get (key) {
     if (!this.enabled) return
@@ -190,7 +198,8 @@ class WarmCache {
       const data = JSON.parse(fs.readFileSync(this._path(key), 'utf8'))
       if (!Number.isFinite(data.timestamp)) throw new TypeError('Invalid prompt cache timestamp')
       const prompt = ManagedPrompt._deserialize(data.prompt)
-      result = { prompt, stale: Date.now() - data.timestamp > this.ttlMs }
+      const ageMs = Math.max(0, Date.now() - data.timestamp)
+      result = { prompt, stale: ageMs > this.ttlMs, ageMs }
     } catch (error) {
       log.debug('Failed to read prompt from cache: %s', error.message)
     }
@@ -228,7 +237,6 @@ class WarmCache {
    * @returns {void}
    */
   delete (key) {
-    if (!this.enabled) return
     try {
       fs.rmSync(this._path(key), { force: true })
     } catch (error) {
@@ -242,7 +250,6 @@ class WarmCache {
    * @returns {void}
    */
   evictPrompt (promptId) {
-    if (!this.enabled) return
     try {
       fs.rmSync(this._promptDir(promptId), { recursive: true, force: true })
     } catch (error) {
@@ -255,11 +262,8 @@ class WarmCache {
    * @returns {void}
    */
   clear () {
-    if (!this.enabled) return
     try {
-      for (const entry of fs.readdirSync(this.cacheDir)) {
-        fs.rmSync(path.join(this.cacheDir, entry), { recursive: true, force: true })
-      }
+      fs.rmSync(this.cacheDir, { recursive: true, force: true })
     } catch (error) {
       log.debug('Failed to clear prompt cache: %s', error.message)
     }

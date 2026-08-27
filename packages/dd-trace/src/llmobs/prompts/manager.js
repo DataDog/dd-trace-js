@@ -25,6 +25,7 @@ const SOURCE_CACHE = 'cache'
  * @property {ManagedPrompt} [prompt]
  * @property {string} [reason]
  * @property {boolean} [notFound]
+ * @property {boolean} [cacheable]
  */
 
 function isPlainObject (value) {
@@ -135,6 +136,7 @@ class PromptManager {
     this.ttlMs = config.DD_LLMOBS_PROMPTS_CACHE_TTL * 1000
     this.timeoutMs = config.DD_LLMOBS_PROMPTS_TIMEOUT * 1000
     this.origin = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') || `https://api.${config.site}`
+    this.cacheGeneration = 0
     this.hotCache = new HotCache({
       ttlMs: this.ttlMs,
       fetchMethod: (key, stale, { context }) => this._backgroundFetch(key, context),
@@ -143,6 +145,8 @@ class PromptManager {
       cacheDir: config.DD_LLMOBS_PROMPTS_CACHE_DIR,
       enabled: config.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED && this.ttlMs > 0,
       ttlMs: this.ttlMs,
+      origin: this.origin,
+      apiKey: config.DD_API_KEY,
     })
   }
 
@@ -268,22 +272,24 @@ class PromptManager {
    * @returns {Promise<PromptFetchResult>}
    */
   async _fetchAndCache (request, { evictOnNotFound = false, hot = true } = {}) {
+    const generation = this.cacheGeneration
     const result = await this._fetchHttp(request)
+    const cacheable = generation === this.cacheGeneration
     if (result.prompt) {
-      if (this.ttlMs > 0) {
+      if (this.ttlMs > 0 && cacheable) {
         const cached = result.prompt._withSource(SOURCE_CACHE)
         if (hot) this.hotCache.set(request.key, cached)
         if (!request.resolve) this.warmCache.set(request.key, cached)
       }
-      return result
+      return { ...result, cacheable }
     }
 
     telemetry.recordPromptFetchError(result.notFound ? 'NotFound' : 'FetchError')
-    if (result.notFound && evictOnNotFound) {
+    if (result.notFound && evictOnNotFound && cacheable) {
       this.hotCache.delete(request.key)
       this.warmCache.delete(request.key)
     }
-    return result
+    return { ...result, cacheable }
   }
 
   /**
@@ -294,6 +300,7 @@ class PromptManager {
    */
   async _backgroundFetch (key, request) {
     const result = await this._fetchAndCache(request, { evictOnNotFound: true, hot: false })
+    if (!result.cacheable) return
     if (result.prompt) return result.prompt._withSource(SOURCE_CACHE)
     if (result.notFound) return
     throw new Error(result.reason)
@@ -318,7 +325,7 @@ class PromptManager {
       if (!request.resolve) {
         const warm = this.warmCache.get(request.key)
         if (warm) {
-          this.hotCache.set(request.key, warm.prompt)
+          this.hotCache.set(request.key, warm.prompt, warm.ageMs)
           if (warm.stale) this.hotCache.refresh(request.key, request)
           telemetry.recordPromptSource('warm_cache')
           return warm.prompt
@@ -391,6 +398,7 @@ class PromptManager {
    * @returns {void}
    */
   clearCache ({ hot = true, warm = true } = {}) {
+    this.cacheGeneration++
     if (hot) this.hotCache.clear()
     if (warm) this.warmCache.clear()
   }
@@ -401,6 +409,7 @@ class PromptManager {
    * @returns {void}
    */
   _evictPrompt (promptId) {
+    this.cacheGeneration++
     this.hotCache.evictPrompt(promptId)
     this.warmCache.evictPrompt(promptId)
   }
