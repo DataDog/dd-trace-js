@@ -33,16 +33,19 @@ async function addRules (turbopack = {}, projectDir = process.cwd()) {
     if (configured.some(rule => isCurrentDatadogLoader(rule, manifest.hash))) continue
     const existing = configured.filter(rule => !isDatadogLoader(rule))
 
+    const targetCondition = ['foreign', 'node', { path: manifest.packagePathPattern }]
+    if (manifest.esmImportPattern) targetCondition.push({ not: { content: manifest.esmImportPattern } })
+
     const datadogRules = [{
       condition: {
-        all: ['foreign', 'node', { path: manifest.packagePathPattern }],
+        all: targetCondition,
       },
       loaders: [{ loader, options: { manifestHash: manifest.hash, manifestPath: manifest.path } }],
     }]
     if (manifest.esmImportPattern) {
       datadogRules.push({
         condition: {
-          all: ['node', { not: 'foreign' }, { content: manifest.esmImportPattern }],
+          all: ['node', { content: manifest.esmImportPattern }],
         },
         loaders: [{
           loader,
