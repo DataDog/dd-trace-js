@@ -45,19 +45,10 @@ function formatMetricTags (tagsDictionary) {
   return Object.keys(tagsDictionary).reduce((/** @type {string[]} */ acc, tagKey) => {
     if (tagKey === 'statusCode') {
       const statusCode = tagsDictionary[tagKey]
-      if (statusCode) {
-        acc.push(`status_code:${statusCode}`, `error_type:${getErrorTypeFromStatusCode(statusCode)}`)
-      } else if (!tagsDictionary.errorType) {
-        // No HTTP status and no specific error type: fall back to 'network'.
-        acc.push('error_type:network')
+      if (isStatusCode400(statusCode)) {
+        acc.push(`status_code:${statusCode}`)
       }
-      return acc
-    }
-    if (tagKey === 'errorType') {
-      const errorType = tagsDictionary[tagKey]
-      if (errorType) {
-        acc.push(`error_type:${errorType}`)
-      }
+      acc.push(`error_type:${getErrorTypeFromStatusCode(statusCode)}`)
       return acc
     }
     const formattedTagKey = /** @type {string} */(formattedTags[tagKey] || tagKey)
@@ -138,8 +129,11 @@ const TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS = 'test_management_tests.request_er
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS = 'test_management_tests.response_tests'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES = 'test_management_tests.response_bytes'
 
+function isStatusCode400 (statusCode) {
+  return statusCode >= 400 && statusCode < 500
+}
+
 function getErrorTypeFromStatusCode (statusCode) {
-  if (typeof statusCode !== 'number') return 'network'
   if (statusCode >= 400 && statusCode < 500) {
     return 'status_code_4xx_response'
   }

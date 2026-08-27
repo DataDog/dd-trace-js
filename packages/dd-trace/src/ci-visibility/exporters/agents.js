@@ -3,84 +3,15 @@
 const http = require('node:http')
 const https = require('node:https')
 
-const { storage } = require('../../../../datadog-core')
-
-const legacyStorage = storage('legacy')
+const { createAgentClass } = require('../../exporters/common/agents')
 
 // Test Optimization flushes many payloads near process exit. The shared exporter
 // agents cap at a single socket per origin, so concurrent payloads queue behind
 // one connection and the bounded final flush aborts the backlog. A dedicated
 // pool with bounded concurrency drains the queue in parallel instead.
 const MAX_SOCKETS = 16
-const agentOptions = { keepAlive: true, maxSockets: MAX_SOCKETS }
-
-/**
- * Creates a Test Optimization agent class whose socket lifecycle cannot be traced.
- *
- * The socket lifecycle hooks run outside the active trace context so connection
- * setup, keep-alive, and reuse never generate tracer telemetry. The implementation
- * mirrors `exporters/common/agents.js`; keeping it local lets Test Optimization
- * use independent connection limits without affecting agents shared by other products.
- *
- * @param {typeof http.Agent|typeof https.Agent} BaseAgent
- * @returns {typeof http.Agent|typeof https.Agent}
- */
-function createAgentClass (BaseAgent) {
-  class TestOptimizationAgent extends BaseAgent {
-    /**
-     * Creates a Test Optimization HTTP(S) agent.
-     */
-    constructor () {
-      super(agentOptions)
-    }
-
-    /**
-     * Creates a socket outside the active trace context.
-     *
-     * @param {...unknown} args
-     * @returns {import('node:stream').Duplex}
-     */
-    createConnection (...args) {
-      return this._noop(() => super.createConnection(...args))
-    }
-
-    /**
-     * Keeps an idle socket alive outside the active trace context.
-     *
-     * @param {...unknown} args
-     * @returns {boolean}
-     */
-    keepSocketAlive (...args) {
-      return this._noop(() => super.keepSocketAlive(...args))
-    }
-
-    /**
-     * Reuses a socket outside the active trace context.
-     *
-     * @param {...unknown} args
-     * @returns {void}
-     */
-    reuseSocket (...args) {
-      return this._noop(() => super.reuseSocket(...args))
-    }
-
-    /**
-     * Runs a socket operation without generating tracer telemetry.
-     *
-     * @template T
-     * @param {() => T} callback
-     * @returns {T}
-     */
-    _noop (callback) {
-      return legacyStorage.run({ noop: true }, callback)
-    }
-  }
-
-  return TestOptimizationAgent
-}
-
-const HttpAgent = createAgentClass(http.Agent)
-const HttpsAgent = createAgentClass(https.Agent)
+const HttpAgent = createAgentClass(http.Agent, MAX_SOCKETS)
+const HttpsAgent = createAgentClass(https.Agent, MAX_SOCKETS)
 
 const httpAgent = new HttpAgent()
 const httpsAgent = new HttpsAgent()

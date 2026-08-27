@@ -83,6 +83,19 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
   })
 
+  it('retries a 5xx response during a background flush without a deadline', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+
+    const error = Object.assign(new Error('unavailable'), { status: 503 })
+    pendingRequests[0].callback(error, null, 503, {})
+    clock.tick(6000)
+
+    assert.strictEqual(pendingRequests.length, 2)
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
   it('does not retry a 400 response', () => {
     const done = sinon.spy()
     request('payload', { deadline: Date.now() + 10_000 }, done)
@@ -104,6 +117,19 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, error, null, 401, {})
     assert.strictEqual(pendingRequests.length, 1)
   })
+
+  for (const statusCode of [301, 409, 422]) {
+    it(`does not retry a ${statusCode} response`, () => {
+      const done = sinon.spy()
+      request('payload', {}, done)
+
+      const error = Object.assign(new Error('non-retriable response'), { status: statusCode })
+      pendingRequests[0].callback(error, null, statusCode, {})
+
+      sinon.assert.calledOnceWithExactly(done, error, null, statusCode, {})
+      assert.strictEqual(pendingRequests.length, 1)
+    })
+  }
 
   it('uses the remaining finalization budget for a late 5xx retry', () => {
     const done = sinon.spy()
@@ -150,6 +176,21 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('waits for a rate-limit reset during a background flush', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+
+    const error = Object.assign(new Error('rate limited'), { status: 429 })
+    pendingRequests[0].callback(error, null, 429, { 'x-ratelimit-reset': '5' })
+    clock.tick(4999)
+    assert.strictEqual(pendingRequests.length, 1)
+    clock.tick(1)
+    assert.strictEqual(pendingRequests.length, 2)
+
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnce(done)
+  })
+
   it('does not retry a rate-limit reset at the finalization deadline', () => {
     const done = sinon.spy()
     request('payload', { deadline: Date.now() + 5000 }, done)
@@ -159,6 +200,17 @@ describe('Test Optimization exporter request', () => {
 
     assert.strictEqual(pendingRequests.length, 1)
     sinon.assert.calledOnceWithExactly(done, error, null, 429, { 'x-ratelimit-reset': '5' })
+  })
+
+  it('does not exceed the rate-limit wait cap during a background flush', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+
+    const error = Object.assign(new Error('rate limited'), { status: 429 })
+    pendingRequests[0].callback(error, null, 429, { 'x-ratelimit-reset': '31' })
+
+    assert.strictEqual(pendingRequests.length, 1)
+    sinon.assert.calledOnceWithExactly(done, error, null, 429, { 'x-ratelimit-reset': '31' })
   })
 
   it('preserves ordinary background retry scheduling without a deadline', () => {
@@ -184,21 +236,6 @@ describe('Test Optimization exporter request', () => {
     clock.tick(10_000)
 
     assert.strictEqual(pendingRequests.length, 1)
-    sinon.assert.calledOnce(done)
-    // The original network error is surfaced instead of the abort error so the
-    // telemetry reports the root cause (ECONNRESET), not the deadline giving up.
-    assert.strictEqual(done.firstCall.args[0], requestError)
-  })
-
-  it('reports the abort error when no prior attempt failed', () => {
-    const controller = new AbortController()
-    const done = sinon.spy()
-    request('payload', { deadline: Date.now() + 10_000, signal: controller.signal }, done)
-
-    const abortError = Object.assign(new Error('finalization expired'), { code: 'ABORT_ERR' })
-    controller.abort(abortError)
-    clock.tick(10_000)
-
     sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0], abortError)
   })

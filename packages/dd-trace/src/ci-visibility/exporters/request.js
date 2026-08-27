@@ -11,18 +11,12 @@ const {
 } = require('../../exporters/common/retry')
 const { getRateLimitResetDelay } = require('../requests/rate-limit')
 
-// HTTP status codes where retrying cannot help: the request is malformed,
-// unauthorized, or otherwise permanently rejected. Everything else (408, 429,
-// 5xx, and other 4xx not listed here) is potentially transient and worth a retry.
-const NON_RETRIABLE_HTTP_STATUS_CODES = new Set([400, 401, 403, 404, 405, 413, 422])
-
 /**
  * @param {number} statusCode
  * @returns {boolean}
  */
-function isRetriableHttpStatus (statusCode) {
-  return statusCode !== undefined && statusCode !== null &&
-    !NON_RETRIABLE_HTTP_STATUS_CODES.has(statusCode)
+function isRetriableHttpStatusCode (statusCode) {
+  return statusCode === 408 || statusCode === 429 || (statusCode >= 500 && statusCode <= 599)
 }
 
 /**
@@ -119,7 +113,6 @@ function requestBuffered (data, options, callback) {
   const timeout = options.timeout || 2000
   let retryTimer
   let settled = false
-  let lastError
 
   const complete = (error, result, statusCode, headers) => {
     if (settled) return
@@ -128,7 +121,7 @@ function requestBuffered (data, options, callback) {
     signal?.removeEventListener('abort', onAbort)
     callback(error, result, statusCode, headers)
   }
-  const onAbort = () => complete(lastError ?? getAbortError(signal))
+  const onAbort = () => complete(getAbortError(signal))
 
   signal?.addEventListener('abort', onAbort, { once: true })
   if (signal?.aborted) return onAbort()
@@ -141,17 +134,9 @@ function requestBuffered (data, options, callback) {
     const deadline = options.deadline
     const remaining = deadline === undefined ? Infinity : deadline - Date.now()
     if (remaining <= 0) {
-      // The deadline elapsed before this attempt started. If a previous attempt
-      // already failed with a real error, surface that instead of masking it as a
-      // deadline timeout — the telemetry needs the original cause (ECONNRESET,
-      // ETIMEDOUT, etc.) to distinguish failure modes.
-      if (lastError) {
-        complete(lastError, null, lastError.status)
-      } else {
-        const error = new Error('Test Optimization request reached its finalization deadline')
-        error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
-        complete(error)
-      }
+      const error = new Error('Test Optimization request reached its finalization deadline')
+      error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
+      complete(error)
       return
     }
 
@@ -175,10 +160,8 @@ function requestBuffered (data, options, callback) {
         return
       }
 
-      lastError = error
-
       const responseStatus = statusCode ?? error.status
-      const isRetriableHttpError = isRetriableHttpStatus(responseStatus)
+      const isRetriableHttpError = isRetriableHttpStatusCode(responseStatus)
       if (options.retry === false || (attemptIndex >= getMaxAttempts(attemptOptions) &&
         (isRetriableNetworkError(error) || isRetriableHttpError))) {
         complete(error, result, statusCode, headers)

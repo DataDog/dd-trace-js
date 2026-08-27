@@ -60,7 +60,7 @@ describe('Test Optimization request tracker', () => {
     sinon.assert.calledOnceWithExactly(done, undefined)
   })
 
-  it('detaches pending requests and releases the final flush at the deadline', () => {
+  it('aborts pending requests and releases the process at the deadline', () => {
     const writer = getWriter()
     writer._encoder.count.returns(1)
     const done = sinon.spy()
@@ -68,35 +68,9 @@ describe('Test Optimization request tracker', () => {
     writer.flush(done, { deadline: Date.now() + 1000 })
     clock.tick(1000)
 
-    // The request is detached (not aborted) so it can complete in the background.
-    assert.strictEqual(pendingRequests[0].options.signal.aborted, false)
+    assert.strictEqual(pendingRequests[0].options.signal.aborted, true)
     sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
-  })
-
-  it('keeps a detached request visible to a later final flush', () => {
-    const writer = getWriter()
-    writer._encoder.count.onFirstCall().returns(1).returns(0)
-    const firstDone = sinon.spy()
-
-    writer.flush(firstDone, { deadline: Date.now() + 1000 })
-    clock.tick(1000)
-
-    // The request is detached but still tracked for a later flush.
-    assert.strictEqual(pendingRequests[0].options.signal.aborted, false)
-    assert.strictEqual(pendingRequests.length, 1)
-
-    // A later final flush can still attach to the in-flight request.
-    const secondDone = sinon.spy()
-    writer.flush(secondDone, { deadline: Date.now() + 1000 })
-    assert.strictEqual(pendingRequests.length, 1)
-
-    // When the request settles, both flushes complete.
-    pendingRequests[0].callback(null)
-    sinon.assert.calledOnce(firstDone)
-    assert.strictEqual(firstDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
-    sinon.assert.calledOnce(secondDone)
-    assert.strictEqual(secondDone.firstCall.args[0], undefined)
   })
 
   it('does not wait for a timed-out request on a later final flush', () => {
@@ -109,9 +83,6 @@ describe('Test Optimization request tracker', () => {
     const done = sinon.spy()
     writer.flush(done, { deadline: Date.now() + 1000 })
 
-    // The detached request is still tracked, so the second flush waits for it.
-    // Settle it so the second flush completes.
-    pendingRequests[0].callback(null)
     sinon.assert.calledOnceWithExactly(done, undefined)
   })
 

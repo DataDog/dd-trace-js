@@ -5,12 +5,6 @@ const { safeJSONStringify } = require('../../../exporters/common/util')
 const { JSONEncoder } = require('../../encode/json-encoder')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 const BaseWriter = require('../../../exporters/common/writer')
-const {
-  incrementCountMetric,
-  TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-  TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-} = require('../../../ci-visibility/telemetry')
-
 const { getAgent } = require('../agents')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
@@ -65,16 +59,8 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Request to the logs intake: ${safeJSONStringify({ ...options, agent: undefined })}`)
 
-    this.#requestTracker.send(request, data, options, (err, res, statusCode) => {
+    this.#requestTracker.send(request, data, options, (err, res) => {
       if (err) {
-        incrementCountMetric(
-          TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-          { endpoint: 'di_logs', statusCode, errorType: statusCode ? undefined : err.code }
-        )
-        incrementCountMetric(
-          TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'di_logs', statusCode, errorType: statusCode ? undefined : err.code }
-        )
         log.error('Error sending DI logs payload', err)
         done(err)
         return

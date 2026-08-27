@@ -1,7 +1,6 @@
 'use strict'
 
 const { performance } = require('node:perf_hooks')
-const dateNow = Date.now
 const { fileURLToPath } = require('node:url')
 
 const { channel } = require('dc-polyfill')
@@ -174,13 +173,6 @@ class MochaPlugin extends CiPlugin {
 
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
-    this._timeOrigin = dateNow()
-    this._perfOrigin = performance.now()
-
-    this.addSub('ci:mocha:session:start', () => {
-      this._timeOrigin = dateNow()
-      this._perfOrigin = performance.now()
-    })
 
     this.addSub('ci:mocha:worker:configuration', ({
       libraryConfig,
@@ -796,15 +788,6 @@ class MochaPlugin extends CiPlugin {
     this.addBind('ci:mocha:global:run', (ctx) => {
       return ctx.currentStore
     })
-  }
-
-  /**
-   * Returns the current time in the coordinate system used by spans.
-   *
-   * @returns {number}
-   */
-  _now () {
-    return this._timeOrigin + performance.now() - this._perfOrigin
   }
 
   /**

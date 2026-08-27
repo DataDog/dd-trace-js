@@ -146,7 +146,7 @@ describe('LogSubmissionPlugin', () => {
     sinon.assert.calledWith(log.error, 'Error submitting %s logs', 'bunyan', error)
   })
 
-  it('detaches pending requests and releases the final flush at the deadline', () => {
+  it('aborts pending requests and releases the final flush at the deadline', () => {
     request.callsFake(() => {})
     publishLog('{"msg":"hello"}')
     const onDone = sinon.spy()
@@ -159,9 +159,8 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(signal.aborted, false)
     clock.tick(1)
     sinon.assert.calledOnce(onDone)
-    // The request is detached (not aborted) so it can complete in the background.
-    assert.strictEqual(signal.aborted, false)
-    assert.strictEqual(onDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+    assert.strictEqual(signal.aborted, true)
+    assert.strictEqual(signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
   })
 
   it('waits for every intake request in the flush snapshot', () => {

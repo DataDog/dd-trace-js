@@ -104,7 +104,6 @@ describe('CI Visibility Coverage Writer', () => {
 
     it('should log request errors', done => {
       const error = new Error('boom')
-      error.code = 'ECONNRESET'
 
       request.yields(error)
 
@@ -122,7 +121,7 @@ describe('CI Visibility Coverage Writer', () => {
         sinon.assert.calledWithExactly(
           incrementCountMetric,
           'endpoint_payload.dropped',
-          { endpoint: 'code_coverage', statusCode: undefined, errorType: 'ECONNRESET' }
+          { endpoint: 'code_coverage' }
         )
         done()
       })

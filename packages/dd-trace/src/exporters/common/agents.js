@@ -6,13 +6,17 @@ const { storage } = require('../../../../datadog-core')
 
 const legacyStorage = storage('legacy')
 
-const keepAlive = true
-const maxSockets = 1
-
-function createAgentClass (BaseAgent) {
+/**
+ * Creates an exporter agent class that suppresses tracing around socket lifecycle operations.
+ *
+ * @param {typeof http.Agent|typeof https.Agent} BaseAgent
+ * @param {number} maxSockets
+ * @returns {typeof http.Agent|typeof https.Agent}
+ */
+function createAgentClass (BaseAgent, maxSockets) {
   class CustomAgent extends BaseAgent {
     constructor () {
-      super({ keepAlive, maxSockets })
+      super({ keepAlive: true, maxSockets })
     }
 
     createConnection (...args) {
@@ -35,10 +39,11 @@ function createAgentClass (BaseAgent) {
   return CustomAgent
 }
 
-const HttpAgent = createAgentClass(http.Agent)
-const HttpsAgent = createAgentClass(https.Agent)
+const HttpAgent = createAgentClass(http.Agent, 1)
+const HttpsAgent = createAgentClass(https.Agent, 1)
 
 module.exports = {
+  createAgentClass,
   httpAgent: new HttpAgent(),
   httpsAgent: new HttpsAgent(),
 }

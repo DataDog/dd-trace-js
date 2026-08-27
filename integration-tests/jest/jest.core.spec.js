@@ -7,7 +7,7 @@ const { fork, exec } = require('child_process')
 const fs = require('node:fs')
 const path = require('path')
 const { inspect } = require('node:util')
-const { assertObjectContains } = require('../helpers')
+const { assertObjectContains, assertUnorderedArrayContains } = require('../helpers')
 
 const {
   sandboxCwd,
@@ -1259,9 +1259,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const events = eventsRequests.map(({ payload }) => payload)
           .flatMap(({ events }) => events)
         const eventTypes = events.map(event => event.type)
-        for (const type of ['test', 'test_session_end', 'test_module_end']) {
-          assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-        }
+        assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
 
         done()
       }).catch(done)
@@ -1283,9 +1281,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             .flatMap(({ events }) => events)
             .map(event => event.type)
 
-          for (const type of ['test', 'test_session_end', 'test_module_end']) {
-            assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-          }
+          assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
           done()
         }).catch(done)
     })
@@ -1507,9 +1503,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const events = eventsRequests.map(({ payload }) => payload)
           .flatMap(({ events }) => events)
         const eventTypes = events.map(event => event.type)
-        for (const type of ['test', 'test_session_end', 'test_module_end']) {
-          assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-        }
+        assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
 
         const tests = events.filter(event => event.type === 'test').map(event => event.content)
         assert.ok(tests.length >= 2, `Expected ${tests.length} >= 2`)
@@ -1538,9 +1532,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             .flatMap(({ events }) => events)
             .map(event => event.type)
 
-          for (const type of ['test', 'test_session_end', 'test_module_end']) {
-            assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-          }
+          assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
           done()
         }).catch(done)
     })
@@ -1918,7 +1910,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   it('bounds the final flush if the server is not available and logs an error', async function () {
-    this.timeout(100_000)
+    this.timeout(20_000)
     // Very slow intake
     receiver.setWaitingTime(30000)
     // Needs to run with the CLI if we want --forceExit to work
@@ -2108,9 +2100,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(packfileRequest.headers['dd-api-key'], '1')
 
       const eventTypes = eventsRequest.payload.events.map(event => event.type)
-      for (const type of ['test', 'test_session_end', 'test_module_end']) {
-        assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-      }
+      assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
       const numSuites = eventTypes.reduce(
         (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
       )

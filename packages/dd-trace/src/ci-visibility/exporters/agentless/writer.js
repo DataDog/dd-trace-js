@@ -81,11 +81,11 @@ class Writer extends BaseWriter {
       if (err) {
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-          { endpoint: 'test_cycle', statusCode, errorType: statusCode ? undefined : err.code }
+          { endpoint: 'test_cycle', statusCode }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'test_cycle', statusCode, errorType: statusCode ? undefined : err.code }
+          { endpoint: 'test_cycle' }
         )
         log.error('Error sending CI agentless payload', err)
         done(err)

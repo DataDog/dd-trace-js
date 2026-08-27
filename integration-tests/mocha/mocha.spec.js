@@ -9,7 +9,7 @@ const { inspect } = require('node:util')
 
 const satisfies = require('semifies')
 
-const { assertObjectContains } = require('../helpers')
+const { assertObjectContains, assertUnorderedArrayContains } = require('../helpers')
 
 const {
   sandboxCwd,
@@ -100,6 +100,12 @@ function assertItrSkippingEnabledTags (events, expected) {
   assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
   const test = events.find(event => event.type === 'test').content
   assert.strictEqual(test.meta[TEST_ITR_SKIPPING_ENABLED], expected)
+}
+
+function getTestSuiteEvents (events) {
+  const testSuites = events.filter(event => event.type === 'test_suite_end')
+  assert.ok(testSuites.length > 0, 'expected test_suite_end event')
+  return testSuites
 }
 
 function getLinesBitmapBase64 (startLine, endLine) {
@@ -283,7 +289,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          // Session and module are marked as failed; suites retain their actual status.
           for (const eventType of ['test_session_end', 'test_module_end']) {
             const event = events.find(event => event.type === eventType)
             assert.ok(event, `expected ${eventType} event`)
@@ -291,6 +296,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
           }
+          if (reporterEvent !== 'start') getTestSuiteEvents(events)
           if (reporterEvent === 'fail') {
             const testEvent = events.find(event =>
               event.type === 'test' && event.content.meta[TEST_NAME] === 'mocha-test-fail can fail'
@@ -390,6 +396,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.ok(event, `expected ${eventType} event`)
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
         }
+        getTestSuiteEvents(events)
       },
       { hardTimeout: 20_000 }
     )
@@ -424,6 +431,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.content.meta[ERROR_MESSAGE], 'Mocha reporter failed')
         }
+        getTestSuiteEvents(events)
       },
       { hardTimeout: 20_000 }
     )
@@ -458,6 +466,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.content.meta[ERROR_MESSAGE], 'Mocha reporter failed')
         }
+        getTestSuiteEvents(events)
       },
       { hardTimeout: 20_000 }
     )
@@ -531,6 +540,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(event.content.error, 1)
           assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
         }
+        getTestSuiteEvents(events)
         const testEvent = events.find(event => event.type === 'test')
         assert.ok(testEvent, 'expected aborted test event')
         assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'skip')
@@ -584,6 +594,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
         }
+        getTestSuiteEvents(events)
       },
       { hardTimeout: 20_000 }
     )
@@ -646,6 +657,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
           }
+          getTestSuiteEvents(events)
         },
         { hardTimeout: 20_000 }
       )
@@ -693,6 +705,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
         }
+        getTestSuiteEvents(events)
       },
       { hardTimeout: 20_000 }
     )
@@ -739,11 +752,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(sessionEvent.content.meta[MOCHA_IS_PARALLEL], 'true')
         assert.strictEqual(suiteEvents.length, 2)
         assert.strictEqual(hierarchyEvents.length, 4)
-        // Session and module are marked as failed; suites retain their actual status.
         for (const event of [sessionEvent, hierarchyEvents.find(event => event.type === 'test_module_end')]) {
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.content.error, 1)
           assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+        }
+        for (const suiteEvent of suiteEvents) {
+          assert.strictEqual(suiteEvent.content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(suiteEvent.content.error, 0)
         }
       },
       { hardTimeout: 20_000 }
@@ -870,6 +886,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
           assert.match(event.content.meta[ERROR_MESSAGE], /custom reusable Mocha reporter failed/)
         }
+        getTestSuiteEvents(events)
       },
       { hardTimeout: 20_000 }
     )
@@ -3064,9 +3081,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.strictEqual(packfileRequest.headers['dd-api-key'], '1')
 
       const eventTypes = eventsRequest.payload.events.map(event => event.type)
-      for (const type of ['test', 'test_session_end', 'test_module_end']) {
-        assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-      }
+      assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
       const numSuites = eventTypes.reduce(
         (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
       )
@@ -3181,9 +3196,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
-        for (const type of ['test', 'test_session_end', 'test_module_end']) {
-          assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-        }
+        assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -3226,9 +3239,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.assertPayloadReceived(({ headers, payload }) => {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
-        for (const type of ['test', 'test_session_end', 'test_module_end']) {
-          assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-        }
+        assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         const testSession = payload.events.find(event => event.type === 'test_session_end').content
         assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
@@ -3287,9 +3298,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
         assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
 
-        for (const type of ['test', 'test_session_end', 'test_module_end']) {
-          assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-        }
+        assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -3574,9 +3583,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
         // because they are not skipped
-        for (const type of ['test', 'test_session_end', 'test_module_end']) {
-          assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-        }
+        assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -3624,9 +3631,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
         // because they are not skipped
-        for (const type of ['test', 'test_session_end', 'test_module_end']) {
-          assert.ok(eventTypes.includes(type), 'expected ' + type + ' in event types')
-        }
+        assertUnorderedArrayContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )

@@ -20,7 +20,6 @@ const { createEfdRetryPolicy } = require('../../../src/ci-visibility/efd-retry-p
 const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
-const actualSpanFormat = require('../../../src/span_format')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
   require('../../../src/ci-visibility/requests/upload-coverage-report')
 const { uploadTestScreenshot: actualUploadTestScreenshotRequest } =
@@ -30,13 +29,7 @@ const sketchesJsPath = require.resolve('../../../../../vendor/dist/@datadog/sket
 
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
 let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
-let formatSpan = actualSpanFormat
-let incrementCountMetric
-
-const formatSpanStub = (...args) => formatSpan(...args)
-formatSpanStub.addError = actualSpanFormat.addError
 const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
-
   '../requests/upload-coverage-report': {
     uploadCoverageReport (...args) {
       return uploadCoverageReportRequest(...args)
@@ -47,13 +40,6 @@ const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporter
       return uploadTestScreenshotRequest(...args)
     },
   },
-  '../telemetry': {
-    incrementCountMetric (...args) {
-      return incrementCountMetric?.(...args)
-    },
-    TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION: 'events_enqueued_for_serialization',
-  },
-  '../../span_format': formatSpanStub,
 })
 
 // The real tracer Config always carries a `testOptimization` namespace object.
@@ -84,8 +70,6 @@ describe('CI Visibility Exporter', () => {
     nock.cleanAll()
     uploadCoverageReportRequest = actualUploadCoverageReportRequest
     uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
-    formatSpan = actualSpanFormat
-    incrementCountMetric = sinon.stub()
   })
 
   afterEach(() => {
@@ -1773,12 +1757,12 @@ describe('CI Visibility Exporter', () => {
         exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
         exporter.flush(flushCallback)
         const requestOptions = uploadTestScreenshotRequest.firstCall.args[0]
-        assert.strictEqual(requestOptions.deadline, 90_000)
+        assert.strictEqual(requestOptions.deadline, 10_000)
         assert.strictEqual(requestOptions.signal.aborted, false)
         sinon.assert.notCalled(exporter._writer.flush)
         sinon.assert.notCalled(flushCallback)
 
-        clock.tick(89_999)
+        clock.tick(9_999)
         sinon.assert.notCalled(screenshotCallback)
         sinon.assert.notCalled(flushCallback)
 

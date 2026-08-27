@@ -57,18 +57,8 @@ class FinalFlushRequestTracker {
       for (const pendingRequest of finalFlush.requests) {
         pendingRequest.finalFlushes.delete(finalFlush)
         if (pendingRequest.finalFlushes.size === 0) {
-          // Detach the request instead of aborting it. The in-flight request keeps
-          // running (its open socket keeps the event loop alive) and completes once
-          // the intake responds or the per-request timeout fires. This avoids
-          // dropping payloads that would have succeeded with a little more time.
-          // The request's callback still runs to emit telemetry and call the
-          // writer's done(), but the final flush has already completed, so the
-          // process can exit once all detached requests settle.
-          // Remove the deadline so the detached request runs as a background
-          // request (no finalization deadline) instead of immediately failing.
-          // Keep it in #pendingRequests so a later final flush can still attach
-          // to it; it is removed when the request's callback settles.
-          delete pendingRequest.options.deadline
+          pendingRequest.controller.abort(error)
+          this.#pendingRequests.delete(pendingRequest)
         } else {
           this.#updateRequestDeadline(pendingRequest)
         }
