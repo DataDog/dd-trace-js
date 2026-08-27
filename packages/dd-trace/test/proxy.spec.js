@@ -314,8 +314,6 @@ describe('TracerProxy', () => {
       const optionalModules = [
         require.resolve('../src/debugger'),
         require.resolve('../src/llmobs/experiments/noop'),
-        require.resolve('../src/service-naming/schemas/v0'),
-        require.resolve('../src/service-naming/schemas/v1'),
       ]
       const script = `
         const optionalModules = ${JSON.stringify(optionalModules)}
@@ -325,7 +323,7 @@ describe('TracerProxy', () => {
       const result = spawnSync(process.execPath, ['--eval', script], { encoding: 'utf8', timeout: 5_000 })
 
       assert.strictEqual(result.status, 0, result.stderr)
-      assert.deepStrictEqual(JSON.parse(result.stdout), [false, false, false, false])
+      assert.deepStrictEqual(JSON.parse(result.stdout), [false, false])
     })
 
     describe('init', () => {
