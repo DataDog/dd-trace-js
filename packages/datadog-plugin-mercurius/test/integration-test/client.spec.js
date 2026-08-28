@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
 const semver = require('semver')
 
 const {
@@ -18,6 +17,18 @@ const {
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 /** @typedef {{ name: string, resource: string, meta: Record<string, string> }} GraphQLRequestSpan */
+
+/**
+ * @param {string} url
+ * @param {Record<string, string>} body
+ */
+function post (url, body) {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
 
 describe('esm', () => {
   let agent
@@ -61,7 +72,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'graphql.request'), true)
         })
 
-        await axios.post(`${proc.url}/graphql`, { query: 'query MyQuery { hello(name: "world") }' })
+        await post(`${proc.url}/graphql`, { query: 'query MyQuery { hello(name: "world") }' })
 
         await res
       }).timeout(50000)
@@ -78,8 +89,8 @@ describe('esm', () => {
         )
 
         const source = 'query First { hello(name: "first") } query Second { hello(name: "second") }'
-        await axios.post(`${proc.url}/graphql`, { query: source, operationName: 'First' })
-        await axios.post(`${proc.url}/graphql`, { query: source, operationName: 'Second' })
+        await post(`${proc.url}/graphql`, { query: source, operationName: 'First' })
+        await post(`${proc.url}/graphql`, { query: source, operationName: 'Second' })
 
         const assertion = agent.assertMessageReceived(({ payload }) => {
           const request = payload.flat().find(span =>
@@ -92,7 +103,7 @@ describe('esm', () => {
 
         await Promise.all([
           assertion,
-          axios.post(`${proc.url}/graphql`, { query: source, operationName: 'Second' }),
+          post(`${proc.url}/graphql`, { query: source, operationName: 'Second' }),
         ])
       }).timeout(50000)
 
@@ -123,7 +134,7 @@ describe('esm', () => {
 
             await Promise.all([
               assertion,
-              axios.get(`${proc.url}/parsed`),
+              fetch(`${proc.url}/parsed`),
             ])
           }
 
