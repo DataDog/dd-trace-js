@@ -574,7 +574,7 @@ describe('TracerProxy', () => {
         proxy.init()
         const boundProvider = proxy.openfeature
 
-        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: true }, 'modify'))
+        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: 'true' }, 'modify'))
 
         const flagConfig = { flags: { 'test-flag': {} } }
         handlers.get('FFE_FLAGS')('apply', flagConfig)
@@ -595,8 +595,8 @@ describe('TracerProxy', () => {
         proxy.init()
 
         const provider = proxy.openfeature
-        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-disable', { DD_TRACE_ENABLED: false }))
-        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-disable', { DD_TRACE_ENABLED: 'false' }))
+        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-enable', { DD_TRACE_ENABLED: 'true' }, 'modify'))
 
         assert.strictEqual(proxy.openfeature, provider)
         sinon.assert.calledOnce(OpenFeatureProvider)
@@ -613,8 +613,10 @@ describe('TracerProxy', () => {
         proxy.init()
         const sdk = proxy.aiguard
 
-        handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: false }))
-        handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+        handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: 'false' }))
+        handlers.get('APM_TRACING')(
+          createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: 'true' }, 'modify')
+        )
 
         assert.strictEqual(proxy.aiguard, sdk)
         sinon.assert.calledOnce(AIGuardSdk)
@@ -675,12 +677,12 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(appsec.enable, config)
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
-        let conf = { DD_TRACE_ENABLED: false }
+        let conf = { DD_TRACE_ENABLED: 'false' }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf))
         sinon.assert.called(appsec.disable)
         sinon.assert.called(iast.disable)
 
-        conf = { DD_TRACE_ENABLED: true }
+        conf = { DD_TRACE_ENABLED: 'true' }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf, 'modify'))
         sinon.assert.calledTwice(appsec.enable)
         sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
