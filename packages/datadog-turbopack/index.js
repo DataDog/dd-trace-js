@@ -59,10 +59,10 @@ async function addRules (turbopack = {}, projectDir = process.cwd()) {
       })
     }
     if (manifest.relativePathPattern) {
+      const relativeCondition = ['node', { not: 'foreign' }, { path: manifest.relativePathPattern }]
+      if (manifest.esmImportPattern) relativeCondition.push({ not: { content: manifest.esmImportPattern } })
       datadogRules.push({
-        condition: {
-          all: ['node', { not: 'foreign' }, { path: manifest.relativePathPattern }],
-        },
+        condition: { all: relativeCondition },
         loaders: [{ loader, options: { manifestHash: manifest.hash, manifestPath: manifest.path } }],
       })
     }

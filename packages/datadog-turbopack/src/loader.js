@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { create } = require('../../../vendor/dist/@apm-js-collab/code-transformer')
-const { isESMFile } = require('../../datadog-esbuild/src/utils')
+const { isESMFile, resolveModule } = require('../../datadog-esbuild/src/utils')
 const { rewrite } = require('../../datadog-instrumentations/src/helpers/rewriter')
 
 const CHANNEL = 'dd-trace:bundler:load'
@@ -30,6 +30,8 @@ module.exports = function loader (source) {
   }
   const target = manifest.targets[normalizePath(this.resourcePath)] ||
     getRelativeTarget(this.resourcePath, manifest.relativeTargets)
+  if (!target && !rewriteApplicationImports && !manifest.esmImportPattern?.test(source)) return source
+
   const esm = isESMFile(this.resourcePath)
 
   if (rewriteApplicationImports || (esm && manifest.esmImportPattern?.test(source))) {
@@ -89,7 +91,10 @@ function rewriteImports (source, resourcePath, targets, aliases = []) {
 
       if (!source || matchesAlias(source.value, aliases)) return
 
-      const resolved = resolveFrom(resourcePath, source.value)
+      let resolved
+      try {
+        resolved = normalizePath(resolveModule(source.value, path.dirname(resourcePath), true))
+      } catch {}
       const target = resolved && targets[resolved]
       if (!target?.esm || !target.proxyPath) return
 
@@ -189,15 +194,6 @@ function visit (node, callback) {
     if (Array.isArray(value)) value.forEach(child => visit(child, callback))
     else visit(value, callback)
   }
-}
-
-function resolveFrom (resourcePath, specifier) {
-  try {
-    return normalizePath(require.resolve(specifier, {
-      paths: [path.dirname(resourcePath)],
-      conditions: new Set(['import', 'node']),
-    }))
-  } catch {}
 }
 
 function relativeImport (from, to) {

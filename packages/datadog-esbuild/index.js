@@ -3,12 +3,12 @@
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
-const { pathToFileURL, fileURLToPath } = require('node:url')
+const { pathToFileURL } = require('node:url')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
-const { processModule, isESMFile } = require('./src/utils')
+const { processModule, isESMFile, resolveModule } = require('./src/utils')
 const log = require('./src/log')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
@@ -185,7 +185,7 @@ ${build.initialOptions.banner.js}`
 
     let fullPathToModule
     try {
-      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir, args.kind === 'import-statement')
+      fullPathToModule = resolveModule(args.path, args.resolveDir, args.kind === 'import-statement')
     } catch {
       log.warn('Unable to find "%s". Unless it\'s dead code this could cause a problem at runtime.', args.path)
       return
@@ -387,27 +387,5 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
         resolveDir: path.dirname(args.path),
       }
     }
-  })
-}
-
-// @see https://github.com/nodejs/node/issues/47000
-function dotFriendlyResolve (path, directory, usesImportStatement) {
-  if (path === '.') {
-    path = './'
-  } else if (path === '..') {
-    path = '../'
-  }
-  let conditions
-  if (usesImportStatement) {
-    conditions = new Set(['import', 'node'])
-  }
-
-  if (path.startsWith('file://')) {
-    path = fileURLToPath(path)
-  }
-  return require.resolve(path, {
-    paths: [directory],
-    // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
-    conditions,
   })
 }

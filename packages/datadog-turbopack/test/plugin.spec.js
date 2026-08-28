@@ -382,7 +382,7 @@ describe('datadog-turbopack configuration', () => {
     assert.match(realpath(target), rule.condition.all[2].path)
   })
 
-  it('isolates artifacts between concurrent manifest generations', async () => {
+  it('reuses artifacts between identical manifest generations', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
     directories.push(directory)
     fs.writeFileSync(path.join(directory, 'package.json'), '{}')
@@ -399,8 +399,8 @@ describe('datadog-turbopack configuration', () => {
     const firstTarget = Object.values(firstTargets).find(target => target.name === 'ai')
     const secondTarget = Object.values(secondTargets).find(target => target.name === 'ai')
 
-    assert.notEqual(first.path, second.path)
-    assert.notEqual(firstTarget.proxyPath, secondTarget.proxyPath)
+    assert.equal(first.path, second.path)
+    assert.equal(firstTarget.proxyPath, secondTarget.proxyPath)
     assert.ok(fs.existsSync(firstTarget.proxyPath))
     assert.ok(fs.existsSync(secondTarget.proxyPath))
   })

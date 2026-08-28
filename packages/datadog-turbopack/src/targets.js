@@ -4,7 +4,7 @@ const fs = require('node:fs/promises')
 const fsSync = require('node:fs')
 const Module = require('node:module')
 const path = require('node:path')
-const { createHash } = require('node:crypto')
+const { createHash, randomUUID } = require('node:crypto')
 
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
 const hooks = require('../../datadog-instrumentations/src/helpers/hooks')
@@ -14,7 +14,7 @@ const {
   matchVersion,
 } = require('../../datadog-instrumentations/src/helpers/instrumentation-utils')
 const { isBuiltinModuleName } = require('../../datadog-instrumentations/src/helpers/shared-utils')
-const { isESMFile, processModule } = require('../../datadog-esbuild/src/utils')
+const { isESMFile, processModule, resolveModule } = require('../../datadog-esbuild/src/utils')
 
 const CACHE_DIRECTORY = path.join('node_modules', '.cache', 'dd-trace', 'turbopack')
 
@@ -37,14 +37,17 @@ async function createManifest (projectDir) {
 
   if (targets.length === 0 && relativeTargets.length === 0) return {}
 
-  let artifactDirectory
+  const artifactHash = createHash('sha256')
+    .update(JSON.stringify({ targets, relativeTargets }))
+    .digest('hex')
+    .slice(0, 16)
   try {
     await fs.mkdir(cacheDirectory, { recursive: true })
-    artifactDirectory = await fs.mkdtemp(path.join(cacheDirectory, 'build-'))
+    await fs.mkdir(path.join(cacheDirectory, `build-${artifactHash}`), { recursive: true })
   } catch {
     return {}
   }
-  const realCacheDirectory = normalizePath(artifactDirectory)
+  const realCacheDirectory = normalizePath(path.join(cacheDirectory, `build-${artifactHash}`))
 
   for (const [index, target] of targets.entries()) {
     const entry = {
@@ -60,7 +63,7 @@ async function createManifest (projectDir) {
       try {
         // Proxies are build-time artifacts; preserve source order for stable paths.
         // eslint-disable-next-line no-await-in-loop
-        await fs.writeFile(proxyPath, await createEsmProxy(
+        await writeFileAtomically(proxyPath, await createEsmProxy(
           target.path, proxyPath, target.name, target.specifier, target.version, target.moduleBaseDir
         ))
       } catch {
@@ -77,7 +80,7 @@ async function createManifest (projectDir) {
   const manifestPath = path.join(realCacheDirectory, 'manifest.json')
   const manifest = JSON.stringify({ relativeTargets, targets: manifestTargets })
   try {
-    await fs.writeFile(manifestPath, manifest)
+    await writeFileAtomically(manifestPath, manifest)
   } catch {
     return {}
   }
@@ -133,7 +136,7 @@ function getTargets (appRequire, disabledInstrumentations = new Set(), projectDi
     const packageRoots = [...(packageRootsByName.get(name) ?? [])]
     if (packageRoots.length === 0) {
       try {
-        const entrypoint = resolveImport(appRequire, name)
+        const entrypoint = resolveModule(name, undefined, true, appRequire.resolve)
         const packageRoot = findPackageRoot(entrypoint)
         if (packageRoot) packageRoots.push(packageRoot)
       } catch {
@@ -323,22 +326,27 @@ function findNodeModulesRoot (packageRoot) {
 function resolvePackageEntrypoint (packageRoot, name) {
   const packageRequire = createPackageRequire(packageRoot)
   try {
-    return packageRequire.resolve(name, { conditions: new Set(['import', 'node']) })
+    return resolveModule(name, undefined, true, packageRequire.resolve)
   } catch {
-    return resolveImport(Module.createRequire(path.join(packageRoot, 'package.json')), '.')
+    return resolveModule('.', undefined, true, Module.createRequire(path.join(packageRoot, 'package.json')).resolve)
   }
 }
 
 /**
- * Resolves with import conditions so an ESM package uses the same entrypoint
- * as a Turbopack Node bundle instead of the CommonJS require entrypoint.
+ * Publishes a generated artifact without exposing a partially written file.
  *
- * @param {Function & { resolve: Function }} appRequire
- * @param {string} specifier
- * @returns {string}
+ * @param {string} file
+ * @param {string} content
+ * @returns {Promise<void>}
  */
-function resolveImport (appRequire, specifier) {
-  return appRequire.resolve(specifier, { conditions: new Set(['import', 'node']) })
+async function writeFileAtomically (file, content) {
+  const temporaryFile = `${file}.${randomUUID()}`
+  try {
+    await fs.writeFile(temporaryFile, content)
+    await fs.rename(temporaryFile, file)
+  } finally {
+    await fs.rm(temporaryFile, { force: true }).catch(() => {})
+  }
 }
 
 /**

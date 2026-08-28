@@ -70,9 +70,38 @@ function isBareSpecifier (specifier) {
   }
 }
 
+/**
+ * Resolves a module with the conditions used by an import when requested.
+ *
+ * @param {string} specifier
+ * @param {string|undefined} directory
+ * @param {boolean} [usesImportStatement]
+ * @param {Function} [resolver]
+ * @returns {string}
+ */
+function resolveModule (specifier, directory, usesImportStatement = false, resolver = require.resolve) {
+  // @see https://github.com/nodejs/node/issues/47000
+  if (specifier === '.') {
+    specifier = './'
+  } else if (specifier === '..') {
+    specifier = '../'
+  }
+
+  if (specifier.startsWith('file://')) {
+    specifier = fileURLToPath(specifier)
+  }
+
+  const options = {}
+  if (directory) options.paths = [directory]
+  if (usesImportStatement) options.conditions = new Set(['import', 'node'])
+
+  // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
+  return resolver(specifier, options)
+}
+
 function resolve (specifier, context) {
   // This comes from an import, that is why import makes preference
-  const conditions = ['import']
+  const conditions = new Set(['import'])
 
   if (specifier.startsWith('file://')) {
     specifier = fileURLToPath(specifier)
@@ -287,4 +316,5 @@ function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
 module.exports = {
   processModule,
   isESMFile,
+  resolveModule,
 }
