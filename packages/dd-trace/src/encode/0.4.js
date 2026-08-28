@@ -12,6 +12,12 @@ const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 // strings this long (events JSON, stack traces, large query bodies) — they
 // are unique per span, so the cache hit rate stays near zero anyway.
 const STRING_CACHE_BYPASS_LIMIT = 1024
+// Cross-payload entries retain their encoded bytes and source string. Promote
+// only consecutive repeats, and cap both generations so cardinality cannot
+// turn the cache into unbounded process-lifetime state.
+const CROSS_PAYLOAD_CACHE_LIMIT = 256
+const CROSS_PAYLOAD_CANDIDATE_LIMIT = 512
+const CROSS_PAYLOAD_STRING_LIMIT = 256
 
 // Pre-encoded static keys + value-prefix bytes; the hot encode loop emits
 // each via one Uint8Array.set instead of routing through the string cache.
@@ -233,6 +239,12 @@ function lazyEncodedTraceBufferLogger (bytes, start, end) {
 }
 
 class AgentEncoder {
+  #crossPayloadStringMap
+  #crossPayloadStringCount = 0
+  #previousPayloadStrings
+  #payloadStrings
+  #payloadStringCount = 0
+
   #limit
   #writer
   #config
@@ -464,13 +476,18 @@ class AgentEncoder {
   #refreshStringCache () {
     const newBuffer = this._stringBytes.buffer
     const stringMap = this._stringMap
+    const crossPayloadStringMap = this.#crossPayloadStringMap
     for (const key of Object.keys(stringMap)) {
       const old = stringMap[key]
+      if (crossPayloadStringMap?.[key] === old) continue
       stringMap[key] = newBuffer.subarray(old.byteOffset, old.byteOffset + old.length)
     }
   }
 
   _reset () {
+    this.#previousPayloadStrings = this.#payloadStrings
+    this.#payloadStrings = undefined
+    this.#payloadStringCount = 0
     this._traceCount = 0
     this._traceBytes.reset()
     this._stringCount = 0
@@ -541,14 +558,40 @@ class AgentEncoder {
     bytes.buffer.set(entry, offset)
   }
 
+  /**
+   * @param {string} value
+   */
   _cacheString (value) {
     let entry = this._stringMap[value]
     if (entry === undefined) {
+      entry = this.#crossPayloadStringMap?.[value]
+      if (entry !== undefined) {
+        this._stringMap[value] = entry
+        return entry
+      }
+
       this._stringCount++
       const start = this._stringBytes.length
       const written = this._stringBytes.write(value)
       entry = this._stringBytes.buffer.subarray(start, start + written)
       this._stringMap[value] = entry
+
+      if (entry.length <= CROSS_PAYLOAD_STRING_LIMIT) {
+        const previousPayloadStrings = this.#previousPayloadStrings
+        const repeated = previousPayloadStrings?.[value] !== undefined
+
+        if (repeated && this.#crossPayloadStringCount < CROSS_PAYLOAD_CACHE_LIMIT) {
+          entry = Buffer.from(entry)
+          this.#crossPayloadStringMap ??= Object.create(null)
+          this.#crossPayloadStringMap[value] = entry
+          this.#crossPayloadStringCount++
+          this._stringMap[value] = entry
+        } else if (!repeated && this.#payloadStringCount < CROSS_PAYLOAD_CANDIDATE_LIMIT) {
+          this.#payloadStrings ??= Object.create(null)
+          this.#payloadStrings[value] = true
+          this.#payloadStringCount++
+        }
+      }
     }
     return entry
   }

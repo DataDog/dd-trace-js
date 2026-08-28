@@ -166,6 +166,115 @@ describe('encode', () => {
       assert.strictEqual(payload[4], 0)
     })
 
+    it('should reuse encoded short strings across payloads without changing the wire', () => {
+      const value = 'stable-across-payloads'
+      data[0].meta = { stable: value }
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      encoder.encode(data)
+      const first = encoder.makePayload()
+      encoder.encode(data)
+      const second = encoder.makePayload()
+      encoder.encode(data)
+      const third = encoder.makePayload()
+
+      assert.deepStrictEqual(second, first)
+      assert.deepStrictEqual(third, first)
+      assert.strictEqual(write.withArgs(value).callCount, 2)
+    })
+
+    it('should only promote strings repeated in consecutive payloads', () => {
+      const value = 'non-consecutive-value'
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      encoder._cacheString(value)
+      encoder.reset()
+      encoder._cacheString('intervening-value')
+      encoder.reset()
+      encoder._cacheString(value)
+      encoder.reset()
+      encoder._cacheString(value)
+      encoder.reset()
+      encoder._cacheString(value)
+
+      assert.strictEqual(write.withArgs(value).callCount, 3)
+    })
+
+    it('should bound cross-payload entries by their encoded UTF-8 byte length', () => {
+      const accepted = 'a'.repeat(251)
+      const rejected = 'é'.repeat(126)
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      for (let payload = 0; payload < 3; payload++) {
+        encoder._cacheString(accepted)
+        encoder._cacheString(rejected)
+        encoder.reset()
+      }
+
+      assert.strictEqual(write.withArgs(accepted).callCount, 2)
+      assert.strictEqual(write.withArgs(rejected).callCount, 3)
+    })
+
+    it('should retain at most 256 encoded strings across payloads', () => {
+      const accepted = []
+      for (let i = 0; i < 255; i++) {
+        accepted.push(`retained-${i}`)
+      }
+      const rejected = 'retained-256'
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      for (const value of accepted) {
+        encoder._cacheString(value)
+      }
+      encoder._cacheString(rejected)
+      encoder.reset()
+      for (const value of accepted) {
+        encoder._cacheString(value)
+      }
+      encoder._cacheString(rejected)
+      encoder.reset()
+      encoder._cacheString(accepted[254])
+      encoder._cacheString(rejected)
+
+      assert.strictEqual(write.withArgs(accepted[254]).callCount, 2)
+      assert.strictEqual(write.withArgs(rejected).callCount, 3)
+    })
+
+    it('should track at most 512 cross-payload candidates', () => {
+      const candidates = []
+      for (let i = 0; i < 513; i++) {
+        candidates.push(`candidate-${i}`)
+      }
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      encoder.reset()
+      for (const value of candidates) {
+        encoder._cacheString(value)
+      }
+      encoder.reset()
+      encoder._cacheString(candidates[511])
+      encoder._cacheString(candidates[512])
+      encoder.reset()
+      encoder._cacheString(candidates[511])
+      encoder._cacheString(candidates[512])
+
+      assert.strictEqual(write.withArgs(candidates[511]).callCount, 2)
+      assert.strictEqual(write.withArgs(candidates[512]).callCount, 3)
+    })
+
+    it('should cache special object keys safely across payloads', () => {
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      for (let payload = 0; payload < 3; payload++) {
+        encoder._cacheString('__proto__')
+        encoder._cacheString('constructor')
+        encoder.reset()
+      }
+
+      assert.strictEqual(write.withArgs('__proto__').callCount, 2)
+      assert.strictEqual(write.withArgs('constructor').callCount, 2)
+    })
+
     it('should log adding an encoded trace to the buffer if enabled', () => {
       const debugConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false, DD_TRACE_ENCODING_DEBUG: true })
       const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
@@ -241,6 +350,15 @@ describe('encode', () => {
       // entry is left pointing at a now-orphaned ArrayBuffer; the public
       // surface does not expose this retention directly.
       const longSuffix = 'x'.repeat(80)
+      const retainedStrings = new Set([
+        '',
+        'name',
+        'resource',
+        'service',
+        'foo',
+        `k_0_${longSuffix}`,
+        `v_0_${longSuffix}`,
+      ])
       const dataToEncode = []
       for (let i = 0; i < 30000; i++) {
         dataToEncode.push({
@@ -258,6 +376,10 @@ describe('encode', () => {
           duration: 1,
         })
       }
+      encoder.encode([dataToEncode[0]])
+      encoder.makePayload()
+      encoder.encode([dataToEncode[0]])
+      encoder.makePayload()
       const initialBuffer = encoder._stringBytes.buffer
 
       encoder.encode(dataToEncode)
@@ -266,7 +388,12 @@ describe('encode', () => {
       assert.notStrictEqual(initialBuffer, finalBuffer, '_stringBytes must have resized for this test to be meaningful')
       let staleEntries = 0
       for (const key of Object.keys(encoder._stringMap)) {
-        if (encoder._stringMap[key].buffer !== finalBuffer.buffer) staleEntries++
+        const buffer = encoder._stringMap[key].buffer
+        if (retainedStrings.has(key)) {
+          if (buffer === initialBuffer.buffer) staleEntries++
+        } else if (buffer !== finalBuffer.buffer) {
+          staleEntries++
+        }
       }
       assert.strictEqual(staleEntries, 0)
     })
