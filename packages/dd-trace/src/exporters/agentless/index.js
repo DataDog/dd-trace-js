@@ -5,7 +5,6 @@ const os = require('node:os')
 
 const log = require('../../log')
 const { entityId } = require('../common/docker')
-const tracerVersion = require('../../../../../package.json').version
 const Writer = require('./writer')
 const { computeIntakeUrl } = require('./intake')
 
@@ -41,11 +40,8 @@ class AgentlessExporter {
     const metadata = {
       hostname: os.hostname(),
       env: config.env,
-      languageName: 'nodejs',
-      languageVersion: process.version,
-      tracerVersion,
       runtimeID: config.tags?.['runtime-id'],
-      ...(entityId ? { containerID: entityId } : {}),
+      ...(entityId ? { containerId: entityId } : {}),
     }
 
     this._writer = new Writer({

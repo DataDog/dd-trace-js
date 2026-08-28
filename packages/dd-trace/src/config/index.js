@@ -622,11 +622,28 @@ class Config extends ConfigBase {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 
-    // Experimental agentless APM span intake
-    // When enabled, sends spans directly to Datadog intake without an agent
-    // TODO: Replace this with a proper configuration
-    const agentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessEnabled) {
+    if (this.DD_AGENTLESS_ENABLED) {
+      setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
+      setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
+      setAndTrack(this, 'llmobs.agentlessEnabled', true)
+      setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
+
+      setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
+      setAndTrack(this, 'runtimeMetrics.enabled', false)
+      setAndTrack(this, 'dsmEnabled', false)
+      setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+      setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
+
+      const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
+      setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
+      if (profilingExporters.length === 0) {
+        setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
+      }
+    }
+
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)

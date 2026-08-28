@@ -5079,16 +5079,66 @@ rules:
     })
   })
 
-  context('agentless APM span intake', () => {
+  context('agentless mode', () => {
     it('should not enable agentless exporter by default', () => {
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
     })
 
+    it('should configure all supported features for agentless mode', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'true'
+      process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+      process.env.DD_DATA_STREAMS_ENABLED = 'true'
+      process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+      process.env.DD_CRASHTRACKING_ENABLED = 'true'
+      process.env.DD_PROFILING_ENABLED = 'true'
+      process.env.DD_PROFILING_EXPORTERS = 'agent'
+      const config = getConfig()
+
+      assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
+      assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED, true)
+      assert.strictEqual(config.llmobs.agentlessEnabled, true)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
+      assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
+      assert.strictEqual(config.runtimeMetrics.enabled, false)
+      assert.strictEqual(config.dsmEnabled, false)
+      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, [])
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+    })
+
+    it('should preserve profiling when it does not use the Agent', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_PROFILING_ENABLED = 'true'
+      process.env.DD_PROFILING_EXPORTERS = 'file'
+      const config = getConfig()
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, ['file'])
+    })
+
+    for (const exporter of ['datadog', 'jest_worker']) {
+      it(`should preserve the Test Optimization ${exporter} exporter`, () => {
+        process.env.DD_AGENTLESS_ENABLED = 'true'
+        const config = getConfig({
+          isCiVisibility: true,
+          experimental: { exporter },
+        })
+
+        assert.strictEqual(config.experimental.exporter, exporter)
+      })
+    }
+
     it('should enable agentless exporter when _DD_APM_TRACING_AGENTLESS_ENABLED is true', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
       assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
     })
 
     it('should disable rate limiting when agentless is enabled', () => {

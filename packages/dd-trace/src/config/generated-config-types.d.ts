@@ -65,6 +65,7 @@ export interface GeneratedConfig {
   };
   dbmPropagationMode: "disabled" | "service" | "full" | "dynamic_service";
   DD_ACTION_EXECUTION_ID: string | undefined;
+  DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_API_KEY: string | undefined;
@@ -610,6 +611,7 @@ export interface GeneratedEnvVarConfig {
   DATADOG_API_KEY: string | undefined;
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENT_HOST: string;
+  DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_AI_GUARD_BLOCK: boolean;
