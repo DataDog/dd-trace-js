@@ -114,7 +114,11 @@ class PlaywrightPlugin extends CiPlugin {
       onDone(isModified)
     })
 
-    this.addSub('ci:playwright:session:start', ({ isFailureScreenshotEnabled, isFailureVideoEnabled }) => {
+    this.addSub('ci:playwright:session:start', ({
+      isFailureScreenshotEnabled,
+      isFailureVideoEnabled,
+      isFailureVideoUploadSupported,
+    }) => {
       this.#isFinalizingAfterError = false
       const testOptimizationConfig = getConfig().testOptimization
 
@@ -125,7 +129,13 @@ class PlaywrightPlugin extends CiPlugin {
           'Set Playwright use.screenshot to "only-on-failure", "on-first-failure", or "on".'
         )
       }
-      if (testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED && !isFailureVideoEnabled) {
+      if (testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED && !isFailureVideoUploadSupported) {
+        log.warn(
+          '%s %s',
+          'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video upload requires Playwright 1.38.0 or later.',
+          'Upgrade Playwright to enable failure video uploads.'
+        )
+      } else if (testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED && !isFailureVideoEnabled) {
         log.warn(
           '%s %s',
           'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video capture is disabled.',
@@ -134,7 +144,11 @@ class PlaywrightPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:playwright:session:configuration', ({ isFailureScreenshotEnabled, isFailureVideoEnabled }) => {
+    this.addSub('ci:playwright:session:configuration', ({
+      isFailureScreenshotEnabled,
+      isFailureVideoEnabled,
+      isFailureVideoUploadSupported,
+    }) => {
       const testOptimizationConfig = getConfig().testOptimization
 
       if (testOptimizationConfig.DD_TEST_FAILURE_SCREENSHOTS_ENABLED && isFailureScreenshotEnabled &&
@@ -146,6 +160,7 @@ class PlaywrightPlugin extends CiPlugin {
         )
       }
       if (testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED && isFailureVideoEnabled &&
+        isFailureVideoUploadSupported &&
         !this.tracer._exporter?.canUploadTestVideos?.()) {
         log.warn(
           '%s %s',

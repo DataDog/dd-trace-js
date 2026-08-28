@@ -58,6 +58,8 @@ const SCREENSHOT_UPLOAD_UNSUPPORTED_WARNING =
   'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot upload is not supported'
 const VIDEO_CAPTURE_DISABLED_WARNING =
   'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video capture is disabled.'
+const VIDEO_UPLOAD_UNSUPPORTED_VERSION_WARNING =
+  'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video upload requires Playwright 1.38.0 or later.'
 
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -74,6 +76,7 @@ versions.forEach((version) => {
 
   // TODO: Remove this once we drop suppport for v5
   const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
+  const contextOldVersions = satisfies(version, '<1.38.0') ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
@@ -131,6 +134,35 @@ versions.forEach((version) => {
       const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
       assert.strictEqual(exitCode, 0)
     }
+
+    contextOldVersions('failure videos', () => {
+      it('warns that video uploads require Playwright 1.38.0 or later', async (receiver, run) => {
+        let testOutput = ''
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+              PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              DD_TRACE_DEBUG: 'true',
+              DD_TRACE_LOG_LEVEL: 'warn',
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        const [exitCode] = await once(proc, 'exit')
+
+        assert.strictEqual(exitCode, 0)
+        const warningCount = testOutput.split(VIDEO_UPLOAD_UNSUPPORTED_VERSION_WARNING).length - 1
+        assert.strictEqual(warningCount, 1, testOutput)
+        assert.ok(!testOutput.includes(VIDEO_CAPTURE_DISABLED_WARNING), testOutput)
+      })
+    })
 
     it('reports the session when a custom reporter throws', async (receiver, run) => {
       const proc = run(

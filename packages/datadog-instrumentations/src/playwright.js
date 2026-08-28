@@ -136,6 +136,7 @@ let rootDir = ''
 let sessionProjects = []
 
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
+const MINIMUM_FAILURE_VIDEO_UPLOAD_VERSION_RANGE = '>=1.38.0'
 const EFD_RETRY_COUNT_REQUEST = 'ddEfdRetryCountRequest'
 const EFD_RETRY_COUNT_RESPONSE = 'ddEfdRetryCountResponse'
 const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
@@ -1314,6 +1315,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const projects = getProjectsFromRunner(this, config)
     const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
     const isFailureVideoEnabled = isFailureVideoCaptureEnabled(projects)
+    const isFailureVideoUploadSupported = satisfies(playwrightVersion, MINIMUM_FAILURE_VIDEO_UPLOAD_VERSION_RANGE)
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
     testSessionStartCh.publish({
@@ -1322,6 +1324,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       rootDir,
       isFailureScreenshotEnabled,
       isFailureVideoEnabled,
+      isFailureVideoUploadSupported,
     })
 
     try {
@@ -1348,7 +1351,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       log.error('Playwright session start error', e)
     }
 
-    testSessionConfigurationCh.publish({ isFailureScreenshotEnabled, isFailureVideoEnabled })
+    testSessionConfigurationCh.publish({
+      isFailureScreenshotEnabled,
+      isFailureVideoEnabled,
+      isFailureVideoUploadSupported,
+    })
 
     const isTestOptimizationSupported = satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)
     const shouldGetKnownTests = isKnownTestsEnabled && isTestOptimizationSupported
