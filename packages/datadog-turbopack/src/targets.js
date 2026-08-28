@@ -236,57 +236,58 @@ function addTargets (targets, packageRoot, name, entries) {
 function findPackageRoots (projectDir, names) {
   const packageRoots = new Map()
   const pending = [path.join(projectDir, 'node_modules')]
+  for (
+    let directory = path.dirname(projectDir);
+    directory !== path.dirname(directory);
+    directory = path.dirname(directory)
+  ) {
+    pending.push(path.join(directory, 'node_modules'))
+  }
   const seen = new Set()
 
   while (pending.length > 0) {
     const nodeModules = pending.pop()
-    let directory
+    let directory = nodeModules
     try {
-      directory = normalizePath(nodeModules)
+      directory = normalizePath(directory)
     } catch {
       continue
     }
     if (seen.has(directory)) continue
     seen.add(directory)
 
-    let entries
-    try {
-      entries = fsSync.readdirSync(directory, { withFileTypes: true })
-    } catch {
-      continue
-    }
-    for (const entry of entries) {
-      if (entry.name === '.bin') continue
-      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
-      const entryPath = path.join(directory, entry.name)
-      if (entry.name.startsWith('@')) {
-        addScopedPackageRoots(entryPath, names, packageRoots, pending)
-      } else {
-        addPackageRoot(entryPath, entry.name, names, packageRoots, pending)
-      }
+    for (const [packageName, packageRoot] of getPackageEntries(directory)) {
+      addPackageRoot(packageRoot, packageName, names, packageRoots, pending)
     }
   }
 
   return packageRoots
 }
 
-function addScopedPackageRoots (scopePath, names, packageRoots, pending) {
-  let entries
+function getPackageEntries (directory) {
+  const entries = readDirectory(directory)
+  return entries.flatMap(entry => {
+    if (entry.name === '.bin' || !isPackageDirectory(entry)) return []
+
+    const entryPath = path.join(directory, entry.name)
+    if (!entry.name.startsWith('@')) return [[entry.name, entryPath]]
+
+    return readDirectory(entryPath)
+      .filter(isPackageDirectory)
+      .map(child => [`${entry.name}/${child.name}`, path.join(entryPath, child.name)])
+  })
+}
+
+function readDirectory (directory) {
   try {
-    entries = fsSync.readdirSync(scopePath, { withFileTypes: true })
+    return fsSync.readdirSync(directory, { withFileTypes: true })
   } catch {
-    return
+    return []
   }
-  for (const entry of entries) {
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
-    addPackageRoot(
-      path.join(scopePath, entry.name),
-      `${path.basename(scopePath)}/${entry.name}`,
-      names,
-      packageRoots,
-      pending
-    )
-  }
+}
+
+function isPackageDirectory (entry) {
+  return entry.isDirectory() || entry.isSymbolicLink()
 }
 
 function addPackageRoot (packageRoot, packageName, names, packageRoots, pending) {
@@ -420,9 +421,11 @@ channel('dd-trace:bundler:load').publish({
 }
 
 function relativeImport (from, to) {
-  let value = path.relative(from, to).replaceAll('\\', '/')
-  if (!value.startsWith('.')) value = `./${value}`
-  return value
+  const value = path.relative(from, to)
+  if (path.isAbsolute(value)) throw new Error('Cannot create a relative import across filesystem volumes')
+
+  const normalized = value.replaceAll('\\', '/')
+  return normalized.startsWith('.') ? normalized : `./${normalized}`
 }
 
 function normalizePath (value) {

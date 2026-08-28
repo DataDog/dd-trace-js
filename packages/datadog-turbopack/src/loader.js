@@ -199,9 +199,11 @@ function resolveFrom (resourcePath, specifier) {
 }
 
 function relativeImport (from, to) {
-  let value = path.relative(from, to).replaceAll('\\', '/')
-  if (!value.startsWith('.')) value = `./${value}`
-  return value
+  const value = path.relative(from, to)
+  if (path.isAbsolute(value)) throw new Error('Cannot create a relative import across filesystem volumes')
+
+  const normalized = value.replaceAll('\\', '/')
+  return normalized.startsWith('.') ? normalized : `./${normalized}`
 }
 
 function normalizePath (value) {

@@ -312,6 +312,21 @@ describe('datadog-turbopack configuration', () => {
     assert.equal(targets[realpath(target)].name, 'ioredis')
   })
 
+  it('discovers supported packages hoisted above the application directory', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    const app = path.join(directory, 'apps', 'web')
+    fs.mkdirSync(app, { recursive: true })
+    fs.writeFileSync(path.join(app, 'package.json'), '{}')
+    const packagePath = createPackageIn(directory, 'ioredis', { main: 'index.js', version: '5.0.0' })
+    const target = write(packagePath, 'index.js', 'module.exports = {}')
+
+    const manifest = await createManifest(app)
+    const targets = JSON.parse(fs.readFileSync(manifest.path, 'utf8')).targets
+
+    assert.equal(targets[realpath(target)].name, 'ioredis')
+  })
+
   it('discovers dependencies beside pnpm virtual-store packages', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
     directories.push(directory)

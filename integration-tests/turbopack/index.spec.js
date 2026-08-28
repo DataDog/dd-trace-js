@@ -42,18 +42,20 @@ describe('Turbopack integration', () => {
     const assertCjsTrace = agent.assertMessageReceived(({ payload }) => {
       assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
       assert.strictEqual(checkSpansForServiceName(payload, 'express.request'), true)
+      assert.strictEqual(checkSpansForServiceName(payload, 'generateText'), true)
     }, 10_000, 1, true)
 
     const response = await axios.get(`${proc.url}/api/cjs`)
-    assert.deepStrictEqual(response.data, { dependency: 'express' })
+    assert.deepStrictEqual(response.data, { dependency: 'express', text: 'ok' })
     await assertCjsTrace
 
     const assertEsmTrace = agent.assertMessageReceived(({ payload }) => {
       assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
+      assert.strictEqual(checkSpansForServiceName(payload, 'generateText'), true)
     }, 10_000, 1, true)
 
     const esmResponse = await axios.get(`${proc.url}/api/esm`)
-    assert.deepStrictEqual(esmResponse.data, { dependency: 'ai' })
+    assert.deepStrictEqual(esmResponse.data, { dependency: 'ai', text: 'ok' })
     await assertEsmTrace
   })
 })
