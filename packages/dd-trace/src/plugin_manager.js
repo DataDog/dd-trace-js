@@ -40,6 +40,9 @@ require('../../datadog-instrumentations')
 if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
   // instrument lambda environment
   require('./lambda')
+  // Lambda plugin doesn't use addHook (it wraps via handler-wrapper or Module._load),
+  // so it won't publish to the load channel. Register it explicitly.
+  maybeEnable(plugins.lambda)
 }
 
 function maybeEnable (Plugin) {
