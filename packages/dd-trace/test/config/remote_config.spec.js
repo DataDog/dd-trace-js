@@ -141,7 +141,7 @@ describe('Tracing Remote Config', () => {
         sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_ENABLED: 'true' })
       })
 
-      it('should drop non-string, non-boolean, non-number allowlisted values instead of forwarding them', () => {
+      it('should drop non-string allowlisted values instead of forwarding them', () => {
         enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
@@ -161,31 +161,6 @@ describe('Tracing Remote Config', () => {
         handler(transaction)
 
         sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.5' })
-      })
-
-      it('should normalize boolean and number allowlisted values to strings', () => {
-        enable(rc, config, onConfigUpdated)
-
-        const handler = batchHandlers.get('APM_TRACING')
-
-        const transaction = createTransaction([
-          {
-            id: 'config-1',
-            file: {
-              sdk_config: sdkConfigPayload({
-                DD_TRACE_ENABLED: false,
-                DD_TRACE_SAMPLE_RATE: 0.5,
-              }),
-            },
-          },
-        ])
-
-        handler(transaction)
-
-        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, {
-          DD_TRACE_ENABLED: 'false',
-          DD_TRACE_SAMPLE_RATE: '0.5',
-        })
       })
 
       it('should ignore malformed entries in the sdk_config array', () => {

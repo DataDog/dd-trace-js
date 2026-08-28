@@ -106,16 +106,12 @@ class RCClientManager {
       for (const entry of entries) {
         if (entry == null || !sdkConfigAllowlist.has(entry.key)) continue
 
-        // Env-style parsers (e.g. BOOLEAN, DECIMAL) assume a string and don't guard against
-        // null/non-string input the way programmatic option coercion does, so normalize
-        // booleans/numbers to their string form and drop everything else (e.g. null) here,
-        // rather than let it reach setRemoteConfig and crash or silently miscoerce (Number(null) === 0).
+        // The backend's SDKConfigEntry.value is typed as a string with no custom unmarshaling, so a
+        // non-string value can never reach this code from a real RC payload; drop it defensively only
+        // for malformed entries (e.g. null) rather than let it reach setRemoteConfig.
         const { value } = entry
-        const type = typeof value
-        if (type === 'string') {
+        if (typeof value === 'string') {
           sdkConfig[entry.key] = value
-        } else if (type === 'boolean' || type === 'number') {
-          sdkConfig[entry.key] = String(value)
         }
       }
     }
