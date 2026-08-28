@@ -16,6 +16,7 @@ ruleTester.run('eslint-no-call-result-invocation', /** @type {import('eslint').R
     '(function () { return value })()',
     '(async () => value)()',
     'factory().method()',
+    'const method = "call"; factory()[method](owner, value)',
     'consume(factory())',
     'const run = factory().bind(owner)',
   ],
