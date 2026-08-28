@@ -53,10 +53,12 @@ function getTestConfigurationTags (tags) {
   }, {})
 }
 
+function isTestSessionEvent (span) {
+  return span.type === 'test_session_end' || span.type === 'test_suite_end' || span.type === 'test_module_end'
+}
+
 function getIsTestSessionTrace (trace) {
-  return trace.some(span =>
-    span.type === 'test_session_end' || span.type === 'test_suite_end' || span.type === 'test_module_end'
-  )
+  return trace.some(isTestSessionEvent)
 }
 
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
@@ -416,6 +418,11 @@ class CiVisibilityExporter extends BufferingExporter {
     }
     const isTestSessionTrace = getIsTestSessionTrace(trace)
     if (!this.canReportSessionTraces() && isTestSessionTrace) {
+      const testTrace = []
+      for (const span of trace) {
+        if (!isTestSessionEvent(span)) testTrace.push(span)
+      }
+      if (testTrace.length > 0) this._export(testTrace)
       return
     }
     if (this._export(trace, undefined, undefined, isTestSessionTrace) === false && isTestSessionTrace) {

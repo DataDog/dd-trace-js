@@ -861,6 +861,24 @@ describe('CI Visibility Exporter', () => {
         )
         sinon.assert.notCalled(ciVisibilityExporter._writer.append)
       })
+
+      for (const sessionEventType of ['test_suite_end', 'test_module_end', 'test_session_end']) {
+        it(`should export test events from a trace containing ${sessionEventType}`, () => {
+          const writer = {
+            append: sinon.spy(),
+            flush: sinon.spy(),
+            setUrl: sinon.spy(),
+          }
+          const testEvent = { type: 'test' }
+          const ciVisibilityExporter = new CiVisibilityExporter({ url })
+          ciVisibilityExporter._isInitialized = true
+          ciVisibilityExporter._writer = writer
+
+          ciVisibilityExporter.export([testEvent, { type: sessionEventType }])
+
+          sinon.assert.calledOnceWithExactly(writer.append, [testEvent])
+        })
+      }
     })
     context('is initialized and can use CI Vis protocol', () => {
       it('should export session traces', () => {
