@@ -77,6 +77,36 @@ describe('Test Visibility DI Writer', () => {
       })
     })
 
+    it('reports enriched telemetry when a payload is dropped', (done) => {
+      const error = Object.assign(new Error('reset'), { code: 'ECONNRESET' })
+      const incrementCountMetric = sinon.stub()
+      const request = sinon.stub().yieldsAsync(error, null, undefined)
+      const TestOptimizationLogsWriter = proxyquire(
+        '../../../../src/ci-visibility/exporters/agentless/di-logs-writer',
+        {
+          '../request': request,
+          '../../../ci-visibility/telemetry': { incrementCountMetric },
+          '../../../config': () => ({ DD_API_KEY: '1' }),
+        }
+      )
+      const logsWriter = new TestOptimizationLogsWriter({ url: 'http://www.example.com' })
+
+      logsWriter.append({ message: 'test' })
+      logsWriter.flush(() => {
+        sinon.assert.calledWithExactly(
+          incrementCountMetric,
+          'endpoint_payload.requests_errors',
+          { endpoint: 'di_logs', statusCode: undefined, errorType: 'ECONNRESET' }
+        )
+        sinon.assert.calledWithExactly(
+          incrementCountMetric,
+          'endpoint_payload.dropped',
+          { endpoint: 'di_logs', statusCode: undefined, errorType: 'ECONNRESET' }
+        )
+        done()
+      })
+    })
+
     it('logs an error if the request fails', (done) => {
       const logErrorSpy = sinon.spy(log, 'error')
 
