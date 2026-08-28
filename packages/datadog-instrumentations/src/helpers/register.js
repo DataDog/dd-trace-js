@@ -11,9 +11,8 @@ const Hook = require('./hook')
 const {
   filename,
   getDisabledInstrumentations,
-  matchVersion,
+  matchesInstrumentation,
 } = require('./instrumentation-utils')
-const { isRelativeRequire } = require('./shared-utils')
 const rewriter = require('./rewriter')
 
 const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
@@ -87,21 +86,9 @@ for (const name of names) {
       instrumentedNodeModules.set(name, moduleExports)
     }
 
-    for (const { file, versions, hook, filePattern, patchDefault } of instrumentations[name]) {
-      const fullFilename = filename(name, file)
-
-      let matchesFile = moduleName === fullFilename
-
-      if (!matchesFile && isRelativeRequire(name)) matchesFile = true
-
-      const fullFilePattern = filePattern && filename(name, filePattern)
-      if (fullFilePattern) {
-        // Some libraries include a hash in their filenames when installed,
-        // so our instrumentation has to include a '.*' to match them for more than a single version.
-        matchesFile ||= new RegExp(fullFilePattern).test(moduleName)
-      }
-
-      if (matchesFile && matchVersion(moduleVersion, versions)) {
+    for (const instrumentation of instrumentations[name]) {
+      if (matchesInstrumentation(name, moduleVersion, moduleName, instrumentation)) {
+        const { hook, patchDefault } = instrumentation
         // IITM invokes this callback for every module in the package. Only unwrap the namespace after its file and
         // version match, otherwise a default export from an unrelated internal module can replace that module.
         if (isIitm && patchDefault === !!moduleExports.default) {
@@ -168,5 +155,4 @@ module.exports = {
   filename,
   pathSepExpr,
   loadChannel,
-  matchVersion,
 }

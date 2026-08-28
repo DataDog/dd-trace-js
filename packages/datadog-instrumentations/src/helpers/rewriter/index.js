@@ -1,10 +1,12 @@
 'use strict'
 
-const { readFileSync } = require('fs')
-const { join } = require('path')
-const { pathToFileURL } = require('url')
+const { readFileSync } = require('node:fs')
+const { join } = require('node:path')
+const { pathToFileURL } = require('node:url')
+
 const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+const { BUNDLER_DC_GLOBAL } = require('../bundler-constants')
 const instrumentations = require('./instrumentations')
 const { getRewriteTarget } = require('./targets')
 const { awaitContextCallback, waitForAsyncEnd } = require('./transforms')
@@ -33,10 +35,80 @@ const moduleVersions = {}
 const disabled = new Set()
 const matcherCjs = create(instrumentations, dcPolyfillCjs)
 const matcherEsm = create(instrumentations, dcPolyfillEsm)
+const matcherBundler = create(instrumentations, 'node:diagnostics_channel')
 
-for (const matcher of [matcherCjs, matcherEsm]) {
+for (const matcher of [matcherCjs, matcherEsm, matcherBundler]) {
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
+}
+matcherBundler.addTransform('tracingChannelImport', addBundlerTracingChannelImport)
+
+/**
+ * Reuses the process-wide polyfill installed by bundler-register while keeping
+ * the native diagnostics channel as the inactive-tracer fallback.
+ *
+ * @param {{ transforms: { defaults: { tracingChannelImport: Function } } }} state
+ * @param {{ body: object[] }} program
+ */
+function addBundlerTracingChannelImport (state, program) {
+  const previousLength = program.body.length
+  state.transforms.defaults.tracingChannelImport(state, program)
+  if (program.body.length === previousLength) return
+
+  const index = program.body.findIndex(isNativeDcDeclaration)
+  const statement = program.body[index]
+  const identifier = statement.type === 'ImportDeclaration'
+    ? statement.specifiers[0].local
+    : statement.declarations[0].id
+
+  identifier.name = 'tr_ch_apm_native_dc'
+  program.body.splice(index + 1, 0, createBundlerDcDeclaration())
+}
+
+/**
+ * @param {object} statement
+ * @returns {boolean}
+ */
+function isNativeDcDeclaration (statement) {
+  if (statement.type === 'ImportDeclaration') {
+    return statement.source?.value === 'node:diagnostics_channel'
+  }
+  const declaration = statement.declarations?.[0]
+  return declaration?.init?.arguments?.[0]?.value === 'node:diagnostics_channel'
+}
+
+/**
+ * @returns {object}
+ */
+function createBundlerDcDeclaration () {
+  return {
+    type: 'VariableDeclaration',
+    declarations: [{
+      type: 'VariableDeclarator',
+      id: { type: 'Identifier', name: 'tr_ch_apm_dc' },
+      init: {
+        type: 'LogicalExpression',
+        operator: '??',
+        left: {
+          type: 'MemberExpression',
+          computed: true,
+          object: { type: 'Identifier', name: 'globalThis' },
+          property: {
+            type: 'CallExpression',
+            arguments: [{ type: 'Literal', value: BUNDLER_DC_GLOBAL }],
+            callee: {
+              type: 'MemberExpression',
+              computed: false,
+              object: { type: 'Identifier', name: 'Symbol' },
+              property: { type: 'Identifier', name: 'for' },
+            },
+          },
+        },
+        right: { type: 'Identifier', name: 'tr_ch_apm_native_dc' },
+      },
+    }],
+    kind: 'const',
+  }
 }
 
 // Keep the marker split: source-map scanners can read a contiguous token in
@@ -52,10 +124,41 @@ const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base6
  * @returns {string|Buffer|ArrayBuffer|Uint8Array}
  */
 function rewrite (content, filename, format, target) {
-  if (!content) return content
+  const { code, map } = rewriteWithMatcher(content, filename, format, target)
+  if (!map) return code
+
+  return code + '\n' + SOURCE_MAP_PREFIX + Buffer.from(map).toString('base64')
+}
+
+/**
+ * Rewrites source with a package specifier that bundlers can include in their
+ * output.
+ *
+ * @param {string|Buffer|ArrayBuffer|Uint8Array} content
+ * @param {string} filename
+ * @param {string} [format]
+ * @param {{ moduleName: string, filePath: string }} [target]
+ * @param {string|object} [sourceMap]
+ * @returns {{ code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }}
+ */
+function rewriteBundledWithSourceMap (content, filename, format, target, sourceMap) {
+  return rewriteWithMatcher(content, filename, format, target, sourceMap, matcherBundler)
+}
+
+/**
+ * @param {string|Buffer|ArrayBuffer|Uint8Array} content
+ * @param {string} filename
+ * @param {string} [format]
+ * @param {{ moduleName: string, filePath: string }} [target]
+ * @param {string|object} [sourceMap]
+ * @param {object} [bundlerMatcher]
+ * @returns {{ code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }}
+ */
+function rewriteWithMatcher (content, filename, format, target, sourceMap, bundlerMatcher) {
+  if (!content) return { code: content, map: sourceMap }
 
   target ||= getRewriteTarget(filename)
-  if (!target) return content
+  if (!target) return { code: content, map: sourceMap }
 
   filename = filename.replace('file://', '')
 
@@ -63,29 +166,22 @@ function rewrite (content, filename, format, target) {
   const { moduleName, filePath } = target
   const version = getVersion(filename, filePath)
 
-  if (disabled.has(moduleName)) return content
+  if (disabled.has(moduleName)) return { code: content, map: sourceMap }
 
-  const matcher = moduleType === 'esm' ? matcherEsm : matcherCjs
+  const matcher = bundlerMatcher ?? (moduleType === 'esm' ? matcherEsm : matcherCjs)
   const transformer = matcher.getTransformer(moduleName, version, filePath)
 
-  if (!transformer) return content
+  if (!transformer) return { code: content, map: sourceMap }
 
   try {
     const source = getSourceText(content)
-
-    // TODO: pass existing sourcemap as input for remapping
-    const { code, map } = transformer.transform(source, moduleType)
-
-    if (!map) return code
-
-    const inlineMap = Buffer.from(map).toString('base64')
-
-    return code + '\n' + SOURCE_MAP_PREFIX + inlineMap
-  } catch (e) {
-    log.error(e)
+    const { code, map } = transformer.transform(source, moduleType, sourceMap)
+    return { code, map }
+  } catch (error) {
+    log.error(error)
   }
 
-  return content
+  return { code: content, map: sourceMap }
 }
 
 /** @typedef {{ buffer: ArrayBuffer | SharedArrayBuffer, byteLength: number, byteOffset: number }} BufferView */
@@ -124,4 +220,4 @@ function getVersion (filename, filePath) {
   return moduleVersions[basename]
 }
 
-module.exports = { rewrite, disable }
+module.exports = { rewrite, rewriteBundledWithSourceMap, disable }

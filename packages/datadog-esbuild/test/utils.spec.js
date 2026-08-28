@@ -75,6 +75,14 @@ describe('esbuild utils', () => {
       assert.strictEqual(isESMFile('/path/to/test.cjs'), false)
     })
 
+    it('should return true if the file has a .mts extension in a CommonJS package', () => {
+      assert.strictEqual(isESMFile('/path/to/test.mts', '/path/to/package.json', { type: 'commonjs' }), true)
+    })
+
+    it('should return false if the file has a .cts extension in an ESM package', () => {
+      assert.strictEqual(isESMFile('/path/to/test.cts', '/path/to/package.json', { type: 'module' }), false)
+    })
+
     it('should return true if the file is in a directory with a package.json that has a type of module', () => {
       assert.strictEqual(isESMFile('/path/to/test.js', '/path/to/package.json', { type: 'module' }), true)
     })

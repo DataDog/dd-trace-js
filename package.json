@@ -93,6 +93,7 @@
     "test:integration:electron": "mocha \"integration-tests/electron/*.spec.js\"",
     "test:integration:esbuild": "mocha --timeout 60000 \"integration-tests/esbuild/*.spec.js\"",
     "test:integration:esbuild:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/esbuild/*.spec.js\"",
+    "test:integration:turbopack": "mocha --timeout 60000 \"integration-tests/turbopack/*.spec.js\"",
     "test:integration:webpack": "mocha --timeout 60000 \"integration-tests/webpack/*.spec.js\"",
     "test:integration:openfeature": "mocha --timeout 60000 \"integration-tests/openfeature/*.spec.js\"",
     "test:integration:openfeature:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/openfeature/*.spec.js\"",
@@ -152,8 +153,8 @@
     "ci/**/*",
     "cypress/**/*",
     "esbuild.js",
-    "turbopack.js",
-    "turbopack.d.ts",
+    "next.js",
+    "next.d.ts",
     "webpack.js",
     "ext/**/*",
     "index.d.ts",
@@ -183,6 +184,7 @@
   ],
   "dependencies": {
     "dc-polyfill": "^0.1.11",
+    "enhanced-resolve": "^5.17.1",
     "import-in-the-middle": "^3.3.2",
     "opentracing": ">=0.14.7"
   },

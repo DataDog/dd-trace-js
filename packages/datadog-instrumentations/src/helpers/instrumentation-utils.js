@@ -4,6 +4,7 @@ const { builtinModules } = require('node:module')
 
 const satisfies = require('../../../../vendor/dist/semifies')
 const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
+const { isRelativeRequire } = require('./shared-utils')
 
 /**
  * @param {string|undefined} version
@@ -21,6 +22,21 @@ function matchVersion (version, ranges) {
  */
 function filename (name, file) {
   return file ? `${name}/${file}` : name
+}
+
+/**
+ * @param {string} name
+ * @param {string|undefined} version
+ * @param {string} moduleName
+ * @param {{ file?: string, filePattern?: string, versions?: string[] }} instrumentation
+ * @returns {boolean}
+ */
+function matchesInstrumentation (name, version, moduleName, instrumentation) {
+  const { file, filePattern, versions } = instrumentation
+  if (!matchVersion(version, versions)) return false
+  if (isRelativeRequire(name)) return true
+  if (moduleName === filename(name, file)) return true
+  return filePattern !== undefined && new RegExp(filename(name, filePattern)).test(moduleName)
 }
 
 /**
@@ -47,5 +63,6 @@ function getDisabledInstrumentations () {
 module.exports = {
   filename,
   getDisabledInstrumentations,
+  matchesInstrumentation,
   matchVersion,
 }
