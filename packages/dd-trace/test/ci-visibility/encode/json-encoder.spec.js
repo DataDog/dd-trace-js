@@ -33,4 +33,13 @@ describe('CI Visibility JSON encoder', () => {
     const serializedPayload = encoder.makePayload()
     assert.strictEqual(serializedPayload, JSON.stringify([payload, payloadSecond]))
   })
+
+  it('accepts payloads through its byte limit and rejects the first payload over it', () => {
+    const encoder = new JSONEncoder(3)
+
+    assert.strictEqual(encoder.encode(1), true)
+    assert.strictEqual(encoder.encode(2), false)
+    assert.strictEqual(encoder.count(), 1)
+    assert.strictEqual(encoder.makePayload(), '[1]')
+  })
 })

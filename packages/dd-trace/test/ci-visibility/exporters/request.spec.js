@@ -67,6 +67,40 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, error, null, 503, {})
   })
 
+  it('allows one more attempt when an overlapping final flush extends the deadline', () => {
+    const done = sinon.spy()
+    const options = { deadline: Date.now() + 1000, timeout: 2000 }
+    request('payload', options, done)
+    const error = Object.assign(new Error('unavailable'), { code: 'ETIMEDOUT' })
+
+    pendingRequests[0].callback(error)
+    clock.tick(500)
+    options.deadline = Date.now() + 2000
+    pendingRequests[1].callback(error)
+    clock.tick(1000)
+
+    assert.strictEqual(pendingRequests.length, 3)
+    pendingRequests[2].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('allows one more attempt when a final flush adopts a background request', () => {
+    const done = sinon.spy()
+    const options = { timeout: 2000 }
+    request('payload', options, done)
+    const error = Object.assign(new Error('unavailable'), { code: 'ETIMEDOUT' })
+
+    pendingRequests[0].callback(error)
+    clock.tick(6000)
+    options.deadline = Date.now() + 2000
+    pendingRequests[1].callback(error)
+    clock.tick(1000)
+
+    assert.strictEqual(pendingRequests.length, 3)
+    pendingRequests[2].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
   it('keeps the ordinary attempt cap for background retries', () => {
     const done = sinon.spy()
     request('payload', {}, done)
@@ -334,6 +368,32 @@ describe('Test Optimization exporter request', () => {
 
     sinon.assert.calledOnceWithExactly(done, abortError)
     assert.strictEqual(pendingRequests.length, 0)
+  })
+
+  it('enforces the queue limit while buffering readable bodies', () => {
+    const firstReadable = new Readable({ read () {} })
+    const secondReadable = new Readable({ read () {} })
+    const rejectedReadable = new Readable({ read () {} })
+    const firstDone = sinon.spy()
+    const secondDone = sinon.spy()
+    const rejectedDone = sinon.spy()
+
+    request(firstReadable, {}, firstDone)
+    request(secondReadable, {}, secondDone)
+    request(rejectedReadable, {}, rejectedDone)
+    firstReadable.emit('data', Buffer.alloc(32 * 1024 * 1024))
+    secondReadable.emit('data', Buffer.alloc(32 * 1024 * 1024))
+    rejectedReadable.emit('data', Buffer.alloc(1))
+
+    sinon.assert.calledOnce(rejectedDone)
+    assert.strictEqual(rejectedDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL')
+    assert.strictEqual(pendingRequests.length, 0)
+
+    firstReadable.emit('end')
+    secondReadable.emit('end')
+    assert.strictEqual(pendingRequests.length, 2)
+    pendingRequests[0].callback(null, 'ok', 200, {})
+    pendingRequests[1].callback(null, 'ok', 200, {})
   })
 
   it('waits for exporter backpressure to clear inside the deadline', () => {

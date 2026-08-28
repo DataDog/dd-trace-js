@@ -97,6 +97,17 @@ describe('AgentProxyCiVisibilityExporter', () => {
     assert.strictEqual(scope.isDone(), true)
   })
 
+  it('bounds agent info initialization before a final flush starts', () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const controlled = createControlledExporter()
+
+      assert.strictEqual(controlled.getRequestOptions().deadline, Date.now() + 60_000)
+    } finally {
+      clock.restore()
+    }
+  })
+
   it('exports buffered data and flushes it when initialization finishes within the final deadline', async () => {
     const clock = sinon.useFakeTimers()
     try {

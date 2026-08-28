@@ -12,6 +12,7 @@ const {
 } = require('../../../ci-visibility/telemetry')
 
 const { getAgent } = require('../agents')
+const { MAX_BUFFERED_BYTES } = require('../limits')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
 
@@ -26,7 +27,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
     super({ ...arguments[0], retainOnBackpressure: true })
     this.#requestTracker = new TestOptimizationRequestTracker(this)
     this._url = url
-    this._encoder = new JSONEncoder()
+    this._encoder = new JSONEncoder(MAX_BUFFERED_BYTES)
     this._isAgentProxy = isAgentProxy
     this.timeout = timeout
   }

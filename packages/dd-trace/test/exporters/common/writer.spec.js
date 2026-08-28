@@ -171,4 +171,12 @@ describe('common Writer', () => {
     assert.strictEqual(writer.append(payload), true)
     sinon.assert.calledOnceWithExactly(encoder.encode, payload)
   })
+
+  it('reports when the encoder rejects an appended payload', () => {
+    const payload = [{ type: 'test' }]
+    encoder.encode.returns(false)
+
+    assert.strictEqual(writer.append(payload), false)
+    sinon.assert.calledOnceWithExactly(encoder.encode, payload)
+  })
 })
