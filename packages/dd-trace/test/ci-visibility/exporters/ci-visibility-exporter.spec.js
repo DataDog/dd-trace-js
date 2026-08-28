@@ -17,6 +17,10 @@ const { assertObjectContains } = require('../../../../../integration-tests/helpe
 const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
 const { createEfdRetryPolicy } = require('../../../src/ci-visibility/efd-retry-policy')
+const {
+  FINAL_FLUSH_FALLBACK_DELAY,
+  FINAL_FLUSH_TIMEOUT,
+} = require('../../../src/ci-visibility/final-flush')
 const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
@@ -1184,7 +1188,7 @@ describe('CI Visibility Exporter', () => {
 
         ciVisibilityExporter.export([{ type: 'test' }])
         ciVisibilityExporter.flush(done)
-        clock.tick(10_100)
+        clock.tick(FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY)
 
         sinon.assert.calledOnce(done)
         const timeoutError = done.firstCall.args[0]
@@ -1882,12 +1886,12 @@ describe('CI Visibility Exporter', () => {
         exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
         exporter.flush(flushCallback)
         const requestOptions = uploadTestScreenshotRequest.firstCall.args[0]
-        assert.strictEqual(requestOptions.deadline, 10_000)
+        assert.strictEqual(requestOptions.deadline, FINAL_FLUSH_TIMEOUT)
         assert.strictEqual(requestOptions.signal.aborted, false)
         sinon.assert.notCalled(exporter._writer.flush)
         sinon.assert.notCalled(flushCallback)
 
-        clock.tick(9_999)
+        clock.tick(FINAL_FLUSH_TIMEOUT - 1)
         sinon.assert.notCalled(screenshotCallback)
         sinon.assert.notCalled(flushCallback)
 
