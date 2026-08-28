@@ -102,7 +102,7 @@ describe('OpenFeature Module', () => {
       openfeatureModule.enable(config)
 
       sinon.assert.notCalled(ExposuresWriterStub)
-      sinon.assert.notCalled(setAgentStrategyStub)
+      sinon.assert.notCalled(setExposureDeliveryStrategyStub)
     })
 
     it('should handle multiple enable calls gracefully', () => {
