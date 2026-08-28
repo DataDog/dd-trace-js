@@ -285,9 +285,6 @@
 /packages/**/*.dsm.spec.js @DataDog/dd-trace-js @DataDog/data-streams-monitoring
 
 # API SDK Capabilities
-/.agents/skills/architecture-review/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
-/.claude/skills/architecture-review @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
-/.cursor/skills/architecture-review @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /eslint-rules/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /ext/kinds.* @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /ext/priority.* @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
@@ -416,6 +413,9 @@
 /packages/dd-trace/test/web-tags-cache.spec.js @DataDog/dd-trace-js @DataDog/profiling-js
 
 # Language Platform
+/.agents/skills/architecture-review/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.claude/skills/architecture-review @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.cursor/skills/architecture-review @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.agents/skills/flaky-test-fixer/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.claude/skills/flaky-test-fixer @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.cursor/skills/flaky-test-fixer @DataDog/dd-trace-js @DataDog/lang-platform-js
