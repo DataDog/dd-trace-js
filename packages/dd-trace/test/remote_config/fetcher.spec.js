@@ -7,7 +7,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../setup/core')
-const JsRemoteConfigFetcher = require('../../src/remote_config/js_fetcher')
+const capabilities = require('../../src/remote_config/capabilities')
 
 const options = {
   clientId: 'client-id',
@@ -19,24 +19,14 @@ const options = {
   processTags: [],
   language: 'node',
   tracerVersion: '1.2.3',
-  url: 'http://127.0.0.1:8126',
-  timeoutMs: 2000,
+  url: 'https://datadoghq.com',
+  timeoutMs: 5000,
+  apiKey: 'api-key',
+  hostname: 'host',
 }
 
-describe('remote config fetcher selection', () => {
-  it('should use the JS client for the Agent protocol', () => {
-    const RemoteConfigFetcher = sinon.stub()
-    const createFetcher = proxyquire('../../src/remote_config/fetcher', {
-      '@datadog/libdatadog': { RemoteConfigFetcher, '@noCallThru': true },
-    })
-
-    const fetcher = createFetcher(options)
-
-    assert.ok(fetcher instanceof JsRemoteConfigFetcher)
-    sinon.assert.notCalled(RemoteConfigFetcher)
-  })
-
-  it('should adapt the libdatadog client for agentless Remote Config', async () => {
+describe('AgentlessRemoteConfigFetcher', () => {
+  it('should adapt the libdatadog client to callbacks', async () => {
     const changes = [{ kind: 'remove', path: 'path' }]
     const nativeFetcher = {
       fetchChanges: sinon.stub().resolves(changes),
@@ -44,78 +34,74 @@ describe('remote config fetcher selection', () => {
       setExtraServices: sinon.stub(),
       setProductCapabilities: sinon.stub().returns(['UNKNOWN']),
     }
-    let constructorOptions
-    function RemoteConfigFetcher (opts) {
-      constructorOptions = opts
-      return nativeFetcher
-    }
+    const RemoteConfigFetcher = sinon.stub().returns(nativeFetcher)
     const run = sinon.stub().callsFake((_store, callback) => callback())
-    const agentlessOptions = {
-      ...options,
-      agentless: true,
-      apiKey: 'api-key',
-      hostname: 'host',
-    }
-
-    const createFetcher = proxyquire('../../src/remote_config/fetcher', {
+    const AgentlessRemoteConfigFetcher = proxyquire('../../src/remote_config/fetcher', {
       '../../../datadog-core': { storage: sinon.stub().returns({ run }) },
       '@datadog/libdatadog': { RemoteConfigFetcher, '@noCallThru': true },
     })
-    const fetcher = createFetcher(agentlessOptions)
+    const fetcher = new AgentlessRemoteConfigFetcher(options)
 
-    assert.deepStrictEqual(constructorOptions, {
-      ...options,
-      apiKey: 'api-key',
-      hostname: 'host',
-    })
     assert.deepStrictEqual(await fetch(fetcher), changes)
+    sinon.assert.calledOnceWithExactly(RemoteConfigFetcher, options)
     sinon.assert.calledOnceWithExactly(run, { noop: true }, sinon.match.func)
 
     fetcher.setConfigState('path', 2, '')
     fetcher.setExtraServices(['service'])
-    assert.deepStrictEqual(fetcher.setProductCapabilities(['PRODUCT'], ['CAPABILITY']), ['UNKNOWN'])
+    const mask = capabilities.ASM_ACTIVATION | capabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION
+    assert.deepStrictEqual(fetcher.setProductCapabilities(['PRODUCT'], encode(mask)), ['UNKNOWN'])
     sinon.assert.calledOnceWithExactly(nativeFetcher.setConfigState, 'path', 2, '')
     sinon.assert.calledOnceWithExactly(nativeFetcher.setExtraServices, ['service'])
-    sinon.assert.calledOnceWithExactly(nativeFetcher.setProductCapabilities, ['PRODUCT'], ['CAPABILITY'])
+    sinon.assert.calledOnceWithExactly(nativeFetcher.setProductCapabilities, ['PRODUCT'], [
+      'ASM_ACTIVATION',
+      'APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION',
+    ])
   })
 
-  it('should report libdatadog fetch failures through the callback', async () => {
+  it('should report rejected fetches through the callback', async () => {
     const expectedError = new Error('request failed')
-    const RemoteConfigFetcher = sinon.stub().returns({
+    const AgentlessRemoteConfigFetcher = createFetcher({
       fetchChanges: sinon.stub().rejects(expectedError),
     })
-    const createFetcher = proxyquire('../../src/remote_config/fetcher', {
-      '@datadog/libdatadog': { RemoteConfigFetcher, '@noCallThru': true },
-    })
 
-    await assert.rejects(fetch(createFetcher({ ...options, agentless: true })), expectedError)
+    await assert.rejects(fetch(new AgentlessRemoteConfigFetcher(options)), expectedError)
   })
 
-  it('should report synchronous libdatadog fetch failures through the callback', async () => {
+  it('should report synchronous fetch failures through the callback', async () => {
     const expectedError = new Error('request failed')
-    const RemoteConfigFetcher = sinon.stub().returns({
+    const AgentlessRemoteConfigFetcher = createFetcher({
       fetchChanges: sinon.stub().throws(expectedError),
     })
-    const createFetcher = proxyquire('../../src/remote_config/fetcher', {
-      '@datadog/libdatadog': { RemoteConfigFetcher, '@noCallThru': true },
-    })
 
-    await assert.rejects(fetch(createFetcher({ ...options, agentless: true })), expectedError)
-  })
-
-  it('should not use the Agent protocol when the agentless client cannot start', () => {
-    const expectedError = new Error('agentless Remote Config is unavailable')
-    const RemoteConfigFetcher = sinon.stub().throws(expectedError)
-    const createFetcher = proxyquire('../../src/remote_config/fetcher', {
-      '@datadog/libdatadog': { RemoteConfigFetcher, '@noCallThru': true },
-    })
-
-    assert.throws(() => createFetcher({ ...options, agentless: true }), expectedError)
+    await assert.rejects(fetch(new AgentlessRemoteConfigFetcher(options)), expectedError)
   })
 })
 
 /**
- * @param {{fetchChanges(callback: (error: Error|null, changes?: object[]) => void): void}} fetcher
+ * @param {object} nativeFetcher
+ * @returns {import('../../src/remote_config/fetcher')}
+ */
+function createFetcher (nativeFetcher) {
+  return proxyquire('../../src/remote_config/fetcher', {
+    '@datadog/libdatadog': {
+      RemoteConfigFetcher: sinon.stub().returns(nativeFetcher),
+      '@noCallThru': true,
+    },
+  })
+}
+
+/**
+ * @param {bigint} mask
+ * @returns {string}
+ */
+function encode (mask) {
+  let hex = mask.toString(16)
+  if (hex.length % 2) hex = `0${hex}`
+  return Buffer.from(hex, 'hex').toString('base64')
+}
+
+/**
+ * @param {{fetchChanges(callback: (error?: Error, changes?: object[]) => void): void}} fetcher
  * @returns {Promise<object[]>}
  */
 function fetch (fetcher) {

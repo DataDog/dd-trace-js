@@ -2,86 +2,24 @@
 
 const { storage } = require('../../../datadog-core')
 
+const capabilities = require('./capabilities')
+
 const legacyStorage = storage('legacy')
+const capabilityEntries = Object.entries(capabilities)
 
-/**
- * The remote config client `RemoteConfig` drives. Both implementations satisfy the same contract,
- * so the change-record flow above them is identical either way:
- *
- * - `fetchChanges(callback)` reports the changes since the previous poll, removals first
- * - `setConfigState(path, applyState, applyError)` reports an apply outcome for a config
- * - `setExtraServices(services)` replaces the extra services reported to the agent
- * - `setProductCapabilities(products, capabilities)` replaces the subscription and returns the
- *   names it did not recognize
- *
- * @typedef {object} RcFetcher
- * @property {(callback: RcFetchCallback) => void} fetchChanges
- * @property {(path: string, applyState: number, applyError: string) => void} setConfigState
- * @property {(services: string[]) => void} setExtraServices
- * @property {(products: string[], capabilities: string[]) => string[]} setProductCapabilities
- */
-
-/**
- * @callback RcFetchCallback
- * @param {Error|null} error
- * @param {RcChangeRecord[]} [changes]
- */
-
-/**
- * @typedef {object} RcChangeRecord
- * @property {'add' | 'update' | 'remove'} kind
- * @property {string} path
- * @property {string} product
- * @property {string} configId
- * @property {string} name
- * @property {number} version
- * @property {string} [contents]
- */
-
-/**
- * @typedef {object} RcFetcherOptions
- * @property {string} clientId
- * @property {string} runtimeId
- * @property {string} service
- * @property {string} env
- * @property {string} appVersion
- * @property {string[]} tags - Already-formatted `"key:value"` strings.
- * @property {string[]} processTags - Already-formatted `"key:value"` strings.
- * @property {string} language
- * @property {string} tracerVersion
- * @property {string} url - Agent or agentless Remote Config base URL.
- * @property {number} timeoutMs
- * @property {boolean} [agentless]
- * @property {string} [apiKey]
- * @property {string} [hostname]
- */
-
-/**
- * @param {RcFetcherOptions} options
- * @returns {RcFetcher}
- */
-function createFetcher (options) {
-  if (!options.agentless) {
-    const JsRemoteConfigFetcher = require('./js_fetcher')
-    return new JsRemoteConfigFetcher(options)
-  }
-
-  return new LibdatadogRemoteConfigFetcher(options)
-}
-
-class LibdatadogRemoteConfigFetcher {
+class AgentlessRemoteConfigFetcher {
   #fetcher
 
   /**
-   * @param {RcFetcherOptions} options
+   * @param {AgentlessRemoteConfigOptions} options
    */
-  constructor ({ agentless, ...options }) {
+  constructor (options) {
     const { RemoteConfigFetcher } = require('@datadog/libdatadog')
     this.#fetcher = new RemoteConfigFetcher(options)
   }
 
   /**
-   * @param {RcFetchCallback} callback
+   * @param {(error?: Error, changes?: RemoteConfigChange[]) => void} callback
    */
   fetchChanges (callback) {
     let result
@@ -94,7 +32,7 @@ class LibdatadogRemoteConfigFetcher {
     }
 
     result.then(
-      changes => callback(null, changes),
+      changes => callback(undefined, changes),
       error => callback(error)
     )
   }
@@ -117,12 +55,47 @@ class LibdatadogRemoteConfigFetcher {
 
   /**
    * @param {string[]} products
-   * @param {string[]} capabilities
+   * @param {string} encodedCapabilities
    * @returns {string[]}
    */
-  setProductCapabilities (products, capabilities) {
-    return this.#fetcher.setProductCapabilities(products, capabilities)
+  setProductCapabilities (products, encodedCapabilities) {
+    const hex = Buffer.from(encodedCapabilities, 'base64').toString('hex')
+    const mask = BigInt(`0x${hex}`)
+    const names = []
+
+    for (const [name, capability] of capabilityEntries) {
+      if ((mask & capability) !== 0n) names.push(name)
+    }
+
+    return this.#fetcher.setProductCapabilities(products, names)
   }
 }
 
-module.exports = createFetcher
+/**
+ * @typedef {object} AgentlessRemoteConfigOptions
+ * @property {string} clientId
+ * @property {string} runtimeId
+ * @property {string} service
+ * @property {string} env
+ * @property {string} appVersion
+ * @property {string[]} tags
+ * @property {string[]} processTags
+ * @property {string} language
+ * @property {string} tracerVersion
+ * @property {string} url
+ * @property {number} timeoutMs
+ * @property {string} apiKey
+ * @property {string} hostname
+ */
+
+/**
+ * @typedef {object} RemoteConfigChange
+ * @property {'add' | 'update' | 'remove'} kind
+ * @property {string} path
+ * @property {string} product
+ * @property {string} configId
+ * @property {number} version
+ * @property {string} [contents]
+ */
+
+module.exports = AgentlessRemoteConfigFetcher

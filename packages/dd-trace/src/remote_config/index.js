@@ -12,7 +12,10 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
 const processTags = require('../process-tags')
 const Scheduler = require('./scheduler')
+const AgentlessRemoteConfigFetcher = require('./fetcher')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
+
+/** @typedef {import('./fetcher').RemoteConfigChange} RemoteConfigChange */
 
 let clientId = uuid()
 /** @type {{ id: string, client_tracer: { runtime_id: string, tags: string[] } } | undefined} */
@@ -21,15 +24,20 @@ let client
 channel('datadog:identity:update').subscribe(refreshIdentity)
 
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
+const AGENTLESS_REQUEST_TIMEOUT_MS = 5000
 
 const kSupportsAckCallback = Symbol('kSupportsAckCallback')
 
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
 class RemoteConfig {
+  #agentless
+  /** @type {AgentlessRemoteConfigFetcher | undefined} */
+  #fetcher
   #handlers = new Map()
   #products = new Set()
   #batchHandlers = new Map()
+  #subscriptionsChanged = false
 
   /**
    * @param {import('../config/config-base')} config - Tracer configuration
@@ -37,6 +45,7 @@ class RemoteConfig {
   constructor (config) {
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
 
+    this.#agentless = config.DD_AGENTLESS_ENABLED
     this.url = config.url
 
     tagger.add(config.tags, {
@@ -44,6 +53,7 @@ class RemoteConfig {
     })
 
     const { commitSHA, repositoryUrl } = getGitMetadata(config)
+    const tracerTags = getTagsString(config, repositoryUrl, commitSHA)
 
     const appliedConfigs = this.appliedConfigs = new Map()
 
@@ -83,7 +93,7 @@ class RemoteConfig {
           env: config.env,
           app_version: config.version,
           extra_services: /** @type {string[]} */ ([]),
-          tags: getTagsString(config, repositoryUrl, commitSHA),
+          tags: tracerTags,
           [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray,
         },
         capabilities: DEFAULT_CAPABILITY, // updated by `updateCapabilities()`
@@ -92,6 +102,29 @@ class RemoteConfig {
     }
 
     client = this.state.client
+
+    if (this.#agentless) {
+      try {
+        this.#fetcher = new AgentlessRemoteConfigFetcher({
+          clientId,
+          runtimeId: config.tags['runtime-id'],
+          service: config.service,
+          env: config.env ?? '',
+          appVersion: config.version ?? '',
+          tags: tracerTags,
+          processTags: processTags.tagsArray,
+          language: 'node',
+          tracerVersion,
+          url: `https://${config.site}`,
+          timeoutMs: AGENTLESS_REQUEST_TIMEOUT_MS,
+          apiKey: config.DD_API_KEY,
+          hostname: config.hostname,
+        })
+        this.#subscriptionsChanged = true
+      } catch (error) {
+        log.error('[RC] Could not start the agentless remote config client', error)
+      }
+    }
   }
 
   /**
@@ -114,6 +147,7 @@ class RemoteConfig {
     if (str.length % 2) str = `0${str}`
 
     this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
+    if (this.#agentless) this.#subscriptionsChanged = true
   }
 
   /**
@@ -156,7 +190,7 @@ class RemoteConfig {
       this.#products.add(product)
     }
     this.updateProducts()
-    if (!hadProducts && this.#products.size > 0) {
+    if ((!this.#agentless || this.#fetcher) && !hadProducts && this.#products.size > 0) {
       this.scheduler.start()
     }
   }
@@ -182,6 +216,7 @@ class RemoteConfig {
 
   updateProducts () {
     this.state.client.products = [...this.#products]
+    if (this.#agentless) this.#subscriptionsChanged = true
   }
 
   /**
@@ -215,6 +250,11 @@ class RemoteConfig {
   }
 
   poll (cb) {
+    if (this.#agentless) {
+      this.#pollAgentless(cb)
+      return
+    }
+
     const options = {
       url: this.url,
       method: 'POST',
@@ -252,6 +292,127 @@ class RemoteConfig {
 
       cb()
     })
+  }
+
+  /**
+   * @param {() => void} cb
+   */
+  #pollAgentless (cb) {
+    const fetcher = this.#fetcher
+    if (fetcher === undefined) {
+      cb()
+      return
+    }
+
+    try {
+      if (this.#subscriptionsChanged) {
+        const unknown = fetcher.setProductCapabilities(
+          this.state.client.products,
+          this.state.client.capabilities
+        )
+        this.#subscriptionsChanged = false
+
+        if (unknown.length !== 0) {
+          log.error('[RC] Unrecognized remote config products or capabilities: %s', unknown.join(', '))
+        }
+      }
+      fetcher.setExtraServices(getExtraServices())
+    } catch (error) {
+      log.error('[RC] Could not update the agentless remote config client', error)
+      cb()
+      return
+    }
+
+    fetcher.fetchChanges((error, changes = []) => {
+      if (error) {
+        log.errorWithoutTelemetry('[RC] Error in request', error)
+      } else if (changes.length !== 0) {
+        try {
+          this.#applyChanges(changes)
+        } catch (applyError) {
+          log.error('[RC] Could not apply remote config update', applyError)
+        }
+      }
+      cb()
+    })
+  }
+
+  /**
+   * @param {RemoteConfigChange[]} changes
+   */
+  #applyChanges (changes) {
+    const toUnapply = /** @type {RcConfigState[]} */ ([])
+    const toApply = /** @type {RcConfigState[]} */ ([])
+    const toModify = /** @type {RcConfigState[]} */ ([])
+    const transactionByPath = new Map()
+    const transactionHandledPaths = new Set()
+    const transactionOutcomes = new Map()
+    const seenPaths = new Set()
+
+    for (const change of changes) {
+      const { path } = change
+      if (seenPaths.has(path)) continue
+      seenPaths.add(path)
+
+      const current = this.appliedConfigs.get(path)
+      if (change.kind === 'remove') {
+        if (current === undefined) continue
+        toUnapply.push(current)
+        transactionByPath.set(path, current)
+        continue
+      }
+
+      let file
+      try {
+        if (change.contents === undefined) throw new Error('Missing config contents')
+        file = change.contents === '' ? null : JSON.parse(change.contents)
+      } catch (error) {
+        log.error('[RC] Could not parse the config file at path %s', path, error)
+        this.#fetcher?.setConfigState(path, ERROR, error.toString())
+        continue
+      }
+
+      const config = /** @type {RcConfigState} */ ({
+        path,
+        product: change.product,
+        id: change.configId,
+        version: change.version,
+        apply_state: UNACKNOWLEDGED,
+        apply_error: '',
+        file,
+      })
+      transactionByPath.set(path, config)
+
+      if (change.kind === 'update' && current !== undefined && current.apply_state !== ERROR) {
+        toModify.push(config)
+      } else {
+        toApply.push(config)
+      }
+    }
+
+    if (transactionByPath.size === 0) return
+
+    const transaction = createUpdateTransaction(
+      { toUnapply, toApply, toModify },
+      transactionHandledPaths,
+      transactionOutcomes
+    )
+
+    for (const [handler, products] of this.#batchHandlers) {
+      const transactionView = filterTransactionByProducts(transaction, products)
+      if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
+        handler(transactionView)
+      }
+    }
+
+    applyOutcomes(transactionByPath, transactionOutcomes)
+    for (const [path, outcome] of transactionOutcomes) {
+      this.#fetcher?.setConfigState(path, outcome.state, outcome.error)
+    }
+
+    this.dispatch(toUnapply, 'unapply', transactionHandledPaths)
+    this.dispatch(toApply, 'apply', transactionHandledPaths)
+    this.dispatch(toModify, 'modify', transactionHandledPaths)
   }
 
   // `client_configs` is the list of config paths to have applied
@@ -372,16 +533,33 @@ class RemoteConfig {
    */
   dispatch (list, action, handledPaths) {
     for (const item of list) {
+      if (action !== 'unapply') {
+        this.appliedConfigs.set(item.path, item)
+      }
+
       if (!handledPaths.has(item.path)) {
         this.#callHandlerFor(action, item)
       }
 
       if (action === 'unapply') {
         this.appliedConfigs.delete(item.path)
-      } else {
-        this.appliedConfigs.set(item.path, item)
+      } else if (item.apply_state === UNACKNOWLEDGED) {
+        this.#fetcher?.setConfigState(item.path, UNACKNOWLEDGED, '')
       }
     }
+  }
+
+  /**
+   * @param {RcConfigState} item
+   * @param {number} applyState
+   * @param {string} applyError
+   */
+  #setApplyState (item, applyState, applyError) {
+    if (this.appliedConfigs.get(item.path) !== item) return
+
+    item.apply_state = applyState
+    item.apply_error = applyError
+    this.#fetcher?.setConfigState(item.path, applyState, applyError)
   }
 
   /**
@@ -402,10 +580,9 @@ class RemoteConfig {
         // TODO: do we want to pass old and new config ?
         handler(action, item.file, item.id, (err) => {
           if (err) {
-            item.apply_state = ERROR
-            item.apply_error = err.toString()
+            this.#setApplyState(item, ERROR, err.toString())
           } else if (item.apply_state !== ERROR) {
-            item.apply_state = ACKNOWLEDGED
+            this.#setApplyState(item, ACKNOWLEDGED, '')
           }
         })
       } else {
@@ -415,19 +592,15 @@ class RemoteConfig {
         const result = handler(action, item.file, item.id)
         if (result instanceof Promise) {
           result.then(
-            () => { item.apply_state = ACKNOWLEDGED },
-            (err) => {
-              item.apply_state = ERROR
-              item.apply_error = err.toString()
-            }
+            () => this.#setApplyState(item, ACKNOWLEDGED, ''),
+            (err) => this.#setApplyState(item, ERROR, err.toString())
           )
         } else {
-          item.apply_state = ACKNOWLEDGED
+          this.#setApplyState(item, ACKNOWLEDGED, '')
         }
       }
     } catch (err) {
-      item.apply_state = ERROR
-      item.apply_error = err.toString()
+      this.#setApplyState(item, ERROR, err.toString())
     }
   }
 }

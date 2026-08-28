@@ -5136,7 +5136,7 @@ rules:
       assert.strictEqual(config.llmobs.agentlessEnabled, true)
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
-      assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
+      assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, true)
       assert.strictEqual(config.runtimeMetrics.enabled, false)
       assert.strictEqual(config.dsmEnabled, false)
       assert.strictEqual(config.dynamicInstrumentation.enabled, true)
@@ -5194,10 +5194,10 @@ rules:
       })
     }
 
-    it('should not enable Dynamic Instrumentation for Test Optimization', () => {
+    it('should not enable Dynamic Instrumentation unless configured by the customer', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
 
-      const config = getConfig({ isCiVisibility: true })
+      const config = getConfig()
 
       assert.strictEqual(config.dynamicInstrumentation.enabled, false)
     })

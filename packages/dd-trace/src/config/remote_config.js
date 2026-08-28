@@ -6,7 +6,6 @@ const tagger = require('../tagger')
 
 module.exports = {
   enable,
-  enableDebuggerCapabilities,
 }
 
 /**
@@ -169,7 +168,9 @@ function enable (rc, config, onConfigUpdated) {
   // Log Management
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
 
-  enableDebuggerCapabilities(rc)
+  // Debugger
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
 
   // Code Origin
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
@@ -205,14 +206,6 @@ function enable (rc, config, onConfigUpdated) {
 
     onConfigUpdated()
   })
-}
-
-/**
- * @param {import('../remote_config')} rc - RemoteConfig instance
- */
-function enableDebuggerCapabilities (rc) {
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
 }
 
 /**
