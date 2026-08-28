@@ -5108,8 +5108,8 @@ rules:
       assert.strictEqual(config.dsmEnabled, false)
       assert.strictEqual(config.dynamicInstrumentation.enabled, true)
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
-      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, [])
-      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, ['agent'])
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
     })
 
     it('should preserve profiling when it does not use the Agent', () => {
