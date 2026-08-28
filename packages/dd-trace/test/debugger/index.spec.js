@@ -7,6 +7,9 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const tracerVersion = require('../../../../package.json').version
+const processTags = require('../../src/process-tags')
+
 require('../setup/mocha')
 
 describe('debugger/index', () => {
@@ -14,6 +17,7 @@ describe('debugger/index', () => {
   let Worker
   let config
   let rc
+  let fetchAgentInfo
   let readFileStub
   let messageChannels
 
@@ -26,6 +30,9 @@ describe('debugger/index', () => {
     Worker.prototype.removeAllListeners = sinon.stub()
 
     readFileStub = sinon.stub()
+    fetchAgentInfo = sinon.stub().callsFake((url, callback) => {
+      callback(null, { endpoints: ['/debugger/v2/input'] })
+    })
     messageChannels = []
 
     DynamicInstrumentation = proxyquire('../../src/debugger/index', {
@@ -33,9 +40,7 @@ describe('debugger/index', () => {
         readFile: readFileStub,
       },
       '../agent/info': {
-        fetchAgentInfo: sinon.stub().callsFake((url, callback) => {
-          callback(null, { endpoints: ['/debugger/v2/input'] })
-        }),
+        fetchAgentInfo,
       },
       './config': proxyquire('../../src/debugger/config', {
         '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
@@ -62,6 +67,8 @@ describe('debugger/index', () => {
 
     config = {
       debug: false,
+      DD_AGENTLESS_ENABLED: false,
+      DD_API_KEY: undefined,
       dynamicInstrumentation: {
         enabled: true,
       },
@@ -69,12 +76,16 @@ describe('debugger/index', () => {
       logLevel: 'info',
       port: 8126,
       service: 'test-service',
+      site: 'datadoghq.com',
       tags: {
         'runtime-id': 'test-runtime-id',
       },
       version: '1.2.3',
       env: 'test-env',
       url: new URL('http://localhost:8126'),
+      remoteConfig: {
+        pollInterval: 5,
+      },
     }
 
     rc = {
@@ -121,6 +132,72 @@ describe('debugger/index', () => {
     it('should set product handler for LIVE_DEBUGGING', () => {
       DynamicInstrumentation.start(config, rc)
       sinon.assert.calledOnceWithExactly(rc.setProductHandler, 'LIVE_DEBUGGING', sinon.match.func)
+    })
+
+    it('should start without remote config for local probes', () => {
+      DynamicInstrumentation.start(config)
+
+      assert.strictEqual(DynamicInstrumentation.isStarted(), true)
+      sinon.assert.notCalled(rc.setProductHandler)
+    })
+
+    it('should use the direct debugger intake in agentless mode', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'us3.datadoghq.com'
+
+      DynamicInstrumentation.start(config)
+
+      sinon.assert.notCalled(fetchAgentInfo)
+      const { remoteConfig, ...workerConfig } = Worker.lastCall.args[1].workerData.config
+      assert.deepStrictEqual(workerConfig, {
+        agentless: true,
+        apiKey: 'test-api-key',
+        commitSHA: 'test-sha',
+        debug: false,
+        dynamicInstrumentation: {
+          enabled: true,
+        },
+        env: 'test-env',
+        hostname: 'test-host',
+        inputPath: '/api/v2/debugger',
+        logLevel: 'info',
+        port: 8126,
+        propagateProcessTags: { enabled: undefined },
+        repositoryUrl: 'https://github.com/test/repo',
+        runtimeId: 'test-runtime-id',
+        service: 'test-service',
+        url: 'https://debugger-intake.us3.datadoghq.com',
+        version: '1.2.3',
+      })
+      assert.deepStrictEqual(remoteConfig, {
+        runtimeId: 'test-runtime-id',
+        service: 'test-service',
+        env: 'test-env',
+        appVersion: '1.2.3',
+        tags: [
+          'runtime-id:test-runtime-id',
+          'git.repository_url:https://github.com/test/repo',
+          'git.commit.sha:test-sha',
+        ],
+        processTags: processTags.tagsArray ?? [],
+        language: 'node',
+        tracerVersion,
+        url: 'https://us3.datadoghq.com',
+        timeoutMs: 5000,
+        retryIntervalMs: 5000,
+        apiKey: 'test-api-key',
+        hostname: 'test-host',
+      })
+    })
+
+    it('should not start agentless without an API key', () => {
+      config.DD_AGENTLESS_ENABLED = true
+
+      DynamicInstrumentation.start(config)
+
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+      sinon.assert.notCalled(Worker)
     })
 
     it('should unref all handles to prevent keeping process alive', () => {
@@ -224,6 +301,8 @@ describe('debugger/index', () => {
 
       const postedConfig = configPort.postMessage.firstCall.args[0]
       assert.deepStrictEqual(postedConfig, {
+        agentless: false,
+        apiKey: undefined,
         commitSHA: 'test-sha',
         debug: false,
         dynamicInstrumentation: {
@@ -235,6 +314,7 @@ describe('debugger/index', () => {
         logLevel: 'info',
         port: 8126,
         propagateProcessTags: { enabled: undefined },
+        remoteConfig: undefined,
         repositoryUrl: 'https://github.com/test/repo',
         runtimeId: 'test-runtime-id',
         service: 'test-service',

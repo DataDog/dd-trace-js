@@ -461,6 +461,38 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(RemoteConfig)
       })
 
+      it('should start Dynamic Instrumentation from a probe file in agentless mode', () => {
+        config.DD_AGENTLESS_ENABLED = true
+        config.dynamicInstrumentation.enabled = true
+        config.dynamicInstrumentation.probeFile = 'probes.json'
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(RemoteConfig)
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, undefined)
+      })
+
+      it('should start Dynamic Instrumentation with agentless Remote Config', () => {
+        config.DD_AGENTLESS_ENABLED = true
+        config.dynamicInstrumentation.enabled = true
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(RemoteConfig)
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, undefined)
+      })
+
+      it('should not start Dynamic Instrumentation without a probe source outside agentless mode', () => {
+        config.dynamicInstrumentation.enabled = true
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(dynamicInstrumentation.start)
+      })
+
       it('should not initialize when disabled', () => {
         config.DD_TRACE_ENABLED = false
 

@@ -148,6 +148,38 @@ describe('diagnostic message http requests', function () {
       })
     })
   }
+
+  it('should send directly to the debugger intake in agentless mode', function () {
+    const requestAgentless = sinon.spy()
+    requestAgentless['@noCallThru'] = true
+    const statusAgentless = proxyquire('../../../src/debugger/devtools_client/status', {
+      './config': {
+        agentless: true,
+        apiKey: 'test-api-key',
+        inputPath: '/api/v2/debugger',
+        service,
+        runtimeId,
+        url: new URL('https://debugger-intake.us3.datadoghq.com'),
+        maxTotalPayloadSize: 5 * 1024 * 1024,
+        dynamicInstrumentation: {
+          uploadIntervalSeconds: 1,
+        },
+        '@noCallThru': true,
+      },
+      '../../exporters/common/request': requestAgentless,
+    })
+
+    statusAgentless.ackReceived({ id: 'agentless-probe', version: 0 })
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(requestAgentless)
+    const options = getRequestOptions(requestAgentless)
+    assert.match(options.path, /^\/api\/v2\/debugger\?ddtags=/)
+    assert.match(options.path, /runtime_id%3Amy-runtime-id/)
+    assert.strictEqual(options.url.href, 'https://debugger-intake.us3.datadoghq.com/')
+    assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
+    assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'agent-debugger')
+  })
 })
 
 function formatAsDiagnosticsEvent ({ probeId, version, status, exception }) {

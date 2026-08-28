@@ -7,7 +7,12 @@ const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_thr
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
 const getDebuggerConfig = require('./config')
-const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2, INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('./constants')
+const {
+  DEBUGGER_DIAGNOSTICS_V1,
+  DEBUGGER_INPUT_DIRECT,
+  DEBUGGER_INPUT_V2,
+  INSPECT_SEGMENT_GLOBAL_PROPERTY,
+} = require('./constants')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
@@ -46,20 +51,25 @@ function isStarted () {
 
 /**
  * Start the Debugger worker thread.
- * Creates a worker thread, sets up message channels, and registers
- * the LIVE_DEBUGGING product handler with remote config.
+ * Creates a worker thread, sets up message channels, and registers the
+ * LIVE_DEBUGGING product handler when remote config is available.
  * Does nothing if the worker is already started.
  *
  * @param {Config} config - The tracer configuration object
- * @param {RemoteConfig} rcInstance - The RemoteConfig instance
+ * @param {RemoteConfig} [rcInstance] - The RemoteConfig instance
  */
 function start (config, rcInstance) {
   if (worker !== null) return
 
+  if (config.DD_AGENTLESS_ENABLED && !config.DD_API_KEY) {
+    log.error('[debugger] DD_API_KEY is required for agentless Dynamic Instrumentation')
+    return
+  }
+
   log.debug('[debugger] Starting Dynamic Instrumentation client...')
 
-  rc = rcInstance
-  rcAckCallbacks = new Map()
+  rc = rcInstance ?? null
+  rcAckCallbacks = rc ? new Map() : null
   const probeChannel = new MessageChannel()
   const logChannel = new MessageChannel()
   configChannel = new MessageChannel()
@@ -77,13 +87,20 @@ function start (config, rcInstance) {
     }
   })
 
-  rc.setProductHandler('LIVE_DEBUGGING', (action, probe, id, ack) => {
-    rcAckCallbacks.set(++ackId, ack)
-    probeChannel.port2.postMessage({ action, probe, ackId })
-  })
+  if (rc) {
+    rc.setProductHandler('LIVE_DEBUGGING', (action, probe, id, ack) => {
+      rcAckCallbacks.set(++ackId, ack)
+      probeChannel.port2.postMessage({ action, probe, ackId })
+    })
+  }
 
   probeChannel.port2.on('message', ({ ackId, error }) => {
-    const ack = rcAckCallbacks.get(ackId)
+    if (ackId === undefined) {
+      if (error) log.error('[debugger] Error applying local probe', error)
+      return
+    }
+
+    const ack = rcAckCallbacks?.get(ackId)
     if (ack === undefined) {
       // This should never happen, but just in case something changes in the future, we should guard against it
       log.error('[debugger] Received an unknown ackId: %s', ackId)
@@ -209,12 +226,16 @@ function cleanup (error) {
 }
 
 /**
- * Detect which debugger endpoint is available on the agent
+ * Select the direct intake or detect which debugger endpoint is available on the Agent.
  *
  * @param {Config} config - The tracer configuration object
  * @param {(endpointPath: string) => void} cb - Callback with the detected endpoint path
  */
 function detectDebuggerEndpoint (config, cb) {
+  if (config.DD_AGENTLESS_ENABLED) {
+    return cb(DEBUGGER_INPUT_DIRECT)
+  }
+
   log.debug('[debugger] Detecting available debugger endpoints...')
 
   fetchAgentInfo(config.url, (err, agentInfo) => {
