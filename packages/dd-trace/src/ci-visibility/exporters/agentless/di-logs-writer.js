@@ -7,7 +7,7 @@ const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 const BaseWriter = require('../../../exporters/common/writer')
 
 const { getAgent } = require('../agents')
-const { MAX_BUFFERED_BYTES } = require('../limits')
+const { MAX_DI_LOG_BUFFERED_BYTES } = require('../limits')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
 
@@ -22,7 +22,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
     super({ ...arguments[0], retainOnBackpressure: true })
     this.#requestTracker = new TestOptimizationRequestTracker(this)
     this._url = url
-    this._encoder = new JSONEncoder(MAX_BUFFERED_BYTES)
+    this._encoder = new JSONEncoder(MAX_DI_LOG_BUFFERED_BYTES)
     this._isAgentProxy = isAgentProxy
     this.timeout = timeout
   }
