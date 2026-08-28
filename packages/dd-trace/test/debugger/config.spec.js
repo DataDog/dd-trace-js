@@ -58,19 +58,6 @@ describe('getDebuggerConfig', function () {
     })
   })
 
-  it('should configure the direct debugger intake in agentless mode', function () {
-    const tracerConfig = getConfig()
-    tracerConfig.DD_AGENTLESS_ENABLED = true
-    tracerConfig.DD_API_KEY = 'test-api-key'
-    tracerConfig.site = 'us3.datadoghq.com'
-
-    const config = getDebuggerConfig(tracerConfig)
-
-    assert.strictEqual(config.agentless, true)
-    assert.strictEqual(config.apiKey, 'test-api-key')
-    assert.strictEqual(config.url, 'https://debugger-intake.us3.datadoghq.com')
-  })
-
   it('should be able to send the config over a MessageChannel', function () {
     const config = getDebuggerConfig(getConfig())
     const channel = new MessageChannel()

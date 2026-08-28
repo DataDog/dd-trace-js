@@ -8,7 +8,7 @@
  */
 module.exports = function getRequestOptions (config, path, headers) {
   if (config.agentless) {
-    headers['DD-API-KEY'] = config.apiKey
+    if (config.apiKey !== undefined) headers['DD-API-KEY'] = config.apiKey
     headers['DD-EVP-ORIGIN'] = 'agent-debugger'
   }
 

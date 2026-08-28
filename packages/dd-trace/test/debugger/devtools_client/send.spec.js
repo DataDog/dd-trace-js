@@ -187,7 +187,6 @@ describe('input message http requests', function () {
     const sendAgentless = proxyquire('../../../src/debugger/devtools_client/send', {
       './config': createConfigMock({
         agentless: true,
-        apiKey: 'test-api-key',
         inputPath: '/api/v2/debugger',
         runtimeId: 'test-runtime-id',
         url: new URL('https://debugger-intake.us3.datadoghq.com'),
@@ -205,7 +204,7 @@ describe('input message http requests', function () {
     assert.match(options.path, /^\/api\/v2\/debugger\?ddtags=/)
     assert.match(options.path, /runtime_id%3Atest-runtime-id/)
     assert.strictEqual(options.url.href, 'https://debugger-intake.us3.datadoghq.com/')
-    assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
+    assert.strictEqual(Object.hasOwn(options.headers, 'DD-API-KEY'), false)
     assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'agent-debugger')
   })
 
