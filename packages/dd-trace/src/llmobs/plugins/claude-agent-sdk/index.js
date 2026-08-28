@@ -26,7 +26,7 @@ function getToolOutputText (raw) {
       output += separator + text
       separator = '\n'
     }
-    return output
+    return output || undefined
   }
 
   if (raw.type === 'tool_result') return getToolOutputText(raw.content)

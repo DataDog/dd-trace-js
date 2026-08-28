@@ -1,7 +1,9 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+const { tracingChannel } = require('dc-polyfill')
 const semifies = require('semifies')
+const sinon = require('sinon')
 const { withVersions } = require('../../../setup/mocha')
 const {
   useLlmObs,
@@ -10,6 +12,7 @@ const {
   MOCK_NUMBER,
 } = require('../../util')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
+const LLMObsTagger = require('../../../../src/llmobs/tagger')
 
 const PROMPT =
   'Spawn a subagent to get the weather in New York. ' +
@@ -21,6 +24,49 @@ describe('Plugin', () => {
   })
 
   const { getEvents } = useLlmObs({ plugin: 'claude-agent-sdk' })
+
+  describe('step output', () => {
+    before(() => {
+      require('../../../../../../versions/@anthropic-ai/claude-agent-sdk@0.2.113').get()
+    })
+
+    it('omits output when a tool result contains no text', async () => {
+      const tagTextIO = sinon.spy(LLMObsTagger.prototype, 'tagTextIO')
+      const stepChannel = tracingChannel('apm:claude-agent-sdk:step')
+
+      try {
+        stepChannel.traceSync(() => {}, {
+          stepIndex: 0,
+          sessionId: 'session-id',
+          chunks: [{
+            type: 'assistant',
+            message: { content: [] },
+          }],
+          llmStartIdx: 0,
+          llmEndIdx: 1,
+          toolOutputs: [{
+            type: 'tool_result',
+            content: [],
+          }],
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+
+        assert.strictEqual(tagTextIO.calledOnce, true)
+        assert.strictEqual(tagTextIO.firstCall.args[2], undefined)
+        assert.strictEqual(llmobsSpans[0].meta.output.value, undefined)
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'step',
+          name: 'step-0',
+          sessionId: 'session-id',
+          tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
+        })
+      } finally {
+        tagTextIO.restore()
+      }
+    })
+  })
 
   withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', (version, moduleName, realVersion) => {
     let client
