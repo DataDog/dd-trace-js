@@ -8,7 +8,7 @@ const getGitMetadata = require('../git_metadata')
  */
 module.exports = function getDebuggerConfig (config, inputPath) {
   const { commitSHA, repositoryUrl } = getGitMetadata(config)
-  const agentless = config.DD_AGENTLESS_ENABLED === true
+  const agentless = config.DD_AGENTLESS_ENABLED
 
   return {
     agentless,
