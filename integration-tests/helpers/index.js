@@ -885,9 +885,10 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
  * @returns {typeof process.env}
  */
 function getCiVisAgentlessConfig (port) {
-  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
+  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js.
+  // The outer workflow's event payload references commits that do not exist in the sandbox repository.
   // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
-  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
+  const { GITHUB_EVENT_PATH, GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
     DD_API_KEY: '1',
@@ -903,9 +904,10 @@ function getCiVisAgentlessConfig (port) {
  * @returns {typeof process.env}
  */
 function getCiVisEvpProxyConfig (port) {
-  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
+  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js.
+  // The outer workflow's event payload references commits that do not exist in the sandbox repository.
   // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
-  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
+  const { GITHUB_EVENT_PATH, GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
     DD_TRACE_AGENT_PORT: String(port),
