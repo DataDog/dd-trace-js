@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
+const { INPUT_PROMPT, PROMPT_TRACKING_INSTRUMENTATION_METHOD, TAGS } = require('../../src/llmobs/constants/tags')
 const { writeBridgeTags, findGenAIAncestorSpanId, normalizeLlmObsTraceId } = require('../../src/llmobs/util')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
@@ -1330,6 +1330,27 @@ describe('tagger', () => {
     })
 
     describe('tagPrompt', () => {
+      it('tags a carried prompt as automatic', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagAutoPrompt(span, { id: 'managed', version: '1', template: 'Hello {name}' })
+
+        assert.strictEqual(Tagger.tagMap.get(span)[INPUT_PROMPT].id, 'managed')
+        assert.deepStrictEqual(Tagger.tagMap.get(span)[TAGS], {
+          [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: 'auto',
+        })
+      })
+
+      it('does not replace an explicitly annotated prompt', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, { id: 'explicit', version: '1', template: 'Explicit' })
+        tagger.tagAutoPrompt(span, { id: 'managed', version: '2', template: 'Managed' })
+
+        assert.strictEqual(Tagger.tagMap.get(span)[INPUT_PROMPT].id, 'explicit')
+        assert.deepStrictEqual(Tagger.tagMap.get(span)[TAGS], {
+          [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: 'annotated',
+        })
+      })
+
       it('serializes managed prompt UUIDs under backend keys', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
         tagger.tagPrompt(span, {

@@ -31,6 +31,7 @@ const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
+const { configurePromptTracking } = require('./prompts/tracking')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -64,6 +65,7 @@ class LLMObs extends NoopLLMObs {
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
     this.#provider = provider
+    configurePromptTracking(config)
   }
 
   get enabled () {

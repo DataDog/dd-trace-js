@@ -6,6 +6,7 @@ const { describe, it, beforeEach } = require('mocha')
 const semifies = require('semifies')
 
 const { withVersions } = require('../../../setup/mocha')
+const ManagedPrompt = require('../../../../src/llmobs/prompts/prompt')
 
 const {
   useLlmObs,
@@ -177,6 +178,69 @@ describe('integrations', () => {
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })
+      })
+
+      it('automatically tracks a formatted managed prompt', async () => {
+        const prompt = new ManagedPrompt({
+          id: 'greeting',
+          version: '1',
+          source: 'registry',
+          template: [
+            { role: 'system', content: 'You are a {persona} assistant.' },
+            { role: 'user', content: '{message}' },
+          ],
+        })
+        const messages = prompt.format({ persona: 'helpful', message: 'Hello, OpenAI!' })
+
+        await openai.chat.completions.create({
+          model: 'gpt-3.5-turbo',
+          messages,
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1,
+          user: 'dd-trace-test',
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'greeting',
+          version: '1',
+          variables: { persona: 'helpful', message: 'Hello, OpenAI!' },
+          chat_template: [
+            { role: 'system', content: 'You are a {persona} assistant.' },
+            { role: 'user', content: '{message}' },
+          ],
+        }, messages)
+      })
+
+      it('does not replace explicit prompt tracking', async () => {
+        const managedPrompt = new ManagedPrompt({
+          id: 'managed',
+          version: '1',
+          source: 'registry',
+          template: [
+            { role: 'system', content: 'You are a {persona} assistant.' },
+            { role: 'user', content: '{message}' },
+          ],
+        })
+
+        await global._ddtrace.llmobs.annotationContext({
+          prompt: { id: 'explicit', version: '2', template: 'Explicit prompt' },
+        }, () => openai.chat.completions.create({
+          model: 'gpt-3.5-turbo',
+          messages: managedPrompt.format({ persona: 'helpful', message: 'Hello, OpenAI!' }),
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1,
+          user: 'dd-trace-test',
+        }))
+
+        const { llmobsSpans } = await getEvents()
+        assert.strictEqual(llmobsSpans[0].meta.input.prompt.id, 'explicit')
+        assert(llmobsSpans[0].tags.includes('prompt_tracking_instrumentation_method:annotated'))
+        assert(!llmobsSpans[0].tags.includes('prompt_tracking_instrumentation_method:auto'))
       })
 
       it('submits an embedding span', async () => {
