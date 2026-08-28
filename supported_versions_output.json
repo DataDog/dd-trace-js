@@ -3,7 +3,7 @@
     "dependency": "@anthropic-ai/claude-agent-sdk",
     "integration": "claude-agent-sdk",
     "minimum_tracer_supported": "0.2.113",
-    "max_tracer_supported": "0.3.259",
+    "max_tracer_supported": "0.3.263",
     "auto-instrumented": "True"
   },
   {
@@ -31,7 +31,7 @@
     "dependency": "@aws/durable-execution-sdk-js",
     "integration": "aws-durable-execution-sdk-js",
     "minimum_tracer_supported": "1.1.0",
-    "max_tracer_supported": "2.3.0",
+    "max_tracer_supported": "2.3.1",
     "auto-instrumented": "True"
   },
   {
@@ -248,49 +248,49 @@
     "dependency": "@supabase/auth-js",
     "integration": "supabase",
     "minimum_tracer_supported": "2.112.2",
-    "max_tracer_supported": "2.112.3",
+    "max_tracer_supported": "2.112.4",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@supabase/functions-js",
     "integration": "supabase",
     "minimum_tracer_supported": "2.112.2",
-    "max_tracer_supported": "2.112.3",
+    "max_tracer_supported": "2.112.4",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@supabase/postgrest-js",
     "integration": "supabase",
     "minimum_tracer_supported": "2.112.2",
-    "max_tracer_supported": "2.112.3",
+    "max_tracer_supported": "2.112.4",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@supabase/realtime-js",
     "integration": "supabase",
     "minimum_tracer_supported": "2.112.2",
-    "max_tracer_supported": "2.112.3",
+    "max_tracer_supported": "2.112.4",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@supabase/storage-js",
     "integration": "supabase",
     "minimum_tracer_supported": "2.112.2",
-    "max_tracer_supported": "2.112.3",
+    "max_tracer_supported": "2.112.4",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@supabase/supabase-js",
     "integration": "supabase",
     "minimum_tracer_supported": "2.112.2",
-    "max_tracer_supported": "2.112.3",
+    "max_tracer_supported": "2.112.4",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@wdio/local-runner",
     "integration": "mocha",
     "minimum_tracer_supported": "9.0.0",
-    "max_tracer_supported": "9.31.5",
+    "max_tracer_supported": "9.31.6",
     "auto-instrumented": "True"
   },
   {
@@ -367,7 +367,7 @@
     "dependency": "child_process",
     "integration": "child_process",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -395,7 +395,7 @@
     "dependency": "dns",
     "integration": "dns",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -444,7 +444,7 @@
     "dependency": "fs",
     "integration": "fs",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -472,21 +472,21 @@
     "dependency": "http",
     "integration": "http",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "http2",
     "integration": "http2",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "https",
     "integration": "http",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -654,7 +654,7 @@
     "dependency": "net",
     "integration": "net",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -668,42 +668,42 @@
     "dependency": "node:dns",
     "integration": "dns",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:fs",
     "integration": "fs",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:http",
     "integration": "http",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:http2",
     "integration": "http2",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:https",
     "integration": "http",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:net",
     "integration": "net",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.8.1",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
