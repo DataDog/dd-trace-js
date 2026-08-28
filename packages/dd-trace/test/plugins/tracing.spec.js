@@ -81,6 +81,16 @@ describe('TracingPlugin', () => {
       assert.ok(!(SVC_SRC_KEY in callArgs.tags), 'SVC_SRC_KEY should not be present when service is not provided')
     })
 
+    it('preserves an explicitly provided SVC_SRC_KEY tag', () => {
+      plugin.startSpan('Test span', {
+        service: { name: 'my-service', source: 'kafka' },
+        meta: { [SVC_SRC_KEY]: 'meta' },
+        metrics: { [SVC_SRC_KEY]: 'metrics' },
+      })
+
+      assert.strictEqual(startSpanSpy.firstCall.args[1].tags[SVC_SRC_KEY], 'metrics')
+    })
+
     it('records the integration claim so a user override is detected at finish', () => {
       const span = plugin.startSpan('Test span', { service: { name: 'kafka-broker', source: 'kafka' } })
 
