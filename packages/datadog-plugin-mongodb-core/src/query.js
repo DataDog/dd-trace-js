@@ -98,7 +98,10 @@ class MongodbCoreQueryPlugin extends DatabasePlugin {
 const MAX_DEPTH = 10
 const MAX_QUERY_LENGTH = 10_000
 
+/** @param {{ q?: Record<string, unknown> }[] | { documents: { q?: Record<string, unknown> }[] }} statements */
 function extractQuery (statements) {
+  if (!Array.isArray(statements)) statements = statements.documents
+
   if (statements.length === 1 && statements[0].q) return statements[0].q
 
   const extractedQueries = []

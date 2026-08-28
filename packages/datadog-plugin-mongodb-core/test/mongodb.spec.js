@@ -229,6 +229,13 @@ describe('Plugin', () => {
                 `insert test.${collectionName}`,
                 `update test.${collectionName}`,
               ].sort())
+
+              const updateSpan = children.find(span => span.resource === `update test.${collectionName}`)
+              assert.strictEqual(updateSpan.meta['mongodb.query'], '{"a":1}')
+
+              const deleteResource = (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`
+              const deleteSpan = children.find(span => span.resource === deleteResource)
+              assert.strictEqual(deleteSpan.meta['mongodb.query'], '{"a":2}')
             }, {
               spanResourceMatch: /^bulkWrite test\./,
               timeoutMs: traceTimeoutMs,

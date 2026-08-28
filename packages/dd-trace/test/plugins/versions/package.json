@@ -177,7 +177,7 @@
     "mocha": "11.8.0",
     "mocha-each": "2.0.1",
     "moleculer": "0.15.1",
-    "mongodb": "7.5.0",
+    "mongodb": "7.6.0",
     "mongodb-core": "3.2.7",
     "mongoose": "9.9.3",
     "mquery": "6.0.0",
