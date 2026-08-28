@@ -728,12 +728,7 @@ module.exports = class CiPlugin extends Plugin {
       this._bufferWorkerTrace(missingTestSuite, trace)
       return
     }
-    const exporter = this.tracer._exporter
-    if (exporter.exportTraceWithDeferredTestSuite) {
-      exporter.exportTraceWithDeferredTestSuite(trace)
-    } else {
-      exporter.export(trace)
-    }
+    this.tracer._exporter.export(trace)
   }
 
   /**
