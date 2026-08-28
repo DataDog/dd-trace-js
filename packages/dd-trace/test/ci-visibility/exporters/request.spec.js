@@ -53,7 +53,7 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
   })
 
-  it('keeps retrying transient responses while the finalization deadline has capacity', () => {
+  it('keeps the ordinary attempt cap during finalization', () => {
     const done = sinon.spy()
     request('payload', { deadline: Date.now() + 30_000 }, done)
     const error = Object.assign(new Error('unavailable'), { status: 503 })
@@ -62,12 +62,9 @@ describe('Test Optimization exporter request', () => {
     clock.tick(6000)
     pendingRequests[1].callback(error, null, 503, {})
     clock.tick(6000)
-    pendingRequests[2].callback(error, null, 503, {})
-    clock.tick(6000)
-    pendingRequests[3].callback(null, 'ok', 200, {})
 
-    assert.strictEqual(pendingRequests.length, 4)
-    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+    assert.strictEqual(pendingRequests.length, 2)
+    sinon.assert.calledOnceWithExactly(done, error, null, 503, {})
   })
 
   for (const statusCode of [408, 429, 500, 599]) {
