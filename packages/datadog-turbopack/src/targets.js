@@ -28,7 +28,6 @@ const CACHE_DIRECTORY = path.join('node_modules', '.cache', 'dd-trace', 'turbopa
 async function createManifest (projectDir) {
   projectDir = path.resolve(projectDir)
   const disabledInstrumentations = getDisabledInstrumentations()
-  loadInstrumentations()
 
   const appRequire = Module.createRequire(path.join(projectDir, 'package.json'))
   const cacheDirectory = path.join(projectDir, CACHE_DIRECTORY)
@@ -112,19 +111,6 @@ async function createManifest (projectDir) {
 }
 
 /**
- * Ensures the existing instrumentation declarations have populated their
- * shared registry before we inspect it at build time.
- */
-function loadInstrumentations () {
-  const disabledInstrumentations = getDisabledInstrumentations()
-  for (const [name, hook] of Object.entries(hooks)) {
-    if (disabledInstrumentations.has(name)) continue
-    const load = hook?.fn ?? hook
-    if (typeof load === 'function') load()
-  }
-}
-
-/**
  * @param {Function & { resolve: Function }} appRequire
  * @param {Set<string>} [disabledInstrumentations]
  * @param {string} [projectDir]
@@ -136,11 +122,12 @@ function loadInstrumentations () {
 function getTargets (appRequire, disabledInstrumentations = new Set(), projectDir) {
   const targets = new Map()
   const packageNames = new Set(
-    Object.keys(instrumentations).filter(name => !isBuiltinModuleName(name) && !name.startsWith('.'))
+    Object.keys(hooks).filter(name => !isBuiltinModuleName(name) && !name.startsWith('.') &&
+      !disabledInstrumentations.has(name))
   )
   const packageRootsByName = projectDir ? findPackageRoots(projectDir, packageNames) : new Map()
 
-  for (const [name, entries] of Object.entries(instrumentations)) {
+  for (const [name, hook] of Object.entries(hooks)) {
     if (isBuiltinModuleName(name) || name.startsWith('.') || disabledInstrumentations.has(name)) continue
 
     const packageRoots = [...(packageRootsByName.get(name) ?? [])]
@@ -153,6 +140,11 @@ function getTargets (appRequire, disabledInstrumentations = new Set(), projectDi
         continue
       }
     }
+    if (packageRoots.length === 0) continue
+
+    const load = hook?.fn ?? hook
+    if (typeof load === 'function') load()
+    const entries = instrumentations[name] ?? []
 
     for (const packageRoot of packageRoots) {
       addTargets(targets, packageRoot, name, entries)
