@@ -59,5 +59,7 @@
   "mercurius/index.js": "mercurius",
   "playwright-core/lib/coreBundle.js": "playwright-core",
   "playwright/lib/index.js": "playwright",
-  "playwright/lib/runner/index.js": "playwright"
+  "playwright/lib/runner/index.js": "playwright",
+  "playwright/lib/worker/testInfo.js": "playwright",
+  "playwright/lib/worker/workerProcessEntry.js": "playwright"
 }

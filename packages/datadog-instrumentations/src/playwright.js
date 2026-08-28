@@ -160,18 +160,6 @@ function isAutomaticFailureScreenshotAttachment (attachment) {
   return typeof attachment?.path === 'string' && automaticFailureScreenshotPaths.delete(attachment.path)
 }
 
-/**
- * Returns whether an attachment contains a Playwright-recorded test video.
- *
- * @param {object} attachment - Playwright attachment payload
- * @returns {boolean}
- */
-function isTestVideoAttachment (attachment) {
-  return attachment?.name === 'video' &&
-    (attachment.contentType === 'video/webm' || attachment.contentType === 'video/mp4') &&
-    typeof attachment.path === 'string'
-}
-
 function isValidKnownTests (receivedKnownTests) {
   return !!receivedKnownTests.playwright
 }
@@ -1149,7 +1137,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
     testBeginHandler(test, browser, shouldCreateTestSpan)
   })
   worker.on('attach', (attachment) => {
-    const { testId, _ddIsAutomaticFailureScreenshot } = attachment
+    const { testId, _ddIsAutomaticFailureScreenshot, _ddIsAutomaticFailureVideo } = attachment
     if (_ddIsAutomaticFailureScreenshot) {
       let screenshots = automaticFailureScreenshotsByTestId.get(testId)
       if (!screenshots) {
@@ -1157,7 +1145,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
         automaticFailureScreenshotsByTestId.set(testId, screenshots)
       }
       screenshots.push(attachment)
-    } else if (isFailureVideoUploadEnabled && isTestVideoAttachment(attachment)) {
+    } else if (isFailureVideoUploadEnabled && _ddIsAutomaticFailureVideo) {
       let videos = failureVideosByTestId.get(testId)
       if (!videos) {
         videos = []

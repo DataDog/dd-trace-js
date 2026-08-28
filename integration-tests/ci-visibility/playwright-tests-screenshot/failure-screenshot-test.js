@@ -1,5 +1,7 @@
 'use strict'
 
+const { writeFileSync } = require('node:fs')
+
 const { test: base, expect } = require('@playwright/test')
 
 let releaseDeferredFailureScreenshot
@@ -56,6 +58,21 @@ test('uploads only the automatic failure screenshot', async ({ page }, testInfo)
     name: 'screenshot',
     path: injectedScreenshotPath,
     contentType: 'image/png',
+  })
+
+  const manualVideoPath = testInfo.outputPath('manual-video.webm')
+  writeFileSync(manualVideoPath, 'manual video attachment')
+  await testInfo.attach('video', {
+    path: manualVideoPath,
+    contentType: 'video/webm',
+  })
+
+  const injectedVideoPath = testInfo.outputPath('injected-video.webm')
+  writeFileSync(injectedVideoPath, 'injected video attachment')
+  testInfo.attachments.push({
+    name: 'video',
+    path: injectedVideoPath,
+    contentType: 'video/webm',
   })
 
   expect(true).toBe(false)

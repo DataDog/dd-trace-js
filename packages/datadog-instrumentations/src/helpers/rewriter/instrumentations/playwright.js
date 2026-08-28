@@ -6,6 +6,44 @@ module.exports = [
   {
     module: {
       name: 'playwright',
+      versionRange: '>=1.38.0',
+      filePath: 'lib/index.js',
+    },
+    astQuery: 'CallExpression[callee.object.object.name="testInfo"]' +
+      '[callee.object.property.name="attachments"][callee.property.name="push"] > ' +
+      'ObjectExpression:has(Property[key.name="name"][value.value="video"])',
+    channelName: 'AutomaticVideoAttachment',
+    transform: 'markPlaywrightAutomaticVideoAttachment',
+  },
+  {
+    module: {
+      name: 'playwright',
+      versionRange: '>=1.38.0 <1.60.0',
+      filePath: 'lib/worker/testInfo.js',
+    },
+    astQuery: 'ClassDeclaration[id.name="TestInfoImpl"] MethodDefinition[key.name="_attach"] ' +
+      'CallExpression[callee.object.type="ThisExpression"][callee.property.name="_onAttach"] > ObjectExpression, ' +
+      'ClassDeclaration[id.name="TestInfoImpl"] MethodDefinition[key.name="_attach"] ' +
+      'CallExpression[callee.object.object.type="ThisExpression"]' +
+      '[callee.object.property.name="_callbacks"][callee.property.name="onAttach"] > ObjectExpression',
+    channelName: 'AutomaticVideoAttachmentPayload',
+    transform: 'propagatePlaywrightAutomaticVideoAttachment',
+  },
+  {
+    module: {
+      name: 'playwright',
+      versionRange: '>=1.60.0',
+      filePath: 'lib/worker/workerProcessEntry.js',
+    },
+    astQuery: 'VariableDeclarator[id.name="TestInfoImpl"] > ClassExpression ' +
+      'MethodDefinition[key.name="_attach"] CallExpression[callee.object.object.type="ThisExpression"]' +
+      '[callee.object.property.name="_callbacks"][callee.property.name="onAttach"] > ObjectExpression',
+    channelName: 'AutomaticVideoAttachmentPayload',
+    transform: 'propagatePlaywrightAutomaticVideoAttachment',
+  },
+  {
+    module: {
+      name: 'playwright',
       versionRange: '>=1.38.0 <1.51.0',
       filePath: 'lib/index.js',
     },
