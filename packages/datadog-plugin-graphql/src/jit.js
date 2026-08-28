@@ -23,7 +23,7 @@ const { resolveJitDefaultInvocation, wrapJitResolve } = GraphQLExecutePlugin
  * }} JitExecutionContext
  */
 
-const graphqlJitCompileContextPrefix = 'tracing:orchestrion:graphql-jit:apm:graphql:compile:context'
+const graphqlJitCompilePrefix = 'tracing:orchestrion:graphql-jit:compile'
 const legacyStorage = storage('legacy')
 const patchedResolverMaps = new WeakSet()
 
@@ -40,7 +40,7 @@ class GraphQLJitExecutePlugin extends GraphQLExecutePlugin {
 
   addTraceSubs () {
     super.addTraceSubs()
-    this.addSub(`${graphqlJitCompileContextPrefix}:end`, configureCompilationContext)
+    this.addSub(`${graphqlJitCompilePrefix}:end`, configureCompilationContext)
   }
 
   /**

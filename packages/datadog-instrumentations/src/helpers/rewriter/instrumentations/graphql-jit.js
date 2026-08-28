@@ -37,7 +37,7 @@ function addInstrumentations (instrumentations, versionRange, filePath) {
       module: moduleDefinition,
       astQuery: BUILD_COMPILATION_CONTEXT,
       functionQuery: { kind: 'Sync' },
-      channelName: 'apm:graphql:compile:context',
+      channelName: 'compile',
     },
     {
       module: moduleDefinition,
