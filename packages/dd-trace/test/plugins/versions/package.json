@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "license": "BSD-3-Clause",
   "private": true,
+  "resolutions": {
+    "standardwebhooks": "1.0.0"
+  },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "5.0.57",
     "@ai-sdk/anthropic": "4.0.39",
