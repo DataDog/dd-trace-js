@@ -21,6 +21,7 @@ app.on('ready', () => {
         case 'request': return onRequest(msg)
         case 'send': return onSend()
         case 'receive': return onReceive()
+        case 'receive-untraced': return onReceiveUntraced()
         case 'handle': return onHandle()
         case 'utility-request': return onUtilityRequest(msg)
       }
@@ -65,6 +66,19 @@ function onReceive () {
 
   loadWindow(win => {
     win.webContents.send('datadog:test:send')
+  })
+}
+
+function onReceiveUntraced () {
+  const listener = () => {
+    ipcMain.off('set-title-untraced', listener)
+    process.send({ name: 'receive-untraced-complete' })
+  }
+
+  ipcMain.on('set-title-untraced', listener)
+
+  loadWindow(win => {
+    win.webContents.send('datadog:test:send-untraced')
   })
 }
 
