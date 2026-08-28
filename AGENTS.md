@@ -113,8 +113,8 @@ The tracer runs in user applications and hot paths:
 - Avoid try/catch in hot paths when inputs can be validated early.
 - Use `.once()` for one-shot events. Register process `beforeExit` work in
   `globalThis[Symbol.for('dd-trace')].beforeExitHandlers`.
-- A performance-motivated complexity increase requires a focused, reproducible microbenchmark. Keep the more
-  readable implementation when results are effectively equal.
+- A performance-motivated complexity increase requires a focused, reproducible microbenchmark: keep the more readable
+  implementation within ~±2%, justify ~5% in the commit body, keep ≥10% reproducible wins with the numbers.
 
 ## Backportability and Runtime Support
 
