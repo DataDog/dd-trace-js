@@ -345,12 +345,10 @@ class RemoteConfig {
     const transactionByPath = new Map()
     const transactionHandledPaths = new Set()
     const transactionOutcomes = new Map()
-    const seenPaths = new Set()
 
     for (const change of changes) {
       const { path } = change
-      if (seenPaths.has(path)) continue
-      seenPaths.add(path)
+      if (transactionByPath.has(path)) continue
 
       const current = this.appliedConfigs.get(path)
       if (change.kind === 'remove') {
@@ -365,8 +363,10 @@ class RemoteConfig {
         if (change.contents === undefined) throw new Error('Missing config contents')
         file = change.contents === '' ? null : JSON.parse(change.contents)
       } catch (error) {
+        if (this.#fetcher === undefined) throw error
+
         log.error('[RC] Could not parse the config file at path %s', path, error)
-        this.#fetcher?.setConfigState(path, ERROR, error.toString())
+        this.#fetcher.setConfigState(path, ERROR, error.toString())
         continue
       }
 
@@ -379,6 +379,10 @@ class RemoteConfig {
         apply_error: '',
         file,
       })
+      if (change.hashes !== undefined) {
+        config.length = change.length
+        config.hashes = change.hashes
+      }
       transactionByPath.set(path, config)
 
       if (change.kind === 'update' && current !== undefined && current.apply_state !== ERROR) {
@@ -421,17 +425,17 @@ class RemoteConfig {
     targets,
     target_files: targetFiles = [],
   }) {
-    const toUnapply = /** @type {RcConfigState[]} */ ([])
-    const toApply = /** @type {RcConfigState[]} */ ([])
-    const toModify = /** @type {RcConfigState[]} */ ([])
-    const transactionByPath = new Map()
-    const transactionHandledPaths = new Set()
-    const transactionOutcomes = new Map()
+    const changes = /** @type {RemoteConfigChange[]} */ ([])
 
     for (const appliedConfig of this.appliedConfigs.values()) {
       if (!clientConfigs.includes(appliedConfig.path)) {
-        toUnapply.push(appliedConfig)
-        transactionByPath.set(appliedConfig.path, appliedConfig)
+        changes.push({
+          kind: 'remove',
+          path: appliedConfig.path,
+          product: appliedConfig.product,
+          configId: appliedConfig.id,
+          version: appliedConfig.version,
+        })
       }
     }
 
@@ -444,15 +448,7 @@ class RemoteConfig {
 
         const current = this.appliedConfigs.get(path)
 
-        const newConf = /** @type {RcConfigState} */ ({})
-
-        if (current) {
-          if (current.hashes.sha256 === meta.hashes.sha256) continue
-
-          toModify.push(newConf)
-        } else {
-          toApply.push(newConf)
-        }
+        if (current?.hashes.sha256 === meta.hashes.sha256) continue
 
         const file = targetFiles.find(file => file.path === path)
         if (!file) throw new Error(`Unable to find file for path ${path}`)
@@ -465,45 +461,21 @@ class RemoteConfig {
 
         const { product, id } = parseConfigPath(path)
 
-        Object.assign(newConf, {
+        changes.push({
+          kind: current === undefined ? 'add' : 'update',
           path,
           product,
-          id,
+          configId: id,
           version: meta.custom.v,
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
+          contents: Buffer.from(file.raw, 'base64').toString(),
           length: meta.length,
           hashes: meta.hashes,
-          file: fromBase64JSON(file.raw),
         })
-        transactionByPath.set(path, newConf)
       }
-
-      this.state.client.state.targets_version = targets.signed.version
-      this.state.client.state.backend_client_state = targets.signed.custom.opaque_backend_state
     }
 
-    if (toUnapply.length || toApply.length || toModify.length) {
-      const transaction = createUpdateTransaction(
-        { toUnapply, toApply, toModify },
-        transactionHandledPaths,
-        transactionOutcomes
-      )
-
-      if (this.#batchHandlers.size) {
-        for (const [handler, products] of this.#batchHandlers) {
-          const transactionView = filterTransactionByProducts(transaction, products)
-          if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
-            handler(transactionView)
-          }
-        }
-      }
-
-      applyOutcomes(transactionByPath, transactionOutcomes)
-
-      this.dispatch(toUnapply, 'unapply', transactionHandledPaths)
-      this.dispatch(toApply, 'apply', transactionHandledPaths)
-      this.dispatch(toModify, 'modify', transactionHandledPaths)
+    if (changes.length !== 0) {
+      this.#applyChanges(changes)
 
       this.state.cached_target_files = /** @type {RcCachedTargetFile[]} */ ([])
 
@@ -518,6 +490,11 @@ class RemoteConfig {
           hashes,
         })
       }
+    }
+
+    if (targets) {
+      this.state.client.state.targets_version = targets.signed.version
+      this.state.client.state.backend_client_state = targets.signed.custom.opaque_backend_state
     }
   }
 

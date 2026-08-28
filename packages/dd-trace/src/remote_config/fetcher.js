@@ -96,6 +96,8 @@ class AgentlessRemoteConfigFetcher {
  * @property {string} configId
  * @property {number} version
  * @property {string} [contents]
+ * @property {number} [length]
+ * @property {Record<string, string>} [hashes]
  */
 
 module.exports = AgentlessRemoteConfigFetcher
