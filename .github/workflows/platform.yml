@@ -91,6 +91,24 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: npm run test:integration:bun
+      - name: Run existing unit tests with Bun
+        run: |
+          npm exec -- bun scripts/mocha-parallel-files.js \
+            --jobs 4 \
+            --timeout 30000 \
+            -- \
+            "packages/datadog-core/test/**/*.spec.js" \
+            packages/dd-trace/test/baggage.spec.js \
+            packages/dd-trace/test/carrier.spec.js \
+            packages/dd-trace/test/rate_limiter.spec.js \
+            packages/dd-trace/test/sampling_rule.spec.js \
+            packages/dd-trace/test/scope.spec.js \
+            packages/dd-trace/test/opentracing/span_context.spec.js \
+            packages/dd-trace/test/opentracing/propagation/tracestate.spec.js \
+            packages/dd-trace/test/profiling/tagger.spec.js \
+            packages/dd-trace/test/profiling/libuv-size.spec.js \
+            packages/dd-trace/test/profiling/loggers/console.spec.js \
+            packages/dd-trace/test/profiling/profilers/poisson.spec.js
       - uses: ./.github/actions/upload-junit-artifacts
         if: always()
         with:

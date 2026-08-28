@@ -1149,6 +1149,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/test
+      - name: Run PostgreSQL tracing tests with Bun
+        env:
+          PG_TEST_NATIVE: "false"
+        run: >-
+          npm exec -- bun ./node_modules/mocha/bin/mocha.js
+          --timeout 60000
+          packages/datadog-plugin-pg/test/index.spec.js
+          --grep "(automatic instrumentation|callback errors|parent context|resolves acquire tags)"
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-bun
 
   prisma:
     strategy:
