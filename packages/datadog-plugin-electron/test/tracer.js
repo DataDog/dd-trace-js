@@ -9,7 +9,7 @@ const logger = globalThis.logger = {
   error: (...args) => console.error(...args),
 }
 
-require('../../dd-trace')
+const tracer = require('../../dd-trace')
   .init({
     service: 'test',
     env: 'tester',
@@ -18,3 +18,9 @@ require('../../dd-trace')
     plugins: false,
   })
   .use('electron', true)
+
+const extract = tracer._tracer.extract
+tracer._tracer.extract = function (format, carrier) {
+  if (carrier === undefined) process.send?.({ name: 'extract-with-undefined' })
+  return extract.call(this, format, carrier)
+}
