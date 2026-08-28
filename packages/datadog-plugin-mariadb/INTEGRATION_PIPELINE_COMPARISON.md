@@ -6,11 +6,13 @@ This branch migrates MariaDB directly to `IntegrationPipeline` operations and st
 processor, lifecycle adapters, source registry, domain registry, or trace manager. It is intended to be compared with:
 
 - legacy MariaDB plugin at `5fcbd3750`;
-- processor/adapter branch `crysmags/integration-processor-adapters` at `8e0a1f1c5`;
+- processor/adapter branch `crysmags/integration-processor-adapters`;
 - direct-stage branch `crysmags/mariadb-integration-pipeline-stages`.
 
 All three retain the existing manual MariaDB instrumentation. The v2 query wrapper and v3 command wrapper continue to
 own actual callback/promise completion; neither design treats `Command.start()` as the logical async lifecycle.
+Both comparison branches restore BullMQ to its pre-pipeline plugin, so the framework and package-local totals below
+measure only the Azure Cosmos and MariaDB database migrations.
 
 ## Direct-stage shape
 
@@ -50,8 +52,10 @@ not surround the original library call with a bound operation scope.
 The direct-stage declaration keeps query shape, stage order, and span metadata close together. The processor version
 leaves a smaller MariaDB package source (135 lines versus 271), because service naming, DBM, tracing, product
 composition, and lifecycle policy move into reusable database-domain modules. Its framework is correspondingly much
-larger: the completed database source/processor/adapter/trace lifecycle is 1,145 lines, while the direct-stage engine
-is 825 lines and this migration adds 115 lines while removing 23 from that engine.
+larger: the database-only registries, source routing, processor, lifecycle adapters, and trace manager total 1,653
+production lines, while the direct-stage engine is 825 lines. Across the two migrated database packages, the
+processor branch has 294 package-local production lines versus 439 on the direct-stage branch; including their
+frameworks, the totals are 1,947 versus 1,264 lines.
 
 Measured as migration production-code churn from each approach's immediate framework baseline, direct stages add 413
 and remove 39 lines across seven files. The processor MariaDB query/pool/IAST slice adds 925 and removes 307 lines

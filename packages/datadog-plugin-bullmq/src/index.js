@@ -1,12 +1,18 @@
 'use strict'
 
-const { createIntegrationPlugin } = require('../../dd-trace/src/plugins/integration-pipeline')
-const { getFilter } = require('./filter')
-const producerOperations = require('./producer')
-const consumerOperation = require('./consumer')
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
+const BullmqProducerPlugins = require('./producer')
+const BullmqConsumerPlugin = require('./consumer')
 
-module.exports = createIntegrationPlugin({
-  id: 'bullmq',
-  configure: config => ({ ...config, producerFilter: getFilter(config) }),
-  operations: [...producerOperations, consumerOperation],
-})
+class BullmqPlugin extends CompositePlugin {
+  static id = 'bullmq'
+
+  static plugins = {
+    queueAdd: BullmqProducerPlugins[0],
+    queueAddBulk: BullmqProducerPlugins[1],
+    flowProducerAdd: BullmqProducerPlugins[2],
+    consumer: BullmqConsumerPlugin,
+  }
+}
+
+module.exports = BullmqPlugin

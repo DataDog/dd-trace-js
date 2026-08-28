@@ -8,9 +8,8 @@ The pipeline is internal and experimental. It is not a public API, and its decla
 
 ## Current checkpoint (2026-08-25)
 
-At this checkpoint, branch `pabloerhard/feat-new-orchestrion-pipeline` has reached this implementation state:
+At this checkpoint, branch `crysmags/mariadb-integration-pipeline-stages` has reached this implementation state:
 
-- BullMQ is the first full pipeline migration and exercises producer, consumer, propagation, and DSM stages.
 - Azure Cosmos is migrated to one async pipeline operation while retaining `DatabasePlugin` as its semantic base.
 - The engine accepts a `TracingPlugin` subclass through `base`, evaluates `skip` as a literal or frame resolver, and
   completes materialized spans through the selected base class's `finish()` method.
@@ -34,7 +33,6 @@ Verification completed at this checkpoint:
 
 - focused pipeline and Azure Cosmos tests: 21 passing;
 - Azure Cosmos CI-equivalent matrix against `@azure/cosmos` 4.4.1 and 4.10.0, including ESM: 22 passing;
-- BullMQ regression matrix after shared compiler optimization: 126 passing;
 - Azure Cosmos changed production source: 100% line coverage;
 - focused ESLint and `git diff --check`: passing.
 - focused MariaDB plugin matrix: 327 passing across generated v2/v3 fixtures;
@@ -55,11 +53,9 @@ Do not use that observation to waive focused lint or CI on subsequent changes.
 | --- | --- |
 | [`integration-pipeline.js`](./integration-pipeline.js) | Authoritative implementation, JSDoc types, validation, lifecycle, stores, and exported helpers. |
 | [`integration-pipeline.spec.js`](../../test/plugins/integration-pipeline.spec.js) | Executable contract for ordering, correlation, spanless operations, errors, no-op scopes, and validation. |
-| [`INTEGRATION_PIPELINE_NOTES.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_NOTES.md) | Mechanical walkthrough using BullMQ and Azure Cosmos. |
-| [`INTEGRATION_PIPELINE_RATIONALE.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_RATIONALE.md) | Adoption argument, architecture score, risks, and rollout criteria. |
-| [BullMQ plugin](../../../datadog-plugin-bullmq/src/index.js) | Messaging integration using multiple operations and product stages. |
 | [Azure Cosmos plugin](../../../datadog-plugin-azure-cosmos/src/index.js) | Database integration using a compatibility base and a resolved skip mode. |
 | [MariaDB plugin](../../../datadog-plugin-mariadb/src/index.js) | Explicit-channel database migration with query/DBM/IAST stages and publish-only pool acquisition. |
+| [MariaDB comparison](../../../datadog-plugin-mariadb/INTEGRATION_PIPELINE_COMPARISON.md) | Database-only architecture, maintenance, and hot-path comparison. |
 | [Orchestrion config index](../../../datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js) | Registration point for source-rewriter definitions. |
 | [Azure Cosmos benchmark](../../../../benchmark/sirun/plugin-azure-cosmos-pipeline/README.md) | Persistent baseline/candidate measurement for accepted, rejected, and inherited no-op paths. |
 
@@ -338,9 +334,9 @@ Overrides parent selection. Parent precedence is:
 2. correlation from the active `storage('context')` store;
 3. span from the active `storage('legacy')` store.
 
-Use this for extracted remote parents, as BullMQ consumer propagation does. Returning `null` explicitly requests a
-root context. Returning `undefined` also creates a root context because an explicitly declared resolver suppresses the
-normal active-context fallback; prefer `null` when that root intent should be obvious to a reviewer.
+Use this when an integration extracts a remote parent or deliberately creates a root operation. Returning `null`
+explicitly requests a root context. Returning `undefined` also creates a root context because an explicitly declared
+resolver suppresses the normal active-context fallback; prefer `null` when that root intent should be obvious.
 
 ### `span`
 
@@ -484,24 +480,6 @@ base's `finish(invocation)` rather than directly finishing the span. This preser
 as peer-service tags.
 
 ## Reference migrations
-
-### BullMQ
-
-BullMQ demonstrates:
-
-- multiple operations in one definition;
-- producer and consumer span shapes;
-- configuration transformation for producer filters;
-- extracted remote-parent selection;
-- tracing-dependent propagation and DSM stages;
-- argument mutation through `frame.invocation.arguments`;
-- correlation and span IDs remaining identical.
-
-Read:
-
-- [`src/index.js`](../../../datadog-plugin-bullmq/src/index.js)
-- [`src/producer.js`](../../../datadog-plugin-bullmq/src/producer.js)
-- [`src/consumer.js`](../../../datadog-plugin-bullmq/src/consumer.js)
 
 ### Azure Cosmos
 
@@ -665,8 +643,8 @@ Do not add an engine concept merely to shorten one migration. Before extending t
 4. Preserve source independence in the lifecycle engine.
 5. Add definition validation for invalid combinations.
 6. Add direct pipeline tests for ordering, errors, cleanup, no-op scopes, and restoration.
-7. Update this guide, the mechanical notes, and the rationale.
-8. Re-run BullMQ, Azure Cosmos, and MariaDB CI when the shared lifecycle changes.
+7. Update this guide and the database architecture comparison.
+8. Re-run Azure Cosmos and MariaDB CI when the shared lifecycle changes.
 
 Architecture changes must be scored against drift prevention, module coupling, explicit contracts, boundary
 testability, extensibility, and hot-path fitness. Compare the existing design with the proposal; do not assign scores
@@ -688,18 +666,17 @@ a fake test path that cannot occur through instrumentation and the plugin manage
   ownership may require source or lifecycle work.
 - `frame.data` is intentionally flexible but weakly typed across integration-specific fields.
 - `when` and resolved `skip` are separate and may repeat a gate computation.
-- Priority sampling can still require a materialized span, so BullMQ propagation remains tracing-dependent.
 - Globally disabled tracing still selects a no-op tracer that cannot reserve normal unique correlation contexts.
 - The optimized Azure Cosmos benchmark still shows a 31% isolated accepted-path regression (about 320 ns), while
   explicit rejections are 9-10% slower (20-25 ns) and inherited no-op is at parity. Real SDK/emulator trials cannot
   resolve that delta against roughly millisecond requests. See `benchmark/sirun/plugin-azure-cosmos-pipeline` and
   keep measuring before adopting the engine in much hotter integrations.
-- BullMQ and Azure Cosmos do not yet prove a shared product stage across integration types.
+- Azure Cosmos and MariaDB do not yet prove a product stage shared across database integrations.
 - Compatibility removal criteria for the legacy store and base-class bridge are not defined.
 
 The Azure benchmark covers accepted, rejected, and inherited no-op paths plus a one-off real emulator comparison. Add
-equivalent persistent measurements for BullMQ, simple synchronous integrations, and globally disabled tracing before
-broad adoption. Warm up for roughly one second, run at least five trials, and reproduce results in a fresh shell.
+equivalent persistent measurements for additional database lifecycles and globally disabled tracing before broad
+adoption. Warm up for roughly one second, run at least five trials, and reproduce results in a fresh shell.
 
 ## Completion checklist
 
@@ -709,7 +686,7 @@ An agent should not declare a migration complete until all of the following are 
 - one or two same-type reference integrations were read;
 - every source target and build format is instrumented;
 - channel subscriber cardinality was audited;
-- legacy span shape, errors, propagation, DSM, and configuration are preserved;
+- legacy span shape, errors, DBM, IAST, and configuration are preserved where applicable;
 - selected base-class behavior is asserted through observable output;
 - every gate includes accepted, rejected, and sibling cases;
 - no-op and parent inheritance behavior is pinned;
@@ -718,5 +695,5 @@ An agent should not declare a migration complete until all of the following are 
 - oldest/newest and ESM tests pass;
 - scoped coverage includes important changed production lines;
 - focused lint and `git diff --check` pass;
-- shared lifecycle changes were regression-tested against BullMQ and Azure Cosmos;
-- notes and rationale reflect any new engine contract or remaining limitation.
+- shared lifecycle changes were regression-tested against Azure Cosmos and MariaDB;
+- the guide and database comparison reflect any new engine contract or remaining limitation.
