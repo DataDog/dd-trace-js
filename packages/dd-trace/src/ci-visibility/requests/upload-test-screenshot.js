@@ -130,6 +130,7 @@ function uploadTestScreenshot (
     timeout: UPLOAD_TIMEOUT_MS,
     url,
     deadline,
+    retryUntilDeadline: false,
     signal,
   }
 
