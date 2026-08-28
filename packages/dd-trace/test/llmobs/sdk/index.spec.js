@@ -134,8 +134,6 @@ describe('sdk', () => {
       const cache = new WarmCache({
         cacheDir,
         ttlMs: 60_000,
-        origin: 'https://api.datadoghq.com',
-        apiKey: config.DD_API_KEY,
       })
       cache.set(cacheKey('greeting', ['latest']), new ManagedPrompt({
         id: 'greeting', version: '1', source: 'cache', template: 'Hello',

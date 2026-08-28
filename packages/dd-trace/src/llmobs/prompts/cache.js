@@ -33,11 +33,6 @@ function cacheKey (promptId, selector) {
   return `${promptId}:${hash}`
 }
 
-function cacheNamespace (origin, apiKey) {
-  const hash = createHash('sha256').update(`${origin}\0${apiKey ?? ''}`).digest('hex')
-  return `v1-${hash}`
-}
-
 function defaultCacheDir () {
   try {
     const home = os.homedir()
@@ -143,13 +138,11 @@ class WarmCache {
    * @param {string | undefined} options.cacheDir
    * @param {boolean} [options.enabled]
    * @param {number} options.ttlMs
-   * @param {string} options.origin
-   * @param {string | undefined} options.apiKey
    */
-  constructor ({ cacheDir, enabled = true, ttlMs, origin, apiKey }) {
+  constructor ({ cacheDir, enabled = true, ttlMs }) {
     this.enabled = enabled && ttlMs > 0
     this.ttlMs = ttlMs
-    this.cacheDir = path.join(cacheDir || defaultCacheDir(), cacheNamespace(origin, apiKey))
+    this.cacheDir = cacheDir || defaultCacheDir()
     if (this.enabled) this._ensureDir(this.cacheDir)
   }
 
@@ -263,7 +256,9 @@ class WarmCache {
    */
   clear () {
     try {
-      fs.rmSync(this.cacheDir, { recursive: true, force: true })
+      for (const entry of fs.readdirSync(this.cacheDir)) {
+        fs.rmSync(path.join(this.cacheDir, entry), { recursive: true, force: true })
+      }
     } catch (error) {
       log.debug('Failed to clear prompt cache: %s', error.message)
     }

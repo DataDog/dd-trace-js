@@ -64,6 +64,16 @@ describe('PromptManager', () => {
     if (cacheDir) fs.rmSync(cacheDir, { recursive: true, force: true })
   })
 
+  it('normalizes decimal durations to integer milliseconds', () => {
+    const manager = new PromptManager(makeConfig({
+      DD_LLMOBS_PROMPTS_CACHE_TTL: 12.3456,
+      DD_LLMOBS_PROMPTS_TIMEOUT: 2.3456,
+    }), () => provider)
+
+    assert.strictEqual(manager.ttlMs, 12_346)
+    assert.strictEqual(manager.timeoutMs, 2_346)
+  })
+
   it('routes latest and encoded exact versions while preserving an override path prefix', async () => {
     process.env._DD_LLMOBS_OVERRIDE_ORIGIN = 'https://proxy.example.test/dd-proxy/'
     fetchStub.onFirstCall().resolves(response(200, promptResponse()))
@@ -301,6 +311,31 @@ describe('PromptManager', () => {
 
     assert.strictEqual(manager.hotCache.get(key), undefined)
     assert.strictEqual(manager.warmCache.get(key), undefined)
+  })
+
+  it('aborts an obsolete background refresh when a manual refresh replaces it', async () => {
+    const now = sinon.stub(performance, 'now').returns(100)
+    let backgroundSignal
+    fetchStub.onFirstCall().resolves(response(200, promptResponse({ version: 1 })))
+    fetchStub.onSecondCall().callsFake((...args) => {
+      const { signal } = args[1]
+      backgroundSignal = signal
+      return new Promise((resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    fetchStub.onThirdCall().resolves(response(200, promptResponse({ version: 2 })))
+    const manager = new PromptManager(makeConfig(), () => provider)
+
+    await manager.getPrompt('greeting')
+    now.returns(60_101)
+    assert.strictEqual((await manager.getPrompt('greeting')).version, '1')
+    assert.strictEqual((await manager.refreshPrompt('greeting')).version, '2')
+    assert.strictEqual(backgroundSignal.aborted, true)
+    await new Promise(setImmediate)
+
+    assert.strictEqual((await manager.getPrompt('greeting')).version, '2')
+    sinon.assert.calledThrice(fetchStub)
   })
 
   it('persists static results but never environment resolve results', async () => {

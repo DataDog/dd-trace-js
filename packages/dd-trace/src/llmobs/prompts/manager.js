@@ -125,6 +125,15 @@ function normalizeResponse (data) {
   return Array.isArray(data) ? data.map(normalizeItem) : normalizeItem(data)
 }
 
+function requestSignal (timeoutMs, cacheSignal) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs)
+  if (!cacheSignal) return timeoutSignal
+  const controller = new AbortController()
+  cacheSignal.addEventListener('abort', () => controller.abort(cacheSignal.reason), { once: true })
+  timeoutSignal.addEventListener('abort', () => controller.abort(timeoutSignal.reason), { once: true })
+  return controller.signal
+}
+
 class PromptManager {
   /**
    * @param {import('../../config/config-base')} config
@@ -133,20 +142,18 @@ class PromptManager {
   constructor (config, provider) {
     this.config = config
     this.provider = provider
-    this.ttlMs = config.DD_LLMOBS_PROMPTS_CACHE_TTL * 1000
-    this.timeoutMs = config.DD_LLMOBS_PROMPTS_TIMEOUT * 1000
+    this.ttlMs = Math.round(config.DD_LLMOBS_PROMPTS_CACHE_TTL * 1000)
+    this.timeoutMs = Math.round(config.DD_LLMOBS_PROMPTS_TIMEOUT * 1000)
     this.origin = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') || `https://api.${config.site}`
     this.cacheGeneration = 0
     this.hotCache = new HotCache({
       ttlMs: this.ttlMs,
-      fetchMethod: (key, stale, { context }) => this._backgroundFetch(key, context),
+      fetchMethod: (key, stale, { context, signal }) => this._backgroundFetch(key, context, signal),
     })
     this.warmCache = new WarmCache({
       cacheDir: config.DD_LLMOBS_PROMPTS_CACHE_DIR,
       enabled: config.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED && this.ttlMs > 0,
       ttlMs: this.ttlMs,
-      origin: this.origin,
-      apiKey: config.DD_API_KEY,
     })
   }
 
@@ -196,9 +203,10 @@ class PromptManager {
   /**
    * Fetch a prompt from the registry or resolve endpoint.
    * @param {PromptRequest} request
+   * @param {AbortSignal} [cacheSignal]
    * @returns {Promise<PromptFetchResult>}
    */
-  async _fetchHttp (request) {
+  async _fetchHttp (request, cacheSignal) {
     const apiKey = this._requireApiKey()
     if (request.resolve && !this.config.DD_APP_KEY) {
       return {
@@ -234,7 +242,7 @@ class PromptManager {
         method,
         headers,
         body,
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: requestSignal(this.timeoutMs, cacheSignal),
       })
       const responseBody = await response.text()
       if (response.ok) {
@@ -268,12 +276,12 @@ class PromptManager {
   /**
    * Fetch and cache one selector.
    * @param {PromptRequest} request
-   * @param {{evictOnNotFound?: boolean, hot?: boolean}} [options]
+   * @param {{evictOnNotFound?: boolean, hot?: boolean, signal?: AbortSignal}} [options]
    * @returns {Promise<PromptFetchResult>}
    */
-  async _fetchAndCache (request, { evictOnNotFound = false, hot = true } = {}) {
+  async _fetchAndCache (request, { evictOnNotFound = false, hot = true, signal } = {}) {
     const generation = this.cacheGeneration
-    const result = await this._fetchHttp(request)
+    const result = await this._fetchHttp(request, signal)
     const cacheable = generation === this.cacheGeneration
     if (result.prompt) {
       if (this.ttlMs > 0 && cacheable) {
@@ -296,10 +304,11 @@ class PromptManager {
    * Refresh one stale hot-cache entry.
    * @param {string} key
    * @param {PromptRequest} request
+   * @param {AbortSignal} signal
    * @returns {Promise<ManagedPrompt | undefined>}
    */
-  async _backgroundFetch (key, request) {
-    const result = await this._fetchAndCache(request, { evictOnNotFound: true, hot: false })
+  async _backgroundFetch (key, request, signal) {
+    const result = await this._fetchAndCache(request, { evictOnNotFound: true, hot: false, signal })
     if (!result.cacheable) return
     if (result.prompt) return result.prompt._withSource(SOURCE_CACHE)
     if (result.notFound) return

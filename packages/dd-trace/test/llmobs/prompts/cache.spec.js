@@ -11,7 +11,7 @@ const sinon = require('sinon')
 const { HotCache, WarmCache, cacheKey } = require('../../../src/llmobs/prompts/cache')
 const ManagedPrompt = require('../../../src/llmobs/prompts/prompt')
 
-const WARM_OPTIONS = { ttlMs: 60_000, origin: 'https://api.datadoghq.com', apiKey: 'api-key' }
+const WARM_OPTIONS = { ttlMs: 60_000 }
 
 describe('Prompt caches', () => {
   let cacheDir
@@ -94,27 +94,7 @@ describe('Prompt caches', () => {
     const cache = new WarmCache({ ...WARM_OPTIONS })
     cache.set(cacheKey('prompt', ['latest']), prompt('prompt'))
 
-    assert.strictEqual(path.dirname(cache.cacheDir), path.join(cacheDir, 'datadog', 'llmobs', 'prompts'))
-    assert.match(path.basename(cache.cacheDir), /^v1-[a-f0-9]{64}$/)
-  })
-
-  it('isolates tenant-owned files and preserves unrelated cache-root data when clearing', () => {
-    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-tenants-'))
-    const first = new WarmCache({ cacheDir, ...WARM_OPTIONS })
-    const second = new WarmCache({ cacheDir, ...WARM_OPTIONS, apiKey: 'other-api-key' })
-    const key = cacheKey('shared', ['latest'])
-    first.set(key, prompt('first'))
-    second.set(key, prompt('second'))
-    fs.writeFileSync(path.join(cacheDir, 'unrelated.txt'), 'keep')
-
-    assert.strictEqual(first.get(key).prompt.id, 'first')
-    assert.strictEqual(second.get(key).prompt.id, 'second')
-
-    first.clear()
-
-    assert.strictEqual(first.get(key), undefined)
-    assert.strictEqual(second.get(key).prompt.id, 'second')
-    assert.strictEqual(fs.readFileSync(path.join(cacheDir, 'unrelated.txt'), 'utf8'), 'keep')
+    assert.strictEqual(cache.cacheDir, path.join(cacheDir, 'datadog', 'llmobs', 'prompts'))
   })
 
   it('clears and evicts owned files even when warm reads and writes are disabled', () => {
