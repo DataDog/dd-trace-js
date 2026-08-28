@@ -18,6 +18,8 @@ const {
   getEfdRetryCountForDuration,
   hasEfdRetries,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { FINAL_FLUSH_FALLBACK_DELAY, FINAL_FLUSH_TIMEOUT } =
+  require('../../dd-trace/src/ci-visibility/final-flush')
 const {
   getCoveredFilesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -95,10 +97,10 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
 const CHILD_MESSAGE_CALL = 1
 
-// Maximum time we'll wait for the tracer to flush
-// The exporter has a 10-second bounded final-flush deadline. Leave enough time
-// for its completion callback before Jest's --forceExit fallback takes over.
-const FLUSH_TIMEOUT = 12_000
+// Maximum time we'll wait for the tracer to flush.
+// Let the exporter enforce its hard deadline and invoke its completion callback
+// before Jest's --forceExit fallback takes over.
+const FLUSH_TIMEOUT = FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY + 5000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
