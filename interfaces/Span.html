@@ -17,15 +17,15 @@ function calls to sub-components. A Trace has a single, top-level &quot;root&quo
 Span that in turn may have zero or more child Spans, which in turn may
 have children.</p>
 </div></section>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Span</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#addlink-1">addLink</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">link</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">attributes</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Object</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">context</span><span class="tsd-signature-symbol">:</span> <a href="SpanContext.html" class="tsd-signature-type tsd-kind-interface">SpanContext</a> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#addlinks-1">addLinks</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">links</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">attributes</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Object</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">context</span><span class="tsd-signature-symbol">:</span> <a href="SpanContext.html" class="tsd-signature-type tsd-kind-interface">SpanContext</a> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#context-1">context</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="SpanContext.html" class="tsd-signature-type tsd-kind-interface">SpanContext</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
-<section class="tsd-panel tsd-hierarchy" data-refl="103">
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Span</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#addlink-1">addLink</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">link</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">attributes</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Object</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">context</span><span class="tsd-signature-symbol">:</span> <a href="SpanContext.html" class="tsd-signature-type tsd-kind-interface">SpanContext</a> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#addlinks-1">addLinks</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">links</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">attributes</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Object</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">context</span><span class="tsd-signature-symbol">:</span> <a href="SpanContext.html" class="tsd-signature-type tsd-kind-interface">SpanContext</a> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#context-1">context</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="SpanContext.html" class="tsd-signature-type tsd-kind-interface">SpanContext</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#recordexception-1">recordException</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">exception</span><span class="tsd-signature-symbol">:</span> <a href="Exception.html" class="tsd-signature-type tsd-kind-interface">Exception</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">attributes</span><span class="tsd-signature-symbol">?:</span> <a href="../types/SpanEventAttributes.html" class="tsd-signature-type tsd-kind-type-alias">SpanEventAttributes</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
+<section class="tsd-panel tsd-hierarchy" data-refl="109">
 <h4>Hierarchy</h4>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-signature-type">Span</span>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">Span</span></li></ul></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/19f740b59466cf618a747f9cb73d87a0df470d1a/index.d.ts#L366">index.d.ts:366</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L376">index.d.ts:376</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -36,6 +36,7 @@ have children.</p>
 <div class="tsd-index-list"><a href="#addlink" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>add<wbr/>Link</span></a>
 <a href="#addlinks" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>add<wbr/>Links</span></a>
 <a href="#context" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>context</span></a>
+<a href="#recordexception" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>record<wbr/>Exception</span></a>
 </div></section></div></details></section></section>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
@@ -58,7 +59,7 @@ It is preferred span links be added at span creation.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/19f740b59466cf618a747f9cb73d87a0df470d1a/index.d.ts#L377">index.d.ts:377</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L395">index.d.ts:395</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="addlinks"><span>add<wbr/>Links</span><a href="#addlinks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -77,7 +78,7 @@ It is preferred span links be added at span creation.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/19f740b59466cf618a747f9cb73d87a0df470d1a/index.d.ts#L387">index.d.ts:387</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L405">index.d.ts:405</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="context"><span>context</span><a href="#context" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -89,7 +90,27 @@ It is preferred span links be added at span creation.</p>
 <h4 class="tsd-returns-title">Returns <a href="SpanContext.html" class="tsd-signature-type tsd-kind-interface">SpanContext</a></h4><aside class="tsd-sources">
 <p>Overrides opentracing.Span.context</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/19f740b59466cf618a747f9cb73d87a0df470d1a/index.d.ts#L367">index.d.ts:367</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L377">index.d.ts:377</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="recordexception"><span>record<wbr/>Exception</span><a href="#recordexception" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="recordexception-1"><span class="tsd-kind-call-signature">recordException</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">exception</span><span class="tsd-signature-symbol">:</span> <a href="Exception.html" class="tsd-signature-type tsd-kind-interface">Exception</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">attributes</span><span class="tsd-signature-symbol">?:</span> <a href="../types/SpanEventAttributes.html" class="tsd-signature-type tsd-kind-type-alias">SpanEventAttributes</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#recordexception-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Records an exception as a span event without marking the span as failed.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">exception</span>: <a href="Exception.html" class="tsd-signature-type tsd-kind-interface">Exception</a></span>
+<div class="tsd-comment tsd-typography"><p>The exception to record.</p>
+</div></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">attributes</span>: <a href="../types/SpanEventAttributes.html" class="tsd-signature-type tsd-kind-type-alias">SpanEventAttributes</a></span>
+<div class="tsd-comment tsd-typography"><p>Additional attributes for the exception event.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L385">index.d.ts:385</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -104,7 +125,7 @@ It is preferred span links be added at span creation.</p>
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
-<div><a href="#addlink"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>add<wbr/>Link</span></a><a href="#addlinks"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>add<wbr/>Links</span></a><a href="#context"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>context</span></a></div></details></div></details></div>
+<div><a href="#addlink"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>add<wbr/>Link</span></a><a href="#addlinks"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>add<wbr/>Links</span></a><a href="#context"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>context</span></a><a href="#recordexception"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>record<wbr/>Exception</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../modules.html">dd-trace</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
