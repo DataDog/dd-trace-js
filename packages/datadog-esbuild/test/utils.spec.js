@@ -5,6 +5,7 @@ const os = require('os')
 const path = require('path')
 const fs = require('fs')
 const sinon = require('sinon')
+const { NODE_MAJOR } = require('../../../version.js')
 const { processModule, resolveModule } = require('../src/utils.js')
 
 describe('esbuild utils', () => {
@@ -116,8 +117,9 @@ describe('esbuild utils', () => {
       fs.writeFileSync(source, "export * from 'dual-package'")
 
       try {
-        assert.strictEqual(path.basename(resolveModule('dual-package', directory, true)), 'import.mjs')
         assert.strictEqual(path.basename(resolveModule('dual-package', directory)), 'require.cjs')
+        if (NODE_MAJOR < 22) return
+        assert.strictEqual(path.basename(resolveModule('dual-package', directory, true)), 'import.mjs')
 
         const setters = await processModule({
           context: { format: 'module' },
