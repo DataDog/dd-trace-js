@@ -108,7 +108,29 @@ describe('datadog-turbopack loader', () => {
       resourcePath: appPath,
     }, fs.readFileSync(appPath, 'utf8'))
 
-    assert.match(result, /require\("\.\.\/\.\.\/node_modules\/\.cache\/dd-trace\/turbopack\/build-[^/]+\/0\.mjs"\)/)
+    assert.match(result, /require\("\.\.\/\.\.\/node_modules\/\.cache\/dd-trace\/turbopack\//)
+    assert.match(result, /build-[^/]+\/0\.mjs"\)/)
+  })
+
+  it('routes CommonJS imports in script-only syntax through its generated proxy', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-'))
+    directories.push(directory)
+    fs.writeFileSync(path.join(directory, 'package.json'), '{}')
+    const packagePath = createPackageIn(directory, 'ai', { main: 'index.mjs', type: 'module', version: '7.0.0' })
+    write(packagePath, 'index.mjs', 'export const generateText = () => {}')
+    const appPath = write(directory, 'pages/api/route.cjs', [
+      'with (globalThis) {}',
+      "const { generateText } = require('ai')",
+    ].join('\n'))
+    const manifest = await createManifest(directory)
+
+    const result = loader.call({
+      getOptions: () => ({ manifestPath: manifest.path, rewriteApplicationImports: true }),
+      resourcePath: appPath,
+    }, fs.readFileSync(appPath, 'utf8'))
+
+    assert.match(result, /require\("\.\.\/\.\.\/node_modules\/\.cache\/dd-trace\/turbopack\//)
+    assert.match(result, /build-[^/]+\/0\.mjs"\)/)
   })
 
   it('does not rewrite an application-defined require function', () => {

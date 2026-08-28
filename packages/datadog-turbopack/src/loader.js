@@ -110,7 +110,7 @@ function rewriteImports (source, resourcePath, targets, aliases = []) {
   if (!transformer) return source
 
   try {
-    const { code, map } = transformer.transform(source, 'esm')
+    const { code, map } = transformer.transform(source, isESMFile(resourcePath) ? 'esm' : 'cjs')
     return rewritten ? withInlineSourceMap(code, map) : source
   } catch {
     // A parser failure must never prevent an application from building.
