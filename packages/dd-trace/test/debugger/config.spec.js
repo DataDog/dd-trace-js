@@ -34,6 +34,7 @@ describe('getDebuggerConfig', function () {
       'logLevel',
       'port',
       'propagateProcessTags',
+      'remoteConfig',
       'repositoryUrl',
       'runtimeId',
       'service',
@@ -63,12 +64,26 @@ describe('getDebuggerConfig', function () {
     tracerConfig.DD_AGENTLESS_ENABLED = true
     tracerConfig.DD_API_KEY = 'test-api-key'
     tracerConfig.site = 'us3.datadoghq.com'
+    tracerConfig.remoteConfig.pollInterval = 0.1
 
     const config = getDebuggerConfig(tracerConfig)
 
     assert.strictEqual(config.agentless, true)
     assert.strictEqual(config.apiKey, 'test-api-key')
     assert.strictEqual(config.url, 'https://debugger-intake.us3.datadoghq.com')
+    assertObjectContains(config.remoteConfig, {
+      runtimeId: tracerConfig.tags['runtime-id'],
+      service: tracerConfig.service,
+      env: tracerConfig.env ?? '',
+      appVersion: tracerConfig.version ?? '',
+      language: 'node',
+      url: 'https://us3.datadoghq.com',
+      timeoutMs: 5000,
+      retryIntervalMs: 100,
+      apiKey: 'test-api-key',
+    })
+    assert.ok(config.remoteConfig.tags.includes(`git.commit.sha:${COMMIT_SHA}`))
+    assert.ok(config.remoteConfig.tags.includes(`git.repository_url:${REPOSITORY_URL}`))
   })
 
   it('should be able to send the config over a MessageChannel', function () {

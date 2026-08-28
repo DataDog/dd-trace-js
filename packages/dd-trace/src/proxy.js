@@ -227,7 +227,8 @@ class Tracer extends NoopProxy {
         openfeatureRemoteConfig.enable(rc, () => this.openfeature, subscribeOpenfeatureToRemoteConfig)
       }
 
-      if (config.dynamicInstrumentation.enabled && (rc || config.dynamicInstrumentation.probeFile)) {
+      if (config.dynamicInstrumentation.enabled &&
+          (rc || config.DD_AGENTLESS_ENABLED || config.dynamicInstrumentation.probeFile)) {
         getDynamicInstrumentation().start(config, rc)
       }
 

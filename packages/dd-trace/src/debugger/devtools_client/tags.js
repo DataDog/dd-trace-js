@@ -21,7 +21,7 @@ module.exports = function buildTags (config, hostname, debuggerVersion, log) {
     [GIT_REPOSITORY_URL, config.repositoryUrl],
   ]
   if (config.agentless) tags.splice(3, 0, ['runtime_id', config.runtimeId])
-  const serializedTags = []
+  let serializedTags = ''
 
   for (const [key, rawValue] of tags) {
     if (rawValue === undefined) continue
@@ -31,8 +31,9 @@ module.exports = function buildTags (config, hostname, debuggerVersion, log) {
       continue
     }
 
-    serializedTags.push(`${key}:${rawValue}`)
+    if (serializedTags) serializedTags += ','
+    serializedTags += `${key}:${rawValue}`
   }
 
-  return serializedTags.join(',')
+  return serializedTags
 }

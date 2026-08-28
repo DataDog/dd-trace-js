@@ -7,6 +7,9 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const tracerVersion = require('../../../../package.json').version
+const processTags = require('../../src/process-tags')
+
 require('../setup/mocha')
 
 describe('debugger/index', () => {
@@ -80,6 +83,9 @@ describe('debugger/index', () => {
       version: '1.2.3',
       env: 'test-env',
       url: new URL('http://localhost:8126'),
+      remoteConfig: {
+        pollInterval: 5,
+      },
     }
 
     rc = {
@@ -143,7 +149,8 @@ describe('debugger/index', () => {
       DynamicInstrumentation.start(config)
 
       sinon.assert.notCalled(fetchAgentInfo)
-      assert.deepStrictEqual(Worker.lastCall.args[1].workerData.config, {
+      const { remoteConfig, ...workerConfig } = Worker.lastCall.args[1].workerData.config
+      assert.deepStrictEqual(workerConfig, {
         agentless: true,
         apiKey: 'test-api-key',
         commitSHA: 'test-sha',
@@ -162,6 +169,25 @@ describe('debugger/index', () => {
         service: 'test-service',
         url: 'https://debugger-intake.us3.datadoghq.com',
         version: '1.2.3',
+      })
+      assert.deepStrictEqual(remoteConfig, {
+        runtimeId: 'test-runtime-id',
+        service: 'test-service',
+        env: 'test-env',
+        appVersion: '1.2.3',
+        tags: [
+          'runtime-id:test-runtime-id',
+          'git.repository_url:https://github.com/test/repo',
+          'git.commit.sha:test-sha',
+        ],
+        processTags: processTags.tagsArray ?? [],
+        language: 'node',
+        tracerVersion,
+        url: 'https://us3.datadoghq.com',
+        timeoutMs: 5000,
+        retryIntervalMs: 5000,
+        apiKey: 'test-api-key',
+        hostname: 'test-host',
       })
     })
 
@@ -288,6 +314,7 @@ describe('debugger/index', () => {
         logLevel: 'info',
         port: 8126,
         propagateProcessTags: { enabled: undefined },
+        remoteConfig: undefined,
         repositoryUrl: 'https://github.com/test/repo',
         runtimeId: 'test-runtime-id',
         service: 'test-service',
