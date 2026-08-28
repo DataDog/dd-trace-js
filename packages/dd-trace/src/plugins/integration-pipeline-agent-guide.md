@@ -1,23 +1,20 @@
-# Integration processor/adapter and compatibility pipeline agent guide
+# Database processor/adapter and compatibility pipeline agent guide
 
 This is the implementation and migration guide for agents continuing the experimental integration-lifecycle work.
-It covers the processor/adapter framework now used by Azure Cosmos, MariaDB, and BullMQ, plus the compatibility
-`IntegrationPipeline` engine retained as a low-level reference. It documents the current executable contracts, the
-invariants migrations must preserve, and the checks required before changing either path.
+It covers the database processor/adapter framework now used by Azure Cosmos and MariaDB, plus the compatibility
+`IntegrationPipeline` engine retained as a low-level reference. It documents the current executable contracts and
+the checks required before changing either path.
 
 Both frameworks are internal and experimental. They are not public APIs, and their declaration shapes may still
-change. New integration migrations must prefer a fixed domain processor and lifecycle adapter. Arbitrary
+change. New database migrations must prefer the fixed database processor and lifecycle adapters. Arbitrary
 integration-authored operation and stage arrays are compatibility-only; do not introduce them as the author-facing
-model when a stable domain contract can own the behavior.
+model when the database contract can own the behavior.
 
 ## Current checkpoint (2026-08-25)
 
 At this checkpoint, branch `crysmags/integration-processor-adapters`, based on
 `pabloerhard/feat-new-orchestrion-pipeline`, has reached this implementation state:
 
-- BullMQ is the first messaging processor/adapter migration. Package sources normalize producer and consumer facts
-  and perform bounded carrier write-back; the shared processor owns filtering, span policy, propagation, DSM, and
-  fixed produce/consume lifecycle adapters.
 - Azure Cosmos is the first database processor/adapter migration. Its package source extracts only Cosmos facts; one
   process-wide bridge normalizes the raw Orchestrion lifecycle; one database processor per tracer owns APM policy.
 - MariaDB is the second database proof. Its existing v2 callback/promise and v3 command wrappers retain physical
@@ -52,10 +49,7 @@ Verification completed at this checkpoint:
 - Azure Cosmos real SDK/emulator tests against `@azure/cosmos` 4.4.1 and 4.10.0: 8 passing;
 - Azure Cosmos ESM named and namespace imports against both boundary versions: 4 passing;
 - full MariaDB plugin matrix, including query, pool, connection, DBM write-back, CJS, and ESM coverage: 328 passing;
-- full BullMQ producer/consumer matrix across 5.66.0, 5.81.3, and 6.1.2, including propagation, filters, DSM, errors,
-  concurrent DSM isolation, CJS, and ESM: 128 passing;
-- focused changed-file coverage for the earlier database slice: 96.94% lines overall; messaging behavior is covered
-  by direct processor/factory contracts and the full BullMQ regression matrix;
+- focused changed-file coverage for the database slice: 96.94% lines overall;
 - focused ESLint and `git diff --check`: passing.
 - the persistent Azure microbenchmark retains a roughly 173 ns accepted-path cost versus the compatibility pipeline;
   duplicate rejection is materially faster, and empty-path and inherited-noop paths remain near parity. See the
@@ -77,17 +71,10 @@ Do not use that observation to waive focused lint or CI on subsequent changes.
 | [`registry.js`](../events/registry.js) | Per-tracer processor ownership and immutable package-source configuration. |
 | [`database/integration.js`](../events/database/integration.js) | Database factory and process-wide package-lifecycle-to-semantic bridge. |
 | [`database/processor.js`](../events/database/processor.js) | Shared database APM policy and stable source-consumer compilation. |
+| [`database/source-lifecycle.js`](../events/database/source-lifecycle.js) | Database-scoped normalized source routing and contributor composition. |
 | [`database/query-lifecycle-adapter.js`](../events/database/query-lifecycle-adapter.js) | Fixed database-query-to-trace-manager lifecycle translation. |
 | [`database/pool-acquire-lifecycle-adapter.js`](../events/database/pool-acquire-lifecycle-adapter.js) | Fixed pool-acquisition lifecycle and caller-context restoration. |
-| [`messaging/integration.js`](../events/messaging/integration.js) | Messaging factory and process-wide package-lifecycle bridge. |
-| [`messaging/processor.js`](../events/messaging/processor.js) | Shared producer/consumer tracing, filtering, propagation, and DSM policy. |
-| [`messaging/lifecycle-adapter.js`](../events/messaging/lifecycle-adapter.js) | Fixed messaging-to-trace-manager lifecycle translation. |
 | [`trace-manager.js`](../events/trace-manager.js) | Opaque per-tracer span ownership and exactly-once terminal operations. |
-| [`INTEGRATION_PIPELINE_NOTES.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_NOTES.md) | Historical walkthrough of the earlier BullMQ compatibility-pipeline prototype. |
-| [`INTEGRATION_PIPELINE_RATIONALE.md`](../../../datadog-plugin-bullmq/INTEGRATION_PIPELINE_RATIONALE.md) | Historical adoption argument and risk record that motivated the fixed framework. |
-| [BullMQ plugin](../../../datadog-plugin-bullmq/src/index.js) | Thin producer/consumer declaration using the shared messaging factory. |
-| [BullMQ producer source](../../../datadog-plugin-bullmq/src/producer.js) | Producer fact extraction and bounded carrier write-back. |
-| [BullMQ consumer source](../../../datadog-plugin-bullmq/src/consumer.js) | Consumer fact and carrier extraction. |
 | [Azure Cosmos plugin](../../../datadog-plugin-azure-cosmos/src/index.js) | Thin database-factory declaration. |
 | [Azure Cosmos query source](../../../datadog-plugin-azure-cosmos/src/query-source.js) | Package-only Cosmos argument/result extraction and skip decisions. |
 | [MariaDB plugin](../../../datadog-plugin-mariadb/src/index.js) | Thin query and pool-acquire declaration using the shared database factory. |
@@ -118,9 +105,9 @@ raw package lifecycle
 ```
 
 Package sources may normalize package arguments/results and apply bounded updates returned by the processor. They
-must not import tracer/plugin internals, create or finish spans, or own propagation, DSM, filtering, or tracing
-policy. Lifecycle adapters are fixed domain code; package declarations provide source extraction and write-back
-functions, not trace start/error/finish policy.
+must not import tracer/plugin internals, create or finish spans, or own DBM, service naming, database tagging, or
+tracing policy. Lifecycle adapters are fixed database-domain code; package declarations provide source extraction
+and write-back functions, not trace start/error/finish policy.
 
 The process-wide source registry owns physical source cardinality. One bridge is active while any tracer consumer or
 eligible product contributor needs that source, or while an observed operation still awaits its terminal phase. The
@@ -133,10 +120,10 @@ package source consumed by that processor. The processor applies shared APM poli
 the domain contract into atomic trace-manager operations, and the trace manager privately correlates the shared event
 identity with the span belonging to that tracer.
 
-Database and messaging now demonstrate that package integrations can share fixed domain contracts without exposing
-spans or lifecycle orchestration to package adapters. Treat that as the default shape: first identify the semantic
-domain operation, then add the narrow source and lifecycle capabilities the domain needs. Do not encode an open-ended
-stage engine inside a processor.
+Azure Cosmos and MariaDB demonstrate that database integrations can share fixed query contracts without exposing
+spans or lifecycle orchestration to package adapters. MariaDB additionally exercises pool-acquisition and connection
+lifecycles. Add narrow database source and lifecycle capabilities only when a concrete integration needs them; do not
+encode an open-ended stage engine inside the processor.
 
 The compatibility `IntegrationPipeline` is retained for executable compatibility and historical experiments with
 arbitrary stage composition. Raw stage arrays are compatibility-only. Introducing a new production caller requires a
@@ -171,15 +158,15 @@ storage, span cleanup, or source lifecycle routing.
 
 ## Compatibility definition reference
 
-Do not start a new same-domain migration from this schema. Prefer `createDatabaseIntegration()` or
-`createMessagingIntegration()` and extend their fixed contracts when the domain has a demonstrated shared need.
+Do not start a new database migration from this schema. Prefer `createDatabaseIntegration()` and extend its fixed
+contracts when at least two database integrations have a demonstrated shared need.
 
 The top-level definition passed to `createIntegrationPlugin` has this shape:
 
 ```js
 createIntegrationPlugin({
   id: 'integration-id',
-  base: OutboundPlugin, // optional; defaults to TracingPlugin
+  base: DatabasePlugin, // optional; defaults to TracingPlugin
   source,               // optional; defaults to the Orchestrion adapter
   configure,            // optional config transformation
   operations: [],       // required and non-empty
@@ -194,9 +181,9 @@ The existing integration ID used by the plugin manager, configuration, telemetry
 
 An optional `TracingPlugin` subclass. The default is `TracingPlugin` itself.
 
-Select the same semantic base as the legacy integration when that base has behavior the migration must retain. For
-example, an HTTP client compatibility migration may select `OutboundPlugin` to preserve peer-service computation and
-base-class `finish()` behavior.
+Select the same semantic base as the legacy integration when that base has behavior the migration must retain. A
+database compatibility migration may select `DatabasePlugin` to preserve storage service naming, peer-service
+computation, and base-class `finish()` behavior.
 
 The generated class overrides automatic trace subscriptions because the pipeline registers its own source channels.
 Other constructor, `configure()`, `startSpan()`, and `finish()` behavior from the selected base still applies.
@@ -410,9 +397,9 @@ Overrides parent selection. Parent precedence is:
 2. correlation from the active `storage('context')` store;
 3. span from the active `storage('legacy')` store.
 
-Use this for extracted remote parents, as BullMQ consumer propagation does. Returning `null` explicitly requests a
-root context. Returning `undefined` also creates a root context because an explicitly declared resolver suppresses the
-normal active-context fallback; prefer `null` when that root intent should be obvious to a reviewer.
+Use this when a source extracts a remote parent or deliberately creates a root operation. Returning `null` explicitly
+requests a root context. Returning `undefined` also creates a root context because an explicitly declared resolver
+suppresses the normal active-context fallback; prefer `null` when that root intent should be obvious.
 
 ### `span`
 
@@ -548,24 +535,6 @@ base's `finish(invocation)` rather than directly finishing the span. This preser
 as peer-service tags.
 
 ## Reference migrations
-
-### BullMQ
-
-BullMQ demonstrates:
-
-- a thin `createMessagingIntegration()` declaration with fixed produce and consume operations;
-- package-only extraction for Queue, FlowProducer, and Worker calls;
-- bounded propagation carrier write-back owned by producer sources;
-- carrier extraction and cleanup owned by the consumer source;
-- shared processor ownership of span shape, producer filters, remote-parent selection, propagation, and DSM;
-- fixed lifecycle adapters and private, per-tracer span ownership;
-- concurrent DSM pathway isolation inside the operation's bound store.
-
-Read:
-
-- [`src/index.js`](../../../datadog-plugin-bullmq/src/index.js)
-- [`src/producer.js`](../../../datadog-plugin-bullmq/src/producer.js)
-- [`src/consumer.js`](../../../datadog-plugin-bullmq/src/consumer.js)
 
 ### Azure Cosmos
 
@@ -758,8 +727,8 @@ Do not add a framework concept merely to shorten one migration. Before extending
 4. Preserve source independence in the lifecycle engine.
 5. Add definition validation for invalid combinations.
 6. Add direct boundary tests for ordering, errors, cleanup, no-op scopes, and restoration.
-7. Update this guide, the mechanical notes, and the rationale.
-8. Re-run every affected domain contract and its BullMQ, Azure Cosmos, or MariaDB regression suite.
+7. Update this guide and the affected database benchmark documentation.
+8. Re-run every affected database contract and its Azure Cosmos or MariaDB regression suite.
 
 Architecture changes must be scored against drift prevention, module coupling, explicit contracts, boundary
 testability, extensibility, and hot-path fitness. Compare the existing design with the proposal; do not assign scores
@@ -780,8 +749,6 @@ a fake test path that cannot occur through instrumentation and the plugin manage
   streaming ownership may require source or lifecycle work.
 - Compatibility `frame.data` is intentionally flexible but weakly typed across integration-specific fields.
 - Compatibility `when` and resolved `skip` are separate and may repeat a gate computation.
-- Priority sampling can still require a materialized span, so processor-owned BullMQ propagation remains bound to a
-  traced operation.
 - Globally disabled tracing still selects a no-op tracer that cannot reserve normal unique correlation contexts.
 - The Azure Cosmos processor/adapter benchmark retains an isolated accepted-path cost of roughly 173 ns, about 14%,
   versus the compatibility pipeline. Duplicate rejection is materially faster, while empty-path and inherited-noop
@@ -797,8 +764,8 @@ a fake test path that cannot occur through instrumentation and the plugin manage
   remains useful to the experiment. New production use requires explicit architecture review.
 
 The Azure and MariaDB benchmarks cover accepted, rejected/no-op, direct/pool-query-facts, and tracing-disabled paths.
-Add equivalent persistent measurements for BullMQ and simple synchronous integrations before broad adoption. Warm up
-for roughly one second, run at least five trials, and reproduce results in a fresh shell.
+Add equivalent persistent measurements for additional database lifecycles before broad adoption. Warm up for roughly
+one second, run at least five trials, and reproduce results in a fresh shell.
 
 ## Completion checklist
 
@@ -810,7 +777,7 @@ An agent should not declare a migration complete until all of the following are 
 - channel subscriber cardinality was audited;
 - processor/adapter sources have one physical raw binding regardless of tracer count;
 - independent APM and product consumers compose correctly, including product-only source activation;
-- legacy span shape, errors, propagation, DSM, and configuration are preserved;
+- legacy span shape, errors, DBM, IAST, and configuration are preserved where applicable;
 - selected base-class behavior is asserted through observable output;
 - every gate includes accepted, rejected, and sibling cases;
 - no-op and parent inheritance behavior is pinned;
@@ -819,5 +786,5 @@ An agent should not declare a migration complete until all of the following are 
 - oldest/newest and ESM tests pass;
 - scoped coverage includes important changed production lines;
 - focused lint and `git diff --check` pass;
-- shared lifecycle changes were regression-tested against BullMQ, Azure Cosmos, and MariaDB;
-- notes and rationale reflect any new engine contract or remaining limitation.
+- shared lifecycle changes were regression-tested against Azure Cosmos and MariaDB;
+- the guide and benchmark documentation reflect any new engine contract or remaining limitation.

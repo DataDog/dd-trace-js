@@ -6,17 +6,15 @@ const { describe, it, beforeEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-describe('bullmq consumer propagation extraction', () => {
+describe('bullmq consumer _extractDatadog', () => {
   let log
-  let extractDatadog
-  let source
+  let BullmqConsumerPlugin
 
   beforeEach(() => {
     log = { warn: sinon.stub(), error: sinon.stub() }
-    source = proxyquire('../src/consumer', {
+    BullmqConsumerPlugin = proxyquire('../src/consumer', {
       '../../dd-trace/src/log': log,
     })
-    ;({ extractDatadog } = source)
   })
 
   it('returns the carrier when metadata is well-formed JSON with _datadog', () => {
@@ -28,7 +26,7 @@ describe('bullmq consumer propagation extraction', () => {
       },
     }
 
-    const carrier = extractDatadog(job)
+    const carrier = BullmqConsumerPlugin.prototype._extractDatadog(job)
 
     assert.deepStrictEqual(carrier, { 'x-datadog-trace-id': '1' })
     assert.deepStrictEqual(JSON.parse(job.opts.telemetry.metadata), { other: 'kept' })
@@ -38,7 +36,7 @@ describe('bullmq consumer propagation extraction', () => {
   it('warns and does not throw on a malformed metadata JSON string', () => {
     const job = { opts: { telemetry: { metadata: '{not json' } } }
 
-    const result = extractDatadog(job)
+    const result = BullmqConsumerPlugin.prototype._extractDatadog(job)
 
     assert.strictEqual(result, undefined)
     sinon.assert.calledOnce(log.warn)
@@ -46,22 +44,9 @@ describe('bullmq consumer propagation extraction', () => {
   })
 
   it('returns undefined without warning when metadata is missing', () => {
-    const result = extractDatadog({ opts: {} })
+    const result = BullmqConsumerPlugin.prototype._extractDatadog({ opts: {} })
 
     assert.strictEqual(result, undefined)
     sinon.assert.notCalled(log.warn)
-  })
-
-  it('normalizes a job without a carrier for the shared consumer adapter', () => {
-    const facts = source.targets[0].start({
-      arguments: [{ data: false, queue: { name: 'jobs' } }],
-    })
-
-    assert.deepStrictEqual(facts, {
-      action: 'processJob',
-      body: false,
-      carrier: undefined,
-      destination: 'jobs',
-    })
   })
 })

@@ -1,23 +1,18 @@
 'use strict'
 
-const { createMessagingIntegration } = require('../../dd-trace/src/events/messaging')
-const consumerSource = require('./consumer')
-const { getFilter } = require('./filter')
-const producerSource = require('./producer')
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
+const BullmqProducerPlugins = require('./producer')
+const BullmqConsumerPlugin = require('./consumer')
 
-module.exports = createMessagingIntegration({
-  configure: config => ({ ...config, producerFilter: getFilter(config) }),
-  id: 'bullmq',
-  operations: [
-    {
-      adapter: 'produce',
-      operation: 'messaging.produce',
-      source: producerSource,
-    },
-    {
-      adapter: 'consume',
-      operation: 'messaging.consume',
-      source: consumerSource,
-    },
-  ],
-})
+class BullmqPlugin extends CompositePlugin {
+  static id = 'bullmq'
+
+  static plugins = {
+    queueAdd: BullmqProducerPlugins[0],
+    queueAddBulk: BullmqProducerPlugins[1],
+    flowProducerAdd: BullmqProducerPlugins[2],
+    consumer: BullmqConsumerPlugin,
+  }
+}
+
+module.exports = BullmqPlugin

@@ -1,37 +1,30 @@
 'use strict'
 
-const { storage } = require('../../../datadog-core')
+const { storage } = require('../../../../datadog-core')
 
-const log = require('../log')
+const log = require('../../log')
 
 const legacyStorage = storage('legacy')
 
-class EventSourceLifecycle {
-  #event = Symbol('datadog.event.source.event')
+class DatabaseSourceLifecycle {
+  #event = Symbol('datadog.database.source.event')
   #identity
-  #messages
   #operation
   #runtime
   #source
   #sourceRegistry
 
   /**
-   * Create shared normalized lifecycle routing for one semantic operation source.
+   * Create shared normalized lifecycle routing for one database operation source.
    *
    * @param {object} source Package source adapter.
-   * @param {object} identity Stable package and domain identity.
+   * @param {object} identity Stable package and database identity.
    * @param {string} operation Stable semantic operation identifier.
-   * @param {import('./source-registry').EventSourceRegistry} sourceRegistry Process-wide source registry.
+   * @param {import('../source-registry').EventSourceRegistry} sourceRegistry Process-wide source registry.
    * @param {object} runtime Registered process-wide source runtime.
-   * @param {string} domain Human-readable domain name used by isolated error logging.
    */
-  constructor (source, identity, operation, sourceRegistry, runtime, domain) {
+  constructor (source, identity, operation, sourceRegistry, runtime) {
     this.#identity = identity
-    this.#messages = Object.freeze({
-      complete: `${domain} source "%s" failed during completion: %s`,
-      start: `${domain} source "%s" failed during start: %s`,
-      update: `${domain} source "%s" failed during source update: %s`,
-    })
     this.#operation = operation
     this.#runtime = runtime
     this.#source = source
@@ -50,7 +43,7 @@ class EventSourceLifecycle {
     try {
       facts = this.#source.start(context)
     } catch (error) {
-      log.error(this.#messages.start, this.#identity.integration, error?.message || error)
+      log.error('Database source "%s" failed during start: %s', this.#identity.integration, error?.message || error)
       return parentStore
     }
 
@@ -100,7 +93,11 @@ class EventSourceLifecycle {
       try {
         this.#source.updateSource(context, facts, event.updates)
       } catch (error) {
-        log.error(this.#messages.update, this.#identity.integration, error?.message || error)
+        log.error(
+          'Database source "%s" failed during source update: %s',
+          this.#identity.integration,
+          error?.message || error
+        )
       }
     }
 
@@ -176,7 +173,7 @@ class EventSourceLifecycle {
    * Extract completion metadata once while isolating package-specific failures.
    *
    * @param {object} context Raw package lifecycle context.
-   * @param {object} event Normalized semantic event.
+   * @param {object} event Normalized semantic database event.
    * @returns {void}
    */
   #resolveMetadata (context, event) {
@@ -185,7 +182,11 @@ class EventSourceLifecycle {
     try {
       event.metadata = this.#source.complete?.(context)
     } catch (error) {
-      log.error(this.#messages.complete, this.#identity.integration, error?.message || error)
+      log.error(
+        'Database source "%s" failed during completion: %s',
+        this.#identity.integration,
+        error?.message || error
+      )
     }
   }
 }
@@ -193,8 +194,8 @@ class EventSourceLifecycle {
 /**
  * Start one processor inside the store composed by earlier lifecycle consumers.
  *
- * @param {object} consumer Stable source consumer with a per-tracer domain processor.
- * @param {object} event Normalized event shared across lifecycle phases.
+ * @param {object} consumer Stable source consumer with a per-tracer database processor.
+ * @param {object} event Normalized database event shared across lifecycle phases.
  * @returns {object | undefined} Store returned by the processor.
  */
 function bindProcessorStart (consumer, event) {
@@ -204,7 +205,7 @@ function bindProcessorStart (consumer, event) {
 /**
  * Preserve processors which started an operation so disablement cannot orphan its terminal phase.
  *
- * @param {object} event Normalized event shared across lifecycle phases.
+ * @param {object} event Normalized database event shared across lifecycle phases.
  * @param {object} consumer Stable source consumer which started tracing.
  * @returns {void}
  */
@@ -227,4 +228,4 @@ function hasError (context) {
   return context !== null && typeof context === 'object' && Reflect.get(context, 'error') !== undefined
 }
 
-module.exports = EventSourceLifecycle
+module.exports = DatabaseSourceLifecycle

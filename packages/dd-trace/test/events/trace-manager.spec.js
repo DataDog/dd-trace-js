@@ -91,39 +91,6 @@ describe('TraceManager', () => {
     sinon.assert.calledOnceWithExactly(plugin.finishSpan, span)
   })
 
-  it('owns propagation and data-streams access without exposing the operation span', () => {
-    const { manager, plugin, span } = createManager()
-    const operation = manager.start('messaging.produce', {}, {})
-    const carrier = {}
-    const parent = { parent: true }
-    const pathway = { pathway: true }
-    plugin.tracer.extract.returns(parent)
-    plugin.tracer.decodeDataStreamsContext.returns(pathway)
-    plugin.tracer.setCheckpoint.returns(pathway)
-
-    manager.inject(operation, 'text_map', carrier)
-    assert.strictEqual(manager.extract('text_map', carrier), parent)
-    assert.strictEqual(manager.decodeDataStreamsContext(carrier), pathway)
-    assert.strictEqual(manager.setCheckpoint(operation, ['direction:out'], 42), pathway)
-
-    sinon.assert.calledOnceWithExactly(plugin.tracer.inject, span, 'text_map', carrier)
-    sinon.assert.calledOnceWithExactly(plugin.tracer.extract, 'text_map', carrier)
-    sinon.assert.calledOnceWithExactly(plugin.tracer.decodeDataStreamsContext, carrier)
-    sinon.assert.calledOnceWithExactly(plugin.tracer.setCheckpoint, ['direction:out'], span, 42)
-  })
-
-  it('ignores operation-scoped capabilities after terminal cleanup', () => {
-    const { manager, plugin } = createManager()
-    const operation = manager.start('messaging.produce', {}, {})
-
-    manager.complete(operation)
-    manager.inject(operation, 'text_map', {})
-    assert.strictEqual(manager.setCheckpoint(operation, ['direction:out'], 0), undefined)
-
-    sinon.assert.notCalled(plugin.tracer.inject)
-    sinon.assert.notCalled(plugin.tracer.setCheckpoint)
-  })
-
   it('finishes once and ignores terminal work after state is released', () => {
     const { manager, plugin, span } = createManager()
     const context = {}
@@ -170,11 +137,5 @@ function createPlugin () {
     addError: sinon.stub(),
     finishSpan: sinon.stub().callsFake(span => span.finish()),
     startSpan: sinon.stub(),
-    tracer: {
-      decodeDataStreamsContext: sinon.stub(),
-      extract: sinon.stub(),
-      inject: sinon.stub(),
-      setCheckpoint: sinon.stub(),
-    },
   }
 }

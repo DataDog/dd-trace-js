@@ -5,12 +5,6 @@
  * @property {(name: string, options: object, context: object) => import('../../../../index').Span} startSpan
  * @property {(error: unknown, span: import('../../../../index').Span) => void} addError
  * @property {(span: import('../../../../index').Span) => void} finishSpan
- * @property {{
- *   inject: (span: import('../../../../index').Span, format: string, carrier: object) => void,
- *   extract: (format: string, carrier: object) => object | null | undefined,
- *   setCheckpoint: (edgeTags: string[], span: import('../../../../index').Span, payloadSize?: number) => object,
- *   decodeDataStreamsContext: (carrier: object | undefined) => object | undefined
- * }} tracer
  */
 
 class TraceManager {
@@ -40,53 +34,6 @@ class TraceManager {
     this.#operations.set(operation, span)
 
     return operation
-  }
-
-  /**
-   * Inject one active operation without exposing its span to a domain processor.
-   *
-   * @param {object} operation Opaque trace operation token.
-   * @param {string} format Propagation carrier format.
-   * @param {object} carrier Mutable propagation carrier.
-   * @returns {void}
-   */
-  inject (operation, format, carrier) {
-    const span = this.#operations.get(operation)
-    if (span) this.#plugin.tracer.inject(span, format, carrier)
-  }
-
-  /**
-   * Extract distributed trace context through the processor's tracer.
-   *
-   * @param {string} format Propagation carrier format.
-   * @param {object} carrier Propagation carrier.
-   * @returns {object | null | undefined} Extracted trace context.
-   */
-  extract (format, carrier) {
-    return this.#plugin.tracer.extract(format, carrier)
-  }
-
-  /**
-   * Decode one data-streams carrier through the processor's tracer.
-   *
-   * @param {object | undefined} carrier Data-streams carrier, including undefined to clear inherited context.
-   * @returns {object | undefined} Decoded pathway context.
-   */
-  decodeDataStreamsContext (carrier) {
-    return this.#plugin.tracer.decodeDataStreamsContext(carrier)
-  }
-
-  /**
-   * Create a data-streams checkpoint for one active operation without exposing its span.
-   *
-   * @param {object} operation Opaque trace operation token.
-   * @param {string[]} edgeTags Data-stream edge tags.
-   * @param {number} payloadSize Message payload size.
-   * @returns {object | undefined} Created pathway context.
-   */
-  setCheckpoint (operation, edgeTags, payloadSize) {
-    const span = this.#operations.get(operation)
-    if (span) return this.#plugin.tracer.setCheckpoint(edgeTags, span, payloadSize)
   }
 
   /**
