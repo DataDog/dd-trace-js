@@ -32,7 +32,9 @@ module.exports = function loader (source) {
     getRelativeTarget(this.resourcePath, manifest.relativeTargets)
   const esm = isESMFile(this.resourcePath)
 
-  if (rewriteApplicationImports || esm) source = rewriteImports(source, this.resourcePath, manifest.targets, aliases)
+  if (rewriteApplicationImports || (esm && manifest.esmImportPattern?.test(source))) {
+    source = rewriteImports(source, this.resourcePath, manifest.targets, aliases)
+  }
 
   if (!target) return source
 
