@@ -93,8 +93,8 @@ jobs:
       - run: npm run test:integration:bun
       - name: Run existing unit tests with Bun
         run: |
-          npm exec -- bun run --bun test:core
-          npm exec -- bun run --bun test:shimmer
+          ./node_modules/.bin/bun run --bun test:core
+          ./node_modules/.bin/bun run --bun test:shimmer
       - uses: ./.github/actions/upload-junit-artifacts
         if: always()
         with:
