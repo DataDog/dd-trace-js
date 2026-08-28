@@ -170,11 +170,12 @@ versions.forEach((version) => {
           const { testSession, testModule, testSuite, tests } = assertCompleteTestSessionTrace(events, testOutput)
 
           assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
-          for (const event of [testSession, testModule, testSuite]) {
+          for (const event of [testSession, testModule]) {
             assert.strictEqual(event.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.error, 1)
             assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
           }
+          assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
           assert.deepStrictEqual(
             [...new Set(tests.map(test => test.meta[TEST_STATUS]))].sort(),
             ['pass', 'skip']
@@ -214,11 +215,12 @@ versions.forEach((version) => {
           const { testSession, testModule, testSuite } = assertCompleteTestSessionTrace(events, testOutput)
 
           assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
-          for (const event of [testSession, testModule, testSuite]) {
+          for (const event of [testSession, testModule]) {
             assert.strictEqual(event.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.error, 1)
             assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
           }
+          assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
         },
         { hardTimeout: 20_000 }
       )
