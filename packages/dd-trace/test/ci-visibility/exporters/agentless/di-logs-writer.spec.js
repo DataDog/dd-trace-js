@@ -29,7 +29,7 @@ describe('Test Visibility DI Writer', () => {
   it('bounds logs retained before serialization', () => {
     const BoundedLogsWriter = proxyquire(
       '../../../../src/ci-visibility/exporters/agentless/di-logs-writer',
-      { '../limits': { MAX_BUFFERED_BYTES: 3 } }
+      { '../limits': { MAX_DI_LOG_BUFFERED_BYTES: 3 } }
     )
     const logsWriter = new BoundedLogsWriter({ url: 'http://www.example.com' })
 

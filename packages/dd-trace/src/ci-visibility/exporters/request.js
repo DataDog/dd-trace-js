@@ -11,7 +11,7 @@ const {
 } = require('../../exporters/common/retry')
 const { FINAL_FLUSH_TIMEOUT_CODE } = require('../final-flush')
 const { getRateLimitResetDelay } = require('../requests/rate-limit')
-const { MAX_BUFFERED_BYTES } = require('./limits')
+const { MAX_REQUEST_BUFFERED_BYTES } = require('./limits')
 
 const BACKPRESSURE_RETRY_MS = 50
 
@@ -84,7 +84,7 @@ function bufferReadable (data, signal, callback) {
   }
   const onData = chunk => {
     const chunkSize = Buffer.byteLength(chunk)
-    if (chunkSize > MAX_BUFFERED_BYTES - bufferedBytes) {
+    if (chunkSize > MAX_REQUEST_BUFFERED_BYTES - bufferedBytes) {
       settled = true
       cleanup(true)
       release()
@@ -101,7 +101,7 @@ function bufferReadable (data, signal, callback) {
     if (settled) return
     settled = true
     cleanup()
-    callback(null, Buffer.concat(chunks), payloadSize)
+    callback(null, chunks, payloadSize)
   }
   const onError = error => {
     if (settled) return
@@ -173,7 +173,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   let waitingForBackpressure = false
 
   if (reservedPayloadSize === undefined) {
-    if (payloadSize > MAX_BUFFERED_BYTES - bufferedBytes) {
+    if (payloadSize > MAX_REQUEST_BUFFERED_BYTES - bufferedBytes) {
       callback(createQueueFullError())
       return
     }

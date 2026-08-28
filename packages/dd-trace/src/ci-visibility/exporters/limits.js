@@ -1,5 +1,9 @@
 'use strict'
 
-const MAX_BUFFERED_BYTES = 64 * 1024 * 1024
+const MAX_DI_LOG_BUFFERED_BYTES = 64 * 1024 * 1024
+const MAX_REQUEST_BUFFERED_BYTES = 64 * 1024 * 1024
 
-module.exports = { MAX_BUFFERED_BYTES }
+module.exports = {
+  MAX_DI_LOG_BUFFERED_BYTES,
+  MAX_REQUEST_BUFFERED_BYTES,
+}
