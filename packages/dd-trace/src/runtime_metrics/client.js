@@ -1,6 +1,6 @@
 'use strict'
 
-const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
+const { DogStatsDClient, createMetricsAggregationClient } = require('../dogstatsd')
 const processTags = require('../process-tags')
 
 /**
@@ -13,7 +13,7 @@ const processTags = require('../process-tags')
  * also tag user-facing custom metrics, inflating their cardinality (and billing).
  *
  * @param {import('../config/config-base')} config - Tracer configuration
- * @returns {MetricsAggregationClient}
+ * @returns {ReturnType<typeof createMetricsAggregationClient>}
  */
 function createMetricsClient (config) {
   const clientConfig = DogStatsDClient.generateClientConfig(config)
@@ -24,7 +24,7 @@ function createMetricsClient (config) {
     }
   }
 
-  return new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+  return createMetricsAggregationClient(clientConfig)
 }
 
 module.exports = { createMetricsClient }
