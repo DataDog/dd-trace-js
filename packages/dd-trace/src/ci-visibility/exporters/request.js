@@ -12,6 +12,14 @@ const {
 const { getRateLimitResetDelay } = require('../requests/rate-limit')
 
 /**
+ * @param {number} statusCode
+ * @returns {boolean}
+ */
+function isRetriableHttpStatusCode (statusCode) {
+  return statusCode === 408 || statusCode === 429 || (statusCode >= 500 && statusCode <= 599)
+}
+
+/**
  * @param {AbortSignal} signal
  * @returns {Error}
  */
@@ -153,15 +161,10 @@ function requestBuffered (data, options, callback) {
       }
 
       const responseStatus = statusCode ?? error.status
-      const isRetriableHttpError = options.deadline !== undefined &&
-        (responseStatus === 429 || responseStatus >= 500)
-      if (options.retry === false || (attemptIndex >= getMaxAttempts(attemptOptions) &&
-        (isRetriableNetworkError(error) || isRetriableHttpError))) {
-        complete(error, result, statusCode, headers)
-        return
-      }
-
-      if (!isRetriableNetworkError(error) && !isRetriableHttpError) {
+      const isRetriableError = isRetriableNetworkError(error) || isRetriableHttpStatusCode(responseStatus)
+      const reachedBackgroundAttemptLimit =
+        options.deadline === undefined && attemptIndex >= getMaxAttempts(attemptOptions)
+      if (options.retry === false || !isRetriableError || reachedBackgroundAttemptLimit) {
         complete(error, result, statusCode, headers)
         return
       }
@@ -170,8 +173,13 @@ function requestBuffered (data, options, callback) {
       if (responseStatus === 429) {
         const resetDelay = getRateLimitResetDelay(headers)
         if (Number.isFinite(resetDelay)) {
-          const retryRemaining = options.deadline - Date.now()
-          if (resetDelay > RATE_LIMIT_MAX_WAIT_MS || resetDelay >= retryRemaining) {
+          if (options.deadline !== undefined) {
+            const retryRemaining = options.deadline - Date.now()
+            if (resetDelay >= retryRemaining) {
+              complete(error, result, statusCode, headers)
+              return
+            }
+          } else if (resetDelay > RATE_LIMIT_MAX_WAIT_MS) {
             complete(error, result, statusCode, headers)
             return
           }
