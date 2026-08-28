@@ -5,7 +5,6 @@ const os = require('node:os')
 
 const log = require('../../log')
 const { entityId } = require('../common/docker')
-const tracerVersion = require('../../../../../package.json').version
 const Writer = require('./writer')
 const { computeIntakeUrl } = require('./intake')
 
