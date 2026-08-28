@@ -11,6 +11,8 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
+const { getAgent } = require('../../../src/ci-visibility/exporters/agents')
+
 describe('ci-visibility/requests/upload-test-screenshot', () => {
   const traceId = '1234567890123456789'
   let tmpDir
@@ -40,9 +42,9 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     )
 
     assert.ok(requestStub.calledOnce)
-    const [bodyFactory, { path, headers, deadline, retryUntilDeadline, signal }] = requestStub.getCall(0).args
+    const [bodyFactory, { path, headers, agent, deadline, retryUntilDeadline, signal }] = requestStub.getCall(0).args
     const query = new URL(path, 'http://localhost:8126').searchParams
-    return { bodyFactory, path, headers, query, deadline, retryUntilDeadline, signal }
+    return { bodyFactory, path, headers, agent, query, deadline, retryUntilDeadline, signal }
   }
 
   before(() => {
@@ -93,6 +95,12 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(requestOptions.deadline, deadline)
       assert.strictEqual(requestOptions.retryUntilDeadline, false)
       assert.strictEqual(requestOptions.signal, abortController.signal)
+    })
+
+    it('uses the dedicated Test Optimization request agent', () => {
+      const { agent } = uploadForFile('screenshot.png')
+
+      assert.strictEqual(agent, getAgent(new URL('http://localhost:8126')))
     })
 
     it('streams the file with its known content length instead of buffering it', () => {

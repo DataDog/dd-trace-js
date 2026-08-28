@@ -7,6 +7,7 @@ const getConfig = require('../../config')
 const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
 const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const log = require('../../log')
+const { getAgent } = require('../exporters/agents')
 const request = require('../exporters/request')
 
 const UPLOAD_TIMEOUT_MS = 30_000
@@ -152,6 +153,7 @@ function uploadTestMedia (options, callback) {
     path: `${basePath}?${query}`,
     timeout: UPLOAD_TIMEOUT_MS,
     url,
+    agent: getAgent(url),
     deadline,
     retryUntilDeadline: false,
     signal,
