@@ -700,6 +700,33 @@ describe('RemoteConfig', () => {
       assert.deepStrictEqual(rc.state, previousState)
     })
 
+    it('should throw when a target file contains invalid JSON', () => {
+      const path = 'datadog/42/PRODUCT/confId/config'
+      payload = {
+        client_configs: [path],
+        targets: toBase64({
+          signed: {
+            custom: { opaque_backend_state: 'state' },
+            targets: {
+              [path]: {
+                custom: { v: 1 },
+                hashes: { sha256: 'haaaxx' },
+              },
+            },
+            version: 1,
+          },
+        }),
+        target_files: [{
+          path,
+          raw: Buffer.from('{invalid').toString('base64'),
+        }],
+      }
+
+      assert.throws(parsePayload, SyntaxError)
+      sinon.assert.notCalled(rc.dispatch)
+      assert.deepStrictEqual(rc.state, previousState)
+    })
+
     it('should throw when config path cannot be parsed', () => {
       payload = {
         client_configs: ['datadog/42/confId/config'],
