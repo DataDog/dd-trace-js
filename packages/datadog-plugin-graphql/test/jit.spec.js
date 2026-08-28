@@ -1059,6 +1059,60 @@ describe('Plugin', () => {
         assert.deepStrictEqual(result.data, firstResult.data)
       })
 
+      it('reuses collapsed default field scope across list items', async () => {
+        const tracer = require('../../dd-trace')
+        const Item = new graphql.GraphQLObjectType({
+          name: 'CollapsedDefaultItem',
+          fields: {
+            value: { type: graphql.GraphQLString },
+          },
+        })
+        const items = []
+        let getterCalls = 0
+        for (const value of ['one', 'two', 'three']) {
+          items.push(Object.defineProperty({}, 'value', {
+            get () {
+              getterCalls++
+              return tracer.trace('user.work', () => value)
+            },
+          }))
+        }
+        const defaultSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'CollapsedDefaultQuery',
+            fields: {
+              items: {
+                type: new graphql.GraphQLList(Item),
+                resolve: () => items,
+              },
+            },
+          }),
+        })
+        const { query } = compileQuery(
+          defaultSchema,
+          graphql.parse('query CollapsedDefault { items { value } }')
+        )
+
+        const result = await executeWithTrace(() => query({}, {}, {}), /CollapsedDefault/, traces => {
+          const spans = traces[0].filter(span => span.name === 'graphql.resolve')
+          const value = spans.find(span => span.meta['graphql.field.name'] === 'value')
+          const userSpans = traces[0].filter(span => span.name === 'user.work')
+          assert.ok(value, 'expected collapsed value span')
+          assert.strictEqual(userSpans.length, getterCalls)
+
+          for (const userSpan of userSpans) {
+            assert.strictEqual(userSpan.parent_id.toString(), value.span_id.toString())
+          }
+        })
+        assert.deepStrictEqual(result.data, {
+          items: [
+            { value: 'one' },
+            { value: 'two' },
+            { value: 'three' },
+          ],
+        })
+      })
+
       it('keeps uncollapsed list fields distinct and correctly parented', async () => {
         const Profile = new graphql.GraphQLObjectType({
           name: 'UncollapsedProfile',
@@ -1536,9 +1590,9 @@ describe('Plugin', () => {
           query: new graphql.GraphQLObjectType({
             name: 'LimitedDepthQuery',
             fields: {
-              child: {
-                type: LimitedDepthChild,
-                resolve: () => ({ value: 'nested' }),
+              children: {
+                type: new graphql.GraphQLList(LimitedDepthChild),
+                resolve: () => [{ value: 'one' }, { value: 'two' }],
               },
             },
           }),
@@ -1548,14 +1602,16 @@ describe('Plugin', () => {
         try {
           const { query } = compileQuery(
             limitedDepthSchema,
-            graphql.parse('query LimitedDepth { child { value } }')
+            graphql.parse('query LimitedDepth { children { value } }')
           )
           const result = await executeWithTrace(() => query({}, {}, {}), /LimitedDepth/, traces => {
             const resolveSpans = traces[0].filter(span => span.name === 'graphql.resolve')
             assert.strictEqual(resolveSpans.length, 1)
-            assert.strictEqual(resolveSpans[0].resource, 'child:LimitedDepthChild')
+            assert.strictEqual(resolveSpans[0].resource, 'children:[LimitedDepthChild]')
           })
-          assert.deepStrictEqual(result.data, { child: { value: 'nested' } })
+          assert.deepStrictEqual(result.data, {
+            children: [{ value: 'one' }, { value: 'two' }],
+          })
         } finally {
           agent.reload('graphql', { variables: ['id', 'name'] })
         }

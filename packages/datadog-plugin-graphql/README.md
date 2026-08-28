@@ -135,7 +135,7 @@ request needs observation
 
 The false branch preserves the code that `graphql-jit` generated. The true branch lets the runtime create or reuse field state before the read.
 
-`jitTraceFirst` enters runtime once per collapsed descriptor and request. `jitTraceAll` enters runtime for every invocation that needs observation.
+`jitTraceFirst` creates field state once per collapsed descriptor and request. Later reads use the stored field context without rebuilding resolver arguments. `jitTraceAll` enters runtime for every invocation that needs observation.
 
 ## What a field descriptor represents
 

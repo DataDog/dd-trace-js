@@ -79,12 +79,18 @@
  *   path: (string | number)[] | undefined,
  *   argumentFactory: ArgumentFactory | undefined
  * ) => unknown} ResolveDefaultInvocation
+ * @typedef {(
+ *   rootCtx: object,
+ *   descriptorId: number,
+ *   source: Record<string, unknown>
+ * ) => unknown} ReadDefaultInScope
  * @typedef {(variableValues: Record<string, unknown> | undefined) => object | undefined} StartExecution
  * @typedef {(
  *   resolver: import('graphql').GraphQLFieldResolver<unknown, unknown>
  * ) => import('graphql').GraphQLFieldResolver<unknown, unknown>} WrapResolver
  * @typedef {{
  *   createFieldMetadata: CreateFieldMetadata,
+ *   readDefaultInScope: ReadDefaultInScope,
  *   resolveDefaultInvocation: ResolveDefaultInvocation,
  *   startExecution: StartExecution,
  *   wrapResolver: WrapResolver
@@ -113,6 +119,7 @@
  *     responsePath: unknown,
  *     input: DescriptorInput
  *   ) => number | undefined,
+ *   readDefaultInScope: ReadDefaultInScope,
  *   resolveDefaultInvocation: ResolveDefaultInvocation,
  *   startExecution: StartExecution
  * }} GraphqlJitRuntime
@@ -127,6 +134,7 @@
  */
 function createGraphqlJitRuntime ({
   createFieldMetadata,
+  readDefaultInScope,
   resolveDefaultInvocation,
   startExecution,
   wrapResolver,
@@ -135,6 +143,7 @@ function createGraphqlJitRuntime ({
     compileDefaultField,
     finalizeCompilation,
     registerField,
+    readDefaultInScope,
     resolveDefaultInvocation,
     startExecution,
   }
@@ -244,9 +253,13 @@ function createGraphqlJitRuntime ({
     const resolveDefault = '__context.ddTrace.jitRuntime.resolveDefaultInvocation(' +
       `__context.ddTrace, ${descriptor.id}, ${parentPath}, ` +
       `__context.ddTrace.config.collapse ? undefined : ${compilerPath.runtimePath}, ${argumentFactory})`
-    const tracedRead = `(${shouldTrace} ? ${resolveDefault} : ${sourcePath})`
+    const readDefaultInScope = '__context.ddTrace.jitRuntime.readDefaultInScope(' +
+      `__context.ddTrace, ${descriptor.id}, ${parentPath})`
+    const collapsedRead = '(__context.ddTrace !== undefined && __context.ddTrace.jitTraceFirst' +
+      ` ? ${readDefaultInScope} : ${sourcePath})`
+    const tracedRead = `(${shouldTrace} ? ${resolveDefault} : ${collapsedRead})`
 
-    return compiledField.slice(0, sourceIndex) + tracedRead + compiledField.slice(sourceIndex + sourcePath.length)
+    return compiledField.replaceAll(sourcePath, tracedRead)
   }
 
   return { configureCompilationContext, runtime }

@@ -840,6 +840,29 @@ function resolveJitDefault (rootCtx, descriptorId, source, path) {
 }
 
 /**
+ * @param {Record<string, unknown>} source
+ * @param {string} fieldName
+ * @returns {unknown}
+ */
+function readJitDefault (source, fieldName) {
+  return source[fieldName]
+}
+
+/**
+ * @param {object} rootCtx
+ * @param {number} descriptorId
+ * @param {Record<string, unknown>} source
+ * @returns {unknown}
+ */
+function readJitDefaultInScope (rootCtx, descriptorId, source) {
+  const descriptor = rootCtx.jitPlan.fields[descriptorId]
+  const field = rootCtx.jitFields[descriptorId]
+  if (!field) return source[descriptor.fieldName]
+
+  return legacyStorage.run(field.currentStore, readJitDefault, source, descriptor.fieldName)
+}
+
+/**
  * @param {object} rootCtx
  * @param {number} descriptorId
  * @param {Record<string, unknown>} source
@@ -1425,5 +1448,6 @@ function addVariableTags (config, span, variableValues) {
 }
 
 module.exports = GraphQLExecutePlugin
+module.exports.readJitDefaultInScope = readJitDefaultInScope
 module.exports.wrapJitResolve = wrapJitResolve
 module.exports.resolveJitDefaultInvocation = resolveJitDefaultInvocation
