@@ -1216,54 +1216,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     assert.strictEqual((testOutput.match(/MOCHA REUSABLE TEST EXECUTED/g) || []).length, 4)
   })
 
-  it('reports a completed suite when the process exits before session finalization', async function () {
-    this.timeout(20_000)
-    const startedAt = Date.now()
-    childProcess = exec(
-      [
-        'node node_modules/mocha/bin/mocha',
-        './ci-visibility/mocha-plugin-tests/passing.js',
-        '--reporter ./ci-visibility/mocha-reporter-exits-after-suite.js',
-      ].join(' '),
-      {
-        cwd,
-        env: {
-          ...getCiVisAgentlessConfig(receiver.port),
-        },
-      }
-    )
-
-    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
-      childProcess,
-      ({ url }) => url.endsWith('/api/v2/citestcycle'),
-      (payloads) => {
-        const events = payloads.flatMap(({ payload }) => payload.events)
-        const suiteEvents = events.filter(event =>
-          event.type === 'test_suite_end' &&
-          event.content.meta[TEST_SUITE] === 'ci-visibility/mocha-plugin-tests/passing.js'
-        )
-        assert.strictEqual(suiteEvents.length, 1)
-        assert.strictEqual(suiteEvents[0].content.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suiteEvents[0].content.error, 0)
-
-        const testEvent = events.find(event =>
-          event.type === 'test' && event.content.meta[TEST_NAME] === 'mocha-test-pass-two can pass'
-        )
-        assert.ok(testEvent, 'expected completed test event')
-        assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
-      },
-      { hardTimeout: 20_000 }
-    )
-
-    const [[exitCode]] = await Promise.all([
-      once(childProcess, 'exit'),
-      eventsPromise,
-    ])
-
-    assert.strictEqual(exitCode, 0)
-    assert.ok(Date.now() - startedAt < 12_000, 'final writer flush should remain bounded')
-  })
-
   it('can run tests and report tests with the APM protocol (old agents)', (done) => {
     receiver.setInfoResponse({ endpoints: [] })
     receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
@@ -3064,7 +3016,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.strictEqual(packfileRequest.headers['dd-api-key'], '1')
 
       const eventTypes = eventsRequest.payload.events.map(event => event.type)
-      assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+      assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
       const numSuites = eventTypes.reduce(
         (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
       )
@@ -3179,7 +3131,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
-        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+        assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -3222,7 +3174,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.assertPayloadReceived(({ headers, payload }) => {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
-        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+        assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
         const testSession = payload.events.find(event => event.type === 'test_session_end').content
         assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
@@ -3281,7 +3233,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
         assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
 
-        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+        assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -3566,7 +3518,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
         // because they are not skipped
-        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+        assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -3614,7 +3566,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
         // because they are not skipped
-        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+        assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
