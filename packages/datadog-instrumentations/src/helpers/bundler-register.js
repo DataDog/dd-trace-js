@@ -4,16 +4,18 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
+const { BUNDLER_DC_GLOBAL } = require('./bundler-constants')
 const { loadChannel } = require('./register.js')
 const {
-  filename,
   getDisabledInstrumentations,
+  matchesInstrumentation,
   matchVersion,
 } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
-const { isRelativeRequire } = require('./shared-utils')
 const disabledInstrumentations = getDisabledInstrumentations()
+
+globalThis[Symbol.for(BUNDLER_DC_GLOBAL)] = dc
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
 // environments (webpack, esbuild), Node.js built-in modules required by
@@ -83,12 +85,14 @@ function doHook (name) {
  * @property {unknown} module
  * @property {string} version
  * @property {string} path
+ * @property {number[]} [instrumentationIndexes]
+ * @property {string} [moduleBaseDir]
+ * @property {string} [moduleName]
  * @property {(exports: unknown, patchDefault: boolean) => void} [apply]
  */
 
 /** @type {Set<string>} */
 const instrumentedNodeModules = new Set()
-
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
@@ -115,15 +119,22 @@ dc.subscribe(CHANNEL, (message) => {
     return
   }
 
-  for (const { file, filePattern, patchDefault, versions, hook } of instrumentation) {
-    const matchesFile = isRelativeRequire(name) || payload.path === filename(name, file) ||
-      (filePattern && new RegExp(filename(name, filePattern)).test(payload.path))
-    if (!matchesFile || !matchVersion(payload.version, versions)) {
+  const indexes = payload.instrumentationIndexes ?? instrumentation.keys()
+  for (const index of indexes) {
+    const entry = instrumentation[index]
+    if (!entry) {
+      log.error('Bundled %s instrumentation index %s does not exist', name, index)
+      continue
+    }
+    const { patchDefault, versions, hook } = entry
+    if (payload.instrumentationIndexes === undefined) {
+      if (!matchesInstrumentation(name, payload.version, payload.path, entry)) continue
+    } else if (!matchVersion(payload.version, versions)) {
       continue
     }
 
     try {
-      loadChannel.publish({ name, version: payload.version, file })
+      loadChannel.publish({ name })
       let exports = payload.module
       const namespace = /** @type {Record<string, unknown>} */ (exports)
       // Only generated ESM proxy payloads need default-export unwrapping.
@@ -131,7 +142,10 @@ dc.subscribe(CHANNEL, (message) => {
         if (patchDefault) exports = namespace.default
         else continue
       }
-      exports = hook(exports, payload.version) ?? exports
+      exports = hook(exports, payload.version, false, {
+        moduleBaseDir: payload.moduleBaseDir,
+        moduleName: payload.moduleName ?? payload.path,
+      }) ?? exports
       payload.module = exports
       payload.apply?.(exports, patchDefault)
     } catch (error) {
