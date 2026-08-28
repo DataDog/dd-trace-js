@@ -245,9 +245,8 @@ function requestBuffered (data, options, callback) {
       const responseStatus = statusCode ?? error.status
       const isRetriableHttpError = isRetriableHttpStatusCode(responseStatus)
       const isRetriableError = attemptTimedOut || isRetriableNetworkError(error) || isRetriableHttpError
-      const reachedBackgroundAttemptLimit =
-        options.deadline === undefined && attemptIndex >= getMaxAttempts(attemptOptions)
-      if (options.retry === false || !isRetriableError || reachedBackgroundAttemptLimit) {
+      const reachedAttemptLimit = attemptIndex >= getMaxAttempts(attemptOptions)
+      if (options.retry === false || !isRetriableError || reachedAttemptLimit) {
         complete(requestError, result, statusCode, headers)
         return
       }
