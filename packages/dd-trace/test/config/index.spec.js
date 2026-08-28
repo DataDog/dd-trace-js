@@ -5085,6 +5085,13 @@ rules:
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
     })
 
+    it('should enable runtime metrics when agentless mode is used alone', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+
+      assert.strictEqual(config.runtimeMetrics.enabled, true)
+    })
+
     it('should configure all supported features for agentless mode', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
       process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
@@ -5104,12 +5111,35 @@ rules:
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
       assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
-      assert.strictEqual(config.runtimeMetrics.enabled, false)
+      assert.strictEqual(config.runtimeMetrics.enabled, true)
       assert.strictEqual(config.dsmEnabled, false)
       assert.strictEqual(config.dynamicInstrumentation.enabled, true)
-      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
-      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, [])
-      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, ['agent'])
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'https://otlp.datadoghq.com/v1/metrics')
+    })
+
+    it('configures authentication for the agentless OTLP metrics endpoint', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'test-key'
+      process.env.OTEL_EXPORTER_OTLP_METRICS_HEADERS = 'existing=value'
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS, {
+        existing: 'value',
+        'dd-api-key': 'test-key',
+      })
+    })
+
+    it('preserves an explicitly configured OTLP metrics endpoint', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'test-key'
+      process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = 'http://localhost:4318/v1/metrics'
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://localhost:4318/v1/metrics')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS, undefined)
     })
 
     it('should preserve profiling when it does not use the Agent', () => {

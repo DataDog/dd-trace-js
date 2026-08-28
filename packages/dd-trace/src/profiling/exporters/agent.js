@@ -16,6 +16,8 @@ const telemetryMetrics = require('../../telemetry/metrics')
 const { EventSerializer } = require('./event_serializer')
 
 const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
+const AGENT_PATH = '/profiling/v1/input'
+const AGENTLESS_PATH = '/api/v2/profile'
 
 const statusCodeCounters = []
 const requestCounter = profilersNamespace.count('profile_api.requests', [])
@@ -113,13 +115,39 @@ function computeRetries (uploadTimeout) {
 }
 
 class AgentExporter extends EventSerializer {
+  #apiKey
   #backoffTime
   #backoffTries
+  #configurationError
+  #path
 
   /** @param {import('./event_serializer').TracerConfig} config */
   constructor (config) {
     super(config)
-    this._url = config.url
+
+    if (config.DD_AGENTLESS_ENABLED) {
+      this.#apiKey = config.DD_API_KEY
+      this.#path = AGENTLESS_PATH
+
+      const site = config.site
+      try {
+        const expectedHostname = `intake.profile.${site.toLowerCase()}`
+        const url = new URL(`https://${expectedHostname}`)
+        if (url.hostname !== expectedHostname || url.origin !== `https://${expectedHostname}`) {
+          throw new Error('site must be a hostname')
+        }
+        this._url = url
+      } catch (error) {
+        this.#configurationError = new Error(`Invalid DD_SITE for agentless profiling: ${site}`, { cause: error })
+      }
+
+      if (!this.#apiKey) {
+        this.#configurationError = new Error('DD_API_KEY is required for agentless profiling')
+      }
+    } else {
+      this._url = config.url
+      this.#path = AGENT_PATH
+    }
 
     const [backoffTries, backoffTime] = computeRetries(config.DD_PROFILING_UPLOAD_TIMEOUT)
 
@@ -132,6 +160,10 @@ class AgentExporter extends EventSerializer {
   }
 
   export (exportSpec) {
+    if (this.#configurationError) {
+      return Promise.reject(this.#configurationError)
+    }
+
     const { profiles } = exportSpec
     const fields = []
 
@@ -174,13 +206,17 @@ class AgentExporter extends EventSerializer {
 
         const options = {
           method: 'POST',
-          path: '/profiling/v1/input',
+          path: this.#path,
           headers: {
             'DD-EVP-ORIGIN': 'dd-trace-js',
             'DD-EVP-ORIGIN-VERSION': version,
             ...form.getHeaders(),
           },
           timeout: this.#backoffTime * 2 ** attempt,
+        }
+
+        if (this.#apiKey) {
+          options.headers['dd-api-key'] = this.#apiKey
         }
 
         docker.inject(options.headers)
@@ -196,7 +232,10 @@ class AgentExporter extends EventSerializer {
 
         // eslint-disable-next-line eslint-rules/eslint-log-printf-style
         log.debug(() => {
-          return `Submitting profiler agent report attempt #${attempt} to: ${JSON.stringify(options)}`
+          const serializedOptions = JSON.stringify(options, (key, value) => {
+            return key === 'dd-api-key' ? '<redacted>' : value
+          })
+          return `Submitting profiler agent report attempt #${attempt} to: ${serializedOptions}`
         })
 
         sendRequest(options, form, (err, response) => {

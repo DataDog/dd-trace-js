@@ -24,8 +24,13 @@ function exporterFromURL (url) {
   const enabled = profilingEnabled === 'auto'
     ? 'auto'
     : ['true', '1'].includes(profilingEnabled) ? 'true' : 'false'
+  const agentlessHostnamePrefix = 'intake.profile.'
+  const agentless = url.protocol === 'https:' && url.hostname.startsWith(agentlessHostnamePrefix)
   return new AgentExporter({
     url,
+    DD_AGENTLESS_ENABLED: agentless,
+    DD_API_KEY: getValueFromEnvSources('DD_API_KEY', true),
+    site: agentless ? url.hostname.slice(agentlessHostnamePrefix.length) : undefined,
     DD_PROFILING_UPLOAD_TIMEOUT: timeoutMs,
     DD_INJECTION_ENABLED: getValueFromEnvSources('DD_INJECTION_ENABLED'),
     profiling: { DD_PROFILING_ENABLED: enabled },

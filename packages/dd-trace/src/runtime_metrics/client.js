@@ -1,6 +1,6 @@
 'use strict'
 
-const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
+const { DogStatsDClient, MetricsAggregationClient, createMetricsTransport } = require('../dogstatsd')
 const processTags = require('../process-tags')
 
 /**
@@ -24,7 +24,7 @@ function createMetricsClient (config) {
     }
   }
 
-  return new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+  return new MetricsAggregationClient(createMetricsTransport(config, clientConfig))
 }
 
 module.exports = { createMetricsClient }

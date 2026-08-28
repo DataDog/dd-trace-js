@@ -28,6 +28,7 @@ describeNotWindows('crashtracker', () => {
 
     config = {
       url: new URL('http://127.0.0.1:7357'),
+      DD_AGENTLESS_ENABLED: false,
       tags: {
         foo: 'bar',
       },
@@ -107,6 +108,49 @@ describeNotWindows('crashtracker', () => {
 
       sinon.assert.called(binding.init)
       sinon.assert.notCalled(log.error)
+    })
+
+    it('should configure independent direct intakes in agentless mode', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'US3.DatadogHQ.com'
+
+      crashtracker.start(config)
+
+      sinon.assert.calledOnce(binding.init)
+      assert.strictEqual(binding.init.firstCall.args[0].endpoint, null)
+      assert.deepStrictEqual(binding.init.firstCall.args[1].env, [
+        ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
+        ['DD_API_KEY', 'test-api-key'],
+        ['DD_SITE', 'us3.datadoghq.com'],
+        ['DD_TRACE_AGENT_URL', 'https://instrumentation-telemetry-intake.us3.datadoghq.com'],
+      ])
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('should not initialize agentless crash tracking without an API key', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.site = 'datadoghq.com'
+
+      crashtracker.start(config)
+
+      sinon.assert.notCalled(binding.init)
+      sinon.assert.calledOnce(log.error)
+      assert.match(log.error.firstCall.args[1].message, /DD_API_KEY is required/)
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
+    })
+
+    it('should reject an agentless site that could redirect the API key', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'datadoghq.com@evil.example'
+
+      crashtracker.start(config)
+
+      sinon.assert.notCalled(binding.init)
+      sinon.assert.calledOnce(log.error)
+      assert.match(log.error.firstCall.args[1].message, /Invalid DD_SITE/)
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
     })
   })
 

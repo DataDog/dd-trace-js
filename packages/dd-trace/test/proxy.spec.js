@@ -849,7 +849,7 @@ describe('TracerProxy', () => {
         proxy.dogstatsd.increment('foo')
       })
 
-      it('should expose noop metrics methods in agentless mode', () => {
+      it('should expose real metrics methods in agentless mode', () => {
         config.DD_AGENTLESS_ENABLED = true
         config.dogstatsd = {
           hostname: 'localhost',
@@ -859,8 +859,9 @@ describe('TracerProxy', () => {
         proxy.init()
         proxy.dogstatsd.increment('foo')
 
-        assert.strictEqual(dogStatsD._config(), undefined)
-        sinon.assert.calledOnceWithExactly(noopDogStatsDClient.increment, 'foo')
+        assert.strictEqual(dogStatsD._config(), config)
+        assert.strictEqual(dogStatsD._increments().length, 1)
+        sinon.assert.notCalled(noopDogStatsDClient.increment)
       })
 
       it('should expose real metrics methods after init when configured', () => {

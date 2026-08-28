@@ -231,6 +231,27 @@ class DogStatsDClient {
   }
 }
 
+/**
+ * Creates the low-level metrics transport for the configured export mode.
+ *
+ * @param {import('./config/config-base')} config - Tracer configuration.
+ * @param {ReturnType<typeof DogStatsDClient.generateClientConfig>} [clientConfig] - Generated transport options.
+ * @returns {DogStatsDClient|import('./agentless-metrics')}
+ */
+function createMetricsTransport (config, clientConfig = DogStatsDClient.generateClientConfig(config)) {
+  if (config.DD_AGENTLESS_ENABLED) {
+    const AgentlessMetricsClient = require('./agentless-metrics')
+    return new AgentlessMetricsClient({
+      apiKey: config.DD_API_KEY,
+      reportHostname: config.reportHostname,
+      site: config.site,
+      tags: clientConfig.tags,
+    })
+  }
+
+  return new DogStatsDClient(clientConfig)
+}
+
 class MetricsAggregationClient {
   constructor (client) {
     this._client = client
@@ -387,8 +408,7 @@ class MetricsAggregationClient {
 class CustomMetrics {
   #client
   constructor (config) {
-    const clientConfig = DogStatsDClient.generateClientConfig(config)
-    this.#client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+    this.#client = new MetricsAggregationClient(createMetricsTransport(config))
 
     const flush = this.flush.bind(this)
 
@@ -446,4 +466,5 @@ module.exports = {
   DogStatsDClient,
   CustomMetrics,
   MetricsAggregationClient,
+  createMetricsTransport,
 }

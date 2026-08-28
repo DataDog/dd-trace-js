@@ -629,15 +629,19 @@ class Config extends ConfigBase {
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
 
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
-      setAndTrack(this, 'runtimeMetrics.enabled', false)
+      setAndTrack(this, 'runtimeMetrics.enabled', true)
       setAndTrack(this, 'dsmEnabled', false)
       setAndTrack(this, 'dynamicInstrumentation.enabled', true)
-      setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
 
-      const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
-      setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
-      if (profilingExporters.length === 0) {
-        setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
+      if (!trackedConfigOrigins.has('OTEL_EXPORTER_OTLP_ENDPOINT') &&
+          !trackedConfigOrigins.has('OTEL_EXPORTER_OTLP_METRICS_ENDPOINT')) {
+        setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', `https://otlp.${this.site}/v1/metrics`)
+        if (this.DD_API_KEY) {
+          setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_HEADERS', {
+            ...this.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
+            'dd-api-key': this.DD_API_KEY,
+          })
+        }
       }
     }
 
