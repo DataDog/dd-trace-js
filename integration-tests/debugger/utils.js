@@ -7,8 +7,6 @@ const { readFileSync } = require('fs')
 const { randomUUID } = require('crypto')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
-
 const { assertObjectContains, assertUUID } = require('../helpers')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
@@ -41,11 +39,18 @@ const pollInterval = 0.1
  */
 
 /**
+ * @template T
+ * @typedef {object} TestResponse
+ * @property {T} body
+ * @property {number} status
+ */
+
+/**
  * A breakpoint with helpers bound for convenient testing.
  *
  * @typedef {BreakpointInfo & {
  *   rcConfig: object|null,
- *   triggerBreakpoint: () => Promise<import('axios').AxiosResponse<unknown>>,
+ *   triggerBreakpoint: () => Promise<TestResponse<object>>,
  *   generateRemoteConfig: (overrides?: object) => object,
  *   generateProbeConfig: BoundGenerateProbeConfigFn
  * }} EnrichedBreakpoint
@@ -53,21 +58,19 @@ const pollInterval = 0.1
 
 /**
  * The live‑debugger integration test harness returned by {@link setup}. Provides the spawned app process, fake agent,
- * axios client, and helpers to generate remote config and trigger breakpoints.
+ * and helpers to generate remote config and trigger breakpoints.
  *
  * @typedef {object} DebuggerTestEnvironment
  * @property {BreakpointInfo} breakpoint - Primary breakpoint metadata.
  * @property {EnrichedBreakpoint[]} breakpoints - All discovered breakpoints with helpers.
- * @property {import('axios').AxiosInstance} axios - HTTP client bound to the test app. Throws if accessed before
- *   `beforeEach` hook runs.
+ * @property {(url: string) => Promise<TestResponse<object>>} request - Sends a request to the test app.
  * @property {string} appFile - Absolute path to the test app entry file. Throws if accessed before `before` hook runs.
  * @property {import('../helpers').FakeAgent} agent - Started fake agent instance. Throws if accessed before
  *   `beforeEach` hook runs.
  * @property {import('../helpers').SpawnedProcess} proc - Spawned app process. Throws if accessed before `beforeEach`
  *   hook runs.
  * @property {object|null} rcConfig - Default remote config for the primary breakpoint.
- * @property {() => Promise<import('axios').AxiosResponse<unknown>>} triggerBreakpoint - Triggers the primary breakpoint
- *   once installed.
+ * @property {() => Promise<TestResponse<object>>} triggerBreakpoint - Triggers the primary breakpoint once installed.
  * @property {(overrides?: object) => object} generateRemoteConfig - Generates RC for the primary breakpoint.
  * @property {BoundGenerateProbeConfigFn} generateProbeConfig - Generates probe config for the primary breakpoint.
  * @property {() => Promise<object>} snapshotReceived - Waits for a snapshot to be received from the test app.
@@ -96,10 +99,10 @@ module.exports = {
  * @param {(data: Buffer) => void} [options.stderrHandler] The function to handle the standard error output of the test
  *   environment.
  * @param {object} [options.agentOptions] Optional configuration options to pass to the FakeAgent constructor.
- * @returns {DebuggerTestEnvironment} Test harness with agent, app process, axios client and breakpoint helpers.
+ * @returns {DebuggerTestEnvironment} Test harness with agent, app process and breakpoint helpers.
  */
 function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandler, stderrHandler, agentOptions } = {}) {
-  let cwd, axios, appFile, agent, proc
+  let cwd, appFile, agent, proc
 
   const breakpoints = getBreakpointInfo({
     deployedFile: testApp,
@@ -117,11 +120,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
   const t = {
     breakpoint: breakpoints[0],
     breakpoints,
-
-    get axios () {
-      assert(axios, 'axios must be initialized in beforeEach hook')
-      return axios
-    },
+    request,
     get appFile () {
       assert(appFile, 'appFile must be initialized in before hook')
       return appFile
@@ -151,21 +150,34 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
   }
 
   /**
+   * @param {string} url
+   * @returns {Promise<TestResponse<object>>}
+   */
+  async function request (url) {
+    const response = await fetch(new URL(url, t.proc.url))
+    assert.strictEqual(response.status, 200)
+    return {
+      body: await response.json(),
+      status: response.status,
+    }
+  }
+
+  /**
    * Trigger the breakpoint once probe is successfully installed
    *
    * @param {string} url The URL of the HTTP route containing the breakpoint to trigger.
-   * @returns {Promise<import('axios').AxiosResponse<unknown>>} A promise that resolves with the response from the HTTP
-   *   request after the breakpoint is triggered.
+   * @returns {Promise<TestResponse<object>>} A promise that resolves with the response from the HTTP request after the
+   *   breakpoint is triggered.
    */
   async function triggerBreakpoint (url) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       t.agent.on('debugger-diagnostics', diagnosticsReceived)
 
       function diagnosticsReceived ({ payload }) {
         payload.some((event) => {
           if (event.debugger.diagnostics.status === 'INSTALLED') {
             t.agent.removeListener('debugger-diagnostics', diagnosticsReceived)
-            t.axios.get(url).then(resolve).catch(reject)
+            resolve(request(url))
             return true
           }
           return false
@@ -218,7 +230,6 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
       },
       silent: silent ?? false,
     }, stdioHandler, stderrHandler)
-    axios = Axios.create({ baseURL: t.proc.url })
   })
 
   afterEach(async function () {
