@@ -222,6 +222,47 @@ describe('Test Optimization exporter request', () => {
     assert.strictEqual(pendingRequests.length, 2)
   })
 
+  it('times out a transport attempt from creation and retries it', () => {
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 30_000, timeout: 1000 }, done)
+
+    const firstRequest = pendingRequests[0]
+    firstRequest.options.signal.addEventListener('abort', () => {
+      const error = Object.assign(new Error('aborted'), { code: 'ABORT_ERR' })
+      firstRequest.callback(error)
+    })
+
+    clock.tick(999)
+    assert.strictEqual(firstRequest.options.signal.aborted, false)
+    clock.tick(1)
+    assert.strictEqual(firstRequest.options.signal.aborted, true)
+    sinon.assert.notCalled(done)
+
+    clock.tick(5999)
+    assert.strictEqual(pendingRequests.length, 1)
+    clock.tick(1)
+    assert.strictEqual(pendingRequests.length, 2)
+
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('reports a transport attempt timeout when retries are disabled', () => {
+    const done = sinon.spy()
+    request('payload', { retry: false, timeout: 1000 }, done)
+
+    const pendingRequest = pendingRequests[0]
+    pendingRequest.options.signal.addEventListener('abort', () => {
+      const error = Object.assign(new Error('aborted'), { code: 'ABORT_ERR' })
+      pendingRequest.callback(error)
+    })
+
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(done)
+    assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT')
+  })
+
   it('aborts a scheduled retry and completes once', () => {
     const controller = new AbortController()
     const done = sinon.spy()
@@ -235,7 +276,47 @@ describe('Test Optimization exporter request', () => {
 
     assert.strictEqual(pendingRequests.length, 1)
     sinon.assert.calledOnce(done)
+    assert.strictEqual(done.firstCall.args[0], requestError)
+  })
+
+  it('reports the abort error when no prior attempt failed', () => {
+    const controller = new AbortController()
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 10_000, signal: controller.signal }, done)
+
+    const abortError = Object.assign(new Error('finalization expired'), { code: 'ABORT_ERR' })
+    controller.abort(abortError)
+    clock.tick(10_000)
+
+    sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0], abortError)
+  })
+
+  it('reports a request timeout when finalization aborts an active transport attempt', () => {
+    const controller = new AbortController()
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 10_000, signal: controller.signal }, done)
+
+    const finalizationError = Object.assign(new Error('finalization expired'), {
+      code: 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT',
+    })
+    controller.abort(finalizationError)
+
+    sinon.assert.calledOnce(done)
+    assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT')
+    assert.strictEqual(pendingRequests[0].options.signal.aborted, true)
+  })
+
+  it('preserves the HTTP status when a retry is aborted', () => {
+    const controller = new AbortController()
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 10_000, signal: controller.signal }, done)
+
+    const requestError = Object.assign(new Error('unavailable'), { status: 503 })
+    pendingRequests[0].callback(requestError, null, 503, {})
+    controller.abort(new Error('finalization expired'))
+
+    sinon.assert.calledOnceWithExactly(done, requestError, null, 503, undefined)
   })
 
   it('stops buffering a readable body when finalization aborts', () => {
@@ -266,12 +347,56 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('waits for exporter backpressure to clear during a background flush', () => {
+    commonRequest.writable = false
+    const done = sinon.spy()
+    request('payload', {}, done)
+
+    clock.tick(49)
+    assert.strictEqual(pendingRequests.length, 0)
+    commonRequest.writable = true
+    clock.tick(1)
+    assert.strictEqual(pendingRequests.length, 1)
+
+    pendingRequests[0].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('accepts exactly 64 MiB of payloads and rejects the first byte over the cap', () => {
+    const firstDone = sinon.spy()
+    const secondDone = sinon.spy()
+    const rejectedDone = sinon.spy()
+
+    request(Buffer.alloc(32 * 1024 * 1024), {}, firstDone)
+    request(Buffer.alloc(32 * 1024 * 1024), {}, secondDone)
+    request(Buffer.alloc(1), {}, rejectedDone)
+
+    assert.strictEqual(pendingRequests.length, 2)
+    sinon.assert.calledOnce(rejectedDone)
+    assert.strictEqual(rejectedDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL')
+
+    pendingRequests[0].callback(null, 'ok', 200, {})
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(firstDone, null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(secondDone, null, 'ok', 200, {})
+  })
+
   it('fails at the deadline while exporter backpressure remains active', () => {
     commonRequest.writable = false
     const done = sinon.spy()
     request('payload', { deadline: Date.now() + 1000 }, done)
 
     clock.tick(1000)
+
+    sinon.assert.calledOnce(done)
+    assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT')
+    assert.strictEqual(pendingRequests.length, 0)
+  })
+
+  it('rejects a request whose finalization deadline has already elapsed', () => {
+    const done = sinon.spy()
+
+    request('payload', { deadline: Date.now() }, done)
 
     sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')

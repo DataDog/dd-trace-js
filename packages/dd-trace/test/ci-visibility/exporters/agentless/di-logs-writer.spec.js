@@ -71,7 +71,7 @@ describe('Test Visibility DI Writer', () => {
 
       const scope = nock('http://www.example.com')
         .post('/api/v2/logs')
-        .reply(500)
+        .reply(400)
 
       const logsWriter = new DynamicInstrumentationLogsWriterWithApiKey({ url: 'http://www.example.com' })
 
@@ -111,7 +111,7 @@ describe('Test Visibility DI Writer', () => {
 
       const scope = nock('http://www.example.com')
         .post('/debugger/v1/input')
-        .reply(500)
+        .reply(400)
 
       const logsWriter = new DynamicInstrumentationLogsWriter({ url: 'http://www.example.com', isAgentProxy: true })
 

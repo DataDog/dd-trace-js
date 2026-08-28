@@ -12,10 +12,10 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../../../dd-trace/test/setup/core')
 const AgentProxyCiVisibilityExporterBase = require('../../../../src/ci-visibility/exporters/agent-proxy')
+const { FINAL_FLUSH_TIMEOUT } = require('../../../../src/ci-visibility/final-flush')
 const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentless/writer')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
-const { FINAL_FLUSH_TIMEOUT } = require('../../../../src/ci-visibility/final-flush')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
 const { clearCache } = require('../../../../src/agent/info')
 const { defaults: { hostname, port } } = require('../../../../src/config/defaults')
@@ -195,12 +195,13 @@ describe('AgentProxyCiVisibilityExporter', () => {
       const controlled = createControlledExporter()
       const firstDone = sinon.spy()
       const firstTrace = [{ type: 'test', name: 'first session' }]
+      const overlapDelay = FINAL_FLUSH_TIMEOUT / 2
 
       controlled.exporter.export(firstTrace)
       controlled.exporter.flush(firstDone)
       const requestOptions = controlled.getRequestOptions()
 
-      clock.tick(FINAL_FLUSH_TIMEOUT / 2)
+      clock.tick(overlapDelay)
 
       const secondDone = sinon.spy()
       const secondTrace = [{ type: 'test', name: 'second session' }]
@@ -209,7 +210,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
       assert.strictEqual(requestOptions.deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
 
-      clock.tick(FINAL_FLUSH_TIMEOUT / 2)
+      clock.tick(overlapDelay)
 
       assert.strictEqual(requestOptions.signal.aborted, false)
       sinon.assert.calledOnce(firstDone)

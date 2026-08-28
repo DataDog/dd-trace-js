@@ -24,7 +24,7 @@ class Writer extends BaseWriter {
   #requestTracker
 
   constructor ({ url, evpProxyPrefix = '' }) {
-    super(...arguments)
+    super({ ...arguments[0], retainOnBackpressure: true })
     this.#requestTracker = new TestOptimizationRequestTracker(this)
     this._url = url
     this._encoder = new CoverageCIVisibilityEncoder(this)

@@ -112,6 +112,19 @@ describe('common Writer', () => {
     sinon.assert.calledOnceWithExactly(done)
   })
 
+  it('retains a non-final payload under backpressure when configured', () => {
+    request.writable = false
+    writer = new Writer({ url: 'http://localhost:8126', retainOnBackpressure: true })
+    writer._encoder = encoder
+    writer._sendPayload = sinon.stub()
+    const done = sinon.stub()
+
+    writer.flush(done)
+
+    sinon.assert.notCalled(encoder.reset)
+    sinon.assert.calledOnceWithExactly(writer._sendPayload, Buffer.from('payload'), 2, done)
+  })
+
   it('sends a bounded final payload when the request buffer is full', () => {
     request.writable = false
     const done = sinon.stub()
@@ -146,6 +159,16 @@ describe('common Writer', () => {
     const options = { deadline: Date.now() + 1000 }
 
     assert.strictEqual(writer.append(payload, options), true)
+    sinon.assert.calledOnceWithExactly(encoder.encode, payload)
+  })
+
+  it('accepts a non-final append under backpressure when configured', () => {
+    request.writable = false
+    writer = new Writer({ url: 'http://localhost:8126', retainOnBackpressure: true })
+    writer._encoder = encoder
+    const payload = [{ type: 'test' }]
+
+    assert.strictEqual(writer.append(payload), true)
     sinon.assert.calledOnceWithExactly(encoder.encode, payload)
   })
 })

@@ -24,7 +24,7 @@ class Writer extends BaseWriter {
   #requestTracker
 
   constructor ({ url, tags, evpProxyPrefix = '' }) {
-    super(...arguments)
+    super({ ...arguments[0], retainOnBackpressure: true })
     this.#requestTracker = new TestOptimizationRequestTracker(this)
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
