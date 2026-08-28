@@ -5139,7 +5139,7 @@ rules:
       assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
       assert.strictEqual(config.runtimeMetrics.enabled, false)
       assert.strictEqual(config.dsmEnabled, false)
-      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
       assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
@@ -5193,6 +5193,14 @@ rules:
         assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
       })
     }
+
+    it('should not enable Dynamic Instrumentation for Test Optimization', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+
+      const config = getConfig({ isCiVisibility: true })
+
+      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+    })
 
     it('should enable agentless exporter when _DD_APM_TRACING_AGENTLESS_ENABLED is true', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'

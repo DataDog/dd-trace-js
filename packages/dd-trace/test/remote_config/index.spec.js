@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, before, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { channel } = require('dc-polyfill')
@@ -18,7 +18,8 @@ describe('RemoteConfig', () => {
   let uuid
   let scheduler
   let Scheduler
-  let request
+  let fetcher
+  let createFetcher
   let log
   let extraServices
   let RemoteConfig
@@ -26,6 +27,7 @@ describe('RemoteConfig', () => {
   let rc
   let tagger
   let getGitMetadata
+  let processTags
 
   before(() => {
     require('../../src/process-tags').initialize()
@@ -41,10 +43,18 @@ describe('RemoteConfig', () => {
 
     Scheduler = sinon.stub().returns(scheduler)
 
-    request = sinon.stub()
+    fetcher = {
+      fetchChanges: sinon.stub().yields(null, []),
+      setConfigState: sinon.spy(),
+      setExtraServices: sinon.spy(),
+      setProductCapabilities: sinon.stub().returns([]),
+    }
+
+    createFetcher = sinon.stub().returns(fetcher)
 
     log = {
       error: sinon.spy(),
+      errorWithoutTelemetry: sinon.spy(),
     }
 
     tagger = {
@@ -54,13 +64,17 @@ describe('RemoteConfig', () => {
     extraServices = []
 
     getGitMetadata = sinon.stub().returns({ commitSHA: undefined, repositoryUrl: undefined })
+    processTags = {
+      tagsArray: require('../../src/process-tags').tagsArray,
+    }
 
     RemoteConfig = proxyquire('../../src/remote_config', {
       '../../../../vendor/dist/crypto-randomuuid': uuid,
       './scheduler': Scheduler,
       '../../../../package.json': { version: '3.0.0' },
-      '../exporters/common/request': request,
+      './fetcher': createFetcher,
       '../log': log,
+      '../process-tags': processTags,
       '../tagger': tagger,
       '../git_metadata': getGitMetadata,
       '../service-naming/extra-services': {
@@ -84,6 +98,31 @@ describe('RemoteConfig', () => {
     rc = new RemoteConfig(config)
   })
 
+  /**
+   * Runs one poll and resolves once the scheduler callback fired.
+   */
+  const poll = () => new Promise((resolve) => rc.poll(resolve))
+
+  /**
+   * @param {'add' | 'update' | 'remove'} kind
+   * @param {string} product
+   * @param {object} [options]
+   * @param {unknown} [options.file]
+   * @param {number} [options.version]
+   * @param {string} [options.configId]
+   */
+  function change (kind, product, { file = {}, version = 1, configId = 'confId' } = {}) {
+    return {
+      kind,
+      path: `datadog/42/${product}/${configId}/config`,
+      product,
+      configId,
+      name: 'config',
+      version,
+      contents: kind === 'remove' ? undefined : JSON.stringify(file),
+    }
+  }
+
   it('should instantiate RemoteConfig', () => {
     sinon.stub(rc, 'poll')
 
@@ -97,73 +136,75 @@ describe('RemoteConfig', () => {
 
     assert.strictEqual(rc.scheduler, scheduler)
 
-    assert.strictEqual(rc.url.toString(), 'http://127.0.0.1:1337/')
-
     sinon.assert.calledOnceWithExactly(tagger.add, config.tags, {
       '_dd.rc.client_id': '1234-5678',
     })
 
-    assert.deepStrictEqual(rc.state, {
-      client: {
-        state: {
-          root_version: 1,
-          targets_version: 0,
-          config_states: [],
-          has_error: false,
-          error: '',
-          backend_client_state: '',
-        },
-        id: '1234-5678',
-        products: [],
-        is_tracer: true,
-        client_tracer: {
-          runtime_id: config.tags['runtime-id'],
-          language: 'node',
-          tracer_version: '3.0.0',
-          service: config.service,
-          env: config.env,
-          app_version: config.version,
-          extra_services: [],
-          tags: ['runtime-id:runtimeId'],
-          process_tags: rc.state.client.client_tracer.process_tags,
-        },
-        capabilities: 'AA==',
-      },
-      cached_target_files: [],
+    sinon.assert.calledOnceWithExactly(createFetcher, {
+      clientId: '1234-5678',
+      runtimeId: 'runtimeId',
+      service: 'serviceName',
+      env: 'serviceEnv',
+      appVersion: 'appVersion',
+      tags: ['runtime-id:runtimeId'],
+      processTags: processTags.tagsArray,
+      language: 'node',
+      tracerVersion: '3.0.0',
+      url: 'http://127.0.0.1:1337/',
+      timeoutMs: 2000,
     })
 
     assert.ok(rc.appliedConfigs instanceof Map)
+    assert.strictEqual(rc.appliedConfigs.size, 0)
   })
 
-  it('should include process_tags in client_tracer', () => {
-    const clientTracer = rc.state.client.client_tracer
+  it('should default an absent env and version to the empty string', () => {
+    createFetcher.resetHistory()
 
-    assert.ok(clientTracer.process_tags, 'process_tags should exist')
-    assert.ok(Array.isArray(clientTracer.process_tags), 'process_tags should be an array')
+    new RemoteConfig({ ...config, env: undefined, version: undefined }) // eslint-disable-line no-new
 
-    // Verify expected process tag keys are present
-    assert.ok(
-      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.basedir:')),
-      `Got: ${inspect(clientTracer.process_tags)}`
-    )
-    assert.ok(
-      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.name:')),
-      `Got: ${inspect(clientTracer.process_tags)}`
-    )
-    assert.ok(
-      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.type:')),
-      `Got: ${inspect(clientTracer.process_tags)}`
-    )
-    assert.ok(
-      clientTracer.process_tags.some(tag => tag.startsWith('entrypoint.workdir:')),
-      `Got: ${inspect(clientTracer.process_tags)}`
-    )
+    const { env, appVersion } = createFetcher.firstCall.firstArg
+    assert.strictEqual(env, '')
+    assert.strictEqual(appVersion, '')
+  })
 
-    // Verify entrypoint.type has expected value
-    assert.ok(
-      clientTracer.process_tags.some(tag => tag === 'entrypoint.type:script'),
-      `Got: ${inspect(clientTracer.process_tags)}`
-    )
+  it('should default absent process tags to an empty array', () => {
+    processTags.tagsArray = undefined
+    createFetcher.resetHistory()
+
+    new RemoteConfig(config) // eslint-disable-line no-new
+
+    assert.deepStrictEqual(createFetcher.firstCall.firstArg.processTags, [])
+  })
+
+  it('should configure the agentless fetcher with the tracer client identity', () => {
+    createFetcher.resetHistory()
+    config.DD_AGENTLESS_ENABLED = true
+    config.DD_API_KEY = 'api-key'
+    config.hostname = 'host'
+    config.site = 'us3.datadoghq.com'
+
+    new RemoteConfig(config) // eslint-disable-line no-new
+
+    const options = createFetcher.firstCall.firstArg
+    assert.strictEqual(options.agentless, true)
+    assert.strictEqual(options.apiKey, 'api-key')
+    assert.strictEqual(options.clientId, '1234-5678')
+    assert.strictEqual(options.hostname, 'host')
+    assert.strictEqual(options.timeoutMs, 5000)
+    assert.strictEqual(options.url, 'https://us3.datadoghq.com')
+  })
+
+  it('should include process_tags in the fetcher options', () => {
+    const { processTags } = createFetcher.firstCall.firstArg
+
+    assert.ok(Array.isArray(processTags), 'processTags should be an array')
+
+    for (const prefix of ['entrypoint.basedir:', 'entrypoint.name:', 'entrypoint.type:', 'entrypoint.workdir:']) {
+      assert.ok(processTags.some(tag => tag.startsWith(prefix)), `Got: ${inspect(processTags)}`)
+    }
+
+    assert.ok(processTags.includes('entrypoint.type:script'), `Got: ${inspect(processTags)}`)
   })
 
   it('should add git metadata to tags if present', () => {
@@ -171,72 +212,127 @@ describe('RemoteConfig', () => {
       commitSHA: '1234567890',
       repositoryUrl: 'https://github.com/DataDog/dd-trace-js',
     })
-    const rc = new RemoteConfig(config)
-    assert.deepStrictEqual(rc.state.client.client_tracer.tags, [
+
+    createFetcher.resetHistory()
+
+    new RemoteConfig(config) // eslint-disable-line no-new
+
+    assert.deepStrictEqual(createFetcher.firstCall.firstArg.tags, [
       'runtime-id:runtimeId',
       'git.repository_url:https://github.com/DataDog/dd-trace-js',
       'git.commit.sha:1234567890',
     ])
   })
 
+  it('should disable itself when no remote config client can be built', async () => {
+    const error = new Error('no fetcher for you')
+    createFetcher.throws(error)
+
+    rc = new RemoteConfig(config)
+
+    sinon.assert.calledOnceWithExactly(
+      log.error,
+      '[RC] Could not start the remote config client, remote config is disabled',
+      error
+    )
+
+    rc.setProductHandler('ASM_FEATURES', noop)
+
+    sinon.assert.notCalled(scheduler.start)
+
+    // A poll triggered by hand must not throw either.
+    await poll()
+    sinon.assert.notCalled(fetcher.fetchChanges)
+  })
+
   describe('updateCapabilities', () => {
-    it('should set multiple capabilities to true', () => {
+    it('should send the enabled capabilities by name on the next poll', async () => {
       rc.updateCapabilities(Capabilities.ASM_ACTIVATION, true)
-      assert.strictEqual(rc.state.client.capabilities, 'Ag==')
-
       rc.updateCapabilities(Capabilities.ASM_IP_BLOCKING, true)
-      assert.strictEqual(rc.state.client.capabilities, 'Bg==')
+      rc.subscribeProducts('ASM_FEATURES')
 
-      rc.updateCapabilities(Capabilities.ASM_DD_RULES, true)
-      assert.strictEqual(rc.state.client.capabilities, 'Dg==')
+      await poll()
 
-      rc.updateCapabilities(Capabilities.ASM_USER_BLOCKING, true)
-      assert.strictEqual(rc.state.client.capabilities, 'jg==')
+      sinon.assert.calledOnceWithExactly(
+        fetcher.setProductCapabilities,
+        ['ASM_FEATURES'],
+        ['ASM_ACTIVATION', 'ASM_IP_BLOCKING']
+      )
     })
 
-    it('should set multiple capabilities to false', () => {
-      rc.state.client.capabilities = 'jg=='
+    it('should remove disabled capabilities', async () => {
+      rc.updateCapabilities(Capabilities.ASM_ACTIVATION, true)
+      rc.updateCapabilities(Capabilities.ASM_IP_BLOCKING, true)
+      rc.subscribeProducts('ASM_FEATURES')
 
-      rc.updateCapabilities(Capabilities.ASM_USER_BLOCKING, false)
-      assert.strictEqual(rc.state.client.capabilities, 'Dg==')
+      await poll()
 
       rc.updateCapabilities(Capabilities.ASM_ACTIVATION, false)
-      assert.strictEqual(rc.state.client.capabilities, 'DA==')
 
-      rc.updateCapabilities(Capabilities.ASM_IP_BLOCKING, false)
-      assert.strictEqual(rc.state.client.capabilities, 'CA==')
+      await poll()
 
-      rc.updateCapabilities(Capabilities.ASM_DD_RULES, false)
-      assert.strictEqual(rc.state.client.capabilities, 'AA==')
+      sinon.assert.calledTwice(fetcher.setProductCapabilities)
+      sinon.assert.calledWithExactly(
+        fetcher.setProductCapabilities.secondCall,
+        ['ASM_FEATURES'],
+        ['ASM_IP_BLOCKING']
+      )
     })
 
-    it('should set an arbitrary amount of capabilities', () => {
-      rc.updateCapabilities(1n << 1n, true)
-      rc.updateCapabilities(1n << 200n, true)
-      assert.strictEqual(rc.state.client.capabilities, 'AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI=')
+    it('should not resend an unchanged capability set', async () => {
+      rc.subscribeProducts('ASM_FEATURES')
 
-      rc.updateCapabilities(1n << 200n, false)
-      assert.strictEqual(rc.state.client.capabilities, 'Ag==')
+      await poll()
+      sinon.assert.calledOnce(fetcher.setProductCapabilities)
+
+      rc.updateCapabilities(Capabilities.ASM_ACTIVATION, false)
+
+      await poll()
+      sinon.assert.calledOnce(fetcher.setProductCapabilities)
+    })
+
+    it('should ignore capability masks that are not in capabilities.js', async () => {
+      const unknown = 1n << 200n
+
+      rc.updateCapabilities(unknown, true)
+      rc.subscribeProducts('ASM_FEATURES')
+
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        '[RC] Ignoring unknown remote config capability 0x%s',
+        unknown.toString(16)
+      )
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(fetcher.setProductCapabilities, ['ASM_FEATURES'], [])
     })
   })
 
   describe('setProductHandler/removeProductHandler', () => {
-    it('should update the product list and autostart or autostop', () => {
+    it('should update the product list and autostart or autostop', async () => {
       sinon.assert.notCalled(rc.scheduler.start)
 
       rc.setProductHandler('ASM_FEATURES', noop)
 
-      assert.deepStrictEqual(rc.state.client.products, ['ASM_FEATURES'])
       sinon.assert.called(rc.scheduler.start)
 
       rc.setProductHandler('ASM_DATA', noop)
       rc.setProductHandler('ASM_DD', noop)
 
-      assert.deepStrictEqual(rc.state.client.products, ['ASM_FEATURES', 'ASM_DATA', 'ASM_DD'])
+      await poll()
+
+      sinon.assert.calledWithExactly(
+        fetcher.setProductCapabilities,
+        ['ASM_FEATURES', 'ASM_DATA', 'ASM_DD'],
+        []
+      )
 
       rc.removeProductHandler('ASM_FEATURES')
 
-      assert.deepStrictEqual(rc.state.client.products, ['ASM_DATA', 'ASM_DD'])
+      await poll()
+
+      sinon.assert.calledWithExactly(fetcher.setProductCapabilities.secondCall, ['ASM_DATA', 'ASM_DD'], [])
 
       rc.removeProductHandler('ASM_DATA')
 
@@ -245,126 +341,86 @@ describe('RemoteConfig', () => {
       rc.removeProductHandler('ASM_DD')
 
       sinon.assert.called(rc.scheduler.stop)
-      assert.strictEqual(rc.state.client.products.length, 0)
     })
   })
 
   describe('poll', () => {
-    let expectedPayload
-
-    beforeEach(() => {
-      sinon.stub(rc, 'parseConfig')
-      expectedPayload = {
-        url: rc.url,
-        method: 'POST',
-        path: '/v0.7/config',
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      }
-    })
-
-    it('should request and do nothing when received status 404', (cb) => {
-      request.yieldsRight(new Error('Response received 404'), '{"a":"b"}', 404)
-
-      const payload = JSON.stringify(rc.state)
-
-      rc.poll(() => {
-        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
-        sinon.assert.notCalled(log.error)
-        sinon.assert.notCalled(rc.parseConfig)
-        cb()
-      })
-    })
-
-    it('should request when received error', (cb) => {
-      const err = new Error('Response received 500')
-      request.yieldsRight(err, '{"a":"b"}', 500)
-
-      const payload = JSON.stringify(rc.state)
-
-      rc.poll(() => {
-        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
-        sinon.assert.notCalled(rc.parseConfig)
-        cb()
-      })
-    })
-
-    it('should request and call parseConfig when payload is not empty', (cb) => {
-      request.yieldsRight(null, '{"a":"b"}', 200)
-
-      const payload = JSON.stringify(rc.state)
-
-      rc.poll(() => {
-        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
-        sinon.assert.notCalled(log.error)
-        sinon.assert.calledOnceWithExactly(rc.parseConfig, { a: 'b' })
-        cb()
-      })
-    })
-
-    it('should catch exceptions, update the error state, and clear the error state at next request', (cb) => {
-      const error = new Error('Unable to parse config')
-      request
-        .onFirstCall().yieldsRight(null, '{"a":"b"}', 200)
-        .onSecondCall().yieldsRight(null, null, 200)
-      rc.parseConfig.onFirstCall().throws(error)
-
-      const payload = JSON.stringify(rc.state)
-
-      rc.poll(() => {
-        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
-        sinon.assert.calledOnceWithExactly(rc.parseConfig, { a: 'b' })
-        sinon.assert.calledOnceWithExactly(log.error, '[RC] Could not parse remote config response', error)
-        assert.strictEqual(rc.state.client.state.has_error, true)
-        assert.strictEqual(rc.state.client.state.error, 'Error: Unable to parse config')
-
-        const payload2 = JSON.stringify(rc.state)
-
-        rc.poll(() => {
-          sinon.assert.calledTwice(request)
-          sinon.assert.calledWith(request.secondCall, payload2, expectedPayload)
-          sinon.assert.calledOnce(rc.parseConfig)
-          sinon.assert.calledOnce(log.error)
-          assert.strictEqual(rc.state.client.state.has_error, false)
-          assert.strictEqual(rc.state.client.state.error.length, 0)
-          cb()
-        })
-      })
-    })
-
-    it('should request and do nothing when payload is empty JSON object', (cb) => {
-      request.yieldsRight(null, '{}', 200)
-
-      const payload = JSON.stringify(rc.state)
-
-      rc.poll(() => {
-        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
-        sinon.assert.notCalled(log.error)
-        sinon.assert.notCalled(rc.parseConfig)
-        cb()
-      })
-    })
-
-    it('should include extra_services in the payload', (cb) => {
-      request.yieldsRight(null, '{}', 200)
+    it('should report extra services on every poll', async () => {
+      await poll()
+      sinon.assert.calledOnceWithExactly(fetcher.setExtraServices, [])
 
       extraServices = ['test-service']
 
-      // getPayload includes the new extraServices that might be available
-      const payload = rc.getPayload()
-      assert.deepStrictEqual(JSON.parse(payload).client.client_tracer.extra_services, extraServices)
+      await poll()
+      sinon.assert.calledWithExactly(fetcher.setExtraServices.secondCall, ['test-service'])
+    })
 
-      rc.poll(() => {
-        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
-        cb()
-      })
+    it('should report the names the native client did not recognize', async () => {
+      fetcher.setProductCapabilities.returns(['NOT_A_PRODUCT', 'NOT_A_CAPABILITY'])
+      rc.subscribeProducts('NOT_A_PRODUCT')
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        '[RC] Unrecognized remote config products or capabilities: %s',
+        'NOT_A_PRODUCT, NOT_A_CAPABILITY'
+      )
+      sinon.assert.calledOnce(fetcher.fetchChanges)
+    })
+
+    it('should survive a client that rejects the subscription update', async () => {
+      const error = new Error('Unknown remote config product')
+      fetcher.setProductCapabilities.throws(error)
+      rc.subscribeProducts('ASM')
+
+      // A throw escaping `poll` would reach the scheduler's timer as an uncaught exception.
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(log.error, '[RC] Could not update the remote config client', error)
+      sinon.assert.notCalled(fetcher.fetchChanges)
+
+      // The next poll must retry rather than silently drop the subscription.
+      fetcher.setProductCapabilities.returns([])
+      await poll()
+
+      sinon.assert.calledWithExactly(fetcher.setProductCapabilities.secondCall, ['ASM'], [])
+      sinon.assert.calledOnce(fetcher.fetchChanges)
+    })
+
+    it('should log request errors without failing the poll', async () => {
+      const error = new Error('Response received 500')
+      fetcher.fetchChanges.yields(error)
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(log.errorWithoutTelemetry, '[RC] Error in request', error)
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('should catch request errors thrown before the fetch starts', async () => {
+      const error = new Error('Could not start request')
+      fetcher.fetchChanges.throws(error)
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(log.errorWithoutTelemetry, '[RC] Error in request', error)
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('should catch errors thrown while applying an update', async () => {
+      const error = new Error('batch handler blew up')
+      rc.subscribeProducts('ASM')
+      rc.setBatchHandler(['ASM'], () => { throw error })
+      fetcher.fetchChanges.yields(null, [change('add', 'ASM')])
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(log.error, '[RC] Could not apply remote config update', error)
     })
   })
 
-  describe('parseConfig', () => {
-    let payload
-    const parsePayload = () => rc.parseConfig(payload)
-    let previousState
-
+  describe('applying changes', () => {
     beforeEach(() => {
       sinon.stub(rc, 'dispatch').callsFake((list, action) => {
         const items = /** @type {Array<{path: string, apply_state: number}>} */ (list)
@@ -375,103 +431,22 @@ describe('RemoteConfig', () => {
           else rc.appliedConfigs.set(item.path, item)
         }
       })
-
-      previousState = JSON.parse(JSON.stringify(rc.state))
     })
 
-    it('should do nothing if passed an empty payload', () => {
-      payload = {}
-      parsePayload()
+    it('should do nothing when there are no changes', async () => {
+      await poll()
+
       sinon.assert.notCalled(rc.dispatch)
-      assert.deepStrictEqual(rc.state, previousState)
+      assert.strictEqual(rc.appliedConfigs.size, 0)
     })
 
-    it('should throw when target is not found', () => {
-      payload = {
-        client_configs: ['datadog/42/PRODUCT/confId/config'],
-        targets: toBase64({
-          signed: {
-            targets: {
-              'datadog/42/OTHERPRODUCT/confId/config': {},
-            },
-          },
-        }),
-      }
+    it('should map adds, updates and removals onto the dispatch lists', async () => {
+      fetcher.fetchChanges.yields(null, [
+        change('add', 'APPLY', { file: { config: 'newConf' } }),
+        change('update', 'MODIFY', { file: { config: 'newConf' }, version: 12 }),
+        change('remove', 'UNAPPLY'),
+      ])
 
-      assert.throws(parsePayload, { message: 'Unable to find target for path datadog/42/PRODUCT/confId/config' })
-      sinon.assert.notCalled(rc.dispatch)
-      assert.deepStrictEqual(rc.state, previousState)
-    })
-
-    it('should throw when target file is not found', () => {
-      payload = {
-        client_configs: ['datadog/42/PRODUCT/confId/config'],
-        targets: toBase64({
-          signed: {
-            targets: {
-              'datadog/42/PRODUCT/confId/config': {
-                hashes: {
-                  sha256: 'haaaxx',
-                },
-              },
-            },
-          },
-        }),
-      }
-
-      assert.throws(parsePayload, { message: 'Unable to find file for path datadog/42/PRODUCT/confId/config' })
-      sinon.assert.notCalled(rc.dispatch)
-      assert.deepStrictEqual(rc.state, previousState)
-    })
-
-    it('should throw when config path cannot be parsed', () => {
-      payload = {
-        client_configs: ['datadog/42/confId/config'],
-        targets: toBase64({
-          signed: {
-            targets: {
-              'datadog/42/confId/config': {
-                hashes: {
-                  sha256: 'haaaxx',
-                },
-              },
-            },
-          },
-        }),
-        target_files: [{
-          path: 'datadog/42/confId/config',
-          raw: toBase64({}),
-        }],
-      }
-
-      assert.throws(parsePayload, { message: 'Unable to parse path datadog/42/confId/config' })
-      sinon.assert.notCalled(rc.dispatch)
-      assert.deepStrictEqual(rc.state, previousState)
-    })
-
-    it('should parse the config, call dispatch, and update the state', () => {
-      rc.appliedConfigs.set('datadog/42/UNAPPLY/confId/config', {
-        path: 'datadog/42/UNAPPLY/confId/config',
-        product: 'UNAPPLY',
-        id: 'confId',
-        version: 69,
-        apply_state: ACKNOWLEDGED,
-        apply_error: '',
-        length: 147,
-        hashes: { sha256: 'anotherHash' },
-        file: { asm: { enabled: true } },
-      })
-      rc.appliedConfigs.set('datadog/42/IGNORE/confId/config', {
-        path: 'datadog/42/IGNORE/confId/config',
-        product: 'IGNORE',
-        id: 'confId',
-        version: 43,
-        apply_state: ACKNOWLEDGED,
-        apply_error: '',
-        length: 420,
-        hashes: { sha256: 'sameHash' },
-        file: {},
-      })
       rc.appliedConfigs.set('datadog/42/MODIFY/confId/config', {
         path: 'datadog/42/MODIFY/confId/config',
         product: 'MODIFY',
@@ -479,95 +454,34 @@ describe('RemoteConfig', () => {
         version: 11,
         apply_state: ACKNOWLEDGED,
         apply_error: '',
-        length: 147,
-        hashes: { sha256: 'oldHash' },
         file: { config: 'oldConf' },
       })
 
-      payload = {
-        client_configs: [
-          'datadog/42/IGNORE/confId/config',
-          'datadog/42/MODIFY/confId/config',
-          'datadog/42/APPLY/confId/config',
-        ],
-        targets: toBase64({
-          signed: {
-            custom: {
-              opaque_backend_state: 'opaquestateinbase64',
-            },
-            targets: {
-              'datadog/42/IGNORE/confId/config': {
-                custom: {
-                  v: 43,
-                },
-                hashes: {
-                  sha256: 'sameHash',
-                },
-                length: 420,
-              },
-              'datadog/42/MODIFY/confId/config': {
-                custom: {
-                  v: 12,
-                },
-                hashes: {
-                  sha256: 'newHash',
-                },
-                length: 147,
-              },
-              'datadog/42/APPLY/confId/config': {
-                custom: {
-                  v: 1,
-                },
-                hashes: {
-                  sha256: 'haaaxx',
-                },
-                length: 0,
-              },
-            },
-            version: 12345,
-          },
-        }),
-        target_files: [
-          {
-            path: 'datadog/42/MODIFY/confId/config',
-            raw: toBase64({ config: 'newConf' }),
-          },
-          {
-            path: 'datadog/42/APPLY/confId/config',
-            raw: '',
-          },
-        ],
-      }
-
-      // Calling parsePayload should not throw.
-      parsePayload()
-
-      assert.strictEqual(rc.state.client.state.targets_version, 12345)
-      assert.strictEqual(rc.state.client.state.backend_client_state, 'opaquestateinbase64')
-
-      sinon.assert.calledThrice(rc.dispatch)
-      sinon.assert.calledWithMatch(rc.dispatch.firstCall, [{
+      const unapplied = {
         path: 'datadog/42/UNAPPLY/confId/config',
         product: 'UNAPPLY',
         id: 'confId',
         version: 69,
         apply_state: ACKNOWLEDGED,
         apply_error: '',
-        length: 147,
-        hashes: { sha256: 'anotherHash' },
         file: { asm: { enabled: true } },
-      }], 'unapply', sinon.match.instanceOf(Set))
+      }
+      rc.appliedConfigs.set(unapplied.path, unapplied)
+
+      await poll()
+
+      sinon.assert.calledThrice(rc.dispatch)
+      sinon.assert.calledWithMatch(rc.dispatch.firstCall, [unapplied], 'unapply', sinon.match.instanceOf(Map))
       sinon.assert.calledWithMatch(rc.dispatch.secondCall, [{
         path: 'datadog/42/APPLY/confId/config',
         product: 'APPLY',
         id: 'confId',
         version: 1,
+        // Set by the `dispatch` stub above, which runs before this assertion.
         apply_state: ACKNOWLEDGED,
         apply_error: '',
-        length: 0,
-        hashes: { sha256: 'haaaxx' },
-        file: null,
-      }], 'apply', sinon.match.instanceOf(Set))
+        file: { config: 'newConf' },
+      }], 'apply', sinon.match.instanceOf(Map))
       sinon.assert.calledWithMatch(rc.dispatch.thirdCall, [{
         path: 'datadog/42/MODIFY/confId/config',
         product: 'MODIFY',
@@ -575,55 +489,112 @@ describe('RemoteConfig', () => {
         version: 12,
         apply_state: ACKNOWLEDGED,
         apply_error: '',
-        length: 147,
-        hashes: { sha256: 'newHash' },
         file: { config: 'newConf' },
-      }], 'modify', sinon.match.instanceOf(Set))
+      }], 'modify', sinon.match.instanceOf(Map))
 
-      assert.deepStrictEqual(rc.state.client.state.config_states, [
-        {
-          id: 'confId',
-          version: 43,
-          product: 'IGNORE',
-          apply_state: ACKNOWLEDGED,
-          apply_error: '',
-        },
-        {
-          id: 'confId',
-          version: 12,
-          product: 'MODIFY',
-          apply_state: ACKNOWLEDGED,
-          apply_error: '',
-        },
-        {
-          id: 'confId',
-          version: 1,
-          product: 'APPLY',
-          apply_state: ACKNOWLEDGED,
-          apply_error: '',
-        },
-      ])
-      assert.deepStrictEqual(rc.state.cached_target_files, [
-        {
-          path: 'datadog/42/IGNORE/confId/config',
-          length: 420,
-          hashes: [{ algorithm: 'sha256', hash: 'sameHash' }],
-        },
-        {
-          path: 'datadog/42/MODIFY/confId/config',
-          length: 147,
-          hashes: [{ algorithm: 'sha256', hash: 'newHash' }],
-        },
-        {
-          path: 'datadog/42/APPLY/confId/config',
-          length: 0,
-          hashes: [{ algorithm: 'sha256', hash: 'haaaxx' }],
-        },
+      assert.deepStrictEqual([...rc.appliedConfigs.keys()], [
+        'datadog/42/MODIFY/confId/config',
+        'datadog/42/APPLY/confId/config',
       ])
     })
 
-    it('should allow batch handlers to ack + handle items and skip per-product handlers (including unapply)', () => {
-      // Arrange: two configs already applied, one will be unapplied.
+    it('should treat an update of a config it never applied as an apply', async () => {
+      fetcher.fetchChanges.yields(null, [change('update', 'APPLY')])
+
+      await poll()
+
+      sinon.assert.calledThrice(rc.dispatch)
+      assert.deepStrictEqual(rc.dispatch.firstCall.firstArg, [])
+      assert.strictEqual(rc.dispatch.secondCall.firstArg.length, 1)
+      assert.deepStrictEqual(rc.dispatch.thirdCall.firstArg, [])
+    })
+
+    it('should reapply an update when the previous apply failed', async () => {
+      const record = change('update', 'APPLY', { version: 2 })
+      rc.appliedConfigs.set(record.path, {
+        ...record,
+        id: record.configId,
+        apply_state: ERROR,
+        apply_error: 'Error: could not apply',
+        file: {},
+      })
+      fetcher.fetchChanges.yields(null, [record])
+
+      await poll()
+
+      assert.strictEqual(rc.dispatch.secondCall.firstArg.length, 1)
+      assert.deepStrictEqual(rc.dispatch.thirdCall.firstArg, [])
+    })
+
+    it('should dispatch a path reported as both added and updated only once', async () => {
+      fetcher.fetchChanges.yields(null, [
+        change('add', 'APPLY', { file: { a: 2 }, version: 2 }),
+        change('update', 'APPLY', { file: { a: 2 }, version: 2 }),
+      ])
+
+      await poll()
+
+      assert.strictEqual(rc.dispatch.secondCall.firstArg.length, 1)
+      assert.deepStrictEqual(rc.dispatch.secondCall.firstArg[0].file, { a: 2 })
+      assert.deepStrictEqual(rc.dispatch.thirdCall.firstArg, [])
+    })
+
+    it('should ignore the removal of a config it never applied', async () => {
+      fetcher.fetchChanges.yields(null, [change('remove', 'UNAPPLY')])
+
+      await poll()
+
+      sinon.assert.notCalled(rc.dispatch)
+    })
+
+    it('should treat empty contents as an absent config', async () => {
+      const record = change('add', 'APPLY')
+      record.contents = ''
+      fetcher.fetchChanges.yields(null, [record])
+
+      await poll()
+
+      assert.strictEqual(rc.dispatch.secondCall.firstArg[0].file, null)
+    })
+
+    it('should report unparsable contents as an error and not apply them', async () => {
+      const record = change('add', 'APPLY')
+      record.contents = '{not json'
+      fetcher.fetchChanges.yields(null, [record])
+
+      await poll()
+
+      sinon.assert.notCalled(rc.dispatch)
+      sinon.assert.calledOnce(log.error)
+      assert.strictEqual(log.error.firstCall.args[0], '[RC] Could not parse the config file at path %s')
+      assert.strictEqual(log.error.firstCall.args[1], 'datadog/42/APPLY/confId/config')
+      sinon.assert.calledOnceWithExactly(
+        fetcher.setConfigState,
+        'datadog/42/APPLY/confId/config',
+        ERROR,
+        sinon.match.string
+      )
+      assert.strictEqual(rc.appliedConfigs.size, 0)
+    })
+
+    it('should report missing contents as an error and not apply the config', async () => {
+      const record = change('add', 'APPLY')
+      delete record.contents
+      fetcher.fetchChanges.yields(null, [record])
+
+      await poll()
+
+      sinon.assert.notCalled(rc.dispatch)
+      sinon.assert.calledOnceWithExactly(
+        fetcher.setConfigState,
+        record.path,
+        ERROR,
+        'Error: Missing config contents'
+      )
+      assert.strictEqual(rc.appliedConfigs.size, 0)
+    })
+
+    it('should let batch handlers ack items and skip per-product handlers (including unapply)', async () => {
       const unapplyPath = 'datadog/42/ASM/confId/config'
       rc.appliedConfigs.set(unapplyPath, {
         path: unapplyPath,
@@ -632,42 +603,29 @@ describe('RemoteConfig', () => {
         version: 1,
         apply_state: ACKNOWLEDGED,
         apply_error: '',
-        length: 1,
-        hashes: { sha256: 'oldHash' },
         file: { a: 1 },
       })
 
       const handler = sinon.spy()
       rc.setProductHandler('ASM', handler)
 
-      // Batch hook will handle the unapply and report success.
       rc.setBatchHandler(['ASM'], (transaction) => {
         for (const item of transaction.toUnapply) {
           transaction.ack(item.path)
         }
       })
+      rc.dispatch.restore()
 
-      payload = {
-        client_configs: [],
-        targets: toBase64({
-          signed: {
-            custom: { opaque_backend_state: 'state' },
-            targets: {},
-            version: 2,
-          },
-        }),
-        target_files: [],
-      }
+      fetcher.fetchChanges.yields(null, [change('remove', 'ASM')])
 
-      // Act
-      parsePayload()
+      await poll()
 
-      // Assert: handler should not be invoked, but state should be updated (unapplied).
       sinon.assert.notCalled(handler)
       assert.strictEqual(rc.appliedConfigs.has(unapplyPath), false)
+      sinon.assert.calledWithExactly(fetcher.setConfigState, unapplyPath, ACKNOWLEDGED, '')
     })
 
-    it('should call per-product handlers when batch handlers do not ack/error (including unapply)', () => {
+    it('should call per-product handlers when batch handlers do not ack/error (including unapply)', async () => {
       const unapplyPath = 'datadog/42/ASM/confId/config'
       const conf = {
         path: unapplyPath,
@@ -676,8 +634,6 @@ describe('RemoteConfig', () => {
         version: 1,
         apply_state: ACKNOWLEDGED,
         apply_error: '',
-        length: 1,
-        hashes: { sha256: 'oldHash' },
         file: { a: 1 },
       }
       rc.appliedConfigs.set(unapplyPath, conf)
@@ -685,28 +641,62 @@ describe('RemoteConfig', () => {
       const handler = sinon.spy()
       rc.setProductHandler('ASM', handler)
 
-      // Batch hook does nothing (does not ack/error), so per-product handler should run.
       rc.setBatchHandler(['ASM'], () => {})
 
       // This test needs the real dispatch path in order to verify handler invocation.
       rc.dispatch.restore()
 
-      payload = {
-        client_configs: [],
-        targets: toBase64({
-          signed: {
-            custom: { opaque_backend_state: 'state' },
-            targets: {},
-            version: 2,
-          },
-        }),
-        target_files: [],
-      }
+      fetcher.fetchChanges.yields(null, [change('remove', 'ASM')])
 
-      parsePayload()
+      await poll()
 
       sinon.assert.calledOnceWithExactly(handler, 'unapply', conf.file, conf.id)
       assert.strictEqual(rc.appliedConfigs.has(unapplyPath), false)
+    })
+
+    it('should stop handing updates to a removed batch handler', async () => {
+      const handler = sinon.spy()
+      rc.subscribeProducts('ASM')
+      rc.setBatchHandler(['ASM'], handler)
+
+      fetcher.fetchChanges.yields(null, [change('add', 'ASM', { file: { a: 1 } })])
+      await poll()
+
+      fetcher.fetchChanges.yields(null, [change('update', 'ASM', { file: { a: 2 }, version: 2 })])
+      await poll()
+
+      sinon.assert.calledTwice(handler)
+      assert.strictEqual(handler.firstCall.firstArg.toApply.length, 1)
+      assert.strictEqual(handler.secondCall.firstArg.toModify.length, 1)
+
+      rc.removeBatchHandler(handler)
+
+      fetcher.fetchChanges.yields(null, [change('update', 'ASM', { file: { a: 3 }, version: 3 })])
+      await poll()
+
+      sinon.assert.calledTwice(handler)
+    })
+
+    it('should report a batch handler error for the config it was reported against', async () => {
+      const error = new Error('waf update failed')
+      rc.subscribeProducts('ASM')
+      rc.setBatchHandler(['ASM'], (transaction) => {
+        for (const item of transaction.toApply) {
+          transaction.error(item.path, error)
+        }
+      })
+      rc.dispatch.restore()
+
+      fetcher.fetchChanges.yields(null, [change('add', 'ASM')])
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(
+        fetcher.setConfigState,
+        'datadog/42/ASM/confId/config',
+        ERROR,
+        'Error: waf update failed'
+      )
     })
   })
 
@@ -746,7 +736,7 @@ describe('RemoteConfig', () => {
         }
       }
 
-      rc.dispatch(list, 'apply', new Set())
+      rc.dispatch(list, 'apply', new Map())
 
       sinon.assert.calledOnceWithExactly(syncGoodNonAckHandler, 'apply', list[0].file, list[0].id)
       sinon.assert.calledOnceWithExactly(syncBadNonAckHandler, 'apply', list[1].file, list[1].id)
@@ -781,6 +771,17 @@ describe('RemoteConfig', () => {
         assert.strictEqual(rc.appliedConfigs.get(`datadog/42/PRODUCT_${i}/confId/config`), list[i])
       }
 
+      // Handlers that have not acknowledged yet must be reported as unacknowledged, overriding the
+      // native client's optimistic acknowledgement of every stored config.
+      for (const index of [2, 3, 6, 7, 8]) {
+        sinon.assert.calledWithExactly(
+          fetcher.setConfigState,
+          `datadog/42/PRODUCT_${index}/confId/config`,
+          UNACKNOWLEDGED,
+          ''
+        )
+      }
+
       setImmediate(() => {
         assert.strictEqual(list[2].apply_state, ACKNOWLEDGED)
         assert.strictEqual(list[2].apply_error, '')
@@ -792,6 +793,19 @@ describe('RemoteConfig', () => {
         assert.strictEqual(list[7].apply_error, 'Error: async ack fn')
         assert.strictEqual(list[8].apply_state, UNACKNOWLEDGED)
         assert.strictEqual(list[8].apply_error, '')
+
+        sinon.assert.calledWithExactly(
+          fetcher.setConfigState,
+          'datadog/42/PRODUCT_3/confId/config',
+          ERROR,
+          'Error: async fn'
+        )
+        sinon.assert.calledWithExactly(
+          fetcher.setConfigState,
+          'datadog/42/PRODUCT_6/confId/config',
+          ACKNOWLEDGED,
+          ''
+        )
         done()
       })
 
@@ -815,10 +829,80 @@ describe('RemoteConfig', () => {
         file: { asm: { enabled: true } },
       })
 
-      rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply', new Set())
+      rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply', new Map())
 
       sinon.assert.calledOnceWithExactly(handler, 'unapply', { asm: { enabled: true } }, 'asm_data')
       assert.strictEqual(rc.appliedConfigs.size, 0)
+    })
+
+    it('should report a rejected thenable from a product handler', () => {
+      const error = new Error('could not apply')
+      rc.setProductHandler('ASM_FEATURES', () => ({
+        /**
+         * @param {() => void} _resolve
+         * @param {(error: Error) => void} reject
+         */
+        then (_resolve, reject) {
+          reject(error)
+        },
+      }))
+      const item = {
+        id: 'asm_data',
+        path: 'datadog/42/ASM_FEATURES/confId/config',
+        product: 'ASM_FEATURES',
+        apply_state: UNACKNOWLEDGED,
+        apply_error: '',
+        file: { asm: { enabled: true } },
+      }
+
+      rc.dispatch([item], 'apply', new Map())
+
+      assert.strictEqual(item.apply_state, ERROR)
+      assert.strictEqual(item.apply_error, error.toString())
+      sinon.assert.calledWithExactly(fetcher.setConfigState, item.path, ERROR, error.toString())
+    })
+
+    it('should acknowledge a synchronous result with a non-callable then property', () => {
+      rc.setProductHandler('ASM_FEATURES', () => ({ then: true }))
+      const item = {
+        id: 'asm_data',
+        path: 'datadog/42/ASM_FEATURES/confId/config',
+        product: 'ASM_FEATURES',
+        apply_state: UNACKNOWLEDGED,
+        apply_error: '',
+        file: { asm: { enabled: true } },
+      }
+
+      rc.dispatch([item], 'apply', new Map())
+
+      assert.strictEqual(item.apply_state, ACKNOWLEDGED)
+      assert.strictEqual(item.apply_error, '')
+      sinon.assert.calledWithExactly(fetcher.setConfigState, item.path, ACKNOWLEDGED, '')
+    })
+
+    it('should ignore an asynchronous acknowledgement for a replaced config', async () => {
+      const acknowledgements = []
+      const handler = sinon.spy((action, conf, id, acknowledge) => acknowledgements.push(acknowledge))
+      rc.setProductHandler('ASM_FEATURES', handler)
+      fetcher.fetchChanges.onFirstCall().yields(null, [change('add', 'ASM_FEATURES')])
+      fetcher.fetchChanges.onSecondCall().yields(null, [change('update', 'ASM_FEATURES', { version: 2 })])
+
+      await poll()
+      await poll()
+      fetcher.setConfigState.resetHistory()
+
+      acknowledgements[0]()
+
+      sinon.assert.notCalled(fetcher.setConfigState)
+      assert.strictEqual(rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config').version, 2)
+
+      acknowledgements[1]()
+      sinon.assert.calledOnceWithExactly(
+        fetcher.setConfigState,
+        'datadog/42/ASM_FEATURES/confId/config',
+        ACKNOWLEDGED,
+        ''
+      )
     })
   })
 
@@ -979,7 +1063,3 @@ describe('RemoteConfig', () => {
     })
   })
 })
-
-function toBase64 (data) {
-  return Buffer.from(JSON.stringify(data), 'utf8').toString('base64')
-}
