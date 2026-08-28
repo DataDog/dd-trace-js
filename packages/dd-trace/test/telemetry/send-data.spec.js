@@ -7,6 +7,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { getAgent } = require('../../src/ci-visibility/exporters/agents')
 require('../setup/core')
 
 describe('sendData', () => {
@@ -51,6 +52,7 @@ describe('sendData', () => {
       hostname: '',
       port: '12345',
     })
+    assert.strictEqual(options.agent, undefined)
   })
 
   it('sends telemetry to the configured socket url', () => {
@@ -178,6 +180,7 @@ describe('sendData', () => {
     })
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    assert.strictEqual(options.agent, getAgent(url))
   })
 
   it('uses DD_CIVISIBILITY_AGENTLESS_URL for telemetry when the agentless intake is overridden', () => {
@@ -200,6 +203,52 @@ describe('sendData', () => {
     const options = request.getCall(0).args[1]
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://my-intake.example/'))
+    assert.strictEqual(options.agent, getAgent(url))
+  })
+
+  it('uses the dedicated Test Optimization agent in agent-proxy mode', () => {
+    const url = new URL('http://127.0.0.1:8126')
+    sendDataModule.sendData(
+      {
+        isCiVisibility: true,
+        testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: false },
+        tags: { 'runtime-id': '123' },
+        url,
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.firstCall.args[1]
+    assert.strictEqual(options.path, '/telemetry/proxy/api/v2/apmtelemetry')
+    assert.strictEqual(options.agent, getAgent(url))
+  })
+
+  it('selects the HTTPS Test Optimization agent when falling back to the agentless backend', () => {
+    request.onFirstCall().yields(new Error('agent unreachable'))
+    request.onSecondCall().yields(null)
+
+    const url = new URL('http://127.0.0.1:8126')
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        isCiVisibility: true,
+        site: 'datadoghq.eu',
+        tags: { 'runtime-id': '123' },
+        testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: false },
+        url,
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    assert.strictEqual(request.callCount, 2)
+    assert.strictEqual(request.firstCall.args[1].agent, getAgent(url))
+    const fallbackUrl = new URL('https://instrumentation-telemetry-intake.datadoghq.eu')
+    assert.strictEqual(request.secondCall.args[1].agent, getAgent(fallbackUrl))
   })
 
   it('sends the agentless backend telemetry with a URL object when the agent request fails', () => {

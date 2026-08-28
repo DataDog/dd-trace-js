@@ -27,6 +27,26 @@ describe('Test Visibility DI Writer', () => {
   })
 
   context('agentless', () => {
+    it('uses the dedicated Test Optimization agent', (done) => {
+      const agent = {}
+      const request = sinon.stub().yieldsAsync(null, 'OK', 202)
+      const TestOptimizationLogsWriter = proxyquire(
+        '../../../../src/ci-visibility/exporters/agentless/di-logs-writer',
+        {
+          '../agents': { getAgent: () => agent },
+          '../request': request,
+          '../../../config': () => ({ DD_API_KEY: '1' }),
+        }
+      )
+      const logsWriter = new TestOptimizationLogsWriter({ url: 'http://www.example.com' })
+
+      logsWriter.append({ message: 'test' })
+      logsWriter.flush(() => {
+        sinon.assert.calledWithMatch(request, sinon.match.any, { agent })
+        done()
+      })
+    })
+
     it('can send logs to the logs intake', (done) => {
       const scope = nock('http://www.example.com')
         .post('/api/v2/logs', body => {
