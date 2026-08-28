@@ -461,6 +461,82 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(RemoteConfig)
       })
 
+      it('should start Dynamic Instrumentation from a probe file without Remote Config', () => {
+        config.dynamicInstrumentation.enabled = true
+        config.dynamicInstrumentation.probeFile = 'probes.json'
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(RemoteConfig)
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, undefined)
+      })
+
+      it('should use debugger-only Remote Config in agentless mode', () => {
+        config.DD_AGENTLESS_ENABLED = true
+        config.DD_API_KEY = 'api-key'
+        config.dynamicInstrumentation.enabled = true
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(RemoteConfig, config)
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, rc)
+        sinon.assert.calledWithExactly(
+          rc.updateCapabilities,
+          RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION,
+          true
+        )
+        sinon.assert.calledWithExactly(
+          rc.updateCapabilities,
+          RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING,
+          true
+        )
+        sinon.assert.notCalled(rc.subscribeProducts)
+        assert.strictEqual(handlers.has('APM_TRACING'), false)
+        assert.strictEqual(handlers.has('AGENT_CONFIG'), false)
+        assert.strictEqual(handlers.has('AGENT_TASK'), false)
+        assert.strictEqual(handlers.has('FFE_FLAGS'), false)
+      })
+
+      it('should not start agentless Dynamic Instrumentation without an API key', () => {
+        config.DD_AGENTLESS_ENABLED = true
+        config.dynamicInstrumentation.enabled = true
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(RemoteConfig)
+        sinon.assert.notCalled(dynamicInstrumentation.start)
+      })
+
+      it('should not start agentless Dynamic Instrumentation in Test Optimization', () => {
+        config.DD_AGENTLESS_ENABLED = true
+        config.DD_API_KEY = 'api-key'
+        config.dynamicInstrumentation.enabled = true
+        config.isCiVisibility = true
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(RemoteConfig)
+        sinon.assert.notCalled(dynamicInstrumentation.start)
+      })
+
+      it('should allow a local probe file in agentless Test Optimization', () => {
+        config.DD_AGENTLESS_ENABLED = true
+        config.DD_API_KEY = 'api-key'
+        config.dynamicInstrumentation.enabled = true
+        config.dynamicInstrumentation.probeFile = 'probes.json'
+        config.isCiVisibility = true
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(RemoteConfig)
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, undefined)
+      })
+
       it('should not initialize when disabled', () => {
         config.DD_TRACE_ENABLED = false
 

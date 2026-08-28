@@ -631,7 +631,9 @@ class Config extends ConfigBase {
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
       setAndTrack(this, 'runtimeMetrics.enabled', false)
       setAndTrack(this, 'dsmEnabled', false)
-      setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+      if (!this.isCiVisibility) {
+        setAndTrack(this, 'dynamicInstrumentation.enabled', true)
+      }
       setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
 
       const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')

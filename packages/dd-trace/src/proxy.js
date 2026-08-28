@@ -186,10 +186,17 @@ class Tracer extends NoopProxy {
         spanleak.startScrubber()
       }
 
-      if (config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED && !config.isCiVisibility) {
-        const RemoteConfig = require('./remote_config')
-        const rc = new RemoteConfig(config)
+      const remoteConfigEnabled = config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED && !config.isCiVisibility
+      const agentlessDebuggerEnabled = config.DD_AGENTLESS_ENABLED &&
+        config.dynamicInstrumentation.enabled && config.DD_API_KEY && !config.isCiVisibility
+      let rc
 
+      if (remoteConfigEnabled || agentlessDebuggerEnabled) {
+        const RemoteConfig = require('./remote_config')
+        rc = new RemoteConfig(config)
+      }
+
+      if (remoteConfigEnabled) {
         const tracingRemoteConfig = require('./config/remote_config')
         tracingRemoteConfig.enable(rc, config, () => {
           this.#updateTracing(config)
@@ -220,14 +227,17 @@ class Tracer extends NoopProxy {
           appsecRemoteConfig.enable(rc, config, this._modules.appsec)
         }
 
-        if (config.dynamicInstrumentation.enabled) {
-          getDynamicInstrumentation().start(config, rc)
-        }
-
         const openfeatureRemoteConfig = require('./openfeature/remote_config')
         const subscribeOpenfeatureToRemoteConfig = config.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
           config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'remote_config'
         openfeatureRemoteConfig.enable(rc, () => this.openfeature, subscribeOpenfeatureToRemoteConfig)
+      } else if (agentlessDebuggerEnabled) {
+        const tracingRemoteConfig = require('./config/remote_config')
+        tracingRemoteConfig.enableDebuggerCapabilities(rc)
+      }
+
+      if (config.dynamicInstrumentation.enabled && (rc || config.dynamicInstrumentation.probeFile)) {
+        getDynamicInstrumentation().start(config, rc)
       }
 
       if (config.profiling.DD_PROFILING_ENABLED === 'true') {
