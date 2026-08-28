@@ -51,12 +51,24 @@ function getLockPath (cacheKey) {
 }
 
 /**
+ * Checks whether a filesystem cache timestamp can be safely compared with the current time.
+ *
+ * @param {unknown} timestamp - Timestamp read from a cache or lock file.
+ * @param {number} now - Current Unix timestamp in milliseconds.
+ * @returns {timestamp is number}
+ */
+function isValidTimestamp (timestamp, now) {
+  return Number.isSafeInteger(timestamp) && timestamp >= 0 && timestamp <= now
+}
+
+/**
  * Attempts to read cached data from the filesystem.
  *
  * @param {string} cacheKey
+ * @param {number} [cacheTtlMs] - Maximum cache age in milliseconds.
  * @returns {{ data: unknown } | undefined}
  */
-function readFromCache (cacheKey) {
+function readFromCache (cacheKey, cacheTtlMs = CACHE_TTL_MS) {
   const cachePath = getCachePath(cacheKey)
   try {
     const raw = fs.readFileSync(cachePath, 'utf8')
@@ -66,8 +78,14 @@ function readFromCache (cacheKey) {
       return
     }
     const { timestamp, data } = parsed
-    if (Date.now() - timestamp > CACHE_TTL_MS) {
-      log.debug('%s cache expired (age: %d ms)', cacheKey, Date.now() - timestamp)
+    const now = Date.now()
+    if (!isValidTimestamp(timestamp, now)) {
+      log.debug('%s cache file has an invalid timestamp, ignoring', cacheKey)
+      return
+    }
+    const age = now - timestamp
+    if (age > cacheTtlMs) {
+      log.debug('%s cache expired (age: %d ms)', cacheKey, age)
       return
     }
     log.debug('%s cache hit', cacheKey)
@@ -101,7 +119,7 @@ function writeToCache (cacheKey, data) {
  * Attempts to acquire an exclusive lock using O_CREAT|O_EXCL.
  *
  * @param {string} cacheKey
- * @returns {boolean}
+ * @returns {boolean|undefined}
  */
 function tryAcquireLock (cacheKey) {
   const lockPath = getLockPath(cacheKey)
@@ -110,8 +128,9 @@ function tryAcquireLock (cacheKey) {
     fs.writeSync(fd, String(Date.now()))
     fs.closeSync(fd)
     return true
-  } catch {
-    return false
+  } catch (err) {
+    if (err.code === 'EEXIST') return false
+    log.debug('%s lock cannot be created, bypassing cache: %s', cacheKey, err.message)
   }
 }
 
@@ -119,9 +138,15 @@ function tryAcquireLock (cacheKey) {
  * Removes the lock file.
  *
  * @param {string} cacheKey
+ * @returns {boolean}
  */
 function releaseLock (cacheKey) {
-  try { fs.unlinkSync(getLockPath(cacheKey)) } catch { /* ignore */ }
+  try {
+    fs.unlinkSync(getLockPath(cacheKey))
+    return true
+  } catch (err) {
+    return err.code === 'ENOENT'
+  }
 }
 
 /**
@@ -165,7 +190,9 @@ function startLockHeartbeat (cacheKey) {
 function isLockStale (cacheKey) {
   try {
     const content = fs.readFileSync(getLockPath(cacheKey), 'utf8')
-    return Date.now() - Number(content) > CACHE_LOCK_TIMEOUT_MS
+    const timestamp = Number(content)
+    const now = Date.now()
+    return !isValidTimestamp(timestamp, now) || now - timestamp > CACHE_LOCK_TIMEOUT_MS
   } catch {
     return true
   }
@@ -175,30 +202,37 @@ function isLockStale (cacheKey) {
  * Polls until the cache file appears or the timeout is reached.
  *
  * @param {string} cacheKey
- * @param {Function} fetchFn - function(done) that fetches from the API
+ * @param {Function} fetchFn - function(cacheKey, done) that fetches from the API
  * @param {Function} done - callback(err, ...results)
+ * @param {number} cacheTtlMs - Maximum cache age in milliseconds.
  */
-function waitForCache (cacheKey, fetchFn, done) {
+function waitForCache (cacheKey, fetchFn, done, cacheTtlMs) {
   const poll = () => {
-    const cached = readFromCache(cacheKey)
+    const cached = readFromCache(cacheKey, cacheTtlMs)
     if (cached) {
       return done(null, cached.data)
     }
     if (isLockStale(cacheKey)) {
       log.debug('%s lock is stale, attempting takeover', cacheKey)
-      releaseLock(cacheKey)
-      if (!tryAcquireLock(cacheKey)) {
+      if (!releaseLock(cacheKey)) {
+        return fetchFn(null, done)
+      }
+      const isLockOwner = tryAcquireLock(cacheKey)
+      if (isLockOwner === undefined) {
+        return fetchFn(null, done)
+      }
+      if (!isLockOwner) {
         return setTimeout(poll, CACHE_LOCK_POLL_MS)
       }
 
-      const cachedAfterTakeover = readFromCache(cacheKey)
+      const cachedAfterTakeover = readFromCache(cacheKey, cacheTtlMs)
       if (cachedAfterTakeover) {
         releaseLock(cacheKey)
         return done(null, cachedAfterTakeover.data)
       }
 
       const stopHeartbeat = startLockHeartbeat(cacheKey)
-      return fetchFn((err, ...results) => {
+      return fetchFn(cacheKey, (err, ...results) => {
         stopHeartbeat()
         done(err, ...results)
       })
@@ -218,14 +252,15 @@ function waitForCache (cacheKey, fetchFn, done) {
  * @param {Function} fetchFn - function(cacheKey, done) that performs the API request.
  *   Must call writeToCache(cacheKey, data) on success before calling done(null, data).
  * @param {Function} done - callback(err, ...results)
+ * @param {number} [cacheTtlMs] - Maximum cache age in milliseconds.
  */
-function withCache (cacheKey, fetchFn, done) {
+function withCache (cacheKey, fetchFn, done, cacheTtlMs = CACHE_TTL_MS) {
   if (!isCacheEnabled()) {
     return fetchFn(null, done)
   }
 
   // Fast path: cache hit
-  const cached = readFromCache(cacheKey)
+  const cached = readFromCache(cacheKey, cacheTtlMs)
   if (cached) {
     return done(null, cached.data)
   }
@@ -233,9 +268,13 @@ function withCache (cacheKey, fetchFn, done) {
   // Try to become the fetcher (lock owner)
   const isLockOwner = tryAcquireLock(cacheKey)
 
+  if (isLockOwner === undefined) {
+    return fetchFn(null, done)
+  }
+
   if (!isLockOwner) {
     log.debug('%s lock held by another process, waiting for cache', cacheKey)
-    return waitForCache(cacheKey, (cb) => fetchFn(cacheKey, cb), done)
+    return waitForCache(cacheKey, fetchFn, done, cacheTtlMs)
   }
 
   // This process owns the lock — start heartbeat and fetch

@@ -1,17 +1,21 @@
 'use strict'
 
+const fs = require('node:fs')
 const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
 
 const { version: tracerVersion } = require('../../../../../package.json')
 const { EMPTY_EFD_RETRY_POLICY, createEfdRetryPolicy } = require('../efd-retry-policy')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
+const { getCachePath, withCache, writeToCache } = require('../requests/fs-cache')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
 const { writeSettingsToCache } = require('../test-optimization-cache')
 const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
+const { MAX_RETRIES } = require('../test-optimization-http-cache-schema')
+const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../telemetry')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
@@ -25,9 +29,24 @@ const {
   FINAL_FLUSH_TIMEOUT,
 } = require('../final-flush')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
+const buildSettingsCacheKey = require('./settings-cache-key')
 
 const hostname = getHostname()
 const EMPTY_SETTINGS = Object.freeze({})
+const SETTINGS_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const SETTINGS_BOOLEAN_FIELDS = Object.freeze([
+  'isCodeCoverageEnabled',
+  'isSuitesSkippingEnabled',
+  'isItrEnabled',
+  'requireGit',
+  'isEarlyFlakeDetectionEnabled',
+  'isFlakyTestRetriesEnabled',
+  'isDiEnabled',
+  'isKnownTestsEnabled',
+  'isTestManagementEnabled',
+  'isImpactedTestsEnabled',
+  'isCoverageReportUploadEnabled',
+])
 
 /**
  * Test session identity sent with every request. Fields are optional because the CI provider,
@@ -57,6 +76,80 @@ function getIsTestSessionTrace (trace) {
   return trace.some(span =>
     span.type === 'test_session_end' || span.type === 'test_suite_end' || span.type === 'test_module_end'
   )
+}
+
+/**
+ * Checks whether a value is a non-negative safe integer.
+ *
+ * @param {unknown} value - Candidate integer.
+ * @returns {value is number}
+ */
+function isNonNegativeSafeInteger (value) {
+  return Number.isSafeInteger(value) && value >= 0
+}
+
+/**
+ * Checks whether a value is a retry count accepted by the settings parser.
+ *
+ * @param {unknown} value - Candidate retry count.
+ * @returns {value is number}
+ */
+function isValidRetryCount (value) {
+  return isNonNegativeSafeInteger(value) && value <= MAX_RETRIES
+}
+
+/**
+ * Checks whether a cached EFD retry policy has the complete parsed shape.
+ *
+ * @param {unknown} retryPolicy - Candidate retry policy.
+ * @returns {boolean}
+ */
+function isValidCachedEfdRetryPolicy (retryPolicy) {
+  if (retryPolicy === null || typeof retryPolicy !== 'object' || Array.isArray(retryPolicy)) return false
+  if (!isValidRetryCount(retryPolicy.schedulingRetryCount)) return false
+  if (!Array.isArray(retryPolicy.durationRetryCounts) ||
+    retryPolicy.durationRetryCounts.length !== EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length) {
+    return false
+  }
+
+  let schedulingRetryCount = 0
+  for (let index = 0; index < EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length; index++) {
+    const durationRetryCount = retryPolicy.durationRetryCounts[index]
+    if (durationRetryCount === null || typeof durationRetryCount !== 'object' ||
+      Array.isArray(durationRetryCount) ||
+      durationRetryCount.durationLimitMs !==
+        EMPTY_EFD_RETRY_POLICY.durationRetryCounts[index].durationLimitMs ||
+      !isValidRetryCount(durationRetryCount.retryCount)) {
+      return false
+    }
+    if (durationRetryCount.retryCount > schedulingRetryCount) {
+      schedulingRetryCount = durationRetryCount.retryCount
+    }
+  }
+  return retryPolicy.schedulingRetryCount === schedulingRetryCount
+}
+
+/**
+ * Checks whether a filesystem cache value has the complete shape produced by
+ * parseLibraryConfigurationResponse.
+ *
+ * @param {unknown} settings - Cached settings value.
+ * @returns {settings is Record<string, unknown>}
+ */
+function isValidCachedSettings (settings) {
+  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) return false
+  for (const field of SETTINGS_BOOLEAN_FIELDS) {
+    if (typeof settings[field] !== 'boolean') return false
+  }
+  if (settings.isDiEnabled && !settings.isFlakyTestRetriesEnabled) return false
+  if (settings.isEarlyFlakeDetectionEnabled && !settings.isKnownTestsEnabled) return false
+  if (!isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy)) return false
+  if (!isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
+    settings.earlyFlakeDetectionFaultyThreshold > 100) {
+    return false
+  }
+  return settings.testManagementAttemptToFixRetries === undefined ||
+    isValidRetryCount(settings.testManagementAttemptToFixRetries)
 }
 
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
@@ -96,6 +189,7 @@ class CiVisibilityExporter extends BufferingExporter {
   #deferredTestSessionTraces = []
   #pendingScreenshotUploads = new Set()
   #screenshotFlushWaiters = new Set()
+  #gitUploadTimeoutId
 
   constructor (config, options = {}) {
     super(config)
@@ -122,11 +216,6 @@ class CiVisibilityExporter extends BufferingExporter {
     this._isTestFailureScreenshotsEnabled =
       Boolean(config?.testOptimization?.DD_TEST_FAILURE_SCREENSHOTS_ENABLED)
 
-    const gitUploadTimeoutId = setTimeout(() => {
-      this._resolveGit(new Error('Timeout while uploading git metadata'))
-    }, GIT_UPLOAD_TIMEOUT)
-    gitUploadTimeoutId.unref?.()
-
     const canUseCiVisProtocolTimeoutId = setTimeout(() => {
       this._resolveCanUseCiVisProtocol(false)
     }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT)
@@ -134,7 +223,8 @@ class CiVisibilityExporter extends BufferingExporter {
 
     this._gitUploadPromise = new Promise(resolve => {
       this._resolveGit = (err) => {
-        clearTimeout(gitUploadTimeoutId)
+        clearTimeout(this.#gitUploadTimeoutId)
+        this.#gitUploadTimeoutId = null
         resolve(err)
       }
     })
@@ -266,51 +356,142 @@ class CiVisibilityExporter extends BufferingExporter {
       const cachedLibraryConfig = this._testOptimizationHttpCache.readSettings()
       if (cachedLibraryConfig !== CACHE_MISS) {
         log.debug('Test Optimization HTTP cache settings found, skipping settings request')
-        writeSettingsToCache(cachedLibraryConfig)
-        this._libraryConfig = this.filterConfiguration(cachedLibraryConfig)
-        const canUseCachedSkippableSuites = !this.shouldRequestSkippableSuites() ||
-          this._testOptimizationHttpCache.hasValidSkippableSuites({
-            testLevel: configuration.testLevel,
-            isCoverageReportUploadEnabled: configuration.isCoverageReportUploadEnabled,
-          })
-        if (this._libraryConfig.requireGit && !canUseCachedSkippableSuites) {
-          this.sendGitMetadata(repositoryUrl)
-        } else {
-          this._resolveGit()
-        }
-        return callback(null, this._libraryConfig)
+        return this._applyCachedSettings(cachedLibraryConfig, configuration, repositoryUrl, false, callback)
       }
 
       if (this._isTestOptimizationCacheOnly) {
         return callback(this._getCacheOnlyError('settings'), {})
       }
 
-      this.sendGitMetadata(repositoryUrl)
-      getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
+      // The settings request has a two-phase shape: when the backend returns
+      // `require_git`, we upload git metadata and re-request settings. Only the
+      // final (post-git-upload) configuration is cached, so the cross-process
+      // filesystem cache never serves a pre-git-upload response that would skip
+      // the git upload in other processes.
+      //
+      // The live-fetch and cache-hit paths resolve the git upload promise
+      // differently, so they must not share a single apply path:
+      //   - Live fetch: `sendGitMetadata` is started in `_fetchLibraryConfigurationFromBackend`
+      //     and resolves `_gitUploadPromise` itself (with the upload result). We must NOT call
+      //     `_resolveGit()` here, or we would race the in-flight upload and mask its error.
+      //   - Filesystem cache hit: no upload was started in this process, so `_applyCachedSettings`
+      //     resolves the git promise locally (starting an upload only if the cached config still
+      //     requires git and we lack valid cached skippable suites).
+      let liveFetchStarted = false
+      const fsCacheKey = buildSettingsCacheKey(configuration)
+      const fetchSettings = (activeCacheKey, done) => {
+        liveFetchStarted = true
+        this._fetchLibraryConfigurationFromBackend(configuration, repositoryUrl, activeCacheKey, done)
+      }
+      const applySettings = (err, libraryConfig) => {
         /**
          * **Important**: this._libraryConfig remains empty in testing frameworks
          * where the tests run in a subprocess, like Jest,
          * because `getLibraryConfiguration` is called only once in the main process.
          */
-        this._libraryConfig = this.filterConfiguration(libraryConfig)
-
         if (err) {
-          callback(err, {})
-        } else if (libraryConfig?.requireGit) {
-          // If the backend requires git, we'll wait for the upload to finish and request settings again
-          this._gitUploadPromise.then(gitUploadError => {
-            if (gitUploadError) {
-              return callback(gitUploadError, {})
-            }
-            getLibraryConfigurationRequest(configuration, (err, finalLibraryConfig) => {
-              this._libraryConfig = this.filterConfiguration(finalLibraryConfig)
-              callback(err, this._libraryConfig)
-            })
-          })
-        } else {
-          callback(null, this._libraryConfig)
+          return callback(err, {})
         }
+        if (liveFetchStarted) {
+          // Live fetch: the git upload was already started and resolves
+          // `_gitUploadPromise` itself. Do not call `_resolveGit()`.
+          writeSettingsToCache(libraryConfig)
+          this._libraryConfig = this.filterConfiguration(libraryConfig)
+          return callback(null, this._libraryConfig)
+        }
+        // Filesystem cache hit: no git upload was started in this process.
+        if (!isValidCachedSettings(libraryConfig)) {
+          // A syntactically valid cache file with an invalid settings payload is corrupt.
+          // Settings never writes such a value, so this is external corruption. Remove the
+          // file and fall back to the backend so we never serve a garbage config that would
+          // crash filterConfiguration or silently disable every feature.
+          try {
+            fs.unlinkSync(getCachePath(fsCacheKey))
+          } catch (err) {
+            if (err.code !== 'ENOENT') {
+              return fetchSettings(null, applySettings)
+            }
+          }
+          liveFetchStarted = false
+          return withCache(fsCacheKey, fetchSettings, applySettings, SETTINGS_CACHE_TTL_MS)
+        }
+        this._applyCachedSettings(libraryConfig, configuration, repositoryUrl, true, callback)
+      }
+      withCache(fsCacheKey, fetchSettings, applySettings, SETTINGS_CACHE_TTL_MS)
+    })
+  }
+
+  /**
+   * Applies a resolved (cached or freshly fetched) library configuration: writes it to the
+   * shared settings cache, filters it through local kill switches, and resolves the git
+   * upload promise according to whether git metadata still needs to be uploaded.
+   *
+   * @param {Record<string, unknown>} settings - Resolved library configuration.
+   * @param {object} configuration - Request configuration used to evaluate cached skippable suites.
+   * @param {string} repositoryUrl - Repository URL for git metadata upload.
+   * @param {boolean} isFilesystemCache - Whether settings came from the cross-process cache.
+   * @param {Function} callback - Completion callback.
+   * @returns {void}
+   */
+  _applyCachedSettings (settings, configuration, repositoryUrl, isFilesystemCache, callback) {
+    writeSettingsToCache(settings)
+    this._libraryConfig = this.filterConfiguration(settings)
+    const canUseCachedSkippableSuites = !this.shouldRequestSkippableSuites() ||
+      this._testOptimizationHttpCache.hasValidSkippableSuites({
+        testLevel: configuration.testLevel,
+        isCoverageReportUploadEnabled: configuration.isCoverageReportUploadEnabled,
       })
+    if (!canUseCachedSkippableSuites && (this._libraryConfig.requireGit || isFilesystemCache)) {
+      this.sendGitMetadata(repositoryUrl)
+    } else {
+      this._resolveGit()
+    }
+    callback(null, this._libraryConfig)
+  }
+
+  /**
+   * Fetches library configuration from the backend, performing the two-phase
+   * `require_git` re-request, and writes only the final configuration to the
+   * filesystem cache when this process owns the cache lock.
+   *
+   * @param {object} configuration - Request configuration for the settings endpoint.
+   * @param {string} repositoryUrl - Repository URL for git metadata upload.
+   * @param {string|null} cacheKey - Filesystem cache key when this process owns the lock, null otherwise.
+   * @param {Function} done - Completion callback.
+   * @returns {void}
+   */
+  _fetchLibraryConfigurationFromBackend (configuration, repositoryUrl, cacheKey, done) {
+    this.sendGitMetadata(repositoryUrl)
+    getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
+      // Mirror the original live path: keep the phase-1 config on `_libraryConfig` even
+      // before the git upload resolves, so `shouldRequestSkippableSuites()` and the
+      // skippable path's `_gitUploadPromise` await behave identically to the uncached flow.
+      this._libraryConfig = this.filterConfiguration(libraryConfig)
+      if (err) {
+        return done(err, libraryConfig)
+      }
+      if (libraryConfig?.requireGit) {
+        // If the backend requires git, wait for the upload to finish and request settings again
+        this._gitUploadPromise.then(gitUploadError => {
+          if (gitUploadError) {
+            return done(gitUploadError, libraryConfig)
+          }
+          getLibraryConfigurationRequest(configuration, (finalErr, finalLibraryConfig) => {
+            if (finalErr) {
+              // Match the original live path: reset `_libraryConfig` from the final
+              // (failed) response so stale phase-1 feature flags don't stay installed.
+              // On error `finalLibraryConfig` is undefined, so this resolves to empty settings.
+              this._libraryConfig = this.filterConfiguration(finalLibraryConfig)
+              return done(finalErr, finalLibraryConfig)
+            }
+            writeToCache(cacheKey, finalLibraryConfig)
+            done(null, finalLibraryConfig)
+          })
+        })
+      } else {
+        writeToCache(cacheKey, libraryConfig)
+        done(null, libraryConfig)
+      }
     })
   }
 
@@ -376,6 +557,13 @@ class CiVisibilityExporter extends BufferingExporter {
     if (!this._config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED) {
       this._resolveGit()
       return
+    }
+    if (this.#gitUploadTimeoutId === null) return
+    if (this.#gitUploadTimeoutId === undefined) {
+      this.#gitUploadTimeoutId = setTimeout(() => {
+        this._resolveGit(new Error('Timeout while uploading git metadata'))
+      }, GIT_UPLOAD_TIMEOUT)
+      this.#gitUploadTimeoutId.unref?.()
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {

@@ -74,8 +74,10 @@ describe('AIGuard Vercel AI integration', () => {
 
   it('evaluates accumulated doStream output chunks', async () => {
     const chunks = [
-      { type: 'text-delta', textDelta: 'Hello' },
-      { type: 'text-delta', textDelta: ' world' },
+      { type: 'text-delta', delta: 'Hello' },
+      { type: 'text-delta', delta: ' world' },
+      { type: 'text-delta', textDelta: '!' },
+      { type: 'text-delta' },
     ]
     const ctx = publish(doStreamAfterChannel, { prompt, chunks })
 
@@ -84,7 +86,7 @@ describe('AIGuard Vercel AI integration', () => {
 
     sinon.assert.calledOnceWithExactly(evaluate, [
       { role: 'user', content: 'Hello' },
-      { role: 'assistant', content: 'Hello world' },
+      { role: 'assistant', content: 'Hello world!' },
     ], {
       block: true,
       source: SOURCE_AUTO,

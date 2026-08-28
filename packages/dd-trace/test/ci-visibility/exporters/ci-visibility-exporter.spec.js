@@ -184,6 +184,24 @@ describe('CI Visibility Exporter', () => {
       assert.strictEqual(scope.isDone(), false)
     })
 
+    it('should start the git upload timeout when an upload is requested', async () => {
+      const clock = sinon.useFakeTimers()
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true },
+      })
+
+      try {
+        ciVisibilityExporter.sendGitMetadata()
+        await clock.tickAsync(60_000)
+
+        const err = await ciVisibilityExporter._gitUploadPromise
+        assert.match(err.message, /Timeout while uploading git metadata/)
+      } finally {
+        clock.restore()
+      }
+    })
+
     it('should resolve _gitUploadPromise when git metadata is fetched', (done) => {
       const scope = nock(url)
         .post('/api/v2/git/repository/search_commits')
@@ -402,6 +420,52 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       })
+      it('does not request skippable suites when git metadata upload fails with require_git false', (done) => {
+        // Regression: the live settings path starts `sendGitMetadata` even when the
+        // backend returns `require_git: false`. `getSkippableSuites` awaits
+        // `_gitUploadPromise`, so a failed upload must resolve that promise with the
+        // error and suppress the skippable request. The settings fs-cache apply path
+        // must NOT call `_resolveGit()` on the live path, or it races the in-flight
+        // upload and masks its error.
+        nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                itr_enabled: true,
+                require_git: false,
+                code_coverage: true,
+                tests_skipping: true,
+              },
+            },
+          }))
+
+        const skippableScope = nock(url)
+          .post('/api/v2/ci/tests/skippable')
+          .reply(200, JSON.stringify({ data: [] }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+        })
+        // Simulate a failed git metadata upload: resolve the git promise with an error,
+        // as the real `sendGitMetadata` would on a non-2xx response.
+        ciVisibilityExporter.sendGitMetadata = function () {
+          setImmediate(() => this._resolveGit(new Error('git metadata upload failed')))
+        }
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+
+        ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+          assert.strictEqual(settingsErr, null)
+          assert.strictEqual(ciVisibilityExporter.shouldRequestSkippableSuites(), true)
+          ciVisibilityExporter.getSkippableSuites({}, (skippableErr, skippableSuites) => {
+            assert.ok(skippableErr instanceof Error, 'skippable should surface the git upload error')
+            assert.deepStrictEqual(skippableSuites, [])
+            assert.strictEqual(skippableScope.isDone(), false, 'should NOT request skippable when git upload fails')
+            done()
+          })
+        })
+      })
       it('will retry ITR configuration request if require_git is true', (done) => {
         const TIME_TO_UPLOAD_GIT = 50
         let hasUploadedGit = false
@@ -485,6 +549,49 @@ describe('CI Visibility Exporter', () => {
           done()
         })
         ciVisibilityExporter._resolveGit()
+      })
+      it('clears phase-one settings when the post-upload settings request fails', (done) => {
+        // Regression: when the backend returns require_git:true and the second (post-upload)
+        // settings request fails, _libraryConfig must be reset to empty settings so stale
+        // phase-one feature flags don't stay installed (shouldRequestSkippableSuites etc.).
+        const scope = nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                require_git: true,
+                code_coverage: true,
+                tests_skipping: true,
+                itr_enabled: true,
+              },
+            },
+          }))
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(400, JSON.stringify({ errors: [{ detail: 'backend error' }] }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
+        })
+        sinon.stub(ciVisibilityExporter, 'sendGitMetadata')
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
+          assert.strictEqual(scope.isDone(), true, 'both phases should have hit the API')
+          assert.ok(err, 'should surface the second-request error')
+          // Phase-1 had tests_skipping:true and itr_enabled:true; after the failure these
+          // must NOT remain installed on _libraryConfig.
+          assert.strictEqual(
+            ciVisibilityExporter.shouldRequestSkippableSuites(),
+            false,
+            'stale phase-1 flags must not enable skippable after a failed negotiation'
+          )
+          done()
+        })
+        // Simulate the git upload finishing so the phase-2 request can proceed.
+        setImmediate(() => ciVisibilityExporter._resolveGit())
       })
     })
   })

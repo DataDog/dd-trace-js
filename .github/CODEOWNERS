@@ -409,6 +409,7 @@
 
 # Language Platform
 /* @DataDog/dd-trace-js @DataDog/lang-platform-js
+/AGENTS.md @DataDog/dd-trace-js @DataDog/lang-platform-js
 /openfeature.d.ts @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
