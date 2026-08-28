@@ -15,8 +15,8 @@ function storeConfig (config) {
     const processTags = require('./process-tags')
 
     const processTagsSerialized = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
-      ? (processTags.serialized || null)
-      : null
+      ? (processTags.serialized || undefined)
+      : undefined
 
     // OTEP-4947 thread-context writer metadata, published as part of the
     // OTel process context so an out-of-process reader can decode the
@@ -34,11 +34,11 @@ function storeConfig (config) {
       config.tags['runtime-id'],
       tracerVersion,
       config.hostname,
-      config.service || null,
-      config.env || null,
-      config.version || null,
+      config.service || undefined,
+      config.env || undefined,
+      config.version || undefined,
       processTagsSerialized,
-      containerId || null,
+      containerId || undefined,
       threadlocalMetadata
     )
 

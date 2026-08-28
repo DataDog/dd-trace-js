@@ -76,11 +76,11 @@ describe('tracer_metadata', () => {
     sinon.assert.calledOnce(storeMetadataStub)
   })
 
-  it('passes null for process_tags when propagateProcessTags is disabled', () => {
+  it('passes undefined for process_tags when propagateProcessTags is disabled', () => {
     storeConfig({ ...baseConfig, DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false })
 
     const args = TracerMetadataStub.firstCall.args
-    assert.strictEqual(args[6], null)
+    assert.strictEqual(args[6], undefined)
   })
 
   it('passes serialized process tags when propagateProcessTags is enabled', () => {
@@ -88,6 +88,15 @@ describe('tracer_metadata', () => {
 
     const args = TracerMetadataStub.firstCall.args
     assert.strictEqual(args[6], 'tag1:val1,tag2:val2')
+  })
+
+  it('passes undefined when process tags are empty', () => {
+    processTagsStub.serialized = ''
+
+    storeConfig({ ...baseConfig, DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
+
+    const args = TracerMetadataStub.firstCall.args
+    assert.strictEqual(args[6], undefined)
   })
 
   it('passes container_id when available', () => {
@@ -99,13 +108,13 @@ describe('tracer_metadata', () => {
     assert.strictEqual(args[7], 'abc123container')
   })
 
-  it('passes null for container_id when not in a container', () => {
+  it('passes undefined for container_id when not in a container', () => {
     dockerStub.containerId = undefined
 
     storeConfig(baseConfig)
 
     const args = TracerMetadataStub.firstCall.args
-    assert.strictEqual(args[7], null)
+    assert.strictEqual(args[7], undefined)
   })
 
   it('passes undefined for threadlocal_metadata when DD_TRACE_OTEL_CTX_ENABLED is false', () => {
@@ -135,11 +144,18 @@ describe('tracer_metadata', () => {
     assert.strictEqual(args[8], undefined)
   })
 
-  it('passes null for service when config.service is falsy', () => {
-    storeConfig({ ...baseConfig, service: undefined })
+  it('passes undefined for optional service fields when they are not configured', () => {
+    storeConfig({
+      ...baseConfig,
+      service: undefined,
+      env: undefined,
+      version: undefined,
+    })
 
     const args = TracerMetadataStub.firstCall.args
-    assert.strictEqual(args[3], null)
+    assert.strictEqual(args[3], undefined)
+    assert.strictEqual(args[4], undefined)
+    assert.strictEqual(args[5], undefined)
   })
 
   it('returns undefined and does not throw when process-discovery is unavailable', () => {
