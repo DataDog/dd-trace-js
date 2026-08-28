@@ -19,6 +19,8 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   DI_DEBUG_ERROR_PREFIX,
   DI_ERROR_DEBUG_INFO_CAPTURED,
+  TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
@@ -27,6 +29,7 @@ const {
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
+  TEST_IS_RUM_ACTIVE,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_MANAGEMENT_ENABLED,
@@ -55,14 +58,27 @@ const TEST_MANAGEMENT_PATH = '/api/v2/test/libraries/test-management/tests'
 /**
  * Starts the minimal W3C WebDriver endpoint required by WebdriverIO workers.
  *
- * @returns {Promise<{port: number, server: import('node:http').Server, getSessionCount: () => number}>}
+ * @returns {Promise<{
+ *   port: number,
+ *   server: import('node:http').Server,
+ *   getSessionCount: () => number,
+ *   getRequests: () => Array<{
+ *     body: {cookie?: {value: string}}|undefined,
+ *     method: string|undefined,
+ *     url: string|undefined
+ *   }>
+ * }>}
  */
 function startWebDriverServer () {
   let sessionCount = 0
+  const requests = []
   const server = http.createServer((request, response) => {
-    request.resume()
+    const chunks = []
+    request.on('data', chunk => chunks.push(chunk))
     request.once('end', () => {
       const isNewSession = request.method === 'POST' && request.url === '/session'
+      const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined
+      requests.push({ body, method: request.method, url: request.url })
       let value = null
 
       if (isNewSession) {
@@ -77,6 +93,10 @@ function startWebDriverServer () {
         }
       } else if (request.method === 'GET' && request.url === '/status') {
         value = { ready: true, message: '' }
+      } else if (request.method === 'POST' && request.url?.endsWith('/execute/sync')) {
+        value = body.script.includes('getInternalContext')
+          ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
+          : true
       }
 
       response.writeHead(200, { 'content-type': 'application/json' })
@@ -99,6 +119,7 @@ function startWebDriverServer () {
         port: address.port,
         server,
         getSessionCount: () => sessionCount,
+        getRequests: () => requests,
       })
     })
   })
@@ -207,7 +228,7 @@ for (const version of versions) {
      * @param {'mocha'|'jasmine'} framework
      * @param {string} scenario
      * @param {number} expectedWebDriverSessions
-     * @param {(payloads: object[]) => void} assertPayloads
+     * @param {(payloads: object[], requests: object[]) => void} assertPayloads
      * @param {object} [extraEnvironment]
      * @param {number} [expectedExitCode]
      * @param {string} [workingDirectory]
@@ -223,6 +244,7 @@ for (const version of versions) {
       workingDirectory = cwd
     ) {
       const initialWebDriverSessionCount = webDriver.getSessionCount()
+      const initialWebDriverRequestCount = webDriver.getRequests().length
       const executable = path.join(cwd, 'node_modules', '.bin', 'wdio')
       childProcess = exec(`"${executable}" run ./wdio.conf.js`, {
         cwd: workingDirectory,
@@ -248,7 +270,10 @@ for (const version of versions) {
       const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,
         undefined,
-        assertPayloads,
+        payloads => assertPayloads(
+          payloads,
+          webDriver.getRequests().slice(initialWebDriverRequestCount)
+        ),
         { hardTimeout: 60_000 }
       )
 
@@ -278,7 +303,7 @@ for (const version of versions) {
          *
          * @param {string} scenario
          * @param {number} expectedWebDriverSessions
-         * @param {(payloads: object[]) => void} assertPayloads
+         * @param {(payloads: object[], requests: object[]) => void} assertPayloads
          * @param {object} [extraEnvironment]
          * @param {number} [expectedExitCode]
          * @param {string} [workingDirectory]
@@ -389,6 +414,23 @@ for (const version of versions) {
             }
           })
         }
+
+        it('correlates tests with RUM sessions', async () => {
+          await runScenario('rum', 1, (payloads, requests) => {
+            const test = getEvents(payloads).find(event => event.type === 'test').content
+            assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
+            assert.strictEqual(test.meta[TEST_BROWSER_NAME], 'chrome')
+            assert.strictEqual(test.meta[TEST_BROWSER_VERSION], 'test')
+
+            const cookieRequests = requests.filter(({ url }) => url?.includes('/cookie'))
+            const setCookieRequest = cookieRequests.find(({ method }) => method === 'POST')
+            assert.strictEqual(setCookieRequest.body.cookie.value, test.trace_id.toString(10))
+            assert.deepStrictEqual(
+              cookieRequests.map(({ method }) => method),
+              ['POST', 'DELETE']
+            )
+          })
+        })
 
         it('requests enabled data once and keeps TIA disabled across parallel workers', async () => {
           receiver.setSettings({

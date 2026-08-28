@@ -16,6 +16,7 @@ const MochaPlugin = require('../../datadog-plugin-mocha/src')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
 const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const {
   adjustRunnerFailuresForTestOptimization,
   efdTests,
@@ -103,6 +104,15 @@ const utilsFixtureModulePath = path.join(
   'build',
   'index.js'
 )
+const browserFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-browser.mjs')
+const browserFixtureModulePaths = ['index.js', 'node.js'].map(file => path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  'webdriverio',
+  'build',
+  file
+))
 const execFileAsync = promisify(execFile)
 
 describe('webdriverio instrumentation', () => {
@@ -157,6 +167,19 @@ describe('webdriverio instrumentation', () => {
     assert.notStrictEqual(rewrittenSource, source)
     assert.match(rewrittenSource, /orchestrion:@wdio\/utils:executeAsync/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/utils:testFrameworkFnWrapper/)
+    assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+  })
+
+  it('rewrites WebdriverIO URL navigation and waits for RUM correlation', () => {
+    const source = fs.readFileSync(browserFixturePath, 'utf8')
+    for (const modulePath of browserFixtureModulePaths) {
+      const rewrittenSource = rewriter.rewrite(source, modulePath, 'module')
+
+      assert.notStrictEqual(rewrittenSource, source)
+      assert.match(rewrittenSource, /orchestrion:webdriverio:url/)
+      assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+    }
   })
 
   it('rewrites legacy and modern Jasmine spec lifecycles', () => {
@@ -271,6 +294,71 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(retries.attempts, 1)
     } finally {
       executeAsyncCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('correlates URL navigations and cleans RUM after user hooks', async () => {
+    const clock = sinon.useFakeTimers()
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const calls = []
+    const browser = {
+      capabilities: {
+        browserName: 'chrome',
+        browserVersion: '123',
+      },
+      deleteCookies: sinon.stub().callsFake((name) => {
+        calls.push(`delete:${name}`)
+        return Promise.resolve()
+      }),
+      execute: sinon.stub()
+        .onFirstCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onSecondCall().resolves(true),
+      setCookies: sinon.stub().callsFake((cookie) => {
+        calls.push(`set:${cookie.value}`)
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      assert.strictEqual(context.browserName, 'chrome')
+      assert.strictEqual(context.browserVersion, '123')
+      context.testExecutionId = '1234'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await new Promise(navigationContext.resolveCallback)
+
+      assert.strictEqual(browser.execute.callCount, 1)
+      assert.deepStrictEqual(calls, [
+        'set:1234',
+      ])
+
+      calls.push('user-after-test')
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      const cleanupPromise = new Promise(testContext.resolveCallback)
+      await clock.tickAsync(500)
+      await cleanupPromise
+
+      assert.deepStrictEqual(calls, [
+        'set:1234',
+        'user-after-test',
+        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
+      ])
+      assert.strictEqual(browser.execute.callCount, 2)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      clock.restore()
     }
   })
 

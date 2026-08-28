@@ -53,6 +53,8 @@ const {
   getFailedTestReplayPromise,
   getTestSuiteExecutionKey,
   isModifiedTest,
+  setRumTestCorrelation,
+  TEST_BROWSER_NAME,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -200,6 +202,20 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
+    this.addSub('ci:webdriverio:rum:page-navigate', (ctx) => {
+      if (this.testFramework !== 'webdriverio') return
+
+      const activeSpan = storage('legacy').getStore()?.span
+      const testSpan = setRumTestCorrelation(ctx, activeSpan)
+      if (!testSpan) {
+        log.error('ci:webdriverio:rum:page-navigate: test span not found')
+        return
+      }
+      if (ctx.browserName) {
+        testSpan.setTag(TEST_BROWSER_NAME, ctx.browserName)
+      }
+    })
+
     this.addBind(jasmineTestFunctionStartCh, (ctx) => {
       if (this.testFrameworkAdapter !== WEBDRIVERIO_JASMINE_ADAPTER) {
         return storage('legacy').getStore()
@@ -222,7 +238,16 @@ class MochaPlugin extends CiPlugin {
 
       const functionType = currentStore[WEBDRIVERIO_JASMINE_FUNCTION_TYPE]
       if (functionType === 'Test') {
-        ctx.retryCallback = error => this.#retryWebdriverioJasmineTest(test, error)
+        ctx.retryCallback = error => {
+          const retry = () => this.#retryWebdriverioJasmineTest(test, error)
+          let cleanup
+          try {
+            cleanup = ctx.rumCleanupCallback?.()
+          } catch (cleanupError) {
+            log.error('WebdriverIO RUM cleanup error', cleanupError)
+          }
+          return cleanup?.then ? cleanup.then(retry, retry) : retry()
+        }
       }
       const nextStore = {
         ...test.currentStore,

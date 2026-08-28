@@ -190,7 +190,7 @@
 /packages/datadog-instrumentations/src/cucumber-worker-threads.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress-config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress-legacy-finalizers.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/playwright-browser-scripts.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/rum-browser-scripts.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/playwright-reporter.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/webdriverio.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/nyc.js @DataDog/dd-trace-js @DataDog/ci-app-libraries

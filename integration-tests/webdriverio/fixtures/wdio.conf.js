@@ -221,6 +221,10 @@ const scenarioConfig = {
     },
     specs: ['./retry.e2e.js'],
   },
+  rum: {
+    maxInstances: 1,
+    specs: ['./rum.e2e.js'],
+  },
   runnerEnvNodeOptions: {
     maxInstances: 1,
     runnerEnv: {

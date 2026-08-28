@@ -1,7 +1,6 @@
 'use strict'
 
-// Serialized into chromium via Playwright's `page.evaluate`. Excluded from coverage by filename.
-// Rename only if you update that glob too.
+// Serialized into browsers by browser-test integrations. Excluded from coverage by filename.
 
 /** @returns {{ isRumInstrumented: boolean, isRumActive: boolean, rumSamplingRate: number | null }} */
 function detectRum () {

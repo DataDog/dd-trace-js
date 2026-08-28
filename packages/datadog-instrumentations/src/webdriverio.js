@@ -1,10 +1,14 @@
 'use strict'
 
+// Capture real timers at module load time before tests can install fake timers.
+const realSetTimeout = setTimeout
+
 const { AsyncResource } = require('node:async_hooks')
 const { fileURLToPath } = require('node:url')
 
 const { EMPTY_EFD_RETRY_POLICY } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   collectTestOptimizationSummariesFromTraces,
@@ -29,8 +33,10 @@ const {
   WORKER_READY,
   WORKER_READY_RESPONSE,
 } = require('./mocha/webdriverio-protocol')
+const { detectRum, stopRumSession } = require('./rum-browser-scripts')
 
 const jasmineDoneCh = channel('ci:webdriverio:jasmine:done')
+const rumPageNavigateCh = channel('ci:webdriverio:rum:page-navigate')
 const testFinishCh = channel('ci:mocha:test:finish')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
@@ -49,15 +55,19 @@ const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
 const jasmineAdapterInitCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
 const baseReporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync')
+const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
 const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance')
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
+const testFrameworkFnWrapperCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+const urlCh = tracingChannel('orchestrion:webdriverio:url')
 
 const NODE_OPTIONS_SEPARATOR_RE = /\s/
 const JASMINE_FRAMEWORK_ADAPTER = 'jasmine'
 const MOCHA_FRAMEWORK_ADAPTER = 'mocha'
 const SUPPORTED_FRAMEWORK_ADAPTERS = new Set([JASMINE_FRAMEWORK_ADAPTER, MOCHA_FRAMEWORK_ADAPTER])
 const TEST_FRAMEWORK = 'webdriverio'
+const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
 let jasmineWorkerRequestId = 0
 
@@ -68,6 +78,7 @@ if (loadCh.hasSubscribers) {
 
 const coordinatorStates = new WeakMap()
 const localRunnerVersions = new WeakMap()
+const activeRumBrowsers = new Set()
 
 addHook({
   name: '@wdio/local-runner',
@@ -78,6 +89,133 @@ addHook({
   localRunnerVersions.set(LocalRunner, version)
   return LocalRunner
 })
+
+/**
+ * Detects RUM after a browser navigation and correlates it with the active test.
+ *
+ * @param {object} browser
+ * @param {() => void} onDone
+ * @returns {Promise<void>}
+ */
+async function handleRumNavigation (browser, onDone) {
+  try {
+    if (!rumPageNavigateCh.hasSubscribers || !browser || typeof browser.execute !== 'function') return
+
+    let rumState
+    try {
+      rumState = await browser.execute(detectRum)
+    } catch (error) {
+      log.error('WebdriverIO RUM detection error', error)
+      return
+    }
+
+    if (!rumState) return
+
+    const { isRumInstrumented, isRumActive, rumSamplingRate } = rumState
+    if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
+      log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
+    }
+    if (!isRumActive) return
+
+    activeRumBrowsers.add(browser)
+    const context = {
+      browserName: browser.capabilities?.browserName,
+      browserVersion: browser.capabilities?.browserVersion,
+      isRumActive,
+      testExecutionId: undefined,
+    }
+    try {
+      rumPageNavigateCh.publish(context)
+    } catch (error) {
+      log.error('WebdriverIO RUM correlation channel error', error)
+      return
+    }
+    if (!context.testExecutionId) return
+
+    try {
+      await browser.setCookies({
+        name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+        value: context.testExecutionId,
+      })
+    } catch (error) {
+      log.error('WebdriverIO RUM correlation cookie error', error)
+    }
+  } catch (error) {
+    log.error('WebdriverIO RUM correlation error', error)
+  } finally {
+    onDone()
+  }
+}
+
+/**
+ * Stops RUM for one browser, waits for its events to flush, and removes the correlation cookie.
+ *
+ * @param {object} browser
+ * @returns {Promise<void>}
+ */
+async function cleanupRumBrowser (browser) {
+  let isRumActive
+  try {
+    isRumActive = await browser.execute(stopRumSession)
+  } catch (error) {
+    log.error('WebdriverIO RUM cleanup error', error)
+  }
+
+  if (isRumActive) {
+    await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+  }
+  try {
+    await browser.deleteCookies(RUM_TEST_EXECUTION_ID_COOKIE_NAME)
+  } catch (error) {
+    log.error('WebdriverIO RUM correlation cookie cleanup error', error)
+  }
+}
+
+/**
+ * Cleans up every browser where the current test detected an active RUM session.
+ *
+ * @returns {Promise<void[]>|undefined}
+ */
+function cleanupRumBrowsers () {
+  if (activeRumBrowsers.size === 0) return
+
+  const cleanupPromises = Array.from(activeRumBrowsers, cleanupRumBrowser)
+  activeRumBrowsers.clear()
+  return Promise.all(cleanupPromises)
+}
+
+/**
+ * Delays URL completion until RUM detection and correlation settle.
+ *
+ * @param {{self?: object, resolveCallback?: (onDone: () => void) => void}} context
+ * @returns {void}
+ */
+function waitForRumNavigation (context) {
+  context.resolveCallback = onDone => {
+    handleRumNavigation(context.self, onDone)
+  }
+}
+
+/**
+ * Delays test completion until RUM cleanup settles after user hooks.
+ *
+ * @param {{
+ *   arguments?: unknown[],
+ *   resolveCallback?: (onDone: () => void) => void,
+ *   rejectCallback?: (onDone: () => void) => void
+ * }} context
+ * @returns {void}
+ */
+function waitForRumCleanup (context) {
+  if (context.arguments?.[1] !== 'Test') return
+
+  const cleanupPromise = cleanupRumBrowsers()
+  if (!cleanupPromise) return
+
+  const waitForCleanup = onDone => cleanupPromise.then(onDone, onDone)
+  context.resolveCallback = waitForCleanup
+  context.rejectCallback = waitForCleanup
+}
 
 /**
  * @typedef {object} WebdriverioRunnerConfig
@@ -1026,8 +1164,24 @@ baseReporterWaitForSyncCh.asyncEnd.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForLogSubmissionAtWorkerExit)
 )
 
+urlCh.asyncEnd.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumNavigation)
+)
+
+testFrameworkFnWrapperCh.asyncEnd.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumCleanup)
+)
+
 // dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
 // @ts-expect-error
+executeAsyncCh.subscribe({
+  start (context) {
+    context.rumCleanupCallback = cleanupRumBrowsers
+    context.retryCallback ??= cleanupRumBrowsers
+  },
+})
+
+// @ts-expect-error See the partial tracing-channel subscriber above.
 jasmineAdapterInitCh.subscribe({
   asyncEnd (context) {
     initializeJasmineWorker(context.result || context.self, context)

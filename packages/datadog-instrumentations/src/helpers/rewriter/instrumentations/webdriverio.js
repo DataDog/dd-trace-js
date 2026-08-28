@@ -190,6 +190,52 @@ module.exports = [
   },
   {
     module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^url[0-9]*$/]',
+    functionQuery: {
+      kind: 'Async',
+    },
+    channelName: 'url',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^url[0-9]*$/] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'url',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^url[0-9]*$/]',
+    functionQuery: {
+      kind: 'Async',
+    },
+    channelName: 'url',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^url[0-9]*$/] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'url',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
       name: '@wdio/utils',
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
@@ -199,6 +245,17 @@ module.exports = [
       kind: 'Async',
     },
     channelName: 'testFrameworkFnWrapper',
+  },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'testFrameworkFnWrapper',
+    transform: 'waitForAsyncEnd',
   },
   {
     module: {
