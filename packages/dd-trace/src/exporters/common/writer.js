@@ -88,12 +88,11 @@ class Writer {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
 
-    this._encode(payload)
-    return true
+    return this._encode(payload) !== false
   }
 
   _encode (payload) {
-    this._encoder.encode(payload)
+    return this._encoder.encode(payload)
   }
 
   setUrl (url) {

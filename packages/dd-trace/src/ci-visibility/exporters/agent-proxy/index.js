@@ -12,6 +12,7 @@ const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 // Shared `evp_proxy` discovery is an explicit path allowlist and does not cover this contract.
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
 const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\/?/
+const AGENT_INFO_TIMEOUT = 60_000
 
 function getLatestEvpProxyVersion (err, agentInfo) {
   if (err) {
@@ -47,7 +48,10 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
     } = config
 
     const initializationController = new AbortController()
-    const initializationOptions = { signal: initializationController.signal }
+    const initializationOptions = {
+      deadline: Date.now() + AGENT_INFO_TIMEOUT,
+      signal: initializationController.signal,
+    }
     this._initializationRequest = {
       controller: initializationController,
       options: initializationOptions,

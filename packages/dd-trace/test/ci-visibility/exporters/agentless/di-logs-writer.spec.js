@@ -26,6 +26,17 @@ describe('Test Visibility DI Writer', () => {
     sinon.restore()
   })
 
+  it('bounds logs retained before serialization', () => {
+    const BoundedLogsWriter = proxyquire(
+      '../../../../src/ci-visibility/exporters/agentless/di-logs-writer',
+      { '../limits': { MAX_BUFFERED_BYTES: 3 } }
+    )
+    const logsWriter = new BoundedLogsWriter({ url: 'http://www.example.com' })
+
+    assert.strictEqual(logsWriter.append(1), true)
+    assert.strictEqual(logsWriter.append(2), false)
+  })
+
   context('agentless', () => {
     it('uses the dedicated Test Optimization agent', (done) => {
       const agent = {}

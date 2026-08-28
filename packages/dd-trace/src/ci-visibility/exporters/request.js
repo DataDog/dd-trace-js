@@ -11,8 +11,8 @@ const {
 } = require('../../exporters/common/retry')
 const { FINAL_FLUSH_TIMEOUT_CODE } = require('../final-flush')
 const { getRateLimitResetDelay } = require('../requests/rate-limit')
+const { MAX_BUFFERED_BYTES } = require('./limits')
 
-const MAX_BUFFERED_BYTES = 64 * 1024 * 1024
 const BACKPRESSURE_RETRY_MS = 50
 
 let bufferedBytes = 0
@@ -77,36 +77,57 @@ function getAbortError (signal) {
  *
  * @param {Readable} data
  * @param {AbortSignal} [signal]
- * @param {(error: Error|null, data?: Buffer) => void} callback
+ * @param {(error: Error|null, data?: Buffer, payloadSize?: number) => void} callback
  * @returns {void}
  */
 function bufferReadable (data, signal, callback) {
   const chunks = []
+  let payloadSize = 0
   let settled = false
 
+  const release = () => {
+    bufferedBytes -= payloadSize
+    payloadSize = 0
+  }
   const cleanup = (keepErrorListener = false) => {
     data.removeListener('data', onData)
     data.removeListener('end', onEnd)
     if (!keepErrorListener) data.removeListener('error', onError)
     signal?.removeEventListener('abort', onAbort)
   }
-  const onData = chunk => chunks.push(chunk)
+  const onData = chunk => {
+    const chunkSize = Buffer.byteLength(chunk)
+    if (chunkSize > MAX_BUFFERED_BYTES - bufferedBytes) {
+      settled = true
+      cleanup(true)
+      release()
+      data.once('close', () => data.removeListener('error', onError))
+      data.destroy()
+      callback(createQueueFullError())
+      return
+    }
+    bufferedBytes += chunkSize
+    payloadSize += chunkSize
+    chunks.push(chunk)
+  }
   const onEnd = () => {
     if (settled) return
     settled = true
     cleanup()
-    callback(null, Buffer.concat(chunks))
+    callback(null, Buffer.concat(chunks), payloadSize)
   }
   const onError = error => {
     if (settled) return
     settled = true
     cleanup()
+    release()
     callback(error)
   }
   const onAbort = () => {
     if (settled) return
     settled = true
     cleanup(true)
+    release()
     data.once('close', () => data.removeListener('error', onError))
     data.destroy()
     callback(getAbortError(signal))
@@ -134,9 +155,9 @@ function request (data, options, callback) {
   if (signal?.aborted) return callback(getAbortError(signal))
 
   if (data instanceof Readable) {
-    bufferReadable(data, signal, (error, bufferedData) => {
+    bufferReadable(data, signal, (error, bufferedData, payloadSize) => {
       if (error) return callback(error)
-      requestBuffered(bufferedData, options, callback)
+      requestBuffered(bufferedData, options, callback, payloadSize)
     })
     return
   }
@@ -151,23 +172,26 @@ function request (data, options, callback) {
  * @param {object} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
  *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
+ * @param {number} [reservedPayloadSize]
  * @returns {void}
  */
-function requestBuffered (data, options, callback) {
+function requestBuffered (data, options, callback, reservedPayloadSize) {
   const { signal } = options
   const timeout = options.timeout || 2000
-  const payloadSize = getPayloadSize(data)
+  const payloadSize = reservedPayloadSize ?? getPayloadSize(data)
   let retryTimer
   let attemptController
   let settled = false
   let lastError
   let waitingForBackpressure = false
 
-  if (payloadSize > MAX_BUFFERED_BYTES - bufferedBytes) {
-    callback(createQueueFullError())
-    return
+  if (reservedPayloadSize === undefined) {
+    if (payloadSize > MAX_BUFFERED_BYTES - bufferedBytes) {
+      callback(createQueueFullError())
+      return
+    }
+    bufferedBytes += payloadSize
   }
-  bufferedBytes += payloadSize
 
   const complete = (error, result, statusCode, headers) => {
     if (settled) return
@@ -225,6 +249,7 @@ function requestBuffered (data, options, callback) {
     }
     waitingForBackpressure = false
 
+    const attemptDeadline = deadline
     const attemptOptions = {
       ...options,
       headers: options.headers ? { ...options.headers } : undefined,
@@ -248,7 +273,9 @@ function requestBuffered (data, options, callback) {
 
       const responseStatus = statusCode ?? error.status
       const isRetriableError = isRetriableNetworkError(error) || isRetriableHttpStatusCode(responseStatus)
-      const reachedAttemptLimit = attemptIndex >= getMaxAttempts(attemptOptions)
+      const deadlineExtended = options.deadline !== undefined &&
+        (attemptDeadline === undefined || options.deadline > attemptDeadline)
+      const reachedAttemptLimit = attemptIndex >= getMaxAttempts(attemptOptions) && !deadlineExtended
       if (options.retry === false || !isRetriableError || reachedAttemptLimit) {
         complete(error, result, statusCode, headers)
         return
