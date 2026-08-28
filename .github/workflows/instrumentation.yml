@@ -51,6 +51,7 @@ jobs:
       - run: npm run test:turbopack:ci
       - uses: ./.github/actions/node/latest
       - run: npm run test:turbopack:ci
+      - run: npm run test:integration:turbopack
       - uses: ./.github/actions/coverage
         with:
           flags: platform-turbopack

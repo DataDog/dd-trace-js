@@ -246,8 +246,8 @@ async function processModule ({ path, internal = false, context, excludeDefault 
  * @returns {boolean}
  */
 function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
-  if (fullPathToModule.endsWith('.mjs')) return true
-  if (fullPathToModule.endsWith('.cjs')) return false
+  if (fullPathToModule.endsWith('.mjs') || fullPathToModule.endsWith('.mts')) return true
+  if (fullPathToModule.endsWith('.cjs') || fullPathToModule.endsWith('.cts')) return false
 
   const pathParts = fullPathToModule.split(path.sep)
   do {

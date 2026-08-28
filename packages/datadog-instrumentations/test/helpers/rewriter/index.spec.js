@@ -565,6 +565,20 @@ describe('check-require-cache', () => {
           module: {
             name: 'test-esm',
             versionRange: '>=0.1',
+            filePath: 'pregel-class.js',
+          },
+          functionQuery: {
+            methodName: 'stream',
+            className: 'Pregel',
+            kind: 'Sync',
+            returnKind: 'AsyncIterator',
+          },
+          channelName: 'pregel_stream_secondary',
+        },
+        {
+          module: {
+            name: 'test-esm',
+            versionRange: '>=0.1',
             filePath: 'exported-function.mjs',
           },
           functionQuery: {
@@ -1238,6 +1252,80 @@ describe('check-require-cache', () => {
     const source = readFileSync(filename, 'utf8')
 
     assert.strictEqual(rewriter.rewrite(source, filename, 'module'), source)
+  })
+
+  it('should compose an existing source map for bundler consumers', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test-trace-sync', 'index.js')
+    const source = readFileSync(filename, 'utf8')
+    const sourceMap = {
+      file: filename,
+      mappings: 'AAAA',
+      names: [],
+      sources: ['original.js'],
+      sourcesContent: [source],
+      version: 3,
+    }
+
+    const result = rewriter.rewriteBundledWithSourceMap(source, filename, 'commonjs', {
+      moduleName: 'test-trace-sync',
+      filePath: 'index.js',
+    }, sourceMap)
+    const map = JSON.parse(result.map)
+
+    assert.match(result.code, /tr_ch_apm_tracingChannel/)
+    assert.strictEqual(map.sources[0], 'original.js')
+    assert.strictEqual(map.sourcesContent[0], source)
+    assert.strictEqual(map.sources.includes('test-trace-sync/index.js'), true)
+  })
+
+  it('should use the shared bundler diagnostics channel with a native fallback', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
+    const source = readFileSync(filename, 'utf8')
+    const result = rewriter.rewriteBundledWithSourceMap(source, filename, 'module', {
+      moduleName: 'test-esm',
+      filePath: 'pregel-class.js',
+    })
+
+    assert.match(result.code, /\bimport\s+.+\s+from\s+"node:diagnostics_channel"/)
+    assert.match(result.code, /Symbol\.for\("dd-trace:bundler:dc"\)/)
+    assert.doesNotMatch(result.code, /dc-polyfill/)
+    assert.strictEqual(result.code.match(/node:diagnostics_channel/g)?.length, 1)
+
+    const commonJsFilename = resolve(__dirname, 'node_modules', 'test-trace-sync', 'index.js')
+    const commonJsSource = readFileSync(commonJsFilename, 'utf8')
+    const commonJsResult = rewriter.rewriteBundledWithSourceMap(
+      commonJsSource,
+      commonJsFilename,
+      'commonjs',
+      { moduleName: 'test-trace-sync', filePath: 'index.js' }
+    )
+
+    assert.match(commonJsResult.code, /require\("node:diagnostics_channel"\)/)
+    assert.match(commonJsResult.code, /Symbol\.for\("dd-trace:bundler:dc"\)/)
+  })
+
+  it('should preserve bundled sources that cannot be rewritten', () => {
+    const sourceMap = { mappings: '', version: 3 }
+    assert.deepStrictEqual(
+      rewriter.rewriteBundledWithSourceMap('', '/project/empty.js', 'module', undefined, sourceMap),
+      { code: '', map: sourceMap }
+    )
+    assert.deepStrictEqual(rewriter.rewriteBundledWithSourceMap(
+      'module.exports = true',
+      '/project/node_modules/missing/index.js',
+      'commonjs',
+      { moduleName: 'missing', filePath: 'index.js' },
+      sourceMap
+    ), { code: 'module.exports = true', map: sourceMap })
+
+    rewriter.disable('test-disabled')
+    assert.deepStrictEqual(rewriter.rewriteBundledWithSourceMap(
+      'module.exports = true',
+      '/project/node_modules/test-disabled/index.js',
+      'commonjs',
+      { moduleName: 'test-disabled', filePath: 'index.js' },
+      sourceMap
+    ), { code: 'module.exports = true', map: sourceMap })
   })
 
   it('should use import when rewriting esm modules', () => {

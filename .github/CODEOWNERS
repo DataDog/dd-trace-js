@@ -101,6 +101,7 @@
 /index.electron.js @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/electron/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/dd-trace-js @DataDog/apm-idm-js
+/integration-tests/turbopack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/pino/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/dd-trace-js @DataDog/apm-idm-js

@@ -5,18 +5,35 @@ const Module = require('node:module')
 
 const sinon = require('sinon')
 
+const { BUNDLER_DC_GLOBAL } = require('../../src/helpers/bundler-constants')
+const instrumentationUtils = require('../../src/helpers/instrumentation-utils')
+
 const CHANNEL = 'dd-trace:bundler:load'
 
 describe('bundler register', () => {
+  const dcGlobal = Symbol.for(BUNDLER_DC_GLOBAL)
+  let originalDc
   let originalRequire
 
   beforeEach(() => {
+    originalDc = globalThis[dcGlobal]
     originalRequire = Module.prototype.require
   })
 
   afterEach(() => {
+    if (originalDc === undefined) {
+      delete globalThis[dcGlobal]
+    } else {
+      globalThis[dcGlobal] = originalDc
+    }
     Module.prototype.require = originalRequire
     sinon.restore()
+  })
+
+  it('shares the polyfilled diagnostics channel with generated bundles', () => {
+    const { dc } = loadBundlerRegister({ hooks: {}, instrumentations: {} })
+
+    assert.strictEqual(globalThis[dcGlobal], dc)
   })
 
   it('honors patchDefault when applying an ESM proxy update', () => {
@@ -33,19 +50,21 @@ describe('bundler register', () => {
 
     publish({
       apply,
+      instrumentationIndexes: [0],
       module: { default: Original },
+      moduleBaseDir: '/app/node_modules/test-default-export',
+      moduleName: 'test-default-export/index.mjs',
       package: 'test-default-export',
       path: 'test-default-export/index.mjs',
       version: '1.0.0',
     })
 
-    sinon.assert.calledOnceWithExactly(hook, Original, '1.0.0')
-    sinon.assert.calledOnceWithExactly(apply, Patched, true)
-    sinon.assert.calledOnceWithExactly(loadChannel.publish, {
-      file: 'index.mjs',
-      name: 'test-default-export',
-      version: '1.0.0',
+    sinon.assert.calledOnceWithExactly(hook, Original, '1.0.0', false, {
+      moduleBaseDir: '/app/node_modules/test-default-export',
+      moduleName: 'test-default-export/index.mjs',
     })
+    sinon.assert.calledOnceWithExactly(apply, Patched, true)
+    sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-default-export' })
   })
 
   it('patches a CommonJS object when its hook does not use a default export', () => {
@@ -67,7 +86,10 @@ describe('bundler register', () => {
 
     publish(payload)
 
-    sinon.assert.calledOnceWithExactly(hook, { Original }, '1.0.0')
+    sinon.assert.calledOnceWithExactly(hook, { Original }, '1.0.0', false, {
+      moduleBaseDir: undefined,
+      moduleName: 'test-commonjs-export/index.js',
+    })
     assert.equal(payload.module, Patched)
   })
 
@@ -110,7 +132,10 @@ describe('bundler register', () => {
       version: '1.0.0',
     })
 
-    sinon.assert.calledOnceWithExactly(integrationHook, {}, '1.0.0')
+    sinon.assert.calledOnceWithExactly(integrationHook, {}, '1.0.0', false, {
+      moduleBaseDir: undefined,
+      moduleName: 'test-pattern-hook/dist/cli-123.js',
+    })
   })
 
   it('matches bundled relative-module hooks', () => {
@@ -130,7 +155,114 @@ describe('bundler register', () => {
       version: '6.1.0',
     })
 
-    sinon.assert.calledOnceWithExactly(integrationHook, {}, '6.1.0')
+    sinon.assert.calledOnceWithExactly(integrationHook, {}, '6.1.0', false, {
+      moduleBaseDir: undefined,
+      moduleName: './runtime/library.js',
+    })
+  })
+
+  it('uses build-plan indexes without running sibling hooks', () => {
+    const skippedHook = sinon.stub()
+    const selectedHook = sinon.stub()
+    const { publish } = loadBundlerRegister({
+      hooks: { 'test-indexed-hook': sinon.stub() },
+      instrumentations: {
+        'test-indexed-hook': [
+          { file: 'first.js', hook: skippedHook },
+          { file: 'second.js', hook: selectedHook },
+        ],
+      },
+    })
+
+    publish({
+      instrumentationIndexes: [1],
+      module: {},
+      package: 'test-indexed-hook',
+      path: 'test-indexed-hook/second.js',
+      version: '1.0.0',
+    })
+
+    sinon.assert.notCalled(skippedHook)
+    sinon.assert.calledOnce(selectedHook)
+  })
+
+  it('rejects stale build-plan entries and incompatible versions', () => {
+    const integrationHook = sinon.stub()
+    const { log, publish } = loadBundlerRegister({
+      hooks: { 'test-stale-plan': sinon.stub() },
+      instrumentations: {
+        'test-stale-plan': [{ file: 'index.js', hook: integrationHook, versions: ['>=2'] }],
+      },
+    })
+
+    publish({
+      instrumentationIndexes: [1],
+      module: {},
+      package: 'test-stale-plan',
+      path: 'test-stale-plan/index.js',
+      version: '2.0.0',
+    })
+    publish({
+      instrumentationIndexes: [0],
+      module: {},
+      package: 'test-stale-plan',
+      path: 'test-stale-plan/index.js',
+      version: '1.0.0',
+    })
+    publish({
+      module: {},
+      package: 'test-stale-plan',
+      path: 'test-stale-plan/other.js',
+      version: '2.0.0',
+    })
+
+    sinon.assert.notCalled(integrationHook)
+    sinon.assert.calledWithMatch(log.error, 'Bundled %s instrumentation index %s does not exist', 'test-stale-plan', 1)
+  })
+
+  it('contains loader and instrumentation failures', () => {
+    const loadHook = sinon.stub().throws(new Error('load failed'))
+    const integrationHook = sinon.stub().throws(new Error('patch failed'))
+    const { log, publish } = loadBundlerRegister({
+      hooks: { 'test-hook-errors': loadHook },
+      instrumentations: {
+        'test-hook-errors': [{ hook: integrationHook }],
+      },
+    })
+
+    publish({
+      instrumentationIndexes: [0],
+      module: {},
+      package: 'test-hook-errors',
+      path: 'test-hook-errors',
+      version: '1.0.0',
+    })
+
+    sinon.assert.calledWithMatch(log.error, 'esbuild-wrapped %s hook failed: %s', 'test-hook-errors', 'load failed')
+    sinon.assert.calledWithMatch(log.error, 'Error executing bundler hook: %s', 'patch failed')
+  })
+
+  it('does not apply an ESM hook without the export shape it expects', () => {
+    const integrationHook = sinon.stub()
+    const apply = sinon.stub()
+    const { publish } = loadBundlerRegister({
+      hooks: { 'test-missing-export': sinon.stub() },
+      instrumentations: {
+        'test-missing-export': [{ hook: integrationHook, patchDefault: false }],
+      },
+    })
+
+    publish({
+      apply,
+      instrumentationIndexes: [0],
+      module: {},
+      package: 'test-missing-export',
+      path: 'test-missing-export',
+      version: '1.0.0',
+    })
+
+    sinon.assert.notCalled(integrationHook)
+    sinon.assert.notCalled(apply)
   })
 })
 
@@ -138,26 +270,27 @@ function loadBundlerRegister ({ disabled = new Set(), hooks, instrumentations })
   const bundlerRegisterPath = require.resolve('../../src/helpers/bundler-register')
   const originalRequire = Module.prototype.require
   const loadChannel = { publish: sinon.stub() }
-  let bundledModuleSubscriber
-  const register = {
-    filename: (name, file) => file ? `${name}/${file}` : name,
-    loadChannel,
-    matchVersion: () => true,
+  const log = { error: sinon.stub() }
+  const dc = {
+    subscribe: (channel, callback) => {
+      if (channel === CHANNEL) bundledModuleSubscriber = callback
+    },
   }
+  let bundledModuleSubscriber
+  const register = { loadChannel }
 
   Module.prototype.require = function (request) {
     if (this.filename === bundlerRegisterPath) {
       const stubs = {
         './hooks': hooks,
-        './instrumentation-utils': { getDisabledInstrumentations: () => disabled },
+        './instrumentation-utils': {
+          ...instrumentationUtils,
+          getDisabledInstrumentations: () => disabled,
+        },
         './instrumentations': instrumentations,
         './register.js': register,
-        '../../../dd-trace/src/log': { error: sinon.stub() },
-        'dc-polyfill': {
-          subscribe: (channel, callback) => {
-            if (channel === CHANNEL) bundledModuleSubscriber = callback
-          },
-        },
+        '../../../dd-trace/src/log': log,
+        'dc-polyfill': dc,
       }
       return stubs[request] || originalRequire.call(this, request)
     }
@@ -168,7 +301,9 @@ function loadBundlerRegister ({ disabled = new Set(), hooks, instrumentations })
   Module.prototype.require = originalRequire
 
   return {
+    dc,
     loadChannel,
+    log,
     publish: message => bundledModuleSubscriber(message),
   }
 }
