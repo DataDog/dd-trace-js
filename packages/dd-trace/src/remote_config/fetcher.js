@@ -19,22 +19,10 @@ class AgentlessRemoteConfigFetcher {
   }
 
   /**
-   * @param {(error?: Error, changes?: RemoteConfigChange[]) => void} callback
+   * @returns {Promise<RemoteConfigChange[]>}
    */
-  fetchChanges (callback) {
-    let result
-
-    try {
-      result = legacyStorage.run({ noop: true }, () => this.#fetcher.fetchChanges())
-    } catch (error) {
-      callback(error)
-      return
-    }
-
-    result.then(
-      changes => callback(undefined, changes),
-      error => callback(error)
-    )
+  fetchChanges () {
+    return legacyStorage.run({ noop: true }, () => this.#fetcher.fetchChanges())
   }
 
   /**
@@ -84,7 +72,7 @@ class AgentlessRemoteConfigFetcher {
  * @property {string} tracerVersion
  * @property {string} url
  * @property {number} timeoutMs
- * @property {string} apiKey
+ * @property {string | undefined} apiKey
  * @property {string} hostname
  */
 

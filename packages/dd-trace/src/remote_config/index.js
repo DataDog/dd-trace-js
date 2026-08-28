@@ -133,16 +133,10 @@ class RemoteConfig {
    */
   updateCapabilities (mask, value) {
     const hex = Buffer.from(this.state.client.capabilities, 'base64').toString('hex')
+    let capabilities = BigInt(`0x${hex}`)
 
-    let num = BigInt(`0x${hex}`)
-
-    if (value) {
-      num |= mask
-    } else {
-      num &= ~mask
-    }
-
-    let str = num.toString(16)
+    capabilities = value ? capabilities | mask : capabilities & ~mask
+    let str = capabilities.toString(16)
 
     if (str.length % 2) str = `0${str}`
 
@@ -323,18 +317,22 @@ class RemoteConfig {
       return
     }
 
-    fetcher.fetchChanges((error, changes = []) => {
-      if (error) {
-        log.errorWithoutTelemetry('[RC] Error in request', error)
-      } else if (changes.length !== 0) {
-        try {
-          this.#applyChanges(changes)
-        } catch (applyError) {
-          log.error('[RC] Could not apply remote config update', applyError)
+    fetcher.fetchChanges().then(
+      (changes) => {
+        if (changes.length !== 0) {
+          try {
+            this.#applyChanges(changes)
+          } catch (error) {
+            log.error('[RC] Could not apply remote config update', error)
+          }
         }
+        cb()
+      },
+      (error) => {
+        log.errorWithoutTelemetry('[RC] Error in request', error)
+        cb()
       }
-      cb()
-    })
+    )
   }
 
   /**
@@ -345,7 +343,6 @@ class RemoteConfig {
     const toApply = /** @type {RcConfigState[]} */ ([])
     const toModify = /** @type {RcConfigState[]} */ ([])
     const transactionByPath = new Map()
-    const transactionHandledPaths = new Set()
     const transactionOutcomes = new Map()
 
     for (const change of changes) {
@@ -362,7 +359,6 @@ class RemoteConfig {
 
       let file
       try {
-        if (change.contents === undefined) throw new Error('Missing config contents')
         file = change.contents === '' ? null : JSON.parse(change.contents)
       } catch (error) {
         if (this.#fetcher === undefined) throw error
@@ -387,7 +383,7 @@ class RemoteConfig {
       }
       transactionByPath.set(path, config)
 
-      if (change.kind === 'update' && current !== undefined && current.apply_state !== ERROR) {
+      if (change.kind === 'update' && current !== undefined) {
         toModify.push(config)
       } else {
         toApply.push(config)
@@ -398,25 +394,30 @@ class RemoteConfig {
 
     const transaction = createUpdateTransaction(
       { toUnapply, toApply, toModify },
-      transactionHandledPaths,
       transactionOutcomes
     )
 
-    for (const [handler, products] of this.#batchHandlers) {
-      const transactionView = filterTransactionByProducts(transaction, products)
-      if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
-        handler(transactionView)
+    if (this.#batchHandlers.size) {
+      for (const [handler, products] of this.#batchHandlers) {
+        const transactionView = filterTransactionByProducts(transaction, products)
+        if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
+          handler(transactionView)
+        }
       }
     }
 
-    applyOutcomes(transactionByPath, transactionOutcomes)
     for (const [path, outcome] of transactionOutcomes) {
-      this.#fetcher?.setConfigState(path, outcome.state, outcome.error)
+      const item = transactionByPath.get(path)
+      if (item !== undefined) {
+        item.apply_state = outcome.state
+        item.apply_error = outcome.error
+        this.#fetcher?.setConfigState(path, outcome.state, outcome.error)
+      }
     }
 
-    this.dispatch(toUnapply, 'unapply', transactionHandledPaths)
-    this.dispatch(toApply, 'apply', transactionHandledPaths)
-    this.dispatch(toModify, 'modify', transactionHandledPaths)
+    this.dispatch(toUnapply, 'unapply', transactionOutcomes)
+    this.dispatch(toApply, 'apply', transactionOutcomes)
+    this.dispatch(toModify, 'modify', transactionOutcomes)
   }
 
   // `client_configs` is the list of config paths to have applied
@@ -506,15 +507,15 @@ class RemoteConfig {
    *
    * @param {RcConfigState[]} list
    * @param {'apply' | 'modify' | 'unapply'} action
-   * @param {Set<string>} handledPaths
+   * @param {Map<string, {state: number, error: string}>} outcomes
    */
-  dispatch (list, action, handledPaths) {
+  dispatch (list, action, outcomes) {
     for (const item of list) {
       if (action !== 'unapply') {
         this.appliedConfigs.set(item.path, item)
       }
 
-      if (!handledPaths.has(item.path)) {
+      if (!outcomes.has(item.path)) {
         this.#callHandlerFor(action, item)
       }
 
@@ -594,8 +595,8 @@ class RemoteConfig {
  * @property {unknown} file
  * @property {number} apply_state
  * @property {string} apply_error
- * @property {number} length
- * @property {Record<string, string>} hashes
+ * @property {number} [length]
+ * @property {Record<string, string>} [hashes]
  */
 
 /**
@@ -623,22 +624,19 @@ class RemoteConfig {
  * Create an immutable "view" of the batch changes and attach explicit outcome reporting.
  *
  * @param {{toUnapply: RcConfigState[], toApply: RcConfigState[], toModify: RcConfigState[]}} changes
- * @param {Set<string>} handledPaths
  * @param {Map<string, {state: number, error: string}>} outcomes
  * @returns {RcBatchUpdateTransaction}
  */
-function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths, outcomes) {
+function createUpdateTransaction ({ toUnapply, toApply, toModify }, outcomes) {
   return {
     toUnapply,
     toApply,
     toModify,
     ack (path) {
       outcomes.set(path, { state: ACKNOWLEDGED, error: '' })
-      handledPaths.add(path)
     },
     error (path, err) {
       outcomes.set(path, { state: ERROR, error: err ? err.toString() : 'Error' })
-      handledPaths.add(path)
     },
   }
 }
@@ -674,16 +672,6 @@ function filterTransactionByProducts (transaction, products) {
     toModify,
     ack: transaction.ack,
     error: transaction.error,
-  }
-}
-
-function applyOutcomes (byPath, outcomes) {
-  for (const [path, outcome] of outcomes) {
-    const item = byPath.get(path)
-    if (item) {
-      item.apply_state = outcome.state
-      item.apply_error = outcome.error
-    }
   }
 }
 

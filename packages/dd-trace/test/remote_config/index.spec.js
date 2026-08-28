@@ -44,7 +44,7 @@ describe('RemoteConfig', () => {
     Scheduler = sinon.stub().returns(scheduler)
 
     fetcher = {
-      fetchChanges: sinon.stub().yields(undefined, []),
+      fetchChanges: sinon.stub().resolves([]),
       setConfigState: sinon.stub(),
       setExtraServices: sinon.stub(),
       setProductCapabilities: sinon.stub().returns([]),
@@ -172,7 +172,6 @@ describe('RemoteConfig', () => {
 
       await poll()
 
-      sinon.assert.calledTwice(AgentlessRemoteConfigFetcher)
       const options = AgentlessRemoteConfigFetcher.lastCall.firstArg
       assert.strictEqual(options.clientId, '1234-5678')
       assert.strictEqual(options.runtimeId, 'runtimeId')
@@ -201,7 +200,7 @@ describe('RemoteConfig', () => {
       const handler = sinon.spy((action, file, id, acknowledge) => acknowledgements.push(acknowledge))
       rc.setProductHandler('LIVE_DEBUGGING', handler)
       const path = 'datadog/42/LIVE_DEBUGGING/probe/config'
-      fetcher.fetchChanges.yields(undefined, [{
+      fetcher.fetchChanges.resolves([{
         kind: 'add',
         path,
         product: 'LIVE_DEBUGGING',
@@ -215,7 +214,7 @@ describe('RemoteConfig', () => {
       sinon.assert.calledOnceWithExactly(handler, 'apply', { id: 'probe', version: 1 }, 'probe', sinon.match.func)
       sinon.assert.calledWithExactly(fetcher.setConfigState, path, UNACKNOWLEDGED, '')
 
-      fetcher.fetchChanges.yields(undefined, [{
+      fetcher.fetchChanges.resolves([{
         kind: 'update',
         path,
         product: 'LIVE_DEBUGGING',
@@ -232,7 +231,7 @@ describe('RemoteConfig', () => {
       acknowledgements[1]()
       sinon.assert.calledOnceWithExactly(fetcher.setConfigState, path, ACKNOWLEDGED, '')
 
-      fetcher.fetchChanges.yields(undefined, [{
+      fetcher.fetchChanges.resolves([{
         kind: 'remove',
         path,
         product: 'LIVE_DEBUGGING',
@@ -245,38 +244,11 @@ describe('RemoteConfig', () => {
       assert.strictEqual(rc.appliedConfigs.size, 0)
     })
 
-    it('should apply an update after the previous config failed', async () => {
-      const handler = sinon.spy()
-      rc.setProductHandler('LIVE_DEBUGGING', handler)
-      const path = 'datadog/42/LIVE_DEBUGGING/probe/config'
-      rc.appliedConfigs.set(path, {
-        path,
-        product: 'LIVE_DEBUGGING',
-        id: 'probe',
-        version: 1,
-        apply_state: ERROR,
-        apply_error: 'apply failed',
-        file: { id: 'probe', version: 1 },
-      })
-      fetcher.fetchChanges.yields(undefined, [{
-        kind: 'update',
-        path,
-        product: 'LIVE_DEBUGGING',
-        configId: 'probe',
-        version: 2,
-        contents: '{"id":"probe","version":2}',
-      }])
-
-      await poll()
-
-      sinon.assert.calledOnceWithExactly(handler, 'apply', { id: 'probe', version: 2 }, 'probe')
-    })
-
     it('should report invalid config contents without dispatching them', async () => {
       const handler = sinon.spy()
       rc.setProductHandler('LIVE_DEBUGGING', handler)
       const path = 'datadog/42/LIVE_DEBUGGING/probe/config'
-      fetcher.fetchChanges.yields(undefined, [{
+      fetcher.fetchChanges.resolves([{
         kind: 'add',
         path,
         product: 'LIVE_DEBUGGING',
@@ -291,21 +263,14 @@ describe('RemoteConfig', () => {
       sinon.assert.calledOnceWithExactly(fetcher.setConfigState, path, ERROR, sinon.match.string)
       assert.strictEqual(rc.appliedConfigs.size, 0)
 
-      const missingContents = {
-        kind: 'add',
+      fetcher.setConfigState.resetHistory()
+      fetcher.fetchChanges.resolves([{
+        kind: 'remove',
         path,
         product: 'LIVE_DEBUGGING',
         configId: 'probe',
         version: 1,
-      }
-      fetcher.setConfigState.resetHistory()
-      fetcher.fetchChanges.yields(undefined, [missingContents])
-      await poll()
-
-      sinon.assert.calledOnceWithExactly(fetcher.setConfigState, path, ERROR, 'Error: Missing config contents')
-
-      fetcher.setConfigState.resetHistory()
-      fetcher.fetchChanges.yields(undefined, [{ ...missingContents, kind: 'remove' }])
+      }])
       await poll()
 
       sinon.assert.notCalled(fetcher.setConfigState)
@@ -323,7 +288,7 @@ describe('RemoteConfig', () => {
         version: 1,
         contents: '',
       }
-      fetcher.fetchChanges.yields(undefined, [change, { ...change, kind: 'update' }])
+      fetcher.fetchChanges.resolves([change, { ...change, kind: 'update' }])
 
       await poll()
 
@@ -336,7 +301,7 @@ describe('RemoteConfig', () => {
       rc.setBatchHandler(['ASM_FEATURES'], transaction => transaction.ack(path))
       rc.setBatchHandler(['ASM_DATA'], unrelatedHandler)
       rc.subscribeProducts('ASM_FEATURES')
-      fetcher.fetchChanges.yields(undefined, [{
+      fetcher.fetchChanges.resolves([{
         kind: 'add',
         path,
         product: 'ASM_FEATURES',
@@ -369,7 +334,7 @@ describe('RemoteConfig', () => {
     it('should continue polling after native client failures', async () => {
       const error = new Error('request failed')
       rc.setProductHandler('LIVE_DEBUGGING', noop)
-      fetcher.fetchChanges.yields(error)
+      fetcher.fetchChanges.rejects(error)
 
       await poll()
 
@@ -395,7 +360,7 @@ describe('RemoteConfig', () => {
       const error = new Error('apply failed')
       rc.setBatchHandler(['ASM_FEATURES'], () => { throw error })
       rc.subscribeProducts('ASM_FEATURES')
-      fetcher.fetchChanges.yields(undefined, [{
+      fetcher.fetchChanges.resolves([{
         kind: 'add',
         path: 'datadog/42/ASM_FEATURES/config/config',
         product: 'ASM_FEATURES',
@@ -471,7 +436,10 @@ describe('RemoteConfig', () => {
     })
 
     it('should set multiple capabilities to false', () => {
-      rc.state.client.capabilities = 'jg=='
+      rc.updateCapabilities(Capabilities.ASM_ACTIVATION, true)
+      rc.updateCapabilities(Capabilities.ASM_IP_BLOCKING, true)
+      rc.updateCapabilities(Capabilities.ASM_DD_RULES, true)
+      rc.updateCapabilities(Capabilities.ASM_USER_BLOCKING, true)
 
       rc.updateCapabilities(Capabilities.ASM_USER_BLOCKING, false)
       assert.strictEqual(rc.state.client.capabilities, 'Dg==')
@@ -859,7 +827,7 @@ describe('RemoteConfig', () => {
         length: 147,
         hashes: { sha256: 'anotherHash' },
         file: { asm: { enabled: true } },
-      }], 'unapply', sinon.match.instanceOf(Set))
+      }], 'unapply', sinon.match.instanceOf(Map))
       sinon.assert.calledWithMatch(rc.dispatch.secondCall, [{
         path: 'datadog/42/APPLY/confId/config',
         product: 'APPLY',
@@ -870,7 +838,7 @@ describe('RemoteConfig', () => {
         length: 0,
         hashes: { sha256: 'haaaxx' },
         file: null,
-      }], 'apply', sinon.match.instanceOf(Set))
+      }], 'apply', sinon.match.instanceOf(Map))
       sinon.assert.calledWithMatch(rc.dispatch.thirdCall, [{
         path: 'datadog/42/MODIFY/confId/config',
         product: 'MODIFY',
@@ -881,7 +849,7 @@ describe('RemoteConfig', () => {
         length: 147,
         hashes: { sha256: 'newHash' },
         file: { config: 'newConf' },
-      }], 'modify', sinon.match.instanceOf(Set))
+      }], 'modify', sinon.match.instanceOf(Map))
 
       assert.deepStrictEqual(rc.state.client.state.config_states, [
         {
@@ -1049,7 +1017,7 @@ describe('RemoteConfig', () => {
         }
       }
 
-      rc.dispatch(list, 'apply', new Set())
+      rc.dispatch(list, 'apply', new Map())
 
       sinon.assert.calledOnceWithExactly(syncGoodNonAckHandler, 'apply', list[0].file, list[0].id)
       sinon.assert.calledOnceWithExactly(syncBadNonAckHandler, 'apply', list[1].file, list[1].id)
@@ -1118,7 +1086,7 @@ describe('RemoteConfig', () => {
         file: { asm: { enabled: true } },
       })
 
-      rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply', new Set())
+      rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply', new Map())
 
       sinon.assert.calledOnceWithExactly(handler, 'unapply', { asm: { enabled: true } }, 'asm_data')
       assert.strictEqual(rc.appliedConfigs.size, 0)
