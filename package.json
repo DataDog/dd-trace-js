@@ -166,6 +166,7 @@
     "openfeature.js",
     "packages/*/index.js",
     "packages/*/index.electron.js",
+    "!packages/*/README.md",
     "packages/*/lib/**/*",
     "packages/*/src/**/*",
     "packages/datadog-instrumentations/orchestrion.yml",
