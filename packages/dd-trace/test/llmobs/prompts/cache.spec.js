@@ -37,6 +37,16 @@ describe('Prompt caches', () => {
     assert.strictEqual(cache.get('1024').prompt.id, '1024')
   })
 
+  it('handles TTL values unsupported by the native LRU', () => {
+    const disabled = new HotCache({ ttlMs: -1 })
+    disabled.set('key', prompt('disabled'))
+    assert.strictEqual(disabled.get('key'), undefined)
+
+    const unlimited = new HotCache({ ttlMs: Infinity })
+    unlimited.set('key', prompt('unlimited'))
+    assert.strictEqual(unlimited.get('key').prompt.id, 'unlimited')
+  })
+
   it('returns stale data immediately and deduplicates background refreshes', async () => {
     const now = sinon.stub(performance, 'now').returns(100)
     let resolveFetch

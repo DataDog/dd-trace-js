@@ -146,6 +146,7 @@ class PromptManager {
     this.timeoutMs = Math.round(config.DD_LLMOBS_PROMPTS_TIMEOUT * 1000)
     this.origin = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') || `https://api.${config.site}`
     this.cacheGeneration = 0
+    this.fetchTokens = new Map()
     this.hotCache = new HotCache({
       ttlMs: this.ttlMs,
       fetchMethod: (key, stale, { context, signal }) => this._backgroundFetch(key, context, signal),
@@ -281,8 +282,12 @@ class PromptManager {
    */
   async _fetchAndCache (request, { evictOnNotFound = false, hot = true, signal } = {}) {
     const generation = this.cacheGeneration
+    const token = Symbol(request.key)
+    this.fetchTokens.set(request.key, token)
     const result = await this._fetchHttp(request, signal)
-    const cacheable = generation === this.cacheGeneration
+    const latest = this.fetchTokens.get(request.key) === token
+    if (latest) this.fetchTokens.delete(request.key)
+    const cacheable = generation === this.cacheGeneration && latest
     if (result.prompt) {
       if (this.ttlMs > 0 && cacheable) {
         const cached = result.prompt._withSource(SOURCE_CACHE)

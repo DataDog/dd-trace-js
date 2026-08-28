@@ -338,6 +338,23 @@ describe('PromptManager', () => {
     sinon.assert.calledThrice(fetchStub)
   })
 
+  it('keeps the newest same-selector fetch in the cache', async () => {
+    let resolveOlder
+    fetchStub.onFirstCall().returns(new Promise(resolve => { resolveOlder = resolve }))
+    fetchStub.onSecondCall().resolves(response(200, promptResponse({ version: 2 })))
+    const manager = new PromptManager(makeConfig(), () => provider)
+
+    const older = manager.getPrompt('greeting')
+    assert.strictEqual((await manager.refreshPrompt('greeting')).version, '2')
+    resolveOlder(response(200, promptResponse({ version: 1 })))
+    assert.strictEqual((await older).version, '1')
+
+    const cached = await manager.getPrompt('greeting')
+    assert.strictEqual(cached.version, '2')
+    assert.strictEqual(cached.source, 'cache')
+    sinon.assert.calledTwice(fetchStub)
+  })
+
   it('persists static results but never environment resolve results', async () => {
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-manager-'))
     fetchStub.resolves(response(200, promptResponse()))

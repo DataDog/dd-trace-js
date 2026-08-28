@@ -53,7 +53,7 @@ class HotCache {
     this.enabled = ttlMs > 0
     this.cache = new LRUCache({
       max: MAX_HOT_ENTRIES,
-      ttl: ttlMs || undefined,
+      ttl: this.enabled && Number.isFinite(ttlMs) ? ttlMs : undefined,
       allowStale: true,
       noDeleteOnStaleGet: true,
       fetchMethod,
