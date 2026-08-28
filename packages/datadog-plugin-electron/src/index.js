@@ -7,7 +7,7 @@ const ElectronNetPlugin = require('./net')
 
 class ElectronPlugin extends CompositePlugin {
   static id = 'electron'
-  static experimental = DD_MAJOR >= 7
+  static optIn = DD_MAJOR >= 7
   static get plugins () {
     return {
       net: ElectronNetPlugin,

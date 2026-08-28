@@ -78,9 +78,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
     ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
-    'office-addin-mock',
-    'winston',
     'jest-image-snapshot',
+    'office-addin-mock',
   ].filter(Boolean), true)
 
   before(function () {
@@ -3553,25 +3552,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         // All retries should pass, so exit code should be 0
         assert.strictEqual(exitCode[0], 0)
       })
-    })
-  })
-
-  context('winston mocking', () => {
-    it('should allow winston to be mocked and verify createLogger is called', async () => {
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'jest-mock-bypass-require/winston-mock-test',
-            SHOULD_CHECK_RESULTS: '1',
-          },
-        }
-      )
-
-      const [code] = await once(childProcess, 'exit')
-      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
     })
   })
 

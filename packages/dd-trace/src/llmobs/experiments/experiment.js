@@ -8,19 +8,24 @@ const {
   buildSpanMetadata,
   buildTags,
   durationNs,
+  generateRunId,
   hasEntries,
   inferMetricType,
-  normalizeEvaluators,
   mergeTags,
+  normalizeEvaluators,
   normalizeJsonMetricValue,
+  normalizePositiveInteger,
+  recordTagsToObject,
   sleep,
   stringify,
   timestampMs,
   validateEvaluatorName,
 } = require('./util')
 
+const TASK_ERROR_MESSAGE = 'task error; evaluation skipped'
+
 // One span per experiment row (LLM Obs experiment span wire format).
-function toSpan (row, metadata, ids, spanName, userTags) {
+function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
   const meta = {
     input: row.input ?? null,
     output: row.output ?? null,
@@ -33,6 +38,21 @@ function toSpan (row, metadata, ids, spanName, userTags) {
     meta.error = { type: row.errorType ?? '', message: row.errorMessage ?? '', stack: row.errorStack ?? '' }
   }
 
+  const tags = buildTags({
+    ...userTags,
+    ...recordTagsToObject(recordTags),
+  }, {
+    experiment_id: ids.experimentId,
+    run_id: ids.runId,
+    run_iteration: ids.runIteration,
+    project_id: ids.projectId,
+    dataset_id: ids.datasetId,
+    dataset_record_id: ids.datasetRecordId,
+    dataset_name: ids.datasetName,
+    experiment_name: ids.experimentName,
+    project_name: ids.projectName,
+  })
+
   return {
     span_id: row.spanId,
     trace_id: row.traceId,
@@ -43,19 +63,13 @@ function toSpan (row, metadata, ids, spanName, userTags) {
     duration: row.durationNs,
     status: row.isError ? 'error' : 'ok',
     meta,
-    tags: buildTags(userTags, {
-      experiment_id: ids.experimentId,
-      run_id: ids.runId,
-      run_iteration: ids.runIteration,
-      dataset_id: ids.datasetId,
-      dataset_record_id: ids.datasetRecordId,
-    }),
+    tags,
   }
 }
 
 // One metric per evaluator per row or summary evaluator.
 function toMetric (
-  label, value, errorMessage, spanId, traceId, timestampMs, experimentId, userTags, source = 'custom'
+  label, value, errorMessage, spanId, traceId, timestampMs, experimentId, userTags, source = 'custom', ids = {}
 ) {
   const metric = {
     metric_source: source,
@@ -63,7 +77,11 @@ function toMetric (
     span_id: spanId,
     trace_id: traceId,
     timestamp_ms: timestampMs,
-    tags: buildTags(userTags, { experiment_id: experimentId }),
+    tags: buildTags(userTags, {
+      experiment_id: experimentId,
+      run_id: ids.runId,
+      run_iteration: ids.runIteration,
+    }),
     experiment_id: experimentId,
   }
 
@@ -115,8 +133,43 @@ function errorMessage (error) {
   return error.message ?? String(error)
 }
 
-// Builder + run() orchestration: runs rows sequentially, emits one root span
-// per dataset row, and posts spans + metrics to the experiments events API.
+function createLimiter (concurrency) {
+  const waiting = []
+  let active = 0
+  let cancellation
+
+  const limit = async function limit (fn, cancelOnError = false) {
+    if (cancellation !== undefined) throw cancellation.error
+    if (active >= concurrency) {
+      await new Promise((resolve, reject) => waiting.push({ resolve, reject }))
+    }
+    if (cancellation !== undefined) throw cancellation.error
+    active++
+    try {
+      return await fn()
+    } catch (error) {
+      if (cancelOnError) limit.cancel(error)
+      throw error
+    } finally {
+      active--
+      const next = waiting.shift()
+      if (next !== undefined) next.resolve()
+    }
+  }
+
+  limit.cancel = (error) => {
+    if (cancellation !== undefined) return
+    cancellation = { error }
+    const queued = [...waiting]
+    waiting.length = 0
+    for (const waiter of queued) waiter.reject(error)
+  }
+
+  return limit
+}
+
+// Builder + run() orchestration: emits one root span per dataset row and
+// posts spans + metrics to the experiments events API.
 class Experiment {
   #client
   #llmobs
@@ -130,6 +183,8 @@ class Experiment {
   #config
   #tags
   #metadata
+  #runs
+  #projectName
   #projectId
   #experimentId
   #runId
@@ -152,8 +207,13 @@ class Experiment {
     this.#evaluators = normalizeEvaluators(options.evaluators, 'row')
     this.#summaryEvaluators = normalizeEvaluators(options.summaryEvaluators, 'summary')
     this.#config = { ...options.config }
+    const filterTags = this.#dataset.filterTags?.() ?? []
+    if (filterTags.length > 0) this.#config.filtered_record_tags = filterTags
+    this.#projectName = options.projectName
     this.#tags = { ...options.tags }
+    if (this.#projectName !== undefined) this.#tags.project_name = this.#projectName
     this.#metadata = { ...options.metadata }
+    this.#runs = this.#external ? 1 : normalizePositiveInteger(options.runs ?? 1, 'runs')
     this.#projectId = null
     this.#experimentId = null
     this.#runId = null
@@ -270,6 +330,7 @@ class Experiment {
       projectId: this.#projectId,
       datasetId: this.#dataset.id,
       datasetRecordId: input.datasetRecordId,
+      projectName: this.#projectName,
       runId: input.runId ?? this.#runId,
       runIteration: input.runIteration ?? this.#runIteration,
     }, input.name ?? this.#name, mergeTags(this.#tags, input.tags))
@@ -313,6 +374,8 @@ class Experiment {
         log.warn('LLMObs experiments: skipping external metric %s because it has neither value nor error', metric.label)
         continue
       }
+      const metricTags = mergeTags(this.#tags, metric.tags)
+      if (this.#projectName !== undefined) metricTags.project_name = this.#projectName
       payload.push(toMetric(
         metric.label,
         metric.value,
@@ -321,7 +384,7 @@ class Experiment {
         span.traceId,
         timestampMs(metric.timestamp),
         experimentId,
-        mergeTags(this.#tags, metric.tags),
+        metricTags,
         metric.source ?? 'custom'
       ))
     }
@@ -348,10 +411,12 @@ class Experiment {
       maxRetries = 0,
       retryDelay = (attempt) => 100 * (attempt + 1),
       throwOnErrors = false,
+      concurrency = 10,
     } = options
 
     if (maxRetries < 0) throw new Error('maxRetries must be >= 0')
     if (typeof retryDelay !== 'function') throw new TypeError('retryDelay must be a function')
+    const concurrencyLimit = normalizePositiveInteger(concurrency, 'concurrency')
 
     const projectId = await this.#client.ensureProjectId()
 
@@ -369,12 +434,12 @@ class Experiment {
       dataset_id: datasetId,
       description: this.#description,
       ensure_unique: true,
-      run_count: 1,
+      run_count: this.#runs,
       metadata: { tags: buildTags(this.#tags, {}) },
     }
     const datasetVersion = this.#dataset.version()
     if (datasetVersion !== null) attributes.dataset_version = datasetVersion
-    if (Object.keys(this.#config).length > 0) attributes.config = this.#config
+    if (hasEntries(this.#config)) attributes.config = this.#config
 
     let created
     try {
@@ -384,28 +449,21 @@ class Experiment {
     }
     this.#experimentId = created.experimentId
     const experimentId = this.#experimentId
-    const runId = id().toString(16).padStart(16, '0')
-    const runIteration = 0
 
     try {
       const records = this.#dataset.records()
       const recordIds = this.#dataset.recordIds()
-      const rows = []
-      const spans = []
-      const metrics = []
-      const evaluatorResults = {}
       const usesLLMObsTrace = Boolean(this.#llmobs?.enabled)
-      let hasRowError = false
+      const runs = []
+      let hasRunError = false
 
-      for (let i = 0; i < records.length; i++) {
-        const record = records[i]
-        const datasetRecordId = i < recordIds.length ? recordIds[i] : ''
-        // Rows currently run sequentially by design; jobs/concurrency is a P1 follow-up.
+      for (let runIndex = 0; runIndex < this.#runs; runIndex++) {
+        const runId = generateRunId()
+        const runIteration = runIndex + 1
         // eslint-disable-next-line no-await-in-loop
-        const row = await this.#processRecord({
-          index: i,
-          record,
-          datasetRecordId,
+        const result = await this.#runSingle({
+          records,
+          recordIds,
           projectId,
           datasetId,
           experimentId,
@@ -414,78 +472,296 @@ class Experiment {
           maxRetries,
           retryDelay,
           throwOnErrors,
+          concurrency: concurrencyLimit,
+          usesLLMObsTrace,
         })
-
-        const timestampMs = Date.now()
-        for (const [label, evaluator] of this.#evaluators) {
-          if (!evaluatorResults[label]) evaluatorResults[label] = []
-          if (row.isError) {
-            const msg = 'task error; evaluation skipped'
-            row.evaluationErrors[label] = msg
-            evaluatorResults[label].push(null)
-            metrics.push(toMetric(label, null, msg, row.spanId, row.traceId, timestampMs, experimentId, this.#tags))
-            continue
-          }
-          try {
-            // eslint-disable-next-line no-await-in-loop
-            const value = await this.#runWithRetries(
-              () => evaluator(record.input, row.output, record.expectedOutput),
-              maxRetries,
-              retryDelay
-            )
-            row.evaluations[label] = value
-            evaluatorResults[label].push(value)
-            metrics.push(toMetric(label, value, null, row.spanId, row.traceId, timestampMs, experimentId, this.#tags))
-          } catch (err) {
-            if (throwOnErrors) throw err
-            const msg = err.message ?? String(err)
-            row.evaluationErrors[label] = msg
-            evaluatorResults[label].push(null)
-            metrics.push(toMetric(label, null, msg, row.spanId, row.traceId, timestampMs, experimentId, this.#tags))
-          }
-        }
-
-        rows.push(row)
-        if (row.isError || hasEntries(row.evaluationErrors)) hasRowError = true
-        if (!usesLLMObsTrace) {
-          spans.push(toSpan(row, record.metadata, {
-            experimentId,
-            projectId,
-            datasetId,
-            datasetRecordId,
-            runId,
-            runIteration,
-          }, this.#task.name || this.#name, this.#tags))
-        }
+        runs.push(result.run)
+        // Submit each run before starting the next iteration so results are available incrementally.
+        // eslint-disable-next-line no-await-in-loop
+        await this.#postEvents(experimentId, result.spans, result.metrics)
+        this.#llmobs?.flush?.()
+        if (result.hasRowError) hasRunError = true
       }
 
-      const summaryEvaluations = await this.#runSummaryEvaluators(rows, records, evaluatorResults, {
-        maxRetries,
-        retryDelay,
-        throwOnErrors,
-        experimentId,
-        metrics,
-      })
-      if (hasEntries(summaryEvaluations)) {
-        for (const value of Object.values(summaryEvaluations)) {
-          if (value?.error) hasRowError = true
-        }
-      }
-
-      await this.#postEvents(experimentId, spans, metrics)
-      this.#llmobs?.flush?.()
       // A row error doesn't abort the run, but the experiment didn't succeed cleanly.
       await this.#updateStatus(
         experimentId,
-        hasRowError ? 'failed' : 'completed',
-        hasRowError ? 'one or more rows failed' : null
+        hasRunError ? 'failed' : 'completed',
+        hasRunError ? 'one or more rows failed' : null
       )
 
-      const run = new ExperimentRun({ runId, runIteration, rows, summaryEvaluations })
-      return new ExperimentResult(experimentId, rows, this.url(), [run], summaryEvaluations)
+      const firstRun = runs[0]
+      return new ExperimentResult(
+        experimentId,
+        firstRun?.rows ?? [],
+        this.url(),
+        runs,
+        firstRun?.summaryEvaluations ?? {}
+      )
     } catch (err) {
       await this.#updateStatus(experimentId, 'failed', err.message ?? String(err))
       throw err
+    }
+  }
+
+  async #runSingle ({
+    records,
+    recordIds,
+    projectId,
+    datasetId,
+    experimentId,
+    runId,
+    runIteration,
+    maxRetries,
+    retryDelay,
+    throwOnErrors,
+    concurrency,
+    usesLLMObsTrace,
+  }) {
+    const limit = createLimiter(concurrency)
+    const results = await this.#mapRecords(records, (index) => {
+      const record = records[index]
+      const datasetRecordId = index < recordIds.length ? recordIds[index] : ''
+      return this.#processRecordWithEvaluators({
+        index,
+        record,
+        datasetRecordId,
+        projectId,
+        datasetId,
+        experimentId,
+        runId,
+        runIteration,
+        maxRetries,
+        retryDelay,
+        throwOnErrors,
+        limit,
+      })
+    }, limit, concurrency, throwOnErrors)
+
+    const rows = new Array(results.length)
+    const spans = []
+    const metrics = []
+    const evaluatorResults = {}
+    let hasRowError = false
+    for (const [label] of this.#evaluators) evaluatorResults[label] = []
+
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i]
+      const row = result.row
+      rows[i] = row
+      for (const [label] of this.#evaluators) {
+        const value = Object.hasOwn(result.evaluatorValues, label) ? result.evaluatorValues[label] : null
+        evaluatorResults[label].push(value)
+      }
+      for (const metric of result.metrics) metrics.push(metric)
+      if (result.hasRowError) hasRowError = true
+      if (!usesLLMObsTrace) {
+        spans.push(toSpan(row, records[i].metadata, {
+          experimentId,
+          projectId,
+          datasetId,
+          datasetRecordId: i < recordIds.length ? recordIds[i] : '',
+          datasetName: this.#dataset.name(),
+          experimentName: this.#name,
+          projectName: this.#projectName,
+          runId,
+          runIteration,
+        }, this.#task.name || this.#name, this.#tags, records[i].tags))
+      }
+    }
+
+    const summaryEvaluations = await this.#runSummaryEvaluators(rows, records, evaluatorResults, {
+      maxRetries,
+      retryDelay,
+      throwOnErrors,
+      experimentId,
+      runId,
+      runIteration,
+      metrics,
+      limit,
+    })
+    if (hasEntries(summaryEvaluations)) {
+      for (const value of Object.values(summaryEvaluations)) {
+        if (value?.error !== null && value?.error !== undefined) hasRowError = true
+      }
+    }
+
+    return {
+      run: new ExperimentRun({ runId, runIteration, hasError: hasRowError, rows, summaryEvaluations }),
+      spans,
+      metrics,
+      hasRowError,
+    }
+  }
+
+  async #mapRecords (records, processRecord, limit, concurrency, throwOnErrors) {
+    const results = new Array(records.length)
+    let nextIndex = 0
+
+    const worker = async () => {
+      while (nextIndex < records.length) {
+        const index = nextIndex++
+        // eslint-disable-next-line no-await-in-loop -- each worker processes one record at a time
+        results[index] = await processRecord(index)
+      }
+    }
+
+    const workers = new Array(Math.min(concurrency, records.length))
+    for (let i = 0; i < workers.length; i++) workers[i] = worker()
+
+    try {
+      await Promise.all(workers)
+    } catch (error) {
+      if (throwOnErrors) limit.cancel(error)
+      throw error
+    }
+    return results
+  }
+
+  async #processRecordWithEvaluators ({
+    index,
+    record,
+    datasetRecordId,
+    projectId,
+    datasetId,
+    experimentId,
+    runId,
+    runIteration,
+    maxRetries,
+    retryDelay,
+    throwOnErrors,
+    limit,
+  }) {
+    const row = await limit(() => this.#processRecord({
+      index,
+      record,
+      datasetRecordId,
+      projectId,
+      datasetId,
+      experimentId,
+      runId,
+      runIteration,
+      maxRetries,
+      retryDelay,
+      throwOnErrors,
+    }), throwOnErrors)
+    const timestampMs = Date.now()
+    const metrics = []
+    const evaluatorValues = {}
+    let firstError
+
+    const pending = new Array(this.#evaluators.length)
+    for (let i = 0; i < this.#evaluators.length; i++) {
+      const [label, evaluator] = this.#evaluators[i]
+      pending[i] = this.#runRowEvaluator({
+        label,
+        evaluator,
+        row,
+        record,
+        timestampMs,
+        experimentId,
+        runId,
+        runIteration,
+        maxRetries,
+        retryDelay,
+        throwOnErrors,
+        limit,
+      })
+    }
+
+    const evaluatorResults = await Promise.all(pending)
+    for (const result of evaluatorResults) {
+      if (result.metric !== null) metrics.push(result.metric)
+      evaluatorValues[result.label] = result.value
+      if (result.error !== undefined && firstError === undefined) firstError = result.error
+    }
+    if (firstError !== undefined) throw firstError
+
+    return {
+      row,
+      metrics,
+      evaluatorValues,
+      hasRowError: row.isError || hasEntries(row.evaluationErrors),
+    }
+  }
+
+  async #runRowEvaluator ({
+    label,
+    evaluator,
+    row,
+    record,
+    timestampMs,
+    experimentId,
+    runId,
+    runIteration,
+    maxRetries,
+    retryDelay,
+    throwOnErrors,
+    limit,
+  }) {
+    if (row.isError) {
+      row.evaluationErrors[label] = TASK_ERROR_MESSAGE
+      return {
+        label,
+        value: null,
+        metric: toMetric(
+          label,
+          null,
+          TASK_ERROR_MESSAGE,
+          row.spanId,
+          row.traceId,
+          timestampMs,
+          experimentId,
+          this.#tags,
+          'custom',
+          { runId, runIteration }
+        ),
+      }
+    }
+
+    try {
+      const value = await limit(() => this.#runWithRetries(
+        () => evaluator(record.input, row.output, record.expectedOutput),
+        maxRetries,
+        retryDelay
+      ), throwOnErrors)
+      row.evaluations[label] = value
+      return {
+        label,
+        value,
+        metric: toMetric(
+          label,
+          value,
+          null,
+          row.spanId,
+          row.traceId,
+          timestampMs,
+          experimentId,
+          this.#tags,
+          'custom',
+          { runId, runIteration }
+        ),
+      }
+    } catch (err) {
+      if (throwOnErrors) throw err
+      const msg = err.message ?? String(err)
+      row.evaluationErrors[label] = msg
+      return {
+        label,
+        value: null,
+        metric: toMetric(
+          label,
+          null,
+          msg,
+          row.spanId,
+          row.traceId,
+          timestampMs,
+          experimentId,
+          this.#tags,
+          'custom',
+          { runId, runIteration }
+        ),
+      }
     }
   }
 
@@ -520,7 +796,8 @@ class Experiment {
       dataset_name: this.#dataset.name(),
       experiment_name: this.#name,
     }
-    const tags = mergeTags(this.#tags, autoTags)
+    if (this.#projectName !== undefined) autoTags.project_name = this.#projectName
+    const tags = mergeTags(this.#tags, { ...recordTagsToObject(record.tags), ...autoTags })
 
     const execute = () => this.#runWithRetries(
       () => this.#task(record.input, this.#config, record.metadata),
@@ -614,17 +891,65 @@ class Experiment {
     const metadata = records.map(record => buildSpanMetadata(record.metadata, this.#config))
     const summaryEvaluations = {}
     const timestampMs = Date.now()
+    const pending = new Array(this.#summaryEvaluators.length)
+    let firstError
 
-    for (const [label, evaluator] of this.#summaryEvaluators) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const value = await this.#runWithRetries(
-          () => evaluator(inputs, outputs, expectedOutputs, evaluatorResults, metadata),
-          options.maxRetries,
-          options.retryDelay
-        )
-        summaryEvaluations[label] = { value, error: null }
-        options.metrics.push(toMetric(
+    for (let i = 0; i < this.#summaryEvaluators.length; i++) {
+      const [label, evaluator] = this.#summaryEvaluators[i]
+      pending[i] = this.#runSummaryEvaluator({
+        label,
+        evaluator,
+        inputs,
+        outputs,
+        expectedOutputs,
+        evaluatorResults,
+        metadata,
+        timestampMs,
+        options,
+      })
+    }
+
+    let results
+    try {
+      results = await Promise.all(pending)
+    } catch (err) {
+      if (options.throwOnErrors) options.limit.cancel(err)
+      throw err
+    }
+    for (const result of results) {
+      if (result.error !== undefined) {
+        if (firstError === undefined) firstError = result.error
+        continue
+      }
+      summaryEvaluations[result.label] = result.evaluation
+      options.metrics.push(result.metric)
+    }
+    if (firstError !== undefined) throw firstError
+
+    return summaryEvaluations
+  }
+
+  async #runSummaryEvaluator ({
+    label,
+    evaluator,
+    inputs,
+    outputs,
+    expectedOutputs,
+    evaluatorResults,
+    metadata,
+    timestampMs,
+    options,
+  }) {
+    try {
+      const value = await options.limit(() => this.#runWithRetries(
+        () => evaluator(inputs, outputs, expectedOutputs, evaluatorResults, metadata),
+        options.maxRetries,
+        options.retryDelay
+      ), options.throwOnErrors)
+      return {
+        label,
+        evaluation: { value, error: null },
+        metric: toMetric(
           label,
           value,
           null,
@@ -633,13 +958,17 @@ class Experiment {
           timestampMs,
           options.experimentId,
           this.#tags,
-          'summary'
-        ))
-      } catch (err) {
-        if (options.throwOnErrors) throw err
-        const msg = err.message ?? String(err)
-        summaryEvaluations[label] = { value: null, error: msg }
-        options.metrics.push(toMetric(
+          'summary',
+          { runId: options.runId, runIteration: options.runIteration }
+        ),
+      }
+    } catch (err) {
+      if (options.throwOnErrors) throw err
+      const msg = err.message ?? String(err)
+      return {
+        label,
+        evaluation: { value: null, error: msg },
+        metric: toMetric(
           label,
           null,
           msg,
@@ -648,11 +977,11 @@ class Experiment {
           timestampMs,
           options.experimentId,
           this.#tags,
-          'summary'
-        ))
+          'summary',
+          { runId: options.runId, runIteration: options.runIteration }
+        ),
       }
     }
-    return summaryEvaluations
   }
 
   async #postEvents (experimentId, spans, metrics) {

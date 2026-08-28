@@ -70,6 +70,7 @@ module.exports = {
   'aws-sdk': () => require('../aws-sdk'),
   bluebird: () => require('../bluebird'),
   'body-parser': () => require('../body-parser'),
+  'browser-bunyan': () => require('../browser-bunyan'),
   bullmq: () => require('../bullmq'),
   bunyan: () => require('../bunyan'),
   'cassandra-driver': () => require('../cassandra-driver'),

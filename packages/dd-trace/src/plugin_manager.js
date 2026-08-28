@@ -61,9 +61,9 @@ function maybeEnable (Plugin) {
 function getEnabled (Plugin) {
   const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
   // skipDefault: only an explicitly configured value should drive enablement here. A registered
-  // default of `false` (e.g. an experimental plugin like `nats`) must not be read as an explicit
+  // default of `false` (e.g. an opt-in plugin like `nats`) must not be read as an explicit
   // "disabled via configuration option" — that path both logs a misleading line and nulls the
-  // plugin class, bypassing the experimental opt-in handled by `loadPlugin`.
+  // plugin class, bypassing the opt-in handled by `loadPlugin`.
   return getValueFromEnvSources(normalizePluginEnvName(envName), true)
 }
 
@@ -102,7 +102,7 @@ module.exports = class PluginManager {
     }
     const pluginConfig = this._configsByName[name] || {
       enabled: this._tracerConfig.plugins !== false &&
-        (!Plugin.experimental || isTrue(getEnabled(Plugin))),
+        (!Plugin.optIn || isTrue(getEnabled(Plugin))),
     }
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
@@ -165,6 +165,7 @@ module.exports = class PluginManager {
       codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
+      DD_TRACE_HTTP_CLIENT_ERROR_STATUSES,
       DD_TRACE_HTTP_SERVER_ERROR_STATUSES,
       clientIpEnabled,
       clientIpHeader,
@@ -195,6 +196,7 @@ module.exports = class PluginManager {
       site,
       url,
       headers: headerTags || [],
+      DD_TRACE_HTTP_CLIENT_ERROR_STATUSES,
       DD_TRACE_HTTP_SERVER_ERROR_STATUSES,
       clientIpHeader,
       DD_TEST_SESSION_NAME,

@@ -477,7 +477,7 @@ class CypressPlugin {
   testsToSkip = []
   skippedTests = []
   skippedTestIds = new Set()
-  skippableTestsCoverage = {}
+  skippableTestsCoverage
   testSessionCoverageMap = createCoverageMap()
   hasForcedToRunSuites = false
   hasUnskippableSuites = false
@@ -566,7 +566,7 @@ class CypressPlugin {
     this.testsToSkip = []
     this.skippedTests = []
     this.skippedTestIds = new Set()
-    this.skippableTestsCoverage = {}
+    this.skippableTestsCoverage = undefined
     this.testSessionCoverageMap = createCoverageMap()
     this.hasForcedToRunSuites = false
     this.hasUnskippableSuites = false
@@ -587,7 +587,6 @@ class CypressPlugin {
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
     this.testSuiteSpan = null
-    this.finishedTestSuiteSpans = []
     this.testModuleSpan = null
     this.testSessionSpan = null
     this.command = undefined
@@ -680,17 +679,6 @@ class CypressPlugin {
   }
 
   /**
-   * Returns whether the backend supplied skipped-test coverage data.
-   *
-   * @returns {boolean}
-   */
-  hasSkippableTestsCoverage () {
-    return !!(this.skippableTestsCoverage &&
-      typeof this.skippableTestsCoverage === 'object' &&
-      Object.keys(this.skippableTestsCoverage).length > 0)
-  }
-
-  /**
    * Returns whether skipped test coverage should be backfilled into the session coverage map.
    *
    * @returns {boolean}
@@ -699,7 +687,7 @@ class CypressPlugin {
     return this.isItrEnabled &&
       this.isCoverageReportUploadEnabled &&
       this.isTestsSkipped &&
-      this.hasSkippableTestsCoverage()
+      this.skippableTestsCoverage !== undefined
   }
 
   /**
@@ -1162,7 +1150,7 @@ class CypressPlugin {
       } else {
         const { skippableTests, correlationId, skippableTestsCoverage } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
-        this.skippableTestsCoverage = skippableTestsCoverage || {}
+        this.skippableTestsCoverage = skippableTestsCoverage
         this.itrCorrelationId = correlationId
         incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
@@ -1283,7 +1271,7 @@ class CypressPlugin {
     return details
   }
 
-  afterRun (suiteStats, error, shouldFailFinishedSuites = true) {
+  afterRun (suiteStats, error) {
     if (!this._isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
       return
@@ -1295,13 +1283,6 @@ class CypressPlugin {
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
-      for (const span of this.finishedTestSuiteSpans) {
-        if (error && shouldFailFinishedSuites) {
-          span.setTag(TEST_STATUS, 'fail')
-          span.setTag('error', error)
-        }
-      }
-      this.finishedTestSuiteSpans = []
       if (error) {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
@@ -1343,7 +1324,6 @@ class CypressPlugin {
       })
 
       finishAllTraceSpans(this.testSessionSpan)
-      this.tracer._tracer._exporter?.exportDeferredTestSuiteSpans?.()
     }
 
     return new Promise(resolve => {
@@ -1638,12 +1618,7 @@ class CypressPlugin {
         if (error || latestError) {
           this.testSuiteSpan.setTag('error', error || latestError)
         }
-        const canRunAfterRun = this.cypressConfig.isTextTerminal ||
-          this.cypressConfig.experimentalInteractiveRunEvents
-        const exporter = this.tracer._tracer._exporter
-        if (canRunAfterRun && exporter?.deferTestSuiteSpan) exporter.deferTestSuiteSpan(this.testSuiteSpan)
         this.testSuiteSpan.finish()
-        if (canRunAfterRun) this.finishedTestSuiteSpans.push(this.testSuiteSpan)
         this.testSuiteSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
@@ -1661,7 +1636,7 @@ class CypressPlugin {
 
     if (error) {
       this.abortPendingScreenshotUploads(error)
-      return this.afterRun(undefined, error, false)
+      return this.afterRun(undefined, error)
     }
 
     const screenshotUploadsPromise = waitForScreenshotUploads()

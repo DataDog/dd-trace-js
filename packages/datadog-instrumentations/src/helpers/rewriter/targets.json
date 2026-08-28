@@ -33,6 +33,7 @@
   "@wdio/cli/build/index.js": "@wdio/cli",
   "@wdio/jasmine-framework/build/index.js": "@wdio/jasmine-framework",
   "@wdio/local-runner/build/index.js": "@wdio/local-runner",
+  "@wdio/runner/build/index.js": "@wdio/runner",
   "@wdio/utils/build/index.js": "@wdio/utils",
   "ai/dist/index.js": "ai",
   "ai/dist/index.mjs": "ai",

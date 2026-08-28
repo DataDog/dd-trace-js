@@ -209,6 +209,7 @@ export interface GeneratedConfig {
   DD_TRACE_BEAUTIFUL_LOGS: boolean;
   DD_TRACE_BLUEBIRD_ENABLED: boolean;
   DD_TRACE_BODY_PARSER_ENABLED: boolean;
+  DD_TRACE_BROWSER_BUNYAN_ENABLED: boolean;
   DD_TRACE_BSON_ENABLED: boolean;
   DD_TRACE_BULLMQ_ENABLED: boolean;
   DD_TRACE_BUNYAN_ENABLED: boolean;
@@ -271,6 +272,7 @@ export interface GeneratedConfig {
   DD_TRACE_HAPI_ENABLED: boolean;
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HONO_ENABLED: boolean;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;
@@ -417,6 +419,7 @@ export interface GeneratedConfig {
       endpoint: string | undefined;
       maxContentSize: number;
       maxMessagesLength: number;
+      redactionEnabled: boolean;
       timeout: number;
     };
     appsec: {
@@ -472,6 +475,7 @@ export interface GeneratedConfig {
     agentlessEnabled: boolean | undefined;
     DD_LLMOBS_ENABLED: boolean;
     mlApp: string | undefined;
+    projectName: string | undefined;
     sampleRate: number;
   };
   logInjection: boolean;
@@ -613,6 +617,7 @@ export interface GeneratedEnvVarConfig {
   DD_AI_GUARD_ENDPOINT: string | undefined;
   DD_AI_GUARD_MAX_CONTENT_SIZE: number;
   DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
+  DD_AI_GUARD_REDACTION_ENABLED: boolean;
   DD_AI_GUARD_TIMEOUT: number;
   DD_API_KEY: string | undefined;
   DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
@@ -757,6 +762,7 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
   DD_LLMOBS_ENABLED: boolean;
   DD_LLMOBS_ML_APP: string | undefined;
+  DD_LLMOBS_PROJECT_NAME: string | undefined;
   DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
@@ -895,6 +901,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_BEAUTIFUL_LOGS: boolean;
   DD_TRACE_BLUEBIRD_ENABLED: boolean;
   DD_TRACE_BODY_PARSER_ENABLED: boolean;
+  DD_TRACE_BROWSER_BUNYAN_ENABLED: boolean;
   DD_TRACE_BSON_ENABLED: boolean;
   DD_TRACE_BULLMQ_ENABLED: boolean;
   DD_TRACE_BUNYAN_ENABLED: boolean;
@@ -968,6 +975,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HEADER_TAGS: string[];
   DD_TRACE_HONO_ENABLED: boolean;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;

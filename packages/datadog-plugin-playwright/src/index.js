@@ -173,7 +173,6 @@ class PlaywrightPlugin extends CiPlugin {
           this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
-        this.tracer._exporter.exportDeferredTestSuiteSpans?.()
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
@@ -255,7 +254,6 @@ class PlaywrightPlugin extends CiPlugin {
         this.numFailedSuites++
       }
 
-      this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
       testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
@@ -523,7 +521,15 @@ class PlaywrightPlugin extends CiPlugin {
 
       finishAllTraceSpans(span)
       if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
-        this.tracer._exporter.flush(onDone)
+        try {
+          this.tracer._exporter.flush(onDone)
+        } catch (error) {
+          // A synchronous flush failure must still release the worker, otherwise it hangs.
+          // Log rather than rethrow: an exception from this diagnostics-channel subscriber
+          // would surface as an uncaught error in the worker and crash the user's test run.
+          onDone?.()
+          log.error('Error flushing traces at Playwright worker shutdown', error)
+        }
       }
     })
 
@@ -534,6 +540,7 @@ class PlaywrightPlugin extends CiPlugin {
       testSourceLine,
       browserName,
       isNew,
+      isAttemptToFix,
       isDisabled,
       isModified,
       isQuarantined,
@@ -558,6 +565,9 @@ class PlaywrightPlugin extends CiPlugin {
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
+      }
+      if (isAttemptToFix) {
+        span.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
       }
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')

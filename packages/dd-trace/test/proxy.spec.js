@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
+const path = require('node:path')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -29,12 +31,14 @@ describe('TracerProxy', () => {
   let Config
   let config
   let runtimeMetrics
+  let dynamicInstrumentation
   let log
   let profiler
   let appsec
   let aiguard
   let telemetry
   let iast
+  let rewriter
   let openfeature
   let PluginManager
   let pluginManager
@@ -47,6 +51,10 @@ describe('TracerProxy', () => {
   let NoopDogStatsDClient
   let OpenFeatureProvider
   let openfeatureProvider
+  let registerTelemetryFlusher
+  let initializeServerlessTelemetry
+  let supportsServerlessTelemetryRetention
+  let flushServerlessTelemetry
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -173,14 +181,27 @@ describe('TracerProxy', () => {
       runtimeMetrics: {
         enabled: false,
       },
-      setRemoteConfig: sinon.spy(),
+      setRemoteConfig: sinon.stub(),
       llmobs: {},
     }
     Config = sinon.stub().returns(config)
 
     runtimeMetrics = {
       start: sinon.spy(),
+      flush: sinon.spy(),
     }
+
+    dynamicInstrumentation = {
+      configure: sinon.spy(),
+      isStarted: sinon.stub().returns(false),
+      start: sinon.spy(),
+      stop: sinon.spy(),
+    }
+
+    registerTelemetryFlusher = sinon.stub().returns(() => {})
+    initializeServerlessTelemetry = sinon.spy()
+    supportsServerlessTelemetryRetention = sinon.stub().returns(true)
+    flushServerlessTelemetry = sinon.spy()
 
     profiler = {
       start: sinon.spy(),
@@ -201,6 +222,11 @@ describe('TracerProxy', () => {
     }
 
     iast = {
+      enable: sinon.spy(),
+      disable: sinon.spy(),
+    }
+
+    rewriter = {
       enable: sinon.spy(),
       disable: sinon.spy(),
     }
@@ -255,10 +281,12 @@ describe('TracerProxy', () => {
       './config': Config,
       './plugin_manager': PluginManager,
       './runtime_metrics': runtimeMetrics,
+      './debugger': dynamicInstrumentation,
       './log': log,
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
+      './appsec/iast/taint-tracking/rewriter': rewriter,
       './aiguard': aiguard,
       './telemetry': telemetry,
       './remote_config': RemoteConfig,
@@ -269,12 +297,35 @@ describe('TracerProxy', () => {
       './flare': flare,
       './openfeature': openfeature,
       './openfeature/flagging_provider': OpenFeatureProvider,
+      './serverless': {
+        IS_SERVERLESS: false,
+        initializeServerlessTelemetry,
+        supportsServerlessTelemetryRetention,
+      },
+      './flush': { flushServerlessTelemetry, registerTelemetryFlusher },
     })
 
     proxy = new ProxyClass()
   })
 
   describe('uninitialized', () => {
+    it('does not load inactive feature modules when required', () => {
+      const entry = require.resolve('..')
+      const optionalModules = [
+        require.resolve('../src/debugger'),
+        require.resolve('../src/llmobs/experiments/noop'),
+      ]
+      const script = `
+        const optionalModules = ${JSON.stringify(optionalModules)}
+        require(${JSON.stringify(entry)})
+        process.stdout.write(JSON.stringify(optionalModules.map(path => require.cache[path] !== undefined)))
+      `
+      const result = spawnSync(process.execPath, ['--eval', script], { encoding: 'utf8', timeout: 5_000 })
+
+      assert.strictEqual(result.status, 0, result.stderr)
+      assert.deepStrictEqual(JSON.parse(result.stdout), [false, false])
+    })
+
     describe('init', () => {
       it('should return itself', () => {
         assert.strictEqual(proxy.init(), proxy)
@@ -288,6 +339,109 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(Config, options)
         sinon.assert.calledWith(DatadogTracer, config)
         sinon.assert.calledOnceWithExactly(RemoteConfig, config)
+        sinon.assert.notCalled(rewriter.enable)
+      })
+
+      it('only loads Test Optimization startup modules through ci/init', () => {
+        const repoRoot = path.resolve(__dirname, '../../..')
+        const testOptimizationRoot = path.join(repoRoot, 'packages/dd-trace/src/ci-visibility') + path.sep
+        const modules = [
+          require.resolve('../src/ci-visibility/test-api-manual/test-api-manual-plugin'),
+          require.resolve('../src/ci-visibility/log-submission/log-submission-plugin'),
+          require.resolve('../src/ci-visibility/dynamic-instrumentation'),
+        ]
+        const script = `
+          const tracer = require(process.env.DD_TRACE_TEST_ENTRYPOINT)
+          if (process.env.DD_TRACE_TEST_CALL_INIT === 'true') {
+            tracer.init()
+          }
+          const modules = ${JSON.stringify(modules)}
+          const loaded = modules.map(module => require.cache[module] !== undefined)
+          const testOptimizationModuleCount = Object.keys(require.cache)
+            .filter(module => module.startsWith(${JSON.stringify(testOptimizationRoot)}))
+            .length
+          process.stdout.write(JSON.stringify({ loaded, testOptimizationModuleCount }), () => process.exit())
+        `
+        const cases = [
+          {
+            entrypoint: repoRoot,
+            callInit: 'true',
+            environment: { DD_AGENTLESS_LOG_SUBMISSION_ENABLED: 'true' },
+            expected: [false, false, false],
+            expectedTestOptimizationModuleCount: 0,
+          },
+          { entrypoint: path.join(repoRoot, 'ci/init'), callInit: 'false', expected: [true, false, true] },
+          {
+            entrypoint: path.join(repoRoot, 'ci/init'),
+            callInit: 'false',
+            environment: { DD_AGENTLESS_LOG_SUBMISSION_ENABLED: 'true' },
+            expected: [true, true, true],
+          },
+          {
+            entrypoint: path.join(repoRoot, 'ci/init'),
+            callInit: 'false',
+            environment: {
+              DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false',
+              DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
+            },
+            expected: [false, false, false],
+          },
+        ]
+
+        for (const testCase of cases) {
+          const result = spawnSync(process.execPath, ['--eval', script], {
+            encoding: 'utf8',
+            env: {
+              ...process.env,
+              DD_AGENTLESS_LOG_SUBMISSION_ENABLED: 'false',
+              DD_API_KEY: 'test-api-key',
+              DD_CIVISIBILITY_AGENTLESS_ENABLED: 'false',
+              DD_CIVISIBILITY_ENABLED: 'true',
+              DD_CIVISIBILITY_MANUAL_API_ENABLED: 'true',
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+              DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+              DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'true',
+              DD_TRACE_ENABLED: 'true',
+              DD_TRACE_STARTUP_LOGS: 'false',
+              DD_TRACE_TEST_CALL_INIT: testCase.callInit,
+              DD_TRACE_TEST_ENTRYPOINT: testCase.entrypoint,
+              ...testCase.environment,
+            },
+          })
+
+          assert.strictEqual(result.status, 0, result.stderr)
+          const { loaded, testOptimizationModuleCount } = JSON.parse(result.stdout)
+          assert.deepStrictEqual(loaded, testCase.expected)
+          if (testCase.expectedTestOptimizationModuleCount !== undefined) {
+            assert.strictEqual(testOptimizationModuleCount, testCase.expectedTestOptimizationModuleCount)
+          }
+        }
+      })
+
+      it('does not load Dynamic Instrumentation while disabled', () => {
+        proxy.init()
+
+        sinon.assert.notCalled(dynamicInstrumentation.configure)
+        sinon.assert.notCalled(dynamicInstrumentation.isStarted)
+        sinon.assert.notCalled(dynamicInstrumentation.start)
+        sinon.assert.notCalled(dynamicInstrumentation.stop)
+      })
+
+      it('starts and configures Dynamic Instrumentation when enabled', () => {
+        config.dynamicInstrumentation.enabled = true
+
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, rc)
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.configure, config)
+      })
+
+      it('should enable the IAST rewriter when IAST is enabled', () => {
+        config.iast.enabled = true
+
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(rewriter.enable, config)
       })
 
       it('should not initialize twice', () => {
@@ -331,6 +485,38 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(config.setRemoteConfig, conf)
         sinon.assert.calledWith(tracer.configure, config)
         sinon.assert.calledWith(pluginManager.configure, config)
+      })
+
+      it('does not load Dynamic Instrumentation for a disabled remote config update', () => {
+        config.setRemoteConfig.callsFake(conf => {
+          config.dynamicInstrumentation.enabled = conf['dynamicInstrumentation.enabled']
+        })
+        proxy.init()
+
+        handlers.get('APM_TRACING')(createApmTracingTransaction('debugger-disabled', {
+          dynamic_instrumentation_enabled: false,
+        }))
+
+        sinon.assert.notCalled(dynamicInstrumentation.configure)
+        sinon.assert.notCalled(dynamicInstrumentation.isStarted)
+        sinon.assert.notCalled(dynamicInstrumentation.start)
+        sinon.assert.notCalled(dynamicInstrumentation.stop)
+      })
+
+      it('loads Dynamic Instrumentation when remote config enables it', () => {
+        config.setRemoteConfig.callsFake(conf => {
+          config.dynamicInstrumentation.enabled = conf['dynamicInstrumentation.enabled']
+        })
+        proxy.init()
+
+        handlers.get('APM_TRACING')(createApmTracingTransaction('debugger-enabled', {
+          dynamic_instrumentation_enabled: true,
+        }))
+
+        sinon.assert.calledOnce(dynamicInstrumentation.isStarted)
+        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, rc)
+        sinon.assert.notCalled(dynamicInstrumentation.configure)
+        sinon.assert.notCalled(dynamicInstrumentation.stop)
       })
 
       it('should support enabling debug logs for tracer flares', () => {
@@ -584,6 +770,39 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.called(runtimeMetrics.start)
+      })
+
+      it('registers the runtime metrics flush with the serverless lifecycle', () => {
+        config.runtimeMetrics.enabled = true
+        const done = sinon.spy()
+
+        proxy.init()
+        registerTelemetryFlusher.firstCall.args[0](done)
+
+        sinon.assert.calledOnceWithExactly(runtimeMetrics.flush, done)
+      })
+
+      it('registers Vercel telemetry retention when tracing is disabled', () => {
+        config.DD_TRACE_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.calledOnce(initializeServerlessTelemetry)
+        const telemetry = initializeServerlessTelemetry.firstCall.args[0]
+        assert.strictEqual(typeof telemetry.flushAll, 'function')
+        const done = sinon.spy()
+        telemetry.flushAll(done)
+        sinon.assert.calledOnceWithExactly(flushServerlessTelemetry, done, undefined)
+      })
+
+      it('does not create a lifecycle owner outside a retention platform', () => {
+        supportsServerlessTelemetryRetention.returns(false)
+        proxy = new ProxyClass()
+
+        proxy.init()
+
+        assert.strictEqual(proxy._serverlessTelemetry, undefined)
+        sinon.assert.calledWithExactly(initializeServerlessTelemetry, undefined)
       })
 
       it('should expose noop metrics methods prior to initialization', () => {

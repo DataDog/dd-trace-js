@@ -6,6 +6,20 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 The module exported by this library is an instance of the [Tracer](./interfaces/tracer.html) class.
 
+<h2 id="llmobs-experiments">LLM Observability Experiments</h2>
+
+LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
+
+```javascript
+const tracer = require('dd-trace').init({
+  llmobs: {
+    projectName: 'experiments-project'
+  }
+})
+```
+
+The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
+
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
@@ -21,11 +35,13 @@ tracer.use('pg', {
 })
 ```
 
-The `langchain` and `modelcontextprotocol-sdk` integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice:
+LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
+
+The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
 
 ```javascript
-// Keep APM tracing for MCP, but let LangChain own the LLM Observability spans.
-tracer.use('modelcontextprotocol-sdk', {
+// Keep APM tracing for OpenAI, but let another integration own the LLM Observability spans.
+tracer.use('openai', {
   llmobs: false
 })
 ```
@@ -47,6 +63,7 @@ tracer.use('modelcontextprotocol-sdk', {
 <h5 id="azure-functions"></h5>
 <h5 id="azure-service-bus"></h5>
 <h5 id="azure-durable-functions"></h5>
+<h5 id="browser-bunyan"></h5>
 <h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="cassandra-driver"></h5>
@@ -132,6 +149,7 @@ tracer.use('modelcontextprotocol-sdk', {
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)
 * [azure-durable-functions](./interfaces/export_.plugins.azure_durable_functions.html)
+* [browser-bunyan](./interfaces/export_.plugins.browser_bunyan.html)
 * [bullmq](./interfaces/export_.plugins.bullmq.html)
 * [bunyan](./interfaces/export_.plugins.bunyan.html)
 * [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
@@ -271,6 +289,25 @@ async function handle () {
 ```
 
 Any error from the awaited handler will automatically be added to the span.
+
+<h3 id="recording-handled-exceptions">Recording handled exceptions</h3>
+
+Use `span.recordException()` to add a handled exception as an event without marking the span as failed.
+
+```javascript
+tracer.trace('checkout', span => {
+  try {
+    authorizePayment()
+  } catch (error) {
+    span.recordException(error, {
+      handled: true,
+      'payment.provider': 'example',
+    })
+  }
+})
+```
+
+If the exception leaves the traced callback, `tracer.trace()` records it as a span error automatically.
 
 <h3 id="tracer-wrap">tracer.wrap(name[, options], fn)</h3>
 

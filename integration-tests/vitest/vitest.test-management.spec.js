@@ -191,8 +191,10 @@ versions.forEach((version) => {
       })
     })
 
-    if (version === 'latest') {
-      context('test management', () => {
+    {
+      const testManagementContext = version === 'latest' ? context : context.skip
+
+      testManagementContext('test management', () => {
         it('supports test.concurrent with test management features', async () => {
           const attemptToFixTestName = 'concurrent test management can attempt to fix a concurrent test'
           const disabledTestName = 'concurrent test management can disable a concurrent test'

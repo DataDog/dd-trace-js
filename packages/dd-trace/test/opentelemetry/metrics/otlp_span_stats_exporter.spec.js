@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 const http = require('node:http')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../../setup/core')
@@ -11,9 +11,12 @@ const { OtlpStatsExporter } = require('../../../src/opentelemetry/metrics/otlp_s
 const { buildResourceAttributes, createOtlpSpanStatsExporter } = require('../../../src/opentelemetry/metrics')
 const { SpanBuckets } = require('../../../src/span_stats')
 const { HTTP_STATUS_CODE } = require('../../../../../ext/tags')
+const processTags = require('../../../src/process-tags')
 
 const RESOURCE_ATTRS = { 'service.name': 'svc' }
 const BUCKET_SIZE_NS = 10 * 1e9
+
+before(() => processTags.initialize())
 
 function makeSpan (overrides = {}) {
   return {
@@ -50,14 +53,49 @@ describe('buildResourceAttributes', () => {
     assert.strictEqual(attrs['service.version'], '1.0.0')
   })
 
-  it('includes datadog.runtime_id from tags when otelSemanticsEnabled is false', () => {
-    const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' }, { otelSemanticsEnabled: false })
+  it('includes datadog.runtime_id from tags', () => {
+    const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' })
     assert.strictEqual(attrs['datadog.runtime_id'], 'abc-123')
   })
 
-  it('omits dd.* attributes when otelSemanticsEnabled is true', () => {
-    const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' }, { otelSemanticsEnabled: true })
-    assert.ok(!Object.keys(attrs).some(k => k.startsWith('datadog.')))
+  it('includes supported non-reserved tracer tags as a single array attribute', () => {
+    const attrs = buildResourceAttributes({
+      team: 'apm',
+      region: 'us-east-1',
+      retries: 3,
+      enabled: false,
+      service: 'ignored',
+      env: 'ignored',
+      version: 'ignored',
+      runtime_id: 'ignored',
+      'runtime-id': 'abc-123',
+    })
+
+    assert.deepStrictEqual(attrs['datadog.tracer_tags'], [
+      'team:apm',
+      'region:us-east-1',
+      'retries:3',
+      'enabled:false',
+    ])
+  })
+
+  it('omits nullish, non-finite, and non-scalar tracer tags', () => {
+    const attrs = buildResourceAttributes({
+      missing: undefined,
+      nullable: null,
+      infinite: Infinity,
+      notANumber: NaN,
+      nested: { team: 'apm' },
+      list: ['apm'],
+    })
+
+    assert.ok(!('datadog.tracer_tags' in attrs))
+  })
+
+  it('includes datadog.process_tags as a single array attribute', () => {
+    const attrs = buildResourceAttributes({})
+    assert.ok(Array.isArray(attrs['datadog.process_tags']))
+    assert.ok(!('datadog.entrypoint.type' in attrs))
   })
 })
 
@@ -76,6 +114,7 @@ describe('createOtlpSpanStatsExporter', () => {
     const exporter = createOtlpSpanStatsExporter({
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
       service: 'svc',
+      tags: {},
     })
     assert.ok(exporter instanceof OtlpStatsExporter)
   })
@@ -85,8 +124,10 @@ describe('OtlpStatsExporter', () => {
   let exporter
   let httpStub
   let mockReq
+  let originalVercel
 
   beforeEach(() => {
+    originalVercel = process.env.VERCEL
     mockReq = {
       write: sinon.stub(),
       end: sinon.stub(),
@@ -112,6 +153,8 @@ describe('OtlpStatsExporter', () => {
 
   afterEach(() => {
     httpStub.restore()
+    if (originalVercel === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = originalVercel
   })
 
   it('sends a POST to /v1/metrics', () => {
@@ -178,5 +221,59 @@ describe('OtlpStatsExporter', () => {
     const drained = makeDrained([makeSpan()])
     exporter.export(drained, BUCKET_SIZE_NS)
     assert.ok(httpStub.calledOnce)
+  })
+
+  it('flushes after an in-flight HTTP export completes', () => {
+    let onEnd
+    httpStub.callsFake((options, callback) => {
+      const mockRes = {
+        statusCode: 200,
+        on: sinon.stub(),
+        once: (event, handler) => {
+          if (event === 'end') onEnd = handler
+          return mockRes
+        },
+      }
+      callback(mockRes)
+      return mockReq
+    })
+    process.env.VERCEL = '1'
+    const serverlessExporter = new OtlpStatsExporter('http://localhost:4318/v1/metrics', 'http/json', RESOURCE_ATTRS)
+    const flushed = sinon.spy()
+
+    serverlessExporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
+    serverlessExporter.flush(flushed)
+
+    sinon.assert.notCalled(flushed)
+    onEnd()
+    sinon.assert.calledOnce(flushed)
+  })
+
+  it('does not wait for exports started after the flush boundary', () => {
+    const onEnd = []
+    httpStub.callsFake((options, callback) => {
+      const mockRes = {
+        statusCode: 200,
+        on: sinon.stub(),
+        once: (event, handler) => {
+          if (event === 'end') onEnd.push(handler)
+          return mockRes
+        },
+      }
+      callback(mockRes)
+      return mockReq
+    })
+    process.env.VERCEL = '1'
+    const serverlessExporter = new OtlpStatsExporter('http://localhost:4318/v1/metrics', 'http/json', RESOURCE_ATTRS)
+    const flushed = sinon.spy()
+
+    serverlessExporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
+    serverlessExporter.flush(flushed)
+    serverlessExporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
+
+    onEnd[0]()
+    sinon.assert.calledOnce(flushed)
+    onEnd[1]()
+    sinon.assert.calledOnce(flushed)
   })
 })

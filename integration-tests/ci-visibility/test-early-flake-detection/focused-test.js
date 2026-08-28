@@ -25,6 +25,7 @@ describe.only('early flake detection focused block', () => {
   })
 })
 
+// This skipped block verifies that Early Flake Detection does not retry skipped tests.
 describe.skip('early flake detection skipped block', () => {
   test('new test inside a skipped block', () => {
     expect(3 + 3).toBe(6)

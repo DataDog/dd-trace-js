@@ -61,7 +61,7 @@ function applyMajorOverrides (supportedConfigurations, majorVersion) {
 
   if (majorVersion >= 7) {
     // The Electron plugin moved to the Electron SDK and is opt-in (disabled by default) from v7 on,
-    // while remaining enabled by default on earlier majors (see ElectronPlugin.experimental).
+    // while remaining enabled by default on earlier majors (see ElectronPlugin.optIn).
     const electronEntry = supportedConfigurations.DD_TRACE_ELECTRON_ENABLED?.[0]
     if (electronEntry) electronEntry.default = 'false'
   }

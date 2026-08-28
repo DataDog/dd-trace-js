@@ -49,6 +49,14 @@ class MeterProvider {
     }
     return meter
   }
+
+  /**
+   * @param {Function} [done] Called after the metric export completes
+   */
+  forceFlush (done) {
+    if (this.reader) this.reader.forceFlush(done)
+    else done?.()
+  }
 }
 
 module.exports = MeterProvider

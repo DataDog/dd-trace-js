@@ -541,6 +541,7 @@ module.exports = {
   getRelativeCoverageFiles,
   getLineCoverageBitmap,
   applySkippedCoverageToCoverage,
+  getTestCoverageLinesData,
   getTestCoverageLinesPercentage,
   resetCoverage,
   mergeCoverage,
@@ -1359,6 +1360,34 @@ function getLineCoverageBitmap (lineCoverage, onlyCoveredLines = false) {
   return bitmap
 }
 
+function getLineCoverageBitmaps (lineCoverage) {
+  let maxLine = 0
+  const entries = Object.entries(lineCoverage)
+
+  for (const [line] of entries) {
+    const lineNumber = Number(line)
+    if (Number.isSafeInteger(lineNumber) && lineNumber > maxLine) {
+      maxLine = lineNumber
+    }
+  }
+  if (maxLine === 0) return {}
+
+  const length = Math.ceil((maxLine + 1) / 8)
+  const coveredBitmap = Buffer.alloc(length)
+  const executableBitmap = Buffer.alloc(length)
+  for (const [line, hits] of entries) {
+    const lineNumber = Number(line)
+    if (!Number.isSafeInteger(lineNumber) || lineNumber <= 0) continue
+
+    const byteIndex = lineNumber >> 3
+    const bit = 1 << (lineNumber % 8)
+    executableBitmap[byteIndex] |= bit
+    if (hits) coveredBitmap[byteIndex] |= bit
+  }
+
+  return { coveredBitmap, executableBitmap }
+}
+
 function mergeCoverageBitmaps (targetBitmap, bitmap) {
   if (!targetBitmap) {
     return Buffer.from(bitmap)
@@ -1419,16 +1448,6 @@ function getCoverageFileBitmap (bitmap) {
   }
 }
 
-function addCoverageFilesToMap (files, targetMap, rootDir) {
-  for (const file of files) {
-    const bitmap = getCoverageFileBitmap(file.bitmap)
-    if (!bitmap) continue
-
-    const filename = rootDir ? getTestSuitePath(file.filename, rootDir) : file.filename
-    targetMap.set(filename, mergeCoverageBitmaps(targetMap.get(filename), bitmap))
-  }
-}
-
 function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   if (!skippedCoverage) return
 
@@ -1439,27 +1458,57 @@ function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   }
 }
 
-function hasSkippedCoverage (skippedCoverage) {
-  return skippedCoverage && typeof skippedCoverage === 'object' && Object.keys(skippedCoverage).length > 0
-}
+/**
+ * Calculates line coverage and optionally returns executable-line coverage files in the same traversal.
+ * @param {object} coverage
+ * @param {object} [skippedCoverage]
+ * @param {string} [rootDir]
+ * @param {boolean} [includeExecutableFiles]
+ * @returns {{ percentage: number, executableFiles?: Array<{ filename: string, bitmap: Buffer }> }}
+ */
+function getTestCoverageLinesData (coverage, skippedCoverage, rootDir, includeExecutableFiles = false) {
+  const coverageMap = getCoverageMap(coverage)
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  const coverageByFilename = new Map()
+  const executableFiles = includeExecutableFiles ? [] : undefined
 
-function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
-  const executableLinesByFile = new Map()
-  const coveredLinesByFile = new Map()
+  for (const filename of coverageMap.files()) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    const { coveredBitmap, executableBitmap } = getLineCoverageBitmaps(fileCoverage.getLineCoverage())
+    if (!executableBitmap) continue
 
-  addCoverageFilesToMap(getExecutableFilesFromCoverage(coverage), executableLinesByFile, rootDir)
-  addCoverageFilesToMap(getCoveredFilesFromCoverage(coverage), coveredLinesByFile, rootDir)
-  addSkippedCoverageToMap(skippedCoverage, coveredLinesByFile)
+    const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
+    const existingCoverage = coverageByFilename.get(relativeFilename)
+    if (existingCoverage) {
+      existingCoverage.coveredBitmap = mergeCoverageBitmaps(existingCoverage.coveredBitmap, coveredBitmap)
+      existingCoverage.executableBitmap = mergeCoverageBitmaps(existingCoverage.executableBitmap, executableBitmap)
+    } else {
+      coverageByFilename.set(relativeFilename, { coveredBitmap, executableBitmap })
+    }
+  }
 
   let totalExecutableLines = 0
   let totalCoveredLines = 0
-
-  for (const [filename, executableLines] of executableLinesByFile) {
-    totalExecutableLines += countBitmapBits(executableLines)
-    totalCoveredLines += countCoveredExecutableBits(coveredLinesByFile.get(filename), executableLines)
+  for (const [filename, { coveredBitmap, executableBitmap }] of coverageByFilename) {
+    const skippedBitmap = skippedCoverageByFilename.get(filename)
+    const combinedCoveredBitmap = skippedBitmap
+      ? mergeCoverageBitmaps(coveredBitmap, skippedBitmap)
+      : coveredBitmap
+    totalExecutableLines += countBitmapBits(executableBitmap)
+    totalCoveredLines += countCoveredExecutableBits(combinedCoveredBitmap, executableBitmap)
+    if (executableFiles) {
+      executableFiles.push({ filename, bitmap: executableBitmap })
+    }
   }
 
-  return totalExecutableLines === 0 ? 0 : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+  const percentage = totalExecutableLines === 0
+    ? 0
+    : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+  return { percentage, executableFiles }
+}
+
+function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
+  return getTestCoverageLinesData(coverage, skippedCoverage, rootDir).percentage
 }
 
 function isLineCoveredByBitmap (bitmap, line) {
@@ -1496,10 +1545,10 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
  * @returns {boolean}
  */
 function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
-  if (!hasSkippedCoverage(skippedCoverage)) return false
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  if (skippedCoverageByFilename.size === 0) return false
 
   const coverageMap = getCoverageMap(coverage)
-  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
   let matched = false
 
   for (const filename of coverageMap.files()) {
@@ -1820,6 +1869,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
   }
 
   const metrics = {}
+  let hasMetrics = false
   for (const candidate of candidateBranches) {
     // Find common ancestor
     const baseSha = getMergeBase(candidate, sourceBranch)
@@ -1838,6 +1888,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
       ahead,
       baseSha,
     }
+    hasMetrics = true
   }
 
   function isDefaultBranch (branch) {
@@ -1846,7 +1897,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     )
   }
 
-  if (Object.keys(metrics).length === 0) {
+  if (!hasMetrics) {
     return null
   }
   // Find branch with smallest "ahead" value, preferring default branch on tie
@@ -1872,6 +1923,7 @@ function getPullRequestDiff (baseCommit, targetCommit) {
 function getModifiedFilesFromDiff (diff) {
   if (!diff) return null
   const result = {}
+  let hasModifiedFiles = false
 
   const filesRegex = /^diff --git a\/(?<file>.+) b\/(?<file2>.+)$/g
   const linesRegex = /^@@ -\d+(,\d+)? \+(?<start>\d+)(,(?<count>\d+))? @@/g
@@ -1886,6 +1938,7 @@ function getModifiedFilesFromDiff (diff) {
     if (fileMatch && fileMatch.groups.file) {
       currentFile = fileMatch.groups.file
       result[currentFile] = []
+      hasModifiedFiles = true
       continue
     }
 
@@ -1904,7 +1957,7 @@ function getModifiedFilesFromDiff (diff) {
     linesRegex.lastIndex = 0
   }
 
-  if (Object.keys(result).length === 0) {
+  if (!hasModifiedFiles) {
     return null
   }
   return result

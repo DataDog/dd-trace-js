@@ -13,7 +13,7 @@ const { metrics } = require('@opentelemetry/api')
 
 require('./setup/core')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
-const { DogStatsDClient } = require('../src/dogstatsd')
+const { DogStatsDClient, MetricsAggregationClient } = require('../src/dogstatsd')
 
 // On Node versions that support `monitorEventLoopDelay({ samplePerIteration })`
 // (available in v24.19.0 and v26.5.0) the runtime metrics module unconditionally skips the
@@ -29,6 +29,19 @@ const MeterProvider = require('../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../src/opentelemetry/metrics/periodic_metric_reader')
 const OtlpTransformer = require('../src/opentelemetry/metrics/otlp_transformer')
 const otlpRuntimeMetrics = require('../src/runtime_metrics/otlp_runtime_metrics')
+
+/**
+ * @param {typeof DogStatsDClient} Client - DogStatsD transport test double
+ * @returns {typeof import('../src/runtime_metrics/client')} Runtime-metrics client factory with real aggregation
+ */
+function proxyMetricsClient (Client) {
+  return proxyquire('../src/runtime_metrics/client', {
+    '../dogstatsd': {
+      DogStatsDClient: Client,
+      createMetricsAggregationClient: options => new MetricsAggregationClient(new Client(options)),
+    },
+  })
+}
 
 function createGarbage (count = 50) {
   let last = {}
@@ -74,6 +87,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           gauge () {},
           increment () {},
           decrement () {},
+          flush (done) { done?.() },
         })
 
         proxy = proxyquire('../src/runtime_metrics', {
@@ -152,6 +166,20 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
         sinon.assert.notCalled(runtimeMetrics.decrement)
         sinon.assert.calledOnce(runtimeMetrics.stop)
       })
+
+      it('flushes when enabled and is noop when disabled', () => {
+        const done = sinon.spy()
+
+        proxy.start()
+        proxy.flush(done)
+        sinon.assert.notCalled(runtimeMetrics.flush)
+        sinon.assert.calledOnce(done)
+
+        config.runtimeMetrics.enabled = true
+        proxy.start(config)
+        proxy.flush(done)
+        sinon.assert.calledOnceWithExactly(runtimeMetrics.flush, done)
+      })
     })
 
     describe('runtimeMetrics', () => {
@@ -186,14 +214,12 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           gauge: sinon.spy(),
           increment: sinon.spy(),
           histogram: sinon.spy(),
-          flush: sinon.spy(),
+          flush: sinon.stub().callsFake(done => done?.()),
         }
 
         const proxiedObject = {
           // Exercise the real client factory (incl. process tags) but with the spy DogStatsD client.
-          './client': proxyquire('../src/runtime_metrics/client', {
-            '../dogstatsd': { DogStatsDClient: Client },
-          }),
+          './client': proxyMetricsClient(Client),
         }
         if (!nativeMetrics) {
           proxiedObject['@datadog/native-metrics'] = {
@@ -244,6 +270,21 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
       afterEach(() => {
         clock.restore()
         runtimeMetrics.stop()
+      })
+
+      it('captures and waits for the final runtime metrics flush', (done) => {
+        client.flush.resetHistory()
+        client.gauge.resetHistory()
+
+        runtimeMetrics.flush(() => {
+          try {
+            sinon.assert.calledOnce(client.flush)
+            sinon.assert.called(client.gauge)
+            done()
+          } catch (error) {
+            done(error)
+          }
+        })
       })
 
       describe('start', () => {
@@ -521,9 +562,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
 
           const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
-            './client': proxyquire('../src/runtime_metrics/client', {
-              '../dogstatsd': { DogStatsDClient: LocalClient },
-            }),
+            './client': proxyMetricsClient(LocalClient),
             '@datadog/native-metrics': nativeMetricsModule,
           })
 
@@ -567,9 +606,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
 
           const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
-            './client': proxyquire('../src/runtime_metrics/client', {
-              '../dogstatsd': { DogStatsDClient: LocalClient },
-            }),
+            './client': proxyMetricsClient(LocalClient),
             '../../../../version': { NODE_MAJOR: 24, NODE_MINOR: 19 },
             '@datadog/native-metrics': {
               start () {
@@ -977,9 +1014,7 @@ describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIterati
     })
 
     localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
-      './client': proxyquire('../src/runtime_metrics/client', {
-        '../dogstatsd': { DogStatsDClient: LocalClient },
-      }),
+      './client': proxyMetricsClient(LocalClient),
       '@datadog/native-metrics': { start: nativeMetricsStart, stop () {} },
     })
 

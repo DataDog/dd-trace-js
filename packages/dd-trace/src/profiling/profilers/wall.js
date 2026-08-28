@@ -138,7 +138,7 @@ class NativeWallProfiler {
 
     this.#pprof.time.start({
       collectCpuTime: this.#cpuProfilingEnabled,
-      columnNumbers: 'pack',
+      columnNumbers: 'emit',
       durationMillis: this.#flushIntervalMillis,
       intervalMicros: this.#samplingIntervalMicros,
       lineNumbers: false,
@@ -168,8 +168,8 @@ class NativeWallProfiler {
         spanFinishCh.subscribe(this.#boundSpanFinished)
         if (this.#endpointCollectionEnabled) {
           // Web-tags cache publishes once per span at the moment its
-          // walk-result transitions from undefined to a real value —
-          // exactly when we need to refresh the ProfilingContext snapshot.
+          // walk-result changes — exactly when we need to refresh the
+          // ProfilingContext snapshot.
           webTagsCache.resolvedCh.subscribe(this.#boundSpanTagsUpdated)
           // Turn on the cache's own tagsUpdate subscription — it's
           // ref-counted, so this composes with any other active consumer.
@@ -229,13 +229,12 @@ class NativeWallProfiler {
         } else if (current !== sampleContext) {
           this.#pprof.time.setContext(sampleContext)
         }
-      // Every setContext() call in ACF mode allocates a fresh contextHolder
-      // (a node::ObjectWrap with its own v8::Global<v8::Value>) in the native
-      // profiler. Skip the call if the CPED already holds this sampleContext,
-      // which is the common case when the same span is repeatedly activated:
-      // #getProfilingContext caches profilingContext on span[ProfilingContext],
-      // so identity comparison short-circuits.
       } else if (current !== sampleContext) {
+        // Every setContext() call in ACF mode allocates a fresh contextHolder
+        // (a node::ObjectWrap with its own v8::Global<v8::Value>) in the native
+        // profiler. We're only incurring the cost when current !== sampleContext
+        // and skip it when current === sampleContext, which is the common case
+        // when the same span is repeatedly activated.
         this.#pprof.time.setContext(sampleContext)
       }
     } else {
@@ -266,8 +265,8 @@ class NativeWallProfiler {
       }
 
       // webTags is snapshotted into the sample context at getProfilingContext
-      // time; if the answer turns out to be undefined and the span later gets
-      // web-server tags, #spanTagsUpdated refreshes this field via the shared
+      // time; if the answer changes later — the span or an ancestor becomes a
+      // web-server span — #spanTagsUpdated refreshes this field via the shared
       // cache (see web-tags-cache.js).
       const webTags = this.#endpointCollectionEnabled ? webTagsCache.getCachedWebTags(span) : undefined
 
@@ -291,9 +290,10 @@ class NativeWallProfiler {
   }
 
   // Invoked (via webTagsCache.resolvedCh) once per span at the moment the
-  // shared cache promotes a previously-undefined webTags answer into a
-  // real value. Refresh the ProfilingContext snapshot so future samples
-  // pick it up.
+  // shared cache changes its webTags answer: an empty one promoted into a real
+  // value, or an outer request's tag bag replaced by a nearer one. Refresh the
+  // ProfilingContext snapshot in place so samples already holding it — including
+  // those of a span that stays active across the promotion — pick it up.
   #spanTagsUpdated (span) {
     if (!this.#started) return
     const profilingContext = span[ProfilingContext]
@@ -417,7 +417,7 @@ class NativeWallProfiler {
     if (rootSpanId !== undefined) {
       labels[LOCAL_ROOT_SPAN_ID_LABEL] = toBigInt(rootSpanId)
     }
-    if (webTags !== undefined && Object.keys(webTags).length !== 0) {
+    if (webTags !== undefined) {
       labels[TRACE_ENDPOINT_LABEL] = endpointNameFromTags(webTags)
     } else if (endpoint) {
       // fallback to endpoint computed when sample was taken

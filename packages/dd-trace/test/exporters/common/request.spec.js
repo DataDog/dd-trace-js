@@ -111,6 +111,50 @@ describe('request', function () {
       })
   })
 
+  it('preserves a caller-supplied connection agent', (done) => {
+    const customAgent = new http.Agent()
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+    nock('http://test:123').get('/path').reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      agent: customAgent,
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'GET',
+    }, (error) => {
+      const callOptions = http.request.getCall(0).args[0]
+      sandbox.restore()
+      customAgent.destroy()
+      assert.strictEqual(callOptions.agent, customAgent)
+      done(error)
+    })
+  })
+
+  it('selects a new default agent when callers reuse options with another protocol', (done) => {
+    const options = {
+      url: new URL('http://test:123'),
+      path: '/path',
+      method: 'GET',
+    }
+    nock('http://test:123').get('/path').reply(200, 'OK')
+
+    request(Buffer.from(''), options, (httpError) => {
+      if (httpError) return done(httpError)
+
+      assert.strictEqual(options.agent, undefined)
+      options.url = new URL('https://test:443')
+      nock('https://test:443').get('/path').reply(200, 'OK')
+
+      request(Buffer.from(''), options, (httpsError) => {
+        assert.strictEqual(options.agent, undefined)
+        done(httpsError)
+      })
+    })
+  })
+
   it('does not retry when retries are disabled', (done) => {
     maxAttempts = 5
     const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
@@ -746,6 +790,49 @@ describe('request', function () {
     })
   })
 
+  it('tracks concurrent payload sizes independently when options are shared', () => {
+    const requests = []
+
+    /**
+     * @returns {EventEmitter} Pending request
+     */
+    function createRequest () {
+      const pending = new EventEmitter()
+      pending.setTimeout = sinon.stub()
+      pending.write = sinon.stub()
+      pending.end = sinon.stub()
+      requests.push(pending)
+
+      return pending
+    }
+
+    const accountingRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const large = Buffer.alloc(63 * 1024 * 1024)
+    const small = Buffer.alloc(1024 * 1024)
+    const options = { method: 'POST', headers: {} }
+
+    accountingRequest(large, options, sinon.stub())
+    accountingRequest(small, options, sinon.stub())
+    requests[0].emit('close')
+    requests[1].emit('close')
+
+    accountingRequest(large, options, sinon.stub())
+
+    assert.strictEqual(accountingRequest.writable, true)
+    requests[2].emit('close')
+  })
+
   it('should drop requests when too much data is buffered', (done) => {
     const bufferSize = 8 * 1024 * 1024
     const buffer = Buffer.alloc(bufferSize).fill(69)
@@ -776,14 +863,15 @@ describe('request', function () {
             'Content-Type': 'application/octet-stream',
           },
         },
-        (err, res) => {
-          if (err) return done(err)
-
-          if (res) {
-            assert.strictEqual(res, 'OK')
-            okCount++
-          } else {
+        (error, res, statusCode, headers, dropped) => {
+          if (error) {
+            assert.strictEqual(error.code, 'ERR_DD_REQUEST_BUFFER_FULL')
+            assert.strictEqual(dropped, true)
             koCount++
+          } else {
+            assert.strictEqual(res, 'OK')
+            assert.strictEqual(dropped, undefined)
+            okCount++
           }
 
           if (okCount + koCount === 10) {

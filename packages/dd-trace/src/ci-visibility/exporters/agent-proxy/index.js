@@ -8,6 +8,8 @@ const request = require('../request')
 const { fetchAgentInfo } = require('../../../agent/info')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
+// Product-specific discovery: newest advertised version, skip v3 (citestcycle), gzip if >= v4.
+// Shared `evp_proxy` discovery is an explicit path allowlist and does not cover this contract.
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
 const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\/?/
 
@@ -52,7 +54,6 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
     }
 
     fetchAgentInfo(this._url, (err, agentInfo) => {
-      const initializationFinalFlush = this._initializationRequest?.finalFlush
       this._initializationRequest = undefined
       const initializationAborted = initializationController.signal.aborted
       const agentInfoError = err || (initializationAborted ? initializationController.signal.reason : undefined)
@@ -110,13 +111,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       this._resolveCanUseCiVisProtocol(isEvpCompatible)
       if (initializationAborted) {
         this.resetUncodedTraces()
-        this.resetDeferredTestSuiteSpans()
         return
-      }
-      if (isEvpCompatible) {
-        if (initializationFinalFlush) this.exportDeferredTestSuiteSpans()
-      } else {
-        this.resetDeferredTestSuiteSpans()
       }
       this.exportUncodedTraces()
       this.exportUncodedCoverages()

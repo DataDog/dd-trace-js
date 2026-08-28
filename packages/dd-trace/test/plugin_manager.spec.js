@@ -68,7 +68,7 @@ describe('Plugin Manager', () => {
       },
       seven: {},
       eight: class Eight extends FakePlugin {
-        static experimental = true
+        static optIn = true
         static id = 'eight'
       },
       graphql: class Graphql extends FakePlugin {
@@ -96,7 +96,7 @@ describe('Plugin Manager', () => {
 
     // Mirrors getValueFromEnvSources: an explicit env value wins, otherwise the registered
     // default is returned unless the caller passes skipDefault. registeredDefaults lets a test
-    // model a plugin whose default-enabled flag is `false` (e.g. an experimental plugin).
+    // model a plugin whose default-enabled flag is `false` (e.g. an opt-in plugin).
     registeredDefaults = {}
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
@@ -309,7 +309,7 @@ describe('Plugin Manager', () => {
       })
     })
 
-    describe('with an experimental plugin', () => {
+    describe('with an opt-in plugin', () => {
       it('should disable the plugin by default', () => {
         pm.configure(makeTracerConfig())
         loadChannel.publish({ name: 'eight' })

@@ -5,7 +5,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 class FsPlugin extends TracingPlugin {
   static id = 'fs'
   static operation = 'operation'
-  static experimental = true
+  static optIn = true
 
   bindStart (ctx) {
     if (!this.activeSpan) return { noop: true }

@@ -53,6 +53,81 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
   })
 
+  it('keeps retrying transient responses while the finalization deadline has capacity', () => {
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 30_000 }, done)
+    const error = Object.assign(new Error('unavailable'), { status: 503 })
+
+    pendingRequests[0].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[1].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[2].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[3].callback(null, 'ok', 200, {})
+
+    assert.strictEqual(pendingRequests.length, 4)
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('keeps the ordinary attempt cap when deadline retries are disabled', () => {
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 30_000, retryUntilDeadline: false }, done)
+    const error = Object.assign(new Error('unavailable'), { status: 503 })
+
+    pendingRequests[0].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[1].callback(error, null, 503, {})
+    clock.tick(6000)
+
+    assert.strictEqual(pendingRequests.length, 2)
+    sinon.assert.calledOnceWithExactly(done, error, null, 503, {})
+  })
+
+  for (const statusCode of [408, 429, 500, 599]) {
+    it(`retries a ${statusCode} response during a background flush`, () => {
+      const done = sinon.spy()
+      request('payload', {}, done)
+      const error = Object.assign(new Error('transient response'), { status: statusCode })
+
+      pendingRequests[0].callback(error, null, statusCode, {})
+      clock.tick(5999)
+      assert.strictEqual(pendingRequests.length, 1)
+      clock.tick(1)
+      assert.strictEqual(pendingRequests.length, 2)
+
+      pendingRequests[1].callback(null, 'ok', 200, {})
+      sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+    })
+  }
+
+  for (const statusCode of [409, 430, 499, 600]) {
+    it(`does not retry a ${statusCode} response`, () => {
+      const done = sinon.spy()
+      request('payload', {}, done)
+      const error = Object.assign(new Error('non-retriable response'), { status: statusCode })
+
+      pendingRequests[0].callback(error, null, statusCode, {})
+
+      assert.strictEqual(pendingRequests.length, 1)
+      sinon.assert.calledOnceWithExactly(done, error, null, statusCode, {})
+    })
+  }
+
+  it('keeps the ordinary attempt cap for background HTTP retries', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+    const error = Object.assign(new Error('unavailable'), { status: 503 })
+
+    pendingRequests[0].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[1].callback(error, null, 503, {})
+    clock.tick(6000)
+
+    assert.strictEqual(pendingRequests.length, 2)
+    sinon.assert.calledOnceWithExactly(done, error, null, 503, {})
+  })
+
   it('uses the remaining finalization budget for a late 5xx retry', () => {
     const done = sinon.spy()
     request('payload', { deadline: Date.now() + 1000, timeout: 2000 }, done)
@@ -107,6 +182,47 @@ describe('Test Optimization exporter request', () => {
 
     assert.strictEqual(pendingRequests.length, 1)
     sinon.assert.calledOnceWithExactly(done, error, null, 429, { 'x-ratelimit-reset': '5' })
+  })
+
+  it('waits for a rate-limit reset during a background flush', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+
+    const error = Object.assign(new Error('rate limited'), { status: 429 })
+    pendingRequests[0].callback(error, null, 429, { 'x-ratelimit-reset': '5' })
+    clock.tick(4999)
+    assert.strictEqual(pendingRequests.length, 1)
+    clock.tick(1)
+    assert.strictEqual(pendingRequests.length, 2)
+
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('does not exceed the rate-limit wait cap during a background flush', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+
+    const error = Object.assign(new Error('rate limited'), { status: 429 })
+    pendingRequests[0].callback(error, null, 429, { 'x-ratelimit-reset': '31' })
+
+    assert.strictEqual(pendingRequests.length, 1)
+    sinon.assert.calledOnceWithExactly(done, error, null, 429, { 'x-ratelimit-reset': '31' })
+  })
+
+  it('uses a rate-limit reset over the background cap when the finalization deadline allows it', () => {
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 45_000 }, done)
+
+    const error = Object.assign(new Error('rate limited'), { status: 429 })
+    pendingRequests[0].callback(error, null, 429, { 'x-ratelimit-reset': '31' })
+    clock.tick(30_999)
+    assert.strictEqual(pendingRequests.length, 1)
+    clock.tick(1)
+    assert.strictEqual(pendingRequests.length, 2)
+
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
   })
 
   it('preserves ordinary background retry scheduling without a deadline', () => {

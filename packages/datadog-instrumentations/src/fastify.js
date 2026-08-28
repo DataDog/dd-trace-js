@@ -146,6 +146,7 @@ function wrapHookDone (ctx, request, reply, req, name, doneCallback) {
     ctx.error = error
     publishError(ctx)
 
+    // eslint-disable-next-line no-restricted-syntax -- arbitrary cookie names; publishing {} sets a WAF address
     const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
 
     if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
@@ -193,6 +194,7 @@ function preHandler (request, reply, done) {
   const res = getRes(reply)
   const ctx = { req, res }
 
+  // eslint-disable-next-line no-restricted-syntax -- arbitrary body keys; publishing {} sets a WAF address
   const hasBody = request.body && Object.keys(request.body).length > 0
 
   // For multipart/form-data, the body is not available until after preValidation hook

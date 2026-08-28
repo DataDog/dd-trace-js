@@ -25,6 +25,7 @@ const {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
   getLineCoverageBitmap,
+  getTestCoverageLinesData,
   getTestCoverageLinesPercentage,
   applySkippedCoverageToCoverage,
   mergeCoverage,
@@ -1517,6 +1518,24 @@ describe('coverage utils', () => {
       assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 75)
     })
 
+    it('calculates coverage and executable-line files together', () => {
+      const partialCoverage = getPartialCoverage()
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.deepStrictEqual(getTestCoverageLinesData(partialCoverage, skippedCoverage, undefined, true), {
+        percentage: 75,
+        executableFiles: [{
+          filename: 'file.js',
+          bitmap: Buffer.from('Hg==', 'base64'),
+        }],
+      })
+    })
+
     it('uses rootDir to match skipped coverage to absolute coverage paths', () => {
       const rootDir = path.join(path.sep, 'repo')
       const coverage = getPartialCoverage(path.join(rootDir, 'file.js'))
@@ -1528,6 +1547,25 @@ describe('coverage utils', () => {
       }
 
       assert.strictEqual(getTestCoverageLinesPercentage(coverage, skippedCoverage, rootDir), 75)
+    })
+
+    it('merges coverage paths that normalize to the same file', () => {
+      const rootDir = path.join(path.sep, 'repo')
+      const filename = path.join(rootDir, 'file.js')
+      const alias = `${path.join(rootDir, 'sub')}${path.sep}..${path.sep}file.js`
+      const aliasedCoverage = getPartialCoverage(alias)
+      aliasedCoverage[alias].s[0] = 0
+
+      assert.deepStrictEqual(getTestCoverageLinesData({
+        ...getPartialCoverage(filename),
+        ...aliasedCoverage,
+      }, undefined, rootDir, true), {
+        percentage: 25,
+        executableFiles: [{
+          filename: 'file.js',
+          bitmap: Buffer.from('Hg==', 'base64'),
+        }],
+      })
     })
 
     it('ignores skipped coverage for files outside the executable coverage map', () => {
@@ -1819,6 +1857,7 @@ index 1234567..89abcde 100644
     assert.strictEqual(getModifiedFilesFromDiff(''), null)
     assert.strictEqual(getModifiedFilesFromDiff(null), null)
     assert.strictEqual(getModifiedFilesFromDiff(undefined), null)
+    assert.strictEqual(getModifiedFilesFromDiff('not a diff\n@@ -1 +1 @@\n'), null)
   })
 
   it('should handle multiple line changes in a single hunk', () => {
@@ -1964,6 +2003,21 @@ describe('getPullRequestBaseBranch', () => {
       sinon.assert.calledWith(getMergeBaseStub, 'trunk', 'feature-branch')
       sinon.assert.calledWith(getCountsStub, 'master', 'feature-branch')
       sinon.assert.calledWith(getCountsStub, 'trunk', 'feature-branch')
+    })
+
+    it('returns null when no candidate branch has a merge base', () => {
+      const { getPullRequestBaseBranch } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          getGitRemoteName: () => 'origin',
+          getSourceBranch: () => 'feature-branch',
+          getMergeBase: sinon.stub().returns(undefined),
+          checkAndFetchBranch: sinon.stub(),
+          getLocalBranches: sinon.stub().returns(['trunk', 'master', 'feature-branch']),
+          getCounts: sinon.stub().returns({ ahead: 0, behind: 0 }),
+        },
+      })
+
+      assert.strictEqual(getPullRequestBaseBranch(), null)
     })
   })
 })

@@ -218,9 +218,10 @@ describe('Plugin', () => {
             })
           })
 
-          if (semver.intersects(version, '>=5.1')) {
+          {
             // initial promise support
-            it('should do automatic instrumentation when using promises', done => {
+            const promiseTest = semver.intersects(version, '>=5.1') ? it : it.skip
+            promiseTest('should do automatic instrumentation when using promises', done => {
               agent.assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
                 assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
@@ -343,9 +344,10 @@ describe('Plugin', () => {
             rawExpectedSchema.outbound
           )
 
-          if (implementation !== 'pg.native') {
+          {
             // pg-cursor is not supported on pg.native, pg-query-stream uses pg-cursor so it is also unsupported
-            describe('streaming capabilities', () => {
+            const streamingSuite = implementation !== 'pg.native' ? describe : describe.skip
+            streamingSuite('streaming capabilities', () => {
               withVersions('pg', 'pg-cursor', pgCursorVersion => {
                 let Cursor
 
@@ -1290,27 +1292,30 @@ describe('Plugin', () => {
           clientDBM.connect(err => done(err))
         })
 
-        it('DBM propagation should handle special characters', done => {
+        it('DBM propagation should handle special characters', () => {
           const queryQueueName = Object.hasOwn(clientDBM, '_queryQueue') ? '_queryQueue' : 'queryQueue'
 
-          clientDBM.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
-            if (err) return done(err)
-
-            clientDBM.end((err) => {
-              if (err) return done(err)
+          return new Promise((resolve, reject) => {
+            let assertionError
+            clientDBM.query('SELECT $1::text as message', ['Hello world!'], (error) => {
+              clientDBM.end((endError) => {
+                if (error) return reject(error)
+                if (endError) return reject(endError)
+                if (assertionError) return reject(assertionError)
+                resolve()
+              })
             })
-          })
 
-          if (clientDBM[queryQueueName][0]) {
             try {
-              assert.strictEqual(clientDBM[queryQueueName][0].text,
+              const query = clientDBM[queryQueueName][0]
+              assert.ok(query)
+              assert.strictEqual(query.text,
                 '/*dddb=\'postgres\',dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
                 `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ SELECT $1::text as message`)
-              done()
-            } catch (e) {
-              done(e)
+            } catch (error) {
+              assertionError = error
             }
-          }
+          })
         })
       })
 

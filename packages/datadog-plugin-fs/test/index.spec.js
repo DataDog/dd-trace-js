@@ -25,8 +25,8 @@ describe('Plugin', () => {
       assert.strictEqual(plugins['node:fs'], FsPlugin)
     })
 
-    it('marks the fs plugin experimental so it stays disabled by default', () => {
-      assert.strictEqual(FsPlugin.experimental, true)
+    it('marks the fs plugin opt-in so it stays disabled by default', () => {
+      assert.strictEqual(FsPlugin.optIn, true)
     })
   })
 

@@ -8,17 +8,14 @@ class BunyanPlugin extends LogPlugin {
 
   constructor (...args) {
     super(...args)
-    this.addSub('apm:bunyan:log', (arg) => this.handleLog(arg))
+    this.addSub(`apm:${this.constructor.id}:log`, (arg) => this.handleLog(arg))
   }
 
   /**
-   * Inject `dd` directly on the record bunyan hands us. bunyan builds the
-   * record inside `mkRecord` via `objCopy(log.fields)` and then copies the
-   * caller's fields onto the result, so the `rec` object that flows
-   * through `_emit` is always bunyan-owned, has `Object.prototype` for its
-   * prototype, and is never the caller's input directly. Mutating it adds
-   * `dd` for every consumer (JSON streams via `JSON.stringify(rec)`, raw
-   * streams via the record reference) without paying for a Proxy view.
+   * Inject `dd` directly on the record Bunyan implementations hand us. They build the record
+   * inside `mkRecord` from a copy of the logger and caller fields, so the `rec` object that flows
+   * through `_emit` is always logger-owned. Mutating it adds `dd` for every consumer without
+   * paying for a Proxy view.
    *
    * @param {{ message: object }} arg
    */

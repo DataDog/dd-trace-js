@@ -1,0 +1,25 @@
+'use strict'
+
+const COMPLETED_PROBE_INDEX = 0
+const MATCHED_CAPTURE_KIND_INDEX = 1
+const CAPTURE_KIND_INDEX = 2
+const HANDLED_PROBE_INDEX = 3
+const PROBE_COUNT_LENGTH = 4
+
+const CAPTURE_KINDS = {
+  none: 1,
+  default: 2,
+  minimal: 3,
+}
+
+const CAPTURE_KIND_NAMES = [undefined, 'none', 'default', 'minimal']
+
+module.exports = {
+  CAPTURE_KIND_INDEX,
+  CAPTURE_KIND_NAMES,
+  CAPTURE_KINDS,
+  COMPLETED_PROBE_INDEX,
+  HANDLED_PROBE_INDEX,
+  MATCHED_CAPTURE_KIND_INDEX,
+  PROBE_COUNT_LENGTH,
+}

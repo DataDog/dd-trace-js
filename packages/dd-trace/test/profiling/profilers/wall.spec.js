@@ -102,7 +102,7 @@ describe('profilers/native/wall', () => {
         sourceMapper: undefined,
         withContexts: false,
         lineNumbers: false,
-        columnNumbers: 'pack',
+        columnNumbers: 'emit',
         workaroundV8Bug: false,
         collectCpuTime: false,
         useCPED: false,
@@ -122,7 +122,7 @@ describe('profilers/native/wall', () => {
         sourceMapper: undefined,
         withContexts: false,
         lineNumbers: false,
-        columnNumbers: 'pack',
+        columnNumbers: 'emit',
         workaroundV8Bug: false,
         collectCpuTime: false,
         useCPED: false,
@@ -252,7 +252,7 @@ describe('profilers/native/wall', () => {
         sourceMapper: mapper,
         withContexts: false,
         lineNumbers: false,
-        columnNumbers: 'pack',
+        columnNumbers: 'emit',
         workaroundV8Bug: false,
         collectCpuTime: false,
         useCPED: false,
@@ -804,15 +804,19 @@ describe('profilers/native/wall', () => {
     function makeChildSpan (webSpanId, webSpan) {
       const tags = { 'span.type': 'router' }
       const spanId = {}
+      // Shares the parent's _trace, as spans of one trace chunk do: it is the
+      // object holding the started-spans list the parent walk reads, and what the
+      // shared cache scopes its per-trace bookkeeping to.
+      const trace = webSpan.context()._trace
       const ctx = {
         _tags: tags,
         _spanId: spanId,
         _parentId: webSpanId,
-        _trace: { started: [webSpan] },
+        _trace: trace,
         getTags () { return this._tags },
       }
       const span = { context: () => ctx }
-      ctx._trace.started.push(span)
+      trace.started.push(span)
       return { span, tags }
     }
 
@@ -903,6 +907,63 @@ describe('profilers/native/wall', () => {
       profilerState[0] = 2
       enterCh.publish()
       assert.strictEqual(sampleContext.endpoint, 'GET /x')
+
+      profiler.stop()
+    })
+
+    it('should refresh a child snapshot taken before its parent became a web span (ACF path)', () => {
+      // The reverse order of the test below: the child is activated first, so its
+      // snapshot records "no web-server ancestor". It must be refreshed the moment
+      // the parent is promoted, without waiting for the child to be reactivated —
+      // a child running uninterrupted synchronous work is never reactivated, and
+      // that is exactly the stretch samples are taken over.
+      const { span: webSpan, tags: webSpanTags, spanId: webSpanId } = makeWebSpan()
+      const { span: childSpan } = makeChildSpan(webSpanId, webSpan)
+
+      const profiler = makeWall(WallProfiler, {
+        endpointCollectionEnabled: true,
+        codeHotspotsEnabled: true,
+        asyncContextFrameEnabled: true,
+      })
+      profiler.start()
+
+      currentStore = { span: childSpan }
+      enterCh.publish()
+      const childCtx = localPprof.time.setContext.lastCall.args[0]
+      assert.strictEqual(childCtx.webTags, undefined)
+
+      webSpanTags['span.type'] = 'web'
+      tagsUpdateCh.publish(webSpan)
+      assert.strictEqual(childCtx.webTags, webSpanTags)
+
+      profiler.stop()
+    })
+
+    it('should repoint a child snapshot at a nearer web span promoted later (ACF path)', () => {
+      // Nested request handling: the child first resolves to the outer request,
+      // then an intermediate span becomes a web-server span of its own. From then
+      // on the child's samples belong to the inner request's endpoint.
+      const { span: outerSpan, tags: outerTags, spanId: outerSpanId } = makeWebSpan()
+      Object.assign(outerTags, { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/outer' })
+      const { span: innerSpan, tags: innerTags } = makeChildSpan(outerSpanId, outerSpan)
+      const innerSpanId = innerSpan.context()._spanId
+      const { span: childSpan } = makeChildSpan(innerSpanId, innerSpan)
+
+      const profiler = makeWall(WallProfiler, {
+        endpointCollectionEnabled: true,
+        codeHotspotsEnabled: true,
+        asyncContextFrameEnabled: true,
+      })
+      profiler.start()
+
+      currentStore = { span: childSpan }
+      enterCh.publish()
+      const childCtx = localPprof.time.setContext.lastCall.args[0]
+      assert.strictEqual(childCtx.webTags, outerTags)
+
+      Object.assign(innerTags, { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/inner' })
+      tagsUpdateCh.publish(innerSpan)
+      assert.strictEqual(childCtx.webTags, innerTags)
 
       profiler.stop()
     })
