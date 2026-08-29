@@ -19,18 +19,33 @@ function randString (length) {
   }).join('')
 }
 
+/**
+ * @param {string[]} keys
+ * @returns {Record<string, number>}
+ */
+function metaFromKeys (keys) {
+  const meta = Object.create(null)
+  for (const key of keys) {
+    meta[key] = 1
+  }
+  return meta
+}
+
 describe('encode', () => {
   let encoder
   let writer
   let logger
   let data
+  let encodePayload
+  let cacheStringPayloads
+  let cacheLowReusePayload
 
   describe('without configuration', () => {
     beforeEach(() => {
       logger = {
         debug: sinon.stub(),
       }
-      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false })
+      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false, flushInterval: 0 })
       const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
         '../log': logger,
         '../config': getConfig,
@@ -56,6 +71,34 @@ describe('encode', () => {
         duration: 456,
         links: [],
       }]
+      encodePayload = () => {
+        encoder.encode(data)
+        return encoder.makePayload()
+      }
+      /**
+       * @param {string[]} values
+       * @param {number} payloadCount
+       */
+      cacheStringPayloads = (values, payloadCount) => {
+        data[0].meta = metaFromKeys(values)
+        data[0].metrics = Object.create(null)
+        for (let payload = 0; payload < payloadCount; payload++) {
+          encodePayload()
+        }
+      }
+      /**
+       * @param {string[]} retained
+       * @param {string} missPrefix
+       */
+      cacheLowReusePayload = (retained, missPrefix) => {
+        const keys = retained.slice()
+        for (let miss = 0; miss < 32; miss++) {
+          keys.push(`${missPrefix}-${miss}`)
+        }
+        data[0].meta = metaFromKeys(keys)
+        data[0].metrics = Object.create(null)
+        encodePayload()
+      }
     })
 
     it('should encode to msgpack', () => {
@@ -167,7 +210,9 @@ describe('encode', () => {
     })
 
     it('should reuse encoded short strings across payloads without changing the wire', () => {
-      const value = 'stable-across-payloads'
+      const identity = 'stable-resource-across-payloads'
+      const value = 'stable-value-across-payloads'
+      data[0].resource = identity
       data[0].meta = { stable: value }
       const write = sinon.spy(encoder._stringBytes, 'write')
 
@@ -180,22 +225,45 @@ describe('encode', () => {
 
       assert.deepStrictEqual(second, first)
       assert.deepStrictEqual(third, first)
-      assert.strictEqual(write.withArgs(value).callCount, 2)
+      assert.strictEqual(write.withArgs(identity).callCount, 2)
+      assert.strictEqual(write.withArgs(value).callCount, 3)
+    })
+
+    it('should not retain encoded strings across buffered payloads', () => {
+      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false, flushInterval: 2000 })
+      const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
+        '../log': logger,
+        '../config': getConfig,
+      })
+      const bufferedEncoder = new AgentEncoder(writer)
+      const value = 'stable-resource-across-buffered-payloads'
+      data[0].resource = value
+      const write = sinon.spy(bufferedEncoder._stringBytes, 'write')
+
+      bufferedEncoder.encode(data)
+      const first = bufferedEncoder.makePayload()
+      bufferedEncoder.encode(data)
+      const second = bufferedEncoder.makePayload()
+      bufferedEncoder.encode(data)
+      const third = bufferedEncoder.makePayload()
+
+      assert.deepStrictEqual(second, first)
+      assert.deepStrictEqual(third, first)
+      assert.strictEqual(write.withArgs(value).callCount, 3)
     })
 
     it('should only promote strings repeated in consecutive payloads', () => {
       const value = 'non-consecutive-value'
       const write = sinon.spy(encoder._stringBytes, 'write')
 
-      encoder._cacheString(value)
-      encoder.reset()
-      encoder._cacheString('intervening-value')
-      encoder.reset()
-      encoder._cacheString(value)
-      encoder.reset()
-      encoder._cacheString(value)
-      encoder.reset()
-      encoder._cacheString(value)
+      data[0].resource = value
+      encodePayload()
+      data[0].resource = 'intervening-value'
+      encodePayload()
+      data[0].resource = value
+      encodePayload()
+      encodePayload()
+      encodePayload()
 
       assert.strictEqual(write.withArgs(value).callCount, 3)
     })
@@ -206,9 +274,8 @@ describe('encode', () => {
       const write = sinon.spy(encoder._stringBytes, 'write')
 
       for (let payload = 0; payload < 3; payload++) {
-        encoder._cacheString(accepted)
-        encoder._cacheString(rejected)
-        encoder.reset()
+        data[0].meta = metaFromKeys([accepted, rejected])
+        encodePayload()
       }
 
       assert.strictEqual(write.withArgs(accepted).callCount, 2)
@@ -217,58 +284,186 @@ describe('encode', () => {
 
     it('should retain at most 256 encoded strings across payloads', () => {
       const accepted = []
-      for (let i = 0; i < 255; i++) {
+      for (let i = 0; i < 252; i++) {
         accepted.push(`retained-${i}`)
       }
-      const rejected = 'retained-256'
+      const rejected = 'retained-253'
       const write = sinon.spy(encoder._stringBytes, 'write')
 
-      for (const value of accepted) {
-        encoder._cacheString(value)
-      }
-      encoder._cacheString(rejected)
-      encoder.reset()
-      for (const value of accepted) {
-        encoder._cacheString(value)
-      }
-      encoder._cacheString(rejected)
-      encoder.reset()
-      encoder._cacheString(accepted[254])
-      encoder._cacheString(rejected)
+      data[0].meta = metaFromKeys([...accepted, rejected])
+      encodePayload()
+      encodePayload()
+      data[0].meta = metaFromKeys([accepted[251], rejected])
+      encodePayload()
 
-      assert.strictEqual(write.withArgs(accepted[254]).callCount, 2)
+      assert.strictEqual(write.withArgs(accepted[251]).callCount, 2)
       assert.strictEqual(write.withArgs(rejected).callCount, 3)
     })
 
     it('should track at most 512 cross-payload candidates', () => {
       const candidates = []
-      for (let i = 0; i < 513; i++) {
+      for (let i = 0; i < 509; i++) {
         candidates.push(`candidate-${i}`)
       }
       const write = sinon.spy(encoder._stringBytes, 'write')
 
-      encoder.reset()
-      for (const value of candidates) {
-        encoder._cacheString(value)
-      }
-      encoder.reset()
-      encoder._cacheString(candidates[511])
-      encoder._cacheString(candidates[512])
-      encoder.reset()
-      encoder._cacheString(candidates[511])
-      encoder._cacheString(candidates[512])
+      data[0].meta = metaFromKeys(candidates)
+      encodePayload()
+      data[0].meta = metaFromKeys([candidates[507], candidates[508]])
+      encodePayload()
+      encodePayload()
 
-      assert.strictEqual(write.withArgs(candidates[511]).callCount, 2)
-      assert.strictEqual(write.withArgs(candidates[512]).callCount, 3)
+      assert.strictEqual(write.withArgs(candidates[507]).callCount, 2)
+      assert.strictEqual(write.withArgs(candidates[508]).callCount, 3)
+    })
+
+    it('should stop learning cross-payload strings after 8 payloads', () => {
+      const accepted = 'learned-in-payload-8'
+      const rejected = 'first-seen-in-payload-8'
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      for (let payload = 1; payload < 7; payload++) {
+        data[0].resource = `filler-${payload}`
+        encodePayload()
+      }
+      data[0].resource = accepted
+      encodePayload()
+      data[0].name = rejected
+      encodePayload()
+      encodePayload()
+      encodePayload()
+
+      assert.strictEqual(write.withArgs(accepted).callCount, 2)
+      assert.strictEqual(write.withArgs(rejected).callCount, 3)
+    })
+
+    it('should relearn after the first payload with 32 misses and fewer than 64 hits', () => {
+      const retained = []
+      for (let index = 0; index < 59; index++) {
+        retained.push(`insufficient-retained-${index}`)
+      }
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      cacheStringPayloads(retained, 10)
+
+      const keys = retained.slice()
+      for (let miss = 0; miss < 31; miss++) {
+        keys.push(`first-miss-${miss}`)
+      }
+      data[0].meta = metaFromKeys(keys)
+      encodePayload()
+
+      cacheLowReusePayload(retained, 'second-miss')
+      data[0].meta = metaFromKeys([retained[58]])
+      encodePayload()
+
+      assert.strictEqual(write.withArgs(retained[58]).callCount, 3)
+    })
+
+    it('should disable cross-payload caching after two low-reuse payloads', () => {
+      const retained = []
+      for (let index = 0; index < 59; index++) {
+        retained.push(`disabled-retained-${index}`)
+      }
+      const value = 'stable-after-two-low-reuse-payloads'
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      cacheStringPayloads(retained, 8)
+      cacheLowReusePayload(retained, 'first-low-reuse-miss')
+      cacheStringPayloads(retained, 8)
+      cacheLowReusePayload(retained, 'second-low-reuse-miss')
+
+      data[0].meta = metaFromKeys([value])
+      encodePayload()
+      encodePayload()
+      encodePayload()
+
+      assert.strictEqual(write.withArgs(value).callCount, 3)
+    })
+
+    it('should disable cross-payload caching when no strings repeat during learning', () => {
+      const value = 'stable-after-fully-unique-learning'
+      const write = sinon.spy(encoder._stringBytes, 'write')
+      let sequence = 0
+      const encodeUniquePayload = () => {
+        const keys = []
+        for (let key = 0; key < 32; key++) {
+          keys.push(`unique-key-${sequence}-${key}`)
+        }
+        data[0].type = `unique-type-${sequence}`
+        data[0].name = `unique-name-${sequence}`
+        data[0].resource = `unique-resource-${sequence}`
+        data[0].service = `unique-service-${sequence}`
+        data[0].meta = metaFromKeys(keys)
+        data[0].metrics = Object.create(null)
+        sequence++
+        encodePayload()
+      }
+
+      for (let payload = 0; payload < 9; payload++) {
+        encodeUniquePayload()
+      }
+      for (let payload = 0; payload < 8; payload++) {
+        encodeUniquePayload()
+      }
+
+      data[0].resource = value
+      encodePayload()
+      encodePayload()
+      encodePayload()
+
+      assert.strictEqual(write.withArgs(value).callCount, 3)
+    })
+
+    it('should keep cross-payload caching after 32 misses with 64 hits', () => {
+      const retained = []
+      for (let index = 0; index < 60; index++) {
+        retained.push(`useful-retained-${index}`)
+      }
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      cacheStringPayloads(retained, 8)
+
+      cacheLowReusePayload(retained, 'useful-miss')
+      data[0].meta = metaFromKeys([retained[59]])
+      encodePayload()
+
+      assert.strictEqual(write.withArgs(retained[59]).callCount, 2)
+    })
+
+    it('should clear a low-reuse strike after a useful payload', () => {
+      const retained = []
+      for (let index = 0; index < 60; index++) {
+        retained.push(`recovered-retained-${index}`)
+      }
+      const value = 'stable-after-low-reuse-recovery'
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      cacheStringPayloads(retained, 8)
+      cacheLowReusePayload(retained.slice(0, 59), 'first-recovery-miss')
+      cacheStringPayloads(retained, 8)
+      const keys = retained.slice()
+      for (let miss = 0; miss < 31; miss++) {
+        keys.push(`useful-recovery-miss-${miss}`)
+      }
+      data[0].meta = metaFromKeys(keys)
+      encodePayload()
+      cacheLowReusePayload(retained.slice(0, 59), 'second-recovery-miss')
+
+      data[0].meta = metaFromKeys([value])
+      encodePayload()
+      encodePayload()
+      encodePayload()
+
+      assert.strictEqual(write.withArgs(value).callCount, 2)
     })
 
     it('should cache special object keys safely across payloads', () => {
       const write = sinon.spy(encoder._stringBytes, 'write')
 
       for (let payload = 0; payload < 3; payload++) {
-        encoder._cacheString('__proto__')
-        encoder._cacheString('constructor')
-        encoder.reset()
+        data[0].meta = metaFromKeys(['__proto__', 'constructor'])
+        encodePayload()
       }
 
       assert.strictEqual(write.withArgs('__proto__').callCount, 2)
