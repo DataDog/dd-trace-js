@@ -103,7 +103,7 @@ async function handleRumNavigation (browser, onDone) {
 
     let rumState
     try {
-      rumState = await browser.execute(detectRum)
+      rumState = await browser.execute(detectRum, RUM_TEST_EXECUTION_ID_COOKIE_NAME)
     } catch (error) {
       log.error('WebdriverIO RUM detection error', error)
       return
@@ -148,12 +148,12 @@ async function handleRumNavigation (browser, onDone) {
 }
 
 /**
- * Stops RUM for one browser, waits for its events to flush, and removes the correlation cookie.
+ * Stops RUM in the current window, waits for its events to flush, and removes the correlation cookie.
  *
  * @param {object} browser
  * @returns {Promise<void>}
  */
-async function cleanupRumBrowser (browser) {
+async function cleanupRumWindow (browser) {
   let isRumActive
   try {
     isRumActive = await browser.execute(stopRumSession)
@@ -168,6 +168,53 @@ async function cleanupRumBrowser (browser) {
     await browser.deleteCookies(RUM_TEST_EXECUTION_ID_COOKIE_NAME)
   } catch (error) {
     log.error('WebdriverIO RUM correlation cookie cleanup error', error)
+  }
+}
+
+/**
+ * Cleans up every open window for one browser and restores the original window.
+ *
+ * @param {object} browser
+ * @returns {Promise<void>}
+ */
+async function cleanupRumBrowser (browser) {
+  if (typeof browser.getWindowHandle !== 'function' ||
+      typeof browser.getWindowHandles !== 'function' ||
+      typeof browser.switchToWindow !== 'function') {
+    await cleanupRumWindow(browser)
+    return
+  }
+
+  let currentWindowHandle
+  let windowHandles
+  try {
+    currentWindowHandle = await browser.getWindowHandle()
+    windowHandles = await browser.getWindowHandles()
+  } catch (error) {
+    log.error('WebdriverIO RUM window discovery error', error)
+    await cleanupRumWindow(browser)
+    return
+  }
+
+  // Window commands share the browser's current context and must run sequentially.
+  for (const windowHandle of windowHandles) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await browser.switchToWindow(windowHandle)
+    } catch (error) {
+      log.error('WebdriverIO RUM window switch error', error)
+      continue
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await cleanupRumWindow(browser)
+  }
+
+  if (windowHandles.length > 1 && windowHandles.includes(currentWindowHandle)) {
+    try {
+      await browser.switchToWindow(currentWindowHandle)
+    } catch (error) {
+      log.error('WebdriverIO RUM window restore error', error)
+    }
   }
 }
 
@@ -207,7 +254,9 @@ function waitForRumNavigation (context) {
  * @returns {void}
  */
 function waitForRumCleanup (context) {
-  if (context.arguments?.[1] !== 'Test') return
+  const type = context.arguments?.[1]
+  const hookName = context.arguments?.[7]
+  if (type !== 'Test' && (type !== 'Hook' || hookName !== 'afterEach')) return
 
   const cleanupPromise = cleanupRumBrowsers()
   if (!cleanupPromise) return

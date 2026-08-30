@@ -93,6 +93,10 @@ function startWebDriverServer () {
         }
       } else if (request.method === 'GET' && request.url === '/status') {
         value = { ready: true, message: '' }
+      } else if (request.method === 'GET' && request.url?.endsWith('/window')) {
+        value = 'window-a'
+      } else if (request.method === 'GET' && request.url?.endsWith('/window/handles')) {
+        value = ['window-a']
       } else if (request.method === 'POST' && request.url?.endsWith('/execute/sync')) {
         value = body.script.includes('getInternalContext')
           ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
@@ -423,11 +427,14 @@ for (const version of versions) {
             assert.strictEqual(test.meta[TEST_BROWSER_VERSION], 'test')
 
             const cookieRequests = requests.filter(({ url }) => url?.includes('/cookie'))
-            const setCookieRequest = cookieRequests.find(({ method }) => method === 'POST')
-            assert.strictEqual(setCookieRequest.body.cookie.value, test.trace_id.toString(10))
+            const setCookieRequests = cookieRequests.filter(({ method }) => method === 'POST')
+            assert.deepStrictEqual(
+              setCookieRequests.map(({ body }) => body.cookie.value),
+              [test.trace_id.toString(10), test.trace_id.toString(10)]
+            )
             assert.deepStrictEqual(
               cookieRequests.map(({ method }) => method),
-              ['POST', 'DELETE']
+              ['POST', 'DELETE', 'POST', 'DELETE']
             )
           })
         })

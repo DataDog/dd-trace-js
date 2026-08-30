@@ -297,7 +297,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('correlates URL navigations and cleans RUM after user hooks', async () => {
+  it('cleans RUM after test and afterEach hook navigations', async () => {
     const clock = sinon.useFakeTimers()
     require('../src/webdriverio')
 
@@ -320,7 +320,13 @@ describe('webdriverio instrumentation', () => {
           isRumInstrumented: true,
           rumSamplingRate: 100,
         })
-        .onSecondCall().resolves(true),
+        .onSecondCall().resolves(true)
+        .onThirdCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onCall(3).resolves(true),
       setCookies: sinon.stub().callsFake((cookie) => {
         calls.push(`set:${cookie.value}`)
         return Promise.resolve()
@@ -339,6 +345,7 @@ describe('webdriverio instrumentation', () => {
       await new Promise(navigationContext.resolveCallback)
 
       assert.strictEqual(browser.execute.callCount, 1)
+      assert.strictEqual(browser.execute.firstCall.args[1], RUM_TEST_EXECUTION_ID_COOKIE_NAME)
       assert.deepStrictEqual(calls, [
         'set:1234',
       ])
@@ -356,9 +363,131 @@ describe('webdriverio instrumentation', () => {
         `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
       ])
       assert.strictEqual(browser.execute.callCount, 2)
+
+      const beforeEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'beforeEach'],
+      }
+      testFunctionCh.asyncEnd.publish(beforeEachContext)
+      assert.strictEqual(beforeEachContext.resolveCallback, undefined)
+
+      const afterEachNavigationContext = { self: browser }
+      urlCh.asyncEnd.publish(afterEachNavigationContext)
+      await new Promise(afterEachNavigationContext.resolveCallback)
+      calls.push('user-after-each')
+
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      const afterEachCleanupPromise = new Promise(afterEachContext.resolveCallback)
+      await clock.tickAsync(500)
+      await afterEachCleanupPromise
+
+      assert.deepStrictEqual(calls, [
+        'set:1234',
+        'user-after-test',
+        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
+        'set:1234',
+        'user-after-each',
+        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
+      ])
+      assert.strictEqual(browser.execute.callCount, 4)
     } finally {
       correlationCh.unsubscribe(correlate)
       clock.restore()
+    }
+  })
+
+  it('cleans RUM in every open browser window and restores the original window', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const calls = []
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete')
+        return Promise.resolve()
+      }),
+      execute: sinon.stub()
+        .onFirstCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onSecondCall().resolves(false)
+        .onThirdCall().resolves(false),
+      getWindowHandle: sinon.stub().resolves('window-a'),
+      getWindowHandles: sinon.stub().resolves(['window-a', 'window-b']),
+      setCookies: sinon.stub().resolves(),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        calls.push(`switch:${windowHandle}`)
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      context.testExecutionId = '1234'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await new Promise(navigationContext.resolveCallback)
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      const cleanupPromise = new Promise(testContext.resolveCallback)
+      await cleanupPromise
+
+      assert.deepStrictEqual(calls, [
+        'switch:window-a',
+        'delete',
+        'switch:window-b',
+        'delete',
+        'switch:window-a',
+      ])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('removes the RUM correlation cookie when the page is unloaded', () => {
+    const originalDocument = global.document
+    const originalWindow = global.window
+    let pageHide
+    global.document = { cookie: '' }
+    global.window = {
+      DD_RUM: {
+        getInitConfiguration: () => ({ sessionSampleRate: 100 }),
+        getInternalContext: () => ({}),
+      },
+      addEventListener: (eventName, listener, options) => {
+        assert.strictEqual(eventName, 'pagehide')
+        assert.deepStrictEqual(options, { once: true })
+        pageHide = listener
+      },
+    }
+
+    try {
+      const { detectRum } = require('../src/rum-browser-scripts')
+      const rumState = detectRum(RUM_TEST_EXECUTION_ID_COOKIE_NAME)
+
+      assert.deepStrictEqual(rumState, {
+        isRumActive: true,
+        isRumInstrumented: true,
+        rumSamplingRate: 100,
+      })
+      pageHide()
+      assert.strictEqual(
+        global.document.cookie,
+        `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=; Max-Age=0; path=/`
+      )
+    } finally {
+      global.document = originalDocument
+      global.window = originalWindow
     }
   })
 
