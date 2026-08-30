@@ -76,7 +76,7 @@ versions.forEach((version) => {
 
   // TODO: Remove this once we drop suppport for v5
   const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
-  const contextOldVersions = satisfies(version, '<1.38.0') ? context : context.skip
+  const contextOldVersions = version !== 'latest' && satisfies(version, '<1.38.0') ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
