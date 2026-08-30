@@ -79,7 +79,7 @@ if (loadCh.hasSubscribers) {
 const coordinatorStates = new WeakMap()
 const localRunnerVersions = new WeakMap()
 const activeRumBrowsers = new Set()
-const rumBrowserOriginUrls = new WeakMap()
+const rumBrowserPreloadScripts = new WeakMap()
 
 /** @typedef {{done: boolean, value?: unknown}} RumGeneratorStep */
 /**
@@ -99,16 +99,48 @@ addHook({
 })
 
 /**
- * Returns the cookie origin for a browser URL.
+ * Sets the RUM correlation cookie before page scripts run after a BiDi navigation.
  *
- * @param {string} url
- * @returns {string|undefined}
+ * @param {string} cookieName
+ * @param {string} testExecutionId
+ * @returns {void}
  */
-function getRumOrigin (url) {
+function setRumCorrelationCookie (cookieName, testExecutionId) {
+  // eslint-disable-next-line unicorn/no-document-cookie -- Page preload runs before WebDriver commands exist.
+  globalThis.document.cookie = `${cookieName}=${testExecutionId}; path=/`
+}
+
+/**
+ * Installs RUM correlation on every subsequent document in the current BiDi browsing context.
+ *
+ * @param {object} browser
+ * @param {string} testExecutionId
+ * @yields {unknown} Browser command result.
+ * @returns {RumGenerator}
+ */
+function * installRumPreloadScript (browser, testExecutionId) {
+  if (!browser.isBidi ||
+      typeof browser.addInitScript !== 'function' ||
+      typeof browser.getWindowHandle !== 'function') return
+
   try {
-    const origin = new URL(url).origin
-    if (origin !== 'null') return origin
-  } catch {}
+    const windowHandle = yield browser.getWindowHandle()
+    let preloadScripts = rumBrowserPreloadScripts.get(browser)
+    if (!preloadScripts) {
+      preloadScripts = new Map()
+      rumBrowserPreloadScripts.set(browser, preloadScripts)
+    }
+    if (preloadScripts.has(windowHandle)) return
+
+    const preloadScript = yield browser.addInitScript(
+      setRumCorrelationCookie,
+      RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+      testExecutionId
+    )
+    preloadScripts.set(windowHandle, preloadScript)
+  } catch (error) {
+    log.error('WebdriverIO RUM correlation preload error', error)
+  }
 }
 
 /**
@@ -154,33 +186,15 @@ function * handleRumNavigation (context) {
     }
     if (!correlationContext.testExecutionId) return
 
-    let currentUrl
-    let origin
-    if (typeof browser.getUrl === 'function') {
-      try {
-        currentUrl = yield browser.getUrl()
-        origin = getRumOrigin(currentUrl)
-      } catch (error) {
-        log.error('WebdriverIO RUM origin tracking error', error)
-      }
-    }
-
     try {
       yield browser.setCookies({
         name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         value: correlationContext.testExecutionId,
       })
-      if (origin && currentUrl) {
-        let originUrls = rumBrowserOriginUrls.get(browser)
-        if (!originUrls) {
-          originUrls = new Map()
-          rumBrowserOriginUrls.set(browser, originUrls)
-        }
-        originUrls.set(origin, currentUrl)
-      }
     } catch (error) {
       log.error('WebdriverIO RUM correlation cookie error', error)
     }
+    yield * installRumPreloadScript(browser, correlationContext.testExecutionId)
   } catch (error) {
     log.error('WebdriverIO RUM correlation error', error)
   }
@@ -212,6 +226,25 @@ function * cleanupRumWindow (browser) {
 }
 
 /**
+ * Removes every RUM correlation cookie without loading its application origin.
+ *
+ * @param {object} browser
+ * @yields {unknown} Browser command result.
+ * @returns {RumGenerator}
+ */
+function * cleanupRumCookies (browser) {
+  if (!browser.isBidi || typeof browser.storageDeleteCookies !== 'function') return
+
+  try {
+    yield browser.storageDeleteCookies({
+      filter: { name: RUM_TEST_EXECUTION_ID_COOKIE_NAME },
+    })
+  } catch (error) {
+    log.error('WebdriverIO RUM cross-origin cookie cleanup error', error)
+  }
+}
+
+/**
  * Cleans up every open window for one browser and restores the original window.
  *
  * @param {object} browser
@@ -219,13 +252,25 @@ function * cleanupRumWindow (browser) {
  * @returns {RumGenerator}
  */
 function * cleanupRumBrowser (browser) {
-  const originUrls = rumBrowserOriginUrls.get(browser)
-  rumBrowserOriginUrls.delete(browser)
+  const preloadScripts = rumBrowserPreloadScripts.get(browser)
+  rumBrowserPreloadScripts.delete(browser)
+  if (preloadScripts) {
+    for (const preloadScript of preloadScripts.values()) {
+      if (typeof preloadScript?.remove === 'function') {
+        try {
+          yield preloadScript.remove()
+        } catch (error) {
+          log.error('WebdriverIO RUM correlation preload cleanup error', error)
+        }
+      }
+    }
+  }
 
   if (typeof browser.getWindowHandle !== 'function' ||
       typeof browser.getWindowHandles !== 'function' ||
       typeof browser.switchToWindow !== 'function') {
     yield * cleanupRumWindow(browser)
+    yield * cleanupRumCookies(browser)
     return
   }
 
@@ -237,24 +282,16 @@ function * cleanupRumBrowser (browser) {
   } catch (error) {
     log.error('WebdriverIO RUM window discovery error', error)
     yield * cleanupRumWindow(browser)
+    yield * cleanupRumCookies(browser)
     return
   }
 
-  const cleanedOrigins = new Set()
   for (const windowHandle of windowHandles) {
     try {
       yield browser.switchToWindow(windowHandle)
     } catch (error) {
       log.error('WebdriverIO RUM window switch error', error)
       continue
-    }
-    if (originUrls?.size && typeof browser.getUrl === 'function') {
-      try {
-        const origin = getRumOrigin(yield browser.getUrl())
-        if (origin) cleanedOrigins.add(origin)
-      } catch (error) {
-        log.error('WebdriverIO RUM window origin error', error)
-      }
     }
     yield * cleanupRumWindow(browser)
   }
@@ -268,46 +305,7 @@ function * cleanupRumBrowser (browser) {
     }
   }
 
-  if (!originUrls?.size) return
-
-  if (typeof browser.newWindow !== 'function' || typeof browser.closeWindow !== 'function') {
-    log.error('WebdriverIO RUM origin cleanup commands are not available')
-    return
-  }
-
-  for (const [origin, url] of originUrls) {
-    if (cleanedOrigins.has(origin)) continue
-
-    let cleanupWindowOpened = false
-    try {
-      yield browser.newWindow(url)
-      cleanupWindowOpened = true
-      const cleanupOrigin = getRumOrigin(yield browser.getUrl())
-      if (cleanupOrigin === origin) {
-        yield * cleanupRumWindow(browser)
-      } else {
-        log.error('WebdriverIO RUM origin cleanup redirected from %s to %s', origin, cleanupOrigin)
-      }
-    } catch (error) {
-      log.error('WebdriverIO RUM origin cleanup error', error)
-    }
-
-    if (cleanupWindowOpened) {
-      try {
-        yield browser.closeWindow()
-      } catch (error) {
-        log.error('WebdriverIO RUM cleanup window close error', error)
-      }
-    }
-
-    if (canRestoreWindow) {
-      try {
-        yield browser.switchToWindow(currentWindowHandle)
-      } catch (error) {
-        log.error('WebdriverIO RUM window restore error', error)
-      }
-    }
-  }
+  yield * cleanupRumCookies(browser)
 }
 
 /**
@@ -327,12 +325,16 @@ function * cleanupRumBrowsers () {
 /**
  * Delays URL completion until RUM detection and correlation settle.
  *
- * @param {{resolveGenerator?: (context: object) => RumGenerator}} context
+ * @param {{
+ *   resolveGenerator?: (context: object) => RumGenerator,
+ *   rejectGenerator?: (context: object) => RumGenerator
+ * }} context
  * @returns {void}
  */
 function waitForRumNavigation (context) {
   if (!rumPageNavigateCh.hasSubscribers) return
   context.resolveGenerator = handleRumNavigation
+  context.rejectGenerator = handleRumNavigation
 }
 
 /**

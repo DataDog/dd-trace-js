@@ -210,6 +210,65 @@ describe('webdriverio instrumentation', () => {
       assert.match(rewrittenSource, /orchestrion:webdriverio:url/)
       assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
       assert.match(rewrittenSource, /__apm\$ctx\.resolveGenerator/)
+      assert.match(rewrittenSource, /__apm\$ctx\.rejectGenerator/)
+    }
+  })
+
+  it('correlates a page left behind by a rejected URL command', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(browserFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, browserFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-browser-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const navigationError = new Error('page load timed out')
+    const calls = []
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake((name) => {
+        calls.push(`delete:${name}`)
+        return Promise.resolve()
+      }),
+      execute: sinon.stub()
+        .onFirstCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onSecondCall().resolves(false),
+      navigateTo: sinon.stub().callsFake(() => {
+        calls.push('navigate')
+        return Promise.reject(navigationError)
+      }),
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push('set')
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      context.testExecutionId = '1234'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { url3 } = await import(pathToFileURL(outputPath))
+      await assert.rejects(url3.call(browser, 'https://example.test'), error => error === navigationError)
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runGenerator(testContext.resolveGenerator(testContext))
+
+      assert.deepStrictEqual(calls, [
+        'navigate',
+        'set',
+        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
+      ])
+      assert.strictEqual(browser.execute.callCount, 2)
+    } finally {
+      correlationCh.unsubscribe(correlate)
     }
   })
 
@@ -495,42 +554,46 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('cleans the RUM correlation cookie from every origin visited by a test', async () => {
+  it('preloads and clears cross-origin RUM correlation without loading application pages', async () => {
     require('../src/webdriverio')
 
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
     const urlCh = tracingChannel('orchestrion:webdriverio:url')
     const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
     const calls = []
-    let currentUrl = 'https://first.example.test/path'
+    let preloadScript
     const browser = {
-      capabilities: {},
-      closeWindow: sinon.stub().callsFake(() => {
-        calls.push('close')
-        return Promise.resolve()
+      addInitScript: sinon.stub().callsFake((script, ...args) => {
+        calls.push('add-preload')
+        preloadScript = { args, script }
+        return Promise.resolve({
+          remove: () => {
+            calls.push('remove-preload')
+            return Promise.resolve()
+          },
+        })
       }),
+      capabilities: {},
       deleteCookies: sinon.stub().callsFake(() => {
-        calls.push(`delete:${new URL(currentUrl).origin}`)
+        calls.push('delete-current')
         return Promise.resolve()
       }),
       execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
         ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
         : false)),
-      getUrl: sinon.stub().callsFake(() => Promise.resolve(currentUrl)),
       getWindowHandle: sinon.stub().resolves('window-a'),
       getWindowHandles: sinon.stub().resolves(['window-a']),
-      newWindow: sinon.stub().callsFake((origin) => {
-        calls.push(`open:${origin}`)
-        currentUrl = origin
-        return Promise.resolve('cleanup-window')
-      }),
+      isBidi: true,
       setCookies: sinon.stub().callsFake(() => {
-        calls.push(`set:${new URL(currentUrl).origin}`)
+        calls.push('set-current')
         return Promise.resolve()
       }),
       switchToWindow: sinon.stub().callsFake((windowHandle) => {
         calls.push(`switch:${windowHandle}`)
-        if (windowHandle === 'window-a') currentUrl = 'https://second.example.test/path'
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete-all')
         return Promise.resolve()
       }),
     }
@@ -544,93 +607,38 @@ describe('webdriverio instrumentation', () => {
       urlCh.asyncEnd.publish(firstNavigationContext)
       await runGenerator(firstNavigationContext.resolveGenerator(firstNavigationContext))
 
-      currentUrl = 'https://second.example.test/path'
-      const secondNavigationContext = { self: browser }
-      urlCh.asyncEnd.publish(secondNavigationContext)
-      await runGenerator(secondNavigationContext.resolveGenerator(secondNavigationContext))
+      assert.ok(preloadScript)
+      const originalDocument = globalThis.document
+      try {
+        globalThis.document = { cookie: '' }
+        preloadScript.script(...preloadScript.args)
+        assert.strictEqual(
+          globalThis.document.cookie,
+          `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=1234; path=/`
+        )
+      } finally {
+        if (originalDocument === undefined) {
+          delete globalThis.document
+        } else {
+          globalThis.document = originalDocument
+        }
+      }
 
       const testContext = { arguments: [undefined, 'Test'] }
       testFunctionCh.asyncEnd.publish(testContext)
       await runGenerator(testContext.resolveGenerator(testContext))
 
       assert.deepStrictEqual(calls, [
-        'set:https://first.example.test',
-        'set:https://second.example.test',
+        'set-current',
+        'add-preload',
+        'remove-preload',
         'switch:window-a',
-        'delete:https://second.example.test',
-        'open:https://first.example.test/path',
-        'delete:https://first.example.test',
-        'close',
-        'switch:window-a',
+        'delete-current',
+        'delete-all',
       ])
-      assert.strictEqual(browser.execute.callCount, 4)
-    } finally {
-      correlationCh.unsubscribe(correlate)
-    }
-  })
-
-  it('does not clean cookies on a redirected origin', async () => {
-    require('../src/webdriverio')
-
-    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
-    const urlCh = tracingChannel('orchestrion:webdriverio:url')
-    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
-    const calls = []
-    let currentUrl = 'https://app.example.test/dashboard'
-    const browser = {
-      capabilities: {},
-      closeWindow: sinon.stub().callsFake(() => {
-        calls.push('close')
-        return Promise.resolve()
-      }),
-      deleteCookies: sinon.stub().callsFake(() => {
-        calls.push(`delete:${new URL(currentUrl).origin}`)
-        return Promise.resolve()
-      }),
-      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
-        ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
-        : false)),
-      getUrl: sinon.stub().callsFake(() => Promise.resolve(currentUrl)),
-      getWindowHandle: sinon.stub().resolves('window-a'),
-      getWindowHandles: sinon.stub().resolves(['window-a']),
-      newWindow: sinon.stub().callsFake((url) => {
-        calls.push(`open:${url}`)
-        currentUrl = 'https://sso.example.test/login'
-        return Promise.resolve('cleanup-window')
-      }),
-      setCookies: sinon.stub().callsFake(() => {
-        calls.push('set')
-        return Promise.resolve()
-      }),
-      switchToWindow: sinon.stub().callsFake((windowHandle) => {
-        calls.push(`switch:${windowHandle}`)
-        if (windowHandle === 'window-a') currentUrl = 'https://other.example.test/'
-        return Promise.resolve()
-      }),
-    }
-    const correlate = context => {
-      context.testExecutionId = '1234'
-    }
-    correlationCh.subscribe(correlate)
-
-    try {
-      const navigationContext = { self: browser }
-      urlCh.asyncEnd.publish(navigationContext)
-      await runGenerator(navigationContext.resolveGenerator(navigationContext))
-
-      currentUrl = 'https://other.example.test/'
-      const testContext = { arguments: [undefined, 'Test'] }
-      testFunctionCh.asyncEnd.publish(testContext)
-      await runGenerator(testContext.resolveGenerator(testContext))
-
-      assert.deepStrictEqual(calls, [
-        'set',
-        'switch:window-a',
-        'delete:https://other.example.test',
-        'open:https://app.example.test/dashboard',
-        'close',
-        'switch:window-a',
-      ])
+      assert.deepStrictEqual(browser.storageDeleteCookies.firstCall.args, [{
+        filter: { name: RUM_TEST_EXECUTION_ID_COOKIE_NAME },
+      }])
       assert.strictEqual(browser.execute.callCount, 2)
     } finally {
       correlationCh.unsubscribe(correlate)
