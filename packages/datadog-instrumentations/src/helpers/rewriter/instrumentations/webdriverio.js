@@ -283,7 +283,7 @@ module.exports = [
     transform: 'awaitContextCallback',
     transformOptions: {
       callbackArgumentNames: ['err'],
-      callbackName: 'retryCallback',
+      callbackName: 'retryGenerator',
     },
   },
   {

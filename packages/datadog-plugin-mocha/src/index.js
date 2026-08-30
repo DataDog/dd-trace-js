@@ -90,6 +90,13 @@ const WEBDRIVERIO_JASMINE_FAILED_EXPECTATION_COUNT = Symbol('webdriverioJasmineF
 const WEBDRIVERIO_JASMINE_FUNCTION_TYPE = Symbol('webdriverioJasmineFunctionType')
 const WEBDRIVERIO_JASMINE_TEST = Symbol('webdriverioJasmineTest')
 
+/** @typedef {{done: boolean, value?: unknown}} RumGeneratorStep */
+/**
+ * @typedef {object} RumGenerator
+ * @property {(value?: unknown) => RumGeneratorStep} next
+ * @property {(error: unknown) => RumGeneratorStep} throw
+ */
+
 /**
  * @typedef {object} WebdriverioJasmineResult
  * @property {string|undefined} id
@@ -238,16 +245,7 @@ class MochaPlugin extends CiPlugin {
 
       const functionType = currentStore[WEBDRIVERIO_JASMINE_FUNCTION_TYPE]
       if (functionType === 'Test') {
-        ctx.retryCallback = error => {
-          const retry = () => this.#retryWebdriverioJasmineTest(test, error)
-          let cleanup
-          try {
-            cleanup = ctx.rumCleanupCallback?.()
-          } catch (cleanupError) {
-            log.error('WebdriverIO RUM cleanup error', cleanupError)
-          }
-          return cleanup?.then ? cleanup.then(retry, retry) : retry()
-        }
+        ctx.retryGenerator = this.#retryWebdriverioJasmineTestAfterRumCleanup.bind(this, ctx, test)
       }
       const nextStore = {
         ...test.currentStore,
@@ -1152,6 +1150,23 @@ class MochaPlugin extends CiPlugin {
     test.attempt++
     test.reportedStatus = undefined
     this.#startWebdriverioJasmineAttempt(test, test.currentStore)
+  }
+
+  /**
+   * Cleans up RUM before advancing a native WebdriverIO retry.
+   *
+   * @param {object} context
+   * @param {object} test
+   * @param {Error|undefined} error
+   * @yields {unknown} RUM cleanup or retry setup operation.
+   * @returns {RumGenerator}
+   */
+  * #retryWebdriverioJasmineTestAfterRumCleanup (context, test, error) {
+    const cleanup = context.rumCleanupGenerator?.()
+    if (cleanup) {
+      yield * cleanup
+    }
+    yield this.#retryWebdriverioJasmineTest(test, error)
   }
 
   /**

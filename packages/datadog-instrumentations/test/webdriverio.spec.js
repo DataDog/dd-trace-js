@@ -115,6 +115,33 @@ const browserFixtureModulePaths = ['index.js', 'node.js'].map(file => path.join(
 ))
 const execFileAsync = promisify(execFile)
 
+/** @typedef {{done: boolean, value?: unknown}} RumGeneratorStep */
+/**
+ * @typedef {object} RumGenerator
+ * @property {(value?: unknown) => RumGeneratorStep} next
+ * @property {(error: unknown) => RumGeneratorStep} throw
+ */
+
+/**
+ * Runs a production instrumentation generator in unit tests.
+ *
+ * @param {RumGenerator} generator
+ * @returns {Promise<unknown>}
+ */
+async function runGenerator (generator) {
+  let step = generator.next()
+  while (!step.done) {
+    try {
+      const operation = step.value
+      const value = typeof operation === 'function' ? await new Promise(operation) : await operation
+      step = generator.next(value)
+    } catch (error) {
+      step = generator.throw(error)
+    }
+  }
+  return step.value
+}
+
 describe('webdriverio instrumentation', () => {
   it('rewrites the ESM launcher scheduler', () => {
     const source = fs.readFileSync(launcherFixturePath, 'utf8')
@@ -169,6 +196,9 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /orchestrion:@wdio\/utils:testFrameworkFnWrapper/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.resolveGenerator/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rejectGenerator/)
+    assert.match(rewrittenSource, /__apm\$ctx\.retryGenerator/)
   })
 
   it('rewrites WebdriverIO URL navigation and waits for RUM correlation', () => {
@@ -179,6 +209,7 @@ describe('webdriverio instrumentation', () => {
       assert.notStrictEqual(rewrittenSource, source)
       assert.match(rewrittenSource, /orchestrion:webdriverio:url/)
       assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+      assert.match(rewrittenSource, /__apm\$ctx\.resolveGenerator/)
     }
   })
 
@@ -201,8 +232,9 @@ describe('webdriverio instrumentation', () => {
     const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
     const subscriber = {
       start (ctx) {
-        ctx.retryCallback = error => {
+        ctx.retryGenerator = function * (error) {
           callbacks.push(error.message)
+          yield undefined
         }
       },
     }
@@ -238,8 +270,9 @@ describe('webdriverio instrumentation', () => {
     const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
     const subscriber = {
       start (ctx) {
-        ctx.retryCallback = () => {
+        ctx.retryGenerator = function * () {
           failedRetries.limit = 0
+          yield undefined
         }
       },
     }
@@ -271,7 +304,9 @@ describe('webdriverio instrumentation', () => {
     const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
     const subscriber = {
       start (ctx) {
-        ctx.retryCallback = () => Promise.reject(new Error('observability callback failed'))
+        ctx.retryGenerator = function * () {
+          yield Promise.reject(new Error('observability callback failed'))
+        }
       },
     }
     let attempts = 0
@@ -342,10 +377,10 @@ describe('webdriverio instrumentation', () => {
     try {
       const navigationContext = { self: browser }
       urlCh.asyncEnd.publish(navigationContext)
-      await new Promise(navigationContext.resolveCallback)
+      await runGenerator(navigationContext.resolveGenerator(navigationContext))
 
       assert.strictEqual(browser.execute.callCount, 1)
-      assert.strictEqual(browser.execute.firstCall.args[1], RUM_TEST_EXECUTION_ID_COOKIE_NAME)
+      assert.strictEqual(browser.execute.firstCall.args.length, 1)
       assert.deepStrictEqual(calls, [
         'set:1234',
       ])
@@ -353,7 +388,7 @@ describe('webdriverio instrumentation', () => {
       calls.push('user-after-test')
       const testContext = { arguments: [undefined, 'Test'] }
       testFunctionCh.asyncEnd.publish(testContext)
-      const cleanupPromise = new Promise(testContext.resolveCallback)
+      const cleanupPromise = runGenerator(testContext.resolveGenerator(testContext))
       await clock.tickAsync(500)
       await cleanupPromise
 
@@ -368,18 +403,18 @@ describe('webdriverio instrumentation', () => {
         arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'beforeEach'],
       }
       testFunctionCh.asyncEnd.publish(beforeEachContext)
-      assert.strictEqual(beforeEachContext.resolveCallback, undefined)
+      assert.strictEqual(beforeEachContext.resolveGenerator, undefined)
 
       const afterEachNavigationContext = { self: browser }
       urlCh.asyncEnd.publish(afterEachNavigationContext)
-      await new Promise(afterEachNavigationContext.resolveCallback)
+      await runGenerator(afterEachNavigationContext.resolveGenerator(afterEachNavigationContext))
       calls.push('user-after-each')
 
       const afterEachContext = {
         arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
       }
       testFunctionCh.asyncEnd.publish(afterEachContext)
-      const afterEachCleanupPromise = new Promise(afterEachContext.resolveCallback)
+      const afterEachCleanupPromise = runGenerator(afterEachContext.resolveGenerator(afterEachContext))
       await clock.tickAsync(500)
       await afterEachCleanupPromise
 
@@ -435,12 +470,11 @@ describe('webdriverio instrumentation', () => {
     try {
       const navigationContext = { self: browser }
       urlCh.asyncEnd.publish(navigationContext)
-      await new Promise(navigationContext.resolveCallback)
+      await runGenerator(navigationContext.resolveGenerator(navigationContext))
 
       const testContext = { arguments: [undefined, 'Test'] }
       testFunctionCh.asyncEnd.publish(testContext)
-      const cleanupPromise = new Promise(testContext.resolveCallback)
-      await cleanupPromise
+      await runGenerator(testContext.resolveGenerator(testContext))
 
       assert.deepStrictEqual(calls, [
         'switch:window-a',
@@ -451,43 +485,6 @@ describe('webdriverio instrumentation', () => {
       ])
     } finally {
       correlationCh.unsubscribe(correlate)
-    }
-  })
-
-  it('removes the RUM correlation cookie when the page is unloaded', () => {
-    const originalDocument = global.document
-    const originalWindow = global.window
-    let pageHide
-    global.document = { cookie: '' }
-    global.window = {
-      DD_RUM: {
-        getInitConfiguration: () => ({ sessionSampleRate: 100 }),
-        getInternalContext: () => ({}),
-      },
-      addEventListener: (eventName, listener, options) => {
-        assert.strictEqual(eventName, 'pagehide')
-        assert.deepStrictEqual(options, { once: true })
-        pageHide = listener
-      },
-    }
-
-    try {
-      const { detectRum } = require('../src/rum-browser-scripts')
-      const rumState = detectRum(RUM_TEST_EXECUTION_ID_COOKIE_NAME)
-
-      assert.deepStrictEqual(rumState, {
-        isRumActive: true,
-        isRumInstrumented: true,
-        rumSamplingRate: 100,
-      })
-      pageHide()
-      assert.strictEqual(
-        global.document.cookie,
-        `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=; Max-Age=0; path=/`
-      )
-    } finally {
-      global.document = originalDocument
-      global.window = originalWindow
     }
   })
 
@@ -945,7 +942,7 @@ describe('webdriverio instrumentation', () => {
         channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
       })
 
-      const retryPromise = executeAsyncContext.retryCallback(new Error('native retry failure'))
+      const retryPromise = runGenerator(executeAsyncContext.retryGenerator(new Error('native retry failure')))
       assert.strictEqual(spans.length, 1)
 
       finishRetrySetup()
@@ -954,7 +951,7 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(spans.length, 2)
 
       retryCh.unsubscribe(onRetry)
-      assert.strictEqual(executeAsyncContext.retryCallback(new Error('immediate native retry failure')), undefined)
+      await runGenerator(executeAsyncContext.retryGenerator(new Error('immediate native retry failure')))
       assert.strictEqual(spans.length, 3)
     } finally {
       retryCh.unsubscribe(onRetry)

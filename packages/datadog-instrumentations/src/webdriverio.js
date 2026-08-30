@@ -80,6 +80,13 @@ const coordinatorStates = new WeakMap()
 const localRunnerVersions = new WeakMap()
 const activeRumBrowsers = new Set()
 
+/** @typedef {{done: boolean, value?: unknown}} RumGeneratorStep */
+/**
+ * @typedef {object} RumGenerator
+ * @property {(value?: unknown) => RumGeneratorStep} next
+ * @property {(error: unknown) => RumGeneratorStep} throw
+ */
+
 addHook({
   name: '@wdio/local-runner',
   versions: ['>=9.0.0'],
@@ -93,17 +100,18 @@ addHook({
 /**
  * Detects RUM after a browser navigation and correlates it with the active test.
  *
- * @param {object} browser
- * @param {() => void} onDone
- * @returns {Promise<void>}
+ * @param {{self?: object}} context
+ * @yields {unknown} Browser command result.
+ * @returns {RumGenerator}
  */
-async function handleRumNavigation (browser, onDone) {
+function * handleRumNavigation (context) {
+  const browser = context.self
   try {
-    if (!rumPageNavigateCh.hasSubscribers || !browser || typeof browser.execute !== 'function') return
+    if (!browser || typeof browser.execute !== 'function') return
 
     let rumState
     try {
-      rumState = await browser.execute(detectRum, RUM_TEST_EXECUTION_ID_COOKIE_NAME)
+      rumState = yield browser.execute(detectRum)
     } catch (error) {
       log.error('WebdriverIO RUM detection error', error)
       return
@@ -118,32 +126,30 @@ async function handleRumNavigation (browser, onDone) {
     if (!isRumActive) return
 
     activeRumBrowsers.add(browser)
-    const context = {
+    const correlationContext = {
       browserName: browser.capabilities?.browserName,
       browserVersion: browser.capabilities?.browserVersion,
       isRumActive,
       testExecutionId: undefined,
     }
     try {
-      rumPageNavigateCh.publish(context)
+      rumPageNavigateCh.publish(correlationContext)
     } catch (error) {
       log.error('WebdriverIO RUM correlation channel error', error)
       return
     }
-    if (!context.testExecutionId) return
+    if (!correlationContext.testExecutionId) return
 
     try {
-      await browser.setCookies({
+      yield browser.setCookies({
         name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
-        value: context.testExecutionId,
+        value: correlationContext.testExecutionId,
       })
     } catch (error) {
       log.error('WebdriverIO RUM correlation cookie error', error)
     }
   } catch (error) {
     log.error('WebdriverIO RUM correlation error', error)
-  } finally {
-    onDone()
   }
 }
 
@@ -151,21 +157,22 @@ async function handleRumNavigation (browser, onDone) {
  * Stops RUM in the current window, waits for its events to flush, and removes the correlation cookie.
  *
  * @param {object} browser
- * @returns {Promise<void>}
+ * @yields {unknown} Browser command result or timer callback.
+ * @returns {RumGenerator}
  */
-async function cleanupRumWindow (browser) {
+function * cleanupRumWindow (browser) {
   let isRumActive
   try {
-    isRumActive = await browser.execute(stopRumSession)
+    isRumActive = yield browser.execute(stopRumSession)
   } catch (error) {
     log.error('WebdriverIO RUM cleanup error', error)
   }
 
   if (isRumActive) {
-    await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+    yield onDone => realSetTimeout(onDone, RUM_FLUSH_WAIT_TIME)
   }
   try {
-    await browser.deleteCookies(RUM_TEST_EXECUTION_ID_COOKIE_NAME)
+    yield browser.deleteCookies(RUM_TEST_EXECUTION_ID_COOKIE_NAME)
   } catch (error) {
     log.error('WebdriverIO RUM correlation cookie cleanup error', error)
   }
@@ -175,43 +182,41 @@ async function cleanupRumWindow (browser) {
  * Cleans up every open window for one browser and restores the original window.
  *
  * @param {object} browser
- * @returns {Promise<void>}
+ * @yields {unknown} Browser command result or delegated cleanup operation.
+ * @returns {RumGenerator}
  */
-async function cleanupRumBrowser (browser) {
+function * cleanupRumBrowser (browser) {
   if (typeof browser.getWindowHandle !== 'function' ||
       typeof browser.getWindowHandles !== 'function' ||
       typeof browser.switchToWindow !== 'function') {
-    await cleanupRumWindow(browser)
+    yield * cleanupRumWindow(browser)
     return
   }
 
   let currentWindowHandle
   let windowHandles
   try {
-    currentWindowHandle = await browser.getWindowHandle()
-    windowHandles = await browser.getWindowHandles()
+    currentWindowHandle = yield browser.getWindowHandle()
+    windowHandles = yield browser.getWindowHandles()
   } catch (error) {
     log.error('WebdriverIO RUM window discovery error', error)
-    await cleanupRumWindow(browser)
+    yield * cleanupRumWindow(browser)
     return
   }
 
-  // Window commands share the browser's current context and must run sequentially.
   for (const windowHandle of windowHandles) {
     try {
-      // eslint-disable-next-line no-await-in-loop
-      await browser.switchToWindow(windowHandle)
+      yield browser.switchToWindow(windowHandle)
     } catch (error) {
       log.error('WebdriverIO RUM window switch error', error)
       continue
     }
-    // eslint-disable-next-line no-await-in-loop
-    await cleanupRumWindow(browser)
+    yield * cleanupRumWindow(browser)
   }
 
   if (windowHandles.length > 1 && windowHandles.includes(currentWindowHandle)) {
     try {
-      await browser.switchToWindow(currentWindowHandle)
+      yield browser.switchToWindow(currentWindowHandle)
     } catch (error) {
       log.error('WebdriverIO RUM window restore error', error)
     }
@@ -221,26 +226,26 @@ async function cleanupRumBrowser (browser) {
 /**
  * Cleans up every browser where the current test detected an active RUM session.
  *
- * @returns {Promise<void[]>|undefined}
+ * @yields {unknown} Delegated browser cleanup operation.
+ * @returns {RumGenerator}
  */
-function cleanupRumBrowsers () {
-  if (activeRumBrowsers.size === 0) return
-
-  const cleanupPromises = Array.from(activeRumBrowsers, cleanupRumBrowser)
+function * cleanupRumBrowsers () {
+  const browsers = [...activeRumBrowsers]
   activeRumBrowsers.clear()
-  return Promise.all(cleanupPromises)
+  for (const browser of browsers) {
+    yield * cleanupRumBrowser(browser)
+  }
 }
 
 /**
  * Delays URL completion until RUM detection and correlation settle.
  *
- * @param {{self?: object, resolveCallback?: (onDone: () => void) => void}} context
+ * @param {{resolveGenerator?: (context: object) => RumGenerator}} context
  * @returns {void}
  */
 function waitForRumNavigation (context) {
-  context.resolveCallback = onDone => {
-    handleRumNavigation(context.self, onDone)
-  }
+  if (!rumPageNavigateCh.hasSubscribers) return
+  context.resolveGenerator = handleRumNavigation
 }
 
 /**
@@ -248,8 +253,8 @@ function waitForRumNavigation (context) {
  *
  * @param {{
  *   arguments?: unknown[],
- *   resolveCallback?: (onDone: () => void) => void,
- *   rejectCallback?: (onDone: () => void) => void
+ *   resolveGenerator?: () => RumGenerator,
+ *   rejectGenerator?: () => RumGenerator
  * }} context
  * @returns {void}
  */
@@ -257,13 +262,10 @@ function waitForRumCleanup (context) {
   const type = context.arguments?.[1]
   const hookName = context.arguments?.[7]
   if (type !== 'Test' && (type !== 'Hook' || hookName !== 'afterEach')) return
+  if (activeRumBrowsers.size === 0) return
 
-  const cleanupPromise = cleanupRumBrowsers()
-  if (!cleanupPromise) return
-
-  const waitForCleanup = onDone => cleanupPromise.then(onDone, onDone)
-  context.resolveCallback = waitForCleanup
-  context.rejectCallback = waitForCleanup
+  context.resolveGenerator = cleanupRumBrowsers
+  context.rejectGenerator = cleanupRumBrowsers
 }
 
 /**
@@ -1225,8 +1227,8 @@ testFrameworkFnWrapperCh.asyncEnd.subscribe(
 // @ts-expect-error
 executeAsyncCh.subscribe({
   start (context) {
-    context.rumCleanupCallback = cleanupRumBrowsers
-    context.retryCallback ??= cleanupRumBrowsers
+    context.rumCleanupGenerator = cleanupRumBrowsers
+    context.retryGenerator ??= cleanupRumBrowsers
   },
 })
 

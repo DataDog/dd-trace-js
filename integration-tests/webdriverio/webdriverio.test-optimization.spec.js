@@ -425,6 +425,7 @@ for (const version of versions) {
             assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
             assert.strictEqual(test.meta[TEST_BROWSER_NAME], 'chrome')
             assert.strictEqual(test.meta[TEST_BROWSER_VERSION], 'test')
+            assert.ok(requests.some(({ url }) => url?.endsWith('/refresh')))
 
             const cookieRequests = requests.filter(({ url }) => url?.includes('/cookie'))
             const setCookieRequests = cookieRequests.filter(({ method }) => method === 'POST')
