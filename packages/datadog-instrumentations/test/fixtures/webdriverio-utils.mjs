@@ -1,5 +1,6 @@
-const testFrameworkFnWrapper = async function (type, spec) {
-  return spec(type)
+const testFrameworkFnWrapper = async function (_wrapFunctions, type, { specFn }, _before, _after, _cid, _retries,
+  hookName) {
+  return specFn(type, hookName)
 }
 
 async function executeAsync (fn, retries, args = [], timeout) {

@@ -79,7 +79,7 @@ if (loadCh.hasSubscribers) {
 const coordinatorStates = new WeakMap()
 const localRunnerVersions = new WeakMap()
 const activeRumBrowsers = new Set()
-const rumBrowserOrigins = new WeakMap()
+const rumBrowserOriginUrls = new WeakMap()
 
 /** @typedef {{done: boolean, value?: unknown}} RumGeneratorStep */
 /**
@@ -154,10 +154,12 @@ function * handleRumNavigation (context) {
     }
     if (!correlationContext.testExecutionId) return
 
+    let currentUrl
     let origin
     if (typeof browser.getUrl === 'function') {
       try {
-        origin = getRumOrigin(yield browser.getUrl())
+        currentUrl = yield browser.getUrl()
+        origin = getRumOrigin(currentUrl)
       } catch (error) {
         log.error('WebdriverIO RUM origin tracking error', error)
       }
@@ -168,13 +170,13 @@ function * handleRumNavigation (context) {
         name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         value: correlationContext.testExecutionId,
       })
-      if (origin) {
-        let origins = rumBrowserOrigins.get(browser)
-        if (!origins) {
-          origins = new Set()
-          rumBrowserOrigins.set(browser, origins)
+      if (origin && currentUrl) {
+        let originUrls = rumBrowserOriginUrls.get(browser)
+        if (!originUrls) {
+          originUrls = new Map()
+          rumBrowserOriginUrls.set(browser, originUrls)
         }
-        origins.add(origin)
+        originUrls.set(origin, currentUrl)
       }
     } catch (error) {
       log.error('WebdriverIO RUM correlation cookie error', error)
@@ -217,8 +219,8 @@ function * cleanupRumWindow (browser) {
  * @returns {RumGenerator}
  */
 function * cleanupRumBrowser (browser) {
-  const origins = rumBrowserOrigins.get(browser)
-  rumBrowserOrigins.delete(browser)
+  const originUrls = rumBrowserOriginUrls.get(browser)
+  rumBrowserOriginUrls.delete(browser)
 
   if (typeof browser.getWindowHandle !== 'function' ||
       typeof browser.getWindowHandles !== 'function' ||
@@ -246,7 +248,7 @@ function * cleanupRumBrowser (browser) {
       log.error('WebdriverIO RUM window switch error', error)
       continue
     }
-    if (origins?.size && typeof browser.getUrl === 'function') {
+    if (originUrls?.size && typeof browser.getUrl === 'function') {
       try {
         const origin = getRumOrigin(yield browser.getUrl())
         if (origin) cleanedOrigins.add(origin)
@@ -266,21 +268,26 @@ function * cleanupRumBrowser (browser) {
     }
   }
 
-  if (!origins?.size) return
+  if (!originUrls?.size) return
 
   if (typeof browser.newWindow !== 'function' || typeof browser.closeWindow !== 'function') {
     log.error('WebdriverIO RUM origin cleanup commands are not available')
     return
   }
 
-  for (const origin of origins) {
+  for (const [origin, url] of originUrls) {
     if (cleanedOrigins.has(origin)) continue
 
     let cleanupWindowOpened = false
     try {
-      yield browser.newWindow(origin)
+      yield browser.newWindow(url)
       cleanupWindowOpened = true
-      yield * cleanupRumWindow(browser)
+      const cleanupOrigin = getRumOrigin(yield browser.getUrl())
+      if (cleanupOrigin === origin) {
+        yield * cleanupRumWindow(browser)
+      } else {
+        log.error('WebdriverIO RUM origin cleanup redirected from %s to %s', origin, cleanupOrigin)
+      }
     } catch (error) {
       log.error('WebdriverIO RUM origin cleanup error', error)
     }
@@ -345,6 +352,20 @@ function waitForRumCleanup (context) {
   if (activeRumBrowsers.size === 0) return
 
   context.resolveGenerator = cleanupRumBrowsers
+  context.rejectGenerator = cleanupRumBrowsers
+}
+
+/**
+ * Cleans up RUM before preserving a failed test or hook rejection.
+ *
+ * @param {{arguments?: unknown[], rejectGenerator?: () => RumGenerator}} context
+ * @returns {void}
+ */
+function waitForFailedRumCleanup (context) {
+  const type = context.arguments?.[1]
+  if (type !== 'Test' && type !== 'Hook') return
+  if (activeRumBrowsers.size === 0) return
+
   context.rejectGenerator = cleanupRumBrowsers
 }
 
@@ -1301,6 +1322,10 @@ urlCh.asyncEnd.subscribe(
 
 testFrameworkFnWrapperCh.asyncEnd.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumCleanup)
+)
+
+testFrameworkFnWrapperCh.error.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForFailedRumCleanup)
 )
 
 // dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
