@@ -433,6 +433,80 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('cleans the RUM correlation cookie from every origin visited by a test', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const calls = []
+    let currentUrl = 'https://first.example.test/path'
+    const browser = {
+      capabilities: {},
+      closeWindow: sinon.stub().callsFake(() => {
+        calls.push('close')
+        return Promise.resolve()
+      }),
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push(`delete:${new URL(currentUrl).origin}`)
+        return Promise.resolve()
+      }),
+      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
+        ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
+        : false)),
+      getUrl: sinon.stub().callsFake(() => Promise.resolve(currentUrl)),
+      getWindowHandle: sinon.stub().resolves('window-a'),
+      getWindowHandles: sinon.stub().resolves(['window-a']),
+      newWindow: sinon.stub().callsFake((origin) => {
+        calls.push(`open:${origin}`)
+        currentUrl = origin
+        return Promise.resolve('cleanup-window')
+      }),
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push(`set:${new URL(currentUrl).origin}`)
+        return Promise.resolve()
+      }),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        calls.push(`switch:${windowHandle}`)
+        if (windowHandle === 'window-a') currentUrl = 'https://second.example.test/path'
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      context.testExecutionId = '1234'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const firstNavigationContext = { self: browser }
+      urlCh.asyncEnd.publish(firstNavigationContext)
+      await runGenerator(firstNavigationContext.resolveGenerator(firstNavigationContext))
+
+      currentUrl = 'https://second.example.test/path'
+      const secondNavigationContext = { self: browser }
+      urlCh.asyncEnd.publish(secondNavigationContext)
+      await runGenerator(secondNavigationContext.resolveGenerator(secondNavigationContext))
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runGenerator(testContext.resolveGenerator(testContext))
+
+      assert.deepStrictEqual(calls, [
+        'set:https://first.example.test',
+        'set:https://second.example.test',
+        'switch:window-a',
+        'delete:https://second.example.test',
+        'open:https://first.example.test',
+        'delete:https://first.example.test',
+        'close',
+        'switch:window-a',
+      ])
+      assert.strictEqual(browser.execute.callCount, 4)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+    }
+  })
+
   it('cleans RUM in every open browser window and restores the original window', async () => {
     require('../src/webdriverio')
 

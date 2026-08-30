@@ -79,6 +79,7 @@ if (loadCh.hasSubscribers) {
 const coordinatorStates = new WeakMap()
 const localRunnerVersions = new WeakMap()
 const activeRumBrowsers = new Set()
+const rumBrowserOrigins = new WeakMap()
 
 /** @typedef {{done: boolean, value?: unknown}} RumGeneratorStep */
 /**
@@ -96,6 +97,19 @@ addHook({
   localRunnerVersions.set(LocalRunner, version)
   return LocalRunner
 })
+
+/**
+ * Returns the cookie origin for a browser URL.
+ *
+ * @param {string} url
+ * @returns {string|undefined}
+ */
+function getRumOrigin (url) {
+  try {
+    const origin = new URL(url).origin
+    if (origin !== 'null') return origin
+  } catch {}
+}
 
 /**
  * Detects RUM after a browser navigation and correlates it with the active test.
@@ -140,11 +154,28 @@ function * handleRumNavigation (context) {
     }
     if (!correlationContext.testExecutionId) return
 
+    let origin
+    if (typeof browser.getUrl === 'function') {
+      try {
+        origin = getRumOrigin(yield browser.getUrl())
+      } catch (error) {
+        log.error('WebdriverIO RUM origin tracking error', error)
+      }
+    }
+
     try {
       yield browser.setCookies({
         name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         value: correlationContext.testExecutionId,
       })
+      if (origin) {
+        let origins = rumBrowserOrigins.get(browser)
+        if (!origins) {
+          origins = new Set()
+          rumBrowserOrigins.set(browser, origins)
+        }
+        origins.add(origin)
+      }
     } catch (error) {
       log.error('WebdriverIO RUM correlation cookie error', error)
     }
@@ -186,6 +217,9 @@ function * cleanupRumWindow (browser) {
  * @returns {RumGenerator}
  */
 function * cleanupRumBrowser (browser) {
+  const origins = rumBrowserOrigins.get(browser)
+  rumBrowserOrigins.delete(browser)
+
   if (typeof browser.getWindowHandle !== 'function' ||
       typeof browser.getWindowHandles !== 'function' ||
       typeof browser.switchToWindow !== 'function') {
@@ -204,6 +238,7 @@ function * cleanupRumBrowser (browser) {
     return
   }
 
+  const cleanedOrigins = new Set()
   for (const windowHandle of windowHandles) {
     try {
       yield browser.switchToWindow(windowHandle)
@@ -211,14 +246,59 @@ function * cleanupRumBrowser (browser) {
       log.error('WebdriverIO RUM window switch error', error)
       continue
     }
+    if (origins?.size && typeof browser.getUrl === 'function') {
+      try {
+        const origin = getRumOrigin(yield browser.getUrl())
+        if (origin) cleanedOrigins.add(origin)
+      } catch (error) {
+        log.error('WebdriverIO RUM window origin error', error)
+      }
+    }
     yield * cleanupRumWindow(browser)
   }
 
-  if (windowHandles.length > 1 && windowHandles.includes(currentWindowHandle)) {
+  const canRestoreWindow = windowHandles.includes(currentWindowHandle)
+  if (windowHandles.length > 1 && canRestoreWindow) {
     try {
       yield browser.switchToWindow(currentWindowHandle)
     } catch (error) {
       log.error('WebdriverIO RUM window restore error', error)
+    }
+  }
+
+  if (!origins?.size) return
+
+  if (typeof browser.newWindow !== 'function' || typeof browser.closeWindow !== 'function') {
+    log.error('WebdriverIO RUM origin cleanup commands are not available')
+    return
+  }
+
+  for (const origin of origins) {
+    if (cleanedOrigins.has(origin)) continue
+
+    let cleanupWindowOpened = false
+    try {
+      yield browser.newWindow(origin)
+      cleanupWindowOpened = true
+      yield * cleanupRumWindow(browser)
+    } catch (error) {
+      log.error('WebdriverIO RUM origin cleanup error', error)
+    }
+
+    if (cleanupWindowOpened) {
+      try {
+        yield browser.closeWindow()
+      } catch (error) {
+        log.error('WebdriverIO RUM cleanup window close error', error)
+      }
+    }
+
+    if (canRestoreWindow) {
+      try {
+        yield browser.switchToWindow(currentWindowHandle)
+      } catch (error) {
+        log.error('WebdriverIO RUM window restore error', error)
+      }
     }
   }
 }

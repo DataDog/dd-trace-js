@@ -65,12 +65,16 @@ const TEST_MANAGEMENT_PATH = '/api/v2/test/libraries/test-management/tests'
  *   getRequests: () => Array<{
  *     body: {cookie?: {value: string}}|undefined,
  *     method: string|undefined,
+ *     pageUrl: string|undefined,
  *     url: string|undefined
  *   }>
  * }>}
  */
 function startWebDriverServer () {
   let sessionCount = 0
+  let currentWindowHandle
+  let windowHandles
+  const windowUrls = new Map()
   const requests = []
   const server = http.createServer((request, response) => {
     const chunks = []
@@ -78,11 +82,15 @@ function startWebDriverServer () {
     request.once('end', () => {
       const isNewSession = request.method === 'POST' && request.url === '/session'
       const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined
-      requests.push({ body, method: request.method, url: request.url })
+      const pageUrl = windowUrls.get(currentWindowHandle)
       let value = null
 
       if (isNewSession) {
         sessionCount++
+        currentWindowHandle = 'window-a'
+        windowHandles = ['window-a']
+        windowUrls.clear()
+        windowUrls.set(currentWindowHandle, 'about:blank')
         value = {
           sessionId: `webdriverio-${sessionCount}`,
           capabilities: {
@@ -94,14 +102,38 @@ function startWebDriverServer () {
       } else if (request.method === 'GET' && request.url === '/status') {
         value = { ready: true, message: '' }
       } else if (request.method === 'GET' && request.url?.endsWith('/window')) {
-        value = 'window-a'
+        value = currentWindowHandle
       } else if (request.method === 'GET' && request.url?.endsWith('/window/handles')) {
-        value = ['window-a']
+        value = windowHandles
+      } else if (request.method === 'POST' && request.url?.endsWith('/window')) {
+        currentWindowHandle = body.handle
+      } else if (request.method === 'DELETE' && request.url?.endsWith('/window')) {
+        windowHandles = windowHandles.filter(windowHandle => windowHandle !== currentWindowHandle)
+        windowUrls.delete(currentWindowHandle)
+        currentWindowHandle = windowHandles[0]
+        value = windowHandles
+      } else if (request.method === 'GET' && request.url?.endsWith('/url')) {
+        value = windowUrls.get(currentWindowHandle)
+      } else if (request.method === 'POST' && request.url?.endsWith('/url')) {
+        windowUrls.set(currentWindowHandle, body.url)
       } else if (request.method === 'POST' && request.url?.endsWith('/execute/sync')) {
-        value = body.script.includes('getInternalContext')
-          ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
-          : true
+        if (body.script.includes('getInternalContext')) {
+          value = { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
+        } else if (body.script.includes('window.open')) {
+          const cleanupWindowHandle = `window-${windowHandles.length + 1}`
+          windowHandles.push(cleanupWindowHandle)
+          windowUrls.set(cleanupWindowHandle, body.args[0])
+        } else {
+          value = true
+        }
       }
+
+      requests.push({
+        body,
+        method: request.method,
+        pageUrl,
+        url: request.url,
+      })
 
       response.writeHead(200, { 'content-type': 'application/json' })
       response.end(JSON.stringify({ value }))
@@ -431,11 +463,19 @@ for (const version of versions) {
             const setCookieRequests = cookieRequests.filter(({ method }) => method === 'POST')
             assert.deepStrictEqual(
               setCookieRequests.map(({ body }) => body.cookie.value),
-              [test.trace_id.toString(10), test.trace_id.toString(10)]
+              [test.trace_id.toString(10), test.trace_id.toString(10), test.trace_id.toString(10)]
             )
             assert.deepStrictEqual(
               cookieRequests.map(({ method }) => method),
-              ['POST', 'DELETE', 'POST', 'DELETE']
+              ['POST', 'POST', 'DELETE', 'DELETE', 'POST', 'DELETE']
+            )
+            assert.deepStrictEqual(
+              cookieRequests.filter(({ method }) => method === 'DELETE').map(({ pageUrl }) => pageUrl),
+              [
+                'http://second.example.test/',
+                'http://example.test',
+                'http://after-each.example.test/',
+              ]
             )
           })
         })
