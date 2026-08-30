@@ -1929,6 +1929,42 @@ describe('CI Visibility Exporter', () => {
       assert.strictEqual(options.url, url)
       sinon.assert.calledOnceWithExactly(callback, null)
     })
+
+    it('allows a background video upload beyond the final flush timeout', () => {
+      const clock = sinon.useFakeTimers()
+      try {
+        uploadTestSuiteVideoRequest = sinon.stub().callsFake((options, callback) => {
+          options.signal.addEventListener('abort', () => callback(options.signal.reason), { once: true })
+        })
+        const exporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+        })
+        exporter._testScreenshotUploadUrl = url
+        const callback = sinon.spy()
+        const startedAt = Date.now()
+
+        exporter.uploadTestSuiteVideo({
+          filePath: '/tmp/spec.mp4',
+          testSessionId: '123',
+          testSuiteId: '456',
+          idempotencyKey: '123:456:spec.mp4',
+          capturedAtMs: 1,
+        }, callback)
+
+        const requestOptions = uploadTestSuiteVideoRequest.firstCall.args[0]
+        assert.strictEqual(requestOptions.deadline, startedAt + (5 * FINAL_FLUSH_TIMEOUT))
+        clock.tick(FINAL_FLUSH_TIMEOUT)
+        assert.strictEqual(requestOptions.signal.aborted, false)
+        sinon.assert.notCalled(callback)
+
+        clock.tick(4 * FINAL_FLUSH_TIMEOUT)
+        assert.strictEqual(requestOptions.signal.aborted, true)
+        sinon.assert.calledOnce(callback)
+      } finally {
+        clock.restore()
+      }
+    })
   })
 
   describe('uploadTestScreenshot', () => {

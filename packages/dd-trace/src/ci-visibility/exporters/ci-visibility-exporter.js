@@ -160,6 +160,8 @@ function isValidCachedSettings (settings) {
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 const MAX_COVERAGE_REPORT_FLAGS = 32
+// Give a 200 MiB background video five minutes; final flush still caps shutdown at 60 seconds.
+const BACKGROUND_VIDEO_UPLOAD_TIMEOUT = 5 * FINAL_FLUSH_TIMEOUT
 
 function appendLogTag (tags, key, value) {
   if (value !== undefined) {
@@ -968,7 +970,7 @@ class CiVisibilityExporter extends BufferingExporter {
       return callback(new Error('Test video upload URL not configured'))
     }
 
-    this.#uploadTestMedia(uploadTestVideoRequest, options, callback)
+    this.#uploadTestMedia(uploadTestVideoRequest, options, callback, BACKGROUND_VIDEO_UPLOAD_TIMEOUT)
   }
 
   /**
@@ -989,7 +991,7 @@ class CiVisibilityExporter extends BufferingExporter {
       return callback(new Error('Test suite video upload URL not configured'))
     }
 
-    this.#uploadTestMedia(uploadTestSuiteVideoRequest, options, callback)
+    this.#uploadTestMedia(uploadTestSuiteVideoRequest, options, callback, BACKGROUND_VIDEO_UPLOAD_TIMEOUT)
   }
 
   /**
@@ -999,9 +1001,10 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {object} uploadOptions - Media request options
    * @param {AbortSignal} [uploadOptions.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
+   * @param {number} [timeoutMs] - Maximum background upload duration
    * @returns {void}
    */
-  #uploadTestMedia (uploadRequest, uploadOptions, callback) {
+  #uploadTestMedia (uploadRequest, uploadOptions, callback, timeoutMs = FINAL_FLUSH_TIMEOUT) {
     const { signal } = uploadOptions
 
     if (signal?.aborted) {
@@ -1010,7 +1013,7 @@ class CiVisibilityExporter extends BufferingExporter {
       return
     }
     this.#resetFinalFlush()
-    const deadline = Date.now() + FINAL_FLUSH_TIMEOUT
+    const deadline = Date.now() + timeoutMs
     const controller = new AbortController()
     let settled = false
     const complete = (error) => {

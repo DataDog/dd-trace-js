@@ -2112,7 +2112,9 @@ moduleTypes.forEach(({
       tracer: cypressPlugin.tracer,
       finishedTestsByFile: cypressPlugin.finishedTestsByFile,
       testsToSkip: cypressPlugin.testsToSkip,
+      testSessionSpan: cypressPlugin.testSessionSpan,
       testSuiteSpan: cypressPlugin.testSuiteSpan,
+      pendingScreenshotUploads: cypressPlugin.pendingScreenshotUploads,
     }
 
     afterEach(() => {
@@ -2124,7 +2126,9 @@ moduleTypes.forEach(({
       cypressPlugin.tracer = originalState.tracer
       cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
       cypressPlugin.testsToSkip = originalState.testsToSkip
+      cypressPlugin.testSessionSpan = originalState.testSessionSpan
       cypressPlugin.testSuiteSpan = originalState.testSuiteSpan
+      cypressPlugin.pendingScreenshotUploads = originalState.pendingScreenshotUploads
       sinon.restore()
     })
 
@@ -2194,6 +2198,36 @@ moduleTypes.forEach(({
         sinon.assert.calledOnce(testSuiteSpan.finish)
       })
     }
+
+    it('does not wait for a suite video upload before completing after:spec', () => {
+      const testSuiteSpan = {
+        context: () => ({ toSpanId: () => '456' }),
+        finish: sinon.stub(),
+        setTag: sinon.stub(),
+      }
+      cypressPlugin.cypressConfig = { isTextTerminal: true }
+      cypressPlugin.finishedTestsByFile = {}
+      cypressPlugin.testsToSkip = []
+      cypressPlugin.pendingScreenshotUploads = []
+      cypressPlugin.testSessionSpan = { context: () => ({ toTraceId: () => '123' }) }
+      cypressPlugin.testSuiteSpan = testSuiteSpan
+      cypressPlugin.tracer = { _tracer: { _exporter: {} } }
+      sinon.stub(cypressPlugin, 'ciVisEvent')
+      const upload = sinon.stub(cypressPlugin, 'uploadTestSuiteVideo').returns(new Promise(() => {}))
+
+      const result = cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/basic-fail.js' },
+        { stats: { failures: 1, tests: 1 }, video: '/tmp/basic-fail.mp4' }
+      )
+
+      assert.strictEqual(result, undefined)
+      sinon.assert.calledOnceWithExactly(upload, {
+        filePath: '/tmp/basic-fail.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
+      })
+      sinon.assert.calledOnce(testSuiteSpan.finish)
+    })
 
     it('restores user retries before requesting configuration for a subsequent run', async () => {
       const cypressConfig = { retries: { openMode: 1, runMode: 2 }, version: '12.0.0' }

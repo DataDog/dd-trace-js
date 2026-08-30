@@ -12,6 +12,7 @@ const assert = require('node:assert')
 
 const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
+const { getValueFromEnvSources } = require('../../../../dd-trace/src/config/helper')
 const { parse, query } = require('./compiler')
 
 const functionTypes = new Set(['ArrowFunctionExpression', 'FunctionDeclaration', 'FunctionExpression'])
@@ -38,6 +39,7 @@ module.exports = {
  * @returns {void}
  */
 function markPlaywrightAutomaticVideoAttachment (_state, node) {
+  if (getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED') !== true) return
   addObjectProperty(node, automaticVideoMarkerProperty)
 }
 
@@ -49,6 +51,7 @@ function markPlaywrightAutomaticVideoAttachment (_state, node) {
  * @returns {void}
  */
 function propagatePlaywrightAutomaticVideoAttachment (_state, node) {
+  if (getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED') !== true) return
   addObjectProperty(node, propagatedVideoMarkerProperty)
 }
 

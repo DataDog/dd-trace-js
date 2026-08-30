@@ -140,7 +140,8 @@ function requestBuffered (data, options, callback) {
       return
     }
 
-    if (!commonRequest.writable) {
+    const isWritable = typeof data === 'function' ? commonRequest.streamWritable : commonRequest.writable
+    if (!isWritable) {
       retryTimer = setTimeout(attempt, Math.min(50, remaining), attemptIndex)
       retryTimer.unref?.()
       return

@@ -1642,13 +1642,13 @@ class CypressPlugin {
       }
     }
 
-    const suiteVideoUploadPromise = !error && (latestError || getSuiteStatus(stats) === 'fail')
-      ? this.uploadTestSuiteVideo({
+    if (!error && (latestError || getSuiteStatus(stats) === 'fail')) {
+      this.uploadTestSuiteVideo({
         filePath: video,
         testSessionId: this.testSessionSpan?.context().toTraceId(),
         testSuiteId: this.testSuiteSpan?.context().toSpanId(),
       })
-      : undefined
+    }
 
     const finishSuite = () => {
       if (this.testSuiteSpan) {
@@ -1664,14 +1664,11 @@ class CypressPlugin {
       }
     }
 
-    const waitForMediaUploads = () => {
-      if (screenshotUploadPromises.length > 0 || this.pendingScreenshotUploads.length > 0 ||
-        suiteVideoUploadPromise) {
+    const waitForScreenshotUploads = () => {
+      if (screenshotUploadPromises.length > 0 || this.pendingScreenshotUploads.length > 0) {
         const pendingScreenshotUploads = this.pendingScreenshotUploads
         this.pendingScreenshotUploads = []
-        const mediaUploads = [...pendingScreenshotUploads, ...screenshotUploadPromises]
-        if (suiteVideoUploadPromise) mediaUploads.push(suiteVideoUploadPromise)
-        return Promise.all(mediaUploads).then(() => null)
+        return Promise.all([...pendingScreenshotUploads, ...screenshotUploadPromises]).then(() => null)
       }
     }
 
@@ -1682,12 +1679,12 @@ class CypressPlugin {
       return this.afterRun(undefined, error)
     }
 
-    const mediaUploadsPromise = waitForMediaUploads()
-    let afterSpecPromise = mediaUploadsPromise
+    const screenshotUploadsPromise = waitForScreenshotUploads()
+    let afterSpecPromise = screenshotUploadsPromise
     if (testSpanFinishPromises.length > 0) {
       const testSpansPromise = Promise.all(testSpanFinishPromises).then(() => null)
-      if (mediaUploadsPromise) {
-        afterSpecPromise = Promise.all([testSpansPromise, mediaUploadsPromise]).then(() => null)
+      if (screenshotUploadsPromise) {
+        afterSpecPromise = Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
       } else {
         afterSpecPromise = testSpansPromise
       }

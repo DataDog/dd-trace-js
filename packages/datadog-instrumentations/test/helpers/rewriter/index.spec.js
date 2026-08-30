@@ -948,20 +948,51 @@ describe('check-require-cache', () => {
     assert.equal(subs.start.callCount, 0)
   })
 
-  it('should mark only Playwright recorder video attachments', () => {
-    const { recordVideo, TestInfoImpl } = compileFile('playwright-video-provenance')
-    const attachments = []
-    const testInfo = new TestInfoImpl(attachment => attachments.push(attachment))
+  it('should not expose the Playwright video marker when uploads are disabled', () => {
+    const originalValue = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+    try {
+      delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+      const { recordVideo, TestInfoImpl } = compileFile('playwright-video-provenance')
+      const attachments = []
+      const testInfo = new TestInfoImpl(attachment => attachments.push(attachment))
 
-    recordVideo(testInfo, '/tmp/automatic-video.webm')
-    testInfo.attachments.push({
-      name: 'video',
-      path: '/tmp/manual-video.webm',
-      contentType: 'video/webm',
-    })
+      recordVideo(testInfo, '/tmp/automatic-video.webm')
 
-    assert.strictEqual(attachments[0]._ddIsAutomaticFailureVideo, true)
-    assert.strictEqual(attachments[1]._ddIsAutomaticFailureVideo, undefined)
+      assert.strictEqual(testInfo.attachments[0]._ddIsAutomaticFailureVideo, undefined)
+      assert.strictEqual(attachments[0]._ddIsAutomaticFailureVideo, undefined)
+    } finally {
+      if (originalValue === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+      else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = originalValue
+    }
+
+    ch = tracingChannel('orchestrion:test:unused')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+  })
+
+  it('should mark only Playwright recorder video attachments when uploads are enabled', () => {
+    const originalValue = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+    try {
+      process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
+      const { recordVideo, TestInfoImpl } = compileFile('playwright-video-provenance')
+      const attachments = []
+      const testInfo = new TestInfoImpl(attachment => attachments.push(attachment))
+
+      recordVideo(testInfo, '/tmp/automatic-video.webm')
+      testInfo.attachments.push({
+        name: 'video',
+        path: '/tmp/manual-video.webm',
+        contentType: 'video/webm',
+      })
+
+      assert.strictEqual(testInfo.attachments[0]._ddIsAutomaticFailureVideo, true)
+      assert.strictEqual(testInfo.attachments[1]._ddIsAutomaticFailureVideo, undefined)
+      assert.strictEqual(attachments[0]._ddIsAutomaticFailureVideo, true)
+      assert.strictEqual(attachments[1]._ddIsAutomaticFailureVideo, undefined)
+    } finally {
+      if (originalValue === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+      else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = originalValue
+    }
 
     ch = tracingChannel('orchestrion:test:unused')
     subs = { start: sinon.spy() }

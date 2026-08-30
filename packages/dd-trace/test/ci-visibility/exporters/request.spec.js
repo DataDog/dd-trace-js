@@ -24,6 +24,7 @@ describe('Test Optimization exporter request', () => {
       pendingRequests.push({ data, options, callback })
     }
     commonRequest.writable = true
+    commonRequest.streamWritable = true
     request = proxyquire('../../../src/ci-visibility/exporters/request', {
       '../../exporters/common/request': commonRequest,
       '../../exporters/common/retry': {
@@ -303,7 +304,7 @@ describe('Test Optimization exporter request', () => {
   })
 
   it('waits for exporter backpressure before creating a readable body without a deadline', () => {
-    commonRequest.writable = false
+    commonRequest.streamWritable = false
     const createBody = sinon.stub().returns(Readable.from('payload'))
     const done = sinon.spy()
     request(createBody, {}, done)
@@ -311,13 +312,22 @@ describe('Test Optimization exporter request', () => {
     clock.tick(49)
     sinon.assert.notCalled(createBody)
     assert.strictEqual(pendingRequests.length, 0)
-    commonRequest.writable = true
+    commonRequest.streamWritable = true
     clock.tick(1)
     sinon.assert.calledOnce(createBody)
     assert.strictEqual(pendingRequests.length, 1)
 
     pendingRequests[0].callback(null, 'ok', 200, {})
     sinon.assert.calledOnce(done)
+  })
+
+  it('sends buffered data while stream capacity is saturated', () => {
+    commonRequest.streamWritable = false
+
+    request('payload', {}, sinon.spy())
+
+    assert.strictEqual(pendingRequests.length, 1)
+    assert.strictEqual(pendingRequests[0].data, 'payload')
   })
 
   it('fails at the deadline while exporter backpressure remains active', () => {

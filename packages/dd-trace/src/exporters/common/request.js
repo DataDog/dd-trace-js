@@ -288,9 +288,16 @@ function byteLength (data) {
   return data.length > 0 ? data.reduce((prev, next) => prev + Buffer.byteLength(next, 'utf8'), 0) : 0
 }
 
-Object.defineProperty(request, 'writable', {
-  get () {
-    return activeBufferSize < maxActiveBufferSize && activeStreamCount < maxActiveStreams
+Object.defineProperties(request, {
+  writable: {
+    get () {
+      return activeBufferSize < maxActiveBufferSize
+    },
+  },
+  streamWritable: {
+    get () {
+      return activeStreamCount < maxActiveStreams
+    },
   },
 })
 

@@ -176,7 +176,8 @@ describe('request', function () {
     }
 
     assert.strictEqual(requests.length, 16)
-    assert.strictEqual(limitedRequest.writable, false)
+    assert.strictEqual(limitedRequest.writable, true)
+    assert.strictEqual(limitedRequest.streamWritable, false)
 
     const rejected = new stream.Readable({ read () {} })
     const rejectedCallback = sinon.spy()
@@ -193,6 +194,7 @@ describe('request', function () {
 
     requests[0].emit('close')
     assert.strictEqual(limitedRequest.writable, true)
+    assert.strictEqual(limitedRequest.streamWritable, true)
 
     for (let index = 1; index < requests.length; index++) requests[index].emit('close')
     for (const readable of streams) assert.strictEqual(readable.destroyed, true)
