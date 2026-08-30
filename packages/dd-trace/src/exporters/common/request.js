@@ -23,9 +23,11 @@ const {
 const legacyStorage = storage('legacy')
 
 const maxActiveBufferSize = 1024 * 1024 * 64
+const maxActiveStreams = 16
 const noop = () => {}
 
 let activeBufferSize = 0
+let activeStreamCount = 0
 
 /**
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
@@ -176,14 +178,21 @@ function request (data, options, callback) {
   // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
   /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
-    if (activeBufferSize + contentLength > maxActiveBufferSize) {
-      const error = new log.NoTransmitError('Maximum active request buffer size reached: payload is discarded.')
-      error.code = 'ERR_DD_REQUEST_BUFFER_FULL'
+    const isBufferFull = activeBufferSize + contentLength > maxActiveBufferSize
+    const isStreamLimitReached = isStreaming && activeStreamCount >= maxActiveStreams
+    if (isBufferFull || isStreamLimitReached) {
+      if (isStreaming && !data.destroyed) data.destroy()
+      const message = isStreamLimitReached
+        ? 'Maximum active request stream count reached: payload is discarded.'
+        : 'Maximum active request buffer size reached: payload is discarded.'
+      const error = new log.NoTransmitError(message)
+      error.code = isStreamLimitReached ? 'ERR_DD_REQUEST_STREAM_LIMIT' : 'ERR_DD_REQUEST_BUFFER_FULL'
       log.debug(error.message)
       return callback(error, undefined, undefined, undefined, true)
     }
 
     activeBufferSize += contentLength
+    if (isStreaming) activeStreamCount++
 
     legacyStorage.run({ noop: true }, () => {
       let finished = false
@@ -193,6 +202,7 @@ function request (data, options, callback) {
         if (finished) return
         finished = true
         activeBufferSize -= contentLength
+        if (isStreaming) activeStreamCount--
       }
 
       /**
@@ -280,7 +290,7 @@ function byteLength (data) {
 
 Object.defineProperty(request, 'writable', {
   get () {
-    return activeBufferSize < maxActiveBufferSize
+    return activeBufferSize < maxActiveBufferSize && activeStreamCount < maxActiveStreams
   },
 })
 

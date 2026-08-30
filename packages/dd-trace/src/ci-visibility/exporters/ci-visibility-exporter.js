@@ -1004,12 +1004,19 @@ class CiVisibilityExporter extends BufferingExporter {
   #uploadTestMedia (uploadRequest, uploadOptions, callback) {
     const { signal } = uploadOptions
 
+    if (signal?.aborted) {
+      const error = signal.reason || Object.assign(new Error('Test screenshot upload aborted'), { code: 'ABORT_ERR' })
+      callback(error)
+      return
+    }
     this.#resetFinalFlush()
+    const deadline = Date.now() + FINAL_FLUSH_TIMEOUT
     const controller = new AbortController()
     let settled = false
     const complete = (error) => {
       if (settled) return
       settled = true
+      clearTimeout(timeoutId)
       signal?.removeEventListener('abort', onAbort)
 
       try {
@@ -1029,6 +1036,13 @@ class CiVisibilityExporter extends BufferingExporter {
       complete(error)
     }
 
+    const timeoutId = setTimeout(() => {
+      const error = createFinalFlushTimeoutError()
+      controller.abort(error)
+      complete(error)
+    }, Math.max(0, deadline - Date.now()))
+    timeoutId.unref?.()
+
     this.#pendingMediaUploads.add(controller)
     signal?.addEventListener('abort', onAbort, { once: true })
 
@@ -1042,6 +1056,7 @@ class CiVisibilityExporter extends BufferingExporter {
       url: this._testScreenshotUploadUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,
+      deadline,
       signal: controller.signal,
     }, complete)
   }

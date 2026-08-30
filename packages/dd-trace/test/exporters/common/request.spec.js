@@ -141,6 +141,63 @@ describe('request', function () {
     })
   })
 
+  it('should limit active streamed requests', () => {
+    const requests = []
+    const createRequest = () => {
+      const pending = new EventEmitter()
+      pending.setTimeout = sinon.stub()
+      pending.write = sinon.stub()
+      pending.end = sinon.stub()
+      pending.destroy = sinon.stub()
+      requests.push(pending)
+      return pending
+    }
+    const limitedRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const streams = []
+
+    for (let index = 0; index < 16; index++) {
+      const readable = new stream.Readable({ read () {} })
+      streams.push(readable)
+      limitedRequest(readable, {
+        method: 'POST',
+        headers: { 'Content-Length': 1 },
+      }, sinon.stub())
+    }
+
+    assert.strictEqual(requests.length, 16)
+    assert.strictEqual(limitedRequest.writable, false)
+
+    const rejected = new stream.Readable({ read () {} })
+    const rejectedCallback = sinon.spy()
+    limitedRequest(rejected, {
+      method: 'POST',
+      headers: { 'Content-Length': 1 },
+    }, rejectedCallback)
+
+    assert.strictEqual(requests.length, 16)
+    assert.strictEqual(rejected.destroyed, true)
+    sinon.assert.calledOnce(rejectedCallback)
+    assert.strictEqual(rejectedCallback.firstCall.args[0].code, 'ERR_DD_REQUEST_STREAM_LIMIT')
+    assert.strictEqual(rejectedCallback.firstCall.args[4], true)
+
+    requests[0].emit('close')
+    assert.strictEqual(limitedRequest.writable, true)
+
+    for (let index = 1; index < requests.length; index++) requests[index].emit('close')
+    for (const readable of streams) assert.strictEqual(readable.destroyed, true)
+  })
+
   it('should destroy a streamed readable when reading fails', (done) => {
     const readError = new Error('could not read media')
     const readable = new stream.Readable({

@@ -1951,7 +1951,7 @@ describe('CI Visibility Exporter', () => {
       return exporter
     }
 
-    it('only bounds a pending media upload after final flush starts', () => {
+    it('bounds a pending media upload from its start', () => {
       const clock = sinon.useFakeTimers()
       try {
         uploadTestScreenshotRequest = sinon.stub().callsFake((options, callback) => {
@@ -1959,34 +1959,23 @@ describe('CI Visibility Exporter', () => {
         })
         const exporter = createScreenshotExporter()
         const screenshotCallback = sinon.spy()
-        const flushCallback = sinon.spy()
+        const startedAt = Date.now()
 
         exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
         const requestOptions = uploadTestScreenshotRequest.firstCall.args[0]
-        assert.strictEqual(requestOptions.deadline, undefined)
+        assert.strictEqual(requestOptions.deadline, startedAt + FINAL_FLUSH_TIMEOUT)
         assert.strictEqual(requestOptions.signal.aborted, false)
-        clock.tick(60_000)
-        assert.strictEqual(requestOptions.signal.aborted, false)
-        sinon.assert.notCalled(screenshotCallback)
-
-        exporter.flush(flushCallback)
-        sinon.assert.notCalled(exporter._writer.flush)
-        sinon.assert.notCalled(flushCallback)
-
         clock.tick(FINAL_FLUSH_TIMEOUT - 1)
         sinon.assert.notCalled(screenshotCallback)
-        sinon.assert.notCalled(flushCallback)
 
         clock.tick(1)
         assert.strictEqual(requestOptions.signal.aborted, true)
         sinon.assert.calledOnce(screenshotCallback)
         assert.strictEqual(screenshotCallback.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
-        sinon.assert.calledOnce(exporter._writer.flush)
-        sinon.assert.calledOnceWithExactly(flushCallback, undefined)
+        sinon.assert.notCalled(exporter._writer.flush)
 
         uploadTestScreenshotRequest.firstCall.args[1]()
         sinon.assert.calledOnce(screenshotCallback)
-        sinon.assert.calledOnce(flushCallback)
       } finally {
         clock.restore()
       }
