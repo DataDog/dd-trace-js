@@ -1643,7 +1643,7 @@ class CypressPlugin {
       }
     }
 
-    if (!error && (latestError || getSuiteStatus(stats) === 'fail')) {
+    if (latestError || getSuiteStatus(stats) === 'fail') {
       this.uploadTestSuiteVideo({
         filePath: video,
         testSessionId: this.testSessionSpan?.context().toTraceId(),

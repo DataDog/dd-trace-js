@@ -2233,6 +2233,38 @@ moduleTypes.forEach(({
       sinon.assert.calledOnce(testSuiteSpan.finish)
     })
 
+    it('uploads a failed suite video when a user after:spec handler fails', () => {
+      const userError = new Error('user after:spec failed')
+      const testSuiteSpan = {
+        context: () => ({ toSpanId: () => '456' }),
+        finish: sinon.stub(),
+        setTag: sinon.stub(),
+      }
+      cypressPlugin.cypressConfig = { isTextTerminal: true }
+      cypressPlugin.finishedTestsByFile = {}
+      cypressPlugin.testsToSkip = []
+      cypressPlugin.pendingScreenshotUploads = []
+      cypressPlugin.testSessionSpan = { context: () => ({ toTraceId: () => '123' }) }
+      cypressPlugin.testSuiteSpan = testSuiteSpan
+      cypressPlugin.tracer = { _tracer: { _exporter: {} } }
+      sinon.stub(cypressPlugin, 'ciVisEvent')
+      const upload = sinon.stub(cypressPlugin, 'uploadTestSuiteVideo')
+      const afterRun = sinon.stub(cypressPlugin, 'afterRun')
+
+      cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/basic-fail.js' },
+        { stats: { failures: 1, tests: 1 }, video: '/tmp/basic-fail.mp4' },
+        userError
+      )
+
+      sinon.assert.calledOnceWithExactly(upload, {
+        filePath: '/tmp/basic-fail.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
+      })
+      sinon.assert.calledOnceWithExactly(afterRun, undefined, userError)
+    })
+
     it('keeps suite video uploads out of screenshot cancellation', () => {
       const uploadTestSuiteVideo = sinon.stub()
       cypressPlugin.uploadedVideoPaths = new Set()
