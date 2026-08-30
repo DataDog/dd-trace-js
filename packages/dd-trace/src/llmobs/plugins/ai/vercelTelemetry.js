@@ -7,6 +7,7 @@ const {
   getGenerationMetadataFromEvent,
   getJsonStringValue,
   getToolCallResultContent,
+  extractUserContentParts,
 } = require('./util')
 
 // TODO: add in embedMany once it has tracingChannel support
@@ -53,15 +54,11 @@ function formatLanguageModelInputMessages (instructions, messages) {
     if (role === 'system') {
       inputMessages.push({ role, content })
     } else if (role === 'user') {
-      const userMessageContent =
-      typeof content === 'string'
-        ? content
-        : content
-          .filter(part => part.type === 'text')
-          .map(part => part.text)
-          .join('')
+      const { content: userMessageContent, imageParts } = extractUserContentParts(content)
+      const userMessage = { role, content: userMessageContent }
+      if (imageParts.length) userMessage.imageParts = imageParts
 
-      inputMessages.push({ role, content: userMessageContent })
+      inputMessages.push(userMessage)
     } else if (role === 'assistant') {
       if (typeof content === 'string') {
         inputMessages.push({ role, content })
