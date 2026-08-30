@@ -1753,7 +1753,7 @@ class CypressPlugin {
    * @param {string|undefined} options.filePath - Cypress video path
    * @param {string|undefined} options.testSessionId - Test session id
    * @param {string|undefined} options.testSuiteId - Test suite id
-   * @returns {Promise<void>|undefined}
+   * @returns {void}
    */
   uploadTestSuiteVideo ({ filePath, testSessionId, testSuiteId }) {
     const exporter = this.tracer?._tracer?._exporter
@@ -1766,16 +1766,14 @@ class CypressPlugin {
     const abortController = new AbortController()
     this.screenshotUploadAbortControllers.add(abortController)
 
-    return new Promise(resolve => {
-      exporter.uploadTestSuiteVideo({
-        filePath,
-        testSessionId,
-        testSuiteId,
-        idempotencyKey: `${testSessionId}:${testSuiteId}:${basename(filePath)}`,
-        capturedAtMs: Date.now(),
-        signal: abortController.signal,
-      }, () => resolve())
-    }).finally(() => {
+    exporter.uploadTestSuiteVideo({
+      filePath,
+      testSessionId,
+      testSuiteId,
+      idempotencyKey: `${testSessionId}:${testSuiteId}:${basename(filePath)}`,
+      capturedAtMs: Date.now(),
+      signal: abortController.signal,
+    }, () => {
       this.screenshotUploadAbortControllers.delete(abortController)
     })
   }

@@ -241,22 +241,6 @@ function request (data, options, callback) {
 
       const req = client.request(connectionOptions, (res) => onResponse(res, complete, handleError))
 
-      stopStreaming = () => {
-        if (!isStreaming) return
-        data.unpipe(req)
-        data.removeListener('error', handleStreamError)
-        if (!data.destroyed) data.destroy()
-      }
-      const handleStreamError = error => req.destroy(error)
-
-      req.once('close', () => {
-        stopStreaming()
-        finalize()
-      })
-      req.once('timeout', () => {
-        stopStreaming()
-        finalize()
-      })
       req.once('error', handleError)
 
       req.setTimeout(timeout, () => {
@@ -272,9 +256,21 @@ function request (data, options, callback) {
       })
 
       if (isStreaming) {
+        const handleStreamError = error => req.destroy(error)
+        stopStreaming = () => {
+          data.unpipe(req)
+          data.removeListener('error', handleStreamError)
+          if (!data.destroyed) data.destroy()
+          if (!req.writableFinished && !req.destroyed) req.destroy()
+          finalize()
+        }
+        req.once('close', stopStreaming)
+        req.once('timeout', stopStreaming)
         data.once('error', handleStreamError)
         data.pipe(req)
       } else {
+        req.once('close', finalize)
+        req.once('timeout', finalize)
         for (const buffer of dataArray) req.write(buffer)
         req.end()
       }

@@ -63,6 +63,7 @@ const log = require('../../dd-trace/src/log')
 
 const PLAYWRIGHT_FAILURE_SCREENSHOT_RE = /^test-failed-\d+\.png$/
 const PLAYWRIGHT_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/webm'])
+const noop = () => {}
 
 /**
  * Returns whether an attachment is an automatic Playwright failure screenshot.
@@ -389,26 +390,17 @@ class PlaywrightPlugin extends CiPlugin {
         }
       }
       this.#pendingTestFinishCallbacks.set(finishTest, abortController)
-      let pendingMediaUploads = 0
-      let screenshotUploadResult
-      const mediaUploadDone = (result) => {
-        if (result !== undefined) screenshotUploadResult = result
-        pendingMediaUploads--
-        if (pendingMediaUploads === 0) finishTest(screenshotUploadResult)
-      }
       const screenshotUploadStarted = this.uploadTestScreenshots({
         screenshots,
         traceId: formattedTestSpan.trace_id.toString(10),
         signal: abortController.signal,
-      }, mediaUploadDone)
-      if (screenshotUploadStarted) pendingMediaUploads++
-      const videoUploadStarted = this.uploadTestVideos({
+      }, finishTest)
+      this.uploadTestVideos({
         videos,
         traceId: formattedTestSpan.trace_id.toString(10),
         signal: abortController.signal,
-      }, mediaUploadDone)
-      if (videoUploadStarted) pendingMediaUploads++
-      if (pendingMediaUploads > 0) return
+      })
+      if (screenshotUploadStarted) return
 
       finishTest()
     })
@@ -701,10 +693,9 @@ class PlaywrightPlugin extends CiPlugin {
    * @param {Array<object>} options.videos - Playwright test attachments
    * @param {string} options.traceId - Test trace id used as the video key
    * @param {AbortSignal} options.signal - Signal used to cancel uploads during error finalization
-   * @param {() => void} onDone - Completion callback
    * @returns {boolean} Whether at least one upload was started
    */
-  uploadTestVideos ({ videos, traceId, signal }, onDone) {
+  uploadTestVideos ({ videos, traceId, signal }) {
     const exporter = this.tracer?._exporter
     if (!Array.isArray(videos) || !videos.length ||
       !exporter?.canUploadTestVideos?.() || !exporter.uploadTestVideo) {
@@ -717,7 +708,6 @@ class PlaywrightPlugin extends CiPlugin {
     }
     if (!videoPaths.size) return false
 
-    let pendingUploads = videoPaths.size
     for (const filePath of videoPaths) {
       exporter.uploadTestVideo({
         filePath,
@@ -725,10 +715,7 @@ class PlaywrightPlugin extends CiPlugin {
         idempotencyKey: `${traceId}:${basename(filePath)}`,
         capturedAtMs: Date.now(),
         signal,
-      }, () => {
-        pendingUploads--
-        if (pendingUploads === 0) queueMicrotask(onDone)
-      })
+      }, noop)
     }
     return true
   }

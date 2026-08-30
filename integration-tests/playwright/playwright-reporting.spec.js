@@ -516,6 +516,41 @@ versions.forEach((version) => {
       })
     })
 
+    contextNewVersions('failure videos', () => {
+      it('starts final flush without waiting for a pending video upload', async (receiver, run) => {
+        let testOutput = ''
+        const proc = run(
+          'node ./ci-visibility/playwright-pending-upload-finalization.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              PLAYWRIGHT_PENDING_VIDEO: 'true',
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end', 'test']) {
+              assert.ok(events.some(event => event.type === eventType), `expected ${eventType}\n${testOutput}`)
+            }
+          },
+          { hardTimeout: 15_000 }
+        )
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0, testOutput)
+        assert.match(testOutput, /PLAYWRIGHT_FINAL_FLUSH_STARTED/)
+      })
+    })
+
     const reportMethods = ['agentless', 'evp proxy']
 
     reportMethods.forEach((reportMethod) => {

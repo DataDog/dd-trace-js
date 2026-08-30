@@ -141,6 +141,62 @@ describe('request', function () {
     })
   })
 
+  it('destroys an incomplete streamed request after an early response', () => {
+    const response = new EventEmitter()
+    response.headers = {}
+    response.statusCode = 413
+    response.setTimeout = sinon.stub()
+    const clientRequest = new EventEmitter()
+    clientRequest.destroyed = false
+    clientRequest.writableFinished = false
+    clientRequest.setTimeout = sinon.stub()
+    clientRequest.write = sinon.stub()
+    clientRequest.end = sinon.stub()
+    clientRequest.destroy = sinon.spy(() => {
+      clientRequest.destroyed = true
+    })
+    let respond
+    const earlyResponseRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: {
+        ...http,
+        request: (_options, onResponse) => {
+          respond = onResponse
+          return clientRequest
+        },
+      },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const readable = new stream.Readable({ read () {} })
+    let requestError
+
+    earlyResponseRequest(readable, {
+      method: 'PUT',
+      retry: false,
+      headers: {
+        'Content-Length': 1024,
+        'Content-Type': 'application/octet-stream',
+      },
+    }, (error) => {
+      requestError = error
+    })
+    respond(response)
+    response.emit('data', Buffer.from('too large'))
+    response.emit('end')
+
+    assert.strictEqual(requestError.status, 413)
+    assert.strictEqual(readable.destroyed, true)
+    assert.strictEqual(clientRequest.destroyed, true)
+    sinon.assert.calledOnce(clientRequest.destroy)
+  })
+
   it('should limit active streamed requests', () => {
     const requests = []
     const createRequest = () => {

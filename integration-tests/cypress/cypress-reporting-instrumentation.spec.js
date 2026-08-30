@@ -2115,6 +2115,8 @@ moduleTypes.forEach(({
       testSessionSpan: cypressPlugin.testSessionSpan,
       testSuiteSpan: cypressPlugin.testSuiteSpan,
       pendingScreenshotUploads: cypressPlugin.pendingScreenshotUploads,
+      uploadedVideoPaths: cypressPlugin.uploadedVideoPaths,
+      screenshotUploadAbortControllers: cypressPlugin.screenshotUploadAbortControllers,
     }
 
     afterEach(() => {
@@ -2129,6 +2131,8 @@ moduleTypes.forEach(({
       cypressPlugin.testSessionSpan = originalState.testSessionSpan
       cypressPlugin.testSuiteSpan = originalState.testSuiteSpan
       cypressPlugin.pendingScreenshotUploads = originalState.pendingScreenshotUploads
+      cypressPlugin.uploadedVideoPaths = originalState.uploadedVideoPaths
+      cypressPlugin.screenshotUploadAbortControllers = originalState.screenshotUploadAbortControllers
       sinon.restore()
     })
 
@@ -2227,6 +2231,34 @@ moduleTypes.forEach(({
         testSuiteId: '456',
       })
       sinon.assert.calledOnce(testSuiteSpan.finish)
+    })
+
+    it('tracks a suite video upload without returning a Promise', () => {
+      let completeUpload
+      const uploadTestSuiteVideo = sinon.stub().callsFake((_options, callback) => {
+        completeUpload = callback
+      })
+      cypressPlugin.uploadedVideoPaths = new Set()
+      cypressPlugin.screenshotUploadAbortControllers = new Set()
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            canUploadTestVideos: () => true,
+            uploadTestSuiteVideo,
+          },
+        },
+      }
+
+      const result = cypressPlugin.uploadTestSuiteVideo({
+        filePath: '/tmp/basic-fail.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
+      })
+
+      assert.strictEqual(result, undefined)
+      assert.strictEqual(cypressPlugin.screenshotUploadAbortControllers.size, 1)
+      completeUpload()
+      assert.strictEqual(cypressPlugin.screenshotUploadAbortControllers.size, 0)
     })
 
     it('restores user retries before requesting configuration for a subsequent run', async () => {
