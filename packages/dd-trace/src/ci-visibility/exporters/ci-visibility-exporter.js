@@ -732,6 +732,8 @@ class CiVisibilityExporter extends BufferingExporter {
     let hasCompleted = false
     let initializationTimeoutId
     let mediaTimeoutId
+    let writersFlushed = false
+    let writerFlushError
 
     const fallbackTimeoutId = isFinalFlush
       ? setTimeout(() => {
@@ -745,7 +747,7 @@ class CiVisibilityExporter extends BufferingExporter {
       clearTimeout(fallbackTimeoutId)
       clearTimeout(initializationTimeoutId)
       clearTimeout(mediaTimeoutId)
-      this.#mediaFlushWaiters.delete(flushWriters)
+      this.#mediaFlushWaiters.delete(completeAfterMedia)
       if (error) log.error('Error flushing Test Optimization data', error)
       if (!isFinalFlush) {
         onDone(error)
@@ -765,12 +767,21 @@ class CiVisibilityExporter extends BufferingExporter {
       }
     }
 
-    const flushWriters = () => {
+    const completeAfterMedia = () => {
+      if (writersFlushed) complete(writerFlushError)
+    }
+
+    const onWritersFlushed = (error) => {
+      writersFlushed = true
+      writerFlushError = error
       if (isFinalFlush && this.#pendingMediaUploads.size !== 0) {
-        this.#mediaFlushWaiters.add(flushWriters)
+        this.#mediaFlushWaiters.add(completeAfterMedia)
         return
       }
+      complete(error)
+    }
 
+    const flushWriters = () => {
       const options = deadline === undefined ? undefined : { deadline }
       if (isFinalFlush) {
         this.#exportDeferredTestSessionTraces(options)
@@ -786,14 +797,14 @@ class CiVisibilityExporter extends BufferingExporter {
       let flushError
 
       if (remaining === 0) {
-        complete()
+        onWritersFlushed()
         return
       }
 
       const onFlushComplete = (error) => {
         flushError ||= error
         remaining -= 1
-        if (remaining === 0) complete(flushError)
+        if (remaining === 0) onWritersFlushed(flushError)
       }
 
       for (const writer of writers) writer.flush(onFlushComplete, options)

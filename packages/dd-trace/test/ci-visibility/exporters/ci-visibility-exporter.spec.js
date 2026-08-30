@@ -2017,7 +2017,7 @@ describe('CI Visibility Exporter', () => {
       }
     })
 
-    it('waits for screenshot completion work before flushing writers', async () => {
+    it('flushes writers while waiting for screenshot completion work', async () => {
       uploadTestScreenshotRequest = sinon.stub()
       const exporter = createScreenshotExporter()
       const completed = []
@@ -2029,14 +2029,13 @@ describe('CI Visibility Exporter', () => {
       exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
       exporter.flush(flushCallback)
 
-      sinon.assert.notCalled(exporter._writer.flush)
+      sinon.assert.calledOnce(exporter._writer.flush)
       sinon.assert.notCalled(flushCallback)
 
       uploadTestScreenshotRequest.firstCall.args[1](null)
       await new Promise(resolve => queueMicrotask(resolve))
 
       assert.deepStrictEqual(completed, ['screenshot'])
-      sinon.assert.calledOnce(exporter._writer.flush)
       sinon.assert.calledOnceWithExactly(flushCallback, undefined)
     })
 
