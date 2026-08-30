@@ -2233,11 +2233,8 @@ moduleTypes.forEach(({
       sinon.assert.calledOnce(testSuiteSpan.finish)
     })
 
-    it('tracks a suite video upload without returning a Promise', () => {
-      let completeUpload
-      const uploadTestSuiteVideo = sinon.stub().callsFake((_options, callback) => {
-        completeUpload = callback
-      })
+    it('keeps suite video uploads out of screenshot cancellation', () => {
+      const uploadTestSuiteVideo = sinon.stub()
       cypressPlugin.uploadedVideoPaths = new Set()
       cypressPlugin.screenshotUploadAbortControllers = new Set()
       cypressPlugin.tracer = {
@@ -2256,8 +2253,16 @@ moduleTypes.forEach(({
       })
 
       assert.strictEqual(result, undefined)
-      assert.strictEqual(cypressPlugin.screenshotUploadAbortControllers.size, 1)
-      completeUpload()
+      sinon.assert.calledOnce(uploadTestSuiteVideo)
+      assert.strictEqual(uploadTestSuiteVideo.firstCall.args[0].signal, undefined)
+      assert.strictEqual(typeof uploadTestSuiteVideo.firstCall.args[1], 'function')
+      const screenshotController = new AbortController()
+      cypressPlugin.screenshotUploadAbortControllers.add(screenshotController)
+      const laterSpecError = new Error('later spec failed')
+
+      cypressPlugin.abortPendingScreenshotUploads(laterSpecError)
+
+      assert.strictEqual(screenshotController.signal.reason, laterSpecError)
       assert.strictEqual(cypressPlugin.screenshotUploadAbortControllers.size, 0)
     })
 

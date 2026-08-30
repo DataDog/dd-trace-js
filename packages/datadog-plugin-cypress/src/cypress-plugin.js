@@ -141,6 +141,7 @@ const {
 } = require('./source-map-utils')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
+const noop = () => {}
 let hasWarnedDeprecatedCypressVersion = false
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
@@ -1763,8 +1764,6 @@ class CypressPlugin {
     }
 
     this.uploadedVideoPaths.add(filePath)
-    const abortController = new AbortController()
-    this.screenshotUploadAbortControllers.add(abortController)
 
     exporter.uploadTestSuiteVideo({
       filePath,
@@ -1772,10 +1771,7 @@ class CypressPlugin {
       testSuiteId,
       idempotencyKey: `${testSessionId}:${testSuiteId}:${basename(filePath)}`,
       capturedAtMs: Date.now(),
-      signal: abortController.signal,
-    }, () => {
-      this.screenshotUploadAbortControllers.delete(abortController)
-    })
+    }, noop)
   }
 
   getTasks () {
