@@ -52,7 +52,8 @@ describe('jest-test-suite', () => {
   // only run for jest-circus tests
   if (jest.retryTimes) {
     const parameters = [[1, 2, 3], [2, 3, 5]]
-    it.each(parameters)('can do parameterized test', (a, b, expected) => {
+    const parameterizedTest = it.each(parameters)
+    parameterizedTest('can do parameterized test', (a, b, expected) => {
       assert.deepStrictEqual(a + b, expected)
       // They are not modified by dd-trace reading the parameters
       assert.deepStrictEqual(parameters[0], [1, 2, 3])

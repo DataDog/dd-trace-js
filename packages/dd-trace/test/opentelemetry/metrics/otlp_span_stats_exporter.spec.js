@@ -22,12 +22,15 @@ const BUCKET_SIZE_NS = 10 * 1e9
 
 function getVercelOtlpStatsExporter () {
   process.env.VERCEL = '1'
-  const serverless = proxyquire.noPreserveCache()('../../../src/serverless', {})
-  const OtlpHttpExporterBase = proxyquire.noPreserveCache()(
+  const loadServerless = proxyquire.noPreserveCache()
+  const serverless = loadServerless('../../../src/serverless', {})
+  const loadOtlpHttpExporterBase = proxyquire.noPreserveCache()
+  const OtlpHttpExporterBase = loadOtlpHttpExporterBase(
     '../../../src/opentelemetry/otlp/otlp_http_exporter_base',
     { '../../serverless': serverless }
   )
-  return proxyquire.noPreserveCache()('../../../src/opentelemetry/metrics/otlp_span_stats_exporter', {
+  const loadOtlpStatsExporter = proxyquire.noPreserveCache()
+  return loadOtlpStatsExporter('../../../src/opentelemetry/metrics/otlp_span_stats_exporter', {
     '../otlp/otlp_http_exporter_base': OtlpHttpExporterBase,
   }).OtlpStatsExporter
 }

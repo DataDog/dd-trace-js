@@ -201,7 +201,8 @@ function cleanup (error) {
   // Pass error for unexpected exits, or undefined for graceful shutdown
   if (rcAckCallbacks) {
     for (const ackId of rcAckCallbacks.keys()) {
-      rcAckCallbacks.get(ackId)(error)
+      const acknowledge = rcAckCallbacks.get(ackId)
+      acknowledge(error)
       rcAckCallbacks.delete(ackId)
     }
     rcAckCallbacks = null

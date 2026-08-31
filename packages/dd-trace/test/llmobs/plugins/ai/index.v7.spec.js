@@ -1192,10 +1192,11 @@ describe('Plugin', () => {
       packageRange: '^5.0.0',
       buildModel: (BedrockModule, scenario) => {
         const { createAmazonBedrock } = BedrockModule.get()
-        return createAmazonBedrock({
+        const model = createAmazonBedrock({
           region: 'us-east-1',
           fetch: makeMockFetch(`bedrock-${scenario}`),
-        })('anthropic.claude-3-haiku-20240307-v1:0')
+        })
+        return model('anthropic.claude-3-haiku-20240307-v1:0')
       },
       env: {
         AWS_ACCESS_KEY_ID: 'test-access-key',
@@ -1210,10 +1211,11 @@ describe('Plugin', () => {
       packageRange: '^4.0.0',
       buildModel: (AnthropicModule, scenario) => {
         const { createAnthropic } = AnthropicModule.get()
-        return createAnthropic({
+        const model = createAnthropic({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`anthropic-${scenario}`),
-        })('claude-3-5-haiku-20241022')
+        })
+        return model('claude-3-5-haiku-20241022')
       },
     })
 
@@ -1250,10 +1252,11 @@ describe('Plugin', () => {
       packageRange: '^4.0.0',
       buildModel: (OpenAiModule, scenario) => {
         const { createOpenAI } = OpenAiModule.get()
-        return createOpenAI({
+        const model = createOpenAI({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`openai-responses-${scenario}`),
-        })('gpt-4o-mini')
+        })
+        return model('gpt-4o-mini')
       },
       scenarios: ['cache-read'],
       getExpectedMetrics: openaiExpectedMetrics,
@@ -1265,10 +1268,11 @@ describe('Plugin', () => {
       packageRange: '^4.0.0',
       buildModel: (GoogleModule, scenario) => {
         const { createGoogleGenerativeAI } = GoogleModule.get()
-        return createGoogleGenerativeAI({
+        const model = createGoogleGenerativeAI({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`google-${scenario}`),
-        })('gemini-2.5-flash')
+        })
+        return model('gemini-2.5-flash')
       },
       scenarios: ['cache-read'],
       getExpectedMetrics: ({ scenario }) => {
