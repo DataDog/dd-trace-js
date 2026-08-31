@@ -823,6 +823,8 @@ describe('Plugin', () => {
             type: 'http',
             resource: 'GET',
           })
+          // Prevent an unhandled rejection before the response body can join the later Promise.all.
+          tracePromise.catch(() => {})
 
           // Make request with custom dispatcher
           // For native DC versions, dispatcher is preserved because we don't wrap fetch at all
@@ -908,6 +910,8 @@ describe('Plugin', () => {
               meta: { 'http.method': 'CONNECT' },
             })
           }, { timeoutMs: 3000 })
+          // Prevent an unhandled rejection before the response body can join the later Promise.all.
+          tracePromise.catch(() => {})
 
           // proxyTunnel forces a CONNECT tunnel for the plain-HTTP-over-HTTP-proxy case.
           // undici 8.7.0 (nodejs/undici#5116) made that case forward an absolute-form

@@ -20,6 +20,7 @@ import eslintCarrierFields from './eslint-rules/eslint-carrier-fields.mjs'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintNoPendingAssertionBeforeAwait from './eslint-rules/eslint-no-pending-assertion-before-await.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
 import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
 import eslintNoUnnecessaryArrayJoin from './eslint-rules/eslint-no-unnecessary-array-join.mjs'
@@ -476,6 +477,7 @@ export default [
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-no-pending-assertion-before-await': eslintNoPendingAssertionBeforeAwait,
           'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
           'eslint-require-agent-stop': eslintRequireAgentStop,
           'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
@@ -973,6 +975,46 @@ export default [
   {
     ...eslintPluginMocha.configs.recommended,
     files: TEST_FILES,
+  },
+  {
+    name: 'dd-trace/tests/pending-assertions',
+    files: TEST_FILES,
+    // Existing violations remain excluded while clean test files are protected from regressions.
+    ignores: [
+      'packages/datadog-plugin-ai/test/index.spec.js',
+      'packages/datadog-plugin-ai/test/index.v7.spec.js',
+      'packages/datadog-plugin-anthropic/test/index.spec.js',
+      'packages/datadog-plugin-aws-durable-execution-sdk-js/test/index.spec.js',
+      'packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js',
+      'packages/datadog-plugin-aws-sdk/test/serverless-peer-service.spec.js',
+      'packages/datadog-plugin-azure-cosmos/test/index.spec.js',
+      'packages/datadog-plugin-bullmq/test/index.spec.js',
+      'packages/datadog-plugin-claude-agent-sdk/test/index.spec.js',
+      'packages/datadog-plugin-confluentinc-kafka-javascript/test/index.spec.js',
+      'packages/datadog-plugin-google-cloud-pubsub/test/dsm.spec.js',
+      'packages/datadog-plugin-google-cloud-vertexai/test/index.spec.js',
+      'packages/datadog-plugin-google-genai/test/index.spec.js',
+      'packages/datadog-plugin-http2/test/server.spec.js',
+      'packages/datadog-plugin-ioredis/test/cluster.spec.js',
+      'packages/datadog-plugin-kafkajs/test/index.spec.js',
+      'packages/datadog-plugin-langchain/test/index.spec.js',
+      'packages/datadog-plugin-langgraph/test/index.spec.js',
+      'packages/datadog-plugin-mariadb/test/index.spec.js',
+      'packages/datadog-plugin-modelcontextprotocol-sdk/test/index.spec.js',
+      'packages/datadog-plugin-moleculer/test/index.spec.js',
+      'packages/datadog-plugin-mysql2/test/index.spec.js',
+      'packages/datadog-plugin-nats/test/index.spec.js',
+      'packages/datadog-plugin-next/test/index.spec.js',
+      'packages/datadog-plugin-openai-agents/test/index.spec.js',
+      'packages/datadog-plugin-openai/test/index.spec.js',
+      'packages/datadog-plugin-pg/test/index.spec.js',
+      'packages/datadog-plugin-redis/test/client.spec.js',
+      'packages/datadog-plugin-router/test/index.spec.js',
+      'packages/dd-trace/test/plugins/agent.spec.js',
+    ],
+    rules: {
+      'eslint-rules/eslint-no-pending-assertion-before-await': 'error',
+    },
   },
   {
     name: 'dd-trace/benchmarks',
