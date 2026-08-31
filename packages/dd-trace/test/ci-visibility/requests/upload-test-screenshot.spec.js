@@ -181,6 +181,30 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(query.get('idempotency_key'), expectedKey)
       assert.strictEqual(query.get('captured_at_ms'), '1700000000000')
     })
+
+    it('streams videos through the evp_proxy without sending the API key', () => {
+      const filePath = join(tmpDir, 'video.webm')
+      writeFileSync(filePath, 'not-empty')
+
+      uploadTestVideo({
+        filePath,
+        traceId,
+        idempotencyKey: `${traceId}:video.webm`,
+        capturedAtMs: 1_700_000_000_000,
+        url: new URL('http://localhost:8126'),
+        isEvpProxy: true,
+        evpProxyPrefix,
+      }, () => {})
+
+      const [bodyFactory, { path, headers, transport }] = requestStub.firstCall.args
+      const body = bodyFactory()
+      assert.strictEqual(body.constructor.name, 'ReadStream')
+      body.destroy()
+      assert.match(path, new RegExp(`^${evpProxyPrefix}/api/v2/ci/test-runs/${traceId}/media\\?`))
+      assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], 'api')
+      assert.strictEqual(headers['DD-API-KEY'], undefined)
+      assert.strictEqual(transport, videoRequestStub)
+    })
   })
 
   describe('videos', () => {

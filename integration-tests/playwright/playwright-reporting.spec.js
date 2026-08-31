@@ -42,6 +42,9 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_SCOPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -517,7 +520,7 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('failure videos', () => {
-      it('starts final flush without waiting for a pending video upload', async (receiver, run) => {
+      it('waits for a pending video upload before the final flush', async (receiver, run) => {
         let testOutput = ''
         const proc = run(
           'node ./ci-visibility/playwright-pending-upload-finalization.js',
@@ -548,6 +551,11 @@ versions.forEach((version) => {
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 0, testOutput)
         assert.match(testOutput, /PLAYWRIGHT_FINAL_FLUSH_STARTED/)
+        assert.ok(
+          testOutput.indexOf('PLAYWRIGHT_VIDEO_UPLOAD_FINISHED') <
+            testOutput.indexOf('PLAYWRIGHT_FINAL_FLUSH_STARTED'),
+          testOutput
+        )
       })
     })
 
@@ -891,6 +899,9 @@ versions.forEach((version) => {
               .filter(event => event.type === 'test')
               .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
             assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_SCOPE], undefined)
 
             const videoPayloads = payloads.filter(({ media }) => media?.contentType === 'video/webm')
             assert.strictEqual(videoPayloads.length, 1, `one test video should upload\n${testOutput}`)
@@ -902,6 +913,52 @@ versions.forEach((version) => {
               `/api/v2/ci/test-runs/${expectedTraceId}/media`
             )
             assert.deepStrictEqual([...videoPayload.media.content.subarray(0, 4)], [26, 69, 223, 163])
+          },
+          { hardTimeout: 60000 }
+        ).catch((error) => {
+          error.message += `\nPlaywright output:\n${testOutput}`
+          throw error
+        })
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+
+      it('tags a failed Playwright test when its video upload fails', async (receiver, run) => {
+        receiver.setMediaResponseStatusCode(500)
+        let testOutput = ''
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+              PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
+              PLAYWRIGHT_OUTPUT_DIR: `./test-results-failure-videos-${++screenshotRunId}`,
+              PLAYWRIGHT_AUTO_NAMED_MANUAL_VIDEO: 'true',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const failedTest = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+
+            assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+            assert.strictEqual(failedTest.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], 'true')
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_SCOPE], undefined)
           },
           { hardTimeout: 60000 }
         ).catch((error) => {

@@ -37,7 +37,14 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_SCOPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const {
+  VIDEO_UPLOAD_RESULT_UPLOADED,
+  VIDEO_UPLOAD_SCOPE_TEST_SUITE,
+} = require('../../packages/dd-trace/src/ci-visibility/test-video')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
@@ -2221,9 +2228,17 @@ moduleTypes.forEach(({
       cypressPlugin._isInit = true
       cypressPlugin.testSessionSpan = { context: () => ({ toTraceId: () => '123' }) }
       cypressPlugin.testSuiteSpan = testSuiteSpan
-      cypressPlugin.tracer = { _tracer: { _exporter: {} } }
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            canUploadTestVideos: () => true,
+            uploadTestSuiteVideo: sinon.stub(),
+          },
+        },
+      }
+      cypressPlugin.uploadedVideoPaths = new Set()
       sinon.stub(cypressPlugin, 'ciVisEvent')
-      const upload = sinon.stub(cypressPlugin, 'uploadTestSuiteVideo').returns(new Promise(() => {}))
+      const upload = sinon.stub(cypressPlugin, 'uploadTestSuiteVideo').resolves(VIDEO_UPLOAD_RESULT_UPLOADED)
 
       const result = cypressPlugin.afterSpec(
         { relative: 'cypress/e2e/basic-fail.js' },
@@ -2232,7 +2247,7 @@ moduleTypes.forEach(({
 
       assert.strictEqual(result, undefined)
       sinon.assert.notCalled(upload)
-      sinon.assert.calledOnce(testSuiteSpan.finish)
+      sinon.assert.notCalled(testSuiteSpan.finish)
 
       await cypressPlugin.afterRun({})
 
@@ -2241,6 +2256,9 @@ moduleTypes.forEach(({
         testSessionId: '123',
         testSuiteId: '456',
       })
+      sinon.assert.calledOnce(testSuiteSpan.finish)
+      sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_UPLOADED, 'true')
+      sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
     })
 
     it('defers a failed suite video to after:run when a user after:spec handler fails', async () => {
@@ -2256,12 +2274,25 @@ moduleTypes.forEach(({
       cypressPlugin.pendingScreenshotUploads = []
       cypressPlugin.pendingVideoUploads = []
       cypressPlugin._isInit = true
-      cypressPlugin.testSessionSpan = { context: () => ({ toTraceId: () => '123' }) }
+      cypressPlugin.testSessionSpan = {
+        context: () => ({
+          toTraceId: () => '123',
+          _trace: { started: [testSuiteSpan] },
+        }),
+      }
       cypressPlugin.testModuleSpan = null
       cypressPlugin.testSuiteSpan = testSuiteSpan
-      cypressPlugin.tracer = { _tracer: { _exporter: {} } }
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            canUploadTestVideos: () => true,
+            uploadTestSuiteVideo: sinon.stub(),
+          },
+        },
+      }
+      cypressPlugin.uploadedVideoPaths = new Set()
       sinon.stub(cypressPlugin, 'ciVisEvent')
-      const upload = sinon.stub(cypressPlugin, 'uploadTestSuiteVideo')
+      const upload = sinon.stub(cypressPlugin, 'uploadTestSuiteVideo').resolves(VIDEO_UPLOAD_RESULT_UPLOADED)
 
       await cypressPlugin.afterSpec(
         { relative: 'cypress/e2e/basic-fail.js' },
@@ -2270,11 +2301,14 @@ moduleTypes.forEach(({
       )
 
       sinon.assert.notCalled(upload)
-      assert.deepStrictEqual(cypressPlugin.pendingVideoUploads, [{
+      assert.strictEqual(cypressPlugin.pendingVideoUploads.length, 1)
+      assertObjectContains(cypressPlugin.pendingVideoUploads[0], {
         filePath: '/tmp/basic-fail.mp4',
         testSessionId: '123',
         testSuiteId: '456',
-      }])
+        testSuiteSpan,
+      })
+      sinon.assert.notCalled(testSuiteSpan.finish)
 
       await cypressPlugin.afterRun({})
 
@@ -2284,10 +2318,11 @@ moduleTypes.forEach(({
         testSuiteId: '456',
       })
       assert.deepStrictEqual(cypressPlugin.pendingVideoUploads, [])
+      sinon.assert.calledOnce(testSuiteSpan.finish)
     })
 
-    it('keeps suite video uploads out of screenshot cancellation', () => {
-      const uploadTestSuiteVideo = sinon.stub()
+    it('keeps suite video uploads out of screenshot cancellation', async () => {
+      const uploadTestSuiteVideo = sinon.stub().callsFake((options, callback) => callback())
       cypressPlugin.uploadedVideoPaths = new Set()
       cypressPlugin.screenshotUploadAbortControllers = new Set()
       cypressPlugin.tracer = {
@@ -2305,7 +2340,7 @@ moduleTypes.forEach(({
         testSuiteId: '456',
       })
 
-      assert.strictEqual(result, undefined)
+      assert.strictEqual(await result, VIDEO_UPLOAD_RESULT_UPLOADED)
       sinon.assert.calledOnce(uploadTestSuiteVideo)
       assert.strictEqual(uploadTestSuiteVideo.firstCall.args[0].signal, undefined)
       assert.strictEqual(typeof uploadTestSuiteVideo.firstCall.args[1], 'function')
@@ -2317,6 +2352,72 @@ moduleTypes.forEach(({
 
       assert.strictEqual(screenshotController.signal.reason, laterSpecError)
       assert.strictEqual(cypressPlugin.screenshotUploadAbortControllers.size, 0)
+    })
+
+    for (const [description, uploadError, expectedTag, unexpectedTag] of [
+      [
+        'tags every test and the suite when a suite video is uploaded',
+        undefined,
+        TEST_FAILURE_VIDEO_UPLOADED,
+        TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+      ],
+      [
+        'tags every test and the suite when a suite video upload fails',
+        new Error('upload failed'),
+        TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+        TEST_FAILURE_VIDEO_UPLOADED,
+      ],
+    ]) {
+      it(description, async () => {
+        const makeSpan = () => ({
+          finish: sinon.stub(),
+          setTag: sinon.stub(),
+        })
+        const firstTestSpan = makeSpan()
+        const secondTestSpan = makeSpan()
+        const testSuiteSpan = makeSpan()
+        const uploadTestSuiteVideo = sinon.stub().callsFake((options, callback) => callback(uploadError))
+        cypressPlugin.uploadedVideoPaths = new Set()
+        cypressPlugin.pendingVideoUploads = [{
+          filePath: '/tmp/basic-fail.mp4',
+          testSessionId: '123',
+          testSuiteId: '456',
+          testSpanFinishes: [{ testSpan: firstTestSpan }, { testSpan: secondTestSpan }],
+          testSuiteSpan,
+        }]
+        cypressPlugin.tracer = {
+          _tracer: {
+            _exporter: {
+              canUploadTestVideos: () => true,
+              uploadTestSuiteVideo,
+            },
+          },
+        }
+        sinon.stub(cypressPlugin, 'ciVisEvent')
+
+        await cypressPlugin.uploadPendingTestSuiteVideos()
+
+        for (const span of [firstTestSpan, secondTestSpan, testSuiteSpan]) {
+          sinon.assert.calledWith(span.setTag, expectedTag, 'true')
+          sinon.assert.calledWith(span.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+          sinon.assert.neverCalledWith(span.setTag, unexpectedTag, 'true')
+          sinon.assert.calledOnce(span.finish)
+        }
+      })
+    }
+
+    it('does not add video tags when no suite video upload is configured', () => {
+      const testSpan = {
+        finish: sinon.stub(),
+        setTag: sinon.stub(),
+      }
+
+      cypressPlugin.finishTestSpans([{ testSpan }])
+
+      sinon.assert.neverCalledWith(testSpan.setTag, TEST_FAILURE_VIDEO_UPLOADED, 'true')
+      sinon.assert.neverCalledWith(testSpan.setTag, TEST_FAILURE_VIDEO_UPLOAD_ERROR, 'true')
+      sinon.assert.neverCalledWith(testSpan.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+      sinon.assert.calledOnce(testSpan.finish)
     })
 
     it('restores user retries before requesting configuration for a subsequent run', async () => {

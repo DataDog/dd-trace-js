@@ -18,7 +18,13 @@ if (isPendingVideo) {
   const exporter = tracer._tracer._exporter
   const flush = exporter.flush.bind(exporter)
   exporter.canUploadTestVideos = () => true
-  exporter.uploadTestVideo = () => {}
+  exporter.uploadTestVideo = (options, onDone) => {
+    setImmediate(() => {
+      // eslint-disable-next-line no-console
+      console.log('PLAYWRIGHT_VIDEO_UPLOAD_FINISHED')
+      onDone()
+    })
+  }
   exporter.flush = (onDone) => {
     // eslint-disable-next-line no-console
     console.log('PLAYWRIGHT_FINAL_FLUSH_STARTED')

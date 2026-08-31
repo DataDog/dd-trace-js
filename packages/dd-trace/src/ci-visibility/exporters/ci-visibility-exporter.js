@@ -936,7 +936,7 @@ class CiVisibilityExporter extends BufferingExporter {
    * @returns {boolean}
    */
   canUploadTestVideos () {
-    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideosEnabled && !this._isUsingEvpProxy
+    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideosEnabled
   }
 
   /**

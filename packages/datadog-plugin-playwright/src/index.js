@@ -13,6 +13,12 @@ const {
   getScreenshotUploadResult,
   getScreenshotUploadTag,
 } = require('../../dd-trace/src/ci-visibility/test-screenshot')
+const {
+  VIDEO_UPLOAD_RESULT_ERROR,
+  VIDEO_UPLOAD_RESULT_UPLOADED,
+  getVideoUploadResult,
+  getVideoUploadTag,
+} = require('../../dd-trace/src/ci-visibility/test-video')
 
 const {
   finishAllTraceSpans,
@@ -63,7 +69,6 @@ const log = require('../../dd-trace/src/log')
 
 const PLAYWRIGHT_FAILURE_SCREENSHOT_RE = /^test-failed-\d+\.png$/
 const PLAYWRIGHT_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/webm'])
-const noop = () => {}
 
 /**
  * Returns whether an attachment is an automatic Playwright failure screenshot.
@@ -185,9 +190,12 @@ class PlaywrightPlugin extends CiPlugin {
           testSuiteSpan.setTag(TEST_STATUS, 'fail')
           testSuiteSpan.setTag('error', error)
         }
-        for (const [finishTest, abortController] of this.#pendingTestFinishCallbacks) {
-          finishTest(SCREENSHOT_UPLOAD_RESULT_ERROR)
-          abortController.abort()
+        for (const [finishTest, pendingTestFinish] of this.#pendingTestFinishCallbacks) {
+          finishTest(
+            pendingTestFinish.hasScreenshot ? SCREENSHOT_UPLOAD_RESULT_ERROR : undefined,
+            pendingTestFinish.hasVideo ? VIDEO_UPLOAD_RESULT_ERROR : undefined
+          )
+          pendingTestFinish.abortController.abort()
         }
       }
 
@@ -376,12 +384,16 @@ class PlaywrightPlugin extends CiPlugin {
 
       this.pendingTestFinishes++
       const abortController = new AbortController()
-      const finishTest = (screenshotUploadResult) => {
+      const finishTest = (screenshotUploadResult, videoUploadResult) => {
         if (!this.#pendingTestFinishCallbacks.delete(finishTest)) return
 
         const screenshotUploadTag = getScreenshotUploadTag(screenshotUploadResult)
         if (screenshotUploadTag) {
           formattedTestSpan.meta[screenshotUploadTag] = 'true'
+        }
+        const videoUploadTag = getVideoUploadTag(videoUploadResult)
+        if (videoUploadTag) {
+          formattedTestSpan.meta[videoUploadTag] = 'true'
         }
         exportTraces()
         this.pendingTestFinishes--
@@ -389,18 +401,44 @@ class PlaywrightPlugin extends CiPlugin {
           this.finishSession()
         }
       }
-      this.#pendingTestFinishCallbacks.set(finishTest, abortController)
+      const pendingTestFinish = {
+        abortController,
+        hasScreenshot: false,
+        hasVideo: false,
+      }
+      this.#pendingTestFinishCallbacks.set(finishTest, pendingTestFinish)
+      let pendingMedia = 0
+      let screenshotUploadResult
+      let videoUploadResult
+      const finishMedia = () => {
+        pendingMedia--
+        if (pendingMedia === 0) finishTest(screenshotUploadResult, videoUploadResult)
+      }
       const screenshotUploadStarted = this.uploadTestScreenshots({
         screenshots,
         traceId: formattedTestSpan.trace_id.toString(10),
         signal: abortController.signal,
-      }, finishTest)
-      this.uploadTestVideos({
+      }, (uploadResult) => {
+        screenshotUploadResult = uploadResult
+        finishMedia()
+      })
+      if (screenshotUploadStarted) {
+        pendingMedia++
+        pendingTestFinish.hasScreenshot = true
+      }
+      const videoUploadStarted = this.uploadTestVideos({
         videos,
         traceId: formattedTestSpan.trace_id.toString(10),
         signal: abortController.signal,
+      }, (uploadResult) => {
+        videoUploadResult = uploadResult
+        finishMedia()
       })
-      if (screenshotUploadStarted) return
+      if (videoUploadStarted) {
+        pendingMedia++
+        pendingTestFinish.hasVideo = true
+      }
+      if (pendingMedia > 0) return
 
       finishTest()
     })
@@ -693,9 +731,10 @@ class PlaywrightPlugin extends CiPlugin {
    * @param {Array<object>} options.videos - Playwright test attachments
    * @param {string} options.traceId - Test trace id used as the video key
    * @param {AbortSignal} options.signal - Signal used to cancel uploads during error finalization
+   * @param {(result: string|undefined) => void} onDone - Completion callback
    * @returns {boolean} Whether at least one upload was started
    */
-  uploadTestVideos ({ videos, traceId, signal }) {
+  uploadTestVideos ({ videos, traceId, signal }, onDone) {
     const exporter = this.tracer?._exporter
     if (!Array.isArray(videos) || !videos.length ||
       !exporter?.canUploadTestVideos?.() || !exporter.uploadTestVideo) {
@@ -708,14 +747,29 @@ class PlaywrightPlugin extends CiPlugin {
     }
     if (!videoPaths.size) return false
 
+    const uploadResults = new Array(videoPaths.size)
+    let pendingUploads = videoPaths.size
+    let index = 0
     for (const filePath of videoPaths) {
+      const resultIndex = index++
       exporter.uploadTestVideo({
         filePath,
         traceId,
         idempotencyKey: `${traceId}:${basename(filePath)}`,
         capturedAtMs: Date.now(),
         signal,
-      }, noop)
+      }, (error, uploaded = true) => {
+        if (uploaded) {
+          uploadResults[resultIndex] = error
+            ? VIDEO_UPLOAD_RESULT_ERROR
+            : VIDEO_UPLOAD_RESULT_UPLOADED
+        }
+        pendingUploads--
+        if (pendingUploads === 0) {
+          const uploadResult = getVideoUploadResult(uploadResults)
+          queueMicrotask(() => onDone(uploadResult))
+        }
+      })
     }
     return true
   }

@@ -1893,7 +1893,7 @@ describe('CI Visibility Exporter', () => {
       assert.strictEqual(exporter.canUploadTestVideos(), true)
     })
 
-    it('returns false when videos would be sent through the Agent EVP proxy', () => {
+    it('returns true when videos are sent through the Agent EVP proxy', () => {
       const exporter = new CiVisibilityExporter({
         url,
         testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
@@ -1901,7 +1901,7 @@ describe('CI Visibility Exporter', () => {
       exporter._testScreenshotUploadUrl = url
       exporter._isUsingEvpProxy = true
 
-      assert.strictEqual(exporter.canUploadTestVideos(), false)
+      assert.strictEqual(exporter.canUploadTestVideos(), true)
     })
   })
 

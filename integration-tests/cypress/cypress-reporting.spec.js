@@ -30,6 +30,9 @@ const {
   TEST_NAME,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_SCOPE,
   TEST_IS_RUM_ACTIVE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
@@ -1137,12 +1140,18 @@ moduleTypes.forEach(({
                 .filter(event => event.type === 'test')
                 .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
               assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_SCOPE], 'test_suite')
 
               const suiteEvent = payloads
                 .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
                 .flatMap(({ payload }) => payload.events)
                 .find(event => event.type === 'test_suite_end')
               assert.ok(suiteEvent, `test suite event should be reported\n${testOutput}`)
+              assert.strictEqual(suiteEvent.content.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+              assert.strictEqual(suiteEvent.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+              assert.strictEqual(suiteEvent.content.meta[TEST_FAILURE_VIDEO_SCOPE], 'test_suite')
 
               const videoPayloads = payloads.filter(({ media }) => media?.contentType === 'video/mp4')
               assert.strictEqual(videoPayloads.length, 1, `one suite video should upload\n${testOutput}`)
@@ -1156,6 +1165,42 @@ moduleTypes.forEach(({
                 `/api/v2/ci/test-suites/${testSessionId}/${testSuiteId}/media`
               )
               assert.ok(videoPayload.media.content.length > 0)
+            },
+            { hardTimeout: 60000 }
+          ).catch((error) => {
+            error.message += `\nCypress output:\n${getTestOutput()}`
+            throw error
+          })
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
+          assert.notStrictEqual(exitCode, 0)
+        })
+
+        onlyAgentlessIt('tags every test and its suite when the Cypress video upload fails', async function () {
+          receiver.setMediaResponseStatusCode(500)
+          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js', {
+            CYPRESS_ENABLE_FAILURE_SCREENSHOTS: undefined,
+            DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined,
+            CYPRESS_ENABLE_FAILURE_VIDEOS: 'true',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+          })
+
+          const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const testOutput = getTestOutput()
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testEvents = events.filter(event => event.type === 'test')
+              const suiteEvent = events.find(event => event.type === 'test_suite_end')
+
+              assert.ok(testEvents.length > 0, `test events should be reported\n${testOutput}`)
+              assert.ok(suiteEvent, `test suite event should be reported\n${testOutput}`)
+              for (const event of [...testEvents, suiteEvent]) {
+                assert.strictEqual(event.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], 'true')
+                assert.strictEqual(event.content.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+                assert.strictEqual(event.content.meta[TEST_FAILURE_VIDEO_SCOPE], 'test_suite')
+              }
             },
             { hardTimeout: 60000 }
           ).catch((error) => {
