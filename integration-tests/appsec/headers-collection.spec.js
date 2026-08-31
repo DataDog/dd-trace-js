@@ -3,8 +3,6 @@
 const assert = require('node:assert/strict')
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
-
 const {
   sandboxCwd,
   useSandbox,
@@ -13,8 +11,19 @@ const {
   stopProc,
 } = require('../helpers')
 
+/**
+ * @param {string} baseUrl
+ * @param {string} url
+ * @param {object} [options]
+ */
+async function request (baseUrl, url, options) {
+  const response = await fetch(new URL(url, baseUrl), options)
+  await response.arrayBuffer()
+  return response
+}
+
 describe('AppSec headers collection - Express', () => {
-  let axios, cwd, appFile, agent, proc
+  let cwd, appFile, agent, proc
 
   useSandbox(['express'])
 
@@ -40,7 +49,6 @@ describe('AppSec headers collection - Express', () => {
       }
 
       proc = await spawnProc(appFile, { cwd, env, execArgv: [] })
-      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -81,10 +89,10 @@ describe('AppSec headers collection - Express', () => {
     startServer('appsec/data-collection/index.js')
 
     it('should collect event headers when a WAF event is triggered', async () => {
-      const expectedRequestHeaders = ['user-agent', 'accept', 'host', 'accept-encoding']
+      const expectedRequestHeaders = ['user-agent', 'accept', 'host', 'accept-encoding', 'accept-language']
       const expectedResponseHeaders = ['content-type', 'content-language']
 
-      await axios.get('/', { headers: { 'User-Agent': 'Arachni/v1' } })
+      await request(proc.url, '/', { headers: { 'User-Agent': 'Arachni/v1' } })
       await assertHeadersReported(expectedRequestHeaders, expectedResponseHeaders)
     })
   })
@@ -93,7 +101,9 @@ describe('AppSec headers collection - Express', () => {
     startServer('appsec/data-collection/index.js', { extendedDataCollection: true })
 
     it('should collect extended headers when a WAF event is triggered', async () => {
-      const expectedRequestHeaders = ['user-agent', 'accept', 'host', 'accept-encoding', 'connection']
+      const expectedRequestHeaders = [
+        'user-agent', 'accept', 'host', 'accept-encoding', 'accept-language', 'sec-fetch-mode', 'connection',
+      ]
 
       // DD_APPSEC_MAX_COLLECTED_HEADERS is set to 25, so it is expected to collect
       // 22 x-datadog-res-XX headers + x-powered-by, content-type and content-language, for a total of 25.
@@ -104,7 +114,7 @@ describe('AppSec headers collection - Express', () => {
         'content-language',
       ]
 
-      await axios.get('/', { headers: { 'User-Agent': 'Arachni/v1' } })
+      await request(proc.url, '/', { headers: { 'User-Agent': 'Arachni/v1' } })
       await assertHeadersReported(expectedRequestHeaders, expectedResponseHeaders)
     })
   })
@@ -113,18 +123,18 @@ describe('AppSec headers collection - Express', () => {
     startServer('appsec/response-headers/express.js')
 
     it('should always collect content-type and content-length response headers when AppSec is enabled', async () => {
-      const response = await axios.get('/', { headers: { 'User-Agent': 'Mozilla/5.0' } })
+      const response = await request(proc.url, '/', { headers: { 'User-Agent': 'Mozilla/5.0' } })
 
       assert.equal(response.status, 200)
-      assert.ok(response.headers['content-type'])
-      assert.ok(response.headers['content-length'])
+      assert.ok(response.headers.get('content-type'))
+      assert.ok(response.headers.get('content-length'))
 
       await agent.assertMessageReceived(({ payload }) => {
         const span = payload[0]?.find(s => s.type === 'web')
         if (!span) throw new Error('web-type span not yet received')
 
-        assert.equal(span.meta['http.response.headers.content-type'], response.headers['content-type'])
-        assert.equal(span.meta['http.response.headers.content-length'], response.headers['content-length'])
+        assert.equal(span.meta['http.response.headers.content-type'], response.headers.get('content-type'))
+        assert.equal(span.meta['http.response.headers.content-length'], response.headers.get('content-length'))
         assert.equal(span.meta['appsec.event'], undefined)
       })
     })
@@ -132,7 +142,7 @@ describe('AppSec headers collection - Express', () => {
 })
 
 describe('AppSec headers collection - Fastify', () => {
-  let axios, cwd, appFile, agent, proc
+  let cwd, appFile, agent, proc
 
   useSandbox(['fastify'])
 
@@ -151,7 +161,6 @@ describe('AppSec headers collection - Fastify', () => {
       },
       execArgv: [],
     })
-    axios = Axios.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
@@ -161,18 +170,18 @@ describe('AppSec headers collection - Fastify', () => {
 
   describe('No security event', () => {
     it('should always emit content-type and content-length response headers when AppSec is enabled', async () => {
-      const response = await axios.get('/', { headers: { 'User-Agent': 'Mozilla/5.0' } })
+      const response = await request(proc.url, '/', { headers: { 'User-Agent': 'Mozilla/5.0' } })
 
       assert.equal(response.status, 200)
-      assert.ok(response.headers['content-type'])
-      assert.ok(response.headers['content-length'])
+      assert.ok(response.headers.get('content-type'))
+      assert.ok(response.headers.get('content-length'))
 
       await agent.assertMessageReceived(({ payload }) => {
         const span = payload[0]?.find(s => s.type === 'web')
         if (!span) throw new Error('web-type span not yet received')
 
-        assert.equal(span.meta['http.response.headers.content-type'], response.headers['content-type'])
-        assert.equal(span.meta['http.response.headers.content-length'], response.headers['content-length'])
+        assert.equal(span.meta['http.response.headers.content-type'], response.headers.get('content-type'))
+        assert.equal(span.meta['http.response.headers.content-length'], response.headers.get('content-length'))
         assert.equal(span.meta['appsec.event'], undefined)
       })
     })

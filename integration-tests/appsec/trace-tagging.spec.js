@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 
 const {
   sandboxCwd,
@@ -14,7 +13,7 @@ const {
 } = require('../helpers')
 
 describe('ASM Trace Tagging rules', () => {
-  let axios, cwd, appFile, agent, proc
+  let cwd, appFile, agent, proc
 
   function startServer () {
     beforeEach(async () => {
@@ -27,13 +26,22 @@ describe('ASM Trace Tagging rules', () => {
       }
 
       proc = await spawnProc(appFile, { cwd, env, execArgv: [] })
-      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
       await stopProc(proc)
       await agent.stop()
     })
+  }
+
+  /**
+   * @param {string} url
+   * @param {object} [init]
+   */
+  async function request (url, init) {
+    const response = await fetch(new URL(url, proc.url), init)
+    await response.arrayBuffer()
+    return response
   }
 
   describe('express', () => {
@@ -47,7 +55,7 @@ describe('ASM Trace Tagging rules', () => {
     startServer()
 
     it('should report waf attributes', async () => {
-      await axios.get('/', { headers: { 'User-Agent': 'TraceTaggingTest/v1' } })
+      await request('/', { headers: { 'User-Agent': 'TraceTaggingTest/v1' } })
 
       await agent.assertMessageReceived(({ _, payload }) => {
         assert.ok(
@@ -77,7 +85,7 @@ describe('ASM Trace Tagging rules', () => {
     it('should report waf attributes', async () => {
       let fastifyRequestReceived = false
 
-      await axios.get('/', { headers: { 'User-Agent': 'TraceTaggingTest/v1' } })
+      await request('/', { headers: { 'User-Agent': 'TraceTaggingTest/v1' } })
 
       // With fastify, the 'fastify.request' is not the first message received by FakeAgent, unlike express.
       // That's why expectedMessageCount is set to 10 and the fastifyRequestReceived flag is added to check
