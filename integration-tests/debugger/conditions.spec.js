@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -19,8 +19,8 @@ describe('Dynamic Instrumentation', function () {
       }))
     })
 
-    it('should not trigger when condition is not met', async function () {
-      await new Promise((resolve, reject) => {
+    it('should not trigger when condition is not met', function () {
+      return new Promise((resolve, reject) => {
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach((event) => {
             if (event.debugger.diagnostics.status === 'INSTALLED') {
@@ -40,8 +40,8 @@ describe('Dynamic Instrumentation', function () {
       })
     })
 
-    it('should report error if condition cannot be compiled', async function () {
-      await new Promise((resolve, reject) => {
+    it('should report error if condition cannot be compiled', function () {
+      return new Promise((resolve, reject) => {
         const rcConfig = t.generateRemoteConfig({
           when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } },
         })

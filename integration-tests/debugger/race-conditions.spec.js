@@ -6,8 +6,8 @@ describe('Dynamic Instrumentation', function () {
   const t = setup({ testApp: 'target-app/basic.js', dependencies: ['fastify'] })
 
   describe('race conditions', function () {
-    it('should remove the last breakpoint completely before trying to add a new one', async function () {
-      await new Promise((resolve, reject) => {
+    it('should remove the last breakpoint completely before trying to add a new one', function () {
+      return new Promise((resolve, reject) => {
         const rcConfig2 = t.generateRemoteConfig()
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
