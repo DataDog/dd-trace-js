@@ -19,6 +19,7 @@ const identifierPattern = /^[$A-Z_a-z][$\w]*$/
 
 module.exports = {
   awaitContextCallback,
+  awaitContextCallbackAtStart,
   configureGraphqlJitCompileObject,
   configureGraphqlJitDeferredField,
   configureGraphqlJitExecute,
@@ -104,6 +105,27 @@ function awaitContextCallback (state, node, _parent, ancestry) {
   recheckedBranch.alternate = clone(node.alternate)
   callbackBranch.alternate.body.push(...originalStatements)
   node.consequent.body = callbackStatements
+}
+
+/**
+ * Awaits an optional context callback before entering the matched node's enclosing try block.
+ *
+ * @param {Parameters<typeof awaitContextCallback>[0]} state
+ * @param {import('estree').Node} node
+ * @param {import('estree').Node} parent
+ * @param {import('estree').Node[]} ancestry
+ * @returns {void}
+ */
+function awaitContextCallbackAtStart (state, node, parent, ancestry) {
+  const tryStatement = node.type === 'TryStatement'
+    ? node
+    : ancestry.find(ancestor => ancestor.type === 'TryStatement')
+  assert(tryStatement?.block?.type === 'BlockStatement',
+    'awaitContextCallbackAtStart: expected an enclosing try statement with a block body')
+
+  const callbackBranch = parse('async function wrapper () { if (true) {} }').body[0].body.body[0]
+  awaitContextCallback(state, callbackBranch, parent, ancestry)
+  tryStatement.block.body.unshift(callbackBranch)
 }
 
 /**

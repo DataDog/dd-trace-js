@@ -334,6 +334,31 @@ describe('check-require-cache', () => {
             filePath: 'trace-await-context-callback.js',
           },
           functionQuery: {
+            functionName: 'runAfterSetup',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_at_start',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runAfterSetup"] TryStatement',
+          channelName: 'trace_await_context_callback_at_start',
+          transform: 'awaitContextCallbackAtStart',
+          transformOptions: {
+            callbackName: 'beforeStart',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          functionQuery: {
             functionName: 'consumeFirst',
             kind: 'Async',
           },
@@ -814,6 +839,46 @@ describe('check-require-cache', () => {
 
     assert.equal(await resultPromise, 'passed')
     assert.equal(attempts, 2)
+  })
+
+  it('should await a context callback before entering a try block', async () => {
+    const { runAfterSetup } = compileFile('trace-await-context-callback')
+    const steps = []
+    let finishSetup
+    let startSetup
+    const setupStarted = new Promise(resolve => {
+      startSetup = resolve
+    })
+    const setupFinished = new Promise(resolve => {
+      finishSetup = resolve
+    })
+
+    subs = {
+      start (ctx) {
+        ctx.beforeStart = async function () {
+          steps.push('setup')
+          startSetup()
+          await setupFinished
+          steps.push('setup done')
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_at_start')
+    ch.subscribe(subs)
+
+    const resultPromise = runAfterSetup(() => {
+      steps.push('task')
+      return 'passed'
+    })
+
+    await setupStarted
+    assert.deepStrictEqual(steps, ['setup'])
+
+    finishSetup()
+
+    assert.equal(await resultPromise, 'passed')
+    assert.deepStrictEqual(steps, ['setup', 'setup done', 'task'])
   })
 
   it('should recheck the condition after the context callback settles', async () => {
