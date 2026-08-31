@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
 const { describe, it } = require('mocha')
 
 const Analyzer = require('../../../../src/appsec/iast/analyzers/vulnerability-analyzer')
@@ -17,12 +16,20 @@ describe('hsts header missing analyzer', () => {
 
   prepareTestServerForIast('hsts header missing analyzer',
     (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config) => {
-      function makeRequestWithXFordwardedProtoHeader (done) {
-        axios.get(`http://localhost:${config.port}/`, {
-          headers: {
-            'X-Forwarded-Proto': 'https',
-          },
-        }).catch(done)
+      /**
+       * @param {(error?: Error) => void} done
+       */
+      async function makeRequestWithXFordwardedProtoHeader (done) {
+        try {
+          const response = await fetch(`http://localhost:${config.port}/`, {
+            headers: {
+              'X-Forwarded-Proto': 'https',
+            },
+          })
+          await response.arrayBuffer()
+        } catch (error) {
+          done(error)
+        }
       }
 
       testThatRequestHasVulnerability((req, res) => {
