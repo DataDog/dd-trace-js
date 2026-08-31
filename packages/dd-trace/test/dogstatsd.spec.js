@@ -32,6 +32,7 @@ describe('dogstatsd', () => {
   let httpServer
   let httpPort
   let httpData
+  let resolveHttpRequest
   let httpUdsServer
   let udsPath
   let statusCode
@@ -99,6 +100,7 @@ describe('dogstatsd', () => {
     createMetricsAggregationClient = dogstatsd.createMetricsAggregationClient
 
     httpData = undefined
+    resolveHttpRequest = undefined
     statusCode = 200
     sockets = []
 
@@ -115,6 +117,9 @@ describe('dogstatsd', () => {
         httpData = Buffer.concat(requestData)
         response.statusCode = statusCode
         response.end()
+        const resolve = resolveHttpRequest
+        resolveHttpRequest = undefined
+        resolve?.(httpData)
       })
     }
 
@@ -173,6 +178,15 @@ describe('dogstatsd', () => {
    */
   function flushClient (dogstatsdClient) {
     return new Promise(resolve => dogstatsdClient.flush(resolve))
+  }
+
+  /**
+   * @returns {Promise<Buffer>}
+   */
+  function waitForHttpRequest () {
+    return new Promise(resolve => {
+      resolveHttpRequest = resolve
+    })
   }
 
   function createCustomMetrics (CustomMetricsCtor = CustomMetrics) {
@@ -602,32 +616,22 @@ describe('dogstatsd', () => {
 
     it('uses HTTP transport tags and a separate telemetry payload', async () => {
       const now = sinon.stub(performance, 'now').returns(0)
-      const payloads = []
-      const telemetryReceived = new Promise(resolve => {
-        assertData = () => {
-          payloads.push(Buffer.concat(httpData).toString())
-          httpData.length = 0
-
-          if (payloads.length === 1) {
-            now.returns(10_000)
-            client.flush()
-            return
-          }
-
-          resolve()
-        }
-      })
 
       try {
         client = createTelemetryClient({ metricsProxyUrl: `http://localhost:${httpPort}` })
         client.gauge('test.avg', 1)
+        const metricsReceived = waitForHttpRequest()
         client.flush()
 
-        await telemetryReceived
+        const metrics = await metricsReceived
+        now.returns(10_000)
+        const telemetryReceived = waitForHttpRequest()
+        client.flush()
+        const telemetry = await telemetryReceived
 
-        assert.strictEqual(payloads[0], 'test.avg:1|g\n')
-        assert.match(payloads[1], /datadog\.dogstatsd\.client\.metrics:1\|c\|/)
-        assert.match(payloads[1], /client_transport:http/)
+        assert.strictEqual(metrics.toString(), 'test.avg:1|g\n')
+        assert.match(telemetry.toString(), /datadog\.dogstatsd\.client\.metrics:1\|c\|/)
+        assert.match(telemetry.toString(), /client_transport:http/)
       } finally {
         now.restore()
       }
@@ -668,9 +672,7 @@ describe('dogstatsd', () => {
       const udpSent = new Promise(resolve => {
         resolveUdp = resolve
       })
-      const httpAttempted = new Promise(resolve => {
-        assertData = resolve
-      })
+      const httpAttempted = waitForHttpRequest()
       udp4.send = sinon.stub().callsFake((buffer, offset, length, port, address, callback) => {
         callback?.()
         resolveUdp()
@@ -683,19 +685,14 @@ describe('dogstatsd', () => {
         client.flush()
 
         await Promise.all([httpAttempted, udpSent])
-        httpData.length = 0
-
-        const telemetryReceived = new Promise(resolve => {
-          assertData = resolve
-        })
         now.returns(10_000)
+        const telemetryReceived = waitForHttpRequest()
         client.flush()
 
-        await telemetryReceived
+        const telemetry = await telemetryReceived
 
-        const telemetry = Buffer.concat(httpData).toString()
-        assert.match(telemetry, /client_transport:http/)
-        assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_sent:13\|c\|/)
+        assert.match(telemetry.toString(), /client_transport:http/)
+        assert.match(telemetry.toString(), /datadog\.dogstatsd\.client\.bytes_sent:13\|c\|/)
       } finally {
         now.restore()
       }
