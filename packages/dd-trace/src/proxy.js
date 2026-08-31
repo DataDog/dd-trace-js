@@ -360,7 +360,8 @@ class Tracer extends NoopProxy {
         drainUuidPool()
         channel('datadog:identity:update').publish(config)
         if (this._tracingInitialized) {
-          const metadata = require('./tracer_metadata')(config)
+          const storeTracerMetadata = require('./tracer_metadata')
+          const metadata = storeTracerMetadata(config)
           if (metadata === undefined) {
             log.warn('Could not store tracer configuration for service discovery')
           }

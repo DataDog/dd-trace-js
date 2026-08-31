@@ -7,7 +7,8 @@ const { URL, format } = require('node:url')
 const { channel } = require('dc-polyfill')
 
 const exporters = require('../../../../ext/exporters')
-const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const createRfdc = require('../../../../vendor/dist/rfdc')
+const rfdc = createRfdc({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')

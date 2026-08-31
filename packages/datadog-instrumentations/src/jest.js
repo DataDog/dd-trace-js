@@ -766,7 +766,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
             return test.call(this, testName, testFn, ...callArgs)
           }
-          const eachBind = bind(eachTest).apply(this, eachArgs)
+          const boundTest = bind(eachTest)
+          const eachBind = boundTest.apply(this, eachArgs)
           return eachBind.apply(this, testArgs)
         }
       }
@@ -879,7 +880,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
             return concurrentTest.call(this, testName, testFn, ...callArgs)
           }
-          const eachBind = bind(concurrentEachTest, false, needsEachError).apply(this, eachArgs)
+          const boundTest = bind(concurrentEachTest, false, needsEachError)
+          const eachBind = boundTest.apply(this, eachArgs)
           return eachBind.apply(this, testArgs)
         }
       }
@@ -928,10 +930,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       let jestEach
       try {
-        jestEach = createRequire(path.join(this.rootDir, 'package.json'))('jest-each')
+        const requireFromPath = createRequire(path.join(this.rootDir, 'package.json'))
+        jestEach = requireFromPath('jest-each')
       } catch {
         try {
-          jestEach = createRequire(path.join(process.cwd(), 'package.json'))('jest-each')
+          const requireFromPath = createRequire(path.join(process.cwd(), 'package.json'))
+          jestEach = requireFromPath('jest-each')
         } catch {
           jestEach = undefined
         }
