@@ -22,10 +22,12 @@ The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project n
 
 <h2 id="llmobs-prompt-management">LLM Observability Prompt Management</h2>
 
-Prompt Management is available through `tracer.init().llmobs` even when LLM Observability span export is disabled. Set `DD_API_KEY` for all operations. Set `DD_APP_KEY` for prompt mutations and HTTP environment resolution; successful local OpenFeature resolution does not require it.
+Prompt retrieval and registry operations are available through `tracer.init().llmobs` even when LLM Observability span export is disabled. Prompt tracking with `toAnnotation()` and `annotationContext()` requires LLM Observability to be enabled. Set `DD_API_KEY` for all operations. Set `DD_APP_KEY` for prompt mutations and HTTP environment resolution; successful local OpenFeature resolution does not require it.
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require('dd-trace').init({
+  llmobs: { mlApp: 'my-app' },
+})
 
 const prompt = await tracer.llmobs.getPrompt('greeting', {
   targetingKey: user.id,

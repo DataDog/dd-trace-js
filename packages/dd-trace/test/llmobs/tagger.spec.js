@@ -1351,6 +1351,30 @@ describe('tagger', () => {
         })
       })
 
+      it('clears managed prompt UUIDs only when replacing the prompt', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          id: 'managed',
+          version: '1',
+          template: 'Hello {name}',
+          variables: { name: 'Ada' },
+          promptUuid: 'prompt-uuid',
+          promptVersionUuid: 'version-uuid',
+        })
+
+        tagger.tagPrompt(span, { variables: { name: 'Grace' } })
+        const prompt = Tagger.tagMap.get(span)[INPUT_PROMPT]
+        assert.equal(prompt.id, 'managed')
+        assert.deepEqual(prompt.variables, { name: 'Grace' })
+        assert.equal(prompt.prompt_uuid, 'prompt-uuid')
+        assert.equal(prompt.prompt_version_uuid, 'version-uuid')
+
+        tagger.tagPrompt(span, { id: 'local', version: '2', template: 'Hi {name}' })
+        assert.equal(prompt.id, 'local')
+        assert.equal(prompt.prompt_uuid, undefined)
+        assert.equal(prompt.prompt_version_uuid, undefined)
+      })
+
       it('tags a span with a string prompt template', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
         tagger.tagPrompt(span, {

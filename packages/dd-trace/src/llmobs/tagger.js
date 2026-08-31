@@ -431,6 +431,8 @@ class LLMObsTagger {
       }
     }
 
+    const currentPrompt = registry.get(span)?.[INPUT_PROMPT]
+    const replacesPrompt = id != null || version != null || template != null
     const finalPromptId = id ?? `${mlApp}_${DEFAULT_PROMPT_NAME}`
     const finalCtxVariablesKeys = contextVariables ?? ['context']
     const finalQueryVariablesKeys = queryVariables ?? ['question']
@@ -534,7 +536,7 @@ class LLMObsTagger {
     }
 
     const validatedPrompt = {}
-    if (finalPromptId) validatedPrompt.id = finalPromptId
+    if (finalPromptId && (!currentPrompt || replacesPrompt)) validatedPrompt.id = finalPromptId
     if (version) validatedPrompt.version = version
     if (promptUuid) validatedPrompt.prompt_uuid = promptUuid
     if (promptVersionUuid) validatedPrompt.prompt_version_uuid = promptVersionUuid
@@ -542,11 +544,18 @@ class LLMObsTagger {
     if (finalTemplate) validatedPrompt.template = finalTemplate
     if (finalChatTemplate?.length) validatedPrompt.chat_template = finalChatTemplate
     if (tags) validatedPrompt.tags = tags
-    if (finalCtxVariablesKeys) validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
-    if (finalQueryVariablesKeys) validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
+    if (finalCtxVariablesKeys && (!currentPrompt || contextVariables != null)) {
+      validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
+    }
+    if (finalQueryVariablesKeys && (!currentPrompt || queryVariables != null)) {
+      validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
+    }
 
-    const currentPrompt = registry.get(span)?.[INPUT_PROMPT]
     if (currentPrompt) {
+      if (replacesPrompt) {
+        if (promptUuid == null) delete currentPrompt.prompt_uuid
+        if (promptVersionUuid == null) delete currentPrompt.prompt_version_uuid
+      }
       Object.assign(currentPrompt, validatedPrompt)
     } else {
       this._setTag(span, INPUT_PROMPT, validatedPrompt)
