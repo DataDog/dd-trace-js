@@ -12,8 +12,12 @@ const { after, before, describe, it } = require('mocha')
 const semifies = require('../../../vendor/dist/semifies')
 const { assertObjectContains, sandboxCwd, useSandbox } = require('../../../integration-tests/helpers')
 const createGraphqlJitRuntime = require('../../datadog-instrumentations/src/helpers/graphql-jit-runtime')
+const { parse, query } = require('../../datadog-instrumentations/src/helpers/rewriter/compiler')
 const rewriterInstrumentations = require('../../datadog-instrumentations/src/helpers/rewriter/instrumentations')
 const { rewrite } = require('../../datadog-instrumentations/src/helpers/rewriter')
+const {
+  configureGraphqlJitDeferredField,
+} = require('../../datadog-instrumentations/src/helpers/rewriter/transforms')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema } = require('./naming')
@@ -291,23 +295,15 @@ describe('Plugin', () => {
       })
       const resolverCallSource = '__context.resolvers.resolver(source, args, contextValue, info)'
 
-      for (const unsupportedCall of ['resolver', 'resolver(source)']) {
-        const fallbackContext = {
-          ddTracePlan: { fields: [] },
-          resolvers: { resolver },
-        }
-        assert.strictEqual(runtime.compileResolverCall(fallbackContext, unsupportedCall, 0), unsupportedCall)
-        assert.strictEqual(fallbackContext.ddTraceWrapAllResolvers, true)
-        assert.deepStrictEqual(runtime.finalizeCompilation(fallbackContext), { fields: [] })
-        assert.strictEqual(fallbackContext.resolvers.resolver, resolver)
-      }
-
       const unregisteredContext = { resolvers: { resolver } }
-      assert.strictEqual(runtime.compileResolverCall(unregisteredContext, resolverCallSource), resolverCallSource)
+      assert.strictEqual(
+        runtime.compileResolverCall(unregisteredContext, resolverCallSource, 'resolver'),
+        resolverCallSource
+      )
       assert.strictEqual(unregisteredContext.resolvers.resolver, resolver)
 
       const context = { resolvers: { resolver } }
-      const resolverCall = runtime.compileResolverCall(context, resolverCallSource, 0)
+      const resolverCall = runtime.compileResolverCall(context, resolverCallSource, 'resolver', 0)
       assert.strictEqual(context.resolvers.resolver, resolver)
       assert.match(resolverCall, /jitRuntime\.resolveField/)
       assert.match(resolverCall, /depthDisabled/)
@@ -397,6 +393,44 @@ void generatedResolver
             `${filePath} retained its compilation context as ${format}`
           )
           assert.doesNotMatch(queryWrapper, /const __apm\$traced =/, `${filePath} retained the traced closure as ${format}`)
+        }
+      })
+
+      it('rejects unsupported resolver call source shapes in the rewriter', () => {
+        const installedVersion = require(join(packageRoot, 'package.json')).version
+        const filePaths = new Set()
+        for (const { module } of rewriterInstrumentations) {
+          if (module.name === 'graphql-jit' && semifies(installedVersion, module.versionRange)) {
+            filePaths.add(module.filePath)
+          }
+        }
+
+        for (const filePath of filePaths) {
+          const content = readFileSync(join(packageRoot, filePath), 'utf8')
+          const isModule = filePath.endsWith('.mjs') || filePath.includes('/esm/')
+          for (const testCase of [
+            {
+              source: '.resolvers.$' + '{resolverName}(',
+              replacement: '.resolver.$' + '{resolverName}(',
+              error: /resolver map access not found/,
+            },
+            {
+              source: '$' + '{executionInfo})`',
+              replacement: '$' + '{executionInfo}`',
+              error: /resolver call end not found/,
+            },
+          ]) {
+            const unsupported = content.replace(testCase.source, testCase.replacement)
+            assert.notStrictEqual(unsupported, content, `${filePath} did not contain ${testCase.source}`)
+
+            const ast = parse(unsupported, { isModule })
+            const deferredFields = query(ast, 'FunctionDeclaration[id.name="compileDeferredField"]')
+            assert.strictEqual(deferredFields.length, 1)
+            assert.throws(
+              () => configureGraphqlJitDeferredField({}, deferredFields[0]),
+              testCase.error
+            )
+          }
         }
       })
 

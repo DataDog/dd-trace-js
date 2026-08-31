@@ -58,7 +58,6 @@
  *   ddTraceDefaultResolvers?: boolean,
  *   ddTracePlan?: BuildingJitPlan,
  *   ddTraceRuntime?: GraphqlJitRuntime,
- *   ddTraceWrapAllResolvers?: boolean,
  *   hoistedFunctions: string[],
  *   resolvers: GraphQLResolverMap
  * }} JitCompilationContext
@@ -118,6 +117,7 @@
  *   compileResolverCall: (
  *     context: JitCompilationContext,
  *     resolverCall: string,
+ *     resolverName: string,
  *     descriptorId: number | undefined
  *   ) => string,
  *   compileDefaultField: (
@@ -210,53 +210,15 @@ function createGraphqlJitRuntime ({
   }
 
   /**
-   * @param {JitCompilationContext & { ddTracePlan: BuildingJitPlan }} context
-   * @returns {JitPlan}
-   */
-  function finalizeCompilation (context) {
-    const plan = context.ddTracePlan
-
-    for (const field of plan.fields) {
-      if (field.parentPathKey !== undefined) {
-        field.parentId = plan.fieldsByPath.get(field.parentPathKey)?.id
-        field.parentPathKey = undefined
-      }
-    }
-    /* istanbul ignore next: this fallback is for an unsupported future compiler source shape. */
-    if (context.ddTraceWrapAllResolvers) {
-      for (const name of Object.keys(context.resolvers)) {
-        context.resolvers[name] = wrapResolver(context.resolvers[name])
-      }
-    }
-    return {
-      fields: plan.fields,
-    }
-  }
-
-  /**
    * @param {JitCompilationContext} context
    * @param {string} resolverCall
+   * @param {string} resolverName
    * @param {number | undefined} descriptorId
    * @returns {string}
    */
-  function compileResolverCall (context, resolverCall, descriptorId) {
+  function compileResolverCall (context, resolverCall, resolverName, descriptorId) {
     const openParenthesis = resolverCall.indexOf('(')
-    /* istanbul ignore next: a future compiler may change its resolver-call source shape. */
-    if (openParenthesis === -1 || resolverCall.at(-1) !== ')') {
-      context.ddTraceWrapAllResolvers = true
-      return resolverCall
-    }
-
     const resolver = resolverCall.slice(0, openParenthesis)
-    const resolverPrefix = '__context.resolvers.'
-    /* istanbul ignore next: a future compiler may change its resolver-map access shape. */
-    if (!resolver.startsWith(resolverPrefix)) {
-      context.ddTraceWrapAllResolvers = true
-      return resolverCall
-    }
-
-    const resolverName = resolver.slice(resolverPrefix.length)
-    /* istanbul ignore next: a future compiler may change its private response-path shape. */
     if (descriptorId === undefined) {
       context.resolvers[resolverName] = wrapResolver(context.resolvers[resolverName])
       return resolverCall
@@ -347,6 +309,24 @@ function createGraphqlJitRuntime ({
   }
 
   return { configureCompilationContext, runtime }
+}
+
+/**
+ * @param {JitCompilationContext & { ddTracePlan: BuildingJitPlan }} context
+ * @returns {JitPlan}
+ */
+function finalizeCompilation (context) {
+  const plan = context.ddTracePlan
+
+  for (const field of plan.fields) {
+    if (field.parentPathKey !== undefined) {
+      field.parentId = plan.fieldsByPath.get(field.parentPathKey)?.id
+      field.parentPathKey = undefined
+    }
+  }
+  return {
+    fields: plan.fields,
+  }
 }
 
 /**

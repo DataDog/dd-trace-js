@@ -34,7 +34,7 @@ Orchestrion applies the instrumentation entries in order. Some entries wrap a fu
 | --- | --- | --- |
 | `buildCompilationContext` | Publish the returned compilation context | Let the plugin attach `ddTraceRuntime` and an empty `ddTracePlan` |
 | `compileObjectType` | Add a branch for an inlined default field | Replace its generated property read with a guarded runtime call |
-| `compileDeferredField` | Register the field and append its descriptor ID to the generated resolver call | Preserve field identity after the compiler hoists the resolver |
+| `compileDeferredField` | Validate and replace the generated resolver call, then add error recording | Preserve field identity and per-invocation failures after the compiler hoists the resolver |
 | `createBoundQuery` | Finalize the plan and add `ddTrace` to the generated execution context | Connect reusable compilation data to one request |
 | The returned query | Add the standard execution wrapper, then adjust that wrapper | Give the plugin the document, schema, plan, and resolver map |
 
@@ -60,7 +60,7 @@ The `buildCompilationContext` completion subscriber calls `configureCompilationC
 
 The rewritten compiler calls the bridge while it generates a query. It records field descriptors and emits calls back to the same bridge.
 
-`finalizeCompilation` replaces temporary parent path keys with descriptor IDs. It also wraps the resolver map.
+`finalizeCompilation` replaces temporary parent path keys with descriptor IDs.
 
 The compilation plan changes names as it crosses each boundary:
 
@@ -104,7 +104,7 @@ The field code reaches compilation data through `rootCtx.jitPlan`.
 
 | Field shape | Generated operation | Datadog connection | Runtime entry |
 | --- | --- | --- | --- |
-| Deferred resolver call | Call through the hoisted resolver map | A private fifth argument contains the descriptor ID | `resolveJitField` |
+| Deferred resolver call | Guarded call through the hoisted resolver map | Generated dispatch contains the descriptor ID | `resolveCompiledJitField` |
 | Inlined default property read | Direct read from the parent result | A conditional expression surrounds the original read | `resolveJitDefaultInvocation` |
 
 These names describe the generated shapes. `alwaysDefer` can create a resolver call for a field that originally used default resolution.
@@ -113,11 +113,15 @@ These names describe the generated shapes. `alwaysDefer` can create a resolver c
 
 `graphql-jit` puts each resolver call in its deferred list. Later, `compileDeferredField` writes the call into the generated query source.
 
-`configureGraphqlJitDeferredField` inserts `registerField` before that source is built. It appends the returned descriptor ID to the resolver call.
+`configureGraphqlJitDeferredField` validates the call template and inserts `registerField` before the source is built.
+It passes the source, resolver name, and descriptor ID to `compileResolverCall`.
 
-`finalizeCompilation` wraps every function in the hoisted resolver map. The wrapper reads the fifth argument and uses it to select `rootCtx.jitPlan.fields[descriptorId]`.
+For a registered field, `compileResolverCall` restores the original resolver in the map. The generated fast path calls that resolver directly.
 
-The wrapper then calls `resolveJitField`. `invokeResolver` removes the private argument before it calls user code, so the public resolver signature does not change.
+When observation is active, the generated branch calls `resolveCompiledJitField` with the descriptor ID and original resolver.
+The compiler error branches call `recordResolverError` with the same descriptor ID.
+
+When field registration fails, `compileResolverCall` keeps the generated call. It wraps that resolver for normal GraphQL instrumentation.
 
 ### Inlined default property reads
 
@@ -163,7 +167,7 @@ Their collapsed path is `users.*.profile.name`. Uncollapsed tracing combines the
 
 This split lets one compiled plan serve all list items. It also lets configuration decide whether list positions count toward the resolver depth.
 
-Both paths resolve a `JitFieldDescriptor` from `rootCtx.jitPlan`. The deferred wrapper performs the lookup before `resolveJitField`.
+Both paths resolve a `JitFieldDescriptor` from `rootCtx.jitPlan`. The deferred dispatch passes the descriptor ID to `resolveCompiledJitField`.
 
 `resolveJitDefaultInvocation` performs the lookup internally.
 
