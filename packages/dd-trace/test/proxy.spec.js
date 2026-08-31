@@ -2,15 +2,21 @@
 
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
+const { once } = require('node:events')
+const http = require('node:http')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
+const { storage } = require('../../datadog-core')
 const RemoteConfigCapabilities = require('../src/remote_config/capabilities')
 
 require('./setup/core')
+
+const legacyStorage = storage('legacy')
 
 describe('TracerProxy', () => {
   let ProxyClass
@@ -143,6 +149,7 @@ describe('TracerProxy', () => {
 
     log = {
       error: sinon.spy(),
+      warn: sinon.spy(),
     }
 
     DatadogTracer = sinon.stub().returns(tracer)
@@ -1317,7 +1324,351 @@ describe('TracerProxy', () => {
       })
     })
   })
+
+  describe('MicroVM identity reset', () => {
+    let channelMock
+    let diagnosticsChannelMock
+    let microProxy
+    let storeConfig
+    let uuidStub
+    let buildProxy
+
+    beforeEach(() => {
+      uuidStub = sinon.stub().returns('00000000-0000-4000-8000-000000000000')
+
+      channelMock = {
+        subscribe: sinon.stub(),
+        unsubscribe: sinon.stub(),
+        publish: sinon.stub(),
+      }
+
+      diagnosticsChannelMock = {
+        channel: sinon.stub().returns(channelMock),
+      }
+      storeConfig = sinon.stub().returns({})
+
+      buildProxy = (nodeBundlesOpenssl = false) => new (proxyquire('../src/proxy', {
+        './tracer': DatadogTracer,
+        './noop/proxy': NoopProxy,
+        './config': Config,
+        './plugin_manager': PluginManager,
+        './runtime_metrics': runtimeMetrics,
+        './log': log,
+        './profiler': profiler,
+        './tracer_metadata': storeConfig,
+        './serverless': {
+          IS_AWS_LAMBDA_MICROVM: true,
+          IS_SERVERLESS: true,
+          NODE_BUNDLES_OPENSSL: nodeBundlesOpenssl,
+        },
+        './appsec': appsec,
+        './appsec/iast': iast,
+        './telemetry': telemetry,
+        './remote_config': RemoteConfig,
+        './aiguard/sdk': AIGuardSdk,
+        './appsec/sdk': AppsecSdk,
+        './dogstatsd': dogStatsD,
+        './noop/dogstatsd': NoopDogStatsDClient,
+        './flare': flare,
+        './openfeature': openfeature,
+        './openfeature/flagging_provider': OpenFeatureProvider,
+        'dc-polyfill': diagnosticsChannelMock,
+        '../../../vendor/dist/crypto-randomuuid': uuidStub,
+      }))()
+
+      microProxy = buildProxy()
+    })
+
+    it('should register the MicroVM hook when env var is set', () => {
+      microProxy.init()
+
+      sinon.assert.calledWith(diagnosticsChannelMock.channel, 'http.server.request.start')
+      sinon.assert.calledOnce(channelMock.subscribe)
+    })
+
+    it('should keep the MicroVM identity refresh when tracer initialization fails', () => {
+      const error = new Error('tracer initialization failed')
+      DatadogTracer.throws(error)
+
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledTwice(channelMock.publish)
+      sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
+      sinon.assert.notCalled(storeConfig)
+      sinon.assert.calledOnceWithExactly(log.error, 'Error initializing tracer', error)
+    })
+
+    it('should not store tracer metadata when tracing is disabled', () => {
+      config.DD_TRACE_ENABLED = false
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.notCalled(storeConfig)
+      sinon.assert.calledTwice(channelMock.publish)
+    })
+
+    it('should publish datadog:identity:update with the tracer config on POST .../run', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      sinon.assert.notCalled(channelMock.publish)
+
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledWith(diagnosticsChannelMock.channel, 'datadog:identity:update')
+      sinon.assert.calledWith(diagnosticsChannelMock.channel, 'datadog:identity:refresh')
+      sinon.assert.calledTwice(channelMock.publish)
+      sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
+    })
+
+    it('should update identity, store metadata, and then refresh consumers', () => {
+      // Core identity producers (id/config/remote_config) self-subscribe to identity:update and
+      // must finish reseeding before identity:refresh notifies downstream cache-holders
+      // (dogstatsd, otel metrics, debugger); otherwise those subsystems would refresh from the
+      // pre-reseed identity.
+      storeConfig.returns(undefined)
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      const channelNames = diagnosticsChannelMock.channel.getCalls().map(call => call.args[0])
+      const updateIndex = channelNames.indexOf('datadog:identity:update')
+      const refreshIndex = channelNames.indexOf('datadog:identity:refresh')
+
+      assert.notStrictEqual(updateIndex, -1)
+      assert.notStrictEqual(refreshIndex, -1)
+
+      const updateCall = diagnosticsChannelMock.channel.getCall(updateIndex)
+      const refreshCall = diagnosticsChannelMock.channel.getCall(refreshIndex)
+      assert.ok(updateCall.callId < storeConfig.firstCall.callId)
+      assert.ok(storeConfig.firstCall.callId < refreshCall.callId)
+      sinon.assert.calledOnceWithExactly(log.warn, 'Could not store tracer configuration for service discovery')
+    })
+
+    it('should NOT fire refreshIdentity on GET /aws/lambda-microvms/runtime/v1/run', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'GET', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.notCalled(channelMock.publish)
+    })
+
+    it('should NOT fire refreshIdentity on POST /other', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/other' } })
+
+      sinon.assert.notCalled(channelMock.publish)
+    })
+
+    it('should log an error at registration when Node bundles its own OpenSSL', () => {
+      buildProxy(true).init()
+
+      sinon.assert.calledOnce(log.error)
+      assert.match(log.error.firstCall.args[0], /bundles its own OpenSSL/)
+    })
+
+    it('should not log an error when Node links a shared OpenSSL', () => {
+      microProxy.init()
+
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('should drain a full UUID batch before publishing datadog:identity:update', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      sinon.assert.notCalled(uuidStub)
+
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      // a full batch, so the pool's cursor wraps and refills wherever the snapshot froze it
+      sinon.assert.callCount(uuidStub, 128)
+
+      const updateIndex = diagnosticsChannelMock.channel.getCalls()
+        .findIndex(call => call.args[0] === 'datadog:identity:update')
+      const updateCall = diagnosticsChannelMock.channel.getCall(updateIndex)
+
+      assert.ok(uuidStub.lastCall.callId < updateCall.callId)
+    })
+
+    it('should not drain the UUID pool when the request is not the run hook', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'GET', url: '/aws/lambda-microvms/runtime/v1/run' } })
+      subscriber({ request: { method: 'POST', url: '/other' } })
+
+      sinon.assert.notCalled(uuidStub)
+    })
+
+    it('should unsubscribe HTTP channel after first fire', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledOnceWithExactly(channelMock.unsubscribe, subscriber)
+    })
+  })
+
+  describe('MicroVM identity refresh (real modules)', () => {
+    let RealConfig
+    let RealRemoteConfig
+    let udp4Send
+    let MicroVmProxy
+    let microProxy
+    let capturedConfig
+    let storedRuntimeId
+    let storeConfig
+    let server
+
+    beforeEach(async () => {
+      // Real (not proxied) config/remote_config/dogstatsd modules, so this test proves the
+      // actual production wiring — not that mocks were called correctly.
+      RealConfig = proxyquire.noPreserveCache()('../src/config', {})
+      RealRemoteConfig = proxyquire.noPreserveCache()('../src/remote_config', {})
+
+      udp4Send = sinon.spy()
+      const udp4 = { send: udp4Send, on: sinon.stub(), unref: sinon.stub() }
+      udp4.on.returns(udp4)
+      udp4.unref.returns(udp4)
+      const dgram = { createSocket: sinon.stub().returns(udp4) }
+      const dns = { lookup: sinon.stub().callsFake((hostname, callback) => callback(null, hostname, 4)) }
+      const RealCustomMetrics = proxyquire.noPreserveCache()('../src/dogstatsd', { dgram }).CustomMetrics
+
+      storeConfig = sinon.stub().callsFake(metadataConfig => {
+        storedRuntimeId = metadataConfig.tags['runtime-id']
+        return {}
+      })
+
+      capturedConfig = null
+      const CapturingConfig = (...args) => {
+        capturedConfig = RealConfig(...args)
+        capturedConfig.lookup = dns.lookup
+        capturedConfig.runtimeMetricsRuntimeId = true
+        // Force the UDP send path so this test can observe the outgoing packet directly,
+        // instead of going through the HTTP-proxy-to-agent path config.url otherwise selects.
+        capturedConfig.url = undefined
+        return capturedConfig
+      }
+
+      MicroVmProxy = proxyquire('../src/proxy', {
+        './tracer': DatadogTracer,
+        './noop/proxy': NoopProxy,
+        './config': CapturingConfig,
+        './plugin_manager': PluginManager,
+        './runtime_metrics': runtimeMetrics,
+        './log': log,
+        './profiler': profiler,
+        './tracer_metadata': storeConfig,
+        './serverless': {
+          IS_AWS_LAMBDA_MICROVM: true,
+          IS_SERVERLESS: true,
+        },
+        './appsec': appsec,
+        './appsec/iast': iast,
+        './telemetry': telemetry,
+        './remote_config': RemoteConfig,
+        './aiguard/sdk': AIGuardSdk,
+        './appsec/sdk': AppsecSdk,
+        './dogstatsd': { CustomMetrics: RealCustomMetrics },
+        './noop/dogstatsd': NoopDogStatsDClient,
+        './flare': flare,
+        './openfeature': openfeature,
+        './openfeature/flagging_provider': OpenFeatureProvider,
+        // dc-polyfill intentionally NOT mocked — this test exercises the real shared channel.
+      })
+
+      microProxy = new MicroVmProxy()
+
+      server = http.createServer((request, response) => {
+        assert.strictEqual(request.method, 'POST')
+        assert.strictEqual(request.url, '/aws/lambda-microvms/runtime/v1/run')
+        response.end()
+      })
+      server.listen(0)
+      await once(server, 'listening')
+    })
+
+    afterEach(async () => {
+      const closed = once(server, 'close')
+      server.close()
+      await closed
+    })
+
+    it('refreshes config, remote config, and dogstatsd tags together on a real /run request', async () => {
+      microProxy.init()
+
+      // Constructed independently from the same real remote_config module proxy.js uses
+      // internally — refreshClientId() mutates module-scoped state shared by every instance.
+      const rc = new RealRemoteConfig(capturedConfig)
+      const originalRuntimeId = capturedConfig.tags['runtime-id']
+      const originalClientId = rc.state.client.id
+
+      const customMetrics = microProxy.dogstatsd
+
+      await triggerMicroVmRun(server)
+
+      assert.notStrictEqual(capturedConfig.tags['runtime-id'], originalRuntimeId)
+      assert.notStrictEqual(rc.state.client.id, originalClientId)
+
+      customMetrics.gauge('test.metric', 1)
+      customMetrics.flush()
+
+      sinon.assert.called(udp4Send)
+      const payload = udp4Send.firstCall.args[0].toString()
+      assert.ok(
+        payload.includes(`runtime-id:${capturedConfig.tags['runtime-id']}`),
+        `expected refreshed runtime-id in payload, got: ${payload}`
+      )
+    })
+
+    it('stores process metadata once with the refreshed /run identity', async () => {
+      microProxy.init()
+
+      const originalRuntimeId = capturedConfig.tags['runtime-id']
+      sinon.assert.notCalled(storeConfig)
+
+      await triggerMicroVmRun(server)
+      await triggerMicroVmRun(server)
+
+      sinon.assert.calledOnceWithExactly(storeConfig, capturedConfig)
+      assert.notStrictEqual(storedRuntimeId, originalRuntimeId)
+      assert.strictEqual(storedRuntimeId, capturedConfig.tags['runtime-id'])
+    })
+  })
 })
+
+/**
+ * @param {import('node:http').Server} server
+ */
+async function triggerMicroVmRun (server) {
+  await legacyStorage.run({ noop: true }, async () => {
+    const { address, port } = server.address()
+    const request = http.request({
+      hostname: address === '::' ? '::1' : address,
+      method: 'POST',
+      path: '/aws/lambda-microvms/runtime/v1/run',
+      port,
+    })
+    const responsePromise = once(request, 'response')
+    request.end()
+
+    const [response] = await responsePromise
+    const end = once(response, 'end')
+    response.resume()
+    await end
+  })
+}
 
 // Helper function to create APM_TRACING batch transaction objects
 function createApmTracingTransaction (configId, libConfig, action = 'apply') {
