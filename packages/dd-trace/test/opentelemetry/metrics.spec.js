@@ -522,6 +522,37 @@ describe('OpenTelemetry Meter Provider', () => {
       }, 120)
     })
 
+    it('advances DELTA start times between exports', () => {
+      const clock = sinon.useFakeTimers()
+      const exported = []
+      mockOtlpExport((decoded) => {
+        exported.push(decoded.resourceMetrics[0].scopeMetrics[0].metrics)
+      })
+
+      setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
+      const meter = metrics.getMeter('app')
+      const counter = meter.createCounter('requests')
+      const histogram = meter.createHistogram('latency')
+
+      counter.add(5)
+      histogram.record(10)
+      clock.tick(100)
+      counter.add(3)
+      histogram.record(20)
+      clock.tick(100)
+
+      assert.strictEqual(exported.length, 2)
+      for (const name of ['requests', 'latency']) {
+        const metric = exported.map(metrics => metrics.find(metric => metric.name === name))
+        const points = metric.map(metric => (metric.sum || metric.histogram).dataPoints[0])
+        assert(points[0].timeUnixNano > points[0].startTimeUnixNano)
+        assert.strictEqual(points[1].startTimeUnixNano, points[0].timeUnixNano)
+        assert(points[1].timeUnixNano > points[1].startTimeUnixNano)
+      }
+      assert.strictEqual(exported[1].find(metric => metric.name === 'requests').sum.dataPoints[0].asInt, 3)
+      assert.strictEqual(exported[1].find(metric => metric.name === 'latency').histogram.dataPoints[0].count, 1)
+    })
+
     it('LOWMEMORY uses DELTA for sync counters', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]

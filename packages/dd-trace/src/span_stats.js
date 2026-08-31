@@ -251,11 +251,11 @@ class SpanStatsProcessor {
    * @param {Function} [done]
    */
   forceFlush (done) {
-    this.#flush(done)
+    this.#flush(done, true)
   }
 
-  #flush (done) {
-    const drained = this.#drainBuckets()
+  #flush (done, force = false) {
+    const drained = this.#drainBuckets(this.otlpExporter && !force ? Date.now() * 1e6 : Infinity)
 
     if (this.enabled && !this.otlpExporter) {
       this.exporter.export({
@@ -310,12 +310,13 @@ class SpanStatsProcessor {
       .record(span)
   }
 
-  #drainBuckets () {
+  #drainBuckets (cutoff) {
     const drained = []
     for (const [timeNs, bucket] of this.buckets.entries()) {
+      if (timeNs + this.bucketSizeNs > cutoff) continue
       drained.push({ timeNs, bucket })
+      this.buckets.delete(timeNs)
     }
-    this.buckets.clear()
     return drained
   }
 
