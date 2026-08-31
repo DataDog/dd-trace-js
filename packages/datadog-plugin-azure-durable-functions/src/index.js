@@ -3,6 +3,7 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { AUTO_KEEP } = require('../../../ext/priority')
 const TraceState = require('../../dd-trace/src/opentracing/propagation/tracestate')
+const { writeTraceparent, writeTracestate } = require('../../dd-trace/src/carrier')
 
 class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get id () { return 'azure-durable-functions' }
@@ -20,10 +21,14 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
       // extract() returns null when the carrier can't be parsed. Normalize to
       // undefined so startSpan still falls back to any active in-process parent
       // rather than being forced to start a brand new root span.
-      childOf = this.tracer.extract('text_map', {
-        traceparent: ctx.traceparent,
-        tracestate: ctx.tracestate,
-      }) ?? undefined
+      const carrier = {}
+
+      writeTraceparent(carrier, ctx.traceparent)
+      if (ctx.tracestate) {
+        writeTracestate(carrier, ctx.tracestate)
+      }
+
+      childOf = this.tracer.extract('text_map', carrier) ?? undefined
     }
 
     const span = this.startSpan(this.operationName(), {
