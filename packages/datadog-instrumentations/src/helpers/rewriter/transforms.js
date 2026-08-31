@@ -37,7 +37,8 @@ module.exports = {
  * @param {{
  *   transformOptions?: {
  *     callbackArgumentNames?: string[],
- *     callbackName?: string
+ *     callbackName?: string,
+ *     callbackThis?: boolean
  *   }
  * }} state
  * @param {import('estree').IfStatement} node
@@ -49,7 +50,7 @@ function awaitContextCallback (state, node, _parent, ancestry) {
   assert(node.type === 'IfStatement' && node.consequent?.type === 'BlockStatement',
     'awaitContextCallback: expected an if statement with a block body')
 
-  const { callbackArgumentNames = [], callbackName } = state.transformOptions ?? {}
+  const { callbackArgumentNames = [], callbackName, callbackThis = false } = state.transformOptions ?? {}
 
   assert(identifierPattern.test(callbackName), 'awaitContextCallback: callbackName must be an identifier')
   assert(callbackArgumentNames.every(name => identifierPattern.test(name)),
@@ -85,12 +86,16 @@ function awaitContextCallback (state, node, _parent, ancestry) {
   }
 
   const originalStatements = node.consequent.body
+  const callbackArguments = callbackArgumentNames.join(', ')
+  const callbackInvocation = callbackThis
+    ? `${callbackVariable}.call(this${callbackArguments ? `, ${callbackArguments}` : ''})`
+    : `${callbackVariable}(${callbackArguments})`
   const callbackStatements = parse(`
     async function wrapper () {
       const ${callbackVariable} = __apm$ctx.${callbackName};
       if (typeof ${callbackVariable} === 'function') {
         try {
-          await ${callbackVariable}(${callbackArgumentNames.join(', ')});
+          await ${callbackInvocation};
         } catch {}
         if (true) {}
       } else {

@@ -334,6 +334,34 @@ describe('check-require-cache', () => {
             filePath: 'trace-await-context-callback.js',
           },
           functionQuery: {
+            className: 'ContextRunner',
+            methodName: 'run',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_this',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'ClassDeclaration[id.name="ContextRunner"] ' +
+            'MethodDefinition[key.name="run"] IfStatement',
+          channelName: 'trace_await_context_callback_this',
+          transform: 'awaitContextCallback',
+          transformOptions: {
+            callbackName: 'beforeContinue',
+            callbackThis: true,
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          functionQuery: {
             functionName: 'runAfterSetup',
             kind: 'Async',
           },
@@ -879,6 +907,24 @@ describe('check-require-cache', () => {
 
     assert.equal(await resultPromise, 'passed')
     assert.deepStrictEqual(steps, ['setup', 'setup done', 'task'])
+  })
+
+  it('should call a context callback with the instrumented receiver', async () => {
+    const { ContextRunner } = compileFile('trace-await-context-callback')
+    const runner = new ContextRunner()
+
+    subs = {
+      start (ctx) {
+        ctx.beforeContinue = async function () {
+          assert.strictEqual(this, runner)
+          await new Promise(resolve => setImmediate(resolve))
+        }
+      },
+    }
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_this')
+    ch.subscribe(subs)
+
+    assert.equal(await runner.run({ shouldContinue: true }), 'continued')
   })
 
   it('should recheck the condition after the context callback settles', async () => {
