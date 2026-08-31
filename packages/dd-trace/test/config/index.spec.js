@@ -65,19 +65,25 @@ describe('Config', () => {
     sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
     sinon.spy(log, 'error')
-    const parsers = proxyquire.noPreserveCache()('../../src/config/parsers', {})
-    const supportedConfigurations = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
-    const configDefaults = proxyquire.noPreserveCache()('../../src/config/defaults', {
+    const loadParsers = proxyquire.noPreserveCache()
+    const parsers = loadParsers('../../src/config/parsers', {})
+    const loadSupportedConfigurations = proxyquire.noPreserveCache()
+    const supportedConfigurations = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
+    const loadDefaults = proxyquire.noPreserveCache()
+    const configDefaults = loadDefaults('../../src/config/defaults', {
       './supported-configurations.json': supportedConfigurations,
       '../log': log,
       './parsers': parsers,
       '../../../../version': { DD_MAJOR: ddMajor },
     })
-    const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
+    const loadHelper = proxyquire.noPreserveCache()
+    const configHelper = loadHelper('../../src/config/helper', {
       './supported-configurations.json': supportedConfigurations,
     })
-    const serverless = proxyquire.noPreserveCache()('../../src/serverless', {})
-    return proxyquire.noPreserveCache()('../../src/config', {
+    const loadServerless = proxyquire.noPreserveCache()
+    const serverless = loadServerless('../../src/serverless', {})
+    const loadConfig = proxyquire.noPreserveCache()
+    const createConfig = loadConfig('../../src/config', {
       './defaults': configDefaults,
       '../log': log,
       '../telemetry': { updateConfig },
@@ -86,7 +92,8 @@ describe('Config', () => {
       './helper': configHelper,
       '../pkg': pkg,
       '../../../../version': { DD_MAJOR: ddMajor },
-    })(options)
+    })
+    return createConfig(options)
   }
 
   beforeEach(() => {
@@ -170,8 +177,10 @@ describe('Config', () => {
     // Load `helper.js` in isolation so a missing alias filter in helper.js cannot be masked by
     // the same overrides applied from `defaults.js` against a shared module cache.
     const loadFreshHelper = () => {
-      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
-      return proxyquire.noPreserveCache()('../../src/config/helper', {
+      const loadSupportedConfigurations = proxyquire.noPreserveCache()
+      const fresh = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
+      const loadHelper = proxyquire.noPreserveCache()
+      return loadHelper('../../src/config/helper', {
         './supported-configurations.json': fresh,
       })
     }
@@ -209,8 +218,10 @@ describe('Config', () => {
     })
 
     itV6Filter('applyMajorOverrides is idempotent on the same supportedConfigurations object', () => {
-      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
-      const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
+      const loadSupportedConfigurations = proxyquire.noPreserveCache()
+      const fresh = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
+      const loadMajorOverrides = proxyquire.noPreserveCache()
+      const applyMajorOverrides = loadMajorOverrides('../../src/config/major-overrides', {})
       const supported = fresh.supportedConfigurations
       assert.ok('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported)
       supported.DD_PROFILING_CPU_ENABLED[0].aliases.push('DD_PROFILING_TEST_ALIAS')
@@ -233,8 +244,10 @@ describe('Config', () => {
     })
 
     it('applyMajorOverrides is idempotent for v5 security controls', () => {
-      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
-      const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
+      const loadSupportedConfigurations = proxyquire.noPreserveCache()
+      const fresh = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
+      const loadMajorOverrides = proxyquire.noPreserveCache()
+      const applyMajorOverrides = loadMajorOverrides('../../src/config/major-overrides', {})
       const supported = fresh.supportedConfigurations
       const iastEntry = supported.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0]
 
@@ -5439,19 +5452,25 @@ rules:
   describe('refreshRuntimeId', () => {
     const loadConfigModule = (overrides = {}) => {
       const uuid = overrides.uuid || require('../../../../vendor/dist/crypto-randomuuid')
-      const parsers = proxyquire.noPreserveCache()('../../src/config/parsers', {})
-      const supportedConfigurations = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
-      const configDefaults = proxyquire.noPreserveCache()('../../src/config/defaults', {
+      const loadParsers = proxyquire.noPreserveCache()
+      const parsers = loadParsers('../../src/config/parsers', {})
+      const loadSupportedConfigurations = proxyquire.noPreserveCache()
+      const supportedConfigurations = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
+      const loadDefaults = proxyquire.noPreserveCache()
+      const configDefaults = loadDefaults('../../src/config/defaults', {
         './supported-configurations.json': supportedConfigurations,
         '../log': log,
         './parsers': parsers,
         '../../../../version': { DD_MAJOR },
       })
-      const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
+      const loadHelper = proxyquire.noPreserveCache()
+      const configHelper = loadHelper('../../src/config/helper', {
         './supported-configurations.json': supportedConfigurations,
       })
-      const serverless = proxyquire.noPreserveCache()('../../src/serverless', {})
-      return proxyquire.noPreserveCache()('../../src/config', {
+      const loadServerless = proxyquire.noPreserveCache()
+      const serverless = loadServerless('../../src/serverless', {})
+      const loadConfig = proxyquire.noPreserveCache()
+      return loadConfig('../../src/config', {
         './defaults': configDefaults,
         '../log': log,
         '../telemetry': { updateConfig },

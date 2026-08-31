@@ -48,7 +48,8 @@ describe('module', () => {
 
   function loadLlmobsModuleOnVercel () {
     process.env.VERCEL = '1'
-    llmobsModuleProxyRequireMeta['../serverless'] = proxyquire.noPreserveCache()(
+    const loadServerless = proxyquire.noPreserveCache()
+    llmobsModuleProxyRequireMeta['../serverless'] = loadServerless(
       '../../../dd-trace/src/serverless',
       {}
     )

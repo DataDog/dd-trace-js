@@ -43,7 +43,8 @@ function getDisabledRuntimeHooks () {
     return channels.get(name)
   }
 
-  proxyquire.noPreserveCache()('../../datadog-instrumentations/src/next', {
+  const loadNext = proxyquire.noPreserveCache()
+  loadNext('../../datadog-instrumentations/src/next', {
     '../../datadog-shimmer': {
       wrap (target, method, wrapper) {
         target[method] = wrapper(target[method])
@@ -1051,7 +1052,8 @@ describe('compiled Next runtimes', () => {
       }
       const routeModule = new RouteModule()
 
-      getHook(runtime)({ [exportName]: RouteModule })
+      const hook = getHook(runtime)
+      hook({ [exportName]: RouteModule })
 
       assert.strictEqual(routeModule[method](...args), returned)
     }
@@ -1072,7 +1074,8 @@ describe('compiled Next runtimes', () => {
           return Promise.resolve({ status: 201 })
         }
       }
-      getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
+      const runtimeHook = getCompiledRuntimeHook('app-route')
+      runtimeHook({ AppRouteRouteModule })
 
       const request = {
         headers: {
@@ -1124,7 +1127,8 @@ describe('compiled Next runtimes', () => {
           return Promise.resolve()
         }
       }
-      getCompiledRuntimeHook('pages-api')({ PagesAPIRouteModule })
+      const runtimeHook = getCompiledRuntimeHook('pages-api')
+      runtimeHook({ PagesAPIRouteModule })
 
       const response = { statusCode: 200 }
       const trace = agent.assertSomeTraces(traces => {
@@ -1156,7 +1160,8 @@ describe('compiled Next runtimes', () => {
           return Promise.reject(new Error('App Page first-entry error'))
         }
       }
-      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+      const runtimeHook = getCompiledRuntimeHook('app-page')
+      runtimeHook({ AppPageRouteModule })
 
       const response = { statusCode: 200 }
       const trace = agent.assertSomeTraces(traces => {

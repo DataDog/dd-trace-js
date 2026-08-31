@@ -1179,7 +1179,8 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
 
   const monitorEventLoopDelay = overrides.monitorEventLoopDelay ?? realPerfHooks.monitorEventLoopDelay
 
-  const otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
+  const loadOtlpRuntimeMetrics = proxyquire.noCallThru()
+  const otlpMetrics = loadOtlpRuntimeMetrics('../src/runtime_metrics/otlp_runtime_metrics', {
     '@opentelemetry/api': {
       metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
     },
@@ -1493,7 +1494,8 @@ describe('otlp_runtime_metrics', () => {
       removeBatchObservableCallback () {},
     }
     const errorLog = sinon.spy()
-    const otlpMetricsFailing = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
+    const loadOtlpRuntimeMetrics = proxyquire.noCallThru()
+    const otlpMetricsFailing = loadOtlpRuntimeMetrics('../src/runtime_metrics/otlp_runtime_metrics', {
       '@opentelemetry/api': {
         metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) },
       },
@@ -1503,7 +1505,8 @@ describe('otlp_runtime_metrics', () => {
         subscribeToIdentityRefresh: () => () => {},
       },
     })
-    const dispatcher = proxyquire.noCallThru()('../src/runtime_metrics', {
+    const loadRuntimeMetrics = proxyquire.noCallThru()
+    const dispatcher = loadRuntimeMetrics('../src/runtime_metrics', {
       './otlp_runtime_metrics': otlpMetricsFailing,
       '../log': { error: errorLog },
     })

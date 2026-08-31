@@ -20,7 +20,8 @@ describe('BaseLLMObsWriter', () => {
   let logger
 
   function getBaseLLMObsWriter () {
-    const serverless = proxyquire.noPreserveCache()('../../../src/serverless', {})
+    const loadServerless = proxyquire.noPreserveCache()
+    const serverless = loadServerless('../../../src/serverless', {})
     proxyquire.preserveCache()
     return proxyquire('../../../src/llmobs/writers/base', {
       '../../exporters/common/request': request,

@@ -128,7 +128,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
                     child: [req.query.key],
                   },
                 }
-                require(tmpFilePath)(Test, filter, () => {
+                const runQuery = require(tmpFilePath)
+                runQuery(Test, filter, () => {
                   res.end()
                 })
               },
