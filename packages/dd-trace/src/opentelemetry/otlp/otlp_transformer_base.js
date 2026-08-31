@@ -76,6 +76,16 @@ class OtlpTransformerBase {
   }
 
   /**
+   * Recomputes the cached OTLP resource attributes (e.g. after `config.tags` changes post-
+   * construction, such as a MicroVM clone resume regenerating its runtime-id). Leaves the
+   * reader/exporter/protocol otherwise untouched.
+   * @param {Attributes} resourceAttributes - Resource attributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    this.#resourceAttributes = this.transformAttributes(resourceAttributes)
+  }
+
+  /**
    * Transforms attributes to OTLP KeyValue format.
    * @param {Attributes} attributes - Attributes to transform
    * @returns {object[]} Array of OTLP KeyValue objects
