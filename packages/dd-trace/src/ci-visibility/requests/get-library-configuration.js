@@ -14,7 +14,6 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
 } = require('../telemetry')
-const { writeSettingsToCache } = require('../test-optimization-cache')
 const { MAX_RETRIES, validateSettingsResponse } = require('../test-optimization-http-cache-schema')
 const request = require('./request')
 
@@ -285,8 +284,6 @@ function getLibraryConfiguration ({
         const settings = parseLibraryConfigurationResponse(res, config)
 
         incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)
-
-        writeSettingsToCache(settings)
 
         done(null, settings)
       } catch (err) {

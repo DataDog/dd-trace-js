@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const logger = require('bunyan').createLogger({ name: 'test-logger' })
+const logger = require('./automatic-log-submission-logger')
 
 describe('WebdriverIO automatic log submission', () => {
   it('logs from an active Test Optimization span', () => {
