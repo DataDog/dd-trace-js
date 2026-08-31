@@ -29,13 +29,9 @@ const SOURCE_CACHE = 'cache'
  */
 
 function isPlainObject (value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  if (!value || typeof value !== 'object') return false
   const prototype = Object.getPrototypeOf(value)
   return prototype === Object.prototype || prototype === null
-}
-
-function stableAttributes (attributes) {
-  return Object.entries(attributes).sort(([left], [right]) => left.localeCompare(right))
 }
 
 /**
@@ -52,8 +48,10 @@ function promptRequest (promptId, { version, env, targetingKey, attributes = {} 
   const requestAttributes = { ...attributes }
   let selector
   if (version !== undefined) selector = ['version', version]
-  else if (env) selector = ['resolve', env, targetingKey ?? null, stableAttributes(requestAttributes)]
-  else selector = ['latest']
+  else if (env) {
+    const attributesSelector = Object.keys(requestAttributes).sort().map(key => [key, requestAttributes[key]])
+    selector = ['resolve', env, targetingKey ?? null, attributesSelector]
+  } else selector = ['latest']
 
   return {
     promptId,
@@ -137,11 +135,11 @@ function requestSignal (timeoutMs, cacheSignal) {
 class PromptManager {
   /**
    * @param {import('../../config/config-base')} config
-   * @param {() => object} provider
+   * @param {() => object} getProvider
    */
-  constructor (config, provider) {
+  constructor (config, getProvider) {
     this.config = config
-    this.provider = provider
+    this.getProvider = getProvider
     this.ttlMs = Math.round(config.DD_LLMOBS_PROMPTS_CACHE_TTL * 1000)
     this.timeoutMs = Math.round(config.DD_LLMOBS_PROMPTS_TIMEOUT * 1000)
     this.origin = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') || `https://api.${config.site}`
@@ -188,7 +186,7 @@ class PromptManager {
     try {
       const context = { ...request.attributes }
       if (request.targetingKey !== undefined) context.targetingKey = request.targetingKey
-      const details = await this.provider().resolveObjectEvaluation(
+      const details = await this.getProvider().resolveObjectEvaluation(
         `__llmobs__.prompt.${request.promptId}`,
         {},
         context,
@@ -210,10 +208,7 @@ class PromptManager {
   async _fetchHttp (request, cacheSignal) {
     const apiKey = this._requireApiKey()
     if (request.resolve && !this.config.DD_APP_KEY) {
-      return {
-        reason: 'DD_APP_KEY is required to resolve prompts for an environment',
-        notFound: false,
-      }
+      return { reason: 'DD_APP_KEY is required to resolve prompts for an environment' }
     }
 
     const encodedId = encodeURIComponent(request.promptId)
@@ -251,26 +246,23 @@ class PromptManager {
         try {
           data = JSON.parse(responseBody)
         } catch {
-          return { reason: 'invalid JSON in response body', notFound: false }
+          return { reason: 'invalid JSON in response body' }
         }
         const source = request.resolve ? 'resolve' : 'registry'
         const prompt = promptFromData(data, source)
-        return prompt
-          ? { prompt, notFound: false, reason: '' }
-          : { reason: 'invalid prompt response', notFound: false }
+        return prompt ? { prompt } : { reason: 'invalid prompt response' }
       }
 
       const detail = detailFromBody(responseBody)
-      const notFound = response.status === 404
-      if (notFound) {
+      if (response.status === 404) {
         log.debug('Prompt not found: prompt_id=%s detail="%s"', request.promptId, detail)
-      } else {
-        log.warn('Prompt fetch failed: prompt_id=%s status=%d detail="%s"', request.promptId, response.status, detail)
+        return { reason: detail, notFound: true }
       }
-      return { reason: detail, notFound }
+      log.warn('Prompt fetch failed: prompt_id=%s status=%d detail="%s"', request.promptId, response.status, detail)
+      return { reason: detail }
     } catch (error) {
       log.warn('Prompt fetch exception: prompt_id=%s: %s', request.promptId, error.message)
-      return { reason: error.message, notFound: false }
+      return { reason: error.message }
     }
   }
 

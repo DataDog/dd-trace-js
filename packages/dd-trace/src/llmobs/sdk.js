@@ -47,15 +47,15 @@ class LLMObs extends NoopLLMObs {
 
   #promptManager
 
-  #provider
+  #getProvider
 
   /**
    * @param {import('../tracer')} tracer - Tracer instance
    * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base')} config - Tracer configuration
-   * @param {() => object} provider - Lazy getter for the tracer's existing OpenFeature provider
+   * @param {() => object} getProvider - Lazy getter for the tracer's existing OpenFeature provider
    */
-  constructor (tracer, llmobsModule, config, provider = () => {}) {
+  constructor (tracer, llmobsModule, config, getProvider = () => {}) {
     super(tracer)
 
     /** @type {import('../config/config-base')} */
@@ -63,7 +63,7 @@ class LLMObs extends NoopLLMObs {
 
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
-    this.#provider = provider
+    this.#getProvider = getProvider
   }
 
   get enabled () {
@@ -86,7 +86,7 @@ class LLMObs extends NoopLLMObs {
   #getPromptManager () {
     if (!this.#promptManager) {
       const PromptManager = require('./prompts/manager')
-      this.#promptManager = new PromptManager(this._config, this.#provider)
+      this.#promptManager = new PromptManager(this._config, this.#getProvider)
     }
     return this.#promptManager
   }
