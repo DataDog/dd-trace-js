@@ -21,6 +21,7 @@ import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintNoCallResultInvocation from './eslint-rules/eslint-no-call-result-invocation.mjs'
+import eslintNoConditionalObjectSpread from './eslint-rules/eslint-no-conditional-object-spread.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
 import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
 import eslintNoUnnecessaryArrayJoin from './eslint-rules/eslint-no-unnecessary-array-join.mjs'
@@ -36,6 +37,11 @@ import eslintTimerUnref from './eslint-rules/eslint-timer-unref.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
+const PACKAGE_SRC_FILES = [
+  'packages/*/src/**/*.js',
+  'packages/*/src/**/*.mjs',
+]
+
 const SRC_FILES = [
   '*.js',
   '*.mjs',
@@ -47,8 +53,7 @@ const SRC_FILES = [
   'scripts/**/*.mjs',
   'packages/*/*.js',
   'packages/*/*.mjs',
-  'packages/*/src/**/*.js',
-  'packages/*/src/**/*.mjs',
+  ...PACKAGE_SRC_FILES,
 ]
 
 const PROCESS_ENV_DISABLE_ALLOW_FILES = [
@@ -478,6 +483,7 @@ export default [
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-no-conditional-object-spread': eslintNoConditionalObjectSpread,
           'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
           'eslint-require-agent-stop': eslintRequireAgentStop,
           'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
@@ -804,6 +810,13 @@ export default [
       'unicorn/prefer-array-from-map': 'off', // few | loops avoid callback allocation
       'unicorn/prefer-continue': 'off', // many
       'unicorn/prefer-ternary': 'off', // many
+    },
+  },
+  {
+    name: 'dd-trace/src/conditional-object-spread',
+    files: PACKAGE_SRC_FILES,
+    rules: {
+      'eslint-rules/eslint-no-conditional-object-spread': 'error',
     },
   },
   {

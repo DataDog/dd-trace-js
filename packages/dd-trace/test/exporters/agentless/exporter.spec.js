@@ -105,6 +105,7 @@ describe('AgentlessExporter', () => {
 
       Exporter = proxyquire('../../../src/exporters/agentless', {
         './writer': Writer,
+        '../common/docker': { entityId: 'container-id' },
       })
 
       exporter = new Exporter({
@@ -118,6 +119,7 @@ describe('AgentlessExporter', () => {
         env: 'production',
         runtimeID: 'test-uuid',
         languageName: 'nodejs',
+        containerID: 'container-id',
       })
     })
 
