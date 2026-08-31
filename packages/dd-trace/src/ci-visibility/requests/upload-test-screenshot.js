@@ -163,6 +163,7 @@ function uploadTestMedia (options, callback) {
     url,
     agent: getAgent(url),
     deadline,
+    retryUntilDeadline: false,
     signal,
   }
 
@@ -190,7 +191,6 @@ function uploadTestMedia (options, callback) {
   }
 
   if (kind === 'video') {
-    requestOptions.retryUntilDeadline = false
     requestOptions.transport = videoRequest
     request(() => createReadStream(filePath), requestOptions, onResponse)
   } else {

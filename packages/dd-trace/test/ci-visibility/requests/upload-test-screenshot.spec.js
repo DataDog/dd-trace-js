@@ -43,9 +43,9 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     )
 
     assert.ok(requestStub.calledOnce)
-    const [payload, { path, headers, agent, deadline, signal }] = requestStub.getCall(0).args
+    const [payload, { path, headers, agent, deadline, retryUntilDeadline, signal }] = requestStub.getCall(0).args
     const query = new URL(path, 'http://localhost:8126').searchParams
-    return { payload, path, headers, agent, query, deadline, signal }
+    return { payload, path, headers, agent, query, deadline, retryUntilDeadline, signal }
   }
 
   before(() => {
@@ -89,13 +89,14 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], undefined)
     })
 
-    it('forwards the deadline and AbortSignal to the media request', () => {
+    it('forwards finalization controls without retrying screenshots until the deadline', () => {
       const abortController = new AbortController()
       const deadline = Date.now() + 10_000
 
       const requestOptions = uploadForFile('screenshot.png', { deadline, signal: abortController.signal })
 
       assert.strictEqual(requestOptions.deadline, deadline)
+      assert.strictEqual(requestOptions.retryUntilDeadline, false)
       assert.strictEqual(requestOptions.signal, abortController.signal)
     })
 
