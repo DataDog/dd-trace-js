@@ -69,7 +69,7 @@ const V4_PACKAGE_SHIMS = [
     file: 'resources/responses/responses',
     targetClass: 'Responses',
     baseResource: 'responses',
-    methods: ['create'],
+    methods: ['create'], // implicitly covers `parse` as well which calls `create` under the hood
     streamedResponse: true,
     versions: ['>=4.87.0'],
   },
