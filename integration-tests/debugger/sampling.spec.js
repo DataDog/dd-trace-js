@@ -38,10 +38,15 @@ describe('Dynamic Instrumentation', function () {
       )
     })
 
-    it('should limit snapshots across probes', async function () {
-      const rcConfigs = Array.from({ length: MAX_SNAPSHOTS_PER_SECOND_GLOBALLY + 1 }, () => {
-        return t.generateRemoteConfig({ captureSnapshot: true, sampling: { snapshotsPerSecond: 5000 } })
-      })
+    it('should limit snapshots across probes at different locations', async function () {
+      const rcConfigs = []
+      for (let i = 0; i < MAX_SNAPSHOTS_PER_SECOND_GLOBALLY + 1; i++) {
+        const breakpoint = t.breakpoints[i % 2]
+        rcConfigs.push(breakpoint.generateRemoteConfig({
+          captureSnapshot: true,
+          sampling: { snapshotsPerSecond: 5000 },
+        }))
+      }
       const probeIds = rcConfigs.map(({ config }) => config.id)
       const probesInstalled = t.waitForProbeStatus(probeIds, 'INSTALLED')
 
@@ -51,15 +56,23 @@ describe('Dynamic Instrumentation', function () {
       await probesInstalled
 
       const snapshots = await t.captureSnapshotsUntilExit(MAX_SNAPSHOTS_PER_SECOND_GLOBALLY, async () => {
-        const response = await t.axios.get(t.breakpoint.url)
-        assert.strictEqual(response.status, 200)
+        const responses = await Promise.all([
+          t.axios.get(t.breakpoints[0].url),
+          t.axios.get(t.breakpoints[1].url),
+        ])
+        for (const response of responses) {
+          assert.strictEqual(response.status, 200)
+        }
       })
 
       assert.strictEqual(snapshots.length, MAX_SNAPSHOTS_PER_SECOND_GLOBALLY)
       const expectedProbeIds = new Set(probeIds)
+      const snapshotProbeIds = new Set()
       for (const { probe } of snapshots) {
         assert.ok(expectedProbeIds.has(probe.id), `Unexpected probe ID: ${probe.id}`)
+        snapshotProbeIds.add(probe.id)
       }
+      assert.strictEqual(snapshotProbeIds.size, MAX_SNAPSHOTS_PER_SECOND_GLOBALLY)
     })
   })
 })

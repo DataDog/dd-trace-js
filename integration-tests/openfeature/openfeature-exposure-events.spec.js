@@ -56,8 +56,14 @@ function addRemoteConfigAndWaitForAcknowledgment (agent, config) {
  * @param {import('node:child_process').ChildProcess} proc
  * @param {number} expectedCount
  * @param {() => Promise<void>} action
+ * @returns {Promise<{
+ *   requests: Array<{ payload: { exposures?: Array<object> }, headers: object, path: string }>,
+ *   earliestTimestamp: number,
+ *   latestTimestamp: number
+ * }>}
  */
 async function captureExposureRequestsUntilExit (agent, proc, expectedCount, action) {
+  const earliestTimestamp = Date.now()
   const requests = []
   let exposureCount = 0
   let resolveExpected
@@ -79,15 +85,41 @@ async function captureExposureRequestsUntilExit (agent, proc, expectedCount, act
   agent.on('exposures', handleExposures)
   try {
     await Promise.all([action(), expectedExposuresReceived])
+    const latestTimestamp = Date.now()
     await stopProc(proc)
-    return requests
+    return { requests, earliestTimestamp, latestTimestamp }
   } finally {
     agent.removeListener('exposures', handleExposures)
   }
 }
 
-// Helper function to check exposure event structure
-function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttributes = {}) {
+/**
+ * @param {number} timestamp
+ * @param {number} earliestTimestamp
+ * @param {number} latestTimestamp
+ */
+function assertTimestampWithin (timestamp, earliestTimestamp, latestTimestamp) {
+  assert.strictEqual(typeof timestamp, 'number')
+  assert.ok(timestamp >= earliestTimestamp, `Expected timestamp ${timestamp} to be at least ${earliestTimestamp}`)
+  assert.ok(timestamp <= latestTimestamp, `Expected timestamp ${timestamp} to be at most ${latestTimestamp}`)
+}
+
+/**
+ * @param {object} event
+ * @param {string} expectedFlag
+ * @param {string} expectedUser
+ * @param {number} earliestTimestamp
+ * @param {number} latestTimestamp
+ * @param {object} [expectedAttributes]
+ */
+function validateExposureEvent (
+  event,
+  expectedFlag,
+  expectedUser,
+  earliestTimestamp,
+  latestTimestamp,
+  expectedAttributes = {}
+) {
   assert.ok(Object.hasOwn(event, 'timestamp'), `Available keys: ${inspect(Object.keys(event))}`)
   assert.ok(Object.hasOwn(event, 'flag'), `Available keys: ${inspect(Object.keys(event))}`)
   assert.ok(Object.hasOwn(event, 'variant'), `Available keys: ${inspect(Object.keys(event))}`)
@@ -100,7 +132,7 @@ function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttri
     assert.deepStrictEqual(event.subject.attributes, expectedAttributes)
   }
 
-  assert.strictEqual(typeof event.timestamp, 'number')
+  assertTimestampWithin(event.timestamp, earliestTimestamp, latestTimestamp)
 }
 
 describe('OpenFeature Remote Config and Exposure Events Integration', () => {
@@ -155,15 +187,16 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           config: ufcPayloads.testBooleanAndStringFlags,
         })
 
-        const requests = await captureExposureRequestsUntilExit(agent, proc, 2, async function () {
-          const response = await fetch(`${proc.url}/evaluate-flags`)
-          assert.strictEqual(response.status, 200)
-          const data = await response.json()
-          assert.strictEqual(data.evaluationsCompleted, 2)
+        const { requests, earliestTimestamp, latestTimestamp } =
+          await captureExposureRequestsUntilExit(agent, proc, 2, async function () {
+            const response = await fetch(`${proc.url}/evaluate-flags`)
+            assert.strictEqual(response.status, 200)
+            const data = await response.json()
+            assert.strictEqual(data.evaluationsCompleted, 2)
 
-          const flushResponse = await fetch(`${proc.url}/flush`)
-          assert.strictEqual(flushResponse.status, 200)
-        })
+            const flushResponse = await fetch(`${proc.url}/flush`)
+            assert.strictEqual(flushResponse.status, 200)
+          })
         const exposureEvents = []
 
         for (const { payload, headers, path: requestPath } of requests) {
@@ -191,9 +224,9 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         assert.ok(booleanEvent, 'Should have boolean flag exposure')
         assert.ok(stringEvent, 'Should have string flag exposure')
 
-        validateExposureEvent(booleanEvent, 'test-boolean-flag', 'test-user-123',
+        validateExposureEvent(booleanEvent, 'test-boolean-flag', 'test-user-123', earliestTimestamp, latestTimestamp,
           { user: 'test-user-123', plan: 'premium' })
-        validateExposureEvent(stringEvent, 'test-string-flag', 'test-user-456',
+        validateExposureEvent(stringEvent, 'test-string-flag', 'test-user-456', earliestTimestamp, latestTimestamp,
           { user: 'test-user-456', tier: 'enterprise' })
       })
     })
@@ -227,12 +260,13 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           config: ufcPayloads.testBooleanAndStringFlags,
         })
 
-        const requests = await captureExposureRequestsUntilExit(agent, proc, 6, async function () {
-          const response = await fetch(`${proc.url}/evaluate-multiple-flags`)
-          assert.strictEqual(response.status, 200)
-          const data = await response.json()
-          assert.strictEqual(data.evaluationsCompleted, 6)
-        })
+        const { requests, earliestTimestamp, latestTimestamp } =
+          await captureExposureRequestsUntilExit(agent, proc, 6, async function () {
+            const response = await fetch(`${proc.url}/evaluate-multiple-flags`)
+            assert.strictEqual(response.status, 200)
+            const data = await response.json()
+            assert.strictEqual(data.evaluationsCompleted, 6)
+          })
         const exposureEvents = []
 
         for (const { payload } of requests) {
@@ -249,6 +283,10 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         }
 
         assert.strictEqual(exposureEvents.length, 6)
+
+        for (const event of exposureEvents) {
+          assertTimestampWithin(event.timestamp, earliestTimestamp, latestTimestamp)
+        }
 
         const booleanEvents = exposureEvents.filter(event => event.flag.key === 'test-boolean-flag')
         const stringEvents = exposureEvents.filter(event => event.flag.key === 'test-string-flag')
