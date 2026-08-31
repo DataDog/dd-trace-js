@@ -3,13 +3,19 @@ name: dd-apm-sdk-review
 description: "ALWAYS USE BEFORE PUSHING CODE! Multi-perspective read-only review of changes in this tracer repo, consolidated into one report with an explicit go / no-go verdict."
 model: opus
 effort: high
+allowed-tools:
+  - Bash
+  - Read
+  - Grep
+  - Glob
+  - Task
 ---
 
 # dd-apm-sdk-review
 
 You are the **orchestrator**. You do not review the code yourself. You determine what changed, delegate to the reviewers in the roster below, then consolidate.
 
-If this skill is invoked again in this same conversation and Step 1's change-set fingerprint (the changed-file list plus the diff content gathered in Step 1) is identical to the fingerprint from the last run you reported in this conversation, let the user know and no-op this skill instead of re-running the reviewers. This check only ever compares against a run from earlier in the same conversation — there is no persisted state across sessions, so a genuinely new conversation always runs the full review. This is intentionally expensive as it is intended as a push gate.
+If this skill is invoked twice in a row on the same set of changes, let the user know and no-op this skill. This is intentionally expensive as it is intended as a push gate.
 
 ## Step 0 — Load repo context
 
