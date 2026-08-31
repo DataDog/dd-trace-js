@@ -426,6 +426,36 @@ describe('Plugin', () => {
             ])
           })
 
+          it('should preserve server errors for malformed raw write commands', async () => {
+            const cases = [
+              { command: { update: collectionName, updates: {} }, resource: 'update test.$cmd' },
+              { command: { delete: collectionName, deletes: {} }, resource: 'delete test.$cmd' },
+            ]
+
+            for (const { command, resource } of cases) {
+              const tracePromise = agent.assertFirstTraceSpan({
+                resource,
+                meta: {
+                  'mongodb.query': '[]',
+                },
+              }, { spanResourceMatch: /^(?:update|delete) test\.\$cmd$/ })
+
+              const operationPromise = new Promise((resolve, reject) => {
+                const promise = db.command(command, error => error ? reject(error) : resolve())
+                promise?.then(resolve, reject)
+              })
+
+              await Promise.all([
+                assert.rejects(operationPromise, error => {
+                  assert.notStrictEqual(error.name, 'TypeError')
+                  assert.strictEqual(error.code, 16)
+                  return true
+                }),
+                tracePromise,
+              ])
+            }
+          })
+
           it('should sanitize buffers as values and not as objects', async () => {
             const tracePromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
