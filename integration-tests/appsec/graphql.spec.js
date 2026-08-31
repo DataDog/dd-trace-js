@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const path = require('path')
 const { inspect } = require('node:util')
-const axios = require('axios')
 
 const {
   FakeAgent,
@@ -38,6 +37,19 @@ describe('graphql', () => {
     await agent.stop()
   })
 
+  /**
+   * @param {object|object[]} body
+   */
+  async function request (body) {
+    const response = await fetch(`${proc.url}/graphql`, {
+      method: 'post',
+      headers: { 'Content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    await response.arrayBuffer()
+    return response
+  }
+
   it('should not report any attack', async () => {
     const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
       assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
@@ -54,22 +66,15 @@ describe('graphql', () => {
       assert.ok(!('_dd.appsec.json' in payload[1][0].meta))
     })
 
-    const requestPromise = axios({
-      url: `${proc.url}/graphql`,
-      method: 'post',
-      headers: {
-        'Content-type': 'application/json',
+    const requestPromise = request({
+      query: 'query getSingleImage($imageId: Int!) { image(imageId: $imageId) { title owner category url }}',
+      variables: {
+        imageId: 1,
       },
-      data: {
-        query: 'query getSingleImage($imageId: Int!) { image(imageId: $imageId) { title owner category url }}',
-        variables: {
-          imageId: 1,
-        },
-        operationName: 'getSingleImage',
-      },
+      operationName: 'getSingleImage',
     })
-
-    await Promise.all([agentPromise, requestPromise])
+    const [response] = await Promise.all([agentPromise, requestPromise])
+    assert.strictEqual(response.status, 200)
   })
 
   it('should report an attack', async () => {
@@ -123,22 +128,15 @@ describe('graphql', () => {
       assert.deepStrictEqual(JSON.parse(payload[1][0].meta['_dd.appsec.json']), result)
     })
 
-    const requestPromise = axios({
-      url: `${proc.url}/graphql`,
-      method: 'post',
-      headers: {
-        'Content-type': 'application/json',
+    const requestPromise = request({
+      query: 'query getImagesByCategory($category: String) { images(category: $category) { title owner url }}',
+      variables: {
+        category: 'testattack',
       },
-      data: {
-        query: 'query getImagesByCategory($category: String) { images(category: $category) { title owner url }}',
-        variables: {
-          category: 'testattack',
-        },
-        operationName: 'getImagesByCategory',
-      },
+      operationName: 'getImagesByCategory',
     })
-
-    await Promise.all([agentPromise, requestPromise])
+    const [response] = await Promise.all([agentPromise, requestPromise])
+    assert.strictEqual(response.status, 200)
   })
 
   it('should block an attack', async () => {
@@ -153,28 +151,15 @@ describe('graphql', () => {
       assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')
     })
 
-    const requestPromise = assert.rejects(
-      axios({
-        url: `${proc.url}/graphql`,
-        method: 'post',
-        headers: {
-          'Content-type': 'application/json',
-        },
-        data: {
-          query: 'query getImagesByCategory($category: String) { images(category: $category) { title owner url }}',
-          variables: {
-            category: 'blockattack',
-          },
-          operationName: 'getImagesByCategory',
-        },
-      }),
-      (err) => {
-        assert.strictEqual(err.response.status, 403)
-        return true
-      }
-    )
-
-    await Promise.all([agentPromise, requestPromise])
+    const requestPromise = request({
+      query: 'query getImagesByCategory($category: String) { images(category: $category) { title owner url }}',
+      variables: {
+        category: 'blockattack',
+      },
+      operationName: 'getImagesByCategory',
+    })
+    const [response] = await Promise.all([agentPromise, requestPromise])
+    assert.strictEqual(response.status, 403)
   })
 
   it('should block an attack in a batched request', async () => {
@@ -189,32 +174,19 @@ describe('graphql', () => {
       assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')
     })
 
-    const requestPromise = assert.rejects(
-      axios({
-        url: `${proc.url}/graphql`,
-        method: 'post',
-        headers: {
-          'Content-type': 'application/json',
-        },
-        data: [
-          {
-            query: 'query getSingleImage($imageId: Int!) { image(imageId: $imageId) { title }}',
-            variables: { imageId: 1 },
-            operationName: 'getSingleImage',
-          },
-          {
-            query: 'query getImagesByCategory($category: String) { images(category: $category) { title }}',
-            variables: { category: 'blockattack' },
-            operationName: 'getImagesByCategory',
-          },
-        ],
-      }),
-      (err) => {
-        assert.strictEqual(err.response.status, 403)
-        return true
-      }
-    )
-
-    await Promise.all([agentPromise, requestPromise])
+    const requestPromise = request([
+      {
+        query: 'query getSingleImage($imageId: Int!) { image(imageId: $imageId) { title }}',
+        variables: { imageId: 1 },
+        operationName: 'getSingleImage',
+      },
+      {
+        query: 'query getImagesByCategory($category: String) { images(category: $category) { title }}',
+        variables: { category: 'blockattack' },
+        operationName: 'getImagesByCategory',
+      },
+    ])
+    const [response] = await Promise.all([agentPromise, requestPromise])
+    assert.strictEqual(response.status, 403)
   })
 })
