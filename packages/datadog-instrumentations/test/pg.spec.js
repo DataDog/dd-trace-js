@@ -137,8 +137,8 @@ describe('pg instrumentation', () => {
               })
 
               describe('with callback in query object', () => {
-                it('Should not fail if it is not aborted', async () => {
-                  await new Promise((resolve, reject) => {
+                it('Should not fail if it is not aborted', () => {
+                  return new Promise((resolve, reject) => {
                     const query = new Query('SELECT 1')
                     query.callback = (error) => {
                       if (error) reject(error)
@@ -149,10 +149,10 @@ describe('pg instrumentation', () => {
                   })
                 })
 
-                it('Should abort query', async () => {
+                it('Should abort query', () => {
                   queryClientStartChannel.subscribe(abortQuery)
 
-                  await assert.rejects(new Promise((resolve, reject) => {
+                  return assert.rejects(new Promise((resolve, reject) => {
                     const query = new Query('SELECT 1')
                     query.callback = error => {
                       if (error) reject(error)

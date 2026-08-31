@@ -13,8 +13,8 @@ describe('Dynamic Instrumentation', function () {
     describe('with snapshot', function () {
       beforeEach(() => { t.triggerBreakpoint() })
 
-      it('should respect global max snapshot sampling rate', async function () {
-        await new Promise((resolve, reject) => {
+      it('should respect global max snapshot sampling rate', function () {
+        return new Promise((resolve, reject) => {
           const MAX_SNAPSHOTS_PER_SECOND_GLOBALLY = 25
           const snapshotsPerSecond = MAX_SNAPSHOTS_PER_SECOND_GLOBALLY * 2
           const probeConf = { captureSnapshot: true, sampling: { snapshotsPerSecond } }
@@ -52,31 +52,32 @@ describe('Dynamic Instrumentation', function () {
           })
 
           t.agent.on('debugger-input', ({ payload }) => {
-            payload.forEach(({ debugger: { snapshot: { timestamp } } }) => {
-              if (isDone) return
-              if (start === 0) start = timestamp
-              if (++hitBreakpoints <= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
-                prevTimestamp = timestamp
-              } else {
-                const duration = timestamp - start
-                const timeSincePrevTimestamp = timestamp - prevTimestamp
+            try {
+              payload.forEach(({ debugger: { snapshot: { timestamp } } }) => {
+                if (isDone) return
+                if (start === 0) start = timestamp
+                if (++hitBreakpoints <= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
+                  prevTimestamp = timestamp
+                } else {
+                  const duration = timestamp - start
+                  const timeSincePrevTimestamp = timestamp - prevTimestamp
 
-                // Allow for a time variance (time will tell if this is enough). Timeouts can vary.
-                assert.ok(duration >= 925, `Expected ${duration} >= 925`)
-                assert.ok(duration < 1050, `Expected ${duration} < 1050`)
+                  // Allow for a time variance (time will tell if this is enough). Timeouts can vary.
+                  assert.ok(duration >= 925, `Expected ${duration} >= 925`)
+                  assert.ok(duration < 1050, `Expected ${duration} < 1050`)
 
-                // A sanity check to make sure we're not saturating the event loop. We expect a lot of snapshots to be
-                // sampled in the beginning of the sample window and then once the threshold is hit, we expect a "quiet"
-                // period until the end of the window. If there's no "quiet" period, then we're saturating the event
-                // loop and this test isn't really testing anything.
-                assert.ok(timeSincePrevTimestamp >= 250, `Expected ${timeSincePrevTimestamp} >= 250`)
+                  // A sanity check to make sure we're not saturating the event loop. We expect a lot of snapshots to be
+                  // sampled in the beginning of the sample window and then once the threshold is hit, we expect a
+                  // "quiet" period until the end of the window. If there's no "quiet" period, then we're saturating the
+                  // event loop and this test isn't really testing anything.
+                  assert.ok(timeSincePrevTimestamp >= 250, `Expected ${timeSincePrevTimestamp} >= 250`)
 
-                clearTimeout(state[rcConfig1.config.id].timer)
-                clearTimeout(state[rcConfig2.config.id].timer)
-
-                done()
-              }
-            })
+                  done()
+                }
+              })
+            } catch (error) {
+              done(error)
+            }
           })
 
           t.agent.addRemoteConfig(rcConfig1)
@@ -86,6 +87,8 @@ describe('Dynamic Instrumentation', function () {
           function done (error) {
             if (isDone) return
             isDone = true
+            clearTimeout(state[rcConfig1.config.id].timer)
+            clearTimeout(state[rcConfig2.config.id].timer)
             if (error) reject(error)
             else resolve()
           }

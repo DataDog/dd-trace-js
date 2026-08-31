@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert/strict')
 const { inspect, promisify } = require('node:util')
 
 const { assertObjectContains, assertUUID } = require('../helpers')
@@ -342,7 +342,7 @@ describe('Dynamic Instrumentation', function () {
                 setTimeout(done, 2000)
               }
             } else if (diagnostics.status === 'EMITTING') {
-              assert.fail('should not trigger any probes when all conditions are not met')
+              done(new Error('should not trigger any probes when all conditions are not met'))
             }
           })
         })
