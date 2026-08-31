@@ -39,9 +39,8 @@ const pollInterval = 0.1
  */
 
 /**
- * @template T
  * @typedef {object} TestResponse
- * @property {T} body
+ * @property {object|string} body
  * @property {number} status
  */
 
@@ -50,7 +49,7 @@ const pollInterval = 0.1
  *
  * @typedef {BreakpointInfo & {
  *   rcConfig: object|null,
- *   triggerBreakpoint: () => Promise<TestResponse<object>>,
+ *   triggerBreakpoint: () => Promise<TestResponse>,
  *   generateRemoteConfig: (overrides?: object) => object,
  *   generateProbeConfig: BoundGenerateProbeConfigFn
  * }} EnrichedBreakpoint
@@ -63,14 +62,14 @@ const pollInterval = 0.1
  * @typedef {object} DebuggerTestEnvironment
  * @property {BreakpointInfo} breakpoint - Primary breakpoint metadata.
  * @property {EnrichedBreakpoint[]} breakpoints - All discovered breakpoints with helpers.
- * @property {(url: string) => Promise<TestResponse<object>>} request - Sends a request to the test app.
+ * @property {(url: string) => Promise<TestResponse>} request - Sends a request to the test app.
  * @property {string} appFile - Absolute path to the test app entry file. Throws if accessed before `before` hook runs.
  * @property {import('../helpers').FakeAgent} agent - Started fake agent instance. Throws if accessed before
  *   `beforeEach` hook runs.
  * @property {import('../helpers').SpawnedProcess} proc - Spawned app process. Throws if accessed before `beforeEach`
  *   hook runs.
  * @property {object|null} rcConfig - Default remote config for the primary breakpoint.
- * @property {() => Promise<TestResponse<object>>} triggerBreakpoint - Triggers the primary breakpoint once installed.
+ * @property {() => Promise<TestResponse>} triggerBreakpoint - Triggers the primary breakpoint once installed.
  * @property {(overrides?: object) => object} generateRemoteConfig - Generates RC for the primary breakpoint.
  * @property {BoundGenerateProbeConfigFn} generateProbeConfig - Generates probe config for the primary breakpoint.
  * @property {() => Promise<object>} snapshotReceived - Waits for a snapshot to be received from the test app.
@@ -151,13 +150,15 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
 
   /**
    * @param {string} url
-   * @returns {Promise<TestResponse<object>>}
+   * @returns {Promise<TestResponse>}
    */
   async function request (url) {
     const response = await fetch(new URL(url, t.proc.url))
     assert.strictEqual(response.status, 200)
     return {
-      body: await response.json(),
+      body: response.headers.get('content-type')?.startsWith('application/json')
+        ? await response.json()
+        : await response.text(),
       status: response.status,
     }
   }
@@ -166,7 +167,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
    * Trigger the breakpoint once probe is successfully installed
    *
    * @param {string} url The URL of the HTTP route containing the breakpoint to trigger.
-   * @returns {Promise<TestResponse<object>>} A promise that resolves with the response from the HTTP request after the
+   * @returns {Promise<TestResponse>} A promise that resolves with the response from the HTTP request after the
    *   breakpoint is triggered.
    */
   async function triggerBreakpoint (url) {
