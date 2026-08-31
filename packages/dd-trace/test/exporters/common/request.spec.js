@@ -111,203 +111,6 @@ describe('request', function () {
       })
   })
 
-  it('should stream a readable when content length is known', (done) => {
-    const body = Buffer.from('streamed')
-    const readable = stream.Readable.from(body)
-    nock('http://test:123', {
-      reqheaders: {
-        'content-type': 'application/octet-stream',
-        'content-length': String(body.length),
-      },
-    })
-      .put('/path', body)
-      .reply(200, 'OK')
-
-    request(readable, {
-      protocol: 'http:',
-      hostname: 'test',
-      port: 123,
-      path: '/path',
-      method: 'PUT',
-      headers: {
-        'Content-Length': body.length,
-        'Content-Type': 'application/octet-stream',
-      },
-      retry: false,
-    }, (error, response) => {
-      assert.strictEqual(response, 'OK')
-      assert.strictEqual(readable.destroyed, true)
-      done(error)
-    })
-  })
-
-  it('destroys an incomplete streamed request after an early response', () => {
-    const response = new EventEmitter()
-    response.headers = {}
-    response.statusCode = 413
-    response.setTimeout = sinon.stub()
-    const clientRequest = new EventEmitter()
-    clientRequest.destroyed = false
-    clientRequest.writableFinished = false
-    clientRequest.setTimeout = sinon.stub()
-    clientRequest.write = sinon.stub()
-    clientRequest.end = sinon.stub()
-    clientRequest.destroy = sinon.spy(() => {
-      clientRequest.destroyed = true
-    })
-    let respond
-    const earlyResponseRequest = proxyquire('../../../src/exporters/common/request', {
-      '../../../../datadog-core': {
-        storage: () => ({ run: runInNoopContext }),
-      },
-      http: {
-        ...http,
-        request: (_options, onResponse) => {
-          respond = onResponse
-          return clientRequest
-        },
-      },
-      './docker': docker,
-      '../../log': log,
-      './retry': {
-        ...require('../../../src/exporters/common/retry'),
-        ...retryStubs,
-      },
-    })
-    const readable = new stream.Readable({ read () {} })
-    let requestError
-
-    earlyResponseRequest(readable, {
-      method: 'PUT',
-      retry: false,
-      headers: {
-        'Content-Length': 1024,
-        'Content-Type': 'application/octet-stream',
-      },
-    }, (error) => {
-      requestError = error
-    })
-    respond(response)
-    response.emit('data', Buffer.from('too large'))
-    response.emit('end')
-
-    assert.strictEqual(requestError.status, 413)
-    assert.strictEqual(readable.destroyed, true)
-    assert.strictEqual(clientRequest.destroyed, true)
-    sinon.assert.calledOnce(clientRequest.destroy)
-  })
-
-  it('should limit active streamed requests', () => {
-    const requests = []
-    const createRequest = () => {
-      const pending = new EventEmitter()
-      pending.setTimeout = sinon.stub()
-      pending.write = sinon.stub()
-      pending.end = sinon.stub()
-      pending.destroy = sinon.stub()
-      requests.push(pending)
-      return pending
-    }
-    const limitedRequest = proxyquire('../../../src/exporters/common/request', {
-      '../../../../datadog-core': {
-        storage: () => ({ run: runInNoopContext }),
-      },
-      http: { ...http, request: createRequest },
-      './docker': docker,
-      '../../log': log,
-      './retry': {
-        ...require('../../../src/exporters/common/retry'),
-        ...retryStubs,
-      },
-    })
-    const streams = []
-
-    for (let index = 0; index < 16; index++) {
-      const readable = new stream.Readable({ read () {} })
-      streams.push(readable)
-      limitedRequest(readable, {
-        method: 'POST',
-        headers: { 'Content-Length': 1 },
-      }, sinon.stub())
-    }
-
-    assert.strictEqual(requests.length, 16)
-    assert.strictEqual(limitedRequest.writable, true)
-    assert.strictEqual(limitedRequest.streamWritable, false)
-
-    const rejected = new stream.Readable({ read () {} })
-    const rejectedCallback = sinon.spy()
-    limitedRequest(rejected, {
-      method: 'POST',
-      headers: { 'Content-Length': 1 },
-    }, rejectedCallback)
-
-    assert.strictEqual(requests.length, 16)
-    assert.strictEqual(rejected.destroyed, true)
-    sinon.assert.calledOnce(rejectedCallback)
-    assert.strictEqual(rejectedCallback.firstCall.args[0].code, 'ERR_DD_REQUEST_STREAM_LIMIT')
-    assert.strictEqual(rejectedCallback.firstCall.args[4], true)
-
-    requests[0].emit('close')
-    assert.strictEqual(limitedRequest.writable, true)
-    assert.strictEqual(limitedRequest.streamWritable, true)
-
-    for (let index = 1; index < requests.length; index++) requests[index].emit('close')
-    for (const readable of streams) assert.strictEqual(readable.destroyed, true)
-  })
-
-  it('should destroy a streamed readable when reading fails', (done) => {
-    const readError = new Error('could not read media')
-    const readable = new stream.Readable({
-      read () {
-        setImmediate(() => this.destroy(readError))
-      },
-    })
-    nock('http://test:123').put('/path').reply(200, 'OK')
-
-    request(readable, {
-      protocol: 'http:',
-      hostname: 'test',
-      port: 123,
-      path: '/path',
-      method: 'PUT',
-      headers: {
-        'Content-Length': 1,
-        'Content-Type': 'application/octet-stream',
-      },
-      retry: false,
-    }, (error) => {
-      assert.strictEqual(error, readError)
-      assert.strictEqual(readable.destroyed, true)
-      done()
-    })
-  })
-
-  it('should destroy a streamed readable when the request is aborted', (done) => {
-    const controller = new AbortController()
-    const readable = new stream.Readable({ read () {} })
-    nock('http://test:123').put('/path').reply(200, 'OK')
-
-    request(readable, {
-      protocol: 'http:',
-      hostname: 'test',
-      port: 123,
-      path: '/path',
-      method: 'PUT',
-      headers: {
-        'Content-Length': 1,
-        'Content-Type': 'application/octet-stream',
-      },
-      retry: false,
-      signal: controller.signal,
-    }, (error) => {
-      assert.strictEqual(error.code, 'ABORT_ERR')
-      assert.strictEqual(readable.destroyed, true)
-      done()
-    })
-    controller.abort()
-  })
-
   it('preserves a caller-supplied connection agent', (done) => {
     const customAgent = new http.Agent()
     const sandbox = sinon.createSandbox()
@@ -987,49 +790,6 @@ describe('request', function () {
     })
   })
 
-  it('tracks concurrent payload sizes independently when options are shared', () => {
-    const requests = []
-
-    /**
-     * @returns {EventEmitter} Pending request
-     */
-    function createRequest () {
-      const pending = new EventEmitter()
-      pending.setTimeout = sinon.stub()
-      pending.write = sinon.stub()
-      pending.end = sinon.stub()
-      requests.push(pending)
-
-      return pending
-    }
-
-    const accountingRequest = proxyquire('../../../src/exporters/common/request', {
-      '../../../../datadog-core': {
-        storage: () => ({ run: runInNoopContext }),
-      },
-      http: { ...http, request: createRequest },
-      './docker': docker,
-      '../../log': log,
-      './retry': {
-        ...require('../../../src/exporters/common/retry'),
-        ...retryStubs,
-      },
-    })
-    const large = Buffer.alloc(63 * 1024 * 1024)
-    const small = Buffer.alloc(1024 * 1024)
-    const options = { method: 'POST', headers: {} }
-
-    accountingRequest(large, options, sinon.stub())
-    accountingRequest(small, options, sinon.stub())
-    requests[0].emit('close')
-    requests[1].emit('close')
-
-    accountingRequest(large, options, sinon.stub())
-
-    assert.strictEqual(accountingRequest.writable, true)
-    requests[2].emit('close')
-  })
-
   it('should drop requests when too much data is buffered', (done) => {
     const bufferSize = 8 * 1024 * 1024
     const buffer = Buffer.alloc(bufferSize).fill(69)
@@ -1060,15 +820,14 @@ describe('request', function () {
             'Content-Type': 'application/octet-stream',
           },
         },
-        (error, res, statusCode, headers, dropped) => {
-          if (error) {
-            assert.strictEqual(error.code, 'ERR_DD_REQUEST_BUFFER_FULL')
-            assert.strictEqual(dropped, true)
-            koCount++
-          } else {
+        (err, res) => {
+          if (err) return done(err)
+
+          if (res) {
             assert.strictEqual(res, 'OK')
-            assert.strictEqual(dropped, undefined)
             okCount++
+          } else {
+            koCount++
           }
 
           if (okCount + koCount === 10) {

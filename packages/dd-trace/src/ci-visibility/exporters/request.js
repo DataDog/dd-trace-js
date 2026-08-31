@@ -110,6 +110,7 @@ function request (data, options, callback) {
  */
 function requestBuffered (data, options, callback) {
   const { signal } = options
+  const transport = options.transport || commonRequest
   const timeout = options.timeout || 2000
   let retryTimer
   let settled = false
@@ -140,8 +141,7 @@ function requestBuffered (data, options, callback) {
       return
     }
 
-    const isWritable = typeof data === 'function' ? commonRequest.streamWritable : commonRequest.writable
-    if (!isWritable) {
+    if (!transport.writable) {
       retryTimer = setTimeout(attempt, Math.min(50, remaining), attemptIndex)
       retryTimer.unref?.()
       return
@@ -152,6 +152,7 @@ function requestBuffered (data, options, callback) {
       headers: options.headers ? { ...options.headers } : undefined,
       retry: false,
     }
+    delete attemptOptions.transport
     if (deadline !== undefined) attemptOptions.timeout = Math.max(1, Math.min(timeout, remaining))
 
     let attemptData
@@ -162,7 +163,7 @@ function requestBuffered (data, options, callback) {
       return
     }
 
-    commonRequest(attemptData, attemptOptions, (error, result, statusCode, headers) => {
+    transport(attemptData, attemptOptions, (error, result, statusCode, headers) => {
       if (settled) return
       if (!error) {
         complete(null, result, statusCode, headers)
@@ -170,7 +171,8 @@ function requestBuffered (data, options, callback) {
       }
 
       const responseStatus = statusCode ?? error.status
-      const isRetriableError = isRetriableNetworkError(error) || isRetriableHttpStatusCode(responseStatus)
+      const isRetriableError = error.retryable !== false &&
+        (isRetriableNetworkError(error) || isRetriableHttpStatusCode(responseStatus))
       const retryUntilDeadline = options.deadline !== undefined && options.retryUntilDeadline !== false
       const reachedAttemptLimit = !retryUntilDeadline && attemptIndex >= getMaxAttempts(attemptOptions)
       if (options.retry === false || !isRetriableError || reachedAttemptLimit) {

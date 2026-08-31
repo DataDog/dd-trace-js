@@ -12,62 +12,12 @@ const assert = require('node:assert')
 
 const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
-const { getValueFromEnvSources } = require('../../../../dd-trace/src/config/helper')
 const { parse, query } = require('./compiler')
 
 const functionTypes = new Set(['ArrowFunctionExpression', 'FunctionDeclaration', 'FunctionExpression'])
 const identifierPattern = /^[$A-Z_a-z][$\w]*$/
-const automaticVideoMarkerProperty = parse(`
-  const value = { _ddIsAutomaticFailureVideo: true }
-`).body[0].declarations[0].init.properties[0]
-const propagatedVideoMarkerProperty = parse(`
-  const value = { _ddIsAutomaticFailureVideo: attachment._ddIsAutomaticFailureVideo }
-`).body[0].declarations[0].init.properties[0]
 
-module.exports = {
-  awaitContextCallback,
-  markPlaywrightAutomaticVideoAttachment,
-  propagatePlaywrightAutomaticVideoAttachment,
-  waitForAsyncEnd,
-}
-
-/**
- * Marks the attachment object created by Playwright's automatic video recorder.
- *
- * @param {object} _state
- * @param {import('estree').ObjectExpression} node
- * @returns {void}
- */
-function markPlaywrightAutomaticVideoAttachment (_state, node) {
-  if (getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED') !== true) return
-  addObjectProperty(node, automaticVideoMarkerProperty)
-}
-
-/**
- * Copies the automatic-video marker into Playwright's worker attachment payload.
- *
- * @param {object} _state
- * @param {import('estree').ObjectExpression} node
- * @returns {void}
- */
-function propagatePlaywrightAutomaticVideoAttachment (_state, node) {
-  if (getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED') !== true) return
-  addObjectProperty(node, propagatedVideoMarkerProperty)
-}
-
-/**
- * Adds a cloned property to an object expression once.
- *
- * @param {import('estree').ObjectExpression} node
- * @param {import('estree').Property} property
- * @returns {void}
- */
-function addObjectProperty (node, property) {
-  assert(node.type === 'ObjectExpression', 'addObjectProperty: expected an object expression')
-  if (node.properties.some(({ key }) => key?.name === property.key.name)) return
-
-  node.properties.push(clone(property))
-}
+module.exports = { awaitContextCallback, waitForAsyncEnd }
 
 /**
  * Awaits an optional context callback before continuing through a matched conditional branch.

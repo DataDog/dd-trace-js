@@ -23,17 +23,14 @@ const {
 const legacyStorage = storage('legacy')
 
 const maxActiveBufferSize = 1024 * 1024 * 64
-const maxActiveStreams = 16
-const noop = () => {}
 
 let activeBufferSize = 0
-let activeStreamCount = 0
 
 /**
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
  * @param {object} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
- *   headers?: import('node:http').IncomingHttpHeaders, dropped?: boolean) => void} callback
+ *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
  */
 function request (data, options, callback) {
   if (!options.headers) {
@@ -66,9 +63,7 @@ function request (data, options, callback) {
     delete options.headers['DD-API-KEY']
   }
 
-  const isStreaming = data instanceof Readable && options.headers['Content-Length'] !== undefined
-
-  if (data instanceof Readable && !isStreaming) {
+  if (data instanceof Readable) {
     const chunks = []
 
     data
@@ -91,11 +86,10 @@ function request (data, options, callback) {
   const client = isSecure ? https : http
   let dataArray = data
 
-  if (!isStreaming && !Array.isArray(data)) {
+  if (!Array.isArray(data)) {
     dataArray = [data]
   }
-  if (!isStreaming) options.headers['Content-Length'] = byteLength(dataArray)
-  const contentLength = isStreaming ? 0 : options.headers['Content-Length']
+  options.headers['Content-Length'] = byteLength(dataArray)
 
   docker.inject(options.headers)
 
@@ -178,31 +172,20 @@ function request (data, options, callback) {
   // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
   /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
-    const isBufferFull = activeBufferSize + contentLength > maxActiveBufferSize
-    const isStreamLimitReached = isStreaming && activeStreamCount >= maxActiveStreams
-    if (isBufferFull || isStreamLimitReached) {
-      if (isStreaming && !data.destroyed) data.destroy()
-      const message = isStreamLimitReached
-        ? 'Maximum active request stream count reached: payload is discarded.'
-        : 'Maximum active request buffer size reached: payload is discarded.'
-      const error = new log.NoTransmitError(message)
-      error.code = isStreamLimitReached ? 'ERR_DD_REQUEST_STREAM_LIMIT' : 'ERR_DD_REQUEST_BUFFER_FULL'
-      log.debug(error.message)
-      return callback(error, undefined, undefined, undefined, true)
+    if (!request.writable) {
+      log.debug('Maximum number of active requests reached: payload is discarded.')
+      return callback(null)
     }
 
-    activeBufferSize += contentLength
-    if (isStreaming) activeStreamCount++
+    activeBufferSize += options.headers['Content-Length'] ?? 0
 
     legacyStorage.run({ noop: true }, () => {
       let finished = false
       let settled = false
-      let stopStreaming = noop
       const finalize = () => {
         if (finished) return
         finished = true
-        activeBufferSize -= contentLength
-        if (isStreaming) activeStreamCount--
+        activeBufferSize -= options.headers['Content-Length'] ?? 0
       }
 
       /**
@@ -214,7 +197,6 @@ function request (data, options, callback) {
       const complete = (error, result, statusCode, headers) => {
         if (settled) return
         settled = true
-        stopStreaming()
         finalize()
         callback(error, result, statusCode, headers)
       }
@@ -225,7 +207,7 @@ function request (data, options, callback) {
       const handleError = (error) => {
         if (settled) return
 
-        if (!isStreaming && options.retry !== false &&
+        if (options.retry !== false &&
             attemptIndex < getMaxAttempts(options) &&
             isRetriableNetworkError(error)) {
           settled = true
@@ -241,6 +223,8 @@ function request (data, options, callback) {
 
       const req = client.request(connectionOptions, (res) => onResponse(res, complete, handleError))
 
+      req.once('close', finalize)
+      req.once('timeout', finalize)
       req.once('error', handleError)
 
       req.setTimeout(timeout, () => {
@@ -255,25 +239,8 @@ function request (data, options, callback) {
         }
       })
 
-      if (isStreaming) {
-        const handleStreamError = error => req.destroy(error)
-        stopStreaming = () => {
-          data.unpipe(req)
-          data.removeListener('error', handleStreamError)
-          if (!data.destroyed) data.destroy()
-          if (!req.writableFinished && !req.destroyed) req.destroy()
-          finalize()
-        }
-        req.once('close', stopStreaming)
-        req.once('timeout', stopStreaming)
-        data.once('error', handleStreamError)
-        data.pipe(req)
-      } else {
-        req.once('close', finalize)
-        req.once('timeout', finalize)
-        for (const buffer of dataArray) req.write(buffer)
-        req.end()
-      }
+      for (const buffer of dataArray) req.write(buffer)
+      req.end()
     })
   }
 
@@ -284,16 +251,9 @@ function byteLength (data) {
   return data.length > 0 ? data.reduce((prev, next) => prev + Buffer.byteLength(next, 'utf8'), 0) : 0
 }
 
-Object.defineProperties(request, {
-  writable: {
-    get () {
-      return activeBufferSize < maxActiveBufferSize
-    },
-  },
-  streamWritable: {
-    get () {
-      return activeStreamCount < maxActiveStreams
-    },
+Object.defineProperty(request, 'writable', {
+  get () {
+    return activeBufferSize < maxActiveBufferSize
   },
 })
 

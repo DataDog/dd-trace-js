@@ -17,12 +17,13 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
   const traceId = '1234567890123456789'
   let tmpDir
   let requestStub
+  let videoRequestStub
   let uploadTestScreenshot
   let uploadTestSuiteVideo
   let uploadTestVideo
 
   // Runs an upload for a file with the given basename and returns the request stub's call args
-  // ({ path, headers, query }). The file is written with real non-empty bytes so it can be streamed.
+  // ({ path, headers, query }). The file is written with real non-empty bytes so it can be read.
   // `extra` merges into the upload options (e.g. isEvpProxy / evpProxyPrefix).
   function uploadForFile (basename, extra = {}) {
     const filePath = join(tmpDir, basename)
@@ -42,9 +43,9 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     )
 
     assert.ok(requestStub.calledOnce)
-    const [bodyFactory, { path, headers, agent, deadline, retryUntilDeadline, signal }] = requestStub.getCall(0).args
+    const [payload, { path, headers, agent, deadline, signal }] = requestStub.getCall(0).args
     const query = new URL(path, 'http://localhost:8126').searchParams
-    return { bodyFactory, path, headers, agent, query, deadline, retryUntilDeadline, signal }
+    return { payload, path, headers, agent, query, deadline, signal }
   }
 
   before(() => {
@@ -53,11 +54,13 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
 
   beforeEach(() => {
     requestStub = sinon.stub().callsFake((_payload, _options, cb) => cb(null, 'ok', 200))
+    videoRequestStub = sinon.stub().callsFake((_filePath, _options, cb) => cb(null, 'ok', 200))
     const uploadRequests = proxyquire(
       '../../../src/ci-visibility/requests/upload-test-screenshot',
       {
         '../../config': () => ({ DD_API_KEY: 'test-api-key' }),
         '../exporters/request': requestStub,
+        './video-request': videoRequestStub,
       }
     )
     uploadTestScreenshot = uploadRequests.uploadTestScreenshot
@@ -93,7 +96,6 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       const requestOptions = uploadForFile('screenshot.png', { deadline, signal: abortController.signal })
 
       assert.strictEqual(requestOptions.deadline, deadline)
-      assert.strictEqual(requestOptions.retryUntilDeadline, false)
       assert.strictEqual(requestOptions.signal, abortController.signal)
     })
 
@@ -103,14 +105,13 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(agent, getAgent(new URL('http://localhost:8126')))
     })
 
-    it('streams the file with its known content length instead of buffering it', () => {
-      const { bodyFactory, headers } = uploadForFile('screenshot.png')
+    it('keeps screenshots on the buffered request path', () => {
+      const { payload, headers } = uploadForFile('screenshot.png')
 
-      assert.strictEqual(typeof bodyFactory, 'function')
-      const body = bodyFactory()
-      assert.strictEqual(body.constructor.name, 'ReadStream')
+      assert.ok(Buffer.isBuffer(payload))
+      assert.strictEqual(payload.toString(), 'not-empty')
       assert.strictEqual(headers['Content-Length'], 9)
-      body.destroy()
+      sinon.assert.notCalled(videoRequestStub)
     })
 
     it('reports an error when the request helper drops the upload', () => {
@@ -194,9 +195,16 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
         url: new URL('http://localhost:8126'),
       }, () => {})
 
-      const [, { path, headers }] = requestStub.firstCall.args
+      const [bodyFactory, { path, headers, retryUntilDeadline, transport }] = requestStub.firstCall.args
+      assert.strictEqual(typeof bodyFactory, 'function')
+      const body = bodyFactory()
+      assert.strictEqual(body.constructor.name, 'ReadStream')
+      body.destroy()
       assert.match(path, new RegExp(`^/api/v2/ci/test-runs/${traceId}/media\\?`))
       assert.strictEqual(headers['Content-Type'], 'video/webm')
+      assert.strictEqual(headers['Content-Length'], 9)
+      assert.strictEqual(retryUntilDeadline, false)
+      assert.strictEqual(transport, videoRequestStub)
     })
 
     it('uploads Cypress videos to the test-suite endpoint', () => {
@@ -214,9 +222,13 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
         url: new URL('http://localhost:8126'),
       }, () => {})
 
-      const [, { path, headers }] = requestStub.firstCall.args
+      const [bodyFactory, { path, headers, transport }] = requestStub.firstCall.args
+      const body = bodyFactory()
+      assert.strictEqual(body.constructor.name, 'ReadStream')
+      body.destroy()
       assert.match(path, /^\/api\/v2\/ci\/test-suites\/123\/456\/media\?/)
       assert.strictEqual(headers['Content-Type'], 'video/mp4')
+      assert.strictEqual(transport, videoRequestStub)
     })
 
     for (const [size, shouldUpload] of [
@@ -238,6 +250,7 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
         }, error => { callbackError = error })
 
         assert.strictEqual(requestStub.called, shouldUpload)
+        sinon.assert.notCalled(videoRequestStub)
         if (shouldUpload) assert.strictEqual(callbackError, null)
         else assert.match(callbackError.message, /is 209715201 bytes and exceeds the 209715200-byte upload limit/)
       })

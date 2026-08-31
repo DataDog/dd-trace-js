@@ -1,6 +1,6 @@
 'use strict'
 
-const { createReadStream, statSync } = require('node:fs')
+const { createReadStream, readFileSync, statSync } = require('node:fs')
 const { extname } = require('node:path')
 
 const getConfig = require('../../config')
@@ -9,6 +9,7 @@ const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const log = require('../../log')
 const { getAgent } = require('../exporters/agents')
 const request = require('../exporters/request')
+const videoRequest = require('./video-request')
 
 const UPLOAD_TIMEOUT_MS = 30_000
 const TEST_RUN_MEDIA_ENDPOINT_PREFIX = '/api/v2/ci/test-runs/'
@@ -122,10 +123,17 @@ function uploadTestMedia (options, callback) {
   }
 
   let fileSize
+  let screenshotContent
   try {
-    fileSize = statSync(filePath).size
+    if (kind === 'video') {
+      fileSize = statSync(filePath).size
+    } else {
+      screenshotContent = readFileSync(filePath)
+      fileSize = screenshotContent.length
+    }
   } catch (error) {
-    return callback(new Error(`Failed to inspect ${kind} at ${filePath}: ${error.message}`))
+    const action = kind === 'video' ? 'inspect video' : 'read screenshot'
+    return callback(new Error(`Failed to ${action} at ${filePath}: ${error.message}`))
   }
   if (fileSize === 0) {
     return callback(new Error(`${kind === 'video' ? 'Video' : 'Screenshot'} at ${filePath} is empty`))
@@ -155,7 +163,6 @@ function uploadTestMedia (options, callback) {
     url,
     agent: getAgent(url),
     deadline,
-    retryUntilDeadline: false,
     signal,
   }
 
@@ -168,9 +175,7 @@ function uploadTestMedia (options, callback) {
 
   log.debug('Uploading test %s %s to %s', kind, filePath, new URL(requestOptions.path, url).href)
 
-  // The retry layer invokes this factory for every attempt, so uploads stay replayable without
-  // buffering the complete media file in the application process.
-  request(() => createReadStream(filePath), requestOptions, (error, response, statusCode) => {
+  const onResponse = (error, response, statusCode) => {
     if (error) {
       log.error('Error uploading test %s: %s', kind, error.message)
       return callback(error)
@@ -182,7 +187,15 @@ function uploadTestMedia (options, callback) {
     }
     log.debug('Test %s uploaded successfully (status: %d)', kind, statusCode)
     callback(null)
-  })
+  }
+
+  if (kind === 'video') {
+    requestOptions.retryUntilDeadline = false
+    requestOptions.transport = videoRequest
+    request(() => createReadStream(filePath), requestOptions, onResponse)
+  } else {
+    request(screenshotContent, requestOptions, onResponse)
+  }
 }
 
 /**

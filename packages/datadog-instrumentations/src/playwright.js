@@ -70,6 +70,7 @@ const createRootSuiteCh = tracingChannel('orchestrion:playwright:createRootSuite
 const artifactsRecorderScreenshotPathCh =
   tracingChannel('orchestrion:playwright:ArtifactsRecorder_createScreenshotAttachmentPath')
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
+const testInfoOutputPathCh = tracingChannel('orchestrion:playwright:TestInfoImpl_outputPath')
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
 
 const testToCtx = new WeakMap()
@@ -149,7 +150,9 @@ const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstru
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
 const instrumentedPlaywrightReporters = new WeakSet()
 const PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE = /(?:^|[\\/])test-failed-\d+\.png$/
+const PLAYWRIGHT_FAILURE_VIDEO_PATH_RE = /(?:^|[\\/])video(?:-\d+)?\.webm$/
 const automaticFailureScreenshotPaths = new Set()
+const automaticFailureVideoPaths = new Set()
 
 /**
  * Returns whether Playwright's internal screenshot recorder created an attachment.
@@ -159,6 +162,16 @@ const automaticFailureScreenshotPaths = new Set()
  */
 function isAutomaticFailureScreenshotAttachment (attachment) {
   return typeof attachment?.path === 'string' && automaticFailureScreenshotPaths.delete(attachment.path)
+}
+
+/**
+ * Returns whether Playwright's internal video recorder created an attachment.
+ *
+ * @param {object} attachment - Playwright attachment payload
+ * @returns {boolean}
+ */
+function isAutomaticFailureVideoAttachment (attachment) {
+  return typeof attachment?.path === 'string' && automaticFailureVideoPaths.delete(attachment.path)
 }
 
 function isValidKnownTests (receivedKnownTests) {
@@ -1741,8 +1754,23 @@ function recordAutomaticFailureScreenshotPath (ctx) {
   }
 }
 
+/**
+ * Records a path created by Playwright's automatic video recorder.
+ *
+ * @param {object} ctx - Orchestrion context
+ * @returns {void}
+ */
+function recordAutomaticFailureVideoPath (ctx) {
+  if (isFailureVideoUploadEnabled &&
+    typeof ctx.result === 'string' &&
+    PLAYWRIGHT_FAILURE_VIDEO_PATH_RE.test(ctx.result)) {
+    automaticFailureVideoPaths.add(ctx.result)
+  }
+}
+
 artifactsRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreenshotPath })
 snapshotRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreenshotPath })
+testInfoOutputPathCh.subscribe({ end: recordAutomaticFailureVideoPath })
 
 if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
   addHook({
@@ -2454,6 +2482,7 @@ function instrumentWorkerMainMethods (workerMain) {
   shimmer.wrap(workerMain, 'dispatchEvent', dispatchEvent => function (event, payload) {
     if (event === 'testBegin') {
       automaticFailureScreenshotPaths.clear()
+      automaticFailureVideoPaths.clear()
     } else if (event === 'stepBegin') {
       stepInfoByStepId[payload.stepId] = {
         startTime: payload.wallTime,
@@ -2470,8 +2499,12 @@ function instrumentWorkerMainMethods (workerMain) {
         duration: payload.wallTime - stepInfo.startTime,
         error: payload.error,
       })
-    } else if (event === 'attach' && isAutomaticFailureScreenshotAttachment(payload)) {
-      payload._ddIsAutomaticFailureScreenshot = true
+    } else if (event === 'attach') {
+      if (isAutomaticFailureScreenshotAttachment(payload)) {
+        payload._ddIsAutomaticFailureScreenshot = true
+      } else if (isAutomaticFailureVideoAttachment(payload)) {
+        payload._ddIsAutomaticFailureVideo = true
+      }
     }
     return dispatchEvent.apply(this, arguments)
   })

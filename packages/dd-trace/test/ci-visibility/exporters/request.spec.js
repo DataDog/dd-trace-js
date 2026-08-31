@@ -24,7 +24,6 @@ describe('Test Optimization exporter request', () => {
       pendingRequests.push({ data, options, callback })
     }
     commonRequest.writable = true
-    commonRequest.streamWritable = true
     request = proxyquire('../../../src/ci-visibility/exporters/request', {
       '../../exporters/common/request': commonRequest,
       '../../exporters/common/retry': {
@@ -148,6 +147,19 @@ describe('Test Optimization exporter request', () => {
     assert.notStrictEqual(streams[0], streams[1])
     assert.strictEqual(pendingRequests[1].data, streams[1])
     pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('uses a caller-provided transport', () => {
+    const transport = sinon.spy((_data, _options, callback) => callback(null, 'ok', 200, {}))
+    transport.writable = true
+    const done = sinon.spy()
+
+    request('payload', { transport }, done)
+
+    sinon.assert.calledOnce(transport)
+    assert.strictEqual(transport.firstCall.args[1].transport, undefined)
+    assert.strictEqual(pendingRequests.length, 0)
     sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
   })
 
@@ -301,33 +313,6 @@ describe('Test Optimization exporter request', () => {
 
     pendingRequests[0].callback(null, 'ok', 200, {})
     sinon.assert.calledOnce(done)
-  })
-
-  it('waits for exporter backpressure before creating a readable body without a deadline', () => {
-    commonRequest.streamWritable = false
-    const createBody = sinon.stub().returns(Readable.from('payload'))
-    const done = sinon.spy()
-    request(createBody, {}, done)
-
-    clock.tick(49)
-    sinon.assert.notCalled(createBody)
-    assert.strictEqual(pendingRequests.length, 0)
-    commonRequest.streamWritable = true
-    clock.tick(1)
-    sinon.assert.calledOnce(createBody)
-    assert.strictEqual(pendingRequests.length, 1)
-
-    pendingRequests[0].callback(null, 'ok', 200, {})
-    sinon.assert.calledOnce(done)
-  })
-
-  it('sends buffered data while stream capacity is saturated', () => {
-    commonRequest.streamWritable = false
-
-    request('payload', {}, sinon.spy())
-
-    assert.strictEqual(pendingRequests.length, 1)
-    assert.strictEqual(pendingRequests[0].data, 'payload')
   })
 
   it('fails at the deadline while exporter backpressure remains active', () => {
