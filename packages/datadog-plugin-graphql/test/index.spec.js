@@ -3196,6 +3196,100 @@ describe('Plugin', () => {
           ])
         })
 
+        for (const testCase of [
+          {
+            name: 'synchronous error',
+            item: { error: new Error('sync failure'), throws: true },
+            expectedError: 'sync failure',
+          },
+          {
+            name: 'asynchronous error',
+            item: { error: new Error('async failure'), rejects: true },
+            expectedError: 'async failure',
+          },
+          {
+            name: 'falsy asynchronous error',
+            item: { rejects: true },
+            expectedError: 'GraphQL resolver rejected without an error',
+          },
+        ]) {
+          it(`should record a reused resolver ${testCase.name} on its collapsed span and hook`, async () => {
+            const Item = new graphql.GraphQLObjectType({
+              name: 'ResolverErrorItem',
+              fields: {
+                value: {
+                  type: graphql.GraphQLString,
+                  /**
+                   * @param {{ error?: Error, rejects?: boolean, throws?: boolean, value?: string }} source
+                   * @returns {Promise<never> | string | undefined}
+                   */
+                  resolve (source) {
+                    if (source.rejects) return Promise.reject(source.error)
+                    if (source.throws) throw source.error
+                    return source.value
+                  },
+                },
+              },
+            })
+            const localSchema = new graphql.GraphQLSchema({
+              query: new graphql.GraphQLObjectType({
+                name: 'ResolverErrorQuery',
+                fields: {
+                  items: {
+                    type: new graphql.GraphQLList(Item),
+                    resolve: () => [
+                      { value: 'first' },
+                      testCase.item,
+                      {
+                        error: new Error('later failure'),
+                        rejects: testCase.item.rejects,
+                        throws: testCase.item.throws,
+                      },
+                      { value: 'last' },
+                    ],
+                  },
+                },
+              }),
+            })
+
+            /** @param {Array<Array<object>>} traces */
+            const assertTrace = traces => {
+              const spans = sort(traces[0])
+              let span
+              for (const candidate of spans) {
+                if (candidate.meta?.['graphql.field.path'] === 'items.*.value') {
+                  span = candidate
+                  break
+                }
+              }
+
+              assert.ok(span, 'expected one collapsed items.*.value span')
+              assert.strictEqual(span.error, 1)
+              assert.strictEqual(span.meta[ERROR_MESSAGE], testCase.expectedError)
+            }
+
+            const [result] = await Promise.all([
+              graphql.graphql({ schema: localSchema, source: '{ items { value } }' }),
+              agent.assertSomeTraces(assertTrace, { spanResourceMatch: /items:\[ResolverErrorItem\]/ }),
+            ])
+
+            assert.strictEqual(result.data.items[0].value, 'first')
+            assert.strictEqual(result.data.items[1].value, null)
+            assert.strictEqual(result.data.items[2].value, null)
+            assert.strictEqual(result.data.items[3].value, 'last')
+            assert.strictEqual(result.errors.length, 2)
+
+            const valueHookCalls = []
+            for (const call of config.hooks.resolve.getCalls()) {
+              if (call.args[1].path === 'items.*.value') valueHookCalls.push(call)
+            }
+            assert.strictEqual(valueHookCalls.length, 1)
+            assert.strictEqual(valueHookCalls[0].args[1].error.message, testCase.expectedError)
+            assert.strictEqual(valueHookCalls[0].args[1].result, undefined)
+            assert.strictEqual(valueHookCalls[0].calledBefore(config.hooks.execute.firstCall), true)
+          })
+        }
+
         it('should finish spans when hooks throw', async () => {
           const rejections = []
           /** @param {unknown} reason */

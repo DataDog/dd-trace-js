@@ -381,9 +381,8 @@ class GraphQLExecutePlugin extends TracingPlugin {
       instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
 
-    this.config.hooks.execute(span, ctx.ddArgs, res)
-
     releaseRootContext(ctx.ddRootCtx, finishPendingFields)
+    this.config.hooks.execute(span, ctx.ddArgs, res)
     span.finish()
   }
 
@@ -472,11 +471,20 @@ class GraphQLExecutePlugin extends TracingPlugin {
    * @param {object} field
    * @param {unknown} error
    * @param {unknown} result
+   * @param {boolean} [failed]
+   * @param {boolean} [reused]
    */
-  completeResolveSpan (rootCtx, field, error, result) {
+  completeResolveSpan (rootCtx, field, error, result, failed = Boolean(error), reused = false) {
     if (rootCtx.resolveFields !== undefined) {
       if (field.endTime !== REUSED_FIELD_END_TIME) {
         field.endTime = rootCtx.executeSpan._getTime()
+      }
+      if (field.jitPathKey === false) {
+        if (failed) recordResolveError(field, error)
+        if (!reused && this.config.hooks.resolve) {
+          field.resolveHookContext = createResolveHookContext(field, field.error, result)
+        }
+        return
       }
       this.#completeResolveSpan(field, error, result)
       return
@@ -654,6 +662,17 @@ function wrapResolve (resolve, isJit = false) {
       }
     } else {
       field.endTime = REUSED_FIELD_END_TIME
+      if (!isJit) {
+        /**
+         * @param {unknown} error
+         * @param {unknown} result
+         * @param {boolean} failed
+         */
+        const finishField = (error, result, failed) => {
+          rootCtx.plugin?.completeResolveSpan(rootCtx, field, error, result, failed, true)
+        }
+        return callInAsyncScope(resolve, this, arguments, field.currentStore, finishField)
+      }
       return callInCollapsedScope(
         resolve,
         this,
@@ -667,9 +686,15 @@ function wrapResolve (resolve, isJit = false) {
     const startTime = executeSpan._getTime()
     rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, info.variableValues)
 
-    return callInAsyncScope(resolve, this, arguments, field.currentStore, (error, res) => {
-      rootCtx.plugin?.completeResolveSpan(rootCtx, field, error, res)
-    }, isJit)
+    /**
+     * @param {unknown} error
+     * @param {unknown} res
+     * @param {boolean} failed
+     */
+    const finishField = (error, res, failed) => {
+      rootCtx.plugin?.completeResolveSpan(rootCtx, field, error, res, failed)
+    }
+    return callInAsyncScope(resolve, this, arguments, field.currentStore, finishField, isJit)
   }
 
   if (isJit) {
@@ -1070,7 +1095,7 @@ function callInCollapsedScope (fn, thisArg, args, field, isJit) {
  * @param {unknown} thisArg
  * @param {ArgumentsList} args
  * @param {object} store
- * @param {(error: unknown, result?: unknown) => void} callback
+ * @param {(error: unknown, result?: unknown, failed?: boolean) => void} callback
  * @param {boolean} isJit
  * @returns {unknown}
  */
@@ -1080,10 +1105,10 @@ function callInAsyncScope (fn, thisArg, args, store, callback, isJit) {
     if (typeof result?.then === 'function' && (!isJit || (result !== null && typeof result === 'object'))) {
       return observeThenable(result, callback)
     }
-    callback(null, result)
+    callback(null, result, false)
     return result
   } catch (error) {
-    callback(error)
+    callback(error, undefined, true)
     throw error
   }
 }
@@ -1104,7 +1129,7 @@ function callInAsyncScope (fn, thisArg, args, store, callback, isJit) {
  * get its real return value, while the settlement callbacks pass through us.
  *
  * @param {Thenable} thenable
- * @param {(error: unknown, result?: unknown) => void} callback
+ * @param {(error: unknown, result?: unknown, failed?: boolean) => void} callback
  * @returns {Thenable}
  */
 function observeThenable (thenable, callback) {
@@ -1120,14 +1145,14 @@ function observeThenable (thenable, callback) {
          * @param {unknown} result
          */
         result => {
-          callback(null, result)
+          callback(null, result, false)
           return onFulfilled ? onFulfilled(result) : result
         },
         /**
          * @param {unknown} error
          */
         error => {
-          callback(error)
+          callback(error, undefined, true)
           if (onRejected) return onRejected(error)
           throw error
         }
@@ -1404,6 +1429,9 @@ function releaseRootContext (rootCtx, finishPendingFields) {
   const endTime = rootCtx.executeSpan._getTime()
   if (rootCtx.resolveFields !== undefined) {
     for (let field = rootCtx.resolveFields; field; field = field.nextResolveField) {
+      if (field.resolveHookContext) {
+        rootCtx.config.hooks.resolve(field.span, field.resolveHookContext)
+      }
       field.span.finish(field.endTime > PENDING_FIELD_END_TIME ? field.endTime : endTime)
     }
   } else if (finishPendingFields && rootCtx.fields !== undefined) {
@@ -1415,6 +1443,38 @@ function releaseRootContext (rootCtx, finishPendingFields) {
   // Resolver-created async resources retain copied stores that all share this owner.
   for (const key of Object.keys(rootCtx)) {
     rootCtx[key] = undefined
+  }
+}
+
+/**
+ * @param {object} field
+ * @param {unknown} error
+ */
+function recordResolveError (field, error) {
+  if (field.error !== undefined) return
+
+  const recordedError = error || new Error('GraphQL resolver rejected without an error')
+  field.error = recordedError
+  field.span.setTag('error', recordedError)
+  if (field.resolveHookContext) {
+    field.resolveHookContext.error = recordedError
+    field.resolveHookContext.result = undefined
+  }
+}
+
+/**
+ * @param {object} field
+ * @param {unknown} error
+ * @param {unknown} result
+ * @returns {{ fieldName: string, path: string, error: unknown, result: unknown }}
+ */
+function createResolveHookContext (field, error, result) {
+  return {
+    fieldName: field.fieldName,
+    path: field.pathString,
+    error: error || null,
+    // Any thenable from any realm must stay undefined so the hook does not see an unresolved promise.
+    result: error || typeof result?.then === 'function' ? undefined : result,
   }
 }
 
