@@ -45,18 +45,18 @@
 /packages/dd-trace/*/standalone @DataDog/dd-trace-js @DataDog/asm-js
 
 # Debugger
-/benchmark/sirun/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
+/benchmark/sirun/debugger/ @DataDog/debugger-nodejs
 
-/integration-tests/code-origin/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/integration-tests/code-origin-remote-config.spec.js @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/integration-tests/code-origin.spec.js @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/integration-tests/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
+/integration-tests/code-origin/ @DataDog/debugger-nodejs
+/integration-tests/code-origin-remote-config.spec.js @DataDog/debugger-nodejs
+/integration-tests/code-origin.spec.js @DataDog/debugger-nodejs
+/integration-tests/debugger/ @DataDog/debugger-nodejs
 
-/packages/datadog-code-origin/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/packages/datadog-plugin-*/**/code_origin.* @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/packages/dd-trace/src/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/packages/dd-trace/test/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/packages/dd-trace/test/plugins/util/stacktrace.spec.js @DataDog/dd-trace-js @DataDog/debugger-nodejs
+/packages/datadog-code-origin/ @DataDog/debugger-nodejs
+/packages/datadog-plugin-*/**/code_origin.* @DataDog/debugger-nodejs
+/packages/dd-trace/src/debugger/ @DataDog/debugger-nodejs
+/packages/dd-trace/test/debugger/ @DataDog/debugger-nodejs
+/packages/dd-trace/test/plugins/util/stacktrace.spec.js @DataDog/debugger-nodejs
 
 # Serverless
 /.agents/skills/serverless-integrations/ @DataDog/dd-trace-js @DataDog/apm-serverless
@@ -387,7 +387,7 @@
 /.github/workflows/apm-integrations.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /.github/workflows/aiguard.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
 /.github/workflows/appsec.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
-/.github/workflows/debugger.yml @DataDog/dd-trace-js @DataDog/debugger-nodejs @dd-octo-sts
+/.github/workflows/debugger.yml @DataDog/debugger-nodejs @dd-octo-sts
 /.github/workflows/instrumentation.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /.github/workflows/electron.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /.github/workflows/release.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
