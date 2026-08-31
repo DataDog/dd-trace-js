@@ -1312,15 +1312,22 @@ class CypressPlugin {
   }
 
   afterRun (suiteStats, error) {
+    const hasPendingVideoSpans = this.pendingVideoUploads.length > 0
     const videoUploadsPromise = this.uploadPendingTestSuiteVideos()
     if (!this._isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
-      return videoUploadsPromise?.then(() => this.#flushExporter(false))
+      if (videoUploadsPromise) {
+        return Promise.all([videoUploadsPromise, this.#flushExporter(false)])
+          .then(() => this.#flushExporter(false))
+      }
+      return
     }
+    const finalizationPromise = this.#finalizeRun(suiteStats, error, hasPendingVideoSpans)
     if (videoUploadsPromise) {
-      return videoUploadsPromise.then(() => this.#finalizeRun(suiteStats, error))
+      return Promise.all([videoUploadsPromise, finalizationPromise])
+        .then(() => this.#flushExporter(false))
     }
-    return this.#finalizeRun(suiteStats, error)
+    return finalizationPromise
   }
 
   /**
@@ -1328,9 +1335,10 @@ class CypressPlugin {
    *
    * @param {object|undefined} suiteStats - Cypress run statistics
    * @param {Error|undefined} error - Run finalization error
+   * @param {boolean} [hasPendingVideoSpans] - Whether video-owned spans will finish during finalization
    * @returns {Promise<null>}
    */
-  #finalizeRun (suiteStats, error) {
+  #finalizeRun (suiteStats, error, hasPendingVideoSpans = false) {
     if (this.testSessionSpan && this.testModuleSpan) {
       const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
@@ -1379,7 +1387,7 @@ class CypressPlugin {
       })
 
       // Cypress finishes suite videos in after:run, so their spans must remain open until the upload result is known.
-      if (this.pendingVideoUploads.length === 0) {
+      if (!hasPendingVideoSpans) {
         finishAllTraceSpans(this.testSessionSpan)
       }
     }
@@ -1717,7 +1725,12 @@ class CypressPlugin {
 
     if (error) {
       this.abortPendingScreenshotUploads(error)
-      return this.#finalizeRun(undefined, error)
+      const videoSpansPromise = this.#finishPendingTestSuiteVideos(VIDEO_UPLOAD_RESULT_ERROR)
+      const finalizationPromise = this.#finalizeRun(undefined, error)
+      if (videoSpansPromise) {
+        return Promise.all([videoSpansPromise, finalizationPromise]).then(() => null)
+      }
+      return finalizationPromise
     }
 
     const screenshotUploadsPromise = waitForScreenshotUploads()
@@ -1876,6 +1889,23 @@ class CypressPlugin {
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     }
     return testSpansPromise
+  }
+
+  /**
+   * Finishes queued video-owned spans when Cypress will not reach after:run.
+   *
+   * @param {string} uploadResult - Video upload outcome applied to every queued span
+   * @returns {Promise<null>|undefined}
+   */
+  #finishPendingTestSuiteVideos (uploadResult) {
+    const pendingVideoUploads = this.pendingVideoUploads
+    this.pendingVideoUploads = []
+    const finishPromises = []
+    for (const pendingVideoUpload of pendingVideoUploads) {
+      const finishPromise = this.#finishPendingTestSuiteVideo(pendingVideoUpload, uploadResult)
+      if (finishPromise) finishPromises.push(finishPromise)
+    }
+    if (finishPromises.length > 0) return Promise.all(finishPromises).then(() => null)
   }
 
   /**
