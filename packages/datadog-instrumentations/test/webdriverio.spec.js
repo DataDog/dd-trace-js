@@ -778,7 +778,7 @@ describe('webdriverio instrumentation', () => {
 
       assert.strictEqual(
         preloadScript,
-        `() => { globalThis.document.cookie = "${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=1234; path=/" }`
+        'cookie => { globalThis.document.cookie = cookie }'
       )
 
       const testContext = { arguments: [undefined, 'Test'] }
@@ -804,6 +804,10 @@ describe('webdriverio instrumentation', () => {
         filter: { name: RUM_TEST_EXECUTION_ID_COOKIE_NAME },
       }])
       assert.deepStrictEqual(browser.scriptAddPreloadScript.firstCall.args, [{
+        arguments: [{
+          type: 'string',
+          value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=1234; path=/`,
+        }],
         functionDeclaration: preloadScript,
       }])
       assert.deepStrictEqual(browser.scriptRemovePreloadScript.firstCall.args, [{ script: 'rum-preload' }])

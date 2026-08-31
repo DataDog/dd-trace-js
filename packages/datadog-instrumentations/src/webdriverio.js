@@ -67,6 +67,7 @@ const JASMINE_FRAMEWORK_ADAPTER = 'jasmine'
 const MOCHA_FRAMEWORK_ADAPTER = 'mocha'
 const SUPPORTED_FRAMEWORK_ADAPTERS = new Set([JASMINE_FRAMEWORK_ADAPTER, MOCHA_FRAMEWORK_ADAPTER])
 const TEST_FRAMEWORK = 'webdriverio'
+const SET_RUM_COOKIE_SCRIPT = 'cookie => { globalThis.document.cookie = cookie }'
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
 let jasmineWorkerRequestId = 0
@@ -118,7 +119,8 @@ function * installRumPreloadScript (browser, testExecutionId) {
 
     const cookie = `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=${testExecutionId}; path=/`
     const { script } = yield browser.scriptAddPreloadScript({
-      functionDeclaration: `() => { globalThis.document.cookie = ${JSON.stringify(cookie)} }`,
+      arguments: [{ type: 'string', value: cookie }],
+      functionDeclaration: SET_RUM_COOKIE_SCRIPT,
     })
     rumBrowserPreloadScripts.set(browser, script)
   } catch (error) {
