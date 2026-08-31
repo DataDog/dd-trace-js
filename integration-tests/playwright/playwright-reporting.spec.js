@@ -873,6 +873,7 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
               PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
               PLAYWRIGHT_OUTPUT_DIR: `./test-results-failure-videos-${++screenshotRunId}`,
+              PLAYWRIGHT_AUTO_NAMED_MANUAL_VIDEO: 'true',
               DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
             },
           }

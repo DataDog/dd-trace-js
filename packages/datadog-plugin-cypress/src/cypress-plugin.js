@@ -1307,11 +1307,22 @@ class CypressPlugin {
   }
 
   afterRun (suiteStats, error) {
+    this.uploadPendingTestSuiteVideos()
     if (!this._isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
       return
     }
-    this.uploadPendingTestSuiteVideos()
+    return this.#finalizeRun(suiteStats, error)
+  }
+
+  /**
+   * Finalizes Cypress run state without starting queued video uploads.
+   *
+   * @param {object|undefined} suiteStats - Cypress run statistics
+   * @param {Error|undefined} error - Run finalization error
+   * @returns {Promise<null>}
+   */
+  #finalizeRun (suiteStats, error) {
     if (this.testSessionSpan && this.testModuleSpan) {
       const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
@@ -1680,7 +1691,7 @@ class CypressPlugin {
 
     if (error) {
       this.abortPendingScreenshotUploads(error)
-      return this.afterRun(undefined, error)
+      return this.#finalizeRun(undefined, error)
     }
 
     const screenshotUploadsPromise = waitForScreenshotUploads()

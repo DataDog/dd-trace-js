@@ -9,37 +9,12 @@ module.exports = [
       versionRange: '>=1.38.0',
       filePath: 'lib/index.js',
     },
+    astQuery: 'CallExpression[callee.object.name="videos"][callee.property.name="map"] > ' +
+      'ArrowFunctionExpression[async]',
     functionQuery: {
-      functionName: 'shouldCaptureVideo',
-      kind: 'Sync',
+      kind: 'Async',
     },
-    channelName: 'shouldCaptureVideo',
-  },
-  {
-    module: {
-      name: 'playwright',
-      versionRange: '>=1.38.0 <1.60.0',
-      filePath: 'lib/worker/testInfo.js',
-    },
-    functionQuery: {
-      className: 'TestInfoImpl',
-      methodName: 'outputPath',
-      kind: 'Sync',
-    },
-    channelName: 'TestInfoImpl_outputPath',
-  },
-  {
-    module: {
-      name: 'playwright',
-      versionRange: '>=1.60.0',
-      filePath: 'lib/worker/workerProcessEntry.js',
-    },
-    functionQuery: {
-      className: 'TestInfoImpl',
-      methodName: 'outputPath',
-      kind: 'Sync',
-    },
-    channelName: 'TestInfoImpl_outputPath',
+    channelName: 'saveAutomaticVideo',
   },
   {
     module: {

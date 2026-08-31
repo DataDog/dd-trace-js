@@ -76,7 +76,7 @@ test('uploads only the automatic failure screenshot', async ({ page }, testInfo)
   })
 
   if (process.env.PLAYWRIGHT_AUTO_NAMED_MANUAL_VIDEO === 'true') {
-    const autoNamedManualVideoPath = testInfo.outputPath('video.webm')
+    const autoNamedManualVideoPath = testInfo.outputPath('video-2.webm')
     writeFileSync(autoNamedManualVideoPath, 'manual video attachment with an automatic filename')
     await testInfo.attach('video', {
       path: autoNamedManualVideoPath,

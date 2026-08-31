@@ -2243,7 +2243,7 @@ moduleTypes.forEach(({
       })
     })
 
-    it('uploads a failed suite video when a user after:spec handler fails', async () => {
+    it('defers a failed suite video to after:run when a user after:spec handler fails', async () => {
       const userError = new Error('user after:spec failed')
       const testSuiteSpan = {
         context: () => ({ toSpanId: () => '456' }),
@@ -2268,6 +2268,15 @@ moduleTypes.forEach(({
         { stats: { passes: 1, tests: 1 }, video: '/tmp/basic-fail.mp4' },
         userError
       )
+
+      sinon.assert.notCalled(upload)
+      assert.deepStrictEqual(cypressPlugin.pendingVideoUploads, [{
+        filePath: '/tmp/basic-fail.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
+      }])
+
+      await cypressPlugin.afterRun({})
 
       sinon.assert.calledOnceWithExactly(upload, {
         filePath: '/tmp/basic-fail.mp4',
