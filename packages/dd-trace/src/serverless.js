@@ -3,6 +3,7 @@
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
 const IS_AWS_LAMBDA_MICROVM = getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN') !== undefined
+const isVercelAtStartup = getEnvironmentVariable('VERCEL') === '1'
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
@@ -61,7 +62,7 @@ function getServerlessPlatformTags (platform = getServerlessPlatform()) {
  * @returns {{ isVercel: boolean }}
  */
 function getServerlessPlatform () {
-  return { isVercel: getEnvironmentVariable('VERCEL') === '1' }
+  return { isVercel: supportsServerlessTelemetryRetention() }
 }
 
 /**
@@ -71,7 +72,7 @@ function getServerlessPlatform () {
  * @returns {boolean}
  */
 function supportsServerlessTelemetryRetention () {
-  return getServerlessPlatform().isVercel
+  return isVercelAtStartup
 }
 
 /**
