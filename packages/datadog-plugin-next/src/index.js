@@ -34,17 +34,19 @@ class NextPlugin extends ServerPlugin {
     let serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
     if (!serviceName || serviceName === this.tracer._service) serviceSource = undefined
 
+    const tags = {
+      [COMPONENT]: this.constructor.id,
+      'service.name': serviceName,
+      'resource.name': req.method,
+      'span.type': 'web',
+      'span.kind': 'server',
+      'http.method': req.method,
+    }
+    if (serviceSource !== undefined) tags[SVC_SRC_KEY] = serviceSource
+
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
-      tags: {
-        [COMPONENT]: this.constructor.id,
-        'service.name': serviceName,
-        'resource.name': req.method,
-        'span.type': 'web',
-        'span.kind': 'server',
-        'http.method': req.method,
-        ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
-      },
+      tags,
       integrationName: this.constructor.id,
     })
 

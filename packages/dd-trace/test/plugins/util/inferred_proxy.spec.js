@@ -341,6 +341,18 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         })
       })
 
+      it('should fall back to the tracer service when the proxy domain is missing', async () => {
+        const headers = { ...config.headers }
+        delete headers['x-dd-proxy-domain-name']
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/`, { headers })
+
+        await agent.assertSomeTraces(traces => {
+          assert.strictEqual(traces[0][0].service, 'aws-server')
+        })
+      })
+
       it('should create a parent span with aws.httpapi for API Gateway v2', async () => {
         const testCase = additionalTestCases['aws-httpapi']
         await loadTest({})

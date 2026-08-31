@@ -47,8 +47,8 @@ class AgentlessExporter {
       // (e.g. a MicroVM clone resume) is picked up by the next `JSON.stringify` in the encoder.
       get env () { return config.env },
       get runtimeID () { return config.tags['runtime-id'] },
-      ...(entityId ? { containerID: entityId } : {}),
     }
+    if (entityId) metadata.containerID = entityId
 
     this._writer = new Writer({
       url: this._url,

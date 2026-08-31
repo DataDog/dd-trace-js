@@ -214,21 +214,23 @@ class BaseFFEWriter {
    * @returns {ActiveWriterRoute} Active route state
    */
   #createRoute (route) {
+    const requestOptions = {
+      headers: {
+        ...route.headers,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      retry: true,
+      timeout: this._timeout,
+      url: route.url,
+      path: route.endpoint,
+    }
+    if (route.agent) requestOptions.agent = route.agent
+
     return {
       url: route.url,
       endpoint: route.endpoint,
-      requestOptions: {
-        ...(route.agent && { agent: route.agent }),
-        headers: {
-          ...route.headers,
-          'Content-Type': 'application/json',
-        },
-        method: 'POST',
-        retry: true,
-        timeout: this._timeout,
-        url: route.url,
-        path: route.endpoint,
-      },
+      requestOptions,
     }
   }
 
