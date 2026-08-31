@@ -6,9 +6,6 @@ const log = require('./log')
 
 const configUpdateChannel = dc.channel('datadog:config:update')
 
-/** @type {boolean} */
-module.started = false
-
 /** @type {import('./profiling/ssi-heuristics').SSIHeuristics | undefined} */
 let armedSSIHeuristics
 
@@ -19,6 +16,17 @@ function getProfilingModule () {
   profilingModule ??= require('./profiling')
   return profilingModule
 }
+
+// The profiling engine can stop itself (e.g. a collection error) without going through
+// module.stop(), so `started` is read from it directly rather than cached in a local flag that
+// could drift out of sync. Checking `profilingModule` first avoids forcing the profiling engine
+// (and its native crashtracker binding) to load just to read this.
+Object.defineProperty(module, 'started', {
+  enumerable: true,
+  get () {
+    return profilingModule !== undefined && profilingModule.profiler.enabled
+  },
+})
 
 /** @type {typeof import('./profiling/ssi-heuristics') | undefined} */
 let ssiHeuristicsModule
@@ -93,13 +101,12 @@ configUpdateChannel.subscribe((config) => {
     disarmSSIHeuristics()
     // Leave an already-running profiler alone; otherwise an unrelated remote-config publish
     // (e.g. an unrelated sampling-rate change) would restart it on every update.
-    if (!module.started) module.started = module.start(config)
+    if (!module.started) module.start(config)
   } else if (enabled === 'false') {
     disarmSSIHeuristics()
     // Only touch the profiling layer if it was actually running, so a disabled profiler never
     // forces the profiling engine (and its native crashtracker binding) to load.
     if (module.started) module.stop()
-    module.started = false
   } else if (!module.started && !armedSSIHeuristics) {
     // 'auto' defers the start decision to SSI heuristics. A running profiler already reflects a
     // decision that was made (by SSI or a prior unconditional enablement), so leave it alone
@@ -112,7 +119,7 @@ configUpdateChannel.subscribe((config) => {
     armedSSIHeuristics.onTriggered(() => {
       // Since disarmSSIHeuristics() runs on every non-auto publish, reaching this callback
       // guarantees the latest published value is still 'auto'.
-      if (!module.started) module.started = module.start(config)
+      if (!module.started) module.start(config)
       disarmSSIHeuristics()
     })
   }

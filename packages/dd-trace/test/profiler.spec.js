@@ -25,8 +25,9 @@ describe('profiler', () => {
     // would in production, so it is proxyquired once for the whole suite rather than per test.
     profilingModule = {
       profiler: {
-        start: sinon.stub().returns(true),
-        stop: sinon.spy(),
+        enabled: false,
+        start: sinon.stub(),
+        stop: sinon.stub(),
         setCustomLabelKeys: sinon.spy(),
         runWithLabels: sinon.stub().callsFake((labels, fn) => fn()),
       },
@@ -56,15 +57,23 @@ describe('profiler', () => {
   })
 
   beforeEach(() => {
-    profilingModule.profiler.start.resetHistory()
-    profilingModule.profiler.start.returns(true)
-    profilingModule.profiler.stop.resetHistory()
+    // profiler.js reads `enabled` straight off the profiling layer rather than caching it, so the
+    // fakes mirror the real Profiler class's start()/stop() by flipping it themselves.
+    profilingModule.profiler.start.reset()
+    profilingModule.profiler.start.callsFake(() => {
+      profilingModule.profiler.enabled = true
+      return true
+    })
+    profilingModule.profiler.stop.reset()
+    profilingModule.profiler.stop.callsFake(() => {
+      profilingModule.profiler.enabled = false
+    })
     FakeSSIHeuristics.resetHistory()
     log.debug.resetHistory()
     log.error.resetHistory()
 
-    // profiler.js tracks `started`/armed heuristics at module scope; reset both so a prior test's
-    // state doesn't leak in. Disarming here calls the fake's onTriggered() against whichever
+    // profiler.js tracks armed heuristics at module scope; reset it so a prior test's state
+    // doesn't leak in. Disarming here calls the fake's onTriggered() against whichever
     // `ssiHeuristics` instance is still current, so null the test-local variable only afterwards.
     publishConfig('false')
     ssiHeuristics = undefined
@@ -87,6 +96,20 @@ describe('profiler', () => {
       assert.strictEqual(profiler.started, true)
     })
 
+    it('reflects the profiling layer self-stopping outside of module.stop()', () => {
+      publishConfig('true')
+      assert.strictEqual(profiler.started, true)
+
+      // e.g. a collection error stopping the native profilers directly, bypassing module.stop()
+      profilingModule.profiler.enabled = false
+
+      assert.strictEqual(profiler.started, false)
+
+      publishConfig('true')
+
+      sinon.assert.calledTwice(profilingModule.profiler.start)
+    })
+
     it('does not re-start an already-running profiler on a repeated enabled publish', () => {
       publishConfig('true')
       publishConfig('true')
@@ -106,14 +129,16 @@ describe('profiler', () => {
 
     it('logs and does not propagate when stopping the profiler throws', () => {
       publishConfig('true')
-      profilingModule.profiler.stop = sinon.stub().throws(new Error('boom'))
+      // The real Profiler clears its enabled flag before the native stop call that could throw.
+      profilingModule.profiler.stop.callsFake(() => {
+        profilingModule.profiler.enabled = false
+        throw new Error('boom')
+      })
 
       publishConfig('false')
 
       assert.strictEqual(profiler.started, false)
       sinon.assert.calledOnce(log.error)
-
-      profilingModule.profiler.stop = sinon.spy()
     })
 
     it('arms the SSI heuristics when set to auto, and starts on trigger', () => {
