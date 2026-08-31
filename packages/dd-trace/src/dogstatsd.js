@@ -4,6 +4,8 @@ const dgram = require('dgram')
 const isIP = require('net').isIP
 const { performance } = require('node:perf_hooks')
 
+const { channel } = require('dc-polyfill')
+
 const tracerVersion = require('../../../package.json').version
 const { storage } = require('../../datadog-core')
 const request = require('./exporters/common/request')
@@ -76,6 +78,8 @@ const TYPE_LABELS = ['count', 'gauge', 'distribution', 'histogram']
  * @returns {void}
  */
 
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
 /**
  * @import { DogStatsD } from "../../../index.d.ts"
  * @implements {DogStatsD}
@@ -115,7 +119,6 @@ class DogStatsDClient {
     this.#family = isIP(options.host)
     this.#host = options.host
     this.#port = options.port
-    this.#tagsPrefix = options.tags?.length ? `|#${options.tags.join(',')}` : ''
     this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
 
     if (telemetryEnabled) {
@@ -129,15 +132,56 @@ class DogStatsDClient {
         packetsSent: 0,
         payload: { message: '', offset: 0, queue: [] },
       }
-
-      const separator = this.#tagsPrefix ? ',' : '|#'
-      const prefix = `${this.#tagsPrefix}${separator}client:nodejs,client_version:${tracerVersion},client_transport:`
-      this.#telemetryHttpTagsPrefix = `${prefix}http`
-      this.#telemetryUdpTagsPrefix = `${prefix}udp`
     }
+
+    this.#updateTagPrefixes(options.tags.length ? `|#${options.tags.join(',')}` : '')
 
     this.#udp4 = this._socket('udp4')
     this.#udp6 = this._socket('udp6')
+  }
+
+  /**
+   * Recomputes the cached tags and tag-prefix (mirrors the constructor) after a `config.tags`
+   * change, e.g. a MicroVM clone resume.
+   *
+   * Buffered lines have the old prefix baked in, and on a clone resume they were produced during
+   * the image build, so every clone holds the same bytes — flushing them would submit one identical
+   * copy per clone. Dropping is right here for that reason only: for a tag change on a live process
+   * the buffer holds unique data whose old tags are still correct, so that case wants a flush
+   * before the swap.
+   *
+   * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
+   */
+  updateTags (tags) {
+    const tagsPrefix = tags.length ? `|#${tags.join(',')}` : ''
+    if (tagsPrefix === this.#tagsPrefix) return
+
+    this.#updateTagPrefixes(tagsPrefix)
+    this.#metrics.queue = []
+    this.#metrics.message = ''
+    this.#metrics.offset = 0
+
+    const payload = this.telemetry?.payload
+    if (payload) {
+      payload.queue = []
+      payload.message = ''
+      payload.offset = 0
+    }
+  }
+
+  /**
+   * Updates the prefixes used for application metrics and client telemetry.
+   * @param {string} tagsPrefix - Serialized global DogStatsD tags
+   */
+  #updateTagPrefixes (tagsPrefix) {
+    this.#tagsPrefix = tagsPrefix
+
+    if (!this.telemetry) return
+
+    const separator = tagsPrefix ? ',' : '|#'
+    const prefix = `${tagsPrefix}${separator}client:nodejs,client_version:${tracerVersion},client_transport:`
+    this.#telemetryHttpTagsPrefix = `${prefix}http`
+    this.#telemetryUdpTagsPrefix = `${prefix}udp`
   }
 
   increment (stat, value, tags) {
@@ -551,6 +595,14 @@ class MetricsAggregationClient {
   }
 
   /**
+   * Recomputes the wrapped client's cached tags (e.g. after a MicroVM clone resume).
+   * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
+   */
+  updateTags (tags) {
+    this._client.updateTags(tags)
+  }
+
+  /**
    * @param {boolean|(() => void)} [forceTelemetry] - Whether to ignore the telemetry interval, or completion callback
    * @param {() => void} [done] - Called after serverless deliveries complete
    * @returns {void}
@@ -765,6 +817,11 @@ class CustomMetrics {
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
     this.#client = createMetricsAggregationClient(clientConfig)
+
+    // CustomMetrics has process-lifetime flush handlers and no stop hook, so this shares that lifetime.
+    identityRefreshChannel.subscribe(() => {
+      this.#client.updateTags(DogStatsDClient.generateClientConfig(config).tags)
+    })
 
     const flush = this.flush.bind(this)
 

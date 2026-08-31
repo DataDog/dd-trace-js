@@ -1,7 +1,8 @@
 'use strict'
 
 const { randomUUID } = require('node:crypto')
-const snapshotPayload = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const createRfdc = require('../../../../../vendor/dist/rfdc')
+const snapshotPayload = createRfdc({ proto: false, circles: false })
 
 /** @typedef {{add?: string[], remove?: string[], replace?: string[]}} TagOperations */
 /**

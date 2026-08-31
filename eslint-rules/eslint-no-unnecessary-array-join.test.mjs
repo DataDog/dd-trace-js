@@ -9,6 +9,8 @@ const ruleTester = new RuleTester({
 ruleTester.run('eslint-no-unnecessary-array-join', /** @type {import('eslint').Rule.RuleModule} */ (rule), {
   valid: [
     "const parts = ['a']; parts.join('')",
+    "const parts = ['a']; parts.join(separator)",
+    "[...parts].join('')",
     "const parts = []; parts.push('a'); consume(parts); parts.join('')",
     "const parts = []; parts.push('a'); parts.join(separator)",
     "const parts = []; parts.push('a'); parts.join(`$" + '{separator}`)',
@@ -54,6 +56,35 @@ ruleTester.run('eslint-no-unnecessary-array-join', /** @type {import('eslint').R
     `,
   ],
   invalid: [
+    {
+      code: "[this.constructor.name, generateStream.name].join('.')",
+      errors: [{ messageId: 'buildLiteralStringDirectly' }],
+    },
+    {
+      code: `
+        const body = isEsm
+          ? [
+              \`import originalConfig from \${JSON.stringify(pathToFileURL(originalConfigFile).href)}\`,
+              \`import cypressConfig from \${JSON.stringify(pathToFileURL(cypressConfigPath).href)}\`,
+              '',
+              'export default cypressConfig.wrapConfig(originalConfig)',
+              '',
+            ].join('\\n')
+          : [
+              \`const cypressConfig = require(\${JSON.stringify(cypressConfigPath)})\`,
+              \`const originalExports = require(\${JSON.stringify(originalConfigFile)})\`,
+              'const originalConfig = originalExports && originalExports.__esModule',
+              '  ? originalExports.default',
+              '  : originalExports',
+              'module.exports = cypressConfig.wrapConfig(originalConfig)',
+              '',
+            ].join('\\n')
+      `,
+      errors: [
+        { messageId: 'buildLiteralStringDirectly' },
+        { messageId: 'buildLiteralStringDirectly' },
+      ],
+    },
     {
       code: "const parts = []; parts.push('a'); parts.join()",
       errors: [{ messageId: 'buildStringDirectly', data: { name: 'parts' } }],

@@ -3,11 +3,13 @@
 const assert = require('node:assert/strict')
 const { hostname } = require('os')
 
+const { channel } = require('dc-polyfill')
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
+
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const { version } = require('../src/pkg')
 const pkg = require('../../../package.json')
@@ -27,6 +29,7 @@ const {
   DEFAULT_SERVICE_NAME,
 } = require('../src/encode/tags-processors')
 const processTags = require('../src/process-tags')
+const { getConfigFresh } = require('./helpers/config')
 
 // Mock spans use the post-format field name `start` (nanoseconds), matching
 // what `SpanProcessor.process` hands to `onSpanFinished` via the formatted
@@ -446,7 +449,6 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(processor.hostname, hostname())
     assert.strictEqual(processor.enabled, config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED)
     assert.strictEqual(processor.env, config.env)
-    assert.deepStrictEqual(processor.tags, config.tags)
     assert.strictEqual(processor.version, config.version)
   })
 
@@ -559,10 +561,29 @@ describe('SpanStatsProcessor', () => {
       }],
       Lang: 'javascript',
       TracerVersion: pkg.version,
-      RuntimeID: processor.tags['runtime-id'],
+      RuntimeID: config.tags['runtime-id'],
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
     })
+  })
+
+  it('should export the current runtime ID after remote config replaces tags', () => {
+    const config = getConfigFresh({ stats: true })
+    const processor = new SpanStatsProcessor(config)
+    clearTimeout(processor.timer)
+    const originalTags = config.tags
+    const originalRuntimeId = originalTags['runtime-id']
+
+    processor.onInterval()
+    assert.strictEqual(exporter.export.lastCall.args[0].RuntimeID, originalRuntimeId)
+
+    config.setRemoteConfig({ tags: { team: 'backend' } })
+    assert.notStrictEqual(config.tags, originalTags)
+    channel('datadog:identity:update').publish(config)
+    processor.onInterval()
+
+    assert.notStrictEqual(config.tags['runtime-id'], originalRuntimeId)
+    assert.strictEqual(exporter.export.lastCall.args[0].RuntimeID, config.tags['runtime-id'])
   })
 
   it('should export on interval with default version', () => {
@@ -578,7 +599,7 @@ describe('SpanStatsProcessor', () => {
       Stats: [],
       Lang: 'javascript',
       TracerVersion: pkg.version,
-      RuntimeID: processor.tags['runtime-id'],
+      RuntimeID: versionlessConfig.tags['runtime-id'],
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
     })
