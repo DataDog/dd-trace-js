@@ -29,6 +29,21 @@ describe('pg instrumentation', () => {
 
     function observeQuery () {}
 
+    /**
+     * @param {{ query: (query: object) => void }} client
+     * @param {{ callback?: (error?: Error | null) => void }} query
+     */
+    function executeQueryWithCallback (client, query) {
+      return new Promise((resolve, reject) => {
+        query.callback = error => {
+          if (error) reject(error)
+          else resolve()
+        }
+
+        client.query(query)
+      })
+    }
+
     before(() => {
       return agent.load(['pg'])
     })
@@ -137,30 +152,17 @@ describe('pg instrumentation', () => {
               })
 
               describe('with callback in query object', () => {
-                it('Should not fail if it is not aborted', () => {
-                  return new Promise((resolve, reject) => {
-                    const query = new Query('SELECT 1')
-                    query.callback = (error) => {
-                      if (error) reject(error)
-                      else resolve()
-                    }
-
-                    client.query(query)
-                  })
+                it('Should not fail if it is not aborted', async () => {
+                  await executeQueryWithCallback(client, new Query('SELECT 1'))
                 })
 
-                it('Should abort query', () => {
+                it('Should abort query', async () => {
                   queryClientStartChannel.subscribe(abortQuery)
 
-                  return assert.rejects(new Promise((resolve, reject) => {
-                    const query = new Query('SELECT 1')
-                    query.callback = error => {
-                      if (error) reject(error)
-                      else resolve()
-                    }
-
-                    client.query(query)
-                  }), { message: 'Test' })
+                  await assert.rejects(
+                    executeQueryWithCallback(client, new Query('SELECT 1')),
+                    { message: 'Test' }
+                  )
                 })
               })
 
