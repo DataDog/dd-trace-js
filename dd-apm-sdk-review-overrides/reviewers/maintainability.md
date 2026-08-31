@@ -4,11 +4,11 @@ Override for `reviewers/maintainability.md` (in the core skill folder) — read 
 
 ## Release notes / changelog policy
 
-No changelog file and no release-notes directory exist; release notes are generated from PR titles and labels. So there is nothing to write - instead audit the PR title and the semver label against **AGENTS.md § "Commit Messages"** and **§ "PR Requirements"**, and check whether `only-land-on-next` is needed per CONTRIBUTING.md ("Indicate intended release targets"). `feat`/`fix`/`perf` are reserved for production code shipped in the npm package.
+No changelog file and no release-notes directory exist; release notes are generated from PR titles and labels. So there is nothing to write - instead audit the PR title and the semver label against **AGENTS.md § "Commit Messages"**, and check whether `only-land-on-next` is needed per CONTRIBUTING.md ("Indicate intended release targets"). `feat`/`fix`/`perf` are reserved for production code shipped in the npm package.
 
 ## Public API and compatibility
 
-Read **AGENTS.md § "Public TypeScript Types"** for the two-surface rule (`index.d.ts` vs `index.d.v5.ts`) and its stance on adding to npm-exported classes. Judge the diff against that section rather than a summary of it.
+Read **AGENTS.md § "Backportability and Runtime Support"** for the requirement to update every supported public TypeScript surface (in this repo, both `index.d.ts` and `index.d.v5.ts`) for new public APIs unless the change is explicitly version-specific. For the stance on adding to npm-exported classes, see `.agents/skills/architecture-review/SKILL.md` (Module coupling dimension) - AGENTS.md does not cover that itself.
 
 Beyond what that section covers, these are also public contracts:
 - `index.js` (package `main`) and the exports of `packages/dd-trace/src/index.js` / `proxy.js`.
@@ -19,7 +19,7 @@ Beyond what that section covers, these are also public contracts:
 
 ## Test commands for this repo
 
-Read **AGENTS.md § "Testing Instructions"** and its subsections "Running Individual Tests" and "Plugin Tests" for the commands, the `PLUGINS`/`SPEC` variables, and the service setup. Use the commands as written there.
+Read **AGENTS.md § "Testing"** for the commands, the `PLUGINS`/`SPEC` variables, and the service setup. Use the commands as written there.
 
 Two things worth stating because they surprise people:
 - Root `npm test` is intentionally disabled - it prints an error and exits 1.

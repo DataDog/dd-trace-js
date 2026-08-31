@@ -21,14 +21,14 @@ Anything added to these files pays cost on every span/request/require — measur
 
 ## Language-specific cost model for dd-trace-js
 
-Read **AGENTS.md § "Performance and Memory"** first: it states the principle ("CRITICAL: Tracer runs in application hot paths - every operation counts") and owns the explicit prohibitions (no `async`/`await` or promises in npm-shipped code outside tests and worker threads; loop-form rules and the `for-in` ban; no `Object.keys(obj).length` emptiness probe; cache regexes and parsed values at module load; order short-circuit chains by frequency x cheapness; avoid try/catch and accessors in hot paths). Apply that section as written; do not paraphrase it into a weaker rule.
+Read **AGENTS.md § "Production Safety and Performance"** first: it states the principle ("CRITICAL: Tracer runs in application hot paths - every operation counts") and owns the explicit prohibitions (no `async`/`await` or promises in npm-shipped code outside tests and worker threads; loop-form rules and the `for-in` ban; no `Object.keys(obj).length` emptiness probe; cache regexes and parsed values at module load; order short-circuit chains by frequency x cheapness; avoid try/catch and accessors in hot paths). Apply that section as written; do not paraphrase it into a weaker rule.
 
 The following are NOT in that section - they are derived from repo code, with the source named, and are the ones most often missed:
 - Allocation is the dominant per-span cost: objects, closures, strings, boxes, intermediate arrays from `.map`/`.filter`, and allocations hidden in convenience APIs.
 - Keep call sites monomorphic and hidden classes stable - initialize all fields in one order, do not add properties later (evidence: comments in `packages/dd-trace/src/span_format.js`, `src/encode/0.4.js`, `src/encode/0.5.js`).
 - `async_hooks`/AsyncLocalStorage propagation is the largest structural overhead; a new ALS instance, an extra `enterWith`, or an `AsyncResource` per operation multiplies it (evidence: `packages/datadog-core/src/storage.js`).
 - Require-time cost is user-visible startup latency; keep new `require`s lazy (evidence: the lazy thunk table in `packages/datadog-instrumentations/src/helpers/hooks.js`).
-- Verification bar for a perf-motivated change is in AGENTS.md § "Performance and Memory" -> "Verifying perf-motivated changes"; a rewrite justified by speed with no numbers is a finding.
+- Verification bar for a perf-motivated change is in AGENTS.md § "Production Safety and Performance" (the microbenchmark requirement bullet); a rewrite justified by speed with no numbers is a finding.
 
 ## Additional checks specific to this repo
 
@@ -45,4 +45,4 @@ cargo install --git https://github.com/DataDog/sirun.git --branch main
 cd benchmark/sirun/<dir>
 node ../run-all-variants.js | sirun --summarize | node ../means.js
 ```
-- Ad-hoc perf verification per AGENTS.md § "Performance and Memory" → "Verifying perf-motivated changes": a one-file microbenchmark, ~1 s warmup, ≥5 trials each impl, re-run in a fresh shell; delete it afterwards or graduate it to `benchmark/sirun/`. A perf-justified rewrite in the diff without numbers is a finding.
+- Ad-hoc perf verification per AGENTS.md § "Production Safety and Performance" (the microbenchmark requirement bullet): a one-file microbenchmark, ~1 s warmup, ≥5 trials each impl, re-run in a fresh shell; delete it afterwards or graduate it to `benchmark/sirun/`. A perf-justified rewrite in the diff without numbers is a finding.

@@ -19,7 +19,7 @@ Convention docs:
 
 Check-mode only. Anything below that would rewrite files is the author's to run, not yours; if a check fails, report it.
 
-Read **AGENTS.md § "Code Style & Linting"** for the style rules and the lint entry points, then run them against the changed files.
+Read **AGENTS.md § "Code Style"** for the style rules and the lint entry points, then run them against the changed files.
 
 ```bash
 npm run lint        # check_licenses + check-no-* + eslint --max-warnings 0 + codeowners audit + verify-exercised-tests
@@ -42,7 +42,7 @@ Config is `eslint.config.mjs` plus the local rules in `eslint-rules/`. Note mark
 
 ## Config options — registration path
 
-Read **AGENTS.md § "Adding New Configuration Options"** - it lists the required steps and the file for each. Do not restate them from memory; open the section and check the diff against it.
+Read **AGENTS.md § "Cross-Cutting Configuration Changes"** - it lists the required steps and the file for each. Do not restate them from memory; open the section and check the diff against it.
 
 Only the parts AGENTS.md does not state:
 - `packages/dd-trace/src/config/generated-config-types.d.ts` is generated; regenerate/verify with `npm run generate:config:types` / `npm run verify:config:types`. A stale generated file fails CI.
@@ -51,7 +51,7 @@ Only the parts AGENTS.md does not state:
 
 ## Commit and PR hygiene
 
-Read **AGENTS.md § "Pull Requests and CI"** and its subsections "Commit Messages", "PR Requirements", and "Flaky tests", plus **§ "Always Consider Backportability"**. Those own the title format and allowed types, the semver label rules, the PR template, the all-green policy, the flaky-test policy, and the `DD_MAJOR` guard for breaking changes.
+Read **AGENTS.md § "Pull Requests and CI" → "Commit Messages"** for the title format, allowed types, PR template usage, and all-green policy; **§ "Debugging Failures"** for the flaky-test handling policy; and **§ "Backportability and Runtime Support"** for Node.js compatibility rules. The `DD_MAJOR` guard example lives in `CONTRIBUTING.md`, not `AGENTS.md`.
 
 Only the parts not stated there:
 - `.github/workflows/pr-title.yml` (`PR_TITLE_PATTERN`) is what actually gates the title, and it auto-syncs the type/scope/semver labels - so a wrong title produces a wrong release label. Its accepted set is wider than the list in AGENTS.md (it also allows `style` and `build`). Treat the workflow as the enforced gate and AGENTS.md as the house preference: a title the workflow accepts is not a finding, but flag the divergence itself as P2 so one of the two gets fixed.

@@ -89,7 +89,7 @@ Each check below carries a stable slug in backticks. Cite checks by slug, never 
 
 ## Evidence
 
-If a benchmark exists for the changed path (see `dd-apm-sdk-review-overrides/reviewers/performance.md` for this repo's benchmark tooling), say whether it was run and what it showed. If the change plausibly regresses a hot path and no benchmark result is available, say so as a P1/SEV-2 ("unmeasured change on a hot path") — do not invent numbers, and do not report an unmeasured suspicion as top-severity unless the cost is obvious from the code (e.g. an allocation in a per-span loop).
+If a benchmark exists for the changed path (see `dd-apm-sdk-review-overrides/reviewers/performance.md` for this repo's benchmark tooling), say whether it was run and what it showed. If the change matches the narrow trigger above (a visible, contestable perf trade-off — removing a lock/guard, swapping in a hand-rolled cache/structure, or an explicit "faster/optimized" claim) and ships no benchmark result, say so as a P1/SEV-2 ("unmeasured change on a hot path") — do not invent numbers. Do not raise this finding for a plain correctness fix in a hot-path file that makes no such trade-off, even if it touches a hot path.
 
 ## Do not
 

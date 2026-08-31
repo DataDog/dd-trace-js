@@ -11,7 +11,7 @@ Override for `reviewers/design.md` (in the core skill folder) — read that file
 - `packages/datadog-shimmer/` — the wrapping primitive used by instrumentations.
 - `packages/datadog-{esbuild,webpack}/`, `packages/datadog-code-origin/`, `vendor/` (rspack-bundled deps → `packages/node_modules/`).
 
-Read **AGENTS.md § "Project Overview"** for the package roles and **§ "Architecture Decisions"** for the six-dimension rubric this repo scores structural changes against - apply that rubric rather than a generic one.
+Package roles are covered by the bullets above and **AGENTS.md § "Repository Map"**. AGENTS.md itself has no architecture-decision rubric; for structural changes (shared abstractions, module boundaries, class hierarchies, public APIs), apply the six-dimension rubric in `.agents/skills/architecture-review/SKILL.md` (drift prevention, module coupling, explicit contracts, testability at boundaries, extensibility, hot-path fitness) rather than a generic one.
 
 - Layering rule: `datadog-core` ← `dd-trace` ← `datadog-plugin-*`; `datadog-instrumentations` sits beside plugins and communicates only via diagnostic channels (decoupled by design — see `.agents/skills/apm-integrations/SKILL.md`).
 - Tests: unit `*.spec.js` beside each package (`packages/*/test/`), E2E in `integration-tests/`, benchmarks in `benchmark/` (`benchmark/sirun/` for tracked ones).
@@ -19,7 +19,7 @@ Read **AGENTS.md § "Project Overview"** for the package roles and **§ "Archite
 
 ## Configuration surface — the registration path
 
-Read **AGENTS.md § "Adding New Configuration Options"** - it lists the required steps and the file for each. Do not restate them from memory; open the section and check the diff against it.
+Read **AGENTS.md § "Cross-Cutting Configuration Changes"** - it lists the required steps and the file for each. Do not restate them from memory; open the section and check the diff against it.
 
 Only the parts AGENTS.md does not state:
 - `packages/dd-trace/src/config/generated-config-types.d.ts` is generated; regenerate/verify with `npm run generate:config:types` / `npm run verify:config:types`. A stale generated file fails CI.
@@ -28,7 +28,7 @@ Only the parts AGENTS.md does not state:
 
 ## Public API surface — what counts as public here
 
-Read **AGENTS.md § "Public TypeScript Types"** for the two-surface rule (`index.d.ts` vs `index.d.v5.ts`) and its stance on adding to npm-exported classes. Judge the diff against that section rather than a summary of it.
+Read **AGENTS.md § "Backportability and Runtime Support"** for the requirement to update every supported public TypeScript surface (in this repo, both `index.d.ts` and `index.d.v5.ts`) for new public APIs unless the change is explicitly version-specific. For the stance on adding to npm-exported classes, see `.agents/skills/architecture-review/SKILL.md` (Module coupling dimension) - AGENTS.md does not cover that itself.
 
 Beyond what that section covers, these are also public contracts:
 - `index.js` (package `main`) and the exports of `packages/dd-trace/src/index.js` / `proxy.js`.
