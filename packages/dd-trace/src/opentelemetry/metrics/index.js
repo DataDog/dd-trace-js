@@ -7,6 +7,10 @@ const { metrics } = require('@opentelemetry/api')
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
 const { registerTelemetryFlusher } = require('../../flush')
+const {
+  buildResourceAttributes: buildGeneralResourceAttributes,
+  registerResourceAttributeRefresh,
+} = require('../resource-attributes')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
@@ -43,30 +47,12 @@ const RESERVED_TRACER_TAGS = new Set(['service', 'env', 'version', 'runtime_id',
  * @param {import('../../config/config-base')} config - Tracer configuration instance
  */
 function initializeOpenTelemetryMetrics (config) {
-  const resourceAttributes = {
-    'service.name': config.service,
-    'service.version': config.version,
-    'deployment.environment': config.env,
-  }
-
-  if (config.tags) {
-    const filteredTags = { ...config.tags }
-    delete filteredTags.service
-    delete filteredTags.version
-    delete filteredTags.env
-    Object.assign(resourceAttributes, filteredTags)
-  }
-
-  if (config.reportHostname) {
-    resourceAttributes['host.name'] = os.hostname()
-  }
-
   const exporter = new OtlpHttpMetricExporter(
     config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
     config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
     config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
-    resourceAttributes
+    buildGeneralResourceAttributes(config)
   )
 
   const reader = new PeriodicMetricReader(
@@ -78,8 +64,11 @@ function initializeOpenTelemetryMetrics (config) {
 
   const meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
+
   // Include the final metric collection and export in lifecycle retention.
   registerTelemetryFlusher(done => meterProvider.forceFlush(done))
+
+  registerResourceAttributeRefresh(exporter, () => buildGeneralResourceAttributes(config))
 }
 
 /**
@@ -122,19 +111,23 @@ function buildResourceAttributes (tags, { reportHostname, service, env, serviceV
 function createOtlpSpanStatsExporter (config) {
   const { OtlpStatsExporter } = require('./otlp_span_stats_exporter')
   const protocol = config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || 'http/json'
-  const resourceAttributes = buildResourceAttributes(config.tags, {
+  const buildSpanStatsResourceAttributes = () => buildResourceAttributes(config.tags, {
     reportHostname: config.reportHostname,
     service: config.service,
     env: config.env,
     serviceVersion: config.version,
   })
-  return new OtlpStatsExporter(
+  const exporter = new OtlpStatsExporter(
     config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
     protocol,
-    resourceAttributes,
+    buildSpanStatsResourceAttributes(),
     config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
     config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
   )
+
+  registerResourceAttributeRefresh(exporter, buildSpanStatsResourceAttributes)
+
+  return exporter
 }
 
 module.exports = {
