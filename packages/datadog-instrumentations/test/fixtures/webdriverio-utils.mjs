@@ -1,6 +1,12 @@
 const testFrameworkFnWrapper = async function (_wrapFunctions, type, { specFn }, _before, _after, _cid, _retries,
   hookName) {
-  return specFn(type, hookName)
+  let error
+  try {
+    return specFn(type, hookName)
+  } catch (caughtError) {
+    error = caughtError
+  }
+  throw error
 }
 
 async function executeAsync (fn, retries, args = [], timeout) {

@@ -55,6 +55,7 @@ const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
 const jasmineAdapterInitCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
 const baseReporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync')
+const runnerRunCh = tracingChannel('orchestrion:@wdio/runner:Runner_run')
 const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
 const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance')
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
@@ -81,9 +82,11 @@ const coordinatorStates = new WeakMap()
 const localRunnerVersions = new WeakMap()
 const rumBrowsers = new Set()
 const rumCorrelationBrowsers = new Set()
+const rumRunnerBrowsers = new WeakSet()
 const sharedRumBrowsers = new WeakSet()
 const rumBrowserPreloadScripts = new WeakMap()
 const rumBrowserTestExecutionIds = new WeakMap()
+let isRumCleanupPending = false
 
 /** @typedef {{done: boolean, value?: unknown}} RumGeneratorStep */
 /**
@@ -159,12 +162,16 @@ function getRumTestExecutionId (browser, isRumActive) {
     browserName: browser.capabilities?.browserName,
     browserVersion: browser.capabilities?.browserVersion,
     isRumActive,
+    isTestOptimizationRunner: isWebdriverioWorker,
     testExecutionId: undefined,
   }
   try {
     rumPageNavigateCh.publish(correlationContext)
   } catch (error) {
     log.error('WebdriverIO RUM correlation channel error', error)
+  }
+  if (correlationContext.isTestOptimizationRunner || correlationContext.testExecutionId) {
+    rumRunnerBrowsers.add(browser)
   }
   return correlationContext.testExecutionId
 }
@@ -240,14 +247,15 @@ function * handleRumNavigation (context) {
     if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
       log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
     }
-    if (!isRumActive) return
+    const testExecutionId = getRumTestExecutionId(browser, isRumActive)
+    if (!rumRunnerBrowsers.has(browser) || (isRumInstrumented && !isRumActive)) return
 
     rumBrowsers.add(browser)
-    const testExecutionId = getRumTestExecutionId(browser, isRumActive)
     if (!testExecutionId) {
-      sharedRumBrowsers.add(browser)
+      if (isRumActive) sharedRumBrowsers.add(browser)
       return
     }
+    if (!isRumActive && browser.isBidi) return
 
     yield * correlateRumBrowser(browser, testExecutionId)
   } catch (error) {
@@ -387,6 +395,7 @@ function * cleanupRumBrowser (browser, stopShared = false) {
  * @returns {RumGenerator}
  */
 function * cleanupRumBrowsers () {
+  isRumCleanupPending = false
   const browsers = [...rumCorrelationBrowsers]
   rumCorrelationBrowsers.clear()
   for (const browser of browsers) {
@@ -402,6 +411,7 @@ function * cleanupRumBrowsers () {
  * @returns {RumGenerator}
  */
 function * cleanupAllRumBrowsers () {
+  isRumCleanupPending = false
   const browsers = [...rumBrowsers]
   rumBrowsers.clear()
   rumCorrelationBrowsers.clear()
@@ -456,9 +466,9 @@ function * startRumTest () {
       log.error('WebdriverIO RUM detection error', error)
       continue
     }
-    if (!rumState?.isRumActive) continue
+    if (!rumState || (rumState.isRumInstrumented && !rumState.isRumActive)) continue
 
-    const testExecutionId = getRumTestExecutionId(browser, true)
+    const testExecutionId = getRumTestExecutionId(browser, rumState.isRumActive || undefined)
     if (!testExecutionId || rumBrowserTestExecutionIds.get(browser) === testExecutionId) continue
 
     yield * correlateRumBrowser(browser, testExecutionId)
@@ -496,6 +506,17 @@ function * retryRumTest () {
   if (!testExecutionId) return
 
   yield * correlateRumBrowsers(browsers, testExecutionId)
+}
+
+/**
+ * Reapplies RUM correlation to active browsers for a managed retry.
+ *
+ * @param {string|undefined} testExecutionId
+ * @yields {unknown} Delegated browser correlation operation.
+ * @returns {RumGenerator}
+ */
+function * retryRumBrowsers (testExecutionId) {
+  yield * correlateRumBrowsers([...rumCorrelationBrowsers], testExecutionId)
 }
 
 /**
@@ -540,6 +561,7 @@ function waitForRumCleanup (context) {
   if (rumCorrelationBrowsers.size === 0) return
 
   if (type === 'Test') {
+    isRumCleanupPending = true
     context.resolveGenerator = detectActiveRumBrowsers
     context.rejectGenerator = detectActiveRumBrowsers
   } else if (type === 'Hook' && hookName === 'afterEach') {
@@ -560,10 +582,27 @@ function waitForFailedRumCleanup (context) {
   if (rumCorrelationBrowsers.size === 0) return
 
   if (type === 'Test') {
+    isRumCleanupPending = true
     context.rejectGenerator = detectActiveRumBrowsers
   } else if (type === 'Hook' && hookName === 'afterEach') {
     context.rejectGenerator = cleanupRumBrowsers
+  } else {
+    isRumCleanupPending = true
   }
+}
+
+/**
+ * Cleans a completed test's RUM state before the next wrapper when no afterEach ran.
+ *
+ * @param {{arguments?: unknown[], rumCleanupGenerator?: () => RumGenerator}} context
+ * @returns {void}
+ */
+function waitForPendingRumCleanup (context) {
+  const type = context.arguments?.[1]
+  const hookName = context.arguments?.[7]
+  if (!isRumCleanupPending || (type === 'Hook' && hookName === 'afterEach')) return
+
+  context.rumCleanupGenerator = cleanupRumBrowsers
 }
 
 /**
@@ -1511,8 +1550,22 @@ function waitForLogSubmissionAtWorkerExit (context) {
   context.rejectCallback = waitForLogs
 }
 
+/**
+ * Cleans retained RUM browsers before WebdriverIO deletes the worker session.
+ *
+ * @param {{rumCleanupGenerator?: () => RumGenerator}} context
+ * @returns {void}
+ */
+function waitForRumCleanupBeforeSessionEnd (context) {
+  context.rumCleanupGenerator = cleanupAllRumBrowsers
+}
+
 baseReporterWaitForSyncCh.asyncEnd.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForLogSubmissionAtWorkerExit)
+)
+
+runnerRunCh.start.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumCleanupBeforeSessionEnd)
 )
 
 urlCh.start.subscribe(
@@ -1527,6 +1580,10 @@ testFrameworkFnWrapperCh.asyncEnd.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumCleanup)
 )
 
+testFrameworkFnWrapperCh.start.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForPendingRumCleanup)
+)
+
 testFrameworkFnWrapperCh.error.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForFailedRumCleanup)
 )
@@ -1538,6 +1595,7 @@ executeAsyncCh.subscribe({
     context.rumStartGenerator = startRumTest
     context.rumCleanupGenerator = cleanupRumBrowsers
     context.rumCorrelationGenerator = correlateRumBrowsers
+    context.rumRetryGenerator = retryRumBrowsers
     context.retryGenerator ??= retryRumTest
   },
 })

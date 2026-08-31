@@ -211,6 +211,7 @@ class MochaPlugin extends CiPlugin {
 
     this.addSub('ci:webdriverio:rum:page-navigate', (ctx) => {
       if (this.testFramework !== 'webdriverio') return
+      ctx.isTestOptimizationRunner = true
 
       const activeSpan = storage('legacy').getStore()?.span
       const testSpan = setRumTestCorrelation(ctx, activeSpan)
@@ -245,7 +246,7 @@ class MochaPlugin extends CiPlugin {
 
       const functionType = currentStore[WEBDRIVERIO_JASMINE_FUNCTION_TYPE]
       if (functionType === 'Test') {
-        ctx.retryGenerator = this.#retryWebdriverioJasmineTestAfterRumCleanup.bind(this, ctx, test)
+        ctx.retryGenerator = this.#retryWebdriverioJasmineTestWithRumCorrelation.bind(this, ctx, test)
       }
       const nextStore = {
         ...test.currentStore,
@@ -1153,7 +1154,7 @@ class MochaPlugin extends CiPlugin {
   }
 
   /**
-   * Cleans up RUM before advancing a native WebdriverIO retry.
+   * Advances a native WebdriverIO retry without stopping its active RUM session.
    *
    * @param {object} context
    * @param {object} test
@@ -1161,22 +1162,15 @@ class MochaPlugin extends CiPlugin {
    * @yields {unknown} RUM cleanup or retry setup operation.
    * @returns {RumGenerator}
    */
-  * #retryWebdriverioJasmineTestAfterRumCleanup (context, test, error) {
-    const cleanup = context.rumCleanupGenerator?.()
-    let browsers
-    if (cleanup) {
-      browsers = yield * cleanup
-    }
+  * #retryWebdriverioJasmineTestWithRumCorrelation (context, test, error) {
     yield this.#retryWebdriverioJasmineTest(test, error)
-
-    if (!browsers?.length) return
 
     const correlationContext = {
       isRumActive: true,
       testExecutionId: undefined,
     }
     setRumTestCorrelation(correlationContext, test.span)
-    const correlation = context.rumCorrelationGenerator?.(browsers, correlationContext.testExecutionId)
+    const correlation = context.rumRetryGenerator?.(correlationContext.testExecutionId)
     if (correlation) {
       yield * correlation
     }

@@ -178,6 +178,8 @@ describe('webdriverio instrumentation', () => {
     const rewrittenSource = rewriter.rewrite(source, runnerFixtureModulePath, 'module')
 
     assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/runner:Runner_run/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupGenerator/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/runner:BaseReporter_waitForSync/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
@@ -209,6 +211,7 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveGenerator/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectGenerator/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupGenerator/)
     assert.match(rewrittenSource, /__apm\$ctx\.rumStartGenerator/)
     assert.match(rewrittenSource, /__apm\$ctx\.retryGenerator/)
   })
@@ -316,7 +319,7 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(calls.slice(4), [
         'detect-at-test-end',
       ])
-      assert.deepStrictEqual(rumStates, [undefined, true])
+      assert.deepStrictEqual(rumStates, [undefined, false, true])
 
       const afterEachContext = {
         arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
@@ -334,6 +337,111 @@ describe('webdriverio instrumentation', () => {
       ])
     } finally {
       correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('correlates classic sessions before asynchronous RUM initialization', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const rumStates = []
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().resolves(),
+      execute: sinon.stub()
+        .onFirstCall().resolves({
+          isRumActive: false,
+          isRumInstrumented: false,
+          rumSamplingRate: null,
+        })
+        .onSecondCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onThirdCall().resolves({
+          isRumActive: false,
+          isRumInstrumented: true,
+          rumSamplingRate: 50,
+        }),
+      setCookies: sinon.stub().resolves(),
+    }
+    browser.execute.onCall(3).resolves({
+      isRumActive: true,
+      isRumInstrumented: true,
+      rumSamplingRate: 100,
+    })
+    browser.execute.onCall(4).resolves(false)
+    const correlate = context => {
+      rumStates.push(context.isRumActive)
+      context.testExecutionId = 'classic-test-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runGenerator(navigationContext.resolveGenerator(navigationContext))
+
+      assert.deepStrictEqual(browser.setCookies.firstCall.args, [{
+        name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+        value: 'classic-test-id',
+      }])
+
+      const executeAsyncContext = {}
+      channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
+      await runGenerator(executeAsyncContext.rumStartGenerator())
+      await runGenerator(executeAsyncContext.rumStartGenerator())
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runGenerator(testContext.resolveGenerator(testContext))
+
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runGenerator(afterEachContext.resolveGenerator(afterEachContext))
+
+      assert.deepStrictEqual(rumStates, [false, true, true])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('does not retain standalone WebdriverIO clients in regular Mocha tests', async () => {
+    require('../src/webdriverio')
+    await cleanupRumState()
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().resolves(),
+      execute: sinon.stub().resolves({
+        isRumActive: true,
+        isRumInstrumented: true,
+        rumSamplingRate: 100,
+      }),
+      setCookies: sinon.stub().resolves(),
+    }
+    const ignoreCorrelation = () => {}
+    correlationCh.subscribe(ignoreCorrelation)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runGenerator(navigationContext.resolveGenerator(navigationContext))
+
+      const workerExitContext = {}
+      tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync').asyncEnd.publish(workerExitContext)
+
+      assert.strictEqual(browser.setCookies.callCount, 0)
+      assert.strictEqual(workerExitContext.resolveGenerator, undefined)
+    } finally {
+      correlationCh.unsubscribe(ignoreCorrelation)
     }
   })
 
@@ -432,6 +540,7 @@ describe('webdriverio instrumentation', () => {
       }),
     }
     const correlate = context => {
+      context.isTestOptimizationRunner = true
       if (hasTestSpan) context.testExecutionId = 'suite-test-id'
     }
     correlationCh.subscribe(correlate)
@@ -724,6 +833,80 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('cleans RUM before the next test when no afterEach hook exists', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete')
+        return Promise.resolve()
+      }),
+      execute: sinon.stub()
+        .onFirstCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onSecondCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onThirdCall().callsFake(() => {
+          calls.push('cleanup')
+          return Promise.resolve(false)
+        }),
+      setCookies: sinon.stub().callsFake(({ value }) => {
+        calls.push(`set:${value}`)
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      context.testExecutionId = 'first-test-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runGenerator(navigationContext.resolveGenerator(navigationContext))
+
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { testFrameworkFnWrapper } = await import(pathToFileURL(outputPath))
+      const firstTestError = new Error('first test failed')
+      await assert.rejects(testFrameworkFnWrapper({}, 'Test', {
+        specFn () {
+          calls.push('first-test')
+          throw firstTestError
+        },
+      }), error => error === firstTestError)
+      await testFrameworkFnWrapper({}, 'Test', {
+        specFn () {
+          calls.push('second-test')
+        },
+      })
+
+      assert.deepStrictEqual(calls, [
+        'set:first-test-id',
+        'first-test',
+        'cleanup',
+        'delete',
+        'second-test',
+      ])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
   it('preloads RUM correlation in current and future browsing contexts', async () => {
     require('../src/webdriverio')
 
@@ -840,7 +1023,11 @@ describe('webdriverio instrumentation', () => {
     }
 
     channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
-    await runGenerator(executeAsyncContext.rumCorrelationGenerator([browser], 'retry-execution-id'))
+    await runGenerator(executeAsyncContext.rumCorrelationGenerator([browser], 'initial-execution-id'))
+    browser.setCookies.resetHistory()
+    browser.switchToWindow.resetHistory()
+
+    await runGenerator(executeAsyncContext.rumRetryGenerator('retry-execution-id'))
 
     assert.deepStrictEqual(browser.switchToWindow.args.map(([windowHandle]) => windowHandle), [
       'window-a',
@@ -1062,6 +1249,38 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('cleans RUM before Runner.run ends the browser session', async () => {
+    const source = fs.readFileSync(runnerFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, runnerFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-runner-rum-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const runCh = tracingChannel('orchestrion:@wdio/runner:Runner_run')
+    const steps = []
+    const subscriber = {
+      start (context) {
+        context.rumCleanupGenerator = function * () {
+          steps.push('cleanup:start')
+          yield new Promise(resolve => setImmediate(resolve))
+          steps.push('cleanup:end')
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    runCh.subscribe(subscriber)
+
+    try {
+      const { Runner } = await import(pathToFileURL(outputPath))
+      const runner = new Runner()
+      runner.onEvent = event => steps.push(event)
+
+      assert.strictEqual(await runner.run({ watch: false }), 0)
+      assert.deepStrictEqual(steps, ['cleanup:start', 'cleanup:end', 'session:end'])
+    } finally {
+      runCh.unsubscribe(subscriber)
+    }
+  })
+
   it('waits for coordinator readiness before resolving JasmineAdapter.init', async () => {
     const source = fs.readFileSync(jasmineFixturePath, 'utf8')
     const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
@@ -1222,6 +1441,10 @@ describe('webdriverio instrumentation', () => {
 
       assert.strictEqual(plugin.testFramework, 'webdriverio')
       assert.strictEqual(plugin.testFrameworkAdapter, 'mocha')
+
+      const correlationContext = {}
+      channel('ci:webdriverio:rum:page-navigate').publish(correlationContext)
+      assert.strictEqual(correlationContext.isTestOptimizationRunner, true)
     } finally {
       plugin.configure(false)
     }
@@ -1413,7 +1636,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('starts native WebdriverIO retry spans after retry setup settles', async () => {
+  it('starts native WebdriverIO retry spans without stopping the active RUM session', async () => {
     const retryCh = channel('ci:mocha:test:retry')
     const { plugin, spans } = createJasminePlugin({})
     const file = path.join(process.cwd(), 'native-retry.spec.js')
@@ -1440,10 +1663,10 @@ describe('webdriverio instrumentation', () => {
       })
       executeAsyncContext.rumCleanupGenerator = function * () {
         yield undefined
-        return ['browser']
+        assert.fail('active RUM session was stopped before a native retry')
       }
-      executeAsyncContext.rumCorrelationGenerator = function * (browsers, testExecutionId) {
-        correlations.push({ browsers, spanCount: spans.length, testExecutionId })
+      executeAsyncContext.rumRetryGenerator = function * (testExecutionId) {
+        correlations.push({ spanCount: spans.length, testExecutionId })
         yield undefined
       }
 
@@ -1455,7 +1678,6 @@ describe('webdriverio instrumentation', () => {
 
       assert.strictEqual(spans.length, 2)
       assert.deepStrictEqual(correlations, [{
-        browsers: ['browser'],
         spanCount: 2,
         testExecutionId: '2',
       }])
@@ -1464,7 +1686,6 @@ describe('webdriverio instrumentation', () => {
       await runGenerator(executeAsyncContext.retryGenerator(new Error('immediate native retry failure')))
       assert.strictEqual(spans.length, 3)
       assert.deepStrictEqual(correlations[1], {
-        browsers: ['browser'],
         spanCount: 3,
         testExecutionId: '3',
       })

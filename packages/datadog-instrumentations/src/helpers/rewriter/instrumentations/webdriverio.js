@@ -61,6 +61,36 @@ module.exports = [
       filePath: 'build/index.js',
     },
     functionQuery: {
+      className: 'Runner',
+      methodName: 'run',
+      kind: 'Async',
+    },
+    channelName: 'Runner_run',
+  },
+  {
+    module: {
+      name: '@wdio/runner',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'VariableDeclarator[id.name="Runner"] > ClassExpression > ClassBody > ' +
+      'MethodDefinition[key.name="run"] IfStatement[test.operator="!"]' +
+      '[test.argument.object.name="args"][test.argument.property.name="watch"], ' +
+      'ClassDeclaration[id.name="Runner"] > ClassBody > MethodDefinition[key.name="run"] ' +
+      'IfStatement[test.operator="!"][test.argument.object.name="args"][test.argument.property.name="watch"]',
+    channelName: 'Runner_run',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumCleanupGenerator',
+    },
+  },
+  {
+    module: {
+      name: '@wdio/runner',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    functionQuery: {
       className: 'BaseReporter',
       methodName: 'waitForSync',
       kind: 'Async',
@@ -292,6 +322,19 @@ module.exports = [
       'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
     channelName: 'testFrameworkFnWrapper',
     transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression TryStatement',
+    channelName: 'testFrameworkFnWrapper',
+    transform: 'awaitContextCallbackAtStart',
+    transformOptions: {
+      callbackName: 'rumCleanupGenerator',
+    },
   },
   {
     module: {

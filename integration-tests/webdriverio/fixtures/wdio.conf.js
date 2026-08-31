@@ -225,6 +225,10 @@ const scenarioConfig = {
     maxInstances: 1,
     specs: ['./rum.e2e.js'],
   },
+  rumNoAfterEach: {
+    maxInstances: 1,
+    specs: ['./rum-no-after-each.e2e.js'],
+  },
   runnerEnvNodeOptions: {
     maxInstances: 1,
     runnerEnv: {

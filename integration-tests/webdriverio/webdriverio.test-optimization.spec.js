@@ -476,6 +476,28 @@ for (const version of versions) {
           })
         })
 
+        it('cleans RUM between tests without afterEach hooks', async () => {
+          await runScenario('rumNoAfterEach', 1, (payloads, requests) => {
+            const tests = getEvents(payloads)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+            const cookieRequests = requests.filter(({ url }) => url?.includes('/cookie'))
+
+            assert.deepStrictEqual(
+              cookieRequests.map(({ method }) => method),
+              ['POST', 'DELETE', 'POST', 'DELETE']
+            )
+            assert.deepStrictEqual(
+              cookieRequests.filter(({ method }) => method === 'POST').map(({ body }) => body.cookie.value),
+              tests.map(test => test.trace_id.toString(10))
+            )
+            assert.deepStrictEqual(
+              cookieRequests.filter(({ method }) => method === 'DELETE').map(({ pageUrl }) => pageUrl),
+              ['http://first.example.test/', 'http://second.example.test/']
+            )
+          })
+        })
+
         it('requests enabled data once and keeps TIA disabled across parallel workers', async () => {
           receiver.setSettings({
             code_coverage: true,
