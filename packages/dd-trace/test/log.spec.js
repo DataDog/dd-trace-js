@@ -28,11 +28,12 @@ describe('log', () => {
       const logWriter = {
         configure: sinon.spy(),
       }
+      const loadConfigHelper = proxyquire.noPreserveCache()
       const configHelper = isServerless
-        ? proxyquire.noPreserveCache()('../src/config/helper', {
+        ? loadConfigHelper('../src/config/helper', {
           '../serverless': { IS_SERVERLESS: true },
         })
-        : proxyquire.noPreserveCache()('../src/config/helper', {
+        : loadConfigHelper('../src/config/helper', {
           '../serverless': { IS_SERVERLESS: false },
           './stable': function StableConfigStub () {
             this.localEntries = localEntries
@@ -41,7 +42,8 @@ describe('log', () => {
           },
         })
 
-      const log = proxyquire.noPreserveCache()('../src/log', {
+      const loadLog = proxyquire.noPreserveCache()
+      const log = loadLog('../src/log', {
         '../config/helper': configHelper,
         './writer': logWriter,
       })
@@ -222,7 +224,8 @@ describe('log', () => {
         DD_TRACE_DEBUG: 'true',
         ...envEntries,
       }
-      log = proxyquire.noPreserveCache()('../src/log', {})
+      const loadLog = proxyquire.noPreserveCache()
+      log = loadLog('../src/log', {})
       log.configure(options)
       return log
     }
@@ -520,7 +523,8 @@ describe('log', () => {
       let logWriter
 
       beforeEach(() => {
-        logWriter = proxyquire.noPreserveCache()('../src/log/writer', {})
+        const loadWriter = proxyquire.noPreserveCache()
+        logWriter = loadWriter('../src/log/writer', {})
       })
 
       describe('error', () => {

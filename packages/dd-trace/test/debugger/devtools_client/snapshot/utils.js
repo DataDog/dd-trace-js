@@ -15,7 +15,8 @@ const session = require('./stub-session')
 const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
   '../session': session,
 })
-const redactionWithStub = proxyquire.noCallThru()('../../../../src/debugger/devtools_client/snapshot/redaction', {
+const loadRedaction = proxyquire.noCallThru()
+const redactionWithStub = loadRedaction('../../../../src/debugger/devtools_client/snapshot/redaction', {
   '../config': {
     dynamicInstrumentation: {
       redactedIdentifiers: [],
