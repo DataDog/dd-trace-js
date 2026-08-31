@@ -81,7 +81,7 @@ module.exports = [
     channelName: 'Runner_run',
     transform: 'awaitContextCallback',
     transformOptions: {
-      callbackName: 'rumCleanupGenerator',
+      callbackName: 'rumCleanupCallback',
     },
   },
   {
@@ -244,7 +244,7 @@ module.exports = [
     channelName: 'url',
     transform: 'awaitContextCallback',
     transformOptions: {
-      callbackName: 'rumPreloadGenerator',
+      callbackName: 'rumPreloadCallback',
       callbackThis: true,
     },
   },
@@ -285,7 +285,7 @@ module.exports = [
     channelName: 'url',
     transform: 'awaitContextCallback',
     transformOptions: {
-      callbackName: 'rumPreloadGenerator',
+      callbackName: 'rumPreloadCallback',
       callbackThis: true,
     },
   },
@@ -333,7 +333,7 @@ module.exports = [
     channelName: 'testFrameworkFnWrapper',
     transform: 'awaitContextCallbackAtStart',
     transformOptions: {
-      callbackName: 'rumCleanupGenerator',
+      callbackName: 'rumCleanupCallback',
     },
   },
   {
@@ -361,7 +361,7 @@ module.exports = [
     channelName: 'executeAsync',
     transform: 'awaitContextCallbackAtStart',
     transformOptions: {
-      callbackName: 'rumStartGenerator',
+      callbackName: 'rumStartCallback',
     },
   },
   {
@@ -378,7 +378,7 @@ module.exports = [
     transform: 'awaitContextCallback',
     transformOptions: {
       callbackArgumentNames: ['err'],
-      callbackName: 'retryGenerator',
+      callbackName: 'retryCallback',
     },
   },
   {

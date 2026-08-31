@@ -90,13 +90,6 @@ const WEBDRIVERIO_JASMINE_FAILED_EXPECTATION_COUNT = Symbol('webdriverioJasmineF
 const WEBDRIVERIO_JASMINE_FUNCTION_TYPE = Symbol('webdriverioJasmineFunctionType')
 const WEBDRIVERIO_JASMINE_TEST = Symbol('webdriverioJasmineTest')
 
-/** @typedef {{done: boolean, value?: unknown}} RumGeneratorStep */
-/**
- * @typedef {object} RumGenerator
- * @property {(value?: unknown) => RumGeneratorStep} next
- * @property {(error: unknown) => RumGeneratorStep} throw
- */
-
 /**
  * @typedef {object} WebdriverioJasmineResult
  * @property {string|undefined} id
@@ -246,7 +239,7 @@ class MochaPlugin extends CiPlugin {
 
       const functionType = currentStore[WEBDRIVERIO_JASMINE_FUNCTION_TYPE]
       if (functionType === 'Test') {
-        ctx.retryGenerator = this.#retryWebdriverioJasmineTestWithRumCorrelation.bind(this, ctx, test)
+        ctx.retryCallback = this.#retryWebdriverioJasmineTestWithRumCorrelation.bind(this, ctx, test)
       }
       const nextStore = {
         ...test.currentStore,
@@ -1159,21 +1152,17 @@ class MochaPlugin extends CiPlugin {
    * @param {object} context
    * @param {object} test
    * @param {Error|undefined} error
-   * @yields {unknown} RUM cleanup or retry setup operation.
-   * @returns {RumGenerator}
+   * @returns {Promise<void>}
    */
-  * #retryWebdriverioJasmineTestWithRumCorrelation (context, test, error) {
-    yield this.#retryWebdriverioJasmineTest(test, error)
+  async #retryWebdriverioJasmineTestWithRumCorrelation (context, test, error) {
+    await this.#retryWebdriverioJasmineTest(test, error)
 
     const correlationContext = {
       isRumActive: true,
       testExecutionId: undefined,
     }
     setRumTestCorrelation(correlationContext, test.span)
-    const correlation = context.rumRetryGenerator?.(correlationContext.testExecutionId)
-    if (correlation) {
-      yield * correlation
-    }
+    await context.rumRetryCallback?.(correlationContext.testExecutionId)
   }
 
   /**
