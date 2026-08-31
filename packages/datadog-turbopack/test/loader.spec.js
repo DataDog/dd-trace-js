@@ -11,10 +11,10 @@ const { afterEach, describe, it } = require('mocha')
 const dc = require('dc-polyfill')
 const enhancedResolve = require('enhanced-resolve')
 const { ESLint } = require('eslint')
+const { engines: eslintEngines } = require('eslint/package.json')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const { engines, nodeMaxMajor } = require('../../../package.json')
 const { withDatadogTurbopack } = require('../../../next')
 const loader = require('../src/loader')
 const {
@@ -26,7 +26,7 @@ const {
 } = require('./helpers')
 
 const CHANNEL = 'dd-trace:bundler:load'
-const lintRuntimeSupported = semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
+const lintRuntimeSupported = semver.satisfies(process.version, eslintEngines.node)
 
 afterEach(() => {
   cleanup()
