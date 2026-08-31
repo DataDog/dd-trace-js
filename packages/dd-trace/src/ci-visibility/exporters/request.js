@@ -272,11 +272,19 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
       lastError = error
 
       const responseStatus = statusCode ?? error.status
-      const isRetriableError = isRetriableNetworkError(error) || isRetriableHttpStatusCode(responseStatus)
+      const isUnknownNetworkError = responseStatus === undefined && error.code === undefined
+      const isRetriableError =
+        isRetriableNetworkError(error) || isUnknownNetworkError || isRetriableHttpStatusCode(responseStatus)
       const deadlineExtended = options.deadline !== undefined &&
         (attemptDeadline === undefined || options.deadline > attemptDeadline)
       const reachedAttemptLimit = attemptIndex >= getMaxAttempts(attemptOptions) && !deadlineExtended
-      if (options.retry === false || !isRetriableError || reachedAttemptLimit) {
+      const reachedUnknownNetworkAttemptLimit = isUnknownNetworkError && attemptIndex >= 2
+      if (
+        options.retry === false ||
+        !isRetriableError ||
+        reachedAttemptLimit ||
+        reachedUnknownNetworkAttemptLimit
+      ) {
         complete(error, result, statusCode, headers)
         return
       }

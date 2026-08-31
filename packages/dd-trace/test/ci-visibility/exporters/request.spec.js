@@ -253,6 +253,47 @@ describe('Test Optimization exporter request', () => {
     assert.strictEqual(pendingRequests.length, 2)
   })
 
+  it('retries an unknown network error once', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+
+    pendingRequests[0].callback(new Error('network failure'))
+    clock.tick(6000)
+
+    assert.strictEqual(pendingRequests.length, 2)
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('does not extend the unknown network retry budget during finalization', () => {
+    const done = sinon.spy()
+    const options = { deadline: Date.now() + 1000, timeout: 2000 }
+    request('payload', options, done)
+    const firstError = new Error('first network failure')
+    const secondError = new Error('second network failure')
+
+    pendingRequests[0].callback(firstError)
+    clock.tick(500)
+    options.deadline = Date.now() + 2000
+    pendingRequests[1].callback(secondError)
+    clock.tick(1000)
+
+    assert.strictEqual(pendingRequests.length, 2)
+    sinon.assert.calledOnceWithExactly(done, secondError, undefined, undefined, undefined)
+  })
+
+  it('does not retry a coded non-transient network error', () => {
+    const done = sinon.spy()
+    request('payload', {}, done)
+    const error = Object.assign(new Error('unknown host'), { code: 'ENOTFOUND' })
+
+    pendingRequests[0].callback(error)
+    clock.tick(6000)
+
+    assert.strictEqual(pendingRequests.length, 1)
+    sinon.assert.calledOnceWithExactly(done, error, undefined, undefined, undefined)
+  })
+
   it('aborts a scheduled retry and completes once', () => {
     const controller = new AbortController()
     const done = sinon.spy()
