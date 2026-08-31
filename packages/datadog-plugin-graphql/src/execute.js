@@ -840,15 +840,6 @@ function resolveJitDefault (rootCtx, descriptorId, source, path) {
 }
 
 /**
- * @param {Record<string, unknown>} source
- * @param {string} fieldName
- * @returns {unknown}
- */
-function readJitDefault (source, fieldName) {
-  return source[fieldName]
-}
-
-/**
  * @param {object} rootCtx
  * @param {number} descriptorId
  * @param {Record<string, unknown>} source
@@ -862,7 +853,10 @@ function readJitDefaultInScope (rootCtx, descriptorId, source, path) {
     : rootCtx.jitFieldsByPath?.get(`${descriptorId}:${path.join('.')}`)
   if (!field) return source[descriptor.fieldName]
 
-  return legacyStorage.run(field.currentStore, readJitDefault, source, descriptor.fieldName)
+  if (legacyStorage.getStore() !== field.currentStore) {
+    legacyStorage.enterWith(field.currentStore)
+  }
+  return source[descriptor.fieldName]
 }
 
 /**
@@ -916,7 +910,7 @@ function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path, argum
   if (field === undefined) {
     return resolveJitDefault(rootCtx, descriptorId, source, path)
   }
-  return source[descriptor.fieldName]
+  return readJitDefaultInScope(rootCtx, descriptorId, source, path)
 }
 
 /**

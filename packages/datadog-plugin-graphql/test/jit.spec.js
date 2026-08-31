@@ -1059,7 +1059,7 @@ describe('Plugin', () => {
         assert.deepStrictEqual(result.data, firstResult.data)
       })
 
-      it('reuses collapsed default field scope across list items', async () => {
+      it('reuses collapsed default field scope regardless of resolver subscribers', async () => {
         const tracer = require('../../dd-trace')
         const Item = new graphql.GraphQLObjectType({
           name: 'CollapsedDefaultItem',
@@ -1092,25 +1092,43 @@ describe('Plugin', () => {
           defaultSchema,
           graphql.parse('query CollapsedDefault { items { value } }')
         )
+        const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
 
-        const result = await executeWithTrace(() => query({}, {}, {}), /CollapsedDefault/, traces => {
-          const spans = traces[0].filter(span => span.name === 'graphql.resolve')
-          const value = spans.find(span => span.meta['graphql.field.name'] === 'value')
-          const userSpans = traces[0].filter(span => span.name === 'user.work')
-          assert.ok(value, 'expected collapsed value span')
-          assert.strictEqual(userSpans.length, getterCalls)
+        for (const withResolverSubscriber of [false, true]) {
+          getterCalls = 0
+          if (withResolverSubscriber) resolverStartChannel.subscribe(noop)
+          try {
+            const result = await executeWithTrace(() => tracer.trace('outer', () => {
+              const result = query({}, {}, {})
+              tracer.trace('after', () => {})
+              return result
+            }), /CollapsedDefault/, traces => {
+              const spans = traces[0].filter(span => span.name === 'graphql.resolve')
+              const value = spans.find(span => span.meta['graphql.field.name'] === 'value')
+              const userSpans = traces[0].filter(span => span.name === 'user.work')
+              const outer = traces[0].find(span => span.name === 'outer')
+              const after = traces[0].find(span => span.name === 'after')
+              assert.ok(value, 'expected collapsed value span')
+              assert.ok(outer)
+              assert.ok(after)
+              assert.strictEqual(after.parent_id.toString(), outer.span_id.toString())
+              assert.strictEqual(userSpans.length, getterCalls)
 
-          for (const userSpan of userSpans) {
-            assert.strictEqual(userSpan.parent_id.toString(), value.span_id.toString())
+              for (const userSpan of userSpans) {
+                assert.strictEqual(userSpan.parent_id.toString(), value.span_id.toString())
+              }
+            })
+            assert.deepStrictEqual(result.data, {
+              items: [
+                { value: 'one' },
+                { value: 'two' },
+                { value: 'three' },
+              ],
+            })
+          } finally {
+            if (withResolverSubscriber) resolverStartChannel.unsubscribe(noop)
           }
-        })
-        assert.deepStrictEqual(result.data, {
-          items: [
-            { value: 'one' },
-            { value: 'two' },
-            { value: 'three' },
-          ],
-        })
+        }
       })
 
       it('keeps uncollapsed list fields distinct and correctly parented', async () => {
