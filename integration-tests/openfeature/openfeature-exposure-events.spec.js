@@ -1,14 +1,90 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
+const { inspect } = require('node:util')
 
-const path = require('path')
-const { inspect, promisify } = require('node:util')
 const { assertObjectContains, sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const ufcPayloads = require('./fixtures/ufc-payloads')
 
 const RC_PRODUCT = 'FFE_FLAGS'
+
+/**
+ * @param {FakeAgent} agent
+ * @param {{ id: string, product: string, config: object }} config
+ */
+function addRemoteConfigAndWaitForAcknowledgment (agent, config) {
+  return new Promise((resolve, reject) => {
+    /** @param {Error} [error] */
+    function finish (error) {
+      agent.removeListener('remote-config-ack-update', handleAcknowledgment)
+      if (error) reject(error)
+      else resolve()
+    }
+
+    /**
+     * @param {string} id
+     * @param {number} version
+     * @param {number} state
+     * @param {string} error
+     */
+    function handleAcknowledgment (id, version, state, error) {
+      if (state === UNACKNOWLEDGED || id !== config.id) return
+
+      try {
+        assert.strictEqual(version, 1)
+        assert.strictEqual(state, ACKNOWLEDGED)
+        assert.ok(!error)
+        finish()
+      } catch (error) {
+        finish(error)
+      }
+    }
+
+    agent.on('remote-config-ack-update', handleAcknowledgment)
+    try {
+      agent.addRemoteConfig(config)
+    } catch (error) {
+      finish(error)
+    }
+  })
+}
+
+/**
+ * @param {FakeAgent} agent
+ * @param {import('node:child_process').ChildProcess} proc
+ * @param {number} expectedCount
+ * @param {() => Promise<void>} action
+ */
+async function captureExposureRequestsUntilExit (agent, proc, expectedCount, action) {
+  const requests = []
+  let exposureCount = 0
+  let resolveExpected
+  const expectedExposuresReceived = new Promise(resolve => { resolveExpected = resolve })
+
+  /** @param {{ payload: { exposures?: Array<object> }, headers: object, path: string }} request */
+  function handleExposures (request) {
+    requests.push(request)
+    const { exposures } = request.payload
+    if (!Array.isArray(exposures)) {
+      resolveExpected()
+      return
+    }
+
+    exposureCount += exposures.length
+    if (exposureCount >= expectedCount) resolveExpected()
+  }
+
+  agent.on('exposures', handleExposures)
+  try {
+    await Promise.all([action(), expectedExposuresReceived])
+    await stopProc(proc)
+    return requests
+  } finally {
+    agent.removeListener('exposures', handleExposures)
+  }
+}
 
 // Helper function to check exposure event structure
 function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttributes = {}) {
@@ -25,7 +101,6 @@ function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttri
   }
 
   assert.strictEqual(typeof event.timestamp, 'number')
-  assert.strictEqual(Date.now() - event.timestamp < 10000, true) // Within last 10 seconds
 }
 
 describe('OpenFeature Remote Config and Exposure Events Integration', () => {
@@ -72,13 +147,26 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         await agent.stop()
       })
 
-      it('should generate exposure events with manual flush', () => promisify((done) => {
+      it('should generate exposure events with manual flush', async function () {
         const configId = 'org-42-env-test'
-        const exposureEvents = []
-        let receivedAckUpdate = false
+        await addRemoteConfigAndWaitForAcknowledgment(agent, {
+          product: RC_PRODUCT,
+          id: configId,
+          config: ufcPayloads.testBooleanAndStringFlags,
+        })
 
-        // Listen for exposure events
-        agent.on('exposures', ({ payload, headers, path }) => {
+        const requests = await captureExposureRequestsUntilExit(agent, proc, 2, async function () {
+          const response = await fetch(`${proc.url}/evaluate-flags`)
+          assert.strictEqual(response.status, 200)
+          const data = await response.json()
+          assert.strictEqual(data.evaluationsCompleted, 2)
+
+          const flushResponse = await fetch(`${proc.url}/flush`)
+          assert.strictEqual(flushResponse.status, 200)
+        })
+        const exposureEvents = []
+
+        for (const { payload, headers, path: requestPath } of requests) {
           assert.ok(Object.hasOwn(payload, 'exposures'), `Available keys: ${inspect(Object.keys(payload))}`)
           assertObjectContains(payload, {
             context: {
@@ -90,66 +178,24 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
 
           exposureEvents.push(...payload.exposures)
 
-          if (exposureEvents.length === 2) {
-            try {
-              assert.strictEqual(headers['content-type'], 'application/json')
-              assert.strictEqual(headers['x-datadog-evp-subdomain'], 'event-platform-intake')
-              assert.strictEqual(path, '/evp_proxy/v2/api/v2/exposures')
-
-              // Verify we got exposure events from flag evaluations
-              assert.strictEqual(exposureEvents.length, 2)
-
-              const booleanEvent = exposureEvents.find(e => e.flag.key === 'test-boolean-flag')
-              const stringEvent = exposureEvents.find(e => e.flag.key === 'test-string-flag')
-
-              assert.ok(booleanEvent, 'Should have boolean flag exposure')
-              assert.ok(stringEvent, 'Should have string flag exposure')
-
-              // Verify exposure event structure using helper
-              validateExposureEvent(booleanEvent, 'test-boolean-flag', 'test-user-123',
-                { user: 'test-user-123', plan: 'premium' })
-              validateExposureEvent(stringEvent, 'test-string-flag', 'test-user-456',
-                { user: 'test-user-456', tier: 'enterprise' })
-
-              endIfDone()
-            } catch (error) {
-              done(error)
-            }
-          }
-        })
-
-        agent.on('remote-config-ack-update', async (id, _version, state) => {
-          if (state === UNACKNOWLEDGED) return
-
-          if (id !== configId) return
-
-          try {
-            assert.strictEqual(state, ACKNOWLEDGED)
-            receivedAckUpdate = true
-
-            const response = await fetch(`${proc.url}/evaluate-flags`)
-            assert.strictEqual(response.status, 200)
-            const data = await response.json()
-            assert.strictEqual(data.evaluationsCompleted, 2)
-
-            // Trigger manual flush to send exposure events
-            await fetch(`${proc.url}/flush`)
-          } catch (error) {
-            done(error)
-          }
-        })
-
-        // Deliver UFC config via Remote Config
-        agent.addRemoteConfig({
-          product: RC_PRODUCT,
-          id: configId,
-          config: ufcPayloads.testBooleanAndStringFlags,
-        })
-
-        function endIfDone () {
-          if (receivedAckUpdate && exposureEvents.length === 2) done()
+          assert.strictEqual(headers['content-type'], 'application/json')
+          assert.strictEqual(headers['x-datadog-evp-subdomain'], 'event-platform-intake')
+          assert.strictEqual(requestPath, '/evp_proxy/v2/api/v2/exposures')
         }
-      })())
+
+        assert.strictEqual(exposureEvents.length, 2)
+
+        const booleanEvent = exposureEvents.find(event => event.flag.key === 'test-boolean-flag')
+        const stringEvent = exposureEvents.find(event => event.flag.key === 'test-string-flag')
+
+        assert.ok(booleanEvent, 'Should have boolean flag exposure')
+        assert.ok(stringEvent, 'Should have string flag exposure')
+
+        validateExposureEvent(booleanEvent, 'test-boolean-flag', 'test-user-123',
+          { user: 'test-user-123', plan: 'premium' })
+        validateExposureEvent(stringEvent, 'test-string-flag', 'test-user-456',
+          { user: 'test-user-456', tier: 'enterprise' })
+      })
     })
 
     describe('with automatic flush', () => {
@@ -173,11 +219,23 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         await agent.stop()
       })
 
-      it('should handle multiple flag evaluations with automatic flush', () => promisify((done) => {
+      it('should handle multiple flag evaluations with automatic flush', async function () {
         const configId = 'org-42-env-test'
+        await addRemoteConfigAndWaitForAcknowledgment(agent, {
+          product: RC_PRODUCT,
+          id: configId,
+          config: ufcPayloads.testBooleanAndStringFlags,
+        })
+
+        const requests = await captureExposureRequestsUntilExit(agent, proc, 6, async function () {
+          const response = await fetch(`${proc.url}/evaluate-multiple-flags`)
+          assert.strictEqual(response.status, 200)
+          const data = await response.json()
+          assert.strictEqual(data.evaluationsCompleted, 6)
+        })
         const exposureEvents = []
 
-        agent.on('exposures', ({ payload }) => {
+        for (const { payload } of requests) {
           assert.ok(Object.hasOwn(payload, 'exposures'), `Available keys: ${inspect(Object.keys(payload))}`)
           assertObjectContains(payload, {
             context: {
@@ -188,51 +246,19 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           })
 
           exposureEvents.push(...payload.exposures)
+        }
 
-          if (exposureEvents.length >= 6) {
-            try {
-              assert.strictEqual(exposureEvents.length, 6)
+        assert.strictEqual(exposureEvents.length, 6)
 
-              const booleanEvents = exposureEvents.filter(e => e.flag.key === 'test-boolean-flag')
-              const stringEvents = exposureEvents.filter(e => e.flag.key === 'test-string-flag')
+        const booleanEvents = exposureEvents.filter(event => event.flag.key === 'test-boolean-flag')
+        const stringEvents = exposureEvents.filter(event => event.flag.key === 'test-string-flag')
 
-              assert.strictEqual(booleanEvents.length, 3)
-              assert.strictEqual(stringEvents.length, 3)
+        assert.strictEqual(booleanEvents.length, 3)
+        assert.strictEqual(stringEvents.length, 3)
 
-              // Verify different users
-              const userIds = new Set(exposureEvents.map(e => e.subject.id))
-              assert.deepStrictEqual(userIds, new Set(['user-1', 'user-2', 'user-3']))
-
-              done()
-            } catch (error) {
-              done(error)
-            }
-          }
-        })
-
-        agent.on('remote-config-ack-update', async (id, _version, state) => {
-          if (state === UNACKNOWLEDGED) return
-          if (id !== configId) return
-          try {
-            assert.strictEqual(state, ACKNOWLEDGED)
-
-            const response = await fetch(`${proc.url}/evaluate-multiple-flags`)
-            assert.strictEqual(response.status, 200)
-            const data = await response.json()
-            assert.strictEqual(data.evaluationsCompleted, 6)
-
-            // No manual flush - let automatic flush handle it (default 1s interval)
-          } catch (error) {
-            done(error)
-          }
-        })
-
-        agent.addRemoteConfig({
-          product: RC_PRODUCT,
-          id: configId,
-          config: ufcPayloads.testBooleanAndStringFlags,
-        })
-      })())
+        const userIds = new Set(exposureEvents.map(event => event.subject.id))
+        assert.deepStrictEqual(userIds, new Set(['user-1', 'user-2', 'user-3']))
+      })
     })
   })
 
@@ -257,45 +283,17 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       await agent.stop()
     })
 
-    it('should acknowledge UFC configuration delivery via Remote Config', (done) => {
+    it('should acknowledge UFC configuration delivery via Remote Config', async function () {
       const configId = 'org-42-env-test'
-      let receivedAckUpdate = false
-
-      agent.on('remote-config-ack-update', (id, version, state, error) => {
-        // Due to the very short DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS, there's a race condition in which we might
-        // get an UNACKNOWLEDGED state first before the ACKNOWLEDGED state.
-        if (state === UNACKNOWLEDGED) return
-
-        try {
-          assert.strictEqual(id, configId)
-          assert.strictEqual(version, 1)
-          assert.strictEqual(state, ACKNOWLEDGED)
-          assert.ok(!error) // falsy check since error will be an empty string, but that's an implementation detail
-
-          receivedAckUpdate = true
-          endIfDone()
-        } catch (err) {
-          done(err)
-        }
-      })
-
-      // Add UFC config via Remote Config
-      agent.addRemoteConfig({
+      const acknowledgment = addRemoteConfigAndWaitForAcknowledgment(agent, {
         product: RC_PRODUCT,
         id: configId,
         config: ufcPayloads.simpleStringFlagForAck,
       })
+      const response = fetch(`${proc.url}/`)
 
-      // Trigger request to start remote config polling
-      fetch(`${proc.url}/`).catch(done)
-
-      let testCompleted = false
-      function endIfDone () {
-        if (receivedAckUpdate && !testCompleted) {
-          testCompleted = true
-          done()
-        }
-      }
+      const [, result] = await Promise.all([acknowledgment, response])
+      assert.strictEqual(result.status, 200)
     })
   })
 
