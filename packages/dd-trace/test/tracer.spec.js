@@ -560,4 +560,21 @@ describe('Tracer', () => {
         'expected service discovery warning to be emitted at log level warn')
     })
   })
+
+  describe('MicroVM service discovery metadata', () => {
+    it('should defer storing metadata while a MicroVM image is being built', () => {
+      const storeConfig = sinon.stub()
+      const PatchedTracer = proxyquire('../src/tracer', {
+        './serverless': {
+          IS_SERVERLESS: true,
+        },
+        './tracer_metadata': storeConfig,
+      })
+
+      // eslint-disable-next-line no-new
+      new PatchedTracer(getConfig({ service: 'service' }))
+
+      sinon.assert.notCalled(storeConfig)
+    })
+  })
 })
