@@ -6,6 +6,13 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 The module exported by this library is an instance of the [Tracer](./interfaces/tracer.html) class.
 
+<h2 id="agentless-mode">Agentless mode</h2>
+
+Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog without a local Agent.
+Agentless mode disables features that require an Agent.
+
+Set the API key with `DD_API_KEY` or `DATADOG_API_KEY`.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:

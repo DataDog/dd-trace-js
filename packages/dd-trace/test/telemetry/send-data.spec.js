@@ -309,6 +309,30 @@ describe('sendData', () => {
     assert.strictEqual(backendOptions.headers['DD-API-KEY'], 'secret-key')
   })
 
+  it('restores Agent telemetry mode after the Agent recovers', () => {
+    const log = {
+      info: sinon.stub(),
+      warn: sinon.stub(),
+    }
+    request.onFirstCall().yields(new Error('agent unreachable'))
+    request.onThirdCall().yields()
+    sendDataModule = proxyquire('../../src/telemetry/send-data', {
+      '../exporters/common/request': request,
+      '../log': log,
+    })
+    const config = {
+      DD_API_KEY: 'secret-key',
+      site: 'datadoghq.eu',
+      tags: { 'runtime-id': '123' },
+    }
+
+    sendDataModule.sendData(config, application, host, 'req-type')
+    sendDataModule.sendData(config, application, host, 'req-type')
+
+    sinon.assert.calledOnceWithExactly(log.warn, 'Agent telemetry failed, started agentless telemetry')
+    sinon.assert.calledOnceWithExactly(log.info, 'Started agent telemetry')
+  })
+
   it('skips the agentless backend request when the endpoint URL is invalid', () => {
     request.yields(new Error('agent unreachable'))
 

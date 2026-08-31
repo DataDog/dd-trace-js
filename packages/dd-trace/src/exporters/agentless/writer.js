@@ -22,7 +22,8 @@ class AgentlessWriter extends BaseWriter {
   #apiKeyMissing = false
   #exporter
   #exporterApiKey
-  #exporterEndpoint
+  #exporterEnv
+  #exporterRuntimeId
   #metadata
   #urlMissing = false
 
@@ -40,11 +41,11 @@ class AgentlessWriter extends BaseWriter {
     if (!url) {
       try {
         this._url = new URL(computeIntakeUrl(site))
-      } catch (err) {
+      } catch (error) {
         log.error(
           'Invalid site value for agentless intake: %s. Cannot construct URL. Error: %s',
           site,
-          err.message
+          error.message
         )
         this._url = undefined
       }
@@ -58,7 +59,6 @@ class AgentlessWriter extends BaseWriter {
 
   /**
    * @param {URL} url - The new intake URL.
-   * @returns {void}
    */
   setUrl (url) {
     super.setUrl(url)
@@ -71,8 +71,7 @@ class AgentlessWriter extends BaseWriter {
   /**
    * @param {Buffer} data - v0.4 MessagePack payload.
    * @param {number} count - Number of traces in the payload.
-   * @param {Function} done - Callback invoked after delivery completes or fails.
-   * @returns {void}
+   * @param {() => void} done - Callback invoked after delivery completes or fails.
    */
   _sendPayload (data, count, done) {
     if (!this._url) {
@@ -97,12 +96,10 @@ class AgentlessWriter extends BaseWriter {
     }
     this.#apiKeyMissing = false
 
-    const endpoint = this.#endpoint()
-    const exporter = this.#getExporter(endpoint, DD_API_KEY)
-    // The WASM fallback performs its HTTP request in JavaScript. Keep that
+    // The WASM transport performs its HTTP request in JavaScript. Keep that
     // internal request out of the instrumented application's traces.
-    legacyStorage.run({ noop: true }, () => exporter.sendV04(data)).then(
-      () => done(),
+    legacyStorage.run({ noop: true }, () => this.#getExporter(DD_API_KEY).sendV04(data)).then(
+      done,
       error => {
         log.error('Failed to send %d trace(s) to the agentless intake: %s', count, error.message)
         done()
@@ -122,43 +119,50 @@ class AgentlessWriter extends BaseWriter {
   }
 
   /**
-   * @param {string} endpoint - The full agentless intake endpoint.
    * @param {string} apiKey - Datadog API key.
-   * @returns {{ sendV04(data: Buffer): Promise<void>, close(): void }} The configured data pipeline exporter.
+   * @returns {import('@datadog/libdatadog').AgentlessExporter}
    */
-  #getExporter (endpoint, apiKey) {
-    if (this.#exporter && this.#exporterEndpoint === endpoint && this.#exporterApiKey === apiKey) {
+  #getExporter (apiKey) {
+    const { env, runtimeID } = this.#metadata
+    if (
+      this.#exporter &&
+      this.#exporterApiKey === apiKey &&
+      this.#exporterEnv === env &&
+      this.#exporterRuntimeId === runtimeID
+    ) {
       return this.#exporter
     }
 
     this.#closeExporter()
     const config = getConfig()
     this.#exporter = createAgentlessExporter({
-      endpoint,
+      endpoint: this.#endpoint(),
       apiKey,
       hostname: this.#metadata.hostname,
-      env: this.#metadata.env,
+      env,
       service: config.service,
       version: config.version,
-      runtimeId: this.#metadata.runtimeID,
+      runtimeId: runtimeID,
       containerId: this.#metadata.containerId,
       tracerVersion,
       languageVersion: process.version,
       languageInterpreter: process.versions.bun ? 'JavaScriptCore' : 'v8',
     })
     this.#exporterApiKey = apiKey
-    this.#exporterEndpoint = endpoint
+    this.#exporterEnv = env
+    this.#exporterRuntimeId = runtimeID
     return this.#exporter
   }
 
-  /**
-   * @returns {void}
-   */
   #closeExporter () {
-    this.#exporter?.close()
+    const closePromise = this.#exporter?.close()
+    closePromise?.catch(error => {
+      log.error('Failed to close the agentless exporter: %s', error.message)
+    })
     this.#exporter = undefined
     this.#exporterApiKey = undefined
-    this.#exporterEndpoint = undefined
+    this.#exporterEnv = undefined
+    this.#exporterRuntimeId = undefined
   }
 }
 
