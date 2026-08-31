@@ -1,0 +1,247 @@
+name: dd-apm-sdk-review
+version: "0.1"
+
+cases:
+  - id: js-perf-lens-ungated-publish-001
+    files:
+      - .agents/skills/dd-apm-sdk-review/reviewers/performance.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
+      - dd-apm-sdk-review-overrides/reviewers/performance.md
+    input: |
+      Apply this repo's performance-review criteria (reviewers/performance.md, its
+      dd-apm-sdk-review-overrides/reviewers/performance.md override, and _common.md) to the
+      following instrumentation wrapper. No git checkout available — this snippet is the
+      entire change to review.
+
+      ```js
+      const sessions = new Map()
+
+      function onRequestStart (req) {
+        sessions.set(req.headers['x-request-id'], req)
+        channel.publish({ req })
+      }
+      ```
+    expected_criteria:
+      - Flags `channel.publish({ req })` as not gated on `channel.hasSubscribers` — this
+        repo's performance override states explicitly that publish calls on instrumentation
+        wrappers must be gated, since the wrapper body runs on every library call.
+      - Also flags, independently or as part of the same finding, that `sessions` is an
+        unbounded Map keyed by a high-cardinality value (the `x-request-id` header) — the
+        language-agnostic universal check number 3 (unbounded memory/collection), mapped to
+        P0 or P1 per the core performance.md's SEV-to-P mapping section, not left as a bare
+        SEV-1 label.
+      - Names the concrete fixes — gate the publish call on `channel.hasSubscribers`, and
+        bound the map (by count and bytes, or don't key it by request id at all).
+    bad_signals:
+      - Treats the ungated `channel.publish` call as a style nit rather than a hot-path
+        cost concern (it runs on every request, per the override's "Hot paths" section).
+      - Misses the unbounded / high-cardinality Map entirely.
+      - Invents a Datadog-internal collection/utility type that doesn't exist in this
+        repo's real toolkit (e.g. a fictitious `BoundedMap` helper).
+
+  - id: js-perf-pipeline-full-review-002
+    files:
+      - .agents/skills/dd-apm-sdk-review/SKILL.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/report-template.md
+    input: |
+      Run dd-apm-sdk-review on the following change. There is no git repository to
+      inspect — this diff is the entire change set; do not attempt any git commands, go
+      straight to running the reviewers on the pasted content below.
+
+      ```diff
+      diff --git a/packages/datadog-instrumentations/src/example-lib.js b/packages/datadog-instrumentations/src/example-lib.js
+      index 1111111..2222222 100644
+      --- a/packages/datadog-instrumentations/src/example-lib.js
+      +++ b/packages/datadog-instrumentations/src/example-lib.js
+      @@ -10,6 +10,11 @@ addHook({ name: 'example-lib', versions: ['>=1'] }, (exampleLib) => {
+      -    return handle.apply(this, arguments)
+      +    sessions.set(req.headers['x-request-id'], req)
+      +    channel.publish({ req })
+      +    return handle.apply(this, arguments)
+      +
+      +  const sessions = new Map()
+      ```
+    expected_criteria:
+      - The report's Mode line states pasted diff / no git (e.g. "pasted diff, no git").
+      - Includes a "Rule files used" section listing which reviewer files were used, per
+        report-template.md.
+      - Raises a performance finding on the ungated `channel.publish` call and/or the
+        unbounded `sessions` Map keyed by `x-request-id`, classified under the report's
+        P0/P1/P2 sections, not the performance lens's internal SEV vocabulary.
+      - States an explicit verdict line (BLOCK / APPROVE_WITH_COMMENTS / APPROVE) and a
+        final READY TO PUSH / DO NOT PUSH statement.
+    bad_signals:
+      - Attempts to run git commands despite the change set being pasted inline.
+      - Skips straight to a verdict with no per-lens findings or "Rule files used" section.
+      - Reports SEV-1 / SEV-2 labels in the final report without resolving them to
+        P0/P1/P2.
+
+  - id: js-coherence-comment-contradicts-code-003
+    files: [.agents/skills/dd-apm-sdk-review/reviewers/coherence.md]
+    input: |
+      Apply this repo's coherence-review criteria (reviewers/coherence.md and _common.md) to
+      the following code. No git checkout available — this snippet is the entire change to
+      review.
+
+      ```js
+      // Retries the request up to 3 times with exponential backoff before giving up.
+      function sendWithRetry (req) {
+        return send(req)
+      }
+      ```
+    expected_criteria:
+      - Names both sides of the contradiction — the comment claims retry-with-backoff
+        behavior, but `sendWithRetry` calls `send` exactly once and never retries.
+      - Anchors the finding to the function/comment, not a vague "misleading comment" note
+        with no location.
+      - Classifies the finding under this skill's P0/P1/P2 scale rather than leaving it
+        unclassified.
+    bad_signals:
+      - Treats this as a naming/style nit instead of naming the comment-vs-code
+        contradiction.
+      - Claims the code retries when it does not.
+      - Reviews performance or design concerns instead of the coherence contradiction.
+
+  - id: js-security-secret-into-log-004
+    files:
+      - .agents/skills/dd-apm-sdk-review/reviewers/security.md
+      - dd-apm-sdk-review-overrides/reviewers/security.md
+    input: |
+      Apply this repo's security-review criteria (reviewers/security.md, its
+      dd-apm-sdk-review-overrides/reviewers/security.md override, and _common.md) to the
+      following code. No git checkout available — this snippet is the entire change to
+      review. `config.dsn` is a full connection string with an embedded username and
+      password, e.g. `amqp://user:password@host:5672`.
+
+      ```js
+      function onConnect (config) {
+        log.debug('connecting with config %j', config)
+      }
+      ```
+    expected_criteria:
+      - Flags `log.debug('connecting with config %j', config)` as logging a config object
+        that contains credentials (the DSN's embedded username/password) — this repo's
+        security override and the generic security.md both call out config values that may
+        contain secrets (API keys, DSNs, passwords in URLs).
+      - States the failure mode — the credential ends up in logs, a customer-visible or
+        persisted place, not just a style complaint.
+      - Classifies the finding at a severity consistent with _common.md's P0 bar for a
+        security/privacy defect, or explicitly justifies a lower severity — does not leave
+        it unclassified or downgrade it to a bare style nit.
+      - Treats this finding as needing private routing per this repo's disclosure rule,
+        rather than proposing it be pasted verbatim into a wide-audience PR description.
+    bad_signals:
+      - Misses the logged secret entirely (e.g., only comments on log level or format
+        string style).
+      - Reports this only as a P2 style issue.
+      - Suggests pasting the finding's detail directly into a public PR description.
+
+  - id: js-design-bypasses-config-registration-005
+    files:
+      - .agents/skills/dd-apm-sdk-review/reviewers/design.md
+      - dd-apm-sdk-review-overrides/reviewers/design.md
+    input: |
+      Apply this repo's design-review criteria (reviewers/design.md, its
+      dd-apm-sdk-review-overrides/reviewers/design.md override, and _common.md) to the
+      following code. No git checkout available — this snippet is the entire change to
+      review.
+
+      ```js
+      function isExtraSlowModeEnabled () {
+        return process.env.DD_TRACE_EXTRA_SLOW_MODE === 'true'
+      }
+      ```
+    expected_criteria:
+      - Flags the direct `process.env.DD_TRACE_EXTRA_SLOW_MODE` read as bypassing this
+        repo's config registration path (defaults, `#applyEnvironment()`,
+        `supported-configurations.json`, telemetry), per design.md's "Configuration
+        surface" check and AGENTS.md's "Adding New Configuration Options" checklist.
+      - Names the concrete consequence — precedence (programmatic config vs env var vs
+        remote config vs default), validation, and telemetry are all skipped by a direct
+        env read.
+      - Classifies the finding as at least P1 rather than approving the snippet as-is.
+    bad_signals:
+      - Approves the direct `process.env` read with no config-registration concern.
+      - Invents a config file path or step that does not exist in this repo.
+
+  - id: js-maintainability-silent-catch-006
+    files:
+      - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
+      - dd-apm-sdk-review-overrides/reviewers/maintainability.md
+    input: |
+      Apply this repo's maintainability-review criteria (reviewers/maintainability.md, its
+      dd-apm-sdk-review-overrides/reviewers/maintainability.md override, and _common.md) to
+      the following code. No git checkout available — this snippet is the entire change to
+      review.
+
+      ```js
+      function flushBuffer (buffer) {
+        try {
+          writeToSocket(buffer)
+        } catch (e) {}
+      }
+      ```
+    expected_criteria:
+      - Flags the empty `catch (e) {}` block as a silent swallow with no `log.error` /
+        `log.warn` call, contradicting AGENTS.md's rule to catch and log errors rather
+        than crash user apps, and this lens's own "Error handling and observability" check.
+      - States the concrete failure mode — a write failure becomes invisible to anyone
+        operating the system, with no log line and no telemetry.
+      - Classifies the finding as at least P1, per maintainability.md's own bar for a
+        silent catch/swallow that drops context.
+    bad_signals:
+      - Does not mention the empty catch block at all.
+      - Treats this as a performance or security issue instead of an
+        observability/maintainability one.
+
+  - id: js-conventions-async-in-production-path-007
+    files:
+      - .agents/skills/dd-apm-sdk-review/reviewers/conventions.md
+      - dd-apm-sdk-review-overrides/reviewers/conventions.md
+    input: |
+      Apply this repo's codebase-conventions criteria (reviewers/conventions.md, its
+      dd-apm-sdk-review-overrides/reviewers/conventions.md override, and _common.md) to the
+      following code. No git checkout available — this snippet is the entire change to
+      review. Assume it ships as part of the npm package, not a test file.
+
+      ```js
+      async function onSpanFinish (span) {
+        await flushToAgent(span)
+      }
+      ```
+    expected_criteria:
+      - Flags the `async`/`await` usage as violating AGENTS.md's explicit rule that
+        production code (outside tests and worker threads) must not use `async`/`await` or
+        promises, and must use callbacks or synchronous patterns instead.
+      - Names this as a dd-trace-js-specific convention violation, not a generic style
+        opinion, and anchors it to the snippet.
+      - Classifies the finding under this skill's P0/P1/P2 scale, at least P1.
+    bad_signals:
+      - Approves the `async`/`await` usage without flagging the rule.
+      - Confuses this with an unrelated style rule (e.g. `for-in`) instead of the
+        async/await prohibition.
+
+  - id: js-cross-sdk-new-env-var-not-verified-008
+    files: [.agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md]
+    input: |
+      Apply this repo's cross-SDK-consistency criteria (reviewers/cross-sdk.md and
+      _common.md) to the following code. No git checkout available, and no network access
+      is available in this environment — this snippet is the entire change to review.
+
+      ```js
+      config.batchFlushIntervalMs = getEnv('DD_TRACE_BATCH_FLUSH_INTERVAL')
+      ```
+    expected_criteria:
+      - Recognizes this as cross-SDK relevant (a new env var / config option), rather than
+        exiting early with "not cross-SDK relevant".
+      - Given no network or `gh` access in this environment, reports `NOT VERIFIED (no spec
+        source available)` or explicitly states it cannot confirm the name/default/units
+        against other SDKs without a reachable spec source — and does not fabricate a
+        sibling-SDK file citation or claim a specific match/mismatch with no evidence.
+      - Does not return a plain `APPROVE` with no verification note for this env var.
+    bad_signals:
+      - Fabricates a citation to a specific file/line in another SDK repo without having
+        actually verified it.
+      - Declares the change definitively compliant or non-compliant with other SDKs with no
+        evidence source named.
+      - Mislabels this new env var as "not cross-SDK relevant".

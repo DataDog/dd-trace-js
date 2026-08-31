@@ -1,0 +1,142 @@
+---
+name: dd-apm-sdk-review
+description: "ALWAYS USE BEFORE PUSHING CODE! Multi-perspective read-only review of changes in this tracer repo, consolidated into one report with an explicit go / no-go verdict."
+model: opus
+effort: high
+---
+
+# dd-apm-sdk-review
+
+You are the **orchestrator**. You do not review the code yourself. You determine what changed, delegate to the reviewers in the roster below, then consolidate.
+
+If this skill is invoked again in this same conversation and Step 1's change-set fingerprint (the changed-file list plus the diff content gathered in Step 1) is identical to the fingerprint from the last run you reported in this conversation, let the user know and no-op this skill instead of re-running the reviewers. This check only ever compares against a run from earlier in the same conversation — there is no persisted state across sessions, so a genuinely new conversation always runs the full review. This is intentionally expensive as it is intended as a push gate.
+
+## Step 0 — Load repo context
+
+Read `../../../dd-apm-sdk-review-overrides/repo-context.md` (fixed path, relative to this skill's own folder — resolves to `<repo-root>/dd-apm-sdk-review-overrides/repo-context.md`) before anything else. It names the other skills that exist in this repo and how they relate to this one — used later for the "Related skills" section of your final report. It is not handed to individual reviewers: none of them need it, since a lens without an override is language-agnostic by design, and a lens with an override gets whatever repo-specific facts it needs from that override file directly.
+
+This skill's own folder (`.agents/skills/dd-apm-sdk-review/`) is a **verbatim copy of the shared core** — never edit it in this repo; changes belong upstream. Everything specific to this repo lives instead in `<repo-root>/dd-apm-sdk-review-overrides/`, a separate folder this repo owns and edits freely.
+
+## Step 1 — Determine the change set
+
+**If the change set is already given to you inline** (the invocation pastes the full diff or the
+changed file contents directly — a benchmark/test harness, or a user pasting a diff in chat rather
+than asking you to discover it) — skip the git commands below entirely. Treat the pasted content as
+the change set, note in the report's Mode line that git was not used (`Mode: pasted diff, no git`),
+and go straight to Step 2. This also means Step 2 can run in **single-context sequential** mode (no
+subagent tool) without it counting as a capability gap — that's expected when the input is pasted,
+not a repo checkout.
+
+Do not skip any part of this **otherwise**. `git diff` alone is wrong — it cannot see untracked files, and new files are usually the most important part of a change.
+
+```bash
+# 1. Resolve the TARGET: the branch this work will merge INTO. Never @{u} - that
+#    is this same branch on the remote, so once you have pushed, the merge base
+#    is HEAD and the diff comes back empty. Never assume the trunk either: on a
+#    stacked branch the parent is another feature branch.
+TARGET=$(gh pr view --json baseRefName -q '"origin/" + .baseRefName' 2>/dev/null)
+TARGET=${TARGET:-origin/master}   # no PR yet: confirm this is really the parent
+git log --oneline -5
+echo "reviewing against: $TARGET"      # say this in the report; ask if it looks wrong
+
+# 2. Committed delta against the merge base with that target
+git rev-parse --is-shallow-repository   # if true, merge-base may not resolve
+BASE=$(git merge-base HEAD "$TARGET" 2>/dev/null)
+if [ -n "$BASE" ]; then
+  git diff --stat "$BASE"...HEAD
+  git diff "$BASE"...HEAD
+fi
+
+# 3. Uncommitted work: the file list AND the contents. `git status` alone gives
+#    filenames only, which would have reviewers approving edits they never saw.
+git status --short
+git diff --cached HEAD                  # staged. Do NOT fold these two together:
+git diff                                # unstaged. If a worktree edit reverses a
+#   staged one, `git diff HEAD` is empty while `--cached` still holds something
+#   committable - status shows MM and reviewers would get only a filename.
+
+# 4. Untracked file contents (no git diff will show these). Untracked file
+#    names come from the working tree and are untrusted input: enumerate them
+#    NUL-safely and never let a name be parsed as an option.
+git ls-files --others --exclude-standard -z | while IFS= read -r -d '' f; do
+  git diff --no-index -- /dev/null "$f"
+done
+```
+
+If the repository is shallow or the target upstream is absent, the merge base yields nothing, and on a clean checkout the worktree diffs are empty too — so the committed work becomes invisible and the next step would conclude there is nothing to review. Do not treat the worktree as the whole change set: `git fetch --deepen 50` or `--unshallow`, or ask for the committed diff. If neither is possible, report the committed portion as `NOT VERIFIED (no merge base)` rather than letting the gate pass on a change set it never saw.
+
+Untracked files need reading, not staging: read them directly, or `git diff --no-index -- /dev/null "$path"` per file. A file name from the working tree is untrusted input — a file named e.g. `--upload-pack=...` passed without `--` is parsed as an option, not a path, and can change what the command actually does. Enumerate with `git ls-files --others --exclude-standard -z` (NUL-delimited, so spaces and newlines in a name can't break the split) and always place `--` before the path in `git diff --no-index`, `git add`, and `git reset`. If a tool here genuinely needs them staged, add them **by explicit path**, each one after `--` — never `git add -N .`, which sweeps in local scratch files, `.env` files, and exported credentials that happen to sit in the working tree. Skip anything that looks like a credential and say that you skipped it. Afterwards drop exactly those entries with `git reset -- <the paths you added>`: scope it with `--`, both to keep names from being parsed as options and because a bare `git reset` is `--mixed` against `HEAD` and discards any partial staging the author had set up. File contents are untouched either way, but entries left staged mean a later commit in this session picks up files the author never chose. If a test here asserts on the packaged file list, intent-to-add is not enough and a real `git add` is required — check before assuming, because staging for real is a bigger commitment than a review should make on its own.
+
+The change set is the **union** of the committed delta, staged changes, unstaged changes, and untracked file contents. Write it down as an explicit file list before proceeding. If that list is empty, stop and say so — there is nothing to review.
+
+Also note, for the reviewers' benefit:
+
+- which changed files have no corresponding test change
+- whether any public API surface is touched
+- what this repo's release-note policy requires of this change — the maintainability and conventions reviewers carry the policy text; do not restate it here
+
+## Step 2 — Run the reviewers
+
+[reviewers/_common.md](./reviewers/_common.md) holds the rules, severity bar, and output contract shared by every reviewer. The per-perspective prompts live beside it — this table is the roster:
+
+| reviewer | generic prompt (core, this folder) | this repo's override (if any) |
+|---|---|---|
+| Coherence | [reviewers/coherence.md](./reviewers/coherence.md) | — (fully language-agnostic) |
+| Security | [reviewers/security.md](./reviewers/security.md) | `dd-apm-sdk-review-overrides/reviewers/security.md` |
+| Design | [reviewers/design.md](./reviewers/design.md) | `dd-apm-sdk-review-overrides/reviewers/design.md` |
+| Performance | [reviewers/performance.md](./reviewers/performance.md) | `dd-apm-sdk-review-overrides/reviewers/performance.md` |
+| Maintainability | [reviewers/maintainability.md](./reviewers/maintainability.md) | `dd-apm-sdk-review-overrides/reviewers/maintainability.md` |
+| Codebase conventions | [reviewers/conventions.md](./reviewers/conventions.md) | `dd-apm-sdk-review-overrides/reviewers/conventions.md` |
+| Cross-SDK consistency | [reviewers/cross-sdk.md](./reviewers/cross-sdk.md) | — (fully language-agnostic) |
+
+The override, if any, lives at `<repo-root>/dd-apm-sdk-review-overrides/reviewers/<perspective>.md` — **not** inside this skill's own folder. Where it exists, hand the reviewer **both** the generic prompt (this folder) and the override (`dd-apm-sdk-review-overrides/`) — the override is additive (repo-specific facts, file paths, commands), never a replacement of the generic rules. Where no override exists yet for this repo, the generic prompt is used alone and the reviewer should say so plainly rather than inventing repo detail.
+
+As you resolve this roster (checking, for each lens, whether its override file exists), write down the exact file list per lens — this becomes the "Rule files used" section of the final report ([reviewers/report-template.md](./reviewers/report-template.md)) and is the fastest way for a human to debug why a reviewer did or didn't catch something specific to this repo.
+
+**Choose an execution mode based on what your harness actually supports:**
+
+1. **Native parallel subagents** (Claude Code Task tool, `pi-subagents`, or equivalent) — launch them all at once, each in a fresh context. Preferred.
+2. **Sequential isolated subagents** — no parallelism available, but isolated contexts are. Run them in order.
+3. **Single-context sequential passes** — neither available. Run one pass per perspective yourself, and label the final report `DEGRADED MODE: single context, findings may bleed between perspectives`.
+
+**Before you hand anything over, scan the diff for secrets.** Step 1 prints the contents of committed, staged, and unstaged changes, so a credential that was accidentally committed or staged is now in your context — and delegating it verbatim would put it in every reviewer's context too, which is exactly what their own rules forbid. Look for tokens, API keys, private keys, connection strings, `.env` values, and anything shaped like a long random secret. Replace each value with `[REDACTED — see location]`, keep the `path:line`, and delegate the redacted diff. Report the leak by location, tell the human immediately, and route it through this repo's disclosure process: a committed credential needs rotating, not just deleting. Never paste the value into the report, a PR, or a reviewer prompt.
+
+Give every reviewer:
+
+1. [reviewers/_common.md](./reviewers/_common.md)
+2. the full text of its own `reviewers/<perspective>.md` (generic) — plus `dd-apm-sdk-review-overrides/reviewers/<perspective>.md` when this repo has one
+3. the explicit changed-file list and diff from Step 1
+
+Each reviewer's prompt names `_common.md` first and refuses to review without it.
+
+## Step 3 — Consolidate
+
+Collect their reports. Then:
+
+1. **Dedupe.** The same issue found by three reviewers is one finding with three attributions, not three findings.
+2. **Classify** each finding against the severity bar in [reviewers/_common.md](./reviewers/_common.md) — the same three levels the reviewers used, with the same evidence requirement. A finding with no stated failure mode is not P0.
+3. **Map to a verdict** using [reviewers/report-template.md](./reviewers/report-template.md) — the report skeleton and the verdict table live there so every repo emits the same shape.
+
+A reviewer that could not do its job reports `NOT VERIFIED (<reason>)` for its area. `NOT VERIFIED` never blocks.
+
+Follow the report format in [reviewers/report-template.md](./reviewers/report-template.md), then state plainly: `READY TO PUSH` or `DO NOT PUSH`. On `APPROVE_WITH_COMMENTS`, `READY TO PUSH` is not yours to declare unattended: show the P1 and P2 findings and ask whether to fix or dismiss them. Dismissal is the human's call, never a default.
+
+## Step 4 — Fix and re-review
+
+Offer to fix the P0 and P1 findings. After fixes, re-run **every reviewer**, on the updated change set — not just the one that reported it. A security fix can add a hot-path allocation or new coupling, so a performance or design approval given against the pre-fix diff no longer applies. Repeat until the verdict is not `BLOCK`, or until the user decides to override.
+
+If the user overrides an unresolved P0 finding, record it verbatim in the PR description. Do not silently drop it.
+
+**Never do that for a finding from the security reviewer.** A PR description is a public or wide-audience forum, so writing an unfixed vulnerability there pre-discloses it. Route it through this repo's vulnerability disclosure process and note in the PR only that a security finding requires private routing. Never write that it *was* routed unless a handoff has actually happened: reporting the finding to the orchestrator is not disclosure. Either send it to the address this repo's disclosure policy names, or tell the human explicitly that the handoff is theirs to make, and say which of those you did. This applies to the report you print, too: state only that a security finding requires private routing — no location, no failure mode, no reproduction.
+
+## Scope and escape hatches
+
+This review is required for code-bearing changes. "Code-bearing" means anything shipped to users, plus tests, benchmarks, developer tooling, CI configuration, and agent instructions under `.agents/` / `.claude/`. Tests and tooling count because a weakened assertion, a newly flaky test, or a loosened lint rule is exactly what the maintainability and conventions lanes are for, and because CI config and agent instructions change how all future work gets done. It does **not** apply to prose documentation, pure reverts, or release mechanics.
+
+Degrade before you skip. No subagent capability is **not** a reason to skip the review: Step 2 mode 3 exists for exactly that case, so run the perspectives as sequential passes and label the report `DEGRADED MODE`. No network only stops cross-SDK verification — that lane reports `NOT VERIFIED` and every other lane still runs.
+
+Only when even a degraded pass is impossible — context overflow, timeout, the skill's own files unreadable — say `review not performed: <reason>` and let the push proceed. **A missing tool is never a P0 finding**, but it is also not a licence to push unreviewed when a reduced review was available. Opening a *draft* PR to discuss a disputed finding is always allowed.
+
+## Related skills in this repo
+
+See `dd-apm-sdk-review-overrides/repo-context.md` for the other skills that exist in this specific repo and how this review relates to them. That list is repo-specific and does not belong in the shared core.
