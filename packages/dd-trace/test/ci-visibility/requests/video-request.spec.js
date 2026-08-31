@@ -94,6 +94,39 @@ describe('ci-visibility/requests/video-request', () => {
     })
   })
 
+  it('destroys an unfinished request after an early successful response', done => {
+    const body = new Readable({ read () {} })
+    const req = new PassThrough()
+    req.setTimeout = sinon.stub()
+    let onResponse
+    const requestVideo = proxyquire('../../../src/ci-visibility/requests/video-request', {
+      'node:http': {
+        ...http,
+        request: (options, callback) => {
+          onResponse = callback
+          return req
+        },
+      },
+    })
+
+    requestVideo(body, getOptions(), (error, result, statusCode) => {
+      assert.ifError(error)
+      assert.strictEqual(result, 'ok')
+      assert.strictEqual(statusCode, 200)
+      assert.strictEqual(req.writableFinished, false)
+      assert.strictEqual(req.destroyed, true)
+      assert.strictEqual(body.destroyed, true)
+      done()
+    })
+
+    const res = new PassThrough()
+    res.statusCode = 200
+    res.headers = {}
+    res.setTimeout = sinon.stub()
+    onResponse(res)
+    res.end('ok')
+  })
+
   it('marks a body read error as non-retriable', done => {
     const readError = Object.assign(new Error('video disappeared'), { code: 'ENOENT' })
     const body = new Readable({

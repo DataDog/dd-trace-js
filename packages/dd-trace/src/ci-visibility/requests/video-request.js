@@ -54,7 +54,7 @@ function requestVideo (body, options, callback) {
       options.signal?.removeEventListener('abort', onAbort)
       body.unpipe(req)
       if (!body.destroyed) body.destroy()
-      if (error && req && !req.destroyed) req.destroy()
+      if (req && !req.destroyed && (error || !req.writableFinished)) req.destroy()
       callback(error, result, statusCode, headers)
     }
     const onAbort = () => complete(getAbortError(options.signal))
