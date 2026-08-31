@@ -8,42 +8,60 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const { logs } = require('@opentelemetry/api-logs')
 const { metrics } = require('@opentelemetry/api')
 const { channel } = require('dc-polyfill')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('./setup/core')
 
 const {
-  getServerlessPlatformTags,
-  getServerlessPlatform,
-  supportsServerlessTelemetryRetention,
-  createServerlessDeliveryTracker,
   enableGCPPubSubPushSubscription,
-  initializeServerlessTelemetry,
 } = require('../src/serverless')
 const { registerVercelTelemetryRetention } = require('../src/serverless/vercel')
-const { flushServerlessTelemetry, registerTelemetryFlusher } = require('../src/flush')
-const Tracer = require('../src/tracer')
-const { initializeOpenTelemetryLogs } = require('../src/opentelemetry/logs')
-const { initializeOpenTelemetryMetrics } = require('../src/opentelemetry/metrics')
+const { flushServerlessTelemetry } = require('../src/flush')
 const TelemetryDeliveryTracker = require('../src/serverless/telemetry-delivery-tracker')
 const agent = require('./plugins/agent')
 const { getConfigFresh } = require('./helpers/config')
 
+function getServerlessFresh () {
+  return proxyquire.noPreserveCache()('../src/serverless', {})
+}
+
+function getServerlessModulesFresh () {
+  const serverless = getServerlessFresh()
+  const flush = proxyquire.noPreserveCache()('../src/flush', {
+    './serverless': serverless,
+  })
+  return { flush, serverless }
+}
+
 describe('TelemetryDeliveryTracker', () => {
-  it('is created only for Vercel', () => {
+  it('snapshots Vercel detection at module load', () => {
     const originalVercel = process.env.VERCEL
     try {
       delete process.env.VERCEL
-      assert.strictEqual(createServerlessDeliveryTracker(), undefined)
-      assert.strictEqual(supportsServerlessTelemetryRetention(), false)
+      const nonVercelServerless = getServerlessFresh()
 
       process.env.VERCEL = '1'
-      assert.ok(createServerlessDeliveryTracker() instanceof TelemetryDeliveryTracker)
-      assert.strictEqual(supportsServerlessTelemetryRetention(), true)
+      assert.strictEqual(nonVercelServerless.createServerlessDeliveryTracker(), undefined)
+      assert.strictEqual(nonVercelServerless.supportsServerlessTelemetryRetention(), false)
+
+      const vercelServerless = getServerlessFresh()
+      delete process.env.VERCEL
+      assert.ok(vercelServerless.createServerlessDeliveryTracker() instanceof TelemetryDeliveryTracker)
+      assert.strictEqual(vercelServerless.supportsServerlessTelemetryRetention(), true)
     } finally {
       if (originalVercel === undefined) delete process.env.VERCEL
       else process.env.VERCEL = originalVercel
     }
+  })
+
+  it('completes immediately without active deliveries', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    let done = 0
+
+    tracker.waitForIdle(() => { done++ })
+
+    assert.strictEqual(done, 1)
   })
 
   it('joins deliveries that were active at the retention boundary', () => {
@@ -73,6 +91,28 @@ describe('TelemetryDeliveryTracker', () => {
     complete.shift()()
     assert.strictEqual(done, 1)
     complete.shift()()
+    assert.strictEqual(done, 1)
+  })
+
+  it('completes a delivery only once', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    let complete
+    let done = 0
+
+    tracker.track(callback => { complete = callback }, () => { done++ })
+    complete()
+    complete()
+
+    assert.strictEqual(done, 1)
+  })
+})
+
+describe('flushServerlessTelemetry', () => {
+  it('completes immediately without configured pipelines', () => {
+    let done = 0
+
+    flushServerlessTelemetry(() => { done++ })
+
     assert.strictEqual(done, 1)
   })
 })
@@ -172,7 +212,7 @@ describe('Vercel span metadata', () => {
       VERCEL_PROJECT_ID: 'prj_123',
     }
 
-    assert.deepStrictEqual(getServerlessPlatformTags(), [
+    assert.deepStrictEqual(getServerlessFresh().getServerlessPlatformTags(), [
       'vercel.project_id', 'prj_123',
       'vercel.environment', 'preview',
     ])
@@ -185,7 +225,7 @@ describe('Vercel span metadata', () => {
       VERCEL_ENV: 'preview',
     }
 
-    assert.deepStrictEqual(getServerlessPlatformTags(), [
+    assert.deepStrictEqual(getServerlessFresh().getServerlessPlatformTags(), [
       'vercel.environment', 'preview',
     ])
   })
@@ -193,7 +233,7 @@ describe('Vercel span metadata', () => {
   it('records the Vercel environment in configuration', () => {
     process.env = { ...environment, VERCEL: '1' }
 
-    assert.strictEqual(getServerlessPlatform().isVercel, true)
+    assert.strictEqual(getServerlessFresh().getServerlessPlatform().isVercel, true)
   })
 })
 
@@ -262,7 +302,18 @@ describe('Vercel telemetry retention', () => {
 
     let unregister
     try {
-      const config = getConfigFresh({ service: 'serverless-flush' })
+      const { flush, serverless } = getServerlessModulesFresh()
+      const Tracer = proxyquire.noPreserveCache()('../src/tracer', {
+        './flush': flush,
+        './serverless': serverless,
+      })
+      const { initializeOpenTelemetryLogs } = proxyquire.noPreserveCache()('../src/opentelemetry/logs', {
+        '../../flush': flush,
+      })
+      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../src/opentelemetry/metrics', {
+        '../../flush': flush,
+      })
+      const config = getConfigFresh({ service: 'serverless-flush' }, { '../serverless': serverless })
       const tracer = new Tracer(config)
       initializeOpenTelemetryLogs(config)
       initializeOpenTelemetryMetrics(config)
@@ -309,7 +360,7 @@ describe('Vercel telemetry retention', () => {
       },
     }
 
-    const unregister = initializeServerlessTelemetry(tracer)
+    const unregister = getServerlessFresh().initializeServerlessTelemetry(tracer)
     try {
       nextFinishChannel.publish({})
       assert.strictEqual(retained, undefined)
@@ -337,6 +388,26 @@ describe('Vercel telemetry retention', () => {
       channel('apm:http:server:request:finish').publish({})
       await Promise.all(retained)
       assert.strictEqual(flushes, 1)
+    } finally {
+      unregister()
+    }
+  })
+
+  it('skips retention without a Vercel waitUntil boundary', async () => {
+    let flushes = 0
+    const unregister = registerVercelTelemetryRetention({
+      flushAll () {
+        flushes++
+      },
+    })
+    try {
+      delete globalThis[requestContext]
+      channel('apm:http:server:request:finish').publish({})
+      globalThis[requestContext] = { get: () => ({}) }
+      channel('apm:http:server:request:finish').publish({})
+      await new Promise(resolve => setImmediate(resolve))
+
+      assert.strictEqual(flushes, 0)
     } finally {
       unregister()
     }
@@ -430,15 +501,18 @@ describe('Vercel telemetry retention', () => {
     assert.strictEqual(result.status, 0, result.stderr)
   })
 
-  it('logs a Vercel waitUntil registration failure', () => {
+  it('logs a Vercel waitUntil registration failure and still flushes', async () => {
     const error = new Error('request context closed')
     const warn = sinon.stub(require('../src/log'), 'warn')
     globalThis[requestContext] = { get: () => ({ waitUntil: () => { throw error } }) }
-    const unregister = registerVercelTelemetryRetention({ flushAll () {} })
+    const flushAll = sinon.spy(done => done())
+    const unregister = registerVercelTelemetryRetention({ flushAll })
 
     try {
       channel('apm:http:server:request:finish').publish({})
+      await new Promise(resolve => setImmediate(resolve))
       sinon.assert.calledWith(warn, 'Unable to retain Vercel telemetry:', error)
+      sinon.assert.calledOnce(flushAll)
     } finally {
       unregister()
       warn.restore()
@@ -456,9 +530,10 @@ describe('Vercel telemetry retention', () => {
       flushes++
       completeTelemetry.push(done)
     }
-    const unregisterTelemetry = registerTelemetryFlusher(telemetryFlusher)
+    const { flush } = getServerlessModulesFresh()
+    const unregisterTelemetry = flush.registerTelemetryFlusher(telemetryFlusher)
     const unregister = registerVercelTelemetryRetention({
-      flushAll: (done, options) => flushServerlessTelemetry(done, options),
+      flushAll: (done, options) => flush.flushServerlessTelemetry(done, options),
     })
     try {
       channel('apm:http:server:request:finish').publish({})
@@ -479,32 +554,11 @@ describe('Vercel telemetry retention', () => {
     }
   })
 
-  it('retains telemetry again when an outer Vercel response follows a nested request', async () => {
-    const retained = []
-    const flushes = []
-    globalThis[requestContext] = {
-      get: () => ({ waitUntil: promise => { retained.push(promise) } }),
-    }
-    const unregister = registerVercelTelemetryRetention({
-      flushAll (done) {
-        flushes.push(done)
-      },
-    })
-    try {
-      channel('apm:http:server:request:finish').publish({ req: {} })
-      await new Promise(resolve => setImmediate(resolve))
-      channel('apm:http:server:request:finish').publish({ req: {} })
-      await new Promise(resolve => setImmediate(resolve))
+  it('coalesces overlapping Vercel responses into one queued flush', () => {
+    const fixture = require.resolve('./fixtures/vercel-telemetry-coalescing')
+    const result = spawnSync(process.execPath, [fixture], { encoding: 'utf8', timeout: 5_000 })
 
-      // Other tracers initialized by this file can share this request context;
-      // the callback count below isolates this test's tracer.
-      assert.ok(retained.length >= 2)
-      assert.strictEqual(flushes.length, 2)
-      flushes[0]()
-      flushes[1]()
-    } finally {
-      unregister()
-    }
+    assert.strictEqual(result.status, 0, result.stderr)
   })
 
   it('passes Vercel retention timeout to the telemetry flush barrier', async () => {

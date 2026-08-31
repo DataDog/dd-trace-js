@@ -16,16 +16,47 @@ const LOOPBACK_DNS_SERVER = '127.0.0.1:1'
 const PLUGINS = ['dns', 'node:dns']
 const TEST_IP = '192.0.2.1'
 
+/**
+ * @param {(ip: string) => Promise<string[]>} reverse
+ */
+function assertReverseSpan (reverse) {
+  const tracePromise = agent.assertFirstTraceSpan({
+    name: 'dns.reverse',
+    service: 'test',
+    resource: TEST_IP,
+    error: 1,
+    meta: {
+      component: 'dns',
+      'span.kind': 'client',
+      'dns.ip': TEST_IP,
+    },
+  })
+
+  return Promise.all([
+    tracePromise,
+    assert.rejects(reverse(TEST_IP)),
+  ])
+}
+
 describe('Plugin', () => {
   let dns
+  let servers
   let tracer
   PLUGINS.forEach(plugin => {
     describe(plugin, () => {
-      afterEach(() => {
-        return agent.close()
+      afterEach(async () => {
+        try {
+          await agent.close()
+        } finally {
+          dns.setServers(servers)
+        }
       })
 
       beforeEach(() => {
+        dns = require(plugin)
+        servers = dns.getServers()
+        dns.setServers([LOOPBACK_DNS_SERVER])
+
         return agent.load('dns')
           .then(() => {
             dns = require(plugin)
@@ -239,29 +270,14 @@ describe('Plugin', () => {
       })
 
       it('should instrument reverse', () => {
+        return assertReverseSpan(promisify(dns.reverse))
+      })
+
+      it('should instrument Resolver.reverse', () => {
         const resolver = new dns.Resolver()
         resolver.setServers([LOOPBACK_DNS_SERVER])
-        const reverse = promisify(resolver.reverse.bind(resolver))
 
-        const tracePromise = agent.assertSomeTraces(traces => {
-          assertObjectContains(traces[0][0], {
-            name: 'dns.reverse',
-            service: 'test',
-            resource: TEST_IP,
-            error: 1,
-          })
-          assertObjectContains(traces[0][0].meta, {
-            component: 'dns',
-            'span.kind': 'client',
-            'dns.ip': TEST_IP,
-          })
-        })
-
-        const reversePromise = reverse(TEST_IP)
-        const rejectionPromise = assert.rejects(reversePromise)
-        resolver.cancel()
-
-        return Promise.all([tracePromise, rejectionPromise])
+        return assertReverseSpan(promisify(resolver.reverse.bind(resolver)))
       })
 
       it('should preserve the parent scope in the callback', done => {
@@ -537,28 +553,14 @@ describe('Plugin', () => {
         })
 
         it('should instrument reverse', () => {
+          return assertReverseSpan(dns.promises.reverse)
+        })
+
+        it('should instrument Resolver.reverse', () => {
           const resolver = new dns.promises.Resolver()
           resolver.setServers([LOOPBACK_DNS_SERVER])
 
-          const tracePromise = agent.assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.reverse',
-              service: 'test',
-              resource: TEST_IP,
-              error: 1,
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'span.kind': 'client',
-              'dns.ip': TEST_IP,
-            })
-          })
-
-          const reversePromise = resolver.reverse(TEST_IP)
-          const rejectionPromise = assert.rejects(reversePromise)
-          resolver.cancel()
-
-          return Promise.all([tracePromise, rejectionPromise])
+          return assertReverseSpan(resolver.reverse.bind(resolver))
         })
 
         it('should preserve the parent scope across await', async () => {
