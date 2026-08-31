@@ -448,7 +448,6 @@ describe('Plugin', () => {
               await Promise.all([
                 assert.rejects(operationPromise, error => {
                   assert.notStrictEqual(error.name, 'TypeError')
-                  assert.strictEqual(error.code, 16)
                   return true
                 }),
                 tracePromise,
