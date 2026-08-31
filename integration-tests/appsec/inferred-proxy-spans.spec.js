@@ -3,11 +3,10 @@
 const assert = require('node:assert/strict')
 const path = require('path')
 
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 describe('Inferred Proxy Spans with AppSec', () => {
-  let axios, cwd, appFile, agent, proc
+  let cwd, appFile, agent, proc
 
   useSandbox()
 
@@ -27,13 +26,22 @@ describe('Inferred Proxy Spans with AppSec', () => {
         DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED: 'true',
       },
     })
-    axios = Axios.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
     proc.kill()
     await agent.stop()
   })
+
+  /**
+   * @param {string} url
+   * @param {object} [init]
+   */
+  async function request (url, init) {
+    const response = await fetch(new URL(url, proc.url), init)
+    await response.arrayBuffer()
+    return response
+  }
 
   const inferredHeaders = {
     'x-dd-proxy': 'aws-apigateway',
@@ -45,7 +53,7 @@ describe('Inferred Proxy Spans with AppSec', () => {
   }
 
   it('should add _dd.appsec.enabled to inferred proxy span', async () => {
-    await axios.get('/', { headers: inferredHeaders })
+    await request('/', { headers: inferredHeaders })
 
     await agent.assertMessageReceived(({ payload }) => {
       const spans = payload[0]
@@ -63,7 +71,7 @@ describe('Inferred Proxy Spans with AppSec', () => {
   })
 
   it('should add _dd.appsec.json to inferred proxy span when attack is detected', async () => {
-    await axios.get('/testattack', { headers: inferredHeaders })
+    await request('/testattack', { headers: inferredHeaders })
 
     await agent.assertMessageReceived(({ payload }) => {
       const spans = payload[0]
