@@ -852,11 +852,14 @@ function readJitDefault (source, fieldName) {
  * @param {object} rootCtx
  * @param {number} descriptorId
  * @param {Record<string, unknown>} source
+ * @param {(string | number)[] | undefined} path
  * @returns {unknown}
  */
-function readJitDefaultInScope (rootCtx, descriptorId, source) {
+function readJitDefaultInScope (rootCtx, descriptorId, source, path) {
   const descriptor = rootCtx.jitPlan.fields[descriptorId]
-  const field = rootCtx.jitFields[descriptorId]
+  const field = rootCtx.config.collapse
+    ? rootCtx.jitFields?.[descriptorId]
+    : rootCtx.jitFieldsByPath?.get(`${descriptorId}:${path.join('.')}`)
   if (!field) return source[descriptor.fieldName]
 
   return legacyStorage.run(field.currentStore, readJitDefault, source, descriptor.fieldName)

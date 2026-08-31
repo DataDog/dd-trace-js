@@ -82,7 +82,8 @@
  * @typedef {(
  *   rootCtx: object,
  *   descriptorId: number,
- *   source: Record<string, unknown>
+ *   source: Record<string, unknown>,
+ *   path: (string | number)[] | undefined
  * ) => unknown} ReadDefaultInScope
  * @typedef {(variableValues: Record<string, unknown> | undefined) => object | undefined} StartExecution
  * @typedef {(
@@ -254,12 +255,17 @@ function createGraphqlJitRuntime ({
       `__context.ddTrace, ${descriptor.id}, ${parentPath}, ` +
       `__context.ddTrace.config.collapse ? undefined : ${compilerPath.runtimePath}, ${argumentFactory})`
     const readDefaultInScope = '__context.ddTrace.jitRuntime.readDefaultInScope(' +
-      `__context.ddTrace, ${descriptor.id}, ${parentPath})`
+      `__context.ddTrace, ${descriptor.id}, ${parentPath}, ` +
+      `__context.ddTrace.config.collapse ? undefined : ${compilerPath.runtimePath})`
     const collapsedRead = '(__context.ddTrace !== undefined && __context.ddTrace.jitTraceFirst' +
       ` ? ${readDefaultInScope} : ${sourcePath})`
     const tracedRead = `(${shouldTrace} ? ${resolveDefault} : ${collapsedRead})`
+    const remainingRead = '(__context.ddTrace !== undefined && ' +
+      '(__context.ddTrace.jitTraceAll || __context.ddTrace.jitTraceFirst)' +
+      ` ? ${readDefaultInScope} : ${sourcePath})`
 
-    return compiledField.replaceAll(sourcePath, tracedRead)
+    return compiledField.slice(0, sourceIndex) + tracedRead +
+      compiledField.slice(sourceIndex + sourcePath.length).replaceAll(sourcePath, remainingRead)
   }
 
   return { configureCompilationContext, runtime }
