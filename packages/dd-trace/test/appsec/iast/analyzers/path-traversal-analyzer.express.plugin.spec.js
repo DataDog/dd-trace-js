@@ -41,7 +41,8 @@ describe('Path traversal analyzer', () => {
           testThatRequestHasVulnerability(
             {
               fn: (req, res) => {
-                require(renderFunctionPath)(res, req.query.file)
+                const render = require(renderFunctionPath)
+                render(res, req.query.file)
                 return true
               },
               vulnerability: 'PATH_TRAVERSAL',
@@ -57,7 +58,8 @@ describe('Path traversal analyzer', () => {
           testThatRequestHasNoVulnerability(
             {
               fn: (req, res) => {
-                require(renderFunctionPath)(res, 'template')
+                const render = require(renderFunctionPath)
+                render(res, 'template')
                 return true
               },
               vulnerability: 'PATH_TRAVERSAL',

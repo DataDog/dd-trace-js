@@ -22,8 +22,10 @@ const identityRefreshChannel = channel('datadog:identity:refresh')
 
 function getVercelBatchLogRecordProcessor () {
   process.env.VERCEL = '1'
-  const serverless = proxyquire.noPreserveCache()('../../src/serverless', {})
-  return proxyquire.noPreserveCache()('../../src/opentelemetry/logs/batch_log_processor', {
+  const loadServerless = proxyquire.noPreserveCache()
+  const serverless = loadServerless('../../src/serverless', {})
+  const loadBatchLogRecordProcessor = proxyquire.noPreserveCache()
+  return loadBatchLogRecordProcessor('../../src/opentelemetry/logs/batch_log_processor', {
     '../../serverless': serverless,
   })
 }
@@ -53,8 +55,9 @@ describe('OpenTelemetry Logs', () => {
     logs.disable()
     const config = getConfigFresh()
     if (config.DD_LOGS_OTEL_ENABLED) {
+      const loadLogs = proxyquire.noPreserveCache()
       const { initializeOpenTelemetryLogs } =
-        proxyquire.noPreserveCache()('../../src/opentelemetry/logs', {})
+        loadLogs('../../src/opentelemetry/logs', {})
       initializeOpenTelemetryLogs(config)
     }
     return { config, logs, loggerProvider: logs.getLoggerProvider() }
@@ -66,13 +69,16 @@ describe('OpenTelemetry Logs', () => {
     process.env.DD_LOGS_OTEL_ENABLED = 'true'
     process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = maxExportBatchSize
 
-    const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
+    const loadProxy = proxyquire.noPreserveCache()
+    const proxy = loadProxy('../../src/proxy', {
       './config': getConfigFresh,
     })
-    const TracerProxy = proxyquire.noPreserveCache()('../../src', {
+    const loadSrc = proxyquire.noPreserveCache()
+    const TracerProxy = loadSrc('../../src', {
       './proxy': proxy,
     })
-    const tracer = proxyquire.noPreserveCache()('../../', {
+    const loadTracer = proxyquire.noPreserveCache()
+    const tracer = loadTracer('../../', {
       './src': TracerProxy,
     })
     tracer._initialized = false
@@ -182,7 +188,10 @@ describe('OpenTelemetry Logs', () => {
       let activeExports = 0
       const completeFlushes = () => {
         if (activeExports !== 0) return
-        while (flushCallbacks.length > 0) flushCallbacks.shift()()
+        while (flushCallbacks.length > 0) {
+          const callback = flushCallbacks.shift()
+          callback()
+        }
       }
       const processor = new VercelBatchLogRecordProcessor({
         export: (records, done) => {
@@ -209,9 +218,12 @@ describe('OpenTelemetry Logs', () => {
       assert.deepStrictEqual(batches.map(batch => batch.map(record => record.body)), [
         [0, 1], [2, 3], [4],
       ])
-      callbacks.shift()()
-      callbacks.shift()()
-      callbacks.shift()()
+      const callback = callbacks.shift()
+      callback()
+      const firstCallback = callbacks.shift()
+      firstCallback()
+      const secondCallback = callbacks.shift()
+      secondCallback()
 
       sinon.assert.calledOnce(done)
     })

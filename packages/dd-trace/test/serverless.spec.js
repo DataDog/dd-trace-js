@@ -23,12 +23,14 @@ const agent = require('./plugins/agent')
 const { getConfigFresh } = require('./helpers/config')
 
 function getServerlessFresh () {
-  return proxyquire.noPreserveCache()('../src/serverless', {})
+  const loadServerless = proxyquire.noPreserveCache()
+  return loadServerless('../src/serverless', {})
 }
 
 function getServerlessModulesFresh () {
   const serverless = getServerlessFresh()
-  const flush = proxyquire.noPreserveCache()('../src/flush', {
+  const loadFlush = proxyquire.noPreserveCache()
+  const flush = loadFlush('../src/flush', {
     './serverless': serverless,
   })
   return { flush, serverless }
@@ -73,9 +75,11 @@ describe('TelemetryDeliveryTracker', () => {
     tracker.track(callback => complete.push(callback))
     tracker.waitForIdle(() => { done++ })
 
-    complete.shift()()
+    const firstCompletion = complete.shift()
+    firstCompletion()
     assert.strictEqual(done, 0)
-    complete.shift()()
+    const secondCompletion = complete.shift()
+    secondCompletion()
     assert.strictEqual(done, 1)
   })
 
@@ -88,9 +92,11 @@ describe('TelemetryDeliveryTracker', () => {
     tracker.waitForIdle(() => { done++ })
     tracker.track(callback => complete.push(callback))
 
-    complete.shift()()
+    const firstCompletion = complete.shift()
+    firstCompletion()
     assert.strictEqual(done, 1)
-    complete.shift()()
+    const secondCompletion = complete.shift()
+    secondCompletion()
     assert.strictEqual(done, 1)
   })
 
@@ -303,14 +309,17 @@ describe('Vercel telemetry retention', () => {
     let unregister
     try {
       const { flush, serverless } = getServerlessModulesFresh()
-      const Tracer = proxyquire.noPreserveCache()('../src/tracer', {
+      const loadTracer = proxyquire.noPreserveCache()
+      const Tracer = loadTracer('../src/tracer', {
         './flush': flush,
         './serverless': serverless,
       })
-      const { initializeOpenTelemetryLogs } = proxyquire.noPreserveCache()('../src/opentelemetry/logs', {
+      const loadOpenTelemetryLogs = proxyquire.noPreserveCache()
+      const { initializeOpenTelemetryLogs } = loadOpenTelemetryLogs('../src/opentelemetry/logs', {
         '../../flush': flush,
       })
-      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../src/opentelemetry/metrics', {
+      const loadOpenTelemetryMetrics = proxyquire.noPreserveCache()
+      const { initializeOpenTelemetryMetrics } = loadOpenTelemetryMetrics('../src/opentelemetry/metrics', {
         '../../flush': flush,
       })
       const config = getConfigFresh({ service: 'serverless-flush' }, { '../serverless': serverless })
