@@ -36,6 +36,21 @@ jobs:
         with:
           flags: platform-esbuild
 
+  turbopack:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: npm run test:turbopack:ci
+      - uses: ./.github/actions/node/latest
+      - run: npm run test:turbopack:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: platform-turbopack
+
   webpack:
     runs-on: ubuntu-latest
     permissions:
@@ -680,6 +695,28 @@ jobs:
       # NYC counters end up bundled too and the bootstrap can't find them at the original
       # paths. Switch to `:coverage` once the harness handles bundled output.
       - run: npm run test:integration:webpack
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}
+
+  integration-turbopack:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [latest]
+    name: ${{ github.workflow }} / integration-turbopack (node-${{ matrix.version }})
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
+      - run: npm run test:integration:turbopack
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:

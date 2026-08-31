@@ -1,10 +1,12 @@
 'use strict'
 
 const assert = require('assert')
+const os = require('os')
 const path = require('path')
 const fs = require('fs')
 const sinon = require('sinon')
-const { processModule } = require('../src/utils.js')
+const { NODE_MAJOR } = require('../../../version.js')
+const { processModule, resolveModule } = require('../src/utils.js')
 
 describe('esbuild utils', () => {
   describe('processModule', () => {
@@ -49,6 +51,86 @@ describe('esbuild utils', () => {
       assert.strictEqual(setters.has('default'), true)
       assert.strictEqual(setters.has('createServer'), true)
       assert.strictEqual(setters.has('METHODS'), true)
+    })
+
+    it('can discover ESM exports without evaluating the module', async () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-'))
+      const marker = path.join(directory, 'evaluated')
+      const source = path.join(directory, 'module.mjs')
+      fs.writeFileSync(source, [
+        "import fs from 'node:fs'",
+        `fs.writeFileSync(${JSON.stringify(marker)}, 'yes')`,
+        'export const value = 1',
+      ].join('; '))
+
+      try {
+        const setters = await processModule({
+          context: { format: 'module' },
+          nonEvaluating: true,
+          path: source,
+        })
+
+        assert.deepStrictEqual([...setters.keys()], ['value'])
+        assert.strictEqual(fs.existsSync(marker), false)
+      } finally {
+        fs.rmSync(directory, { force: true, recursive: true })
+      }
+    })
+
+    it('does not evaluate re-exported ESM modules during discovery', async () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-'))
+      const marker = path.join(directory, 'evaluated')
+      const source = path.join(directory, 'module.mjs')
+      const reexport = path.join(directory, 'reexport.mjs')
+      fs.writeFileSync(source, "export * from './reexport.mjs'")
+      fs.writeFileSync(reexport, [
+        "import fs from 'node:fs'",
+        `fs.writeFileSync(${JSON.stringify(marker)}, 'yes')`,
+        'export const value = 1',
+      ].join('; '))
+
+      try {
+        const setters = await processModule({
+          context: { format: 'module' },
+          nonEvaluating: true,
+          path: source,
+        })
+
+        assert.deepStrictEqual([...setters.keys()], ['value'])
+        assert.strictEqual(fs.existsSync(marker), false)
+      } finally {
+        fs.rmSync(directory, { force: true, recursive: true })
+      }
+    })
+
+    it('resolves bare re-exports with import conditions', async () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-'))
+      const packageDirectory = path.join(directory, 'node_modules', 'dual-package')
+      const source = path.join(directory, 'module.mjs')
+      fs.mkdirSync(packageDirectory, { recursive: true })
+      fs.writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({
+        name: 'dual-package',
+        exports: { import: './import.mjs', require: './require.cjs' },
+      }))
+      fs.writeFileSync(path.join(packageDirectory, 'import.mjs'), 'export const value = 1')
+      fs.writeFileSync(path.join(packageDirectory, 'require.cjs'), 'module.exports = {}')
+      fs.writeFileSync(source, "export * from 'dual-package'")
+
+      try {
+        assert.strictEqual(path.basename(resolveModule('dual-package', directory)), 'require.cjs')
+        if (NODE_MAJOR < 22) return
+        assert.strictEqual(path.basename(resolveModule('dual-package', directory, true)), 'import.mjs')
+
+        const setters = await processModule({
+          context: { format: 'module' },
+          nonEvaluating: true,
+          path: source,
+        })
+
+        assert.deepStrictEqual([...setters.keys()], ['value'])
+      } finally {
+        fs.rmSync(directory, { force: true, recursive: true })
+      }
     })
   })
 

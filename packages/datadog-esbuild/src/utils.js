@@ -30,6 +30,18 @@ const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
   }
   : getExportsImporting
 
+// Unlike the legacy fallback above, this path only parses module source and
+// never evaluates the target. Turbopack uses it while generating proxies so
+// loading a customer's dependency cannot run application code during config.
+const getExportsWithoutEvaluation = async (srcUrl, context, getSource) => {
+  const mod = await loadGetExportsModule()
+  const exportNames = mod.getExports(srcUrl, context, getSource)
+  if (exportNames?.next) {
+    return driveGetExportsGenerator(exportNames, getSource)
+  }
+  return exportNames
+}
+
 function isStarExportLine (line) {
   return /^\* from /.test(line)
 }
@@ -58,9 +70,38 @@ function isBareSpecifier (specifier) {
   }
 }
 
+/**
+ * Resolves a module with the conditions used by an import when requested.
+ *
+ * @param {string} specifier
+ * @param {string|undefined} directory
+ * @param {boolean} [usesImportStatement]
+ * @param {Function} [resolver]
+ * @returns {string}
+ */
+function resolveModule (specifier, directory, usesImportStatement = false, resolver = require.resolve) {
+  // @see https://github.com/nodejs/node/issues/47000
+  if (specifier === '.') {
+    specifier = './'
+  } else if (specifier === '..') {
+    specifier = '../'
+  }
+
+  if (specifier.startsWith('file://')) {
+    specifier = fileURLToPath(specifier)
+  }
+
+  const options = {}
+  if (directory) options.paths = [directory]
+  if (usesImportStatement) options.conditions = new Set(['import', 'node'])
+
+  // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
+  return resolver(specifier, options)
+}
+
 function resolve (specifier, context) {
   // This comes from an import, that is why import makes preference
-  const conditions = ['import']
+  const conditions = new Set(['import'])
 
   if (specifier.startsWith('file://')) {
     specifier = fileURLToPath(specifier)
@@ -144,16 +185,17 @@ function driveGetExportsGenerator (exportsGenerator, getSource) {
  * @param {boolean} [moduleData.internal]
  * @param {object} moduleData.context
  * @param {boolean} [moduleData.excludeDefault]
+ * @param {boolean} [moduleData.nonEvaluating]
  * @returns {Promise<Map>}
  */
-async function processModule ({ path, internal = false, context, excludeDefault = false }) {
+async function processModule ({ path, internal = false, context, excludeDefault = false, nonEvaluating = false }) {
   let exportNames, srcUrl
   if (internal) {
     // we can not read and parse of internal modules
     exportNames = await getExportsImporting(path)
   } else {
     srcUrl = pathToFileURL(path)
-    exportNames = await getExports(srcUrl, context, getSource)
+    exportNames = await (nonEvaluating ? getExportsWithoutEvaluation : getExports)(srcUrl, context, getSource)
   }
 
   const starExports = new Set()
@@ -207,6 +249,7 @@ async function processModule ({ path, internal = false, context, excludeDefault 
         path: fileURLToPath(result.url),
         context: { ...context, format: result.format },
         excludeDefault: true,
+        nonEvaluating,
       })
 
       for (const [name, setter] of subSetters.entries()) {
@@ -273,4 +316,5 @@ function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
 module.exports = {
   processModule,
   isESMFile,
+  resolveModule,
 }

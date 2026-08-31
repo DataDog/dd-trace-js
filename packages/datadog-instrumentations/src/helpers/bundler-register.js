@@ -9,8 +9,11 @@ const {
   loadChannel,
   matchVersion,
 } = require('./register.js')
+const { getDisabledInstrumentations } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
+const { isRelativeRequire } = require('./shared-utils')
+const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
 // environments (webpack, esbuild), Node.js built-in modules required by
@@ -77,10 +80,19 @@ function doHook (name) {
 /** @type {Set<string>} */
 const instrumentedNodeModules = new Set()
 
-/** @typedef {{ package: string, module: unknown, version: string, path: string }} Payload */
+/**
+ * @typedef {object} Payload
+ * @property {string} package
+ * @property {unknown} module
+ * @property {string} [moduleBaseDir]
+ * @property {string} [moduleName]
+ * @property {string} version
+ * @property {string} path
+ */
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
+  if (disabledInstrumentations.has(name)) return
 
   const isPrefixedWithNode = name.startsWith('node:')
 
@@ -104,14 +116,27 @@ dc.subscribe(CHANNEL, (message) => {
     return
   }
 
-  for (const { file, versions, hook } of instrumentation) {
-    if (payload.path !== filename(name, file) || !matchVersion(payload.version, versions)) {
+  for (const { file, filePattern, patchDefault, versions, hook } of instrumentation) {
+    const matchesFile = isRelativeRequire(name) || payload.path === filename(name, file) ||
+      (filePattern && new RegExp(filename(name, filePattern)).test(payload.path))
+    if (!matchesFile || !matchVersion(payload.version, versions)) {
       continue
     }
 
     try {
       loadChannel.publish({ name, version: payload.version, file })
-      payload.module = hook(payload.module, payload.version) ?? payload.module
+      let exports = payload.module
+      // Only generated ESM proxy payloads need default-export unwrapping.
+      if (typeof payload.apply === 'function' && patchDefault === !!exports.default) {
+        if (patchDefault) exports = exports.default
+        else continue
+      }
+      exports = hook(exports, payload.version, undefined, {
+        moduleBaseDir: payload.moduleBaseDir,
+        moduleName: payload.moduleName,
+      }) ?? exports
+      payload.module = exports
+      payload.apply?.(exports, patchDefault)
     } catch (e) {
       log.error('Error executing bundler hook', e)
     }
