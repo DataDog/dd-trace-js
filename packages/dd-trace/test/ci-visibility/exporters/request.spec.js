@@ -53,7 +53,7 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
   })
 
-  it('keeps the ordinary attempt cap during finalization', () => {
+  it('keeps retrying retriable responses while the finalization deadline has capacity', () => {
     const done = sinon.spy()
     request('payload', { deadline: Date.now() + 30_000 }, done)
     const error = Object.assign(new Error('unavailable'), { status: 503 })
@@ -62,9 +62,12 @@ describe('Test Optimization exporter request', () => {
     clock.tick(6000)
     pendingRequests[1].callback(error, null, 503, {})
     clock.tick(6000)
+    pendingRequests[2].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[3].callback(null, 'ok', 200, {})
 
-    assert.strictEqual(pendingRequests.length, 2)
-    sinon.assert.calledOnceWithExactly(done, error, null, 503, {})
+    assert.strictEqual(pendingRequests.length, 4)
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
   })
 
   it('allows one more attempt when an overlapping final flush extends the deadline', () => {
@@ -292,6 +295,47 @@ describe('Test Optimization exporter request', () => {
 
     assert.strictEqual(pendingRequests.length, 1)
     sinon.assert.calledOnceWithExactly(done, error, undefined, undefined, undefined)
+  })
+
+  it('times out a transport attempt from creation and retries it', () => {
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 30_000, timeout: 1000 }, done)
+
+    const firstRequest = pendingRequests[0]
+    firstRequest.options.signal.addEventListener('abort', () => {
+      const error = Object.assign(new Error('aborted'), { code: 'ABORT_ERR' })
+      firstRequest.callback(error)
+    })
+
+    clock.tick(999)
+    assert.strictEqual(firstRequest.options.signal.aborted, false)
+    clock.tick(1)
+    assert.strictEqual(firstRequest.options.signal.aborted, true)
+    sinon.assert.notCalled(done)
+
+    clock.tick(5999)
+    assert.strictEqual(pendingRequests.length, 1)
+    clock.tick(1)
+    assert.strictEqual(pendingRequests.length, 2)
+
+    pendingRequests[1].callback(null, 'ok', 200, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+  })
+
+  it('reports a transport attempt timeout when retries are disabled', () => {
+    const done = sinon.spy()
+    request('payload', { retry: false, timeout: 1000 }, done)
+
+    const pendingRequest = pendingRequests[0]
+    pendingRequest.options.signal.addEventListener('abort', () => {
+      const error = Object.assign(new Error('aborted'), { code: 'ABORT_ERR' })
+      pendingRequest.callback(error)
+    })
+
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(done)
+    assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT')
   })
 
   it('aborts a scheduled retry and completes once', () => {

@@ -180,6 +180,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   const timeout = options.timeout || 2000
   const payloadSize = reservedPayloadSize ?? getPayloadSize(data)
   let retryTimer
+  let attemptTimer
   let attemptController
   let settled = false
   let lastError
@@ -197,6 +198,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     if (settled) return
     settled = true
     clearTimeout(retryTimer)
+    clearTimeout(attemptTimer)
     signal?.removeEventListener('abort', onAbort)
     bufferedBytes -= payloadSize
     callback(error, result, statusCode, headers)
@@ -249,7 +251,6 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     }
     waitingForBackpressure = false
 
-    const attemptDeadline = deadline
     const attemptOptions = {
       ...options,
       headers: options.headers ? { ...options.headers } : undefined,
@@ -258,10 +259,19 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     if (deadline !== undefined) attemptOptions.timeout = Math.max(1, Math.min(timeout, remaining))
 
     const controller = new AbortController()
+    const attemptTimeout = attemptOptions.timeout || timeout
+    let attemptTimedOut = false
+
     attemptController = controller
     attemptOptions.signal = controller.signal
+    attemptTimer = setTimeout(() => {
+      attemptTimedOut = true
+      controller.abort(createRequestTimeoutError())
+    }, attemptTimeout)
+    attemptTimer.unref?.()
 
     commonRequest(data, attemptOptions, (error, result, statusCode, headers) => {
+      clearTimeout(attemptTimer)
       if (attemptController === controller) attemptController = undefined
       if (settled) return
       if (!error) {
@@ -269,23 +279,24 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
         return
       }
 
-      lastError = error
+      const requestError = attemptTimedOut ? createRequestTimeoutError() : error
+      lastError = requestError
 
       const responseStatus = statusCode ?? error.status
       const isUnknownNetworkError = responseStatus === undefined && error.code === undefined
       const isRetriableError =
-        isRetriableNetworkError(error) || isUnknownNetworkError || isRetriableHttpStatusCode(responseStatus)
-      const deadlineExtended = options.deadline !== undefined &&
-        (attemptDeadline === undefined || options.deadline > attemptDeadline)
-      const reachedAttemptLimit = attemptIndex >= getMaxAttempts(attemptOptions) && !deadlineExtended
+        attemptTimedOut || isRetriableNetworkError(error) || isUnknownNetworkError ||
+          isRetriableHttpStatusCode(responseStatus)
+      const reachedBackgroundAttemptLimit =
+        options.deadline === undefined && attemptIndex >= getMaxAttempts(attemptOptions)
       const reachedUnknownNetworkAttemptLimit = isUnknownNetworkError && attemptIndex >= 2
       if (
         options.retry === false ||
         !isRetriableError ||
-        reachedAttemptLimit ||
+        reachedBackgroundAttemptLimit ||
         reachedUnknownNetworkAttemptLimit
       ) {
-        complete(error, result, statusCode, headers)
+        complete(requestError, result, statusCode, headers)
         return
       }
 
@@ -296,11 +307,11 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
           if (options.deadline !== undefined) {
             const retryRemaining = options.deadline - Date.now()
             if (resetDelay >= retryRemaining) {
-              complete(error, result, statusCode, headers)
+              complete(requestError, result, statusCode, headers)
               return
             }
           } else if (resetDelay > RATE_LIMIT_MAX_WAIT_MS) {
-            complete(error, result, statusCode, headers)
+            complete(requestError, result, statusCode, headers)
             return
           }
           retryDelay = resetDelay
@@ -311,7 +322,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
       if (options.deadline !== undefined && retryDelay === undefined) {
         const retryRemaining = options.deadline - Date.now()
         if (retryRemaining <= 0) {
-          complete(error, result, statusCode, headers)
+          complete(requestError, result, statusCode, headers)
           return
         }
         const retryAttemptTimeout = timeout < retryRemaining ? timeout : Math.ceil(retryRemaining / 2)
