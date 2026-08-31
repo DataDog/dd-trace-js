@@ -70,6 +70,8 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'WEBSITE_SKU',
   // lambda RITM target path (computed once at module load)
   'LAMBDA_TASK_ROOT',
+  // MicroVM clone-resume identity reseed hook registration
+  'AWS_LAMBDA_MICROVM_IMAGE_ARN',
   // serverless service-name fallbacks (Config singleton)
   'WEBSITE_SITE_NAME',
   // azure metadata payload (cached at first build)

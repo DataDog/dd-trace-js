@@ -8,6 +8,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { metrics } = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
@@ -15,6 +16,8 @@ const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
 const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -1282,6 +1285,42 @@ describe('OpenTelemetry Meter Provider', () => {
       } finally {
         clock.restore()
       }
+    })
+  })
+
+  describe('Identity refresh', () => {
+    it('exports refreshed resources without resetting the ObservableCounter delta baseline', () => {
+      const clock = sinon.useFakeTimers()
+      const exportedMetrics = []
+      mockOtlpExport((decoded) => {
+        const resourceAttributes = decoded.resourceMetrics[0].resource.attributes
+        const runtimeId = resourceAttributes.find(attribute => attribute.key === 'runtime-id')
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        exportedMetrics.push({
+          runtimeId: runtimeId.value.stringValue,
+          value: counter.sum.dataPoints[0].asInt,
+        })
+      })
+
+      const { config } = setupMetrics()
+      const initialRuntimeId = config.tags['runtime-id']
+      const meter = metrics.getMeter('app')
+      let value = 20
+      meter.createObservableCounter('obs').addCallback((result) => result.observe(value))
+
+      clock.tick(100)
+
+      // Refresh happens after the first export already established a baseline of 20.
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+      value = 25
+
+      clock.tick(100)
+
+      assert.deepStrictEqual(exportedMetrics, [
+        { runtimeId: initialRuntimeId, value: 20 },
+        { runtimeId: 'refreshed-id', value: 5 },
+      ])
     })
   })
 })
