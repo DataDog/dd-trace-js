@@ -1,7 +1,6 @@
 'use strict'
 
 const { AgentEncoder } = require('./0.4')
-const { normalizeSpan } = require('./tags-processors')
 
 const CROSS_PAYLOAD_CACHE_LIMIT = 256
 const CROSS_PAYLOAD_CANDIDATE_LIMIT = 512
@@ -24,46 +23,28 @@ class CrossPayloadAgentEncoder extends AgentEncoder {
   }
 
   /**
-   * @param {object[]} trace
-   */
-  encode (trace) {
-    const crossPayloadState = crossPayloadStates.get(this)
-    if (crossPayloadState !== undefined &&
-      crossPayloadState.learningPayloadCount < CROSS_PAYLOAD_LEARNING_PAYLOAD_LIMIT) {
-      for (const span of trace) {
-        normalizeSpan(span)
-        if (span.type) markPayloadString(crossPayloadState, span.type)
-        markPayloadString(crossPayloadState, span.name)
-        markPayloadString(crossPayloadState, span.resource)
-        markPayloadString(crossPayloadState, span.service)
-        if (span.meta) {
-          markMapKeys(crossPayloadState, span.meta)
-        }
-        if (span.metrics) {
-          markMapKeys(crossPayloadState, span.metrics)
-        }
-      }
-    }
-    super.encode(trace)
-  }
-
-  /**
    * @param {string} value
+   * @param {boolean} [stable]
    * @returns {Buffer}
    */
-  _cacheString (value) {
+  _cacheString (value, stable = false) {
     const crossPayloadState = crossPayloadStates.get(this)
     if (crossPayloadState === undefined || value.length === 0 || value.length > CROSS_PAYLOAD_STRING_LIMIT) {
       return AgentEncoder.prototype._cacheString.call(this, value)
     }
 
     const learning = crossPayloadState.learningPayloadCount < CROSS_PAYLOAD_LEARNING_PAYLOAD_LIMIT
+    if (learning && stable) markPayloadString(crossPayloadState, value)
     const retainedEntry = crossPayloadState.stringMap?.[value]
     if (retainedEntry !== undefined) {
       if (!learning && crossPayloadState.hitCount < CROSS_PAYLOAD_MISS_LIMIT) {
         crossPayloadState.hitCount++
       }
-      return retainedEntry
+      const start = this._stringBytes.length
+      this._stringBytes.set(retainedEntry)
+      const entry = this._stringBytes.buffer.subarray(start, start + retainedEntry.length)
+      this._stringMap[value] = entry
+      return entry
     }
     if (!learning && crossPayloadState.missCount < CROSS_PAYLOAD_MISS_LIMIT) {
       crossPayloadState.missCount++
@@ -136,28 +117,13 @@ function createCrossPayloadState () {
  * @param {string} value
  */
 function markPayloadString (crossPayloadState, value) {
-  if (value.length === 0 ||
-    value.length > CROSS_PAYLOAD_STRING_LIMIT ||
-    crossPayloadState.payloadStableStringCount >= CROSS_PAYLOAD_CANDIDATE_LIMIT ||
+  if (crossPayloadState.payloadStableStringCount >= CROSS_PAYLOAD_CANDIDATE_LIMIT ||
     crossPayloadState.payloadStableStrings?.[value] !== undefined) {
     return
   }
   crossPayloadState.payloadStableStrings ??= Object.create(null)
   crossPayloadState.payloadStableStrings[value] = true
   crossPayloadState.payloadStableStringCount++
-}
-
-/**
- * @param {ReturnType<typeof createCrossPayloadState>} crossPayloadState
- * @param {Record<string, unknown>} value
- */
-function markMapKeys (crossPayloadState, value) {
-  for (const key of Object.keys(value)) {
-    const entryValue = value[key]
-    if (typeof entryValue === 'string' || typeof entryValue === 'number') {
-      markPayloadString(crossPayloadState, key)
-    }
-  }
 }
 
 /**

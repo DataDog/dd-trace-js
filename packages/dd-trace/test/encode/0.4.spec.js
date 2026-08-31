@@ -221,18 +221,21 @@ describe('encode', () => {
       data[0].resource = identity
       data[0].meta = { stable: value }
       const write = sinon.spy(encoder._stringBytes, 'write')
+      const cacheString = sinon.spy(encoder, '_cacheString')
+      const trace = new Array(50).fill(data[0])
 
-      encoder.encode(data)
+      encoder.encode(trace)
       const first = encoder.makePayload()
-      encoder.encode(data)
+      encoder.encode(trace)
       const second = encoder.makePayload()
-      encoder.encode(data)
+      encoder.encode(trace)
       const third = encoder.makePayload()
 
       assert.deepStrictEqual(second, first)
       assert.deepStrictEqual(third, first)
       assert.strictEqual(write.withArgs(identity).callCount, 2)
       assert.strictEqual(write.withArgs(value).callCount, 3)
+      assert.strictEqual(cacheString.withArgs(identity).callCount, 3)
     })
 
     it('should not retain encoded strings across buffered payloads', () => {
