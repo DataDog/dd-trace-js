@@ -1,10 +1,12 @@
 'use strict'
 
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['dns.promises.resolveTlsa'] }] */
+
 const assert = require('node:assert/strict')
 const { promisify } = require('node:util')
 
 const dc = require('dc-polyfill')
-const { afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { storage } = require('../../datadog-core')
 const { ERROR_TYPE, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -42,21 +44,24 @@ describe('Plugin', () => {
   let dns
   let servers
   let tracer
+
+  before(() => {
+    dns = require('dns')
+    servers = dns.getServers()
+    dns.setServers([LOOPBACK_DNS_SERVER])
+  })
+
+  after(() => {
+    dns.setServers(servers)
+  })
+
   PLUGINS.forEach(plugin => {
     describe(plugin, () => {
-      afterEach(async () => {
-        try {
-          await agent.close()
-        } finally {
-          dns.setServers(servers)
-        }
+      afterEach(() => {
+        return agent.close()
       })
 
       beforeEach(() => {
-        dns = require(plugin)
-        servers = dns.getServers()
-        dns.setServers([LOOPBACK_DNS_SERVER])
-
         return agent.load('dns')
           .then(() => {
             dns = require(plugin)
