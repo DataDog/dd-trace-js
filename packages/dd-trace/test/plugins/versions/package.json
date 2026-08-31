@@ -141,6 +141,7 @@
     "generic-pool": "3.9.0",
     "google-gax": "6.1.0",
     "graphql": "16.14.2",
+    "graphql-jit": "0.8.8",
     "graphql-tag": "2.12.7",
     "graphql-tools": "9.0.34",
     "graphql-yoga": "5.22.0",
