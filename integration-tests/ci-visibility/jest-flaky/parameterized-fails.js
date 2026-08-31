@@ -1,10 +1,11 @@
 'use strict'
 
 describe('test-flaky-test-retries', () => {
-  test.each([
+  const parameterizedTest = test.each([
     ['passing row', true],
     ['failing row', false],
-  ])('preserves parameters between retries', (row, shouldPass) => {
+  ])
+  parameterizedTest('preserves parameters between retries', (row, shouldPass) => {
     expect(shouldPass).toBe(true)
   })
 })
