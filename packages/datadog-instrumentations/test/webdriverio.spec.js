@@ -272,6 +272,42 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('does not retain a standalone RUM browser when no test correlation is available', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().resolves(),
+      execute: sinon.stub().resolves({
+        isRumActive: true,
+        isRumInstrumented: true,
+        rumSamplingRate: 100,
+      }),
+      setCookies: sinon.stub().resolves(),
+    }
+    const skipCorrelation = () => {}
+    correlationCh.subscribe(skipCorrelation)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runGenerator(navigationContext.resolveGenerator(navigationContext))
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+
+      assert.strictEqual(testContext.resolveGenerator, undefined)
+      assert.strictEqual(browser.execute.callCount, 1)
+      assert.strictEqual(browser.setCookies.callCount, 0)
+      assert.strictEqual(browser.deleteCookies.callCount, 0)
+    } finally {
+      correlationCh.unsubscribe(skipCorrelation)
+    }
+  })
+
   it('rewrites legacy and modern Jasmine spec lifecycles', () => {
     const source = fs.readFileSync(jasmineCoreFixturePath, 'utf8')
     const rewrittenSource = rewriter.rewrite(source, jasmineCoreFixtureModulePath)

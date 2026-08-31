@@ -171,7 +171,6 @@ function * handleRumNavigation (context) {
     }
     if (!isRumActive) return
 
-    activeRumBrowsers.add(browser)
     const correlationContext = {
       browserName: browser.capabilities?.browserName,
       browserVersion: browser.capabilities?.browserVersion,
@@ -186,6 +185,7 @@ function * handleRumNavigation (context) {
     }
     if (!correlationContext.testExecutionId) return
 
+    activeRumBrowsers.add(browser)
     try {
       yield browser.setCookies({
         name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
