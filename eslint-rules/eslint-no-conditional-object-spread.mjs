@@ -23,6 +23,7 @@ export default {
       SpreadElement (node) {
         if (
           node.parent.type !== 'ObjectExpression' ||
+          node.parent.properties.at(-1) !== node ||
           !hasSafeAssignmentTarget(node.parent) ||
           !hasSafeConditionalObject(node.argument)
         ) return

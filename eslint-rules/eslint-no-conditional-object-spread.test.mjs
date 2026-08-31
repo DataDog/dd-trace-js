@@ -24,6 +24,8 @@ ruleTester.run('eslint-no-conditional-object-spread', /** @type {import('eslint'
     'const result = { ...(enabled ? { value } : { ...fallback }) }',
     'const result = { __proto__: prototype, ...(enabled && { value }) }',
     'const result = { set value (next) {}, ...(enabled && { value }) }',
+    'const result = { ...(enabled && { value: 1 }), value: 2 }',
+    'const result = { ...(enabled ? { value } : {}), other }',
   ],
   invalid: [
     {
@@ -40,10 +42,11 @@ ruleTester.run('eslint-no-conditional-object-spread', /** @type {import('eslint'
     },
     {
       code: 'const result = { ...(enabled && { value }), ...(ready ? {} : { other }) }',
-      errors: [
-        { messageId: 'assignConditionalProperties' },
-        { messageId: 'assignConditionalProperties' },
-      ],
+      errors: [{ messageId: 'assignConditionalProperties' }],
+    },
+    {
+      code: 'const result = { value: first(), ...(enabled && { value: second() }) }',
+      errors: [{ messageId: 'assignConditionalProperties' }],
     },
   ],
 })
