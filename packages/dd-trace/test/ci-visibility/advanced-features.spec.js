@@ -24,6 +24,25 @@ describe('test optimization validation advanced features', () => {
     assert.match(result.diagnosis, /manifest is incomplete/)
   })
 
+  it('reports an unavailable generated strategy as a validator limitation', () => {
+    const framework = {
+      id: 'vitest:root',
+      generatedTestStrategy: {
+        reason: 'The selected Vitest project excludes validator-generated tests.',
+        status: 'not_possible',
+      },
+    }
+    const result = requireGeneratedScenario(framework, 'basic-pass', 'efd')
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.manifestIncomplete, true)
+    assert.strictEqual(result.evidence.blockerCategory, 'VALIDATOR_LIMITATION')
+    assert.strictEqual(result.evidence.featureEligibility.eligible, undefined)
+    assert.strictEqual(result.evidence.featureEligibility.reasonCode, 'generated-test-strategy-not-possible')
+    assert.match(result.evidence.recommendation, /validator engineering/)
+    assert.match(result.evidence.recommendation, /project setup changes are not required/)
+  })
+
   it('keeps missing generated identity evidence incomplete when the clean count was unknown', async () => {
     const scenario = { id: 'basic-pass', runCommand: { argv: ['node', 'test.js'] } }
     const result = await reportMissingGeneratedTest({

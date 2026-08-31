@@ -27,7 +27,7 @@ describe('Path traversal analyzer', () => {
 
   withVersions('express', 'express', version => {
     if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
-      // eslint-disable-next-line mocha/no-pending-tests
+      // Express 4.10.5 and older cannot start on Node.js 24.
       describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
       return
     }
@@ -41,7 +41,8 @@ describe('Path traversal analyzer', () => {
           testThatRequestHasVulnerability(
             {
               fn: (req, res) => {
-                require(renderFunctionPath)(res, req.query.file)
+                const render = require(renderFunctionPath)
+                render(res, req.query.file)
                 return true
               },
               vulnerability: 'PATH_TRAVERSAL',
@@ -57,7 +58,8 @@ describe('Path traversal analyzer', () => {
           testThatRequestHasNoVulnerability(
             {
               fn: (req, res) => {
-                require(renderFunctionPath)(res, 'template')
+                const render = require(renderFunctionPath)
+                render(res, 'template')
                 return true
               },
               vulnerability: 'PATH_TRAVERSAL',

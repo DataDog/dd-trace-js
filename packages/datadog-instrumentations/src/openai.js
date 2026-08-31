@@ -6,6 +6,7 @@ const { addHook } = require('./helpers/instrument')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
+const responsePromiseContexts = new WeakMap()
 
 // Provider lifecycle channels. Payloads stay OpenAI-native:
 // before { args, parentSpan, abortController, pending }
@@ -68,7 +69,7 @@ const V4_PACKAGE_SHIMS = [
     file: 'resources/responses/responses',
     targetClass: 'Responses',
     baseResource: 'responses',
-    methods: ['create'],
+    methods: ['create'], // implicitly covers `parse` as well which calls `create` under the hood
     streamedResponse: true,
     versions: ['>=4.87.0'],
   },
@@ -211,9 +212,23 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 })
 
 /**
+ * @typedef {{
+ *   methodName: string,
+ *   args: unknown[],
+ *   basePath?: string,
+ *   result?: Record<string, unknown>,
+ *   error?: unknown,
+ * }} OpenAiContext
+ */
+
+/**
  * For streamed responses, we need to accumulate all of the content in
  * the chunks, and let the combined content be the final response.
  * This way, spans look the same as when not streamed.
+ *
+ * @param {{ headers: unknown, url: string }} response
+ * @param {{ method: string }} options
+ * @param {OpenAiContext} ctx
  */
 function wrapStreamIterator (response, options, ctx) {
   return function (itr) {
@@ -249,6 +264,42 @@ function wrapStreamIterator (response, options, ctx) {
 }
 
 const extensions = ['.js', '.mjs']
+
+for (const extension of extensions) {
+  const apiPromiseShims = [
+    { file: `core${extension}`, versions: ['>=4 <5'] },
+    { file: `core/api-promise${extension}`, versions: ['>=5'] },
+  ]
+
+  for (const { file, versions } of apiPromiseShims) {
+    // APIPromise is a Promise subclass whose methods are dynamically replaced on pagination instances,
+    // so preserving the returned object's identity requires shimmer instead of Orchestrion.
+    addHook({ name: 'openai', file, versions }, exports => {
+      const { prototype } = exports.APIPromise
+
+      shimmer.wrap(prototype, 'parse', parse => function (...args) {
+        const state = responsePromiseContexts.get(this.responsePromise)
+        if (!state) return parse.apply(this, args)
+
+        const parsedPromise = parse.apply(this, args)
+          .then(body => Promise.all([this.responsePromise, body]))
+
+        return handleUnwrappedAPIPromise(parsedPromise, state)
+      })
+
+      shimmer.wrap(prototype, 'asResponse', asResponse => function (...args) {
+        const state = responsePromiseContexts.get(this.responsePromise)
+        const responsePromise = asResponse.apply(this, args)
+
+        if (!state?.getBeforeVerdict) return responsePromise
+
+        return Promise.all([state.getBeforeVerdict(), responsePromise]).then(([, response]) => response)
+      })
+
+      return exports
+    })
+  }
+}
 
 for (const extension of extensions) {
   for (const shim of V4_PACKAGE_SHIMS) {
@@ -295,44 +346,8 @@ for (const extension of extensions) {
               }
               : null
 
-            if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
-              // this should only ever be invoked from a client.beta.chat.completions.parse call
-              shimmer.wrap(apiProm, '_thenUnwrap', origApiPromThenUnwrap => function (...args) {
-                // TODO(sam.brenner): I wonder if we can patch the APIPromise prototype instead, although
-                // we might not have access to everything we need...
-
-                // this is a new apipromise instance
-                const unwrappedPromise = origApiPromThenUnwrap.apply(this, args)
-
-                shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => function (...args) {
-                  const parsedPromise = origApiPromParse.apply(this, args)
-                    .then(body => Promise.all([this.responsePromise, body]))
-
-                  return handleUnwrappedAPIPromise(
-                    parsedPromise, ctx, stream, getBeforeVerdict, afterChannel, parentSpan
-                  )
-                })
-
-                return unwrappedPromise
-              })
-            }
-
-            // wrapping `parse` avoids problematic wrapping of `then` when trying to call
-            // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
-            shimmer.wrap(apiProm, 'parse', origApiPromParse => function (...args) {
-              const parsedPromise = origApiPromParse.apply(this, args)
-                .then(body => Promise.all([this.responsePromise, body]))
-
-              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, getBeforeVerdict, afterChannel, parentSpan)
-            })
-
-            // Gate `.asResponse()` callers on the before verdict so raw-response paths still block.
-            if (beforeChannel && typeof apiProm.asResponse === 'function') {
-              shimmer.wrap(apiProm, 'asResponse', origAsResponse => function (...args) {
-                const responsePromise = origAsResponse.apply(this, args)
-                return Promise.all([getBeforeVerdict(), responsePromise]).then(([, response]) => response)
-              })
-            }
+            const state = { ctx, stream, getBeforeVerdict, afterChannel, parentSpan }
+            responsePromiseContexts.set(apiProm.responsePromise, state)
 
             ch.end.publish(ctx)
 
@@ -345,7 +360,8 @@ for (const extension of extensions) {
   }
 }
 
-function handleUnwrappedAPIPromise (apiProm, ctx, stream, getBeforeVerdict, afterChannel, parentSpan) {
+function handleUnwrappedAPIPromise (apiProm, state) {
+  const { ctx, stream, getBeforeVerdict, afterChannel, parentSpan } = state
   const gatedApiProm = getBeforeVerdict
     ? Promise.all([getBeforeVerdict(), apiProm]).then(([, result]) => result)
     : apiProm

@@ -721,7 +721,7 @@ describe('integrations', () => {
             n: 1,
             user: 'dd-trace-test',
           })
-        } catch (e) {
+        } catch {
           // expected error
         }
 
@@ -892,6 +892,52 @@ describe('integrations', () => {
         }
 
         await openai.responses.create({
+          model: 'gpt-4o-mini',
+          input: 'What is the capital of France?',
+          max_output_tokens: 100,
+          temperature: 0.5,
+          stream: false,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'What is the capital of France?' },
+          ],
+          outputMessages: [
+            { role: 'assistant', content: MOCK_STRING },
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+          },
+          modelName: 'gpt-4o-mini-2024-07-18',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 100,
+            temperature: 0.5,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            stream: false,
+          },
+          tags: { ml_app: 'test', integration: 'openai' },
+        })
+      })
+
+      it('submits a response.parse span', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.parse({
           model: 'gpt-4o-mini',
           input: 'What is the capital of France?',
           max_output_tokens: 100,

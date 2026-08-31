@@ -167,17 +167,18 @@ class AgentlessJSONEncoder {
       const metadataPrefix = metadataJson.slice(0, -1)
       const hasMetadata = metadataPrefix.length > 1 // more than just '{'
 
-      const traceParts = []
+      let tracesJson = ''
       for (const spanStrings of this._traces) {
         const spansJson = '[' + spanStrings.join(',') + ']'
+        if (tracesJson) tracesJson += ','
         if (hasMetadata) {
-          traceParts.push(metadataPrefix + ',"spans":' + spansJson + '}')
+          tracesJson += metadataPrefix + ',"spans":' + spansJson + '}'
         } else {
-          traceParts.push('{"spans":' + spansJson + '}')
+          tracesJson += '{"spans":' + spansJson + '}'
         }
       }
 
-      const payload = '{"traces":[' + traceParts.join(',') + ']}'
+      const payload = '{"traces":[' + tracesJson + ']}'
       this._reset()
       return Buffer.from(payload, 'utf8')
     } catch (err) {

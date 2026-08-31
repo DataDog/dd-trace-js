@@ -16,17 +16,32 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
+const { createEfdRetryPolicy } = require('../../../src/ci-visibility/efd-retry-policy')
+const {
+  FINAL_FLUSH_FALLBACK_DELAY,
+  FINAL_FLUSH_TIMEOUT,
+} = require('../../../src/ci-visibility/final-flush')
 const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
   require('../../../src/ci-visibility/requests/upload-coverage-report')
+const { uploadTestScreenshot: actualUploadTestScreenshotRequest } =
+  require('../../../src/ci-visibility/requests/upload-test-screenshot')
+
+const sketchesJsPath = require.resolve('../../../../../vendor/dist/@datadog/sketches-js')
 
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
+let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
 const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
   '../requests/upload-coverage-report': {
     uploadCoverageReport (...args) {
       return uploadCoverageReportRequest(...args)
+    },
+  },
+  '../requests/upload-test-screenshot': {
+    uploadTestScreenshot (...args) {
+      return uploadTestScreenshotRequest(...args)
     },
   },
 })
@@ -46,12 +61,19 @@ describe('CI Visibility Exporter', () => {
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
     sinon.stub(cp, 'execFileSync').returns('false')
-    sinon.stub(fs, 'readFileSync').returns('')
+    const readFileSync = fs.readFileSync
+    sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
+      if (filename === sketchesJsPath) {
+        return readFileSync.call(fs, filename, ...args)
+      }
+      return ''
+    })
     const config = getConfig()
     originalApiKey = config.DD_API_KEY
     config.DD_API_KEY = '1'
     nock.cleanAll()
     uploadCoverageReportRequest = actualUploadCoverageReportRequest
+    uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
   })
 
   afterEach(() => {
@@ -69,6 +91,15 @@ describe('CI Visibility Exporter', () => {
       DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: 20,
       DD_TEST_MANAGEMENT_ENABLED: true,
     }
+    const ZERO_RETRY_POLICY = {
+      durationRetryCounts: [
+        { durationLimitMs: 5000, retryCount: 0 },
+        { durationLimitMs: 10_000, retryCount: 0 },
+        { durationLimitMs: 30_000, retryCount: 0 },
+        { durationLimitMs: 300_000, retryCount: 0 },
+      ],
+      schedulingRetryCount: 0,
+    }
 
     it('creates a complete frozen policy from remote and local settings', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ testOptimization })
@@ -78,8 +109,7 @@ describe('CI Visibility Exporter', () => {
         isItrEnabled: true,
         requireGit: true,
         isEarlyFlakeDetectionEnabled: true,
-        earlyFlakeDetectionNumRetries: 0,
-        earlyFlakeDetectionSlowTestRetries: { '5s': 0 },
+        earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 0 }),
         earlyFlakeDetectionFaultyThreshold: 0,
         isFlakyTestRetriesEnabled: true,
         isDiEnabled: true,
@@ -96,8 +126,7 @@ describe('CI Visibility Exporter', () => {
         isItrEnabled: true,
         requireGit: true,
         isEarlyFlakeDetectionEnabled: true,
-        earlyFlakeDetectionNumRetries: 0,
-        earlyFlakeDetectionSlowTestRetries: { '5s': 0 },
+        earlyFlakeDetectionRetryPolicy: ZERO_RETRY_POLICY,
         earlyFlakeDetectionFaultyThreshold: 0,
         isFlakyTestRetriesEnabled: true,
         flakyTestRetriesCount: 5,
@@ -109,7 +138,7 @@ describe('CI Visibility Exporter', () => {
         isCoverageReportUploadEnabled: true,
       })
       assert.strictEqual(Object.isFrozen(policy), true)
-      assert.strictEqual(Object.isFrozen(policy.earlyFlakeDetectionSlowTestRetries), true)
+      assert.strictEqual(Object.isFrozen(policy.earlyFlakeDetectionRetryPolicy), true)
     })
 
     it('creates a complete disabled policy when remote settings are unavailable', () => {
@@ -121,8 +150,7 @@ describe('CI Visibility Exporter', () => {
         isItrEnabled: false,
         requireGit: false,
         isEarlyFlakeDetectionEnabled: false,
-        earlyFlakeDetectionNumRetries: 0,
-        earlyFlakeDetectionSlowTestRetries: {},
+        earlyFlakeDetectionRetryPolicy: ZERO_RETRY_POLICY,
         earlyFlakeDetectionFaultyThreshold: 30,
         isFlakyTestRetriesEnabled: false,
         flakyTestRetriesCount: 5,
@@ -158,6 +186,24 @@ describe('CI Visibility Exporter', () => {
       sinon.assert.calledOnceWithExactly(onGitUploadReady, undefined)
       assert.strictEqual(clock.now, 0)
       assert.strictEqual(scope.isDone(), false)
+    })
+
+    it('should start the git upload timeout when an upload is requested', async () => {
+      const clock = sinon.useFakeTimers()
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true },
+      })
+
+      try {
+        ciVisibilityExporter.sendGitMetadata()
+        await clock.tickAsync(60_000)
+
+        const err = await ciVisibilityExporter._gitUploadPromise
+        assert.match(err.message, /Timeout while uploading git metadata/)
+      } finally {
+        clock.restore()
+      }
     })
 
     it('should resolve _gitUploadPromise when git metadata is fetched', (done) => {
@@ -378,6 +424,52 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       })
+      it('does not request skippable suites when git metadata upload fails with require_git false', (done) => {
+        // Regression: the live settings path starts `sendGitMetadata` even when the
+        // backend returns `require_git: false`. `getSkippableSuites` awaits
+        // `_gitUploadPromise`, so a failed upload must resolve that promise with the
+        // error and suppress the skippable request. The settings fs-cache apply path
+        // must NOT call `_resolveGit()` on the live path, or it races the in-flight
+        // upload and masks its error.
+        nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                itr_enabled: true,
+                require_git: false,
+                code_coverage: true,
+                tests_skipping: true,
+              },
+            },
+          }))
+
+        const skippableScope = nock(url)
+          .post('/api/v2/ci/tests/skippable')
+          .reply(200, JSON.stringify({ data: [] }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+        })
+        // Simulate a failed git metadata upload: resolve the git promise with an error,
+        // as the real `sendGitMetadata` would on a non-2xx response.
+        ciVisibilityExporter.sendGitMetadata = function () {
+          setImmediate(() => this._resolveGit(new Error('git metadata upload failed')))
+        }
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+
+        ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+          assert.strictEqual(settingsErr, null)
+          assert.strictEqual(ciVisibilityExporter.shouldRequestSkippableSuites(), true)
+          ciVisibilityExporter.getSkippableSuites({}, (skippableErr, skippableSuites) => {
+            assert.ok(skippableErr instanceof Error, 'skippable should surface the git upload error')
+            assert.deepStrictEqual(skippableSuites, [])
+            assert.strictEqual(skippableScope.isDone(), false, 'should NOT request skippable when git upload fails')
+            done()
+          })
+        })
+      })
       it('will retry ITR configuration request if require_git is true', (done) => {
         const TIME_TO_UPLOAD_GIT = 50
         let hasUploadedGit = false
@@ -462,14 +554,64 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter._resolveGit()
       })
+      it('clears phase-one settings when the post-upload settings request fails', (done) => {
+        // Regression: when the backend returns require_git:true and the second (post-upload)
+        // settings request fails, _libraryConfig must be reset to empty settings so stale
+        // phase-one feature flags don't stay installed (shouldRequestSkippableSuites etc.).
+        const scope = nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                require_git: true,
+                code_coverage: true,
+                tests_skipping: true,
+                itr_enabled: true,
+              },
+            },
+          }))
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(400, JSON.stringify({ errors: [{ detail: 'backend error' }] }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
+        })
+        sinon.stub(ciVisibilityExporter, 'sendGitMetadata')
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
+          assert.strictEqual(scope.isDone(), true, 'both phases should have hit the API')
+          assert.ok(err, 'should surface the second-request error')
+          // Phase-1 had tests_skipping:true and itr_enabled:true; after the failure these
+          // must NOT remain installed on _libraryConfig.
+          assert.strictEqual(
+            ciVisibilityExporter.shouldRequestSkippableSuites(),
+            false,
+            'stale phase-1 flags must not enable skippable after a failed negotiation'
+          )
+          done()
+        })
+        // Simulate the git upload finishing so the phase-2 request can proceed.
+        setImmediate(() => ciVisibilityExporter._resolveGit())
+      })
     })
   })
 
   describe('filterConfiguration', () => {
     const remoteConfiguration = {
       isEarlyFlakeDetectionEnabled: true,
-      earlyFlakeDetectionNumRetries: 10,
-      earlyFlakeDetectionSlowTestRetries: { '5s': 10, '10s': 5, '30s': 3, '5m': 2 },
+      earlyFlakeDetectionRetryPolicy: {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 10 },
+          { durationLimitMs: 10_000, retryCount: 5 },
+          { durationLimitMs: 30_000, retryCount: 3 },
+          { durationLimitMs: 300_000, retryCount: 2 },
+        ],
+        schedulingRetryCount: 10,
+      },
     }
 
     it('preserves the backend EFD retry configuration when the local retry count is unset', () => {
@@ -477,10 +619,9 @@ describe('CI Visibility Exporter', () => {
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
-      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 10)
       assert.deepStrictEqual(
-        configuration.earlyFlakeDetectionSlowTestRetries,
-        remoteConfiguration.earlyFlakeDetectionSlowTestRetries
+        configuration.earlyFlakeDetectionRetryPolicy,
+        remoteConfiguration.earlyFlakeDetectionRetryPolicy
       )
     })
 
@@ -492,12 +633,14 @@ describe('CI Visibility Exporter', () => {
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
-      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 2)
-      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
-        '5s': 2,
-        '10s': 2,
-        '30s': 2,
-        '5m': 2,
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionRetryPolicy, {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 2 },
+          { durationLimitMs: 10_000, retryCount: 2 },
+          { durationLimitMs: 30_000, retryCount: 2 },
+          { durationLimitMs: 300_000, retryCount: 2 },
+        ],
+        schedulingRetryCount: 2,
       })
     })
 
@@ -509,12 +652,14 @@ describe('CI Visibility Exporter', () => {
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
-      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 0)
-      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
-        '5s': 0,
-        '10s': 0,
-        '30s': 0,
-        '5m': 0,
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionRetryPolicy, {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 0 },
+          { durationLimitMs: 10_000, retryCount: 0 },
+          { durationLimitMs: 30_000, retryCount: 0 },
+          { durationLimitMs: 300_000, retryCount: 0 },
+        ],
+        schedulingRetryCount: 0,
       })
     })
   })
@@ -826,6 +971,24 @@ describe('CI Visibility Exporter', () => {
         )
         sinon.assert.notCalled(ciVisibilityExporter._writer.append)
       })
+
+      for (const sessionEventType of ['test_suite_end', 'test_module_end', 'test_session_end']) {
+        it(`should export test events from a trace containing ${sessionEventType}`, () => {
+          const writer = {
+            append: sinon.spy(),
+            flush: sinon.spy(),
+            setUrl: sinon.spy(),
+          }
+          const testEvent = { type: 'test' }
+          const ciVisibilityExporter = new CiVisibilityExporter({ url })
+          ciVisibilityExporter._isInitialized = true
+          ciVisibilityExporter._writer = writer
+
+          ciVisibilityExporter.export([testEvent, { type: sessionEventType }])
+
+          sinon.assert.calledOnceWithExactly(writer.append, [testEvent])
+        })
+      }
     })
     context('is initialized and can use CI Vis protocol', () => {
       it('should export session traces', () => {
@@ -848,6 +1011,201 @@ describe('CI Visibility Exporter', () => {
         )
         sinon.assert.called(ciVisibilityExporter._writer.append)
       })
+
+      it('defers an immediate session flush until the bounded final flush', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy((done) => done?.()),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._writer = writer
+        ciVisibilityExporter._canUseCiVisProtocol = true
+
+        ciVisibilityExporter.export([{ type: 'test_session_end' }])
+
+        sinon.assert.notCalled(writer.flush)
+        ciVisibilityExporter.flush(() => {})
+        sinon.assert.calledOnce(writer.flush)
+        assert.strictEqual(typeof writer.flush.firstCall.args[1].deadline, 'number')
+      })
+
+      it('exports a suite trace without retaining it', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(done => done?.()),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._writer = writer
+        ciVisibilityExporter._canUseCiVisProtocol = true
+        const testEvent = { type: 'test' }
+        const suiteEvent = {
+          type: 'test_suite_end',
+          span_id: 'suite-span-id',
+          error: 0,
+          meta: { 'test.status': 'pass' },
+          metrics: {},
+        }
+
+        ciVisibilityExporter.export([testEvent, suiteEvent])
+
+        sinon.assert.calledOnceWithExactly(writer.append, [testEvent, suiteEvent])
+      })
+    })
+  })
+
+  describe('flush', () => {
+    it('completes immediately when initialization is pending without buffered data', () => {
+      const clock = sinon.useFakeTimers()
+      try {
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
+        const timersBeforeFlush = clock.countTimers()
+        const done = sinon.spy()
+
+        ciVisibilityExporter.flush(done)
+
+        sinon.assert.calledOnceWithExactly(done)
+        assert.strictEqual(clock.countTimers(), timersBeforeFlush)
+      } finally {
+        clock.restore()
+      }
+    })
+
+    for (const [payloadType, writerProperty, exportPayload] of [
+      ['trace', '_writer', exporter => exporter.export([{ type: 'test' }])],
+      ['coverage', '_coverageWriter', exporter => exporter.exportCoverage({})],
+    ]) {
+      it(`waits for exporter initialization with buffered ${payloadType}`, async () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy((done) => done()),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
+        const done = sinon.spy()
+
+        exportPayload(ciVisibilityExporter)
+        ciVisibilityExporter.flush(done)
+        sinon.assert.notCalled(done)
+
+        ciVisibilityExporter[writerProperty] = writer
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        await Promise.resolve()
+
+        sinon.assert.calledOnce(writer.flush)
+        sinon.assert.calledOnceWithExactly(done, undefined)
+        assert.strictEqual(typeof writer.flush.firstCall.args[1].deadline, 'number')
+      })
+    }
+
+    it('starts a new final flush after more test data is exported', () => {
+      const writer = {
+        append: sinon.spy(),
+        flush: sinon.spy((done) => done?.()),
+        setUrl: sinon.spy(),
+      }
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+      ciVisibilityExporter._isInitialized = true
+      ciVisibilityExporter._canUseCiVisProtocol = true
+      ciVisibilityExporter._writer = writer
+
+      ciVisibilityExporter.flush(() => {})
+      ciVisibilityExporter.export([{ type: 'test_session_end' }])
+      ciVisibilityExporter.flush(() => {})
+
+      sinon.assert.calledTwice(writer.flush)
+    })
+
+    it('does not coalesce new test data into an active final flush', () => {
+      const flushCallbacks = []
+      const writer = {
+        append: sinon.spy(),
+        flush: sinon.spy(done => flushCallbacks.push(done)),
+        setUrl: sinon.spy(),
+      }
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+      ciVisibilityExporter._isInitialized = true
+      ciVisibilityExporter._canUseCiVisProtocol = true
+      ciVisibilityExporter._writer = writer
+      const firstDone = sinon.spy()
+      const secondDone = sinon.spy()
+
+      ciVisibilityExporter.flush(firstDone)
+      ciVisibilityExporter.export([{ type: 'test_session_end' }])
+      ciVisibilityExporter.flush(secondDone)
+
+      sinon.assert.calledTwice(writer.flush)
+      flushCallbacks[0]()
+      sinon.assert.calledOnceWithExactly(firstDone, undefined)
+      sinon.assert.notCalled(secondDone)
+      flushCallbacks[1]()
+      sinon.assert.calledOnceWithExactly(secondDone, undefined)
+    })
+
+    it('completes every coalesced final flush when a callback throws', () => {
+      let flushWriter
+      const callbackError = new Error('framework callback error')
+      const logError = sinon.stub(ciVisibilityLog, 'error')
+      const writer = {
+        append: sinon.spy(),
+        flush: sinon.spy(done => { flushWriter = done }),
+        setUrl: sinon.spy(),
+      }
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+      ciVisibilityExporter._isInitialized = true
+      ciVisibilityExporter._canUseCiVisProtocol = true
+      ciVisibilityExporter._writer = writer
+      const firstDone = sinon.spy(() => { throw callbackError })
+      const secondDone = sinon.spy()
+
+      ciVisibilityExporter.flush(firstDone)
+      ciVisibilityExporter.flush(secondDone)
+
+      sinon.assert.calledOnce(writer.flush)
+      flushWriter()
+      sinon.assert.calledOnceWithExactly(firstDone, undefined)
+      sinon.assert.calledOnceWithExactly(secondDone, undefined)
+      sinon.assert.calledOnceWithExactly(
+        logError,
+        'Error completing Test Optimization flush callback',
+        callbackError
+      )
+    })
+
+    it('reuses an expired final flush when exporter initialization never completes', () => {
+      const clock = sinon.useFakeTimers()
+      const logError = sinon.stub(ciVisibilityLog, 'error')
+      const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+      let beforeExitHandler
+      try {
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
+        beforeExitHandler = [...beforeExitHandlers].at(-1)
+        const done = sinon.spy()
+
+        ciVisibilityExporter.export([{ type: 'test' }])
+        ciVisibilityExporter.flush(done)
+        clock.tick(FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY)
+
+        sinon.assert.calledOnce(done)
+        const timeoutError = done.firstCall.args[0]
+        assert.strictEqual(timeoutError.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+
+        const repeatedDone = sinon.spy()
+        ciVisibilityExporter.flush(repeatedDone)
+        sinon.assert.calledOnceWithExactly(repeatedDone, timeoutError)
+
+        const timersBeforeExit = clock.countTimers()
+        beforeExitHandler()
+        assert.strictEqual(clock.countTimers(), timersBeforeExit)
+        sinon.assert.calledOnce(logError)
+      } finally {
+        beforeExitHandlers.delete(beforeExitHandler)
+        clock.restore()
+      }
     })
   })
 
@@ -1377,13 +1735,28 @@ describe('CI Visibility Exporter', () => {
       return exporter
     }
 
+    /**
+     * @param {CiVisibilityExporter} exporter
+     * @param {(error: Error|null) => void} [callback]
+     */
     function upload (exporter, callback = () => {}) {
       exporter.uploadCoverageReport({
         filePath: '/tmp/coverage.xml',
+        fileDevice: 1n,
+        fileInode: 9_007_199_254_740_993n,
         format: 'cobertura',
         testEnvironmentMetadata: { 'git.commit.sha': 'abc123' },
       }, callback)
     }
+
+    it('forwards the discovered coverage report identity', () => {
+      const exporter = createExporter()
+
+      upload(exporter)
+
+      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].fileDevice, 1n)
+      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].fileInode, 9_007_199_254_740_993n)
+    })
 
     it('reuses exactly 32 coverage report flags for every upload', () => {
       const flags = Array.from({ length: 32 }, (_, index) => `flag-${index}`)
@@ -1479,6 +1852,116 @@ describe('CI Visibility Exporter', () => {
       })
       ciVisibilityExporter._testScreenshotUploadUrl = url
       assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), true)
+    })
+  })
+
+  describe('uploadTestScreenshot', () => {
+    const screenshotOptions = {
+      filePath: '/tmp/test-failed-1.png',
+      traceId: '1',
+      idempotencyKey: '1:test-failed-1.png',
+      capturedAtMs: 1,
+    }
+
+    function createScreenshotExporter () {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+      exporter._isInitialized = true
+      exporter._canUseCiVisProtocol = true
+      exporter._writer = { append: sinon.stub(), flush: sinon.stub().yields() }
+      return exporter
+    }
+
+    it('bounds a pending screenshot and lets final flush complete', () => {
+      const clock = sinon.useFakeTimers()
+      try {
+        uploadTestScreenshotRequest = sinon.stub()
+        const exporter = createScreenshotExporter()
+        const screenshotCallback = sinon.spy()
+        const flushCallback = sinon.spy()
+
+        exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
+        exporter.flush(flushCallback)
+        const requestOptions = uploadTestScreenshotRequest.firstCall.args[0]
+        assert.strictEqual(requestOptions.deadline, FINAL_FLUSH_TIMEOUT)
+        assert.strictEqual(requestOptions.signal.aborted, false)
+        sinon.assert.notCalled(exporter._writer.flush)
+        sinon.assert.notCalled(flushCallback)
+
+        clock.tick(FINAL_FLUSH_TIMEOUT - 1)
+        sinon.assert.notCalled(screenshotCallback)
+        sinon.assert.notCalled(flushCallback)
+
+        clock.tick(1)
+        assert.strictEqual(requestOptions.signal.aborted, true)
+        sinon.assert.calledOnce(screenshotCallback)
+        assert.strictEqual(screenshotCallback.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+        sinon.assert.calledOnce(exporter._writer.flush)
+        sinon.assert.calledOnceWithExactly(flushCallback, undefined)
+
+        uploadTestScreenshotRequest.firstCall.args[1]()
+        sinon.assert.calledOnce(screenshotCallback)
+        sinon.assert.calledOnce(flushCallback)
+      } finally {
+        clock.restore()
+      }
+    })
+
+    it('waits for screenshot completion work before flushing writers', async () => {
+      uploadTestScreenshotRequest = sinon.stub()
+      const exporter = createScreenshotExporter()
+      const completed = []
+      const screenshotCallback = () => queueMicrotask(() => completed.push('screenshot'))
+      const flushCallback = sinon.spy()
+
+      exporter.flush(sinon.spy())
+      exporter._writer.flush.resetHistory()
+      exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
+      exporter.flush(flushCallback)
+
+      sinon.assert.notCalled(exporter._writer.flush)
+      sinon.assert.notCalled(flushCallback)
+
+      uploadTestScreenshotRequest.firstCall.args[1](null)
+      await new Promise(resolve => queueMicrotask(resolve))
+
+      assert.deepStrictEqual(completed, ['screenshot'])
+      sinon.assert.calledOnce(exporter._writer.flush)
+      sinon.assert.calledOnceWithExactly(flushCallback, undefined)
+    })
+
+    it('forwards caller cancellation and completes once', () => {
+      uploadTestScreenshotRequest = sinon.stub()
+      const exporter = createScreenshotExporter()
+      const controller = new AbortController()
+      const callback = sinon.spy()
+      const error = new Error('framework stopped')
+
+      exporter.uploadTestScreenshot({ ...screenshotOptions, signal: controller.signal }, callback)
+      const requestSignal = uploadTestScreenshotRequest.firstCall.args[0].signal
+      controller.abort(error)
+
+      assert.strictEqual(requestSignal.aborted, true)
+      sinon.assert.calledOnceWithExactly(callback, error)
+      uploadTestScreenshotRequest.firstCall.args[1](error)
+      sinon.assert.calledOnce(callback)
+    })
+
+    it('does not start an upload when the caller signal is already aborted', () => {
+      uploadTestScreenshotRequest = sinon.stub()
+      const exporter = createScreenshotExporter()
+      const controller = new AbortController()
+      const callback = sinon.spy()
+      const error = new Error('framework stopped')
+      controller.abort(error)
+
+      exporter.uploadTestScreenshot({ ...screenshotOptions, signal: controller.signal }, callback)
+
+      sinon.assert.notCalled(uploadTestScreenshotRequest)
+      sinon.assert.calledOnceWithExactly(callback, error)
     })
   })
 })

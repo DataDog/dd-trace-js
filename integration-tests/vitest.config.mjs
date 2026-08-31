@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
+import { BaseSequencer } from 'vitest/node'
 
 let defineVitestConfig = defineConfig
 
-class CustomSequencer {
+class CustomSequencer extends BaseSequencer {
   async shard (files) {
     return files
   }
@@ -12,7 +13,7 @@ class CustomSequencer {
       // eslint-disable-next-line no-console
       console.log(process.env.CUSTOM_SEQUENCER_MARKER)
     }
-    return files
+    return super.sort(files)
   }
 }
 
@@ -23,6 +24,16 @@ const config = {
     ],
     reporters: ['default'],
   },
+}
+
+if (process.env.VITEST_THROWING_REPORTER) {
+  config.test.reporters.push('./ci-visibility/vitest-reporter-throws.mjs')
+}
+
+if (process.env.VITEST_PRESERVE_SYMLINKS) {
+  config.resolve = {
+    preserveSymlinks: true,
+  }
 }
 
 const poolConfig = process.env.POOL_CONFIG || 'forks'
@@ -80,6 +91,9 @@ if (process.env.VITEST_BROWSER_MODE) {
     : 'playwright'
 
   config.test.browser = {
+    connectTimeout: process.env.VITEST_BROWSER_CONNECT_TIMEOUT
+      ? Number(process.env.VITEST_BROWSER_CONNECT_TIMEOUT)
+      : undefined,
     enabled: true,
     headless: true,
     provider,
@@ -174,7 +188,7 @@ if (process.env.PROJECT_POOL_CONFIG) {
 if (process.env.COVERAGE_PROVIDER) {
   config.test.coverage = {
     provider: process.env.COVERAGE_PROVIDER || 'v8',
-    include: ['ci-visibility/vitest-tests/**'],
+    include: [process.env.COVERAGE_INCLUDE || 'ci-visibility/vitest-tests/**'],
     reporter: ['text-summary', 'lcov'],
   }
 }

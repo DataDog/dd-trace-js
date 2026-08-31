@@ -184,6 +184,75 @@ moduleTypes.forEach(({
         ])
       })
 
+      it('preserves manual Cypress retries when the EFD retry budget is zero', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 0,
+            },
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          cypress: {},
+        })
+
+        const specToRun = 'cypress/e2e/fails-first-then-passes.cy.js'
+        const testName = 'efd with manual cypress retries fails first then passes'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_EXPECTED_ATTEMPT: '1',
+              CYPRESS_RETRIES: '1',
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const tests = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            const diagnosticTests = tests.map(test => ({
+              status: test.meta[TEST_STATUS],
+              abortReason: test.meta[TEST_EARLY_FLAKE_ABORT_REASON],
+              isRetry: test.meta[TEST_IS_RETRY],
+              retryReason: test.meta[TEST_RETRY_REASON],
+            }))
+            assert.deepStrictEqual(diagnosticTests, [
+              { status: 'fail', abortReason: undefined, isRetry: undefined, retryReason: undefined },
+              {
+                status: 'pass',
+                abortReason: undefined,
+                isRetry: 'true',
+                retryReason: TEST_RETRY_REASON_TYPES.ext,
+              },
+            ])
+          },
+          { hardTimeout: 60_000 }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
+      })
+
       it('uses the retry count from the matching slow_test_retries bucket', async () => {
         receiver.setSettings({
           early_flake_detection: {

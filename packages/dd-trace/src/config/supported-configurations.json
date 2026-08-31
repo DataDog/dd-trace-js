@@ -93,6 +93,16 @@
         "default": "16"
       }
     ],
+    "DD_AI_GUARD_REDACTION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.aiguard.redactionEnabled"
+        ],
+        "default": "true"
+      }
+    ],
     "DD_AI_GUARD_TIMEOUT": [
       {
         "implementation": "A",
@@ -1341,6 +1351,16 @@
         "default": null
       }
     ],
+    "DD_LLMOBS_PROJECT_NAME": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "llmobs.projectName"
+        ],
+        "default": null
+      }
+    ],
     "DD_LLMOBS_SAMPLE_RATE": [
       {
         "implementation": "A",
@@ -1941,6 +1961,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_TEST_MANAGEMENT_REPORT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",
@@ -2438,6 +2466,13 @@
       }
     ],
     "DD_TRACE_BODY_PARSER_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_BROWSER_BUNYAN_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -2984,11 +3019,28 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_HTTP_CLIENT_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "400-499"
+      }
+    ],
     "DD_TRACE_HTTP_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
         "default": "true"
+      }
+    ],
+    "DD_TRACE_HTTP_SERVER_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "500-599",
+        "aliases": [
+          "DD_HTTP_SERVER_ERROR_STATUSES"
+        ]
       }
     ],
     "DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED": [
@@ -3494,6 +3546,13 @@
       }
     ],
     "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_TRACE_OTEL_CTX_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

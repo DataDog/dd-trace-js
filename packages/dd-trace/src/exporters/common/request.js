@@ -30,7 +30,7 @@ let activeBufferSize = 0
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
  * @param {object} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
- *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
+ *   headers?: import('node:http').IncomingHttpHeaders, dropped?: boolean) => void} callback
  */
 function request (data, options, callback) {
   if (!options.headers) {
@@ -89,11 +89,15 @@ function request (data, options, callback) {
   if (!Array.isArray(data)) {
     dataArray = [data]
   }
-  options.headers['Content-Length'] = byteLength(dataArray)
+  const contentLength = byteLength(dataArray)
+  options.headers['Content-Length'] = contentLength
 
   docker.inject(options.headers)
 
-  options.agent = isSecure ? httpsAgent : httpAgent
+  const connectionOptions = {
+    ...options,
+    agent: options.agent ?? (isSecure ? httpsAgent : httpAgent),
+  }
 
   /**
    * @param {import('node:http').IncomingMessage} res
@@ -169,12 +173,14 @@ function request (data, options, callback) {
   // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
   /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
-    if (!request.writable) {
-      log.debug('Maximum number of active requests reached: payload is discarded.')
-      return callback(null)
+    if (activeBufferSize + contentLength > maxActiveBufferSize) {
+      const error = new log.NoTransmitError('Maximum active request buffer size reached: payload is discarded.')
+      error.code = 'ERR_DD_REQUEST_BUFFER_FULL'
+      log.debug(error.message)
+      return callback(error, undefined, undefined, undefined, true)
     }
 
-    activeBufferSize += options.headers['Content-Length'] ?? 0
+    activeBufferSize += contentLength
 
     legacyStorage.run({ noop: true }, () => {
       let finished = false
@@ -182,7 +188,7 @@ function request (data, options, callback) {
       const finalize = () => {
         if (finished) return
         finished = true
-        activeBufferSize -= options.headers['Content-Length'] ?? 0
+        activeBufferSize -= contentLength
       }
 
       /**
@@ -218,7 +224,7 @@ function request (data, options, callback) {
         }
       }
 
-      const req = client.request(options, (res) => onResponse(res, complete, handleError))
+      const req = client.request(connectionOptions, (res) => onResponse(res, complete, handleError))
 
       req.once('close', finalize)
       req.once('timeout', finalize)

@@ -25,7 +25,7 @@ function getTestData (kinesis, streamName, input, cb) {
 
     try {
       cb(null, JSON.parse(dataBuffer))
-    } catch (e) {
+    } catch {
       cb(null, dataBuffer)
     }
   })

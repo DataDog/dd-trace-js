@@ -41,7 +41,7 @@ function canonicalizePath (value) {
 }
 
 /**
- * @param {NodeJS.ProcessEnv} [env]
+ * @param {typeof process.env} [env]
  * @returns {boolean}
  */
 function isCoverageActive (env = process.env) {
@@ -65,7 +65,7 @@ function labelSuffix () {
 }
 
 /**
- * @param {NodeJS.ProcessEnv} [env]
+ * @param {typeof process.env} [env]
  * @returns {string}
  */
 function getCollectorRoot (env = process.env) {
@@ -242,11 +242,11 @@ function prependBootstrapRequire (nodeOptions) {
  * copies the parent's value to a child even when a custom env omits it, so omitting is not enough),
  * while a foreign directory the child set itself is preserved.
  *
- * @param {NodeJS.ProcessEnv | undefined} env
+ * @param {typeof process.env | undefined} env
  * @param {object} [options]
  * @param {string} [options.cwd]
  * @param {string | URL} [options.scriptPath]
- * @returns {NodeJS.ProcessEnv | undefined}
+ * @returns {typeof process.env | undefined}
  */
 function applyCoverageEnv (env, options = {}) {
   if (!isCoverageActive()) return env

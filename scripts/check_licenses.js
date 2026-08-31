@@ -188,7 +188,9 @@ function addNpmProductionDependencies (dependencies, packageLockPath) {
   if (!packages) throw new Error('package-lock.json does not contain package metadata')
 
   for (const [packagePath, dependency] of Object.entries(packages)) {
-    if (!packagePath || dependency.link || (dependency.dev && !dependency.devOptional)) continue
+    // A peer dependency is supplied by the consumer, not shipped by this package, the same
+    // way addYarnProductionDependencies excludes peerDependencies from its graph walk.
+    if (!packagePath || dependency.link || dependency.peer || (dependency.dev && !dependency.devOptional)) continue
 
     dependencies.add(dependency.name ?? getNameFromPackagePath(packagePath))
   }
@@ -203,16 +205,18 @@ function addNpmProductionDependencies (dependencies, packageLockPath) {
 function addDependencyPatterns (patterns, manifest, context, includePeers = false) {
   const optionalDependencies = manifest.optionalDependencies ?? {}
 
-  for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
-    if (!Object.hasOwn(optionalDependencies, name)) {
-      addDependencyPattern(patterns, name, range, context)
+  if ((manifest.dependencies) != null) {
+    for (const [name, range] of Object.entries(manifest.dependencies)) {
+      if (!Object.hasOwn(optionalDependencies, name)) {
+        addDependencyPattern(patterns, name, range, context)
+      }
     }
   }
   for (const [name, range] of Object.entries(optionalDependencies)) {
     addDependencyPattern(patterns, name, range, context)
   }
-  if (includePeers) {
-    for (const [name, range] of Object.entries(manifest.peerDependencies ?? {})) {
+  if (includePeers && (manifest.peerDependencies) != null) {
+    for (const [name, range] of Object.entries(manifest.peerDependencies)) {
       addDependencyPattern(patterns, name, range, context, manifest.optionalPeers?.includes(name))
     }
   }

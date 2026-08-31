@@ -126,7 +126,7 @@ process.on('warning', (warning) => {
  * same emitter for event `error`. Once the upstream fix ships the duplicates
  * disappear and this returns false again, so real leaks resume throwing.
  *
- * @param {Error & { emitter?: NodeJS.EventEmitter, type?: string }} warning
+ * @param {Error & { emitter?: import('node:events').EventEmitter, type?: string }} warning
  * @returns {boolean}
  */
 function isNodeHttpSocketLeak (warning) {

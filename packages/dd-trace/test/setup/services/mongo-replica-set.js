@@ -45,6 +45,7 @@ function commandMongoCore (server, command) {
 }
 
 /**
+ * @param {boolean} isSandbox load `mongodb-core` from the sandbox instead of the version folder
  * @returns {Promise<void>}
  */
 function waitForMongoReplicaSet (isSandbox) {

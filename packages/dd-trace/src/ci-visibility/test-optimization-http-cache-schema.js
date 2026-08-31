@@ -26,7 +26,7 @@ const SETTINGS_BOOLEAN_KEYS = [
 ]
 const EARLY_FLAKE_DETECTION_KEYS = ['enabled', 'faulty_session_threshold', 'slow_test_retries']
 const TEST_MANAGEMENT_KEYS = ['attempt_to_fix_retries', 'enabled']
-const RETRY_THRESHOLD_PATTERN = /^\d+(?:ms|s|m|h)$/
+const RETRY_THRESHOLD_PATTERN = /^\d+(?:ms|[smh])$/
 const MAX_VALIDATION_MODULES = 1000
 const MAX_VALIDATION_SUITES = 10_000
 const MAX_VALIDATION_TESTS = 100_000
@@ -137,7 +137,7 @@ function validateSkippableTestsResponse (response, options = {}) {
   if (response.meta !== undefined) {
     assertObject(response.meta, 'Invalid skippable tests response: meta must be an object')
   }
-  if (response.meta?.coverage !== undefined) {
+  if (response.meta?.coverage !== undefined && response.meta.coverage !== null) {
     assertObject(response.meta.coverage, 'Invalid skippable tests response: meta.coverage must be an object')
   }
   if (response.meta?.correlation_id !== undefined && typeof response.meta.correlation_id !== 'string') {

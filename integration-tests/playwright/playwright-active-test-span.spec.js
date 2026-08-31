@@ -42,11 +42,7 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   // TODO: Remove this once we drop suppport for v5
-  const contextNewVersions = (...args) => {
-    if (satisfies(version, '>=1.38.0') || version === 'latest') {
-      context(...args)
-    }
-  }
+  const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
@@ -147,6 +143,31 @@ versions.forEach((version) => {
 
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
+
+      it('does not request the page fixture from instrumented hooks', async (receiver, run) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const test = events.find(event => event.type === 'test').content
+
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          })
+
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js no-page-fixture-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), receiverPromise])
+
+        assert.strictEqual(exitCode, 0)
+      })
     })
 
     contextNewVersions('correlation between tests and RUM sessions', () => {
@@ -232,6 +253,7 @@ versions.forEach((version) => {
             const eventFinishedTestEvents = telemetryEvents
               .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
 
+            assert.ok(eventFinishedTestEvents.length > 0, 'test event telemetry from a worker should be sent')
             eventFinishedTestEvents.forEach(({ tags }) => {
               assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
               assert.ok(tags.includes('test_framework:playwright'), `Got: ${inspect(tags)}`)

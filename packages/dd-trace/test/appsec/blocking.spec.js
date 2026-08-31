@@ -33,9 +33,9 @@ describe('blocking', () => {
     }
 
     const blocking = proxyquire('../../src/appsec/blocking', {
-      '../log': log,
-      './blocked_templates': defaultBlockedTemplate,
-      './telemetry': telemetry,
+      '../../log': log,
+      './templates': defaultBlockedTemplate,
+      '../telemetry': telemetry,
     })
 
     block = blocking.block
@@ -421,10 +421,10 @@ describe('blocking', () => {
       }
 
       const blocking = proxyquire('../../src/appsec/blocking', {
-        '../log': log,
-        '../plugins/util/web': webStub,
-        './blocked_templates': { ...defaultBlockedTemplate, graphqlJson: 'graphqlBody' },
-        './telemetry': telemetry,
+        '../../log': log,
+        '../../plugins/util/web': webStub,
+        './templates': { ...defaultBlockedTemplate, graphqlJson: 'graphqlBody' },
+        '../telemetry': telemetry,
       })
 
       addSpecificEndpoint = blocking.addSpecificEndpoint

@@ -31,7 +31,9 @@ function isValid (logEntry) {
 }
 
 const EOL = '\n'
-const STACK_FRAME_LINE_REGEX = /^\s*at\s/gm
+// `[ \t]*` (horizontal whitespace) cannot span line terminators, so under `m` the `^`-anchored
+// match runs once per line instead of rescanning across lines. Stack frames indent with spaces.
+const STACK_FRAME_LINE_REGEX = /^[ \t]*at\s/gm
 
 function sanitize (logEntry) {
   const stack = logEntry.stack_trace

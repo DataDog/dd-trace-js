@@ -1,23 +1,24 @@
 'use strict'
 
 /* eslint-disable no-console */
+const exporters = require('../ext/exporters')
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/dd-trace/src/config/helper')
 const { isFalse, isTrue } = require('../packages/dd-trace/src/util')
 
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
-const DEFAULT_FLUSH_INTERVAL = 5000
+const DEFAULT_FLUSH_INTERVAL = 10_000
 const JEST_FLUSH_INTERVAL = 0
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
 const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
 const EXPORTER_MAP = {
-  jest: 'jest_worker',
-  cucumber: 'cucumber_worker',
-  mocha: 'mocha_worker',
-  playwright: 'playwright_worker',
-  vitest: 'vitest_worker',
+  jest: exporters.JEST_WORKER,
+  cucumber: exporters.CUCUMBER_WORKER,
+  mocha: exporters.MOCHA_WORKER,
+  playwright: exporters.PLAYWRIGHT_WORKER,
+  vitest: exporters.VITEST_WORKER,
 }
 
 function isPackageManager () {
@@ -70,7 +71,6 @@ if (!isTestWorker && isPackageManager()) {
 }
 
 if (isTestWorker) {
-  baseOptions.telemetry = { enabled: false }
   baseOptions.experimental = {
     exporter: EXPORTER_MAP[testWorkerType],
   }

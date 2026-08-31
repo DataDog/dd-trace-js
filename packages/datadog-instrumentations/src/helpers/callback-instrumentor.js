@@ -3,6 +3,8 @@
 const shimmer = require('../../../datadog-shimmer')
 const { channel } = require('./instrument')
 
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
+
 /**
  * Create a shimmer-compatible instrumentor for callback-style APIs whose work is offloaded to the
  * libuv worker thread pool (e.g. zlib.gzip, crypto.pbkdf2, dns.lookup). Builds a set of three
@@ -22,7 +24,7 @@ const { channel } = require('./instrument')
  * @param {boolean} [options.captureResult] set `ctx.result` to the callback's first
  *   non-error argument before publishing `:finish`. Plugins that tag spans from the call's
  *   return value (e.g. the DNS lookup plugin) rely on this.
- * @returns {(buildContext: (thisArg: unknown, args: IArguments) => object | undefined) =>
+ * @returns {(buildContext: (thisArg: unknown, args: ArgumentsLike) => object | undefined) =>
  *   (fn: Function) => Function}
  */
 function createCallbackInstrumentor (prefix, { captureResult = false } = {}) {

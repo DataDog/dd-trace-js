@@ -11,5 +11,14 @@ describe('WebdriverIO Test Management', () => {
     assert.fail('quarantined failure')
   })
 
-  it('is attempt to fix', () => {})
+  it('passes every attempt to fix', () => {})
+
+  it('fails every attempt to fix', () => {
+    assert.fail('attempt to fix failure')
+  })
+
+  let mixedAttempts = 0
+  it('has mixed attempt to fix results', () => {
+    assert.strictEqual(mixedAttempts++, 1)
+  })
 })

@@ -6,7 +6,8 @@ const http = require('http')
 const express = require('express')
 const bodyParser = require('body-parser')
 const msgpack = require('@msgpack/msgpack')
-const upload = require('multer')()
+const createMulter = require('multer')
+const upload = createMulter()
 
 const noop = () => {}
 
@@ -31,6 +32,7 @@ module.exports = class FakeAgent extends EventEmitter {
   port = 0
   advertiseDebuggerV2IntakeSupport = true
   debuggerV2IntakeStatusCode = 202
+  evpProxyVersions = [2]
   /** @type {Set<import('net').Socket>} */
   #sockets = new Set()
   /** @type {Record<string, RemoteConfigFile>} */
@@ -49,6 +51,9 @@ module.exports = class FakeAgent extends EventEmitter {
     }
     if (options.debuggerV2IntakeStatusCode !== undefined) {
       this.debuggerV2IntakeStatusCode = options.debuggerV2IntakeStatusCode
+    }
+    if (options.evpProxyVersions !== undefined) {
+      this.evpProxyVersions = [...options.evpProxyVersions]
     }
   }
 
@@ -376,7 +381,10 @@ function buildExpressServer (agent) {
   app.use(bodyParser.json({ limit: Infinity, type: 'application/json' }))
 
   app.get('/info', (req, res) => {
-    const endpoints = ['/evp_proxy/v2', '/debugger/v1/input']
+    const endpoints = [
+      ...agent.evpProxyVersions.map(version => `/evp_proxy/v${version}`),
+      '/debugger/v1/input',
+    ]
     if (agent.advertiseDebuggerV2IntakeSupport) {
       endpoints.push('/debugger/v2/input')
     }
@@ -519,7 +527,7 @@ function buildExpressServer (agent) {
     } else {
       agent.emit('debugger-diagnostics', {
         headers: req.headers,
-        payload: JSON.parse((/** @type {Express.Multer.File[]} */ (req.files))[0].buffer.toString()),
+        payload: JSON.parse((/** @type {Array<{ buffer: Buffer }>} */ (req.files))[0].buffer.toString()),
       })
     }
   })
@@ -565,10 +573,14 @@ function buildExpressServer (agent) {
     })
   })
 
-  app.post('/evp_proxy/v2/api/v2/exposures', (req, res) => {
+  app.post([
+    '/evp_proxy/v2/api/v2/exposures',
+    '/evp_proxy/v4/api/v2/exposures',
+  ], (req, res) => {
     res.status(200).send()
     agent.emit('exposures', {
       headers: req.headers,
+      path: req.path,
       payload: req.body,
     })
   })

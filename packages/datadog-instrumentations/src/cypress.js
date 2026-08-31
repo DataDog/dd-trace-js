@@ -8,6 +8,8 @@ const {
   wrapConfig,
 } = require('./cypress-config')
 
+require('./cypress-legacy-finalizers')
+
 const MINIMUM_CYPRESS_VERSION = DD_MAJOR >= 6 ? '>=12.0.0' : '>=10.2.0'
 
 // Wrap defineConfig() so configs are instrumented when loaded in Cypress's

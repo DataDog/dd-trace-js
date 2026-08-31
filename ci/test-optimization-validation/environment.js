@@ -63,8 +63,10 @@ function setEnvironmentValue (environment, name, value, platform = process.platf
  * @returns {void}
  */
 function mergeEnvironment (target, source, platform = process.platform) {
-  for (const [name, value] of Object.entries(source || {})) {
-    setEnvironmentValue(target, name, value, platform)
+  if (source) {
+    for (const [name, value] of Object.entries(source)) {
+      setEnvironmentValue(target, name, value, platform)
+    }
   }
 }
 

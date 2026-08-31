@@ -126,7 +126,7 @@ describe('Expression language', function () {
         `[(() => {
           try {
             const result = foo
-            return typeof result === 'string' ? result : $dd_inspect(result, $dd_segmentInspectOptions)
+            return typeof result === 'string' ? result : $dd_inspectSegment(result)
           } catch (e) {
             return { expr: "foo", message: \`\${e.name}: \${e.message}\` }
           }
@@ -146,7 +146,7 @@ describe('Expression language', function () {
         `["foo: ",(() => {
           try {
             const result = foo
-            return typeof result === 'string' ? result : $dd_inspect(result, $dd_segmentInspectOptions)
+            return typeof result === 'string' ? result : $dd_inspectSegment(result)
           } catch (e) {
             return { expr: "foo", message: \`\${e.name}: \${e.message}\` }
           }
@@ -170,7 +170,7 @@ function generateTestCaseName (ast, dataOrSuffix, expected) {
 function serialize (value) {
   try {
     return JSON.stringify(value)
-  } catch (e) {
+  } catch {
     // Some values are not serializable to JSON, so we fall back to stringification
     return String(value)
   }

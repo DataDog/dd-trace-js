@@ -40,19 +40,21 @@ function getResolvedExecutable (command) {
  */
 function bindManifestExecutables (manifest) {
   const identities = []
-  for (const framework of manifest.frameworks || []) {
-    if (framework.status !== 'runnable') continue
-    const command = getManifestCommands({ frameworks: [framework] })[0]?.[1]
-    try {
-      const identity = getCommandExecutableIdentity(command, manifest.repository.root)
-      bindApprovedExecutable(framework.validation, identity)
-      identities.push({ id: `framework:${framework.id}`, ...identity })
-    } catch (error) {
-      identities.push({
-        id: `framework:${framework.id}`,
-        unavailable: true,
-        reason: error?.message || String(error),
-      })
+  if (manifest.frameworks) {
+    for (const framework of manifest.frameworks) {
+      if (framework.status !== 'runnable') continue
+      const command = getManifestCommands({ frameworks: [framework] })[0]?.[1]
+      try {
+        const identity = getCommandExecutableIdentity(command, manifest.repository.root)
+        bindApprovedExecutable(framework.validation, identity)
+        identities.push({ id: `framework:${framework.id}`, ...identity })
+      } catch (error) {
+        identities.push({
+          id: `framework:${framework.id}`,
+          unavailable: true,
+          reason: error?.message || String(error),
+        })
+      }
     }
   }
   return identities

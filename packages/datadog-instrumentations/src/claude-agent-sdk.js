@@ -13,6 +13,66 @@ const LOCAL_LIFECYCLE_LOOKAHEAD = 4
 
 const chunkEmitTimes = new WeakMap()
 
+/**
+ * @typedef {{ session_id?: string } & Record<string, unknown>} Chunk
+ */
+
+/**
+ * @typedef {{
+ *   id: string,
+ *   name?: string,
+ *   input?: unknown,
+ *   output?: unknown,
+ *   error?: unknown,
+ *   isInterrupt?: boolean,
+ *   sessionId?: string,
+ *   hookStartTime?: number,
+ *   hookFinishTime?: number,
+ * }} ToolState
+ */
+
+/**
+ * @typedef {{ taskStartedChunk?: Chunk, toolResultIndex?: number }} ToolLifecycle
+ */
+
+/**
+ * @typedef {(startIndex: number, toolUseId: string) => ToolLifecycle} GetLifecycle
+ */
+
+/**
+ * @typedef {{
+ *   tools: Map<string, ToolState>,
+ *   subagents: Map<string, Record<string, unknown>>,
+ *   prompt?: string,
+ *   model?: string,
+ *   resume?: string,
+ *   maxTurns?: number,
+ *   permissionMode?: string,
+ *   sessionId?: string,
+ *   source?: string,
+ *   cwd?: string,
+ *   transcriptPath?: string,
+ *   agentType?: string,
+ *   endReason?: string,
+ *   stopReason?: string,
+ *   lastAssistantMessage?: string,
+ * }} SessionContext
+ */
+
+/**
+ * @typedef {{
+ *   stepIndex: number,
+ *   startTime?: number,
+ *   finishTime?: number,
+ *   parentToolUseId?: string,
+ *   sessionId?: string,
+ *   chunks?: Chunk[],
+ *   llmStartIdx?: number,
+ *   llmEndIdx?: number,
+ *   toolOutputs?: unknown[],
+ * }} StepContext
+ */
+
 function hasDownstreamSubscribers () {
   return queryChannel.asyncEnd.hasSubscribers ||
     queryChannel.error.hasSubscribers ||
@@ -287,10 +347,12 @@ function getToolResultContent (chunk, toolUseId) {
 }
 
 /**
- *
- * @param {Array<Record<string, unknown>>} chunks
+ * @param {Chunk[]} chunks
  * @param {number} startIndex
  * @param {string} toolUseId
+ * @param {SessionContext | null | undefined} sessionCtx
+ * @param {GetLifecycle} getLifecycle
+ * @param {ToolLifecycle} lifecycle
  * @returns {number} index in chunks where the next step should start iteration
  */
 function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, lifecycle) {
@@ -342,9 +404,14 @@ function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, l
 }
 
 /**
- *
- * @param {Array<Record<string, unknown>>} chunks
+ * @param {Chunk[]} chunks
  * @param {number} startIndex
+ * @param {number | undefined} stepStartTime
+ * @param {string | null | undefined} parentToolUseId
+ * @param {string | undefined} initialPrompt
+ * @param {StepContext | null | undefined} stepCtx
+ * @param {SessionContext | null | undefined} sessionCtx
+ * @param {GetLifecycle} getLifecycle
  * @returns {number} index in chunks where the next step should start iteration
  */
 function processStep (
@@ -447,7 +514,16 @@ function processStep (
 }
 
 /**
- * @param {Array<Record<string, unknown>>} chunks
+ * @param {Chunk[]} chunks
+ * @param {{
+ *   sessionCtx?: SessionContext,
+ *   session_id?: string,
+ *   cwd?: string,
+ *   permissionMode?: string,
+ *   output?: unknown,
+ *   arguments?: Array<{ prompt?: string }>,
+ *   runInContext?: (fn: () => number) => number,
+ * }} agentCtx
  */
 function processChunks (chunks, agentCtx) {
   let chunkIndex = 0

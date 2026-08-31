@@ -61,7 +61,7 @@ function decodeVLQ (str, cursor) {
  * @returns {string | null}
  */
 function resolveSourcePath (mapDir, sourceRoot, sourcePath) {
-  const cleanSourcePath = sourcePath.replace(/[?#].*$/, '')
+  const cleanSourcePath = sourcePath.split(/[?#]/)[0]
   if (/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(cleanSourcePath)) {
     // Virtual sources may use URL-like schemes (e.g. file://, webpack://, vite://).
     // If they encode an absolute local path in the URL pathname, use it.

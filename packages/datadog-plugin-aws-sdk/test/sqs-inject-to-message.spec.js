@@ -539,7 +539,25 @@ describe('Sqs plugin responseExtractDSMContext', () => {
       [carrier, undefined]
     )
 
-    assert.deepStrictEqual(decoded, [carrier])
+    assert.deepStrictEqual(decoded, [carrier, undefined])
+  })
+
+  it('decodes every message of a mixed batch, so one without a context starts a new pathway', () => {
+    const decoded = []
+    const plugin = buildPlugin({
+      dsmEnabled: true,
+      decodeDataStreamsContext: (carrier) => { decoded.push(carrier) },
+    })
+
+    const datadog = { 'x-datadog-trace-id': '777' }
+    plugin.responseExtractDSMContext(
+      'receiveMessage',
+      { QueueUrl },
+      { Messages: [{ Body: JSON.stringify(ebEnvelope(datadog)) }, { Body: 'sent by an uninstrumented producer' }] },
+      null
+    )
+
+    assert.deepStrictEqual(decoded, [datadog, undefined])
   })
 
   it('returns without checkpoints when the receive yields no messages', () => {

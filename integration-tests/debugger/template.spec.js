@@ -48,27 +48,22 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(messages.shift(), '[]')
         assert.strictEqual(messages.shift(), '[ [Object], 2, 3, ... 2 more items ]')
         assert.strictEqual(messages.shift(), '{}')
+        assert.strictEqual(messages.shift(), '{ a: 1, b: 2, c: 3, d: 4, e: 5 }')
         const obj = messages.shift()
-        let expectedObjectShape = '{ ' +
-          'foo: [Object], ' +
-          'bar: true, ' +
-          'baz: [Getter], ' +
-          (NODE_MAJOR >= 24
-            ? 'Symbol(nodejs.util.inspect.custom): [Function: [nodejs.util.inspect.custom]] '
-            : '[Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]] ') +
+        const expectedObjectShape = '{ ' +
+          'foo: [Object], bar: true, baz: [Getter], qux: 42, quux: false, ... 1 more property ' +
         '}'
         assert.strictEqual(obj, expectedObjectShape)
-        if (NODE_MAJOR >= 26) {
-          // A proxy should be stringified to the wrapped object plus the proxy type in newer Node.js versions
-          expectedObjectShape = `Proxy(${expectedObjectShape})`
-        }
-        assert.strictEqual(messages.shift(), expectedObjectShape)
+        assert.strictEqual(messages.shift(), '[Proxy]')
+        assert.strictEqual(messages.shift(), '{ a: 1, b: 2, c: 3, d: 4, e: 5, ... 1 more property }')
+        assert.strictEqual(messages.shift(), '[Value omitted: inspection may execute user code]')
         assert.strictEqual(messages.shift(), '<ref *1> { circular: [Circular *1] }')
+        assert.strictEqual(
+          messages.shift(),
+          '<ref *1> { circular: [Circular *1], a: 1, b: 2, c: 3, d: 4, ... 1 more property }'
+        )
         assert.strictEqual(messages.shift(), '[class CustomClass]')
-        // Notice execution of `Symbol.toStringTag` getter (`foo`). There's nothing we can do about it when using
-        // `util.inspect`, but it has not been considered a big side-effects issue, as anyone implementing this
-        // function is doing so with the explicit intent of modifying the string representation of instances.
-        assert.strictEqual(messages.shift(), 'CustomClass [foo] { b: 2, c: 3 }')
+        assert.strictEqual(messages.shift(), '{ b: 2, c: 3, d: 4, e: 5, f: 6, ... 1 more property }')
         if (NODE_MAJOR >= 24) {
           assert.strictEqual(messages.shift(), 'Promise { 42 }')
         } else {
@@ -83,18 +78,8 @@ describe('Dynamic Instrumentation', function () {
         }
         assert.strictEqual(messages.shift(), '[Function: arrowFn]')
         assert.strictEqual(messages.shift(), '[Function: fn]')
-        assert.strictEqual(
-          messages.shift(),
-          NODE_MAJOR > 18
-            ? 'Set(5) { 1, 2, 3, ... 2 more items }'
-            : 'Set(5) { 1, 2, 3, 4, 5 }'
-        )
-        assert.strictEqual(
-          messages.shift(),
-          NODE_MAJOR > 18
-            ? 'Map(5) { 1 => 2, 3 => 4, 5 => 6, ... 2 more items }'
-            : 'Map(5) { 1 => 2, 3 => 4, 5 => 6, 7 => 8, 9 => 10 }'
-        )
+        assert.strictEqual(messages.shift(), 'Set(5) { 1, 2, 3, ... 2 more items }')
+        assert.strictEqual(messages.shift(), 'Map(5) { 1 => 2, 3 => 4, 5 => 6, ... 2 more items }')
         assert.strictEqual(messages.shift(), 'WeakSet { <items unknown> }')
         assert.strictEqual(messages.shift(), 'WeakMap { <items unknown> }')
         assert.strictEqual(messages.shift(), 'Buffer(6) [Uint8Array] [ 102, 111, 111, ... 3 more items ]')
@@ -138,11 +123,19 @@ describe('Dynamic Instrumentation', function () {
           { str: ';' },
           { dsl: 'emptyObj', json: { ref: 'emptyObj' } },
           { str: ';' },
+          { dsl: 'maxObj', json: { ref: 'maxObj' } },
+          { str: ';' },
           { dsl: 'obj', json: { ref: 'obj' } },
           { str: ';' },
           { dsl: 'proxy', json: { ref: 'proxy' } },
           { str: ';' },
+          { dsl: 'objectWithProxyPrototype', json: { ref: 'objectWithProxyPrototype' } },
+          { str: ';' },
+          { dsl: 'sideEffectfulObject', json: { ref: 'sideEffectfulObject' } },
+          { str: ';' },
           { dsl: 'circular', json: { ref: 'circular' } },
+          { str: ';' },
+          { dsl: 'wideCircular', json: { ref: 'wideCircular' } },
           { str: ';' },
           { dsl: 'CustomClass', json: { ref: 'CustomClass' } },
           { str: ';' },

@@ -1,16 +1,11 @@
-# Category-Specific Test Strategies
+# Test Strategy Per Instrumented Surface
 
-## ⚠️ CRITICAL: Categories Are Mutually Exclusive ⚠️
-
-**YOU CANNOT MIX STRATEGIES BETWEEN CATEGORIES.**
-
-**Each category has FORBIDDEN and REQUIRED patterns. Violating these will cause test failure.**
-
----
+A package may expose several kinds of surface. Choose the response source and expected span fields for each
+instrumented operation.
 
 ## Quick Reference: What's FORBIDDEN vs REQUIRED
 
-### ORCHESTRATION (langgraph, crewai, autogen)
+### Orchestration (langgraph)
 
 **FORBIDDEN:**
 - ❌ VCR cassettes or VCR proxy URLs
@@ -26,55 +21,55 @@
 - ✅ spanKind: 'workflow' or 'agent'
 - ✅ Test orchestration logic, not API calls
 
-### LLM_CLIENT (openai, anthropic, google-genai)
+### Provider-backed LLM operation (openai, anthropic, genai)
 
 **FORBIDDEN:**
-- ❌ Pure function tests without VCR
-- ❌ spanKind: 'workflow' (use 'llm' instead)
+- ❌ Tests that skip the SDK and tag spans by hand
+- ❌ `spanKind: 'workflow'` for chat or generation
 
 **REQUIRED:**
-- ✅ VCR cassettes with proxy baseURL
-- ✅ Real API calls (recorded once)
-- ✅ spanKind: 'llm'
-- ✅ modelName, modelProvider fields
+- ✅ Calls through the real client, answered by a cassette on the proxy baseURL or a canned `fetch`
+- ✅ `spanKind: 'llm'`
+- ✅ `modelName` and `modelProvider`
 
-### MULTI_PROVIDER (ai-sdk, langchain)
+### Multi-provider (ai, langchain)
 
-Same as LLM_CLIENT.
+Exercise the real abstraction and provider path. `ai` records cassettes for some providers and hands a canned
+`fetch` to others. Do not assign one kind to the package: `ai` and LangChain emit kinds such as `llm`, `workflow`,
+`embedding`, `retrieval`, and `tool` according to the operation.
 
-### INFRASTRUCTURE (MCP)
+### Infrastructure (modelcontextprotocol-sdk)
 
 **REQUIRED:**
-- ✅ Mock server tests
+- ✅ The SDK's real server and client over its in-memory transport
 - ❌ NO VCR
 
 ---
 
 ## Overview
 
-Test strategy depends on package category:
+Response strategy depends on the surface under test:
 
-| LlmObsCategory | VCR | Real APIs | Mock LLMs | Strategy |
-|----------------|-----|-----------|-----------|----------|
-| LLM_CLIENT | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
-| MULTI_PROVIDER | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
-| ORCHESTRATION | ❌ No | ❌ No | ✅ Yes | Pure functions, mock responses |
-| INFRASTRUCTURE | ❌ No | ❌ No | ✅ Yes | Mock servers |
+| Surface | Response source | Harness |
+|---------|-----------------|---------|
+| LLM client | Provider response | Real client through VCR or a canned `fetch` |
+| Multi-provider | Provider response | Real abstraction and provider through VCR or a canned `fetch` |
+| Orchestration | Plain node response | Native graph/workflow APIs |
+| Infrastructure | Protocol handler response | SDK server and client over in-memory transport |
 
-**Enum location:** `anubis_apm/workflows/analyze/models.py`
+A cassette is the default provider response. Where the client takes a `fetch` option (openai-agents, some `ai`
+providers) or only reaches for `global.fetch` (google-cloud-vertexai), the spec answers the call itself instead.
 
-**IF YOU USE THE WRONG STRATEGY, THE TEST WILL FAIL. ALWAYS CHECK THE CATEGORY FIRST.**
+## Provider-backed operations
 
-## LlmObsCategory.LLM_CLIENT & LlmObsCategory.MULTI_PROVIDER
-
-**Strategy:** VCR with real API calls through proxy
+**Strategy:** the real SDK path through VCR or a canned `fetch`
 
 ### Setup
 
 ```javascript
 const client = new MyLLMClient({
   apiKey: 'test-key',
-  baseURL: 'http://127.0.0.1:9126/vcr/provider'  // VCR proxy
+  baseURL: 'http://127.0.0.1:9126/vcr/provider'
 })
 ```
 
@@ -82,100 +77,121 @@ const client = new MyLLMClient({
 
 ```javascript
 it('instruments chat completion', async () => {
-  // Real API call (first run records, subsequent replays)
-  const response = await client.chat.completions.create({
+  await client.chat.completions.create({
     messages: [{ role: 'user', content: 'Hello' }],
     model: 'gpt-4'
   })
 
-  const events = getEvents()
+  const { apmSpans, llmobsSpans } = await getEvents()
 
-  assertLlmObsSpanEvent(events[0], {
+  assertLlmObsSpanEvent(llmobsSpans[0], {
+    span: apmSpans[0],
     spanKind: 'llm',
-    modelName: 'gpt-4',
+    name: 'MyLLMClient.createChatCompletion',
+    modelName: 'my-model',
+    modelProvider: 'my-provider',
     inputMessages: [{ content: 'Hello', role: 'user' }],
     outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
-    metrics: { input_tokens: MOCK_NOT_NULLISH }
+    metrics: {
+      input_tokens: MOCK_NOT_NULLISH,
+      output_tokens: MOCK_NOT_NULLISH,
+      total_tokens: MOCK_NOT_NULLISH
+    },
+    tags: { ml_app: 'test', integration: 'my-integration' }
   })
 })
 ```
 
-### Key Points
+`name` and `modelProvider` are whatever the plugin reports, not strings the spec picks, and `tags` is required —
+see [assertion-helpers.md](assertion-helpers.md) for the openai shape and the required-field list.
 
-- ✅ Use VCR proxy URL
-- ✅ Make real API calls
-- ✅ Test actual LLM responses
-- ✅ Validate token counts from real usage
-- ✅ Test provider-specific features
-- ✅ Commit cassettes to repo
+### Require The SDK Inside `before()`
 
-### ⚠️ Transitive Dependency Require Order
-
-If the instrumented methods live in a **sub-package** that is a dependency of the package you load (e.g. `@openai/agents-openai` is a dep of `@openai/agents-core`), you must **require the sub-package first**.
-
-RITM patches modules on their first `require()`. If the parent package loads the sub-package transitively before your `before()` hook requires it, the module is already cached and RITM never fires — instrumentation silently does nothing.
+A module is instrumented by the `require` that runs after the hooks are installed: RITM's patched require pulls
+the exports (from Node's cache if they are already there) and hands them to every registered hook.
+`useLlmObs()` loads the tracer from its own `before()` hook, so a file-scope `require` returns the exports as
+they were before any hook existed. Load the version fixtures from `before()`:
 
 ```javascript
-before(() => {
-  // ✅ CORRECT: require the instrumented sub-package first
-  const { OpenAIResponsesModel } = require('@openai/agents-openai')
-  const agentsCore = require('@openai/agents-core')
-
-  // ❌ WRONG: parent loads sub-package transitively, caching it before RITM patches it
-  // const agentsCore = require('@openai/agents-core')        // caches @openai/agents-openai
-  // const { OpenAIResponsesModel } = require('@openai/agents-openai')  // already cached, not patched
+withVersions('openai-agents', '@openai/agents', (version) => {
+  before(() => {
+    agentsCore = require(`../../../../../../versions/@openai/agents@${version}`).get()
+    const { OpenAIResponsesModel } =
+      require(`../../../../../../versions/@openai/agents-openai@${version}`).get()
+  })
 })
 ```
 
-**Symptom when wrong:** tests time out — `getEvents()` never resolves, no APM traces arrive, only the SDK's own internal tracing output appears.
+`beforeEach()` works the same way and is what the openai and langgraph specs use; the requirement is any hook
+rather than file scope.
 
-## LlmObsCategory.ORCHESTRATION
+Order between the two requires does not matter here: `packages/datadog-instrumentations/src/openai-agents.js` hooks
+both `@openai/agents` and `@openai/agents-openai`. Where a spec's comment does ask for an order — the MCP spec
+requires its client entry before the server — keep it.
+
+**Symptom when wrong:** tests time out — `getEvents()` never resolves, no APM traces arrive, only the SDK's own
+internal tracing output appears.
+
+## Orchestration
 
 **Strategy:** Pure function tests, NO VCR, NO real API calls
 
 ### Setup
 
+No proxy and no client — the graph is built from the library's own exports, required from the version fixture in a
+hook so the tracer is already installed:
+
 ```javascript
-// No VCR proxy - use library directly
-const { StateGraph, Annotation } = require('@langchain/langgraph')
+let StateGraph
+let Annotation
+
+beforeEach(() => {
+  const langgraph = require(`../../../../../../versions/@langchain/langgraph@${version}`).get()
+  StateGraph = langgraph.StateGraph
+  Annotation = langgraph.Annotation
+})
 ```
 
 ### Test Pattern
 
 ```javascript
-it('instruments graph invoke', async () => {
-  // Create graph with mock LLM responses
-  const graph = new StateGraph({
-    channels: {
-      messages: Annotation.Root({
-        reducer: (x, y) => x.concat(y)
-      })
-    }
+it('creates a workflow span for streaming execution', async () => {
+  const StateAnnotation = Annotation.Root({
+    messages: Annotation({
+      reducer: (existingMessages, newMessages) => existingMessages.concat(newMessages),
+      default: () => [],
+    }),
   })
 
-  // Add node with mock LLM response (no real API call)
-  graph.addNode('agent', async (state) => ({
-    messages: [{ role: 'assistant', content: 'Mock LLM response' }]
-  }))
+  const workflow = new StateGraph(StateAnnotation)
+    .addNode('chat', () => ({ messages: [{ role: 'assistant', content: 'Streaming response' }] }))
+    .addEdge('__start__', 'chat')
+    .addEdge('chat', '__end__')
 
-  graph.addEdge(START, 'agent')
-  graph.addEdge('agent', END)
+  const app = workflow.compile({ name: 'my-graph' })
 
-  const compiled = graph.compile()
+  const chunks = []
+  for await (const chunk of await app.stream({ messages: [{ role: 'user', content: 'Test' }] })) {
+    chunks.push(chunk)
+  }
+  assert.ok(chunks.length > 0, `Expected ${chunks.length} > 0`)
 
-  // Invoke with mock data
-  const result = await compiled.invoke({
-    messages: [{ role: 'user', content: 'Test' }]
-  })
+  const { apmSpans, llmobsSpans } = await getEvents()
 
-  const events = getEvents()
-
-  assertLlmObsSpanEvent(events[0], {
-    spanKind: 'workflow',  // Not 'llm'!
-    name: 'langgraph.graph.invoke'
+  assertLlmObsSpanEvent(llmobsSpans[0], {
+    span: apmSpans[0],
+    spanKind: 'workflow',
+    name: 'my-graph',
+    inputValue: JSON.stringify({ messages: [{ role: 'user', content: 'Test' }] }),
+    outputValue: MOCK_STRING,
+    tags: { ml_app: 'test', integration: 'langgraph' },
   })
 })
 ```
+
+The instrumented entry point is `Pregel.stream`, so the span closes when the iterator is drained, and `name` is
+whatever `compile({ name })` was given. The graph's state shape comes from `Annotation.Root`, and the terminal
+nodes are the `'__start__'` / `'__end__'` literals the spec uses.
 
 ### Key Points
 
@@ -187,121 +203,76 @@ it('instruments graph invoke', async () => {
 - ✅ Use pure functions returning mock data
 - ✅ Test workflow/graph state transitions
 - ✅ Mock LLM responses as simple objects
-- ✅ Load modules in `beforeEach()` for fresh state
+- ✅ Load modules after `useLlmObs()` installs the tracer
 
 ### Why No VCR?
 
-Orchestration tools don't make HTTP calls themselves - they coordinate other libraries that do. Testing them requires testing the orchestration logic, not API interactions.
+Pure orchestration operations do not make provider HTTP calls. Their tests exercise graph state and execution rather
+than a provider API.
 
-## Category 4: Infrastructure
+## Infrastructure
 
-**Strategy:** Mock server tests
+**Strategy:** the SDK's own server and client, wired over its in-memory transport
 
 ### Setup
 
 ```javascript
-const mockServer = new MockMCPServer()
-await mockServer.start()
+const server = new McpServer({ name: 'test-server', version: '1.0.0' })
+server.registerTool('test-tool', { description: 'A test tool', inputSchema: {} }, async () => ({
+  content: [{ type: 'text', text: 'Result from test-tool' }],
+}))
+
+const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+await server.connect(serverTransport)
+
+client = new Client({ name: 'test-client', version: '1.0.0' })
+await client.connect(clientTransport)
 ```
 
 ### Test Pattern
 
 ```javascript
-it('instruments MCP protocol', async () => {
-  const client = new MCPClient({
-    serverUrl: mockServer.url
-  })
+it('creates a tool span for a basic tool call', async () => {
+  await client.callTool({ name: 'test-tool', arguments: {} })
 
-  await client.connect()
-  const response = await client.call('method', params)
+  const { apmSpans, llmobsSpans } = await getEvents()
 
-  const events = getEvents()
-
-  assertLlmObsSpanEvent(events[0], {
-    spanKind: 'task',  // Or appropriate kind
-    name: 'mcp.call'
+  assertLlmObsSpanEvent(llmobsSpans[0], {
+    span: apmSpans[0],
+    spanKind: 'tool',
+    name: 'MCP Client Tool Call: test-tool',
+    inputValue: JSON.stringify({ name: 'test-tool', arguments: {} }),
+    outputValue: JSON.stringify({
+      content: [{ type: 'text', text: 'Result from test-tool', annotations: {}, meta: {} }],
+      isError: false,
+    }),
+    tags: {
+      ml_app: 'test',
+      integration: 'modelcontextprotocol-sdk',
+      mcp_tool_kind: 'client',
+      mcp_server_name: 'test-server',
+      mcp_server_version: '1.0.0',
+    },
   })
 })
 ```
 
 ### Key Points
 
-- ❌ NO VCR
-- ✅ Mock server instances
-- ✅ Test protocol compliance
-- ✅ Test message passing
-- ✅ Validate transport behavior
+- ❌ NO VCR, and no hand-rolled fake server — the tool handlers you register are the canned responses
+- ✅ Span kind `'tool'` for tool calls and `'task'` for list-tools
+- ✅ Protocol-specific tags (`mcp_tool_kind`, `mcp_server_name`, `mcp_server_version`)
+- ✅ `inputValue` / `outputValue` carry the JSON-stringified protocol payloads
 
-## Decision Matrix
+## Which Row Applies
 
-Use this to choose strategy:
+The question that picks the response source is whether the instrumented operation reaches a provider. Pointing an
+orchestrator at a proxy baseURL, or letting a node construct a real client, tests the provider instead of the graph;
+letting a client reach `https://api.openai.com` needs a key and stops being deterministic.
 
-### Does package make HTTP calls to LLM APIs?
+## Examples by Shape
 
-**YES** → Use VCR (Category 1 or 2)
-- Configure baseURL to VCR proxy
-- Make real API calls
-- Validate real responses
-
-**NO** → Check next question
-
-### Does it orchestrate workflows/graphs?
-
-**YES** → Pure functions (Category 3)
-- No VCR proxy
-- Mock LLM responses
-- Test state management
-
-**NO** → Mock servers (Category 4)
-- Create mock server
-- Test protocol/transport
-
-## Common Mistakes
-
-### Mistake 1: Using VCR for Orchestration
-
-```javascript
-// ❌ WRONG - LangGraph with VCR
-const client = new StateGraph({
-  baseURL: 'http://127.0.0.1:9126/vcr/langgraph'
-})
-```
-
-**Why wrong:** LangGraph doesn't make HTTP calls itself.
-
-**Fix:** Use pure functions with mock responses.
-
-### Mistake 2: Not Using VCR for API Clients
-
-```javascript
-// ❌ WRONG - OpenAI without VCR
-const client = new OpenAI({
-  apiKey: 'real-key',
-  baseURL: 'https://api.openai.com'  // Direct to API
-})
-```
-
-**Why wrong:** Tests will fail without API key, hit rate limits, be non-deterministic.
-
-**Fix:** Use VCR proxy URL.
-
-### Mistake 3: Making Real API Calls in Orchestration Tests
-
-```javascript
-// ❌ WRONG - Real OpenAI in LangGraph test
-graph.addNode('agent', async (state) => {
-  const openai = new OpenAI({ apiKey: 'real-key' })
-  return await openai.chat.completions.create({ ... })
-})
-```
-
-**Why wrong:** Orchestration tests should be pure functions.
-
-**Fix:** Mock LLM responses directly.
-
-## Examples by Category
-
-### Category 1: OpenAI (VCR)
+### LLM client: OpenAI (VCR)
 
 ```javascript
 const openai = new OpenAI({
@@ -311,7 +282,7 @@ const openai = new OpenAI({
 await openai.chat.completions.create({ ... })
 ```
 
-### Category 2: Vercel AI SDK (VCR)
+### Multi-provider: Vercel AI SDK (VCR)
 
 ```javascript
 const model = createOpenAI({
@@ -321,28 +292,23 @@ const model = createOpenAI({
 await generateText({ model, prompt: '...' })
 ```
 
-### Category 3: LangGraph (Pure Functions)
+### Orchestration: LangGraph (Pure Functions)
 
 ```javascript
-graph.addNode('agent', async (state) => ({
-  messages: [{ role: 'assistant', content: 'Mock' }]
-}))
-await graph.invoke({ ... })
+const workflow = new StateGraph(StateAnnotation)
+  .addNode('chat', () => ({ messages: [{ role: 'assistant', content: 'Mock' }] }))
+  .addEdge('__start__', 'chat')
+  .addEdge('chat', '__end__')
+
+const app = workflow.compile({ name: 'my-graph' })
+for await (const chunk of await app.stream({ messages: [] })) { /* drain to close the span */ }
 ```
 
-### Category 4: MCP (Mock Server)
+### Infrastructure: MCP
 
 ```javascript
-const mockServer = new MockServer()
-const client = new MCPClient({ url: mockServer.url })
-await client.call('method', {})
+const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+await server.connect(serverTransport)
+await client.connect(clientTransport)
+await client.callTool({ name: 'test-tool', arguments: {} })
 ```
-
-## Summary
-
-- **API clients**: Use VCR, test real APIs
-- **Multi-provider**: Use VCR, test provider switching
-- **Orchestration**: Pure functions, mock responses
-- **Infrastructure**: Mock servers, test protocols
-
-Choose strategy based on what the package does, not what it's called.

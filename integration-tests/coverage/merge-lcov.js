@@ -13,6 +13,14 @@ const TestExclude = require('test-exclude')
 const baseNycConfig = require('../../nyc.config')
 const { REPO_ROOT, getMergedReportDir, getV8CoverageDir } = require('./runtime')
 
+/** @typedef {import('node:inspector').Profiler.FunctionCoverage} FunctionCoverage */
+
+/**
+ * @typedef {object} MergedScriptCoverage
+ * @property {FunctionCoverage[]} functions
+ * @property {number} entries
+ */
+
 // Same include/exclude as the istanbul reporters used, so the file set is identical regardless of
 // which tool collected. c8's own `excludeAfterRemap` semantics are reproduced here: we decide
 // inclusion on the resolved on-disk path, after mapping the V8 url back to a real file.
@@ -54,25 +62,76 @@ function shouldInclude (filePath) {
 }
 
 /**
- * Convert one process' raw V8 coverage file into an istanbul coverage map and merge it into `into`.
- * Each entry whose source is an in-scope repo file is run through `v8-to-istanbul` (patched to fix
- * the multi-line-statement over-report) and folded in; everything else (node internals, deps,
- * test files) is skipped.
+ * Zero execution counts while serializing a coverage shape. Entries with the same shape can
+ * safely have their corresponding counts summed before conversion, while the serialized shape can
+ * be reused to reproduce v8-to-istanbul's count-independent defaults.
  *
- * @param {import('istanbul-lib-coverage').CoverageMap} into
- * @param {string} v8File absolute path to a raw V8 coverage JSON file
- * @returns {Promise<number>} count of in-scope script entries merged
+ * @param {string} key
+ * @param {unknown} value
+ * @returns {unknown}
  */
-async function mergeV8File (into, v8File) {
+function zeroCoverageCount (key, value) {
+  return key === 'count' ? 0 : value
+}
+
+/**
+ * @param {FunctionCoverage[]} target
+ * @param {FunctionCoverage[]} source
+ * @returns {void}
+ */
+function mergeCoverageCounts (target, source) {
+  for (let functionIndex = 0; functionIndex < target.length; functionIndex++) {
+    const targetRanges = target[functionIndex].ranges
+    const sourceRanges = source[functionIndex].ranges
+    for (let rangeIndex = 0; rangeIndex < targetRanges.length; rangeIndex++) {
+      targetRanges[rangeIndex].count += sourceRanges[rangeIndex].count
+    }
+  }
+}
+
+/**
+ * Add the count-independent part of one converted coverage object into another. v8-to-istanbul
+ * initializes untouched source lines to one, so converting N entries separately contributes that
+ * default N times while converting their summed ranges contributes it once.
+ *
+ * @param {Record<string, import('istanbul-lib-coverage').FileCoverageData>} target
+ * @param {Record<string, import('istanbul-lib-coverage').FileCoverageData>} source
+ * @param {number} multiplier
+ * @returns {void}
+ */
+function addCoverageCounts (target, source, multiplier) {
+  for (const [filePath, targetFile] of Object.entries(target)) {
+    const sourceFile = source[filePath]
+    for (const [statementId, count] of Object.entries(sourceFile.s)) {
+      targetFile.s[statementId] += count * multiplier
+    }
+    for (const [branchId, counts] of Object.entries(sourceFile.b)) {
+      const targetCounts = targetFile.b[branchId]
+      for (let index = 0; index < counts.length; index++) {
+        targetCounts[index] += counts[index] * multiplier
+      }
+    }
+    for (const [functionId, count] of Object.entries(sourceFile.f)) {
+      targetFile.f[functionId] += count * multiplier
+    }
+  }
+}
+
+/**
+ * @param {Map<string, Map<string, MergedScriptCoverage>>} mergedScripts
+ * @param {Map<string, boolean>} inclusionCache
+ * @param {string} v8File absolute path to a raw V8 coverage JSON file
+ * @returns {Promise<void>}
+ */
+async function mergeV8File (mergedScripts, inclusionCache, v8File) {
   let parsed
   try {
     parsed = JSON.parse(await fs.readFile(v8File, 'utf8'))
   } catch {
-    return 0
+    return
   }
-  let merged = 0
   for (const entry of parsed.result ?? []) {
-    if (!entry.url || !entry.url.startsWith('file://')) continue
+    if (!entry.url || !entry.url.startsWith('file://') || !Array.isArray(entry.functions)) continue
     let filePath
     try {
       filePath = fileURLToPath(entry.url)
@@ -80,20 +139,27 @@ async function mergeV8File (into, v8File) {
       continue
     }
     filePath = rebaseSandboxPath(filePath)
-    if (!shouldInclude(filePath)) continue
+    let included = inclusionCache.get(filePath)
+    if (included === undefined) {
+      included = shouldInclude(filePath)
+      inclusionCache.set(filePath, included)
+    }
+    if (!included) continue
 
-    const converter = v8toIstanbul(filePath, 0)
-    try {
-      await converter.load()
-      converter.applyCoverage(entry.functions)
-      into.merge(converter.toIstanbul())
-      merged++
-    } catch {
-      // A file that changed on disk since the run, or a source map we can't resolve, is skipped
-      // rather than failing the whole merge.
+    let fileScripts = mergedScripts.get(filePath)
+    if (!fileScripts) {
+      fileScripts = new Map()
+      mergedScripts.set(filePath, fileScripts)
+    }
+    const shape = JSON.stringify(entry.functions, zeroCoverageCount)
+    const existing = fileScripts.get(shape)
+    if (existing) {
+      mergeCoverageCounts(existing.functions, entry.functions)
+      existing.entries++
+    } else {
+      fileScripts.set(shape, { functions: entry.functions, entries: 1 })
     }
   }
-  return merged
 }
 
 /**
@@ -116,12 +182,34 @@ async function convertV8DirToReport (v8Dir, outputDir) {
   }
   const v8Files = files.filter(f => f.endsWith('.json'))
 
+  const mergedScripts = new Map()
+  const inclusionCache = new Map()
+  for (const file of v8Files) {
+    await mergeV8File(mergedScripts, inclusionCache, path.join(v8Dir, file))
+  }
+
   const coverageMap = libCoverage.createCoverageMap({})
   let scripts = 0
-  // Sequential rather than parallel: v8-to-istanbul reads + parses each source, and a wide fan-out
-  // across thousands of entries spikes memory; the merge is not the slow part of a coverage run.
-  for (const file of v8Files) {
-    scripts += await mergeV8File(coverageMap, path.join(v8Dir, file))
+  for (const [filePath, fileScripts] of mergedScripts) {
+    for (const [shape, { functions, entries }] of fileScripts) {
+      const converter = v8toIstanbul(filePath, 0)
+      try {
+        await converter.load()
+        converter.applyCoverage(functions)
+        const converted = converter.toIstanbul()
+        if (entries > 1) {
+          const defaultsConverter = v8toIstanbul(filePath, 0)
+          await defaultsConverter.load()
+          defaultsConverter.applyCoverage(JSON.parse(shape))
+          addCoverageCounts(converted, defaultsConverter.toIstanbul(), entries - 1)
+        }
+        coverageMap.merge(converted)
+        scripts += entries
+      } catch {
+        // A file that changed on disk since the run, or a source map we can't resolve, is skipped
+        // rather than failing the whole merge.
+      }
+    }
   }
 
   if (coverageMap.files().length === 0) {

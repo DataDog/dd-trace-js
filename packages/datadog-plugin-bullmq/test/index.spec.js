@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const semver = require('semver')
 const sinon = require('sinon')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const { ANY_STRING } = require('../../../integration-tests/helpers')
@@ -12,6 +13,10 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
   category: 'messaging',
 }, (meta) => {
   const { agent } = meta
+  const isBullmq6 = semver.gte(semver.coerce(meta.version), '6.0.0')
+  const queueAddErrorMessage = isBullmq6
+    ? "JobId cannot be '0' or start with '0:'"
+    : 'Validation error, cannot resolve alias "inv"'
 
   before(async () => {
     await testSetup.setup(meta.mod)
@@ -48,16 +53,15 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
           'error.type': 'Error',
-          'error.message': 'Validation error, cannot resolve alias "inv"',
+          'error.message': queueAddErrorMessage,
           'error.stack': ANY_STRING,
         },
       })
 
-      try {
-        await testSetup.queueAddError()
-      } catch (err) {
-        // Expected error
-      }
+      await assert.rejects(testSetup.queueAddError(isBullmq6), {
+        name: 'Error',
+        message: queueAddErrorMessage,
+      })
 
       return traceAssertion
     })
@@ -114,7 +118,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
 
       try {
         await testSetup.queueAddBulkError()
-      } catch (err) {
+      } catch {
         // Expected error
       }
 
@@ -194,7 +198,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
 
       try {
         await testSetup.flowProducerAddError()
-      } catch (err) {
+      } catch {
         // Expected error
       }
 

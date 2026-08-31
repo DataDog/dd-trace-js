@@ -78,6 +78,10 @@ module.exports = {
       versions: ['>=3'],
     },
     {
+      name: '@aws-sdk/client-eventbridge',
+      versions: ['>=3'],
+    },
+    {
       name: '@aws-sdk/client-sfn',
       versions: ['>=3'],
     },
@@ -99,6 +103,10 @@ module.exports = {
     },
   ],
   bullmq: [
+    {
+      name: 'ioredis',
+      dep: true,
+    },
     {
       name: 'redis',
       versions: ['>=4'],
@@ -297,6 +305,19 @@ module.exports = {
       name: 'graphql',
       versions: ['^15.2.0'],
     },
+    {
+      name: 'graphql-jit',
+      versions: [
+        '>=0.8.0 <0.8.5',
+        '>=0.8.5 <0.8.7',
+      ],
+    },
+  ],
+  'graphql-jit': [
+    {
+      name: 'graphql',
+      dep: true,
+    },
   ],
   'apollo-server-core': [
     {
@@ -462,7 +483,12 @@ module.exports = {
   mariadb: [
     {
       name: 'mariadb',
-      versions: ['2.5.6', '3.0.0', '3.4.0'],
+      versions: ['2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2'],
+    },
+    {
+      name: 'mariadb',
+      versions: ['3.5.3'],
+      node: '>=20',
     },
   ],
   mercurius: [
@@ -470,6 +496,7 @@ module.exports = {
       // mercurius peers graphql; pin the only supported major (16) so the
       // graphql instrumentation's TypeInfo `.enter`/`.leave` calls resolve.
       name: 'graphql',
+      dep: true,
       versions: ['^16.0.0'],
     },
     {

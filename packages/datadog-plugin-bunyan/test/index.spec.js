@@ -4,12 +4,15 @@ const assert = require('node:assert/strict')
 const { Writable } = require('node:stream')
 const { inspect } = require('node:util')
 
+const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+
+const logSubmissionCh = channel('ci:log-submission:log')
 
 describe('Plugin', () => {
   let logger
@@ -62,6 +65,29 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with disabled plugin', () => {
+        beforeEach(() => {
+          return agent.load('bunyan', { enabled: false })
+        })
+
+        beforeEach(() => {
+          setupTest(version)
+        })
+
+        it('should not publish uncorrelated records for automatic submission', () => {
+          const onLog = sinon.spy()
+          logSubmissionCh.subscribe(onLog)
+
+          try {
+            logger.info('message')
+          } finally {
+            logSubmissionCh.unsubscribe(onLog)
+          }
+
+          sinon.assert.notCalled(onLog)
+        })
+      })
+
       describe('with configuration', () => {
         beforeEach(() => {
           return agent.load('bunyan', { logInjection: true })
@@ -84,6 +110,66 @@ describe('Plugin', () => {
               span_id: span.context().toSpanId(),
             })
           })
+        })
+
+        it('should publish correlated records for automatic submission', () => {
+          let submission
+          const onLog = payload => {
+            submission = payload
+          }
+          logSubmissionCh.subscribe(onLog)
+
+          try {
+            tracer.scope().activate(span, () => {
+              logger.info('message')
+            })
+          } finally {
+            logSubmissionCh.unsubscribe(onLog)
+          }
+
+          const record = JSON.parse(submission.message)
+          assert.strictEqual(submission.source, 'bunyan')
+          assert.strictEqual(record.dd.trace_id, span.context().toTraceId(true))
+          assert.strictEqual(record.dd.span_id, span.context().toSpanId())
+        })
+
+        it('should publish correlated raw records for automatic submission', () => {
+          const rawStream = new Writable({ objectMode: true })
+          rawStream._write = () => {}
+          const rawLogger = require(`../../../versions/bunyan@${version}`).get().createLogger({
+            name: 'test',
+            streams: [{ type: 'raw', stream: rawStream }],
+          })
+          let submission
+          const onLog = payload => {
+            submission = payload
+          }
+          logSubmissionCh.subscribe(onLog)
+
+          try {
+            tracer.scope().activate(span, () => {
+              rawLogger.info('message')
+            })
+          } finally {
+            logSubmissionCh.unsubscribe(onLog)
+          }
+
+          assert.strictEqual(submission.source, 'bunyan')
+          assert.strictEqual(submission.message.dd.trace_id, span.context().toTraceId(true))
+          assert.strictEqual(submission.message.dd.span_id, span.context().toSpanId())
+        })
+
+        it('should not publish serialization-only emissions for automatic submission', () => {
+          const onLog = sinon.spy()
+          logSubmissionCh.subscribe(onLog)
+
+          try {
+            logger._emit({ level: 30, msg: 'message' }, true)
+          } finally {
+            logSubmissionCh.unsubscribe(onLog)
+          }
+
+          sinon.assert.notCalled(onLog)
         })
 
         it('should not mutate the original record', () => {

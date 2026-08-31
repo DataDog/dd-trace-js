@@ -16,25 +16,32 @@ const MOCK_OBJECT = Symbol('object')
 const MOCK_NOT_NULLISH = Symbol('not-nullish')
 
 /**
+ * @typedef {typeof MOCK_STRING | typeof MOCK_NUMBER | typeof MOCK_OBJECT | typeof MOCK_NOT_NULLISH} MockValue
+ */
+
+/**
+ * Optional fields assert their own absence when omitted, except `traceId`, which defaults to `MOCK_STRING`.
  * @typedef {{
- *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval',
+ *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'step' | 'tool' | 'retrieval',
  *   name: string,
- *   inputMessages: Record<string, unknown>,
- *   outputMessages: Record<string, unknown>,
- *   inputDocuments: Record<string, unknown>,
- *   outputDocuments: Record<string, unknown>,
- *   inputValue: Record<string, unknown>,
- *   outputValue: Record<string, unknown>,
- *   metrics: { [key: string]: number },
- *   metadata: Record<string, unknown>,
+ *   inputMessages?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   outputMessages?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   inputDocuments?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   outputDocuments?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   inputValue?: string | MockValue,
+ *   outputValue?: string | MockValue,
+ *   metrics?: Record<string, number | MockValue> | MockValue,
+ *   metadata?: Record<string, unknown> | MockValue,
+ *   toolDefinitions?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   agentAttribution?: { pagent_name?: string, pagent_span_id?: string },
  *   modelName?: string,
  *   modelProvider?: string,
  *   parentId?: string,
- *   error?: { message: string, type: string, stack: string },
- *   span: unknown,
+ *   error?: object,
+ *   span: object,
  *   sessionId?: string,
- *   tags: Record<string, unknown>,
- *   traceId?: string,
+ *   tags: Record<string, string>,
+ *   traceId?: string | MockValue,
  * }} ExpectedLLMObsSpanEvent
  */
 
@@ -58,7 +65,7 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
 /**
  *
  * @param {object} actual
- * @param {ExpectedLLMObsSpanEvent} expected
+ * @param {object | MockValue | string | number | boolean | null | undefined} expected
  * @param {string} key name to associate with the assertion
  */
 function assertWithMockValues (actual, expected, key) {
@@ -133,6 +140,7 @@ function assertLlmObsSpanEvent (actual, expected) {
     traceId = MOCK_STRING, // used for future custom LLMObs trace IDs,
     metrics,
     metadata,
+    agentAttribution,
     inputMessages,
     inputValue,
     inputDocuments,
@@ -205,10 +213,15 @@ function assertLlmObsSpanEvent (actual, expected) {
   const actualOutputDocuments = actual.meta.output.documents
   const actualTraceId = actual.trace_id
   const actualTags = actual.tags
+  // agent_attribution is present on every span that has an agent ancestor, which most callers
+  // don't restate. Pull it out and assert it only when a test opts in via `agentAttribution`;
+  // otherwise ignore it so unrelated nested-span assertions keep passing.
+  const actualAgentAttribution = actual.meta.agent_attribution
 
   delete actual.metrics
   delete actual.meta.metadata
   delete actual.meta.output
+  delete actual.meta.agent_attribution
   delete actual.trace_id
   delete actual.tags
   delete actual._dd // we do not care about asserting on the private dd fields
@@ -216,6 +229,7 @@ function assertLlmObsSpanEvent (actual, expected) {
   assertWithMockValues(actualTraceId, traceId, 'traceId')
   assertWithMockValues(actualMetrics, metrics ?? {}, 'metrics')
   assertWithMockValues(actualMetadata, metadata, 'metadata')
+  if (agentAttribution) assertWithMockValues(actualAgentAttribution, agentAttribution, 'agentAttribution')
 
   // 1a. sort tags since they might be unordered
   const expectedTags = expectedLLMObsTags({ span, tags, error, sessionId })
@@ -335,6 +349,7 @@ function assertLlmObsEvaluationMetric (actual, expected) {
   }
 
   const expectedEvaluationMetric = {
+    event_kind: 'evaluation',
     join_on: {
       span: {
         trace_id: joinOn.span.traceId,
@@ -391,6 +406,7 @@ function fromBuffer (spanProperty, isNumber = false) {
 /**
  * @param {object} options
  * @param {string} options.plugin
+ * @param {object} [options.pluginConfig] - config passed to `tracer.use(plugin, ...)`
  * @param {object} options.tracerConfigOptions
  * @returns {{
  *   getEvents: (numLlmObsSpans?: number) => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
@@ -400,6 +416,7 @@ function fromBuffer (spanProperty, isNumber = false) {
  */
 function useLlmObs ({
   plugin,
+  pluginConfig = {},
   tracerConfigOptions = {},
 } = {}) {
   /** @type {ReturnType<typeof agent.assertSomeTraces>} */
@@ -421,7 +438,7 @@ function useLlmObs ({
   })
 
   before(async () => {
-    await agent.load(plugin, {}, {
+    await agent.load(plugin, pluginConfig, {
       llmobs: {
         mlApp: 'test',
         agentlessEnabled: false,
@@ -481,11 +498,16 @@ function useLlmObs ({
       }
     },
 
-    getEvaluationMetrics: function () {
-      const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
-      return evaluationMetricsRequests
-        .flatMap(request => request.data.attributes.metrics)
-        .sort((a, b) => a.timestamp_ms - b.timestamp_ms)
+    getEvaluationMetrics: async function () {
+      const evaluationMetrics = []
+
+      while (evaluationMetrics.length === 0 && !runState.cancelled) {
+        await new Promise(resolve => setImmediate(resolve))
+        const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
+        evaluationMetrics.push(...evaluationMetricsRequests.flatMap(request => request.data.attributes.metrics))
+      }
+
+      return evaluationMetrics.sort((a, b) => a.timestamp_ms - b.timestamp_ms)
     },
   }
 }

@@ -2,15 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
-const Level = {
-  trace: 10,
-  debug: 20,
-  info: 30,
-  warn: 40,
-  error: 50,
-  critical: 50,
-  off: 100,
-}
+const Level = require('./levels')
 
 const traceChannel = channel('datadog:log:trace')
 const debugChannel = channel('datadog:log:debug')

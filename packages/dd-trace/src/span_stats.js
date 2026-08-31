@@ -14,8 +14,11 @@ const {
   GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
+const id = require('./id')
+const log = require('./log')
 
 const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
+const ZERO_ID = id('0')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
@@ -150,9 +153,24 @@ class SpanAggKey {
 }
 
 class SpanBuckets extends Map {
+  #includeTraceRoot
+
+  /**
+   * @param {boolean} [includeTraceRoot]
+   */
+  constructor (includeTraceRoot = false) {
+    super()
+    this.#includeTraceRoot = includeTraceRoot
+  }
+
   forSpan (span) {
     const aggKey = new SpanAggKey(span)
-    const key = aggKey.toString()
+    const baseKey = aggKey.toString()
+    const parentId = span.parent_id
+    if (this.#includeTraceRoot && parentId !== undefined && parentId !== null) {
+      aggKey.isTraceRoot = parentId.equals(ZERO_ID)
+    }
+    const key = this.#includeTraceRoot ? `${baseKey},${aggKey.isTraceRoot}` : baseKey
 
     if (!this.has(key)) {
       this.set(key, new SpanAggStats(aggKey))
@@ -163,9 +181,19 @@ class SpanBuckets extends Map {
 }
 
 class TimeBuckets extends Map {
+  #includeTraceRoot
+
+  /**
+   * @param {boolean} [includeTraceRoot]
+   */
+  constructor (includeTraceRoot = false) {
+    super()
+    this.#includeTraceRoot = includeTraceRoot
+  }
+
   forTime (time) {
     if (!this.has(time)) {
-      this.set(time, new SpanBuckets())
+      this.set(time, new SpanBuckets(this.#includeTraceRoot))
     }
 
     return this.get(time)
@@ -173,31 +201,38 @@ class TimeBuckets extends Map {
 }
 
 class SpanStatsProcessor {
-  constructor ({
-    stats: {
-      DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
-      interval = 10,
-    } = {},
-    hostname,
-    port,
-    url,
-    env,
-    tags,
-    version: appVersion,
-    _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
-  } = {}, otlpExporter) {
+  #config
+
+  /**
+   * @param {import('./config/config-base')} config
+   * @param {import('./opentelemetry/metrics/otlp_span_stats_exporter').OtlpStatsExporter} [otlpExporter]
+   */
+  constructor (config, otlpExporter) {
+    const {
+      stats: {
+        DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
+        interval = 10,
+      } = {},
+      hostname,
+      port,
+      url,
+      env,
+      tags,
+      version: appVersion,
+      _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
+    } = config
     if (!otlpExporter) {
       this.exporter = new SpanStatsExporter({ hostname, port, tags, url })
     }
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
-    this.buckets = new TimeBuckets()
+    this.buckets = new TimeBuckets(Boolean(otlpExporter))
     this.hostname = os.hostname()
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null
     this.env = env
-    this.tags = tags || {}
+    this.#config = config
     this.sequence = 0
     this.version = appVersion
 
@@ -208,6 +243,18 @@ class SpanStatsProcessor {
   }
 
   onInterval () {
+    this.#flush()
+  }
+
+  /**
+   * Drains pending span statistics and waits for their export.
+   * @param {Function} [done]
+   */
+  forceFlush (done) {
+    this.#flush(done)
+  }
+
+  #flush (done) {
     const drained = this.#drainBuckets()
 
     if (this.enabled && !this.otlpExporter) {
@@ -218,13 +265,37 @@ class SpanStatsProcessor {
         Stats: this.#toV06Payload(drained),
         Lang: 'javascript',
         TracerVersion: pkg.version,
-        RuntimeID: this.tags['runtime-id'],
+        RuntimeID: this.#config.tags['runtime-id'],
         Sequence: ++this.sequence,
         ProcessTags: processTags.serialized,
-      })
+      }, done)
     } else if (this.otlpExporter && drained.length > 0) {
-      this.otlpExporter.export(drained, this.bucketSizeNs)
-    }
+      if (typeof this.otlpExporter.flush === 'function' && done) {
+        // Snapshot requests already in flight before starting this boundary
+        // export, so a later invocation cannot extend this lifecycle barrier.
+        let pending = 2
+        const complete = () => {
+          if (--pending === 0) done()
+        }
+        try {
+          this.otlpExporter.flush(complete)
+        } catch (error) {
+          log.error('Failed to flush OTLP span stats:', error)
+          complete()
+        }
+        try {
+          this.otlpExporter.export(drained, this.bucketSizeNs, complete)
+        } catch (error) {
+          log.error('Failed to export OTLP span stats:', error)
+          complete()
+        }
+      } else {
+        this.otlpExporter.export(drained, this.bucketSizeNs, done)
+      }
+    } else if (this.otlpExporter) {
+      if (typeof this.otlpExporter.flush === 'function') this.otlpExporter.flush(done)
+      else done?.()
+    } else done?.()
   }
 
   onSpanFinished (span) {

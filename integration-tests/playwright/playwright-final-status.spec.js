@@ -36,11 +36,7 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   // TODO: Remove this once we drop suppport for v5
-  const contextNewVersions = (...args) => {
-    if (satisfies(version, '>=1.38.0') || version === 'latest') {
-      context(...args)
-    }
-  }
+  const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
@@ -449,8 +445,22 @@ versions.forEach((version) => {
           early_flake_detection: { enabled: false },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        // Only run the serial suite. The other test in this fixture intentionally exhausts its retries,
+        // delaying the serial retry until this test's payload collection timeout on slower runners.
+        const proc = run(
+          './node_modules/.bin/playwright test --retries=1 --grep "playwright serial" -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
+            },
+          }
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -464,23 +474,10 @@ versions.forEach((version) => {
             const passExecution = seriallySkippedTests.find(t => t.meta[TEST_STATUS] === 'pass')
             assert.ok(passExecution, 'Expected a passing execution on the retry cycle')
             assert.strictEqual(passExecution.meta[TEST_FINAL_STATUS], 'pass')
-          }, 30000)
+          })
 
-        // --retries=1 is Playwright's native retry — no dd-trace retry features needed.
-        // dd-trace won't override it since its guard is `if (project.retries === 0)`.
-        const proc = run(
-          './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry-serial',
-            },
-          }
-        )
-
-        await Promise.all([once(proc, 'exit'), receiverPromise])
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0)
       })
 
       it(

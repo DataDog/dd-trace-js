@@ -9,7 +9,7 @@ const agent = require('../../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 module.exports = (name, factory, versionRange) => {
   describe('Instrumentation', () => {
-    let Promise
+    let LibraryPromise
 
     describe(name, () => {
       withVersions(name, name, version => {
@@ -26,13 +26,13 @@ module.exports = (name, factory, versionRange) => {
         beforeEach(() => {
           const moduleExports = require(`../../../../versions/${name}@${version}`, {}).get()
 
-          Promise = factory ? factory(moduleExports) : moduleExports
+          LibraryPromise = factory ? factory(moduleExports) : moduleExports
         })
 
         it('should run the then() callbacks in the context where then() was called', () => {
           const store = 'store'
 
-          let promise = new Promise((resolve, reject) => {
+          let promise = new LibraryPromise((resolve, reject) => {
             setImmediate(() => {
               storage('legacy').run('promise', () => {
                 resolve()
@@ -58,7 +58,7 @@ module.exports = (name, factory, versionRange) => {
         it('should run the catch() callback in the context where catch() was called', () => {
           const store = storage('legacy').getStore()
 
-          let promise = new Promise((resolve, reject) => {
+          let promise = new LibraryPromise((resolve, reject) => {
             setImmediate(() => {
               storage('legacy').run('promise', () => {
                 reject(new Error())
@@ -81,7 +81,7 @@ module.exports = (name, factory, versionRange) => {
 
         it('should allow to run without a scope if not available when calling then()', () => {
           storage('legacy').run(null, () => {
-            const promise = new Promise((resolve, reject) => {
+            const promise = new LibraryPromise((resolve, reject) => {
               setImmediate(() => {
                 resolve()
               })

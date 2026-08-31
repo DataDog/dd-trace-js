@@ -3,21 +3,21 @@
     "dependency": "@anthropic-ai/claude-agent-sdk",
     "integration": "claude-agent-sdk",
     "minimum_tracer_supported": "0.2.113",
-    "max_tracer_supported": "0.3.215",
+    "max_tracer_supported": "0.3.220",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@anthropic-ai/sdk",
     "integration": "anthropic",
     "minimum_tracer_supported": "0.14.0",
-    "max_tracer_supported": "0.112.3",
+    "max_tracer_supported": "0.115.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@apollo/gateway",
     "integration": "apollo",
     "minimum_tracer_supported": "2.3.0",
-    "max_tracer_supported": "2.14.2",
+    "max_tracer_supported": "2.14.3",
     "auto-instrumented": "True"
   },
   {
@@ -38,7 +38,7 @@
     "dependency": "@azure/cosmos",
     "integration": "azure-cosmos",
     "minimum_tracer_supported": "4.4.1",
-    "max_tracer_supported": "4.9.3",
+    "max_tracer_supported": "4.10.0",
     "auto-instrumented": "True"
   },
   {
@@ -108,7 +108,7 @@
     "dependency": "@google/genai",
     "integration": "google-genai",
     "minimum_tracer_supported": "1.19.0",
-    "max_tracer_supported": "2.12.0",
+    "max_tracer_supported": "2.13.0",
     "auto-instrumented": "True"
   },
   {
@@ -122,14 +122,14 @@
     "dependency": "@hapi/hapi",
     "integration": "hapi",
     "minimum_tracer_supported": "17.9.0",
-    "max_tracer_supported": "21.4.9",
+    "max_tracer_supported": "21.4.10",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@happy-dom/jest-environment",
     "integration": "jest",
     "minimum_tracer_supported": "10.0.0",
-    "max_tracer_supported": "20.10.6",
+    "max_tracer_supported": "20.11.1",
     "auto-instrumented": "True"
   },
   {
@@ -178,7 +178,7 @@
     "dependency": "@modelcontextprotocol/sdk",
     "integration": "modelcontextprotocol-sdk",
     "minimum_tracer_supported": "1.27.1",
-    "max_tracer_supported": "1.29.0",
+    "max_tracer_supported": "1.30.0",
     "auto-instrumented": "True"
   },
   {
@@ -206,7 +206,7 @@
     "dependency": "@openai/agents",
     "integration": "openai-agents",
     "minimum_tracer_supported": "0.7.0",
-    "max_tracer_supported": "0.13.5",
+    "max_tracer_supported": "0.14.1",
     "auto-instrumented": "True"
   },
   {
@@ -234,14 +234,21 @@
     "dependency": "@smithy/core",
     "integration": "aws-sdk",
     "minimum_tracer_supported": "3.24.0",
-    "max_tracer_supported": "3.29.5",
+    "max_tracer_supported": "3.31.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@smithy/smithy-client",
     "integration": "aws-sdk",
     "minimum_tracer_supported": "1.0.3",
-    "max_tracer_supported": "4.14.10",
+    "max_tracer_supported": "4.14.15",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@wdio/local-runner",
+    "integration": "mocha",
+    "minimum_tracer_supported": "9.0.0",
+    "max_tracer_supported": "9.30.0",
     "auto-instrumented": "True"
   },
   {
@@ -255,7 +262,7 @@
     "dependency": "ai",
     "integration": "ai",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "7.0.31",
+    "max_tracer_supported": "7.0.38",
     "auto-instrumented": "True"
   },
   {
@@ -287,10 +294,17 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "browser-bunyan",
+    "integration": "browser-bunyan",
+    "minimum_tracer_supported": "1.0.0",
+    "max_tracer_supported": "1.8.0",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "bullmq",
     "integration": "bullmq",
     "minimum_tracer_supported": "5.66.0",
-    "max_tracer_supported": "5.80.9",
+    "max_tracer_supported": "5.81.2",
     "auto-instrumented": "True"
   },
   {
@@ -332,7 +346,7 @@
     "dependency": "cypress",
     "integration": "cypress",
     "minimum_tracer_supported": "12.0.0",
-    "max_tracer_supported": "15.16.0",
+    "max_tracer_supported": "15.19.0",
     "auto-instrumented": "True"
   },
   {
@@ -360,7 +374,7 @@
     "dependency": "electron",
     "integration": "electron",
     "minimum_tracer_supported": "37.0.0",
-    "max_tracer_supported": "42.1.0",
+    "max_tracer_supported": "43.2.0",
     "auto-instrumented": "True"
   },
   {
@@ -381,7 +395,7 @@
     "dependency": "find-my-way",
     "integration": "find-my-way",
     "minimum_tracer_supported": "1.0.0",
-    "max_tracer_supported": "9.6.0",
+    "max_tracer_supported": "9.7.0",
     "auto-instrumented": "True"
   },
   {
@@ -409,7 +423,7 @@
     "dependency": "hono",
     "integration": "hono",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "4.12.30",
+    "max_tracer_supported": "4.12.32",
     "auto-instrumented": "True"
   },
   {
@@ -514,7 +528,7 @@
     "dependency": "mariadb",
     "integration": "mariadb",
     "minimum_tracer_supported": "2.0.4",
-    "max_tracer_supported": "3.4.5",
+    "max_tracer_supported": "3.5.3",
     "auto-instrumented": "True"
   },
   {
@@ -556,7 +570,7 @@
     "dependency": "moleculer",
     "integration": "moleculer",
     "minimum_tracer_supported": "0.14.0",
-    "max_tracer_supported": "0.15.0",
+    "max_tracer_supported": "0.15.1",
     "auto-instrumented": "True"
   },
   {
@@ -605,7 +619,7 @@
     "dependency": "next",
     "integration": "next",
     "minimum_tracer_supported": "10.2.0",
-    "max_tracer_supported": "16.2.6",
+    "max_tracer_supported": "16.2.12",
     "auto-instrumented": "True"
   },
   {
@@ -661,7 +675,7 @@
     "dependency": "openai",
     "integration": "openai",
     "minimum_tracer_supported": "3.0.0",
-    "max_tracer_supported": "6.48.0",
+    "max_tracer_supported": "7.0.0",
     "auto-instrumented": "True"
   },
   {
@@ -696,7 +710,7 @@
     "dependency": "playwright",
     "integration": "playwright",
     "minimum_tracer_supported": "1.38.0",
-    "max_tracer_supported": "1.61.0",
+    "max_tracer_supported": "1.62.1",
     "auto-instrumented": "True"
   },
   {
@@ -738,7 +752,7 @@
     "dependency": "selenium-webdriver",
     "integration": "selenium",
     "minimum_tracer_supported": "4.11.0",
-    "max_tracer_supported": "4.44.0",
+    "max_tracer_supported": "4.46.0",
     "auto-instrumented": "True"
   },
   {
@@ -766,14 +780,14 @@
     "dependency": "undici",
     "integration": "undici",
     "minimum_tracer_supported": "4.4.1",
-    "max_tracer_supported": "8.7.0",
+    "max_tracer_supported": "8.9.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "vitest",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.9",
+    "max_tracer_supported": "4.1.10",
     "auto-instrumented": "True"
   },
   {
@@ -787,7 +801,7 @@
     "dependency": "workerpool",
     "integration": "mocha",
     "minimum_tracer_supported": "6.0.0",
-    "max_tracer_supported": "10.0.2",
+    "max_tracer_supported": "10.0.3",
     "auto-instrumented": "True"
   },
   {

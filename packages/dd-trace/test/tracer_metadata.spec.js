@@ -13,6 +13,7 @@ describe('tracer_metadata', () => {
   let libdatadogStub
   let dockerStub
   let processTagsStub
+  let otelThreadCtxStub
 
   const baseConfig = {
     tags: { 'runtime-id': 'test-runtime-id' },
@@ -21,6 +22,7 @@ describe('tracer_metadata', () => {
     env: 'test-env',
     version: '1.0.0',
     DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false,
+    DD_TRACE_OTEL_CTX_ENABLED: false,
   }
 
   beforeEach(() => {
@@ -38,11 +40,21 @@ describe('tracer_metadata', () => {
 
     dockerStub = { containerId: undefined }
     processTagsStub = { serialized: 'tag1:val1,tag2:val2' }
+    otelThreadCtxStub = {
+      getThreadLocalMetadata: sinon.stub().returns({
+        attributeKeys: ['datadog.thread_name'],
+        schemaVersion: 'nodejs_v1_dev',
+        extraAttributes: [
+          { key: 'threadlocal.wrapped_object_offset', intValue: 24 },
+        ],
+      }),
+    }
 
     storeConfig = proxyquire('../src/tracer_metadata', {
       '@datadog/libdatadog': libdatadogStub,
       './exporters/common/docker': dockerStub,
       './process-tags': processTagsStub,
+      './otel-thread-ctx': otelThreadCtxStub,
     })
   })
 
@@ -94,6 +106,33 @@ describe('tracer_metadata', () => {
 
     const args = TracerMetadataStub.firstCall.args
     assert.strictEqual(args[7], null)
+  })
+
+  it('passes undefined for threadlocal_metadata when DD_TRACE_OTEL_CTX_ENABLED is false', () => {
+    storeConfig(baseConfig)
+    const args = TracerMetadataStub.firstCall.args
+    assert.strictEqual(args[8], undefined)
+    sinon.assert.notCalled(otelThreadCtxStub.getThreadLocalMetadata)
+  })
+
+  it('passes the OTEP-4947 process-context snapshot when DD_TRACE_OTEL_CTX_ENABLED is true', () => {
+    storeConfig({ ...baseConfig, DD_TRACE_OTEL_CTX_ENABLED: true })
+    const args = TracerMetadataStub.firstCall.args
+    sinon.assert.calledOnce(otelThreadCtxStub.getThreadLocalMetadata)
+    assert.deepStrictEqual(args[8], {
+      attributeKeys: ['datadog.thread_name'],
+      schemaVersion: 'nodejs_v1_dev',
+      extraAttributes: [
+        { key: 'threadlocal.wrapped_object_offset', intValue: 24 },
+      ],
+    })
+  })
+
+  it('passes undefined when getThreadLocalMetadata is unavailable (e.g. no pprof)', () => {
+    otelThreadCtxStub.getThreadLocalMetadata.returns(undefined)
+    storeConfig({ ...baseConfig, DD_TRACE_OTEL_CTX_ENABLED: true })
+    const args = TracerMetadataStub.firstCall.args
+    assert.strictEqual(args[8], undefined)
   })
 
   it('passes null for service when config.service is falsy', () => {

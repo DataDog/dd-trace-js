@@ -13,7 +13,6 @@ const SECRET_NAME_SOURCE = [
   'PASSPHRASE',
   'CREDENTIAL',
   'PRIVATE_?KEY',
-  'CLIENT_?SECRET',
   'ACCESS_?KEY',
   'COOKIE',
 ].join('|')
@@ -22,23 +21,18 @@ const EXACT_SECRET_ASSIGNMENT_NAME_SOURCE = [
   'AUTH',
   'AUTHORIZATION',
   'PASS',
-  'SET-COOKIE',
   'PAT',
   'JWT',
   'WEBHOOK(?:_URL)?',
 ].join('|')
-const SECRET_NAME_CHARS = '[A-Za-z0-9_.-]'
+// Every pattern built from these name sources carries the `i` flag; the classes list uppercase only.
+const SECRET_NAME_CHARS = '[A-Z0-9_.-]'
 const SECRET_ASSIGNMENT_NAME_SOURCE = [
-  `(?:${EXACT_SECRET_ASSIGNMENT_NAME_SOURCE})`,
-  `[A-Za-z_]${SECRET_NAME_CHARS}*(?:${SECRET_NAME_SOURCE})${SECRET_NAME_CHARS}*`,
-  `[A-Za-z_]${SECRET_NAME_CHARS}*[-_]PASS`,
-  `[A-Za-z_]${SECRET_NAME_CHARS}*[-_]AUTH(?:ORIZATION)?`,
-  `[A-Za-z_]${SECRET_NAME_CHARS}*[-_](?:PAT|JWT|WEBHOOK(?:_URL)?)`,
-  'PASS',
-  'AUTH',
-  'AUTHORIZATION',
-  'COOKIE',
-  'SET-COOKIE',
+  EXACT_SECRET_ASSIGNMENT_NAME_SOURCE,
+  `[A-Z_]${SECRET_NAME_CHARS}*(?:${SECRET_NAME_SOURCE})${SECRET_NAME_CHARS}*`,
+  `[A-Z_]${SECRET_NAME_CHARS}*[-_]PASS`,
+  `[A-Z_]${SECRET_NAME_CHARS}*[-_]AUTH(?:ORIZATION)?`,
+  `[A-Z_]${SECRET_NAME_CHARS}*[-_](?:PAT|JWT|WEBHOOK(?:_URL)?)`,
 ].join('|')
 const SECRET_FLAG_SOURCE = [
   'api-key',
@@ -54,7 +48,7 @@ const SECRET_FLAG_SOURCE = [
   'auth',
 ].join('|')
 const SECRET_VALUE_SOURCE = String.raw`("[^"]*"|'[^']*'|[^\s,;]+)`
-const SENSITIVE_NAME_PATTERN = new RegExp(`(?:${SECRET_NAME_SOURCE})`, 'i')
+const SENSITIVE_NAME_PATTERN = new RegExp(SECRET_NAME_SOURCE, 'i')
 const SENSITIVE_AUTH_NAME_PATTERN = /(?:^|_)AUTH(?:ORIZATION)?(?:_|$)/i
 const SENSITIVE_COOKIE_NAME_PATTERN = /(?:^|_)SET_?COOKIE(?:_|$)|(?:^|_)COOKIE(?:_|$)/i
 const SENSITIVE_PASS_NAME_PATTERN = /(?:^|_)PASS(?:_|$)/i
@@ -64,16 +58,16 @@ const SECRET_ASSIGNMENT_PATTERN = new RegExp(
   'gi'
 )
 const SECRET_FLAG_PATTERN = new RegExp(
-  String.raw`(--(?:${SECRET_FLAG_SOURCE})(?:-[A-Za-z0-9]+)*)(=|\s+)` + SECRET_VALUE_SOURCE,
+  String.raw`(--(?:${SECRET_FLAG_SOURCE})(?:-[A-Z0-9]+)*)(=|\s+)` + SECRET_VALUE_SOURCE,
   'gi'
 )
 const SECRET_FLAG_NAME_PATTERN = new RegExp(
-  `^--(?:${SECRET_FLAG_SOURCE})(?:-[A-Za-z0-9]+)*$`,
+  `^--(?:${SECRET_FLAG_SOURCE})(?:-[A-Z0-9]+)*$`,
   'i'
 )
 const AUTH_HEADER_PATTERN = /\b(Bearer)\s+([^\s'",}\]]+)/gi
 const AUTH_SCHEME_ASSIGNMENT_QUOTED_PATTERN = new RegExp(
-  String.raw`\b(${SECRET_ASSIGNMENT_NAME_SOURCE})\s*=\s*(["'])(?:Bearer|Basic)\s+.*?\2`,
+  String.raw`\b(${SECRET_ASSIGNMENT_NAME_SOURCE})\s*=\s*(["'])(?:Bearer|Basic)\s.*?\2`,
   'gi'
 )
 const AUTH_SCHEME_ASSIGNMENT_PATTERN = new RegExp(
@@ -83,7 +77,7 @@ const AUTH_SCHEME_ASSIGNMENT_PATTERN = new RegExp(
 const DEFAULT_IGNORABLE_PATTERN = /\p{Default_Ignorable_Code_Point}/gu
 const DEFAULT_IGNORABLE_TEST_PATTERN = /\p{Default_Ignorable_Code_Point}/u
 const CONTROL_CHARACTER_TEST_PATTERN = /\p{Cc}/u
-const UNSAFE_CONTROL_SOURCE = String.raw`[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]`
+const UNSAFE_CONTROL_SOURCE = String.raw`[\u0000-\u0008\v\f\u000E-\u001F\u007F-\u009F]`
 const UNSAFE_CONTROL_PATTERN = new RegExp(UNSAFE_CONTROL_SOURCE, 'g')
 const UNSAFE_CONTROL_TEST_PATTERN = new RegExp(UNSAFE_CONTROL_SOURCE)
 const PRIVATE_KEY_BLOCK_PATTERN =
@@ -92,10 +86,10 @@ const JWT_VALUE_PATTERN = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9
 const KNOWN_TOKEN_VALUE_PATTERN =
   /\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b/g
 const SECRET_HEADER_ENV_NAME_SOURCE = [
-  `(?:${SECRET_NAME_SOURCE}|PAT|JWT|WEBHOOK(?:_URL)?)`,
-  `[A-Za-z_]${SECRET_NAME_CHARS}*(?:${SECRET_NAME_SOURCE})${SECRET_NAME_CHARS}*`,
-  `[A-Za-z_]${SECRET_NAME_CHARS}*[-_]AUTH(?:ORIZATION)?`,
-  `[A-Za-z_]${SECRET_NAME_CHARS}*[-_](?:PAT|JWT|WEBHOOK(?:_URL)?)`,
+  `${SECRET_NAME_SOURCE}|PAT|JWT|WEBHOOK(?:_URL)?`,
+  `[A-Z_]${SECRET_NAME_CHARS}*(?:${SECRET_NAME_SOURCE})${SECRET_NAME_CHARS}*`,
+  `[A-Z_]${SECRET_NAME_CHARS}*[-_]AUTH(?:ORIZATION)?`,
+  `[A-Z_]${SECRET_NAME_CHARS}*[-_](?:PAT|JWT|WEBHOOK(?:_URL)?)`,
 ].join('|')
 const SECRET_HEADER_NAME_SOURCE = [
   'dd-api-key',
@@ -103,16 +97,13 @@ const SECRET_HEADER_NAME_SOURCE = [
   'api-key',
   'authorization',
   'proxy-authorization',
-  'token',
-  'cookie',
-  'set-cookie',
   SECRET_HEADER_ENV_NAME_SOURCE,
 ].join('|')
 const SECRET_HEADER_PATTERN = new RegExp(
-  String.raw`\b((?:${SECRET_HEADER_NAME_SOURCE}))\s*:\s*("[^"]*"|'[^']*'|[^\r\n,}]+)`,
+  String.raw`\b(${SECRET_HEADER_NAME_SOURCE})\s*:\s*("[^"]*"|'[^']*'|[^\r\n,}]+)`,
   'gi'
 )
-const URL_CREDENTIAL_PATTERN = /([a-z][a-z0-9+.-]*:\/\/)([^@\s/]+)(@)/gi
+const URL_CREDENTIAL_PATTERN = /(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*:\/\/)([^@\s/]+)(@)/gi
 const GITHUB_SECRET_REFERENCE_PATTERN =
   /(?:\b[A-Za-z_][A-Za-z0-9_.-]*\s*[:=]\s*)?\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g
 const SAFE_REFERENCE_MARKER_PATTERN = /DDCIVARREF([0-9]+)X/g

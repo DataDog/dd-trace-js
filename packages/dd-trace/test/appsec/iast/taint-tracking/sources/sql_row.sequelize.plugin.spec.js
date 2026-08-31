@@ -1,6 +1,6 @@
 'use strict'
 
-const { prepareTestServerForIast } = require('../../utils')
+const { prepareTestServerForIast, invokeCommandInjectionSink } = require('../../utils')
 const { withVersions } = require('../../../../setup/mocha')
 
 describe('db sources with sequelize', () => {
@@ -53,8 +53,7 @@ describe('db sources with sequelize', () => {
         testThatRequestHasNoVulnerability(async (req, res) => {
           const result = await sequelize.query('SELECT * from examples')
 
-          const childProcess = require('child_process')
-          childProcess.execSync(result[0][0].command)
+          invokeCommandInjectionSink(result[0][0].command)
 
           res.end('OK')
         }, 'COMMAND_INJECTION', null, 'Should not detect COMMAND_INJECTION with database source')
@@ -96,8 +95,7 @@ describe('db sources with sequelize', () => {
         testThatRequestHasNoVulnerability(async (req, res) => {
           const examples = await Example.findAll()
 
-          const childProcess = require('child_process')
-          childProcess.execSync(examples[0].command)
+          invokeCommandInjectionSink(examples[0].command)
 
           res.end('OK')
         }, 'COMMAND_INJECTION', null, 'Should not detect COMMAND_INJECTION with database source')

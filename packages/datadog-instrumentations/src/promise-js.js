@@ -7,9 +7,9 @@ const { wrapThen } = require('./helpers/promise')
 addHook({
   name: 'promise-js',
   versions: ['>=0.0.3'],
-}, Promise => {
-  if (Promise !== global.Promise) {
-    shimmer.wrap(Promise.prototype, 'then', wrapThen)
+}, LibraryPromise => {
+  if (LibraryPromise !== global.Promise) {
+    shimmer.wrap(LibraryPromise.prototype, 'then', wrapThen)
   }
-  return Promise
+  return LibraryPromise
 })

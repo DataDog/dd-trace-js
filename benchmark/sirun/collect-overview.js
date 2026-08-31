@@ -30,12 +30,14 @@ const SG_FILE = path.join(require('os').tmpdir(), 'sg-overview.txt')
 const HIGH_MEANING = new Set([
   'shimmer-runtime', 'shimmer-startup', 'scope', 'id', 'spans', 'encoding',
   'exporting-pipeline', 'propagation', 'async_hooks', 'url', 'startup', 'fs',
+  'appsec-waf',
 ])
 const LOW_MEANING = new Set(['plugin-dns'])
 
 const CRITICAL_PATH = new Set([
   'shimmer-runtime', 'shimmer-startup', 'scope', 'id', 'spans', 'encoding',
   'exporting-pipeline', 'propagation', 'async_hooks', 'startup',
+  'appsec-waf',
 ])
 const LIVE = new Set(['appsec', 'appsec-iast', 'plugin-http', 'plugin-net'])
 const BACKGROUND = new Set(['runtime-metrics', 'profiler', 'log', 'llmobs', 'debugger'])

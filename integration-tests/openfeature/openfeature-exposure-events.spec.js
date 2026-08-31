@@ -54,7 +54,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       let agent, proc
 
       beforeEach(async () => {
-        agent = await new FakeAgent().start()
+        agent = await new FakeAgent(0, { evpProxyVersions: [2, 4] }).start()
         proc = await spawnProc(appFile, {
           cwd,
           env: {
@@ -78,7 +78,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         let receivedAckUpdate = false
 
         // Listen for exposure events
-        agent.on('exposures', ({ payload, headers }) => {
+        agent.on('exposures', ({ payload, headers, path }) => {
           assert.ok(Object.hasOwn(payload, 'exposures'), `Available keys: ${inspect(Object.keys(payload))}`)
           assertObjectContains(payload, {
             context: {
@@ -94,6 +94,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
             try {
               assert.strictEqual(headers['content-type'], 'application/json')
               assert.strictEqual(headers['x-datadog-evp-subdomain'], 'event-platform-intake')
+              assert.strictEqual(path, '/evp_proxy/v2/api/v2/exposures')
 
               // Verify we got exposure events from flag evaluations
               assert.strictEqual(exposureEvents.length, 2)

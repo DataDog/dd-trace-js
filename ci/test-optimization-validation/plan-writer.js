@@ -4,6 +4,7 @@ const crypto = require('node:crypto')
 const path = require('node:path')
 
 const { VERSION } = require('../../version')
+const { getRequiredCapabilities } = require('./approval')
 const { writeApprovalArtifacts } = require('./approval-artifacts')
 const { serializeApprovalCommand } = require('./command-runner')
 const { getUnavailableExecutable } = require('./executable')
@@ -41,6 +42,9 @@ function formatExecutionPlan (input) {
  * @param {string[]} [input.selectedFrameworkIds] selected framework ids
  * @param {string|null} [input.requestedScenario] selected scenario
  * @param {boolean} [input.keepTempFiles] retain temporary files
+ * @param {object} [input.packageCheck] installed package-load result
+ * @param {Map<string, object>} [input.ciPreflightResults] static CI results by framework
+ * @param {Array<{path: string, sha256: string}>} [input.expectedProjectFiles] preflight project snapshot
  * @param {boolean} [input.verbose] print progress
  * @returns {{plan: string}} written plan
  */
@@ -50,6 +54,9 @@ function formatExecutionPlanArtifacts ({
   selectedFrameworkIds = [],
   requestedScenario = null,
   keepTempFiles = false,
+  packageCheck,
+  ciPreflightResults = new Map(),
+  expectedProjectFiles,
   verbose = false,
 }) {
   const offlineFixtureNonce = crypto.randomBytes(16).toString('hex')
@@ -61,6 +68,7 @@ function formatExecutionPlanArtifacts ({
     offlineFixtureNonce,
     keepTempFiles,
     verbose,
+    expectedProjectFiles,
   })
   const validatorArgv = [
     process.execPath,
@@ -72,8 +80,11 @@ function formatExecutionPlanArtifacts ({
   ]
   const plan = formatApprovalPlan({
     approvalArtifacts,
+    ciPreflightResults,
     manifest,
     out,
+    keepTempFiles,
+    packageCheck,
     requestedScenario,
     validatorArgv,
   })
@@ -86,20 +97,67 @@ function formatExecutionPlanArtifacts ({
  *
  * @param {object} input formatting inputs
  * @param {object} input.approvalArtifacts approval artifact paths and digest
+ * @param {Map<string, object>} input.ciPreflightResults static CI results by framework
  * @param {object} input.manifest normalized manifest
  * @param {string} input.out output directory
+ * @param {boolean} input.keepTempFiles retain temporary files
+ * @param {object|undefined} input.packageCheck installed package-load result
  * @param {string|null} input.requestedScenario selected scenario
  * @param {string[]} input.validatorArgv exact validator command
  * @returns {string} Markdown plan
  */
-function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenario, validatorArgv }) {
+function formatApprovalPlan ({
+  approvalArtifacts,
+  ciPreflightResults,
+  manifest,
+  out,
+  keepTempFiles,
+  packageCheck,
+  requestedScenario,
+  validatorArgv,
+}) {
   const root = manifest.repository.root
+  const runnableFrameworks = manifest.frameworks.filter(framework => framework.status === 'runnable')
+  const requiredCapabilities = getRequiredCapabilities({
+    manifest,
+    requestedScenario,
+  })
+  const buildPrerequisites = runnableFrameworks.filter(framework => {
+    return framework.buildArtifactRequired === true ||
+      (framework.validation?.fallbackTests || []).some(fallback => fallback.buildArtifactRequired === true)
+  }).length
   const lines = [
     '# Test Optimization Validation Plan',
     '',
     `Repository: ${inline(root)}`,
     `Validator: ${inline(`dd-trace ${VERSION}`)}`,
     `Results: ${inline(relative(root, out))}`,
+    ...(packageCheck?.ok
+      ? [`Installed package check: ${plain(packageCheck.diagnosis)}`]
+      : []),
+    '',
+    '## Approval Summary',
+    '',
+    requestedScenario === 'ci-wiring'
+      ? 'Local execution: none; this plan performs static CI analysis only.'
+      : `Local execution: ${runnableFrameworks.length} framework target${
+          runnableFrameworks.length === 1 ? '' : 's'
+        } eligible; ${manifest.frameworks.length - runnableFrameworks.length} setup or static-only.`,
+    `Required host capabilities: ${
+      requiredCapabilities.length > 0 ? requiredCapabilities.map(formatCapability).join(', ') : 'none declared'
+    }.`,
+    `Build prerequisites: ${
+      buildPrerequisites > 0
+        ? `${buildPrerequisites} eligible framework target${
+            buildPrerequisites === 1 ? '' : 's'
+          } may require the project's normal build`
+        : 'none detected statically'
+    }.`,
+    `Mutable paths: ${inline(relative(root, out))} and the temporary files disclosed below; temporary files ${
+      keepTempFiles ? 'will be retained by request' : 'will be removed after validation'
+    }.`,
+    'CI replay: none. CI configuration is inspected statically and CI commands are never executed.',
+    'Approval: one checksum-bound validator command, shown once at the end of this plan.',
     '',
     'The validator will run only the displayed `node <repository-contained-runner> <one-test-file>` commands. The ' +
       'runner may be an exact repository-owned Node test wrapper. The validator itself will not directly invoke ' +
@@ -112,8 +170,15 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
   for (const framework of manifest.frameworks) {
     lines.push(`### ${plain(getFrameworkLabel(framework, root))}`, '')
     if (framework.status !== 'runnable') {
-      lines.push(`Status: ${plain(formatStatus(framework.status))}.`)
-      for (const note of framework.notes || []) lines.push(`- ${plain(note)}`)
+      lines.push(
+        `Status: ${plain(formatStatus(framework.status))}.`,
+        ...(framework.blockerCategory
+          ? [`Blocker: ${plain(framework.blockerCategory.replaceAll('_', ' '))}.`]
+          : [])
+      )
+      if (framework.notes) {
+        for (const note of framework.notes) lines.push(`- ${plain(note)}`)
+      }
       lines.push('')
       continue
     }
@@ -122,13 +187,25 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
       lines.push('Status: static CI audit only; no project test command is selected.', '')
     } else {
       const basic = getBasicCommand(framework)
+      const fallbackTests = framework.validation.fallbackTests || []
       const unavailable = getUnavailableExecutable(basic)
       const status = unavailable
         ? `local validation will be incomplete because ${inline(unavailable)} is unavailable`
         : 'eligible for approved clean preflight; runtime prerequisites are unverified'
       lines.push(
         `Status: ${status}.`,
-        `Representative test: ${inline(relative(root, framework.validation.testFile))}`,
+        `Representative test: ${inline(relative(root, framework.validation.testFile))}${formatCandidateRequirements({
+          buildArtifactRequired: framework.buildArtifactRequired,
+          localSocketRequired: framework.localSocketRequired,
+        })}`,
+        ...(fallbackTests.length > 0
+          ? [
+              'Fallback tests, tried in order only if the representative does not pass cleanly:',
+              ...fallbackTests.map(fallback => {
+                return `- ${inline(relative(root, fallback.testFile))}${formatCandidateRequirements(fallback)}`
+              }),
+            ]
+          : []),
         `Working directory: ${inline(relative(root, basic.cwd))}`,
         `Timeout: ${basic.timeoutMs} ms`,
         ...(Object.keys(basic.env || {}).length > 0
@@ -136,16 +213,71 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
           : []),
         ...formatOmittedRunnerOptions(framework.validation.omittedRunnerOptions),
         '',
+        ...(framework.browserRequired
+          ? [
+              'Browser permission: this approved validation command launches the project browser through its ' +
+                'selected test runner. If the agent platform blocks browser processes, request its narrow permission ' +
+                'for the exact checksum-bound validator command below; do not change or broaden the command. ' +
+                'Complete ' +
+                'the project\'s normal browser installation, application startup, and build first when the selected ' +
+                'test depends on them.',
+              '',
+            ]
+          : []),
+        ...(framework.localSocketRequired
+          ? [
+              `Localhost prerequisite: ${
+                framework.allCandidatesRequireLocalSocket
+                  ? 'every approved candidate appears'
+                  : 'the selected test appears'
+              } to open or contact a local listener. A restricted execution environment may require narrow ` +
+                'permission for the exact validator command.',
+              '',
+            ]
+          : []),
+        ...(framework.buildArtifactRequired
+          ? [
+              'Build prerequisite: the selected test appears to load a build or dist artifact. Complete the ' +
+                'project\'s normal build before validation if that artifact is not already present.',
+              '',
+            ]
+          : []),
         'Basic Reporting command:',
         '',
         codeBlock(serializeApprovalCommand(basic)),
         '',
         'The command runs once without Datadog and once with validator-owned offline initialization. A debug rerun ' +
           'and one clean confirmation may run only when needed to diagnose a mismatch.',
+        ...(fallbackTests.length > 0
+          ? [
+              'If this test does not pass cleanly, the validator may try the disclosed fallback tests in order. It ' +
+                'will initialize only the first candidate that passes, and will stop early when the failure is a ' +
+                'confirmed shared runtime prerequisite rather than a candidate-specific test failure.',
+            ]
+          : []),
         ''
       )
 
+      for (const [index, fallback] of fallbackTests.entries()) {
+        const fallbackCommand = getBasicCommand(framework, fallback.testFile)
+        lines.push(
+          `Fallback Basic Reporting command ${index + 1}:`,
+          '',
+          codeBlock(serializeApprovalCommand(fallbackCommand)),
+          ''
+        )
+      }
+
       const selectedScenarios = getSelectedGeneratedScenarios(framework, requestedScenario)
+      if (selectedScenarios.length > 0) {
+        lines.push(
+          `Advanced checks use working directory: ${inline(relative(
+            root,
+            getGeneratedCommand(framework, selectedScenarios[0]).cwd
+          ))}`,
+          ''
+        )
+      }
       for (const scenario of selectedScenarios) {
         const command = getGeneratedCommand(framework, scenario)
         const source = getGeneratedSource(framework, scenario)
@@ -157,9 +289,6 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
           `Temporary file: ${inline(relative(root, scenario.testIdentities[0].file))}`,
           '',
           codeBlock(source),
-          '',
-          'Execution count: one clean generated-test verification, one instrumented identity-discovery run, and ' +
-            'one feature-validation run. One debug rerun may run only after a failure.',
           ''
         )
       }
@@ -173,12 +302,23 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
           ''
         )
       }
+      if (selectedScenarios.length > 0) {
+        lines.push(
+          'Advanced execution policy: each generated scenario has one clean verification, one instrumented ' +
+            'identity-discovery run, and one feature-validation run. One debug rerun may run only after a failure.',
+          ''
+        )
+      }
     }
 
     const ci = framework.ciWiring
+    const ciPreflight = ciPreflightResults.get(framework.id)
     lines.push(
       'CI audit: static only; no CI or package command will execute.',
       `CI review: ${plain(ci?.reviewComplete ? 'complete' : 'incomplete')}.`,
+      ...(ciPreflight
+        ? [`CI pre-approval result: ${plain(formatCiPreflightResult(ciPreflight))}`]
+        : []),
       ...(ci?.configFile ? [`CI file: ${inline(relative(root, ci.configFile))}`] : []),
       ''
     )
@@ -188,6 +328,8 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
     '## Writes and Cleanup',
     '',
     `- Validation artifacts: ${inline(relative(root, out))}`,
+    '- Single-flight lock: the approved validator creates one fixed lock in the result directory while it runs. An ' +
+      'existing lock blocks execution and is never reclaimed automatically.',
     ...(requestedScenario === 'ci-wiring'
       ? []
       : [
@@ -233,10 +375,41 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
   return lines.join('\n')
 }
 
+function formatCapability (capability) {
+  const labels = {
+    browser_process: 'browser process',
+    localhost_socket: 'localhost socket',
+  }
+  return labels[capability] || capability
+}
+
+function formatCandidateRequirements (candidate) {
+  const requirements = [
+    ...(candidate.localSocketRequired ? ['localhost'] : []),
+    ...(candidate.buildArtifactRequired ? ['build output'] : []),
+  ]
+  return requirements.length > 0 ? ` (${requirements.join(', ')} required)` : ''
+}
+
+function formatCiPreflightResult (result) {
+  const status = result.status === 'fail'
+    ? 'confirmed actionable problem'
+    : result.status === 'pass'
+      ? 'no confirmed problem'
+      : 'incomplete'
+  return `${status}: ${result.diagnosis}`
+}
+
 function formatOmittedRunnerOptions (options = []) {
-  return options.map(option => option === '--run'
-    ? 'Normalized runner option: `--run` is omitted because the validator supplies Vitest `run` itself.'
-    : 'Omitted runner option: `--typecheck` is excluded because validation executes runtime tests only.')
+  const descriptions = {
+    '-R': 'Omitted runner option: `-R` selects only Mocha report presentation; the validator uses its bounded ' +
+      'reporter.',
+    '--reporter': 'Omitted runner option: `--reporter` selects only Mocha report presentation; the validator uses ' +
+      'its bounded reporter.',
+    '--run': 'Normalized runner option: `--run` is omitted because the validator supplies Vitest `run` itself.',
+    '--typecheck': 'Omitted runner option: `--typecheck` is excluded because validation executes runtime tests only.',
+  }
+  return options.map(option => descriptions[option])
 }
 
 /**

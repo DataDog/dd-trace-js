@@ -5,6 +5,8 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const proxyquire = require('proxyquire').noPreserveCache()
+
 const {
   cleanupOfflineFixture,
   createOfflineFixture,
@@ -69,6 +71,34 @@ describe('test optimization offline validation artifacts', () => {
     cleanupOfflineFixture(fixture.root)
     cleanupOfflineFixture(otherFixture.root)
     assert.strictEqual(fs.existsSync(fixture.root), false)
+  })
+
+  it('treats a fixture that disappears during cleanup as already removed', () => {
+    const fixture = createOfflineFixture({
+      approvedPlanSha256: 'e'.repeat(64),
+      offlineFixtureNonce: 'e'.repeat(32),
+      framework: { id: 'vitest:cleanup-race' },
+      repositoryRoot,
+      scenarioName: 'basic-reporting',
+    })
+    const raceSafeCleanup = proxyquire(
+      '../../../../ci/test-optimization-validation/offline-fixtures',
+      {
+        'node:fs': {
+          rmSync: filename => {
+            if (filename === fixture.root) {
+              const error = new Error('already removed')
+              error.code = 'ENOENT'
+              throw error
+            }
+            return fs.rmSync(filename)
+          },
+        },
+      }
+    ).cleanupOfflineFixture
+
+    raceSafeCleanup(fixture.root)
+    fs.rmSync(path.dirname(path.dirname(fixture.root)), { force: true, recursive: true })
   })
 
   it('maps colliding sanitized framework ids to distinct stable fixture and artifact paths', () => {
@@ -218,7 +248,10 @@ describe('test optimization offline validation artifacts', () => {
   })
 
   it('rejects symbolic-link and hard-linked payload files', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the link semantics exercised here.
+      this.skip()
+    }
     const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
     const source = path.join(repositoryRoot, 'source.json')
     fs.writeFileSync(source, JSON.stringify(createTestCyclePayload()))
@@ -293,7 +326,10 @@ describe('test optimization offline validation artifacts', () => {
   })
 
   it('rejects malformed and hard-linked completion records', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the hard-link semantics exercised here.
+      this.skip()
+    }
     const { outputRoot, processId } = createPayloadRoot(repositoryRoot)
     const completionPath = path.join(outputRoot, 'completions', `completion-${processId}.json`)
 

@@ -72,10 +72,10 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const cacheWriteTokenCount = headers['x-amzn-bedrock-cache-write-input-token-count']
 
       pendingTokenHeaders.set(requestId, {
-        inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount),
-        outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount),
-        cacheReadTokensFromHeaders: cacheReadTokenCount && Number.parseInt(cacheReadTokenCount),
-        cacheWriteTokensFromHeaders: cacheWriteTokenCount && Number.parseInt(cacheWriteTokenCount),
+        inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount, 10),
+        outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount, 10),
+        cacheReadTokensFromHeaders: cacheReadTokenCount && Number.parseInt(cacheReadTokenCount, 10),
+        cacheWriteTokensFromHeaders: cacheWriteTokenCount && Number.parseInt(cacheWriteTokenCount, 10),
       })
     })
 
@@ -138,7 +138,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   #tagCommon ({ span, requestParams, textAndResponseReason, tokensFromHeaders }) {
     this._tagger.tagMetadata(span, {
       temperature: Number.parseFloat(requestParams.temperature) || 0,
-      max_tokens: Number.parseInt(requestParams.maxTokens) || 0,
+      max_tokens: Number.parseInt(requestParams.maxTokens, 10) || 0,
     })
     this._tagger.tagLLMIO(span, requestParams.prompt, textAndResponseReason.messages)
     this._tagger.tagMetrics(span, extractTokens({

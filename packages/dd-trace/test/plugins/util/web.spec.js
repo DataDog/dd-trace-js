@@ -60,7 +60,9 @@ describe('plugins/util/web', () => {
       assert.ok(Object.hasOwn(config, 'validateStatus'))
       assert.strictEqual(typeof config.validateStatus, 'function')
       assert.strictEqual(config.validateStatus(200), true)
+      assert.strictEqual(config.validateStatus(499), true)
       assert.strictEqual(config.validateStatus(500), false)
+      assert.strictEqual(config.validateStatus(599), false)
       assert.ok(Object.hasOwn(config, 'hooks'))
       assert.ok(typeof config.hooks === 'object' && config.hooks !== null)
       assert.ok(Object.hasOwn(config.hooks, 'request'))
@@ -71,16 +73,88 @@ describe('plugins/util/web', () => {
     it('should use the shared config if set', () => {
       const config = web.normalizeConfig({
         headers: ['test'],
-        validateStatus: code => false,
+        DD_TRACE_HTTP_SERVER_ERROR_STATUSES: '200',
+        validateStatus: code => code === 200,
         hooks: {
           request: () => 'test',
         },
       })
 
       assert.deepStrictEqual(config.headers, [['test', undefined]])
-      assert.strictEqual(config.validateStatus(200), false)
+      assert.strictEqual(config.validateStatus(200), true)
       assert.ok(Object.hasOwn(config, 'hooks'))
       assert.strictEqual(config.hooks.request(), 'test')
+    })
+
+    it('should mark configured HTTP server status codes as errors', () => {
+      const config = web.normalizeConfig({
+        DD_TRACE_HTTP_SERVER_ERROR_STATUSES: ' 200 - 201, 202, 250-249 ',
+      })
+
+      assert.strictEqual(config.validateStatus(199), true)
+      assert.strictEqual(config.validateStatus(200), false)
+      assert.strictEqual(config.validateStatus(201), false)
+      assert.strictEqual(config.validateStatus(202), false)
+      assert.strictEqual(config.validateStatus(203), true)
+      assert.strictEqual(config.validateStatus(248), true)
+      assert.strictEqual(config.validateStatus(249), false)
+      assert.strictEqual(config.validateStatus(250), false)
+      assert.strictEqual(config.validateStatus(251), true)
+      assert.strictEqual(config.validateStatus(500), true)
+    })
+
+    it('should combine overlapping HTTP server status code ranges', () => {
+      const config = web.normalizeConfig({
+        DD_TRACE_HTTP_SERVER_ERROR_STATUSES: '250-300,420,240-260',
+      })
+
+      assert.strictEqual(config.validateStatus(239), true)
+      assert.strictEqual(config.validateStatus(240), false)
+      assert.strictEqual(config.validateStatus(255), false)
+    })
+
+    it('should only configure valid HTTP status codes', () => {
+      const config = web.normalizeConfig({ DD_TRACE_HTTP_SERVER_ERROR_STATUSES: '100,599' })
+
+      assert.strictEqual(config.validateStatus(100), false)
+      assert.strictEqual(config.validateStatus(599), false)
+    })
+
+    for (const value of ['500-599', ' 500 - 599 ']) {
+      it(`should use the default matcher for the explicit default range ${JSON.stringify(value)}`, () => {
+        const config = web.normalizeConfig({ DD_TRACE_HTTP_SERVER_ERROR_STATUSES: value })
+
+        assert.strictEqual(config.validateStatus(499), true)
+        assert.strictEqual(config.validateStatus(500), false)
+        assert.strictEqual(config.validateStatus(599), false)
+      })
+    }
+
+    for (const value of ['', '99', '600', '99-100', '599-600', '600-599', '200,,202', '200-']) {
+      it(`should use the default HTTP server error statuses for ${JSON.stringify(value)}`, () => {
+        const config = web.normalizeConfig({ DD_TRACE_HTTP_SERVER_ERROR_STATUSES: value })
+
+        assert.strictEqual(config.validateStatus(499), true)
+        assert.strictEqual(config.validateStatus(500), false)
+        assert.strictEqual(config.validateStatus(599), false)
+      })
+    }
+
+    it('should use the default HTTP server error statuses for a non-string value', () => {
+      const config = web.normalizeConfig({ DD_TRACE_HTTP_SERVER_ERROR_STATUSES: 200 })
+
+      assert.strictEqual(config.validateStatus(499), true)
+      assert.strictEqual(config.validateStatus(500), false)
+    })
+
+    it('should apply configured HTTP server error statuses when validateStatus is invalid', () => {
+      const config = web.normalizeConfig({
+        DD_TRACE_HTTP_SERVER_ERROR_STATUSES: '200',
+        validateStatus: true,
+      })
+
+      assert.strictEqual(config.validateStatus(200), false)
+      assert.strictEqual(config.validateStatus(500), true)
     })
 
     describe('queryStringObfuscation', () => {
@@ -174,6 +248,54 @@ describe('plugins/util/web', () => {
 
         assert.strictEqual(span.context().getTag(HTTP_CLIENT_IP), '8.8.8.8')
       })
+  })
+
+  describe('extractIncomingServerContext', () => {
+    it('passes propagation headers to the configured tracer extractor', () => {
+      const headers = {
+        traceparent: '00-00000000000000000000000000000001-0000000000000002-01',
+      }
+      const context = {}
+      const tracer = {
+        extract: sinon.stub().returns(context),
+      }
+
+      assert.strictEqual(web.extractIncomingServerContext(tracer, headers), context)
+      sinon.assert.calledOnceWithExactly(tracer.extract, 'http_headers', headers)
+    })
+
+    it('returns the configured extractor result', () => {
+      const headers = {
+        traceparent: '00-00000000000000000000000000000001-0000000000000002-01',
+      }
+      const tracer = {
+        extract: sinon.stub(),
+      }
+
+      assert.strictEqual(web.extractIncomingServerContext(tracer, headers), undefined)
+      sinon.assert.calledOnceWithExactly(tracer.extract, 'http_headers', headers)
+    })
+
+    it('normalizes Web Headers before extraction', () => {
+      const entries = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        traceparent: '00-00000000000000000000000000000001-0000000000000002-01',
+      }
+      const headers = {
+        get: name => entries[name.toLowerCase()],
+        [Symbol.iterator]: function * () {
+          yield * Object.entries(entries)
+        },
+      }
+      const context = {}
+      const tracer = {
+        extract: sinon.stub().returns(context),
+      }
+
+      assert.strictEqual(web.extractIncomingServerContext(tracer, headers), context)
+      sinon.assert.calledOnceWithExactly(tracer.extract, 'http_headers', entries)
+    })
   })
 
   describe('OTel semantics network.peer.address', () => {
@@ -740,6 +862,22 @@ describe('plugins/util/web', () => {
       )
     })
 
+    it('merges W3C tracing allow-headers on OPTIONS when allow-origin is *', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'baggage, traceparent, tracestate, x-other'
+      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200)
+
+      assert.ok(res.setHeader.calledOnce)
+      assert.deepStrictEqual(
+        res.setHeader.firstCall.args,
+        [ALLOW_HEADERS, 'baggage,traceparent,tracestate']
+      )
+    })
+
     it('honours headers passed as the second writeHead argument', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
@@ -807,7 +945,7 @@ describe('plugins/util/web', () => {
       )
     })
 
-    it('leaves allow-headers untouched when no datadog header was requested', () => {
+    it('leaves allow-headers untouched when no supported tracing header was requested', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] = 'content-type, x-other'
@@ -832,6 +970,22 @@ describe('plugins/util/web', () => {
       assert.deepStrictEqual(
         res.writeHead.firstCall.args,
         [204, 'No Content', { 'x-test': '1' }]
+      )
+    })
+
+    it('trims whitespace surrounding each requested header entry', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = '  x-datadog-parent-id  ,x-datadog-trace-id  '
+      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200)
+
+      assert.ok(res.setHeader.calledOnce)
+      assert.deepStrictEqual(
+        res.setHeader.firstCall.args,
+        [ALLOW_HEADERS, 'x-datadog-parent-id,x-datadog-trace-id']
       )
     })
   })

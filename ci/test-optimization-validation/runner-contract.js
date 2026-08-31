@@ -7,10 +7,10 @@ const { environmentNamesEqual, setEnvironmentValue } = require('./environment')
 
 const RUNNER_OPTIONS = {
   cucumber: {
-    flags: new Set(),
+    flags: new Set(['--backtrace', '--fail-fast', '--no-strict', '--strict']),
     values: new Set([
       '-p', '--config', '--import', '--language', '--loader', '--profile', '--require', '--require-module',
-      '--world-parameters',
+      '--parallel', '--world-parameters',
     ]),
   },
   cypress: {
@@ -18,7 +18,7 @@ const RUNNER_OPTIONS = {
     values: new Set(['--browser', '--config-file']),
   },
   jest: {
-    flags: new Set(['--detectLeaks']),
+    flags: new Set(['--color', '--colors', '--detectLeaks']),
     values: new Set(['-c', '--config', '--env', '--runner', '--testEnvironment']),
   },
   mocha: {
@@ -128,17 +128,6 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot, pla
     }
   }
   const omittedOptions = getOmittedRunnerOptions(framework, invocation)
-  if (framework === 'cucumber') {
-    const language = getOptionValue(invocation, '--language')
-    if (language && language !== 'en') {
-      return {
-        environment: {},
-        error: `--language ${language} is not supported by the validator-generated English scenarios`,
-        inputFiles: [],
-        runnerArgs: [],
-      }
-    }
-  }
 
   const environment = getRunnerEnvironment(invocation, platform)
   const environmentError = getRunnerEnvironmentError(environment, platform)
@@ -165,6 +154,23 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot, pla
     omittedOptions,
     runnerArgs,
   }
+}
+
+function getRunnerConfigurationContract (framework, runnerArgs, environment, projectRoot, repositoryRoot) {
+  const runnerArgsError = getRunnerArgsError(framework, runnerArgs)
+  if (runnerArgsError) {
+    return {
+      environment: {},
+      error: `runner arguments ${runnerArgsError}`,
+      inputFiles: [],
+      runnerArgs: [],
+    }
+  }
+  const inputs = getRunnerInputs(runnerArgs, environment, projectRoot, repositoryRoot)
+  if (inputs.error) {
+    return { environment: {}, error: inputs.error, inputFiles: [], runnerArgs: [] }
+  }
+  return { environment, inputFiles: inputs.files, runnerArgs }
 }
 
 /**
@@ -239,7 +245,7 @@ function getRunnerSearchRoots (framework, command, projectRoot, repositoryRoot) 
  */
 function addRunnerSearchRoot (roots, value, projectRoot, repositoryRoot, directory) {
   if (typeof value !== 'string' || !value) return
-  const literal = value.split(/[*?{[]/, 1)[0].replace(/[\\/]+$/, '')
+  const literal = value.split(/[*?{[]/, 1)[0].replace(/(?<![\\/])[\\/]+$/, '')
   if (!literal) return
   const candidate = path.resolve(projectRoot, literal)
   const searchRoot = directory || !path.extname(candidate) ? candidate : path.dirname(candidate)
@@ -305,17 +311,24 @@ function getUnknownRunnerOption (framework, invocation) {
 
 function getOmittedRunnerOptions (framework, invocation) {
   const omitted = OMITTED_RUNNER_OPTIONS[framework] || new Set()
+  const ignored = IGNORED_RUNNER_OPTIONS[framework] || { flags: new Set(), values: new Set() }
   return [...new Set(invocation.tokens
     .slice(invocation.runnerIndex + 1)
-    .filter(token => token.startsWith('-') && omitted.has(token.split('=', 1)[0])))]
+    .filter(token => {
+      if (!token.startsWith('-')) return false
+      const option = token.split('=', 1)[0]
+      return omitted.has(option) || ignored.flags.has(option) || ignored.values.has(option)
+    })
+    .map(token => token.split('=', 1)[0]))]
 }
 
-function getOptionValue (invocation, expected) {
-  const tokens = invocation.tokens.slice(invocation.runnerIndex + 1)
-  for (let index = 0; index < tokens.length; index++) {
-    if (tokens[index].split('=', 1)[0] !== expected) continue
-    return tokens[index].includes('=') ? tokens[index].slice(tokens[index].indexOf('=') + 1) : tokens[index + 1]
+function getArgumentOptionValues (args, expected) {
+  const values = []
+  for (let index = 0; index < args.length; index++) {
+    if (args[index].split('=', 1)[0] !== expected) continue
+    values.push(args[index].includes('=') ? args[index].slice(args[index].indexOf('=') + 1) : args[index + 1])
   }
+  return values
 }
 
 /**
@@ -361,7 +374,8 @@ function getRunnerArgsError (framework, args) {
     }
     const option = token.split('=', 1)[0]
     if (options.flags.has(option)) {
-      if (token !== option && !/^--detectLeaks=(?:true|false)$/.test(token)) {
+      if (token !== option &&
+        !/^--(?:color|colors|detectLeaks)=(?:true|false)$/.test(token)) {
         return `contain an invalid value for ${option}`
       }
       continue
@@ -374,6 +388,13 @@ function getRunnerArgsError (framework, args) {
     const value = args[++index]
     if (typeof value !== 'string' || !value || value.startsWith('-') || CONTROL_PATTERN.test(value)) {
       return `contain a missing or unsafe value for ${option}`
+    }
+  }
+
+  if (framework === 'cucumber') {
+    const language = getArgumentOptionValues(args, '--language').find(value => value !== 'en')
+    if (language) {
+      return `--language ${language} is not supported by the validator-generated English scenarios`
     }
   }
 }
@@ -411,10 +432,12 @@ function getRunnerInputError (args, environment, projectRoot, repositoryRoot, co
   if (inputs.error) return inputs.error
 
   const approved = new Set()
-  for (const filename of configFiles || []) {
-    try {
-      approved.add(fs.realpathSync(filename))
-    } catch {}
+  if (configFiles) {
+    for (const filename of configFiles) {
+      try {
+        approved.add(fs.realpathSync(filename))
+      } catch {}
+    }
   }
   const unbound = inputs.files.find(filename => !approved.has(filename))
   if (unbound) return `references an input that is not approval-bound: ${unbound}`
@@ -439,26 +462,34 @@ function getFrameworkInvocation (command, framework) {
   })
   if (runnerIndex === -1) return
 
-  const prefix = tokens.slice(0, runnerIndex)
-  const firstCommand = prefix.find(token => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token))
-  if (firstCommand && !RUNNER_LAUNCHERS.has(path.basename(firstCommand).toLowerCase())) {
-    return {
-      error: `runner launch wrapper ${path.basename(firstCommand)} is not allowlisted`,
-      runnerIndex,
-      tokens,
-    }
-  }
-  for (const token of prefix) {
-    if (RUNNER_LAUNCHERS.has(path.basename(token).toLowerCase())) continue
-    if (/^[A-Za-z_][A-Za-z0-9_]*=[^;&|`]*$/.test(token)) continue
-    return {
-      error: 'runner launch wrapper contains options or positional arguments whose semantics the validator does not ' +
-        'preserve',
-      runnerIndex,
-      tokens,
-    }
-  }
+  const prefixError = getRunnerPrefixError(tokens.slice(0, runnerIndex))
+  if (prefixError) return { error: prefixError, runnerIndex, tokens }
   return { runnerIndex, tokens }
+}
+
+function getRunnerPrefixError (prefix) {
+  let coverageLauncher = false
+  for (let index = 0; index < prefix.length; index++) {
+    const token = prefix[index]
+    if (/^[A-Za-z_][A-Za-z0-9_]*=[^;&|`]*$/.test(token)) continue
+
+    const basename = path.basename(token).toLowerCase()
+    if (RUNNER_LAUNCHERS.has(basename)) {
+      coverageLauncher = basename === 'c8' || basename === 'nyc'
+      continue
+    }
+    if (coverageLauncher && /^(?:-r|--reporter)=\S+$/.test(token)) continue
+    if (coverageLauncher && /^(?:-r|--reporter)$/.test(token) &&
+      prefix[index + 1] && !prefix[index + 1].startsWith('-')) {
+      index++
+      continue
+    }
+    if (!prefix.some(candidate => RUNNER_LAUNCHERS.has(path.basename(candidate).toLowerCase()))) {
+      return `runner launch wrapper ${path.basename(token)} is not allowlisted`
+    }
+    return 'runner launch wrapper contains options or positional arguments whose semantics the validator does not ' +
+      'preserve'
+  }
 }
 
 /**
@@ -612,6 +643,10 @@ function resolveInputFile (input, projectRoot) {
   if (!input.module || path.isAbsolute(input.value) || input.value.startsWith('.')) {
     return path.resolve(projectRoot, input.value)
   }
+  const projectRelative = path.resolve(projectRoot, input.value)
+  try {
+    return require.resolve(projectRelative)
+  } catch {}
   try {
     return require.resolve(input.value, { paths: [projectRoot] })
   } catch {}
@@ -657,6 +692,7 @@ function isPathInside (root, filename) {
 module.exports = {
   getProjectNodeRunner,
   getRunnerArgsError,
+  getRunnerConfigurationContract,
   getRunnerContract,
   getRunnerEnvironmentError,
   getRunnerInputError,

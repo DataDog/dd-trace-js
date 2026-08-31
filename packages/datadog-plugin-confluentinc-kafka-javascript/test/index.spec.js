@@ -3,15 +3,20 @@
 const assert = require('node:assert/strict')
 
 const { randomUUID } = require('node:crypto')
+const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema } = require('./naming')
 const { waitForTopicReady } = require('./helpers')
+
+/** @typedef {Array<Record<string, string | Buffer>>} NativeHeaders */
 
 describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'
@@ -210,7 +215,7 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                const parentId = parseInt(span.parent_id.toString())
+                const parentId = parseInt(span.parent_id.toString(), 10)
                 assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
 
@@ -347,12 +352,6 @@ describe('Plugin', () => {
           let Consumer
 
           beforeEach(async () => {
-            const lib = require(`../../../versions/${module}@${version}`).get()
-            nativeApi = lib
-
-            tracer = await agent.load('confluentinc-kafka-javascript')
-
-            // Get the producer/consumer classes directly from the module
             Producer = nativeApi.Producer
             Consumer = nativeApi.KafkaConsumer
 
@@ -405,6 +404,52 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
 
+            it('should include every repeated native header key in the DSM payload size', () => {
+              const setCheckpointSpy = sinon.spy(tracer._tracer._dataStreamsProcessor, 'setCheckpoint')
+              const startChannel = dc.channel('apm:confluentinc-kafka-javascript:produce:start')
+              const message = Buffer.from('native DSM message')
+              const key = 'native-dsm-key'
+              /** @type {Record<string, string | Buffer | Array<string | Buffer>>} */
+              let carrier = {}
+
+              const captureCarrier = (ctx) => { carrier = ctx.messages[0].headers }
+              startChannel.subscribe(captureCarrier)
+
+              try {
+                nativeProducer.produce(
+                  testTopic,
+                  null,
+                  message,
+                  key,
+                  undefined,
+                  undefined,
+                  [{ 'content-type': 'text' }, { 'content-type': 'application/json' }]
+                )
+
+                assert.deepStrictEqual(carrier['content-type'], ['text', 'application/json'])
+
+                let expectedSize = message.length + Buffer.byteLength(key)
+                for (const headerKey of Object.keys(carrier)) {
+                  // DsmPathwayCodec writes its header after the checkpoint is sized.
+                  if (headerKey === 'dd-pathway-ctx-base64') continue
+
+                  const value = carrier[headerKey]
+                  const values = Array.isArray(value) ? value : [value]
+                  for (const single of values) {
+                    expectedSize += Buffer.byteLength(headerKey) +
+                      (Buffer.isBuffer(single) ? single.length : Buffer.byteLength(single))
+                  }
+                }
+
+                assert.strictEqual(setCheckpointSpy.lastCall.args[3], expectedSize)
+                // Repeating 'content-type' is what the generic carrier walk would miss.
+                assert.notStrictEqual(getMessageSize({ key, value: message, headers: carrier }), expectedSize)
+              } finally {
+                startChannel.unsubscribe(captureCarrier)
+                setCheckpointSpy.restore()
+              }
+            })
+
             it('should be instrumented with error', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
@@ -423,12 +468,17 @@ describe('Plugin', () => {
                 assert.ok(span.meta[ERROR_MESSAGE])
               }, { timeoutMs: 10000 })
 
-              try {
-                // Passing invalid arguments should cause an error
-                nativeProducer.produce()
-              } catch (err) {
-                // Error is expected
-              }
+              assert.throws(() => {
+                nativeProducer.produce(
+                  testTopic,
+                  null,
+                  Buffer.from('invalid native header'),
+                  'native-key',
+                  undefined,
+                  undefined,
+                  [{ invalid: 42 }]
+                )
+              }, { message: 'Header value must be a string or buffer' })
 
               return expectedSpanPromise
             })
@@ -466,38 +516,96 @@ describe('Plugin', () => {
               }))
             })
 
-            function consume (consumer, producer, topic, message, timeoutMs = 9500) {
+            /**
+             * @param {{ consume: Function, unsubscribe: Function }} consumer
+             * @param {{ produce: Function }} producer
+             * @param {string} topic
+             * @param {Buffer} message
+             * @param {number} [timeoutMs]
+             * @param {(message: { value: Buffer, headers?: NativeHeaders }) => void} [onMessage]
+             * @param {Array<Record<string, string | Buffer> | null>} [headers]
+             *   Entries may be malformed; the boundary decides what reaches the library.
+             */
+            function consume (
+              consumer,
+              producer,
+              topic,
+              message,
+              timeoutMs = 9500,
+              onMessage,
+              headers
+            ) {
               return /** @type {Promise<void>} */(new Promise((resolve, reject) => {
+                let retryId
+                let settled = false
                 const timeoutId = setTimeout(() => {
-                  reject(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
+                  settle(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
                 }, timeoutMs)
 
+                function settle (error) {
+                  if (settled) return
+                  settled = true
+                  clearTimeout(timeoutId)
+                  clearTimeout(retryId)
+
+                  let unsubscribeError
+                  try {
+                    consumer.unsubscribe()
+                  } catch (unsubscribeFailure) {
+                    unsubscribeError = unsubscribeFailure
+                  }
+
+                  const rejection = error || unsubscribeError
+                  if (rejection) {
+                    reject(rejection)
+                  } else {
+                    resolve()
+                  }
+                }
+
+                function retry () {
+                  if (!settled) retryId = setTimeout(doConsume, 20)
+                }
+
                 function doConsume () {
-                  consumer.consume(1, function (err, messages) {
-                    if (err) {
-                      clearTimeout(timeoutId)
-                      return reject(err)
+                  consumer.consume(1, function (error, messages) {
+                    if (settled) return
+
+                    if (error) {
+                      settle(error)
+                      return
                     }
 
                     if (!messages || messages.length === 0) {
-                      setTimeout(doConsume, 20)
+                      retry()
                       return
                     }
 
                     const consumedMessage = messages[0]
 
                     if (consumedMessage.value.toString() !== message.toString()) {
-                      setTimeout(doConsume, 20)
+                      retry()
                       return
                     }
 
-                    clearTimeout(timeoutId)
-                    consumer.unsubscribe()
-                    resolve()
+                    try {
+                      if (typeof onMessage === 'function') {
+                        onMessage(consumedMessage)
+                      }
+                    } catch (error) {
+                      settle(error)
+                      return
+                    }
+
+                    settle()
                   })
                 }
                 doConsume()
-                producer.produce(topic, null, message, 'native-consumer-key')
+                try {
+                  producer.produce(topic, null, message, 'native-consumer-key', undefined, undefined, headers)
+                } catch (error) {
+                  settle(error)
+                }
               }))
             }
 
@@ -537,7 +645,7 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                const parentId = parseInt(span.parent_id.toString())
+                const parentId = parseInt(span.parent_id.toString(), 10)
                 assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
               nativeConsumer.setDefaultConsumeTimeout(10)
@@ -549,6 +657,57 @@ describe('Plugin', () => {
               await consume(nativeConsumer, nativeProducer, testTopic, message)
 
               return expectedSpanPromise
+            })
+
+            it('should preserve native application headers and replace stale propagation headers', async () => {
+              const message = Buffer.from('test message with native headers')
+              const staleTraceId = 'stale-trace-id'
+              const applicationBuffer = Buffer.from([0xde, 0xad, 0xbe, 0xef])
+
+              nativeConsumer.setDefaultConsumeTimeout(10)
+              nativeConsumer.subscribe([testTopic])
+
+              await consume(nativeConsumer, nativeProducer, testTopic, message, 9500, (consumedMessage) => {
+                const entries = nativeHeaderEntries(consumedMessage.headers)
+
+                assert.deepStrictEqual(entries.filter(([key]) => key === 'content-type'), [
+                  ['content-type', Buffer.from('text/plain')],
+                  ['content-type', Buffer.from('application/json')],
+                ])
+                assert.deepStrictEqual(entries.filter(([key]) => key === 'Traceparent'), [
+                  ['Traceparent', Buffer.from('application-value')],
+                ])
+                assert.deepStrictEqual(entries.filter(([key]) => key === 'binary-header'), [
+                  ['binary-header', applicationBuffer],
+                ])
+
+                const traceId = entries.find(([key]) => key === 'x-datadog-trace-id')
+                assert.ok(traceId)
+                assert.notStrictEqual(traceId[1].toString(), staleTraceId)
+              }, [
+                { 'content-type': 'text/plain' },
+                { 'content-type': 'application/json' },
+                { 'binary-header': applicationBuffer },
+                { 'x-datadog-trace-id': staleTraceId },
+                { Traceparent: 'application-value' },
+              ])
+            })
+
+            it('should send generated headers only when the header array is unusable', async () => {
+              const message = Buffer.from('test message with an unusable native header array')
+
+              nativeConsumer.setDefaultConsumeTimeout(10)
+              nativeConsumer.subscribe([testTopic])
+
+              await consume(nativeConsumer, nativeProducer, testTopic, message, 9500, (consumedMessage) => {
+                const keys = nativeHeaderEntries(consumedMessage.headers).map(([key]) => key)
+
+                assert.ok(!keys.includes('content-type'))
+                assert.ok(keys.includes('x-datadog-trace-id'))
+              }, [
+                { 'content-type': 'text/plain' },
+                null,
+              ])
             })
           })
         })
@@ -575,4 +734,16 @@ async function sendMessages (kafka, topic, messages) {
     messages,
   })
   await producer.disconnect()
+}
+
+/**
+ * @param {NativeHeaders | undefined} headers `KafkaConsumer~Message.headers`,
+ *   absent when the record carries none.
+ * @returns {Array<[string, string | Buffer]>} Wire order, duplicates kept.
+ */
+function nativeHeaderEntries (headers) {
+  return (headers ?? []).map((header) => {
+    const [key] = Object.keys(header)
+    return [key, header[key]]
+  })
 }

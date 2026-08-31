@@ -1,23 +1,80 @@
 'use strict'
 
 const log = require('../../log')
+const { ExternalExperiment } = require('./experiment')
+
+const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
+const NOOP_SPAN_ID = '0000000000000000'
+const NOOP_TRACE_ID = '00000000000000000000000000000000'
+
+/**
+ * @typedef {object} DatasetRecordNew
+ * @property {string} [id]
+ * @property {unknown} inputData
+ * @property {unknown} [expectedOutput]
+ * @property {Record<string, unknown>} [metadata]
+ * @property {string[]} [tags]
+ */
 
 class NoopDataset {
   #name
+  #description
   #records
+  #filterTags
 
   constructor (name = '', options = {}) {
     this.#name = name
+    this.#description = typeof options === 'string' ? options : (options.description ?? '')
+    this.#filterTags = typeof options === 'string' ? [] : [...(options.filterTags ?? [])]
     this.#records = (typeof options === 'string' ? [] : (options.records ?? [])).map(record => ({
       id: record.id ?? null,
       input: record.inputData,
       expectedOutput: record.expectedOutput ?? null,
       metadata: record.metadata ?? {},
+      tags: [...(record.tags ?? [])],
     }))
   }
 
-  addRecord (input, expectedOutput, metadata) {
-    this.#records.push({ id: null, input, expectedOutput: expectedOutput ?? null, metadata: metadata ?? {} })
+  addRecord (input, expectedOutput, metadata, tags) {
+    this.#records.push({
+      id: null,
+      input,
+      expectedOutput: expectedOutput ?? null,
+      metadata: metadata ?? {},
+      tags: [...(tags ?? [])],
+    })
+    return this
+  }
+
+  /**
+   * Add multiple records to a dataset.
+   * @param {DatasetRecordNew[]} records
+   * @returns {NoopDataset} This dataset for chaining.
+   */
+  addRecords (records) {
+    for (const record of records) {
+      this.#records.push({
+        id: record.id ?? null,
+        input: record.inputData,
+        expectedOutput: record.expectedOutput ?? null,
+        metadata: record.metadata ?? {},
+        tags: [...(record.tags ?? [])],
+      })
+    }
+    return this
+  }
+
+  update (index, fields) {
+    const record = this.#records[index]
+    if (record == null) return this
+    if (Object.hasOwn(fields, 'input')) record.input = fields.input
+    if (Object.hasOwn(fields, 'expectedOutput')) record.expectedOutput = fields.expectedOutput ?? null
+    if (Object.hasOwn(fields, 'metadata')) record.metadata = fields.metadata ?? {}
+    return this
+  }
+
+  delete (index) {
+    this.#records.splice(index, 1)
     return this
   }
 
@@ -25,8 +82,55 @@ class NoopDataset {
     return Promise.resolve({ pushedCount: 0, totalCount: 0 })
   }
 
+  /**
+   * Add tags to a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {NoopDataset} This dataset for chaining.
+   */
+  addTags (index, tags) {
+    const record = this.#records[index]
+    if (!record) return this
+    const normalizedTags = tags ?? []
+    record.tags = [...new Set([...(record.tags ?? []), ...normalizedTags])].sort()
+    return this
+  }
+
+  /**
+   * Remove tags from a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {NoopDataset} This dataset for chaining.
+   */
+  removeTags (index, tags) {
+    const record = this.#records[index]
+    if (!record) return this
+    const normalizedTags = tags ?? []
+    const removed = new Set(normalizedTags)
+    record.tags = (record.tags ?? []).filter(tag => !removed.has(tag)).sort()
+    return this
+  }
+
+  /**
+   * Replace all tags on a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {NoopDataset} This dataset for chaining.
+   */
+  replaceTags (index, tags) {
+    const record = this.#records[index]
+    if (!record) return this
+    const normalizedTags = tags ?? []
+    record.tags = [...normalizedTags]
+    return this
+  }
+
   name () {
     return this.#name
+  }
+
+  description () {
+    return this.#description
   }
 
   id () {
@@ -37,12 +141,24 @@ class NoopDataset {
     return null
   }
 
+  projectName () {
+    return null
+  }
+
   version () {
     return null
   }
 
   latestVersion () {
     return null
+  }
+
+  /**
+   * Return the tags used to filter this dataset.
+   * @returns {string[]} Dataset record filter tags.
+   */
+  filterTags () {
+    return [...this.#filterTags]
   }
 
   records () {
@@ -60,9 +176,11 @@ class NoopDataset {
 
 class NoopExperiment {
   #name
+  #external
 
-  constructor (name = '') {
+  constructor (name = '', external = false) {
     this.#name = name
+    this.#external = external
   }
 
   name () {
@@ -70,7 +188,7 @@ class NoopExperiment {
   }
 
   experimentId () {
-    return null
+    return this.#external ? NOOP_EXPERIMENT_ID : null
   }
 
   url () {
@@ -78,7 +196,39 @@ class NoopExperiment {
   }
 
   run () {
-    return Promise.resolve({ experimentId: null, rows: [], url: null })
+    return Promise.resolve({
+      experimentId: null,
+      rows: [],
+      summaryEvaluations: {},
+      runs: [],
+      url: null,
+    })
+  }
+
+  /**
+   * @returns {Promise<{experimentId: string, spanId: string, traceId: string, url: null}>}
+   */
+  submitSpan () {
+    return Promise.resolve({
+      experimentId: NOOP_EXPERIMENT_ID,
+      spanId: NOOP_SPAN_ID,
+      traceId: NOOP_TRACE_ID,
+      url: null,
+    })
+  }
+
+  /**
+   * @returns {Promise<void>}
+   */
+  submitEvaluationMetrics () {
+    return Promise.resolve()
+  }
+
+  /**
+   * @returns {Promise<void>}
+   */
+  close () {
+    return Promise.resolve()
   }
 }
 
@@ -101,14 +251,23 @@ class NoopExperiments {
     return new NoopDataset(name, options)
   }
 
-  pullDataset (name) {
+  pullDataset (name, options = {}) {
     this.#warn()
-    return Promise.resolve(new NoopDataset(name))
+    return Promise.resolve(new NoopDataset(name, { filterTags: options.tags }))
   }
 
   experiment (options = {}) {
     this.#warn()
     return new NoopExperiment(options.name)
+  }
+
+  /**
+   * @param {object} options
+   * @returns {Promise<ExternalExperiment>}
+   */
+  startExperiment (options = {}) {
+    this.#warn()
+    return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name, true)))
   }
 }
 

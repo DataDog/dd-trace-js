@@ -9,6 +9,7 @@ const rrtypes = {
   resolveAny: 'ANY',
   resolve4: 'A',
   resolve6: 'AAAA',
+  resolveCaa: 'CAA',
   resolveCname: 'CNAME',
   resolveMx: 'MX',
   resolveNs: 'NS',
@@ -17,6 +18,7 @@ const rrtypes = {
   resolvePtr: 'PTR',
   resolveNaptr: 'NAPTR',
   resolveSoa: 'SOA',
+  resolveTlsa: 'TLSA',
 }
 
 // `dns.promises` and `require('dns/promises')` resolve to the same exports object. Both
@@ -81,7 +83,7 @@ function buildCallbackArgsContext (rrtype) {
     const captured = [...args]
     captured.pop() // remove the callback
     if (rrtype) {
-      captured.push(rrtype)
+      insertRrtype(captured, rrtype)
     }
     return { args: captured }
   }
@@ -91,8 +93,25 @@ function buildPromiseArgsContext (rrtype) {
   return function (_, args) {
     const captured = [...args]
     if (rrtype) {
-      captured.push(rrtype)
+      insertRrtype(captured, rrtype)
     }
     return { args: captured }
   }
+}
+
+/**
+ * @param {unknown[]} captured
+ * @param {string} rrtype
+ */
+function insertRrtype (captured, rrtype) {
+  if (captured.length === 0) {
+    captured.push(rrtype)
+    return
+  }
+
+  captured.push(rrtype)
+  for (let index = captured.length - 1; index > 1; index--) {
+    captured[index] = captured[index - 1]
+  }
+  captured[1] = rrtype
 }

@@ -286,6 +286,35 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with configured HTTP server error statuses', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '200-201,202'
+          await agent.load('http', { client: false })
+          http = require(pluginToBeLoaded)
+        })
+
+        beforeEach(done => {
+          appListener = new http.Server(listener).listen(0, 'localhost', () => {
+            port = appListener.address().port
+            done()
+          })
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES
+        })
+
+        it('should mark a configured status code as an error', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+              assert.strictEqual(traces[0][0].error, 1)
+            }),
+            axios.get(`http://localhost:${port}/user`),
+          ])
+        })
+      })
+
       describe('with a `server` configuration', () => {
         beforeEach(() => {
           return agent.load('http', { client: false, server: {} })

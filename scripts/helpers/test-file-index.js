@@ -77,17 +77,20 @@ function normalizePattern (pattern) {
   if (!pattern.includes('./') && !pattern.includes('//')) return pattern
 
   const segments = pattern.split('/')
-  const kept = []
+  let normalized = ''
+  let hasSegment = false
 
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i]
     // A leading empty segment marks an absolute pattern and a trailing one a directory-only
     // pattern; both change what matches, so only interior blanks are collapsed.
     if (segment === '.' || (segment === '' && i !== 0 && i !== segments.length - 1)) continue
-    kept.push(segment)
+    if (hasSegment) normalized += '/'
+    normalized += segment
+    hasSegment = true
   }
 
-  return kept.join('/')
+  return normalized
 }
 
 /**
@@ -120,7 +123,7 @@ class TestFileIndex {
   /** @type {boolean} */
   #nocase
 
-  /** @type {NodeJS.Platform} */
+  /** @type {typeof process.platform} */
   #platform
 
   /** @type {Map<string, InstanceType<typeof Minimatch>>} */
@@ -137,7 +140,7 @@ class TestFileIndex {
 
   /**
    * @param {string[]} files Sorted repository-relative POSIX paths.
-   * @param {{ nocase: boolean, platform: NodeJS.Platform }} options
+   * @param {{ nocase: boolean, platform: typeof process.platform }} options
    */
   constructor (files, { nocase, platform }) {
     this.files = files

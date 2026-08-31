@@ -4,7 +4,7 @@ const { EventEmitter } = require('events')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
-const { buildProfilingRuntime } = require('./config')
+const { buildProfilingRuntime, getProfilingTags } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
@@ -35,7 +35,7 @@ function profileHasMissingSourceMaps (profile) {
 }
 
 function processInfo (infos, info, type) {
-  if (Object.keys(info).length > 0) {
+  if (info !== undefined) {
     infos[type] = info
   }
 }
@@ -54,6 +54,7 @@ class Profiler extends EventEmitter {
   #compressionFn
   #compressionFnInitialized = false
   #compressionOptions
+  #config
   #customLabelKeys = new Set()
   #enabled = false
   #endpointCounts = new Map()
@@ -64,7 +65,7 @@ class Profiler extends EventEmitter {
   #profilers
   #spanFinishListener
   #systemInfoReport
-  #tags
+  #currentSnapshotTags
   #timer
   #uploadCompression
 
@@ -95,6 +96,10 @@ class Profiler extends EventEmitter {
     for (const key of keys) {
       this.#customLabelKeys.add(key)
     }
+    this.#applyCustomLabelKeys()
+  }
+
+  #applyCustomLabelKeys () {
     if (this.#profilers) {
       for (const profiler of this.#profilers) {
         profiler.setCustomLabelKeys?.(this.#customLabelKeys)
@@ -172,14 +177,18 @@ class Profiler extends EventEmitter {
     if (this.enabled) return true
     this.#enabled = true
 
-    const { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+    const { tags: snapshotTags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
       buildProfilingRuntime(config)
-    this.#tags = tags
+    this.#config = config
     this.#exporters = exporters
     this.#flushInterval = flushInterval
     this.#profilers = profilers
+    this.#currentSnapshotTags = snapshotTags
     this.#uploadCompression = uploadCompression
     this.#systemInfoReport = systemInfoReport
+    if (this.#customLabelKeys.size > 0) {
+      this.#applyCustomLabelKeys()
+    }
 
     this._setInterval()
     // Log errors if the source map finder fails, but don't prevent the rest
@@ -241,7 +250,7 @@ class Profiler extends EventEmitter {
     processInfo(infos, info, profileType)
     this.#submit({
       [profileType]: encodedProfile,
-    }, infos, start, end, snapshotKinds.ON_OUT_OF_MEMORY)
+    }, infos, start, end, this.#currentSnapshotTags, snapshotKinds.ON_OUT_OF_MEMORY)
   }
 
   _setInterval () {
@@ -325,6 +334,7 @@ class Profiler extends EventEmitter {
 
       const startDate = this.#lastStart
       const endDate = new Date()
+      const snapshotTags = this.#currentSnapshotTags
       const profiles = []
 
       crashtracker.withProfilerSerializing(() => {
@@ -341,6 +351,7 @@ class Profiler extends EventEmitter {
       })
 
       if (restart) {
+        this.#currentSnapshotTags = getProfilingTags(this.#config)
         this._capture(this._timeoutInterval, endDate)
       }
 
@@ -378,7 +389,7 @@ class Profiler extends EventEmitter {
       }))
 
       if (hasEncoded) {
-        await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotKind)
+        await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotTags, snapshotKind)
         profileSubmittedChannel.publish()
         log.debug('Submitted profiles')
       }
@@ -388,9 +399,15 @@ class Profiler extends EventEmitter {
     }
   }
 
-  #submit (profiles, infos, start, end, snapshotKind) {
-    const tags = this.#tags
-
+  /**
+   * @param {Record<string, Buffer|string>} profiles
+   * @param {Record<string, unknown>} infos
+   * @param {Date} start
+   * @param {Date} end
+   * @param {Record<string, string|number|boolean|undefined>} snapshotTags
+   * @param {string} snapshotKind
+   */
+  #submit (profiles, infos, start, end, snapshotTags, snapshotKind) {
     // Flatten endpoint counts
     const endpointCounts = {}
     for (const [endpoint, { count }] of this.#endpointCounts) {
@@ -398,12 +415,12 @@ class Profiler extends EventEmitter {
     }
     this.#endpointCounts.clear()
 
-    tags.snapshot = snapshotKind
-    tags.profile_seq = this.#profileSeq++
+    snapshotTags.snapshot = snapshotKind
+    snapshotTags.profile_seq = this.#profileSeq++
     const customAttributes = this.#customLabelKeys.size > 0
       ? [...this.#customLabelKeys]
       : undefined
-    const exportSpec = { profiles, infos, start, end, tags, endpointCounts, customAttributes }
+    const exportSpec = { profiles, infos, start, end, tags: snapshotTags, endpointCounts, customAttributes }
     const tasks = this.#exporters.map(exporter =>
       exporter.export(exportSpec).catch(error => {
         log.warn(error)

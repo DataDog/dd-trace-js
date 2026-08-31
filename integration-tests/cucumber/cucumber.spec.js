@@ -79,6 +79,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FINAL_STATUS,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { SAMPLING_PRIORITY } = require('../../ext/tags')
 const { AUTO_KEEP } = require('../../ext/priority')
@@ -102,6 +103,7 @@ const version = process.env.CUCUMBER_VERSION || 'latest'
 const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
 const onlyLatestIt = version === 'latest' ? it : it.skip
+const rejectsFormatterErrorsIt = version === '7.0.0' ? it : it.skip
 
 const runTestsCommand = './node_modules/.bin/cucumber-js ci-visibility/features/*.feature'
 const runTestsWithCoverageCommand = './node_modules/nyc/bin/nyc.js -r=text-summary ' +
@@ -292,6 +294,79 @@ describe(`cucumber@${version} commonJS`, () => {
       once(childProcess, 'exit'),
       telemetryPromise,
     ])
+  })
+
+  rejectsFormatterErrorsIt('marks completed suites failed when a custom formatter throws', async () => {
+    childProcess = exec(
+      './node_modules/.bin/cucumber-js ci-visibility/features/greetings.feature ' +
+      '--format ./ci-visibility/cucumber-formatter-throws.js',
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          const event = events.find(event => event.type === eventType)
+          assert.ok(event, `expected ${eventType} event`)
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(event.content.error, 1, `${eventType} should contain the formatter error`)
+          assert.match(event.content.meta[ERROR_MESSAGE], /custom Cucumber formatter failed/)
+        }
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    assert.notStrictEqual(exitCode, 0)
+  })
+
+  it('forwards telemetry from parallel workers', async () => {
+    receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+
+        assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+      })
+    const telemetryPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+        const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+        const testFinishedMetric = telemetryMetrics.find(({ metric, tags }) =>
+          metric === 'event_finished' && tags.includes('event_type:test')
+        )
+
+        assert.ok(testFinishedMetric, 'test event telemetry from a worker should be sent')
+      })
+
+    childProcess = exec(
+      './node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature --parallel 2',
+      {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          DD_TRACE_AGENT_PORT: String(receiver.port),
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+        },
+      }
+    )
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+      telemetryPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
   })
 
   onlyLatestIt('waits for the final payload before the programmatic run resolves', async () => {
@@ -619,11 +694,7 @@ describe(`cucumber@${version} commonJS`, () => {
           })
       })
 
-      const runModes = ['serial']
-
-      if (version !== '7.0.0') { // only on latest or 9 if node is old
-        runModes.push('parallel')
-      }
+      const runModes = ['serial', 'parallel']
 
       runModes.forEach((runMode) => {
         it(`(${runMode}) can run and report tests`, (done) => {
@@ -771,8 +842,9 @@ describe(`cucumber@${version} commonJS`, () => {
         })
       })
 
-      if (reportMethod === 'agentless' && version !== '7.0.0') {
-        it('keeps module tags when worker traces arrive before parallel suite start', async () => {
+      {
+        const delayedWorkerTest = reportMethod === 'agentless' && version !== '7.0.0' ? it : it.skip
+        delayedWorkerTest('keeps module tags when worker traces arrive before parallel suite start', async () => {
           childProcess = exec(
             parallelModeCommand,
             {
@@ -1059,6 +1131,48 @@ describe(`cucumber@${version} commonJS`, () => {
             )
           })
 
+        it('prints a message when every suite is skipped', async () => {
+          receiver.setSettings({
+            itr_enabled: true,
+            code_coverage: false,
+            tests_skipping: true,
+          })
+          receiver.setSuitesToSkip([
+            {
+              type: 'suite',
+              attributes: {
+                suite: `${featuresPath}farewell.feature`,
+              },
+            },
+          ])
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature',
+            { cwd, env: envVars }
+          )
+          childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+          const [, [exitCode]] = await Promise.all([
+            eventsPromise,
+            once(childProcess, 'close'),
+          ])
+
+          assert.strictEqual(exitCode, 0, testOutput)
+          assert.strictEqual(
+            testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+            1,
+            testOutput
+          )
+        })
+
         it('does not skip tests if git metadata upload fails', (done) => {
           receiver.setSuitesToSkip([{
             type: 'suite',
@@ -1307,8 +1421,9 @@ describe(`cucumber@${version} commonJS`, () => {
           })
         })
 
-        if (!isAgentless) {
-          context('if the agent is not event platform proxy compatible', () => {
+        {
+          const evpCompatibilityContext = isAgentless ? context.skip : context
+          evpCompatibilityContext('if the agent is not event platform proxy compatible', () => {
             it('does not do any intelligent test runner request', (done) => {
               receiver.setInfoResponse({ endpoints: [] })
 
@@ -1565,16 +1680,69 @@ describe(`cucumber@${version} commonJS`, () => {
                 )
                 .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
 
-              const diagnosticTests = tests.map(test => ({
-                status: test.meta[TEST_STATUS],
-                isRetry: test.meta[TEST_IS_RETRY],
-                retryReason: test.meta[TEST_RETRY_REASON],
-              }))
-              assert.deepStrictEqual(diagnosticTests, [
-                { status: 'fail', isRetry: undefined, retryReason: undefined },
-                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
-                { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
-              ])
+              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass', 'fail'])
+              assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+              assert.ok(!(TEST_RETRY_REASON in tests[0].meta))
+              for (const retryTest of tests.slice(1)) {
+                assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+              }
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features-flaky/flaky.feature --retry 1',
+            {
+              cwd,
+              env: envVars,
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
+          assert.strictEqual(exitCode, 0)
+        })
+
+        it('preserves manual Cucumber retries when the EFD retry budget is zero', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': 0,
+                '10s': 0,
+                '30s': 0,
+                '5m': 0,
+              },
+              faulty_session_threshold: 100,
+            },
+            flaky_test_retries_enabled: false,
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({
+            cucumber: {},
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test =>
+                  test.meta[TEST_SUITE] === 'ci-visibility/features-flaky/flaky.feature' &&
+                  test.meta[TEST_NAME] === 'Say flaky'
+                )
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              const expectedStatuses = version === 'latest' ? ['fail', 'pass'] : ['pass']
+              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), expectedStatuses)
+              assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+              assert.ok(!(TEST_RETRY_REASON in tests[0].meta))
+              if (version === 'latest') {
+                assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              }
             })
 
           childProcess = exec(
@@ -3526,11 +3694,15 @@ describe(`cucumber@${version} commonJS`, () => {
         childProcess.stdout?.on('data', (data) => {
           stdout += data.toString()
         })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data.toString()
+        })
 
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
               assert.doesNotMatch(stdout, /I am running/)
+              assert.match(stdout, /Disabled: \d+ tests? skipped\./)
               assert.strictEqual(exitCode, 0)
             } else {
               assert.match(stdout, /I am running/)
@@ -3622,12 +3794,19 @@ describe(`cucumber@${version} commonJS`, () => {
         childProcess.stdout?.on('data', (data) => {
           stdout += data.toString()
         })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data.toString()
+        })
 
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             // Regardless of whether the test is quarantined or not, it will be run
             assert.match(stdout, /I am running as quarantine/)
             if (isQuarantining) {
+              assert.match(
+                stdout,
+                /Quarantined: \d+ tests? run; \d+ failures? did not affect the test session\./
+              )
               // even though a test fails, the exit code is 1 because the test is quarantined
               assert.strictEqual(exitCode, 0)
             } else {
@@ -3642,6 +3821,160 @@ describe(`cucumber@${version} commonJS`, () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         runTest(done, true)
+      })
+
+      onlyLatestIt('reports a quarantined test once after ATR retries', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 1,
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-test-management/quarantine.feature',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (data) => {
+          stdout += data.toString()
+        })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.strictEqual(exitCode, 0)
+        assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+      })
+
+      onlyLatestIt('can quarantine a new test retried by EFD', async () => {
+        const numRetries = 3
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': numRetries,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+          test_management: { enabled: true },
+        })
+        receiver.setKnownTests({ cucumber: {} })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-test-management/quarantine.feature',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+        childProcess.stdout?.on('data', data => { testOutput += data })
+        childProcess.stderr?.on('data', data => { testOutput += data })
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === 'Say quarantine')
+
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(tests.length, numRetries + 1)
+            for (const test of tests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            }
+
+            const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, numRetries)
+            for (const retry of retries) {
+              assert.strictEqual(retry.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+            }
+
+            const finalTests = tests.filter(test => TEST_FINAL_STATUS in test.meta)
+            assert.strictEqual(finalTests.length, 2)
+            for (const test of finalTests) {
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+            }
+          }, { hardTimeout: 60_000 })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.match(testOutput, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+        assert.strictEqual(exitCode, 0, testOutput)
+      })
+
+      it('preserves literal retry-like scenario names', async () => {
+        const testName = 'Say quarantine (attempt 2)'
+        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setTestManagementTests({
+          cucumber: {
+            suites: {
+              'ci-visibility/features-test-management/retry-like-name.feature': {
+                tests: {
+                  [testName]: {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const test = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .find(test => test.meta[TEST_NAME] === testName)
+
+            assert.ok(test)
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-test-management/retry-like-name.feature',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+
+        childProcess.stdout?.on('data', (data) => {
+          stdout += data.toString()
+        })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.strictEqual(exitCode, 0)
+        assert.match(stdout, /retry-like-name\.feature › Say quarantine \(attempt 2\)/)
       })
 
       it('fails if quarantine is not enabled', (done) => {
@@ -3741,6 +4074,7 @@ describe(`cucumber@${version} commonJS`, () => {
         })
 
       let exitCode
+      let stdout = ''
       childProcess = exec(
         './node_modules/.bin/cucumber-js' +
         ' ci-visibility/features-test-management-parallel/disabled.feature' +
@@ -3752,13 +4086,18 @@ describe(`cucumber@${version} commonJS`, () => {
         }
       )
 
+      childProcess.stdout?.on('data', data => { stdout += data })
+      childProcess.stderr?.on('data', data => { stdout += data })
       childProcess.on('exit', (code) => { exitCode = code })
 
       await Promise.all([
         eventsPromise,
         once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
       ])
 
+      assert.match(stdout, /Disabled: 1 test skipped\./)
       assert.strictEqual(exitCode, 0)
     })
 
@@ -3779,6 +4118,7 @@ describe(`cucumber@${version} commonJS`, () => {
       })
 
       let exitCode
+      let stdout = ''
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -3807,14 +4147,19 @@ describe(`cucumber@${version} commonJS`, () => {
         }
       )
 
+      childProcess.stdout?.on('data', data => { stdout += data })
+      childProcess.stderr?.on('data', data => { stdout += data })
       childProcess.on('exit', (code) => { exitCode = code })
 
       await Promise.all([
         eventsPromise,
         once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
       ])
 
       // Quarantined test fails but exit code should be 0
+      assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
       assert.strictEqual(exitCode, 0)
     })
 

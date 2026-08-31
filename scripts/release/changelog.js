@@ -18,6 +18,18 @@ const GITHUB_URL = 'https://github.com'
 const REPO_URL = `${GITHUB_URL}/DataDog/dd-trace-js`
 const UNCATEGORIZED_PRODUCT = 'Other'
 const DEPENDENCY_PRODUCT = 'Dependencies'
+const INTERNAL_PATH_PATTERNS = [
+  /^\.agents\//,
+  /^\.github\//,
+  /^\.gitlab(?:-ci\.yml|\/)/,
+  /^benchmark\//,
+  /^integration-tests\//,
+  /^scripts\//,
+  /(^|\/)(?:test|tests|benchmark)(?:\/|$)/,
+  /\.(?:spec|test)\.[cm]?[jt]sx?$/,
+  /(^|\/)(?:package-lock\.json|yarn\.lock)$/,
+  /^(?:AGENTS\.md|CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json)$/,
+]
 // Dependabot tags the commit scope `deps-dev` for development dependencies and
 // `deps` for production ones, but the `deps` manifests under test/benchmark/docs
 // directories are not shipped. The shipped manifests are the repo root and the
@@ -37,9 +49,9 @@ const CATEGORY_BY_TYPE = {
   perf: 'Performance',
 }
 const PRODUCTS = [
-  ['AppSec', ['appsec', 'iast', 'rasp', 'waf', 'asm', 'aap']],
-  ['AI Guard', ['aiguard', 'ai-guard', 'ai_guard']],
-  ['Profiling', ['profiling', 'profiler']],
+  ['AppSec', ['appsec', 'iast', 'rasp', 'waf', 'asm', 'aap'], ['appsec']],
+  ['AI Guard', ['aiguard', 'ai-guard', 'ai_guard'], ['ai-guard']],
+  ['Profiling', ['profiling', 'profiler'], ['profiling']],
   ['Test Optimization', [
     'ci-visibility',
     'test-optimization',
@@ -54,9 +66,9 @@ const PRODUCTS = [
     'playwright',
     'vitest',
     'selenium',
-  ]],
+  ], ['test-optimization']],
   ['Crash Tracking', ['crashtracking', 'crash-tracking']],
-  ['Dynamic Instrumentation', ['debugger', 'code-origin', 'dynamic-instrumentation']],
+  ['Dynamic Instrumentation', ['debugger', 'code-origin', 'dynamic-instrumentation'], ['debugger']],
   ['LLM Observability', [
     'llmobs',
     'ai',
@@ -67,11 +79,12 @@ const PRODUCTS = [
     'genai',
     'vertexai',
     'bedrockruntime',
-  ]],
-  ['Serverless', ['serverless', 'lambda', 'azure_metadata', 'inferred_proxy']],
-  ['OpenTelemetry', ['otel', 'opentelemetry']],
-  ['Data Streams Monitoring', ['dsm', 'data-streams']],
-  ['Database Monitoring', ['dbm']],
+  ], ['llm-observability']],
+  ['Serverless', ['serverless', 'lambda', 'azure_metadata', 'inferred_proxy'], ['serverless']],
+  ['OpenTelemetry', ['otel', 'opentelemetry'], ['open-telemetry']],
+  ['Data Streams Monitoring', ['dsm', 'data-streams'], ['datastreams']],
+  ['Database', [], ['database']],
+  ['Database Monitoring', ['dbm'], ['dbm']],
   ['Feature Flags', ['openfeature', 'feature-flags', 'flagging', 'ffe']],
   ['General', [
     'core',
@@ -117,10 +130,24 @@ for (const [product, scopes] of PRODUCTS) {
 }
 
 /**
+ * @typedef {object} Contributor
+ * @property {string} name
+ * @property {string} [login]
+ */
+
+/**
+ * @typedef {object} ChangedFile
+ * @property {string} filename
+ * @property {string} [previous_filename]
+ */
+
+/**
  * @typedef {object} CommitEntry
  * @property {string} sha
  * @property {string} subject
- * @property {string} [author] Display string for the release contributor, e.g. `@handle`.
+ * @property {Contributor[]} [contributors]
+ * @property {string[]} [labels]
+ * @property {string[]} [files]
  */
 
 /**
@@ -137,6 +164,7 @@ for (const [product, scopes] of PRODUCTS) {
  * @property {string} subject
  * @property {string} pr Bare pull request number, e.g. `8012`, or `''` when absent.
  * @property {boolean} revert
+ * @property {Contributor[]} contributors
  * @property {boolean} [drop] Set when the entry is intentionally omitted from the changelog.
  * @property {string} [warning]
  */
@@ -150,7 +178,7 @@ function createReleaseChangelog (entries, breakingEntries = []) {
   const sections = new Map()
   const breakingChanges = []
   const breakingPullRequests = new Set()
-  const contributors = new Set()
+  const contributors = new Map()
   const warnings = []
   let isMinor = false
 
@@ -158,7 +186,7 @@ function createReleaseChangelog (entries, breakingEntries = []) {
     const change = parseChange(entry, { dropOtherDependencies: false })
 
     if (change.warning) warnings.push(change.warning)
-    if (entry.author) contributors.add(entry.author)
+    addContributors(contributors, change.contributors)
     if (change.pr) breakingPullRequests.add(change.pr)
     breakingChanges.push(change)
   }
@@ -170,7 +198,7 @@ function createReleaseChangelog (entries, breakingEntries = []) {
     if (change.pr && breakingPullRequests.has(change.pr)) continue
     if (change.warning) warnings.push(change.warning)
     if (change.category === 'Features' && !change.revert) isMinor = true
-    if (entry.author) contributors.add(entry.author)
+    addContributors(contributors, change.contributors)
 
     const section = sections.get(change.category)
     if (section) {
@@ -203,21 +231,74 @@ function parseChange (entry, options = {}) {
       subject: subjectWithPullRequest.subject,
       pr: subjectWithPullRequest.pr,
       revert: false,
+      contributors: entry.contributors ?? [],
       warning: `Non-conventional release-note subject for ${entry.sha}: ${entry.subject}`,
     }
   }
 
-  const dependency = classifyDependencyBump(parsed.scopes, parsed.subject)
+  const dependency = classifyDependencyBump(parsed.scopes, parsed.subject, entry.files)
   if (dependency === 'other' && options.dropOtherDependencies !== false) {
     return { drop: true }
   }
 
+  const category = entry.files && isInternalOnly(entry.files)
+    ? INTERNAL_CATEGORY
+    : CATEGORY_BY_TYPE[parsed.type] || INTERNAL_CATEGORY
   return {
-    category: CATEGORY_BY_TYPE[parsed.type] || INTERNAL_CATEGORY,
-    product: dependency ? DEPENDENCY_PRODUCT : selectProduct(parsed.scopes),
+    category,
+    product: dependency
+      ? DEPENDENCY_PRODUCT
+      : selectLabeledProduct(entry.labels ?? []) ?? selectProduct(parsed.scopes),
     subject: parsed.subject,
     pr: subjectWithPullRequest.pr,
     revert: parsed.isRevert,
+    contributors: entry.contributors ?? [],
+  }
+}
+
+/**
+ * @param {string[]} paths
+ * @param {ChangedFile[]} changedFiles
+ * @returns {void}
+ */
+function appendChangedPaths (paths, changedFiles) {
+  for (const file of changedFiles) {
+    paths.push(file.filename)
+    if (file.previous_filename) paths.push(file.previous_filename)
+  }
+}
+
+/**
+ * @param {string[]} files
+ */
+function isInternalOnly (files) {
+  if (files.length === 0) return false
+
+  for (const file of files) {
+    let internal = false
+    for (const pattern of INTERNAL_PATH_PATTERNS) {
+      if (pattern.test(file)) {
+        internal = true
+        break
+      }
+    }
+    if (!internal) return false
+  }
+  return true
+}
+
+/**
+ * @param {Map<string, Contributor>} contributors
+ * @param {Contributor[]} additions
+ * @returns {void}
+ */
+function addContributors (contributors, additions) {
+  for (const contributor of additions) {
+    const identity = contributor.login?.toLowerCase() ?? contributor.name.toLowerCase()
+    const existing = contributors.get(identity)
+    if (existing === undefined || (existing.login === undefined && contributor.login !== undefined)) {
+      contributors.set(identity, contributor)
+    }
   }
 }
 
@@ -229,11 +310,19 @@ function parseChange (entry, options = {}) {
  *
  * @param {string[]} scopes
  * @param {string} subject
+ * @param {string[]|undefined} files
  * @returns {'production'|'other'|undefined}
  */
-function classifyDependencyBump (scopes, subject) {
+function classifyDependencyBump (scopes, subject, files) {
   if (!scopes.includes('deps') && !scopes.includes('deps-dev')) return
   if (scopes.includes('deps-dev')) return 'other'
+
+  if (files) {
+    for (const file of files) {
+      if (file === 'package.json' || file === 'vendor/package.json') return 'production'
+    }
+    return 'other'
+  }
 
   const directory = subject.match(/\bin (\/\S+)/)
   if (directory && directory[1] !== '/vendor') return 'other'
@@ -316,6 +405,25 @@ function selectProduct (scopes) {
 }
 
 /**
+ * @param {string[]} labels
+ * @returns {string|undefined}
+ */
+function selectLabeledProduct (labels) {
+  const labelSet = new Set(labels)
+  const selected = []
+  for (const [product, , productLabels = []] of PRODUCTS) {
+    for (const label of productLabels) {
+      if (labelSet.has(label)) {
+        selected.push(product)
+        break
+      }
+    }
+  }
+
+  return selected.length > 0 ? selected.join(' / ') : undefined
+}
+
+/**
  * @param {string} scope
  */
 function findProduct (scope) {
@@ -334,37 +442,48 @@ function sentenceCase (subject) {
 
 /**
  * @param {Map<string, Change[]>} sections
- * @param {Set<string>} contributors
+ * @param {Map<string, Contributor>} contributors
  * @param {Change[]} breakingChanges
  */
 function renderMarkdown (sections, contributors, breakingChanges) {
-  const lines = []
+  let markdown = ''
 
   if (breakingChanges.length > 0) {
-    lines.push('### Breaking Changes')
+    markdown = '### Breaking Changes\n'
     for (const change of breakingChanges.sort(compareChanges)) {
-      lines.push(renderChange(change))
+      markdown += `${renderChange(change)}\n`
     }
-    lines.push('')
   }
 
   for (const category of CATEGORY_ORDER) {
     const changes = sections.get(category)
     if (!changes?.length) continue
 
-    lines.push(renderHeading(category))
+    if (markdown) markdown += '\n'
+    markdown += `${renderHeading(category)}\n`
     for (const change of changes.sort(compareChanges)) {
-      lines.push(renderChange(change))
+      markdown += `${renderChange(change)}\n`
     }
-    lines.push('')
   }
 
   if (contributors.size > 0) {
-    const badges = [...contributors].sort(compareContributors).map(renderContributor)
-    lines.push('### Contributors', '', badges.join(' '), '')
+    const iconContributors = []
+    for (const contributor of contributors.values()) {
+      if (contributor.login) iconContributors.push(contributor)
+    }
+    if (iconContributors.length > 0) {
+      iconContributors.sort(compareContributors)
+      let avatars = ''
+      for (const contributor of iconContributors) {
+        if (avatars) avatars += ' '
+        avatars += renderContributor(contributor)
+      }
+      if (markdown) markdown += '\n'
+      markdown += `### Contributors\n\n${avatars}\n`
+    }
   }
 
-  return lines.join('\n')
+  return markdown
 }
 
 /**
@@ -392,26 +511,20 @@ function compareChanges (a, b) {
 }
 
 /**
- * @param {string} a
- * @param {string} b
+ * @param {Contributor} a
+ * @param {Contributor} b
  */
 function compareContributors (a, b) {
-  return a.toLowerCase().localeCompare(b.toLowerCase())
+  return a.name.toLowerCase().localeCompare(b.name.toLowerCase())
 }
 
 /**
- * Renders a GitHub avatar that links to the contributor's profile. Display
- * strings that are not a `@handle` (a plain git author name) have no profile to
- * link, so they render verbatim.
- *
- * @param {string} contributor
+ * @param {Contributor} contributor
  */
 function renderContributor (contributor) {
-  if (!contributor.startsWith('@')) return contributor
-
-  const login = contributor.slice(1)
+  const { login, name } = contributor
   return `[<img src="${GITHUB_URL}/${login}.png?size=48" width="24" height="24" ` +
-    `alt="${contributor}" title="${contributor}" />](${GITHUB_URL}/${login})`
+    `alt="${name}" title="${name}" />](${GITHUB_URL}/${login})`
 }
 
 /**
@@ -445,5 +558,7 @@ function renderPullRequest (number) {
 }
 
 module.exports = {
+  appendChangedPaths,
   createReleaseChangelog,
+  isInternalOnly,
 }

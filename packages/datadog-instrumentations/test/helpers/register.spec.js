@@ -9,6 +9,7 @@ const sinon = require('sinon')
 describe('register', () => {
   let hooksMock
   let HookMock
+  let instrumentationsMock
   let originalModuleProtoRequire
   let telemetryMock
 
@@ -31,6 +32,7 @@ describe('register', () => {
     }
 
     HookMock = sinon.stub()
+    instrumentationsMock = {}
     telemetryMock = sinon.stub()
 
     const registerPath = require.resolve('../../src/helpers/register')
@@ -41,6 +43,7 @@ describe('register', () => {
         const stubs = {
           './hooks': hooksMock,
           './hook': HookMock,
+          './instrumentations': instrumentationsMock,
           '../../../dd-trace/src/guardrails/telemetry': telemetryMock,
         }
         return stubs[request] || originalModuleProtoRequire.call(this, request)
@@ -120,6 +123,50 @@ describe('register', () => {
       result: 'abort',
       result_class: 'incompatible_library',
       result_reason: `Incompatible integration version: ${integrationName}@${moduleVersion}`,
+    })
+  })
+
+  it('should only unwrap an IITM default export after its instrumentation matches', () => {
+    const patch = sinon.stub()
+    hooksMock.mariadb = { esmFirst: true, fn: sinon.stub() }
+    instrumentationsMock.mariadb = [{
+      file: 'lib/cmd/query.js',
+      versions: ['>=3.5.1'],
+      patchDefault: true,
+      hook: patch,
+    }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'mariadb')
+    const hook = hookCall.args[2]
+    const moduleExports = { default: class Execute {} }
+
+    const result = hook(moduleExports, 'mariadb/lib/cmd/execute.js', '/path/to/mariadb', '3.5.1', true)
+
+    assert.strictEqual(result, moduleExports)
+    sinon.assert.notCalled(patch)
+
+    const unsupportedModuleExports = { default: class Query {} }
+    const unsupportedVersion = hook(
+      unsupportedModuleExports,
+      'mariadb/lib/cmd/query.js',
+      '/path/to/mariadb',
+      '3.5.0',
+      true
+    )
+
+    assert.strictEqual(unsupportedVersion, unsupportedModuleExports)
+    sinon.assert.notCalled(patch)
+
+    const Query = class Query {}
+    patch.returns('patched')
+
+    const patched = hook({ default: Query }, 'mariadb/lib/cmd/query.js', '/path/to/mariadb', '3.5.1', true)
+
+    assert.strictEqual(patched, 'patched')
+    sinon.assert.calledOnceWithExactly(patch, Query, '3.5.1', true, {
+      moduleBaseDir: '/path/to/mariadb',
+      moduleName: 'mariadb/lib/cmd/query.js',
     })
   })
 })

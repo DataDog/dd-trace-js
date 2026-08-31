@@ -29,9 +29,10 @@ const RUNNER_PATTERNS = {
  * @param {object} input audit inputs
  * @param {object} input.manifest validation manifest
  * @param {object} input.framework framework entry
+ * @param {Map<string, Buffer|undefined>} [input.projectFileSources] approval-bound project sources
  * @returns {object} CI audit result
  */
-function runCiWiring ({ manifest, framework }) {
+function runCiWiring ({ manifest, framework, projectFileSources }) {
   const contradiction = getFrameworkCiDiscoveryContradiction(framework, manifest)
   if (contradiction) {
     return getIncomplete(framework, contradiction.reason, {
@@ -46,6 +47,32 @@ function runCiWiring ({ manifest, framework }) {
     conclusion: 'incomplete',
     domain: 'ci_configuration',
     evidenceStrength: 'unknown',
+  }
+  if (hasNoSupportedCiConfiguration(manifest, ci)) {
+    return getIncomplete(
+      framework,
+      'No supported CI configuration file was found by bounded repository discovery. The CI audit is incomplete; ' +
+        'this does not prove that the repository has no external CI configuration.',
+      {
+        ...evidence,
+        reasonCode: 'no-supported-ci-configuration',
+        recommendation: 'Identify the CI system and one repository-controlled test job. If CI is configured outside ' +
+          'this repository, review that configuration separately.',
+      }
+    )
+  }
+  if (hasUnavailableRemoteCiCommand(ci)) {
+    return getIncomplete(
+      framework,
+      'The selected CI path delegates test execution to a remote action or reusable workflow whose command is not ' +
+        'available in this repository. The CI audit is incomplete.',
+      {
+        ...evidence,
+        reasonCode: 'remote-ci-command-unavailable',
+        recommendation: 'Review the referenced action or reusable workflow at its pinned revision. Keep the result ' +
+          'incomplete when its final test command and effective environment cannot be bound statically.',
+      }
+    )
   }
   const missing = getMissingReviewFields(ci)
   if (missing.length > 0) {
@@ -63,7 +90,7 @@ function runCiWiring ({ manifest, framework }) {
     )
   }
 
-  const source = readCiSource(ci.configFile)
+  const source = readProjectSource(ci.configFile, projectFileSources)
   if (!source) {
     return getIncomplete(framework, 'The recorded CI configuration file is unavailable or too large to verify.', {
       ...evidence,
@@ -87,7 +114,7 @@ function runCiWiring ({ manifest, framework }) {
   }
 
   const command = ci.command.trim()
-  const resolution = getRunnerResolution(command, framework, ci)
+  const resolution = getRunnerResolution(command, framework, ci, projectFileSources)
   const normalizedSource = jobSource.replaceAll('\\', '/')
   const hasInitialization = /dd-trace\/ci\/init(?:\.js)?\b/.test(normalizedSource)
   const matrixRelevant = matrixAffectsCiFacts(jobSource, command)
@@ -138,12 +165,16 @@ function runCiWiring ({ manifest, framework }) {
   if (initialization.status === 'missing' &&
     resolution.status === 'confirmed' &&
     unresolved.relevant.length === 0) {
+    const transportMissing = ciFacts.transport.status === 'missing'
     return getFailure(
       framework,
       'The checksum-bound CI job reaches the selected test framework through a bounded static command path, but ' +
-        'does not configure the dd-trace/ci/init preload. Test Optimization is not initialized in that job.',
+        `does not configure the dd-trace/ci/init preload${
+          transportMissing ? ' and declares no visible Datadog Agent or agentless reporting transport' : ''
+        }. Test Optimization is not configured in that job.`,
       {
         ...evidence,
+        ciConfigurationStatus: 'not_configured',
         ciRemediation: remediation,
         conclusion: 'confirmed_misconfigured',
         evidenceStrength: 'confirmed_static',
@@ -153,17 +184,26 @@ function runCiWiring ({ manifest, framework }) {
   }
 
   if (resolution.status !== 'confirmed') {
-    const partial = initialization.status === 'missing'
-      ? 'The selected job has no visible dd-trace/ci/init preload. '
-      : ''
+    let visibleFacts = ''
+    if (initialization.status === 'missing') {
+      visibleFacts = 'The selected job has no visible dd-trace/ci/init preload.'
+    }
+    if (ciFacts.transport.status === 'missing') {
+      if (visibleFacts) visibleFacts += ' '
+      visibleFacts += 'The recorded review found no visible Datadog Agent or agentless reporting transport.'
+    }
+    const recommendation = /working directory/i.test(resolution.reason)
+      ? 'Keep the CI job\'s actual working directory. Resolve the repository-root wrapper to the selected test ' +
+        'runner statically; do not substitute the framework package directory merely to make the audit conclusive.'
+      : 'Resolve the remaining wrapper or dynamic command statically, or confirm the effective NODE_OPTIONS value ' +
+        'in the final test process with DD_TRACE_DEBUG=1.'
     return getIncomplete(
       framework,
-      `${partial}The CI audit remains incomplete because the selected command could not be resolved to the ` +
-        `${framework.framework} runner: ${resolution.reason}.`,
+      'The CI audit remains incomplete because the selected command could not be resolved to the ' +
+        `${framework.framework} runner: ${resolution.reason}. ${visibleFacts}`.trim(),
       {
         ...evidence,
-        recommendation: 'Resolve the remaining wrapper or dynamic command statically, or confirm the effective ' +
-          'NODE_OPTIONS value in the final test process with DD_TRACE_DEBUG=1.',
+        recommendation,
       }
     )
   }
@@ -244,9 +284,10 @@ function getEffectiveNodeOptionsOverride (commandPath = []) {
  * @param {string} command selected CI command
  * @param {object} framework framework manifest entry
  * @param {object} ci selected CI evidence
+ * @param {Map<string, Buffer|undefined>} [projectFileSources] approval-bound project sources
  * @returns {object} static runner resolution
  */
-function getRunnerResolution (command, framework, ci) {
+function getRunnerResolution (command, framework, ci, projectFileSources) {
   if (getDirectRunner(command, framework.framework)) {
     return {
       commandPath: [command],
@@ -266,7 +307,7 @@ function getRunnerResolution (command, framework, ci) {
       status: 'unresolved',
     }
   }
-  const scripts = readProjectScripts(framework.project.packageJson)
+  const scripts = readProjectScripts(framework.project.packageJson, projectFileSources)
   if (!scripts) {
     return {
       reason: 'the approval-bound project package.json is unavailable or invalid',
@@ -283,10 +324,10 @@ function getRunnerResolution (command, framework, ci) {
       status: 'unresolved',
     }
   }
-  const candidate = expansion.terminals.find(terminal => {
+  const candidates = expansion.terminals.filter(terminal => {
     return getDirectRunner(terminal.command, framework.framework)
   })
-  if (!candidate) {
+  if (candidates.length === 0) {
     return {
       lifecycleScripts: expansion.lifecycleScripts,
       reason: 'no bounded local package-script path reaches the selected framework runner',
@@ -294,6 +335,15 @@ function getRunnerResolution (command, framework, ci) {
       status: 'unresolved',
     }
   }
+  if (candidates.length > 1) {
+    return {
+      lifecycleScripts: expansion.lifecycleScripts,
+      reason: 'more than one bounded local package-script path reaches the selected framework runner',
+      source: 'unresolved_wrapper',
+      status: 'unresolved',
+    }
+  }
+  const candidate = candidates[0]
   return {
     commandPath: candidate.path,
     lifecycleScripts: expansion.lifecycleScripts,
@@ -303,11 +353,11 @@ function getRunnerResolution (command, framework, ci) {
   }
 }
 
-function readProjectScripts (filename) {
+function readProjectScripts (filename, projectFileSources) {
   try {
-    const stat = fs.lstatSync(filename)
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CI_FILE_BYTES) return
-    const packageJson = JSON.parse(fs.readFileSync(filename, 'utf8'))
+    const source = readProjectSource(filename, projectFileSources)
+    if (source === undefined) return
+    const packageJson = JSON.parse(source)
     if (!packageJson.scripts || typeof packageJson.scripts !== 'object' ||
       Array.isArray(packageJson.scripts)) return {}
     return packageJson.scripts
@@ -346,18 +396,19 @@ function classifyUnresolved (ci, resolution, matrixRelevant, jobSource) {
   const ignored = []
   const unresolved = Array.isArray(ci.unresolved) ? ci.unresolved : []
   const githubHosted = /[/\\]\.github[/\\]workflows[/\\]/.test(ci.configFile) &&
-    /^\s*runs-on:\s*(?:ubuntu|windows|macos)-/mi.test(jobSource)
+    /^[ \t]*runs-on:[ \t]*(?:ubuntu|windows|macos)-/mi.test(jobSource)
 
   for (const item of unresolved) {
     const isMatrix = /\bmatrix\b/i.test(item)
-    const isResolvedPackagePath = resolution.source === 'local_package_script' &&
-      /\b(?:lifecycle|npm|package script|pnpm|pretest|posttest|yarn)\b/i.test(item)
+    const isResolvedPackagePath = resolution.status === 'confirmed' &&
+      resolution.source === 'local_package_script' &&
+      /\b(?:bun|lifecycle|npm|package script|pnpm|pretest|posttest|yarn)\b/i.test(item)
     const isAmbientGithubSettings = githubHosted &&
-      /\b(?:repository|organization|environment)[-\s,\w]*\b(?:secrets?|variables?)\b/i.test(item) &&
+      /\b(?:repository|organization|environment)[-\s,\w]+\b(?:secrets?|variables?)\b/i.test(item) &&
       /\b(?:inject|inherit|outside)\b/i.test(item)
     const isOtherJob = /^Other jobs?\b/i.test(item) ||
-      /\bsecond\b.*\bjob\b.*\bonly\b.*\bselected\b/i.test(item) ||
-      /\brelease\b.*\bcontains no test job\b/i.test(item)
+      /\bsecond\b.+\bjob\b.+\bonly\b.+\bselected\b/i.test(item) ||
+      /\brelease\b.+\bcontains no test job\b/i.test(item)
     if ((isMatrix && !matrixRelevant) ||
       isResolvedPackagePath ||
       isAmbientGithubSettings ||
@@ -371,6 +422,29 @@ function classifyUnresolved (ci, resolution, matrixRelevant, jobSource) {
     relevant.push('the CI evidence review is not marked complete')
   }
   return { ignored, relevant }
+}
+
+function hasNoSupportedCiConfiguration (manifest, ci) {
+  if (ci.configFile || ci.job || ci.command) return false
+  const unresolved = Array.isArray(ci.unresolved) ? ci.unresolved : []
+  return manifest.ciDiscovery?.found?.length === 0 ||
+    unresolved.some(item => /No supported CI configuration file was found/i.test(item))
+}
+
+function hasUnavailableRemoteCiCommand (ci) {
+  if (ci.command) return false
+  const evidence = [
+    ci.step,
+    ...(Array.isArray(ci.unresolved) ? ci.unresolved : []),
+  ].filter(Boolean)
+  if (evidence.some(item => {
+    return /\b(?:remote|external|third-party)\s+(?:action|workflow)\b/i.test(item)
+  })) return true
+
+  return evidence.some(item => {
+    const reference = /^\s*uses:\s*["']?([^"'\s]+)["']?\s*$/im.exec(item)?.[1]
+    return reference && !reference.startsWith('./')
+  })
 }
 
 function matrixAffectsCiFacts (jobSource, command) {
@@ -407,6 +481,8 @@ function normalizeDirectCommand (command) {
     assignments.push(...crossEnv.assignments)
     source = source.slice(crossEnv.length)
   }
+  source = source.replace(/^(?:(?:bunx|npx)(?:\.cmd)?|(?:pnpm|yarn)(?:\.cmd)?\s+exec)\s+/, '')
+    .replace(/^bun x\s+/, '')
   return { assignments, index: prefix.length, source }
 }
 
@@ -446,7 +522,7 @@ function getSelectedJobSource (source, ci) {
 
 function getYamlKeyEntry (line, index) {
   if (!line || /^\s*(?:#|$)/.test(line) || /^\s/.test(line) && line.includes('\t')) return
-  const match = /^(\s*)(?:"([^"]+)"|'([^']+)'|([^:#][^:]*)):\s*(?:#.*)?$/.exec(line)
+  const match = /^(\s*)(?:"([^"]+)"|'([^']+)'|([^\s:#][^:]*)):\s*(?:#.*)?$/.exec(line)
   if (!match) return
   return {
     indent: match[1].length,
@@ -491,16 +567,23 @@ function getMissingReviewFields (ci) {
 }
 
 /**
- * Reads one bounded regular CI file.
+ * Reads one bounded regular project file or its approval-bound snapshot.
  *
- * @param {string} filename CI file
+ * @param {string} filename project file
+ * @param {Map<string, Buffer|undefined>} [projectFileSources] approval-bound project sources
  * @returns {string|undefined} source
  */
-function readCiSource (filename) {
+function readProjectSource (filename, projectFileSources) {
+  if (typeof filename !== 'string') return
+  const resolved = path.resolve(filename)
+  if (projectFileSources) {
+    if (!projectFileSources.has(resolved)) return
+    return projectFileSources.get(resolved)?.toString('utf8')
+  }
   try {
-    const stat = fs.lstatSync(filename)
+    const stat = fs.lstatSync(resolved)
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CI_FILE_BYTES) return
-    return fs.readFileSync(filename, 'utf8')
+    return fs.readFileSync(resolved, 'utf8')
   } catch {}
 }
 
@@ -519,11 +602,35 @@ function containsLiteral (source, value) {
 
 function containsExecutionCommand (source, value) {
   const command = String(value).replaceAll('\r\n', '\n').trim()
-  if (!command || command.includes('\n')) return false
-  return source.split(/\r?\n/).some(line => {
+  if (!command) return false
+  const lines = source.replaceAll('\r\n', '\n').split('\n')
+  return lines.some((line, index) => {
     if (/^\s*#/.test(line)) return false
-    const match = /^\s*(?:-\s*)?(?:run|script):\s*(.*?)\s*$/.exec(line)
-    return match?.[1] === command
+    const match = /^\s*(?:-\s*)?(?:run|script):(.*)$/.exec(line)
+    if (!match) return false
+    const scalar = match[1].trim()
+    if (!/^\|[+-]?$/.test(scalar)) return scalar === command
+
+    const indicatorIndent = /^\s*/.exec(line)[0].length
+    const block = []
+    let contentIndent
+    for (let next = index + 1; next < lines.length; next++) {
+      if (!lines[next].trim()) {
+        block.push('')
+        continue
+      }
+      const nextIndent = /^\s*/.exec(lines[next])[0].length
+      if (contentIndent === undefined) {
+        if (nextIndent <= indicatorIndent) break
+        contentIndent = nextIndent
+      } else if (nextIndent < contentIndent) {
+        break
+      }
+      block.push(lines[next])
+    }
+    if (contentIndent === undefined) return false
+    const blockCommand = block.map(candidate => candidate.slice(contentIndent)).join('\n').trim()
+    return blockCommand === command
   })
 }
 

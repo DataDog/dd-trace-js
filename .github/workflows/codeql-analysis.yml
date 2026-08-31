@@ -45,7 +45,7 @@ jobs:
 
       - name: Initialize CodeQL
         id: init-codeql
-        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           languages: ${{ matrix.language }}
           config-file: .github/codeql_config.yml
@@ -57,7 +57,7 @@ jobs:
 
       - name: Perform CodeQL Analysis
         id: analyze
-        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           token: ${{ github.token }}
           wait-for-processing: false
@@ -69,7 +69,7 @@ jobs:
         run: |
           # Poll every 10s (30x = 5 min total), matching the official action's
           # timeout but halving the API calls vs its default 5s interval.
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             RESULT=$(curl -sf \
               -H "Authorization: Bearer $TOKEN" \
               -H "Accept: application/vnd.github+json" \

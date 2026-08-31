@@ -46,9 +46,12 @@ const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
 class FakeCiVisIntake extends FakeAgent {
   #settings = DEFAULT_SETTINGS
+  #settingsResponses = []
+  #settingsResponseDelayMs = 0
   #settingsResponseStatusCode = 200
   #settingsResponseStatusCodes = []
   #mediaResponseDelayMs = 0
+  #mediaResponsesPending = false
   #mediaResponseStatusCode = 201
   #suitesToSkip = DEFAULT_SUITES_TO_SKIP
   #skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
@@ -60,6 +63,7 @@ class FakeCiVisIntake extends FakeAgent {
   #waitingTime = 0
   #knownTestsPageIndex = 0
   #testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+  #testManagementResponses = []
   #testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
   #skippableSuitesResponseStatusCode = 200
 
@@ -103,6 +107,26 @@ class FakeCiVisIntake extends FakeAgent {
     this.#settings = newSettings
   }
 
+  /**
+   * Sets library configuration responses to return in order.
+   *
+   * @param {object[]} responses
+   * @returns {void}
+   */
+  setSettingsResponses (responses) {
+    this.#settingsResponses = responses.slice()
+  }
+
+  /**
+   * Delays settings responses to exercise initialization ordering.
+   *
+   * @param {number} delayMs
+   * @returns {void}
+   */
+  setSettingsResponseDelay (delayMs) {
+    this.#settingsResponseDelayMs = delayMs
+  }
+
   setSettingsResponseCode (statusCode) {
     this.#settingsResponseStatusCode = statusCode
   }
@@ -128,12 +152,31 @@ class FakeCiVisIntake extends FakeAgent {
     this.#mediaResponseDelayMs = delayMs
   }
 
+  /**
+   * Leaves media requests open until the client cancels them.
+   *
+   * @returns {void}
+   */
+  setMediaResponsesPending () {
+    this.#mediaResponsesPending = true
+  }
+
   setWaitingTime (newWaitingTime) {
     this.#waitingTime = newWaitingTime
   }
 
   setTestManagementTests (newTestManagementTests) {
     this.#testManagementResponse = newTestManagementTests
+  }
+
+  /**
+   * Sets Test Management responses to return in order.
+   *
+   * @param {object[]} responses
+   * @returns {void}
+   */
+  setTestManagementTestResponses (responses) {
+    this.#testManagementResponses = responses.slice()
   }
 
   setTestManagementTestsResponseCode (newStatusCode) {
@@ -269,6 +312,9 @@ class FakeCiVisIntake extends FakeAgent {
         })
       }
 
+      if (this.#mediaResponsesPending) {
+        return
+      }
       if (this.#mediaResponseDelayMs > 0) {
         setTimeout(respond, this.#mediaResponseDelayMs)
       } else {
@@ -280,22 +326,33 @@ class FakeCiVisIntake extends FakeAgent {
       '/api/v2/libraries/tests/services/setting',
       '/evp_proxy/:version/api/v2/libraries/tests/services/setting',
     ], (req, res) => {
-      const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
-        this.#settingsResponseStatusCode
-      res.status(settingsResponseStatusCode)
-      if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
-        res.send(JSON.stringify({
-          data: {
-            attributes: this.#settings,
-          },
-        }))
-      } else {
-        res.send(JSON.stringify({ errors: ['error'] }))
+      const respond = () => {
+        const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
+          this.#settingsResponseStatusCode
+        const settings = this.#settingsResponses.length
+          ? this.#settingsResponses.shift()
+          : this.#settings
+        res.status(settingsResponseStatusCode)
+        if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
+          res.send(JSON.stringify({
+            data: {
+              attributes: settings,
+            },
+          }))
+        } else {
+          res.send(JSON.stringify({ errors: ['error'] }))
+        }
+        this.emit('message', {
+          headers: req.headers,
+          url: req.url,
+        })
       }
-      this.emit('message', {
-        headers: req.headers,
-        url: req.url,
-      })
+
+      if (this.#settingsResponseDelayMs > 0) {
+        setTimeout(respond, this.#settingsResponseDelayMs)
+      } else {
+        respond()
+      }
     })
 
     app.post([
@@ -373,10 +430,13 @@ class FakeCiVisIntake extends FakeAgent {
       '/evp_proxy/:version/api/v2/test/libraries/test-management/tests',
     ], (req, res) => {
       res.setHeader('content-type', 'application/json')
+      const testManagementResponse = this.#testManagementResponses.length
+        ? this.#testManagementResponses.shift()
+        : this.#testManagementResponse
       const data = JSON.stringify({
         data: {
           attributes: {
-            modules: this.#testManagementResponse,
+            modules: testManagementResponse,
           },
         },
       })
@@ -417,6 +477,8 @@ class FakeCiVisIntake extends FakeAgent {
 
   stop () {
     this.#settings = DEFAULT_SETTINGS
+    this.#settingsResponses = []
+    this.#settingsResponseDelayMs = 0
     this.#settingsResponseStatusCode = 200
     this.#settingsResponseStatusCodes = []
     this.#suitesToSkip = DEFAULT_SUITES_TO_SKIP
@@ -426,8 +488,10 @@ class FakeCiVisIntake extends FakeAgent {
     this.#knownTestsPageIndex = 0
     this.#infoResponse = DEFAULT_INFO_RESPONSE
     this.#mediaResponseDelayMs = 0
+    this.#mediaResponsesPending = false
     this.#testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     this.#testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+    this.#testManagementResponses = []
     this.#skippableSuitesResponseStatusCode = 200
     this.removeAllListeners()
     if (this.waitingTimeoutId) {
@@ -442,7 +506,7 @@ class FakeCiVisIntake extends FakeAgent {
   // drain. `hardTimeout` is a backstop for a genuinely hung child — bump it per-call
   // only when a workload's child runtime is provably above the default.
   /**
-   * @param {import('child_process').ChildProcess | NodeJS.EventEmitter} childProcess
+   * @param {import('child_process').ChildProcess | import('node:events').EventEmitter} childProcess
    *   Source of the `'exit'` event. `exitCode` / `signalCode` are read synchronously
    *   so a child that has already exited is handled correctly.
    * @param {(message: object) => boolean} [payloadMatch] Per-message filter; falsy
@@ -547,7 +611,7 @@ class FakeCiVisIntake extends FakeAgent {
             clearTimeout(timeoutId)
             this.off('message', messageHandler)
             resolve()
-          } catch (e) {
+          } catch {
             // Assertion not yet satisfied — we'll try again when a new payload arrives.
             // The timeout handler will re-run onPayload and reject with the actual error.
           }

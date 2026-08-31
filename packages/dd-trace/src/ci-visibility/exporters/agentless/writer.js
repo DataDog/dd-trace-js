@@ -1,11 +1,10 @@
 'use strict'
 const getConfig = require('../../../config')
-const request = require('../../../exporters/common/request')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../../evp_proxy/path')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const log = require('../../../log')
 
-const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
-const BaseWriter = require('../../../exporters/common/writer')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -15,17 +14,35 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
   TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
 } = require('../../../ci-visibility/telemetry')
+const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
+const BaseWriter = require('../../../exporters/common/writer')
+const { getAgent } = require('../agents')
+const request = require('../request')
+const TestOptimizationRequestTracker = require('./request-tracker')
 
 class Writer extends BaseWriter {
+  #requestTracker
+
   constructor ({ url, tags, evpProxyPrefix = '' }) {
     super(...arguments)
-    const { 'runtime-id': runtimeId, env, service } = tags
+    this.#requestTracker = new TestOptimizationRequestTracker(this)
     this._url = url
-    this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
+    this._encoder = new AgentlessCiVisibilityEncoder(this, { tags })
     this._evpProxyPrefix = evpProxyPrefix
   }
 
-  _sendPayload (data, _, done) {
+  /**
+   * Flushes buffered events, waiting for tracked requests during finalization.
+   *
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flush (done, options) {
+    this.#requestTracker.flush(done, options)
+  }
+
+  _sendPayload (data, _, done, flushOptions) {
     const options = {
       path: '/api/v2/citestcycle',
       method: 'POST',
@@ -35,23 +52,25 @@ class Writer extends BaseWriter {
       },
       timeout: 15_000,
       url: this._url,
+      agent: getAgent(this._url),
+      deadline: flushOptions?.deadline,
     }
 
     if (this._evpProxyPrefix) {
-      options.path = `${this._evpProxyPrefix}/api/v2/citestcycle`
+      options.path = joinEVPProxyPath(this._evpProxyPrefix, '/api/v2/citestcycle')
       delete options.headers['dd-api-key']
-      options.headers['X-Datadog-EVP-Subdomain'] = 'citestcycle-intake'
+      options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'citestcycle-intake'
     }
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
+    log.debug(() => `Request to the intake: ${safeJSONStringify({ ...options, agent: undefined })}`)
 
     const startRequestTime = Date.now()
 
     incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, { endpoint: 'test_cycle' })
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, Buffer.byteLength(data))
 
-    request(data, options, (err, res, statusCode) => {
+    this.#requestTracker.send(request, data, options, (err, res, statusCode) => {
       distributionMetric(
         TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
         { endpoint: 'test_cycle' },
@@ -67,7 +86,7 @@ class Writer extends BaseWriter {
           { endpoint: 'test_cycle' }
         )
         log.error('Error sending CI agentless payload', err)
-        done()
+        done(err)
         return
       }
       log.debug('Response from the intake:', res)

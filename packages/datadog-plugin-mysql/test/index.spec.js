@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const dc = require('node:diagnostics_channel')
+const net = require('node:net')
+const { inspect } = require('node:util')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -59,6 +62,66 @@ describe('Plugin', () => {
               assert.strictEqual(tracer.scope().active(), span)
               done()
             })
+          })
+        })
+
+        it('should preserve successful query callback semantics', async () => {
+          let query
+
+          await new Promise((resolve, reject) => {
+            /**
+             * @param {Error | null} error
+             * @param {object[] | undefined} results
+             * @param {object[] | undefined} fields
+             */
+            function callback (error, results, fields) {
+              try {
+                assert.strictEqual(arguments.length, 3)
+                assert.strictEqual(this, query)
+                assert.strictEqual(error, null)
+                assert.ok(Array.isArray(results))
+                assert.ok(Array.isArray(fields))
+                resolve()
+              } catch (error) {
+                reject(error)
+              }
+            }
+
+            query = connection.query('SELECT 1 + 1 AS solution', callback)
+          })
+        })
+
+        it('should preserve failed query callback semantics', async () => {
+          const probe = net.createServer()
+          await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
+          const { port } = probe.address()
+          await new Promise(resolve => probe.close(resolve))
+
+          const failedConnection = mysql.createConnection({
+            host: '127.0.0.1',
+            port,
+            user: 'root',
+            connectTimeout: 500,
+          })
+          let query
+
+          await new Promise((resolve, reject) => {
+            /**
+             * @param {Error} error
+             */
+            function callback (error) {
+              failedConnection.destroy()
+              try {
+                assert.strictEqual(arguments.length, 1)
+                assert.strictEqual(this, query)
+                assert.ok(error instanceof Error)
+                resolve()
+              } catch (error) {
+                reject(error)
+              }
+            }
+
+            query = failedConnection.query('SELECT 1', callback)
           })
         })
 
@@ -239,14 +302,15 @@ describe('Plugin', () => {
       describe('with a connection pool', () => {
         let pool
 
+        before(() => agent.load('mysql'))
+
+        after(() => agent.close())
+
         afterEach((done) => {
-          pool.end(() => {
-            agent.close().then(done)
-          })
+          pool.end(() => done())
         })
 
-        beforeEach(async () => {
-          await agent.load('mysql')
+        beforeEach(() => {
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           pool = mysql.createPool({
@@ -264,6 +328,31 @@ describe('Plugin', () => {
           'db',
           'db.name'
         )
+
+        withPeerService(
+          () => tracer,
+          'mysql',
+          (done) => pool.getConnection((error, connection) => {
+            connection?.release()
+            done(error)
+          }),
+          'db',
+          'db.name',
+          { desc: 'for explicit pool acquire', resource: 'mysql.pool.acquire' }
+        )
+
+        it('keeps tracing when an acquire finishes without a matching start', async () => {
+          dc.channel('apm:mysql:pool:acquire:finish').publish({ poolWaitTime: 1 })
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['db.type'], 'mysql')
+            }, { spanResourceMatch: /^SELECT 15 AS survivor$/ }),
+            new Promise((resolve, reject) => {
+              pool.query('SELECT 15 AS survivor', error => error ? reject(error) : resolve())
+            }),
+          ])
+        })
 
         it('should do automatic instrumentation', done => {
           agent
@@ -343,6 +432,216 @@ describe('Plugin', () => {
               pool.query('SELECT 2 AS two', check(span2))
             })
           })
+        })
+
+        it('records the pool acquire wait time on the pooled query span', done => {
+          agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+
+            assert.strictEqual(typeof span.metrics['mysql.pool.wait_time'], 'number')
+            assert.ok(span.metrics['mysql.pool.wait_time'] >= 0)
+            assert.strictEqual(traces[0].find(span => span.name === 'mysql.pool.acquire'), undefined)
+          }, { spanResourceMatch: /^SELECT 4 AS pool_wait_probe$/ })
+            .then(done)
+            .catch(done)
+
+          pool.query('SELECT 4 AS pool_wait_probe', error => {
+            if (error) done(error)
+          })
+        })
+
+        it('carries the pool wait when query dispatch is deferred after acquisition', async () => {
+          const getConnection = pool.getConnection
+          pool.getConnection = function (callback) {
+            return getConnection.call(this, function () {
+              setImmediate(() => callback.apply(this, arguments))
+            })
+          }
+
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
+
+                assert.strictEqual(typeof span.metrics['mysql.pool.wait_time'], 'number')
+                assert.strictEqual(traces[0].find(span => span.name === 'mysql.pool.acquire'), undefined)
+              }, { spanResourceMatch: /^SELECT 13 AS deferred_dispatch$/ }),
+              new Promise((resolve, reject) => {
+                pool.query('SELECT 13 AS deferred_dispatch', error => error ? reject(error) : resolve())
+              }),
+            ])
+          } finally {
+            pool.getConnection = getConnection
+          }
+        })
+
+        /**
+         * @returns {Promise<number>}
+         */
+        async function getClosedPort () {
+          const probe = net.createServer()
+          await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
+          const port = probe.address().port
+          await new Promise(resolve => probe.close(resolve))
+          return port
+        }
+
+        for (const deferredRetry of [false, true]) {
+          const scheduling = deferredRetry ? 'tick-delayed' : 'synchronous'
+
+          it(`retains pooled-query classification across a ${scheduling} canRetry failover`, async function () {
+            const unsupportedCluster = mysql.createPoolCluster()
+            const supported = typeof unsupportedCluster.of('*').query === 'function'
+            unsupportedCluster.end(() => {})
+            if (!supported) return this.skip()
+
+            const cluster = mysql.createPoolCluster()
+            cluster.add('dead', {
+              host: '127.0.0.1',
+              user: 'root',
+              port: await getClosedPort(),
+              connectionLimit: 1,
+            })
+            cluster.add('live', { host: '127.0.0.1', user: 'root', database: 'db', connectionLimit: 1 })
+            cluster.on('warn', () => {})
+            const namespace = cluster.of('*')
+            if (deferredRetry) {
+              const query = namespace.query
+              let queryCalls = 0
+              namespace.query = function () {
+                if (++queryCalls === 2) {
+                  setImmediate(() => query.apply(this, arguments))
+                  return arguments[0]
+                }
+                return query.apply(this, arguments)
+              }
+            }
+            const resource = `SELECT 9 AS ${scheduling.replace('-', '_')}_failover_probe`
+
+            try {
+              await Promise.all([
+                agent.assertSomeTraces(traces => {
+                  const span = traces[0][0]
+
+                  assert.strictEqual(typeof span.metrics['mysql.pool.wait_time'], 'number')
+                  assert.strictEqual(traces[0].find(span => span.name === 'mysql.pool.acquire'), undefined)
+                }, { spanResourceMatch: new RegExp(`^${resource}$`) }),
+                new Promise((resolve, reject) => {
+                  namespace.query(resource, error => error ? reject(error) : resolve())
+                }),
+              ])
+            } finally {
+              await new Promise(resolve => cluster.end(resolve))
+            }
+          })
+        }
+
+        it('records a final acquire error when every pool-cluster node fails', async function () {
+          const cluster = mysql.createPoolCluster({ removeNodeErrorCount: 1 })
+          cluster.add('dead', {
+            host: '127.0.0.1',
+            user: 'root',
+            port: await getClosedPort(),
+            connectionLimit: 1,
+          })
+          cluster.on('warn', () => {})
+          const namespace = cluster.of('*')
+
+          if (typeof namespace.query !== 'function') {
+            cluster.end(() => {})
+            return this.skip()
+          }
+
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const acquireSpan = traces[0].find(span => span.name === 'mysql.pool.acquire')
+
+                assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                assert.strictEqual(acquireSpan.error, 1)
+                assert.strictEqual(typeof acquireSpan.metrics['mysql.pool.wait_time'], 'number')
+              }),
+              new Promise((resolve, reject) => {
+                namespace.query('SELECT 12 AS all_nodes_down', error => {
+                  return error ? resolve() : reject(new Error('expected acquire error'))
+                })
+              }),
+            ])
+          } finally {
+            await new Promise(resolve => cluster.end(resolve))
+          }
+        })
+
+        it('reports a zero wait time when an idle pooled connection is reused', async () => {
+          await new Promise((resolve, reject) => {
+            pool.query('SELECT 1', error => error ? reject(error) : resolve())
+          })
+          // Let the first query's release return the connection to the free list before reusing it.
+          await new Promise(resolve => setImmediate(resolve))
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].metrics['mysql.pool.wait_time'], 0)
+            }, { spanResourceMatch: /^SELECT 7 AS idle_probe$/ }),
+            new Promise((resolve, reject) => {
+              pool.query('SELECT 7 AS idle_probe', error => error ? reject(error) : resolve())
+            }),
+          ])
+        })
+
+        it('creates a dedicated acquire span for an explicit pool.getConnection()', done => {
+          const parent = tracer.startSpan('acquire-parent')
+
+          agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name === 'mysql.pool.acquire')
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assert.strictEqual(acquireSpan.resource, 'mysql.pool.acquire')
+            assert.strictEqual(acquireSpan.parent_id.toString(), parent.context().toSpanId())
+            assert.strictEqual(typeof acquireSpan.metrics['mysql.pool.wait_time'], 'number')
+            assert.ok(acquireSpan.metrics['mysql.pool.wait_time'] >= 0)
+          }, { spanResourceMatch: /^mysql\.pool\.acquire$/ })
+            .then(done)
+            .catch(done)
+
+          tracer.scope().activate(parent, () => {
+            pool.getConnection((error, connection) => {
+              if (error) return done(error)
+              connection.release()
+              parent.finish()
+            })
+          })
+        })
+
+        it('records an error on explicit and pooled-query acquire failures', async () => {
+          const failingPool = mysql.createPool({
+            host: '127.0.0.1',
+            port: await getClosedPort(),
+            user: 'root',
+            connectTimeout: 500,
+          })
+          failingPool.on('error', () => {})
+
+          try {
+            for (const acquire of [
+              callback => failingPool.getConnection(callback),
+              callback => failingPool.query('SELECT 15 AS acquire_failure', callback),
+            ]) {
+              await Promise.all([
+                agent.assertSomeTraces(traces => {
+                  const acquireSpan = traces[0].find(span => span.name === 'mysql.pool.acquire')
+
+                  assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                  assert.strictEqual(acquireSpan.error, 1)
+                }),
+                new Promise((resolve, reject) => {
+                  acquire(error => error ? resolve() : reject(new Error('expected acquire error')))
+                }),
+              ])
+            }
+          } finally {
+            await new Promise(resolve => failingPool.end(resolve))
+          }
         })
       })
 

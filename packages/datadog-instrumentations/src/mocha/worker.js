@@ -2,6 +2,7 @@
 
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const { EMPTY_EFD_RETRY_POLICY } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const log = require('../../../dd-trace/src/log')
 const { DD_MAJOR } = require('../../../../version')
@@ -23,7 +24,7 @@ const {
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
-  createWebdriverioWorkerMessage,
+  sendWebdriverioWorkerMessage,
   SUITE_FINISH,
   WEBDRIVERIO_WORKER_ENV,
   WORKER_READY,
@@ -35,7 +36,9 @@ const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 const workerFinishCh = channel('ci:mocha:worker:finish')
 const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 
-const config = {}
+const config = {
+  earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
+}
 const runnerToFiles = new WeakMap()
 const runnerToFailedHooks = new WeakMap()
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
@@ -50,19 +53,12 @@ let configurationRequestId = 0
  * @returns {void}
  */
 function sendWebdriverioMessage (message, onError, onDone) {
-  if (!process.send || !process.connected) {
-    onError?.()
-    onDone?.()
-    return
-  }
-
-  process.send(createWebdriverioWorkerMessage(message), (error) => {
+  sendWebdriverioWorkerMessage(message, error => {
     if (error) {
       log.error('WebdriverIO Test Optimization IPC error', error)
-      onError?.()
     }
-    onDone?.()
-  })
+    onError?.()
+  }, onDone)
 }
 
 /**
@@ -76,12 +72,10 @@ function applyMochaOptions (options) {
     config.isKnownTestsEnabled = true
     config.isEarlyFlakeDetectionEnabled = options._ddIsEfdEnabled
     config.knownTests = options._ddKnownTests
-    config.earlyFlakeDetectionNumRetries = options._ddEfdNumRetries
-    config.earlyFlakeDetectionSlowTestRetries = options._ddEfdSlowTestRetries ?? {}
+    config.earlyFlakeDetectionRetryPolicy = options._ddEfdRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
     delete options._ddIsEfdEnabled
     delete options._ddKnownTests
-    delete options._ddEfdNumRetries
-    delete options._ddEfdSlowTestRetries
+    delete options._ddEfdRetryPolicy
     delete options._ddIsKnownTestsEnabled
   }
   if (options._ddIsImpactedTestsEnabled) {
@@ -245,7 +239,7 @@ function getWebdriverioHookTest (hook) {
  */
 function adjustWebdriverioHookFailures (runner) {
   let suppressedFailures = 0
-  for (const { test } of runnerToFailedHooks.get(runner) || []) {
+  for (const { test } of runnerToFailedHooks.get(runner)) {
     if (isWebdriverioFailureSuppressed(test)) {
       suppressedFailures++
     }
@@ -287,7 +281,7 @@ function getWebdriverioSuiteResults (runner) {
     }
   })
 
-  for (const { file, test } of runnerToFailedHooks.get(runner) || []) {
+  for (const { file, test } of runnerToFailedHooks.get(runner)) {
     const result = resultsByFile.get(file)
     if (result && !isWebdriverioFailureSuppressed(test)) {
       result.status = 'fail'

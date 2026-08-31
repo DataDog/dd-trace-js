@@ -138,7 +138,7 @@ createIntegrationTestSuite('openai-agents', '@openai/agents', {
 
       try {
         await testSetup.runError()
-      } catch (err) {
+      } catch {
         // errorAgent triggers an intentional error from the mocked model
       }
 

@@ -13,11 +13,11 @@ const fixturesDir = path.join(__dirname, 'mocha-parallel-files-fixtures')
  *   stdout: string,
  *   stderr: string,
  *   code: number|null,
- *   signal: NodeJS.Signals|null
+ *   signal: keyof import('node:os').SignalConstants|null
  * }} ChildResult
  *
  * @typedef {{
- *   killSignal?: NodeJS.Signals,
+ *   killSignal?: keyof import('node:os').SignalConstants,
  *   killOnFirstStdout?: boolean,
  *   timeoutMs?: number
  * }} RunOpts
@@ -85,13 +85,14 @@ describe('mocha-parallel-files script', function () {
     assert.match(stdout, /Failed:\s+0\b/)
   })
 
-  it('preserves the SIGINT exit code on user interrupt', async function () {
-    if (process.platform === 'win32') {
-      this.skip()
-      return
-    }
-    const fixture = path.join(fixturesDir, 'long-running.js')
-    const { code } = await runParallel(['--', fixture], { killSignal: 'SIGINT', killOnFirstStdout: true })
-    assert.strictEqual(code, 130)
-  })
+  {
+    const sigintTest = process.platform === 'win32' ? it.skip : it
+
+    // Windows does not support the SIGINT process semantics exercised here.
+    sigintTest('preserves the SIGINT exit code on user interrupt', async function () {
+      const fixture = path.join(fixturesDir, 'long-running.js')
+      const { code } = await runParallel(['--', fixture], { killSignal: 'SIGINT', killOnFirstStdout: true })
+      assert.strictEqual(code, 130)
+    })
+  }
 })

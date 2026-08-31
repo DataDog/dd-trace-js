@@ -1,11 +1,7 @@
 'use strict'
 
 const log = require('../log')
-const web = require('../plugins/util/web')
-const { extractIp } = require('../plugins/util/ip_extractor')
-const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { IS_SERVERLESS } = require('../serverless')
-const { isEmpty } = require('../util')
 const RuleManager = require('./rule_manager')
 const appsecRemoteConfig = require('./remote_config')
 const {
@@ -37,24 +33,52 @@ const {
   stripePaymentIntentCreate,
   stripeConstructEvent,
 } = require('./channels')
-const waf = require('./waf')
-const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecurity = require('./api_security')
-const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
-const { getActiveRequest } = require('./store')
+const { setTemplates } = require('./blocking')
 const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
 const lambda = require('./lambda')
 const rasp = require('./rasp')
-
-const responseAnalyzedSet = new WeakSet()
-const storedResponseHeaders = new WeakMap()
-const storedBodies = new WeakMap()
+const httpRequest = require('./handlers/http-request')
+const httpResponse = require('./handlers/http-response')
+const auth = require('./handlers/auth')
+const payments = require('./handlers/payments')
 
 let isEnabled = false
-let config
+
+// Single source of truth for what enable() subscribes and disable() unsubscribes,
+// so the two can't drift apart.
+const channelHandlers = [
+  [bodyParser, httpRequest.onRequestBodyParsed],
+  [multerParser, httpRequest.onRequestBodyParsed],
+  [cookieParser, httpRequest.onRequestCookieParser],
+  [incomingHttpRequestStart, httpRequest.incomingHttpStartTranslator],
+  [incomingHttpRequestEnd, httpRequest.incomingHttpEndTranslator],
+  [passportVerify, auth.onPassportVerify],
+  [passportUser, auth.onPassportDeserializeUser],
+  [expressSession, auth.onExpressSession],
+  [queryParser, httpRequest.onRequestQueryParsed],
+  [nextBodyParsed, httpRequest.onRequestBodyParsed],
+  [nextQueryParsed, httpRequest.onRequestQueryParsed],
+  [expressProcessParams, httpRequest.onRequestProcessParams],
+  [fastifyBodyParser, httpRequest.onRequestBodyParsed],
+  [fastifyQueryParams, httpRequest.onRequestQueryParsed],
+  [fastifyCookieParser, httpRequest.onRequestCookieParser],
+  [fastifyPathParams, httpRequest.onRequestProcessParams],
+  [routerParam, httpRequest.onRequestProcessParams],
+  [responseBody, httpResponse.onResponseBody],
+  [fastifyResponseChannel, httpResponse.onResponseBody],
+  [responseWriteHead, httpResponse.onResponseWriteHead],
+  [responseSetHeader, httpResponse.onResponseOperation],
+  [informationalResponse, httpResponse.onResponseOperation],
+  [stripeCheckoutSessionCreate, payments.onStripeCheckoutSessionCreate],
+  [stripePaymentIntentCreate, payments.onStripePaymentIntentCreate],
+  [stripeConstructEvent, payments.onStripeConstructEvent],
+  [lambdaStartInvocation, lambda.onLambdaStartInvocation],
+  [lambdaEndInvocation, lambda.onLambdaEndInvocation],
+]
 
 function enable (_config) {
   if (isEnabled) return
@@ -79,36 +103,13 @@ function enable (_config) {
 
     UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
 
-    bodyParser.subscribe(onRequestBodyParsed)
-    multerParser.subscribe(onRequestBodyParsed)
-    cookieParser.subscribe(onRequestCookieParser)
-    incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
-    incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
-    passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
-    passportUser.subscribe(onPassportDeserializeUser)
-    expressSession.subscribe(onExpressSession)
-    queryParser.subscribe(onRequestQueryParsed)
-    nextBodyParsed.subscribe(onRequestBodyParsed)
-    nextQueryParsed.subscribe(onRequestQueryParsed)
-    expressProcessParams.subscribe(onRequestProcessParams)
-    fastifyBodyParser.subscribe(onRequestBodyParsed)
-    fastifyQueryParams.subscribe(onRequestQueryParsed)
-    fastifyCookieParser.subscribe(onRequestCookieParser)
-    fastifyPathParams.subscribe(onRequestProcessParams)
-    routerParam.subscribe(onRequestProcessParams)
-    responseBody.subscribe(onResponseBody)
-    fastifyResponseChannel.subscribe(onResponseBody)
-    responseWriteHead.subscribe(onResponseWriteHead)
-    responseSetHeader.subscribe(onResponseOperation)
-    informationalResponse.subscribe(onResponseOperation)
-    stripeCheckoutSessionCreate.subscribe(onStripeCheckoutSessionCreate)
-    stripePaymentIntentCreate.subscribe(onStripePaymentIntentCreate)
-    stripeConstructEvent.subscribe(onStripeConstructEvent)
-    lambdaStartInvocation.subscribe(lambda.onLambdaStartInvocation)
-    lambdaEndInvocation.subscribe(lambda.onLambdaEndInvocation)
+    httpRequest.setConfig(_config)
+
+    for (const [channel, handler] of channelHandlers) {
+      channel.subscribe(handler)
+    }
 
     isEnabled = true
-    config = _config
   } catch (err) {
     if (IS_SERVERLESS) {
       log.debug('[ASM] Serverless mode: suppressing error log, calling disable()')
@@ -120,403 +121,8 @@ function enable (_config) {
   }
 }
 
-const analyzedBodies = new WeakSet()
-
-function onRequestBodyParsed ({ req, res, body, abortController }) {
-  if (body === undefined || body === null) return
-
-  if (!req) {
-    req = getActiveRequest()
-  }
-
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  if (!req.body) {
-    // do not store body if it is in req.body
-    storedBodies.set(req, body)
-  }
-
-  if (typeof body === 'object') {
-    if (isEmpty(body)) return
-    analyzedBodies.add(body)
-  }
-
-  const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_BODY]: body,
-    },
-  }, req)
-
-  handleResults(results?.actions, req, res, rootSpan, abortController)
-}
-
-const analyzedCookies = new WeakSet()
-
-function onRequestCookieParser ({ req, res, abortController, cookies }) {
-  if (!cookies || typeof cookies !== 'object') return
-
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  if (isEmpty(cookies)) return
-  analyzedCookies.add(cookies)
-
-  const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_COOKIES]: cookies,
-    },
-  }, req)
-
-  handleResults(results?.actions, req, res, rootSpan, abortController)
-}
-
-function incomingHttpStartTranslator ({ req, res, abortController }) {
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  const clientIp = extractIp(config, req)
-
-  rootSpan.addTags({
-    '_dd.appsec.enabled': 1,
-    '_dd.runtime_family': 'nodejs',
-    [HTTP_CLIENT_IP]: clientIp,
-  })
-
-  if (config.inferredProxyServicesEnabled) {
-    const context = web.getContext(req)
-    if (context?.inferredProxySpan) {
-      context.inferredProxySpan.setTag('_dd.appsec.enabled', 1)
-    }
-  }
-
-  const persistent = {
-    [addresses.HTTP_INCOMING_URL]: req.url,
-    [addresses.HTTP_INCOMING_HEADERS]: copyHeadersOmitting(req.headers, 'cookie'),
-    [addresses.HTTP_INCOMING_METHOD]: req.method,
-  }
-
-  if (clientIp) {
-    persistent[addresses.HTTP_CLIENT_IP] = clientIp
-  }
-
-  const results = waf.run({ persistent }, req)
-
-  handleResults(results?.actions, req, res, rootSpan, abortController)
-}
-
-function incomingHttpEndTranslator ({ req, res }) {
-  const persistent = {}
-
-  // we need to keep this to support other body parsers
-  if (req.body !== undefined && req.body !== null) {
-    if (typeof req.body === 'object') {
-      if (!isEmpty(req.body) && !analyzedBodies.has(req.body)) {
-        persistent[addresses.HTTP_INCOMING_BODY] = req.body
-      }
-    } else {
-      persistent[addresses.HTTP_INCOMING_BODY] = req.body
-    }
-  }
-
-  // we need to keep this to support other cookie parsers
-  if (
-    req.cookies !== null &&
-    typeof req.cookies === 'object' &&
-    !isEmpty(req.cookies) &&
-    !analyzedCookies.has(req.cookies)
-  ) {
-    persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
-  }
-
-  // we need to keep this to support nextjs
-  const query = req.query
-  if (
-    query !== null &&
-    typeof query === 'object' &&
-    !isEmpty(query)
-  ) {
-    persistent[addresses.HTTP_INCOMING_QUERY] = query
-  }
-
-  // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
-  web.setRouteOrEndpointTag(req)
-
-  const apiSecSamplingDecision = apiSecurity.sampleRequest(req, res, true)
-  if (apiSecSamplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
-    persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
-  }
-
-  let wafResult
-  if (!isEmpty(persistent)) {
-    wafResult = waf.run({ persistent }, req)
-  }
-
-  apiSecurity.reportRequest(req, apiSecSamplingDecision, wafResult)
-
-  waf.disposeContext(req)
-
-  const storedHeaders = storedResponseHeaders.get(req) || {}
-
-  const body = req.body || storedBodies.get(req)
-  Reporter.finishRequest(req, res, storedHeaders, body)
-
-  if (storedHeaders) {
-    storedResponseHeaders.delete(req)
-  }
-  storedBodies.delete(req)
-}
-
-function onPassportVerify ({ framework, login, user, success, abortController }) {
-  const req = getActiveRequest()
-  const rootSpan = req && web.root(req)
-
-  if (!rootSpan) {
-    log.warn('[ASM] No rootSpan found in onPassportVerify')
-    return
-  }
-
-  const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
-
-  handleResults(results?.actions, req, web.getContext(req)?.res, rootSpan, abortController)
-}
-
-function onPassportDeserializeUser ({ user, abortController }) {
-  const req = getActiveRequest()
-  const rootSpan = req && web.root(req)
-
-  if (!rootSpan) {
-    log.warn('[ASM] No rootSpan found in onPassportDeserializeUser')
-    return
-  }
-
-  const results = UserTracking.trackUser(user, rootSpan)
-
-  handleResults(results?.actions, req, web.getContext(req)?.res, rootSpan, abortController)
-}
-
-function onExpressSession ({ req, res, sessionId, abortController }) {
-  const rootSpan = web.root(req)
-  if (!rootSpan) {
-    log.warn('[ASM] No rootSpan found in onExpressSession')
-    return
-  }
-
-  const isSdkCalled = rootSpan.context().getTag('usr.session_id')
-  if (isSdkCalled) return
-
-  const results = waf.run({
-    persistent: {
-      [addresses.USER_SESSION_ID]: sessionId,
-    },
-  }, req)
-
-  handleResults(results?.actions, req, res, rootSpan, abortController)
-}
-
-function onRequestQueryParsed ({ req, res, query, abortController }) {
-  if (!query || typeof query !== 'object') return
-
-  if (!req) {
-    req = getActiveRequest()
-  }
-
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  if (isEmpty(query)) return
-
-  const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_QUERY]: query,
-    },
-  }, req)
-
-  handleResults(results?.actions, req, res, rootSpan, abortController)
-}
-
-function onRequestProcessParams ({ req, res, abortController, params }) {
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  if (!params || typeof params !== 'object' || isEmpty(params)) return
-
-  const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_PARAMS]: params,
-    },
-  }, req)
-
-  handleResults(results?.actions, req, res, rootSpan, abortController)
-}
-
-function onResponseBody ({ req, res, body }) {
-  if (!body || typeof body !== 'object') return
-  if (apiSecurity.sampleRequest(req, res) !== apiSecurity.SamplingDecision.SAMPLE) return
-
-  // we don't support blocking at this point, so no results needed
-  waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
-    },
-  }, req)
-}
-
-function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
-  // Normalize header names to lowercase so downstream consumers see the same shape
-  // regardless of how the caller wrote them.
-  const normalizedResponseHeaders = {}
-  for (const [key, value] of Object.entries(responseHeaders)) {
-    normalizedResponseHeaders[key.toLowerCase()] = value
-  }
-
-  if (!isEmpty(normalizedResponseHeaders)) {
-    storedResponseHeaders.set(req, normalizedResponseHeaders)
-  }
-
-  // TODO: do not call waf if inside block()
-  // if (isBlocking()) {
-  //   return
-  // }
-
-  // avoid "write after end" error
-  if (isBlocked(res) || callBlockDelegation(res)) {
-    abortController?.abort()
-    return
-  }
-
-  // avoid double waf call
-  if (responseAnalyzedSet.has(res)) {
-    return
-  }
-
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
-      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: copyHeadersOmitting(normalizedResponseHeaders, 'set-cookie'),
-    },
-  }, req)
-
-  responseAnalyzedSet.add(res)
-
-  handleResults(results?.actions, req, res, rootSpan, abortController)
-}
-
-function onResponseOperation ({ res, abortController }) {
-  if (isBlocked(res)) {
-    abortController?.abort()
-  }
-}
-
-function onStripeCheckoutSessionCreate (payload) {
-  if (payload?.mode !== 'payment') return
-
-  waf.run({
-    persistent: {
-      [addresses.PAYMENT_CREATION]: {
-        integration: 'stripe',
-        id: payload.id,
-        amount_total: payload.amount_total,
-        client_reference_id: payload.client_reference_id,
-        currency: payload.currency,
-        'discounts.coupon': payload.discounts?.[0]?.coupon,
-        'discounts.promotion_code': payload.discounts?.[0]?.promotion_code,
-        livemode: payload.livemode,
-        'total_details.amount_discount': payload.total_details?.amount_discount,
-        'total_details.amount_shipping': payload.total_details?.amount_shipping,
-      },
-    },
-  })
-}
-
-function onStripePaymentIntentCreate (payload) {
-  if (payload === null || typeof payload !== 'object') return
-
-  waf.run({
-    persistent: {
-      [addresses.PAYMENT_CREATION]: {
-        integration: 'stripe',
-        id: payload.id,
-        amount: payload.amount,
-        currency: payload.currency,
-        livemode: payload.livemode,
-        payment_method: payload.payment_method,
-      },
-    },
-  })
-}
-
-function onStripeConstructEvent (payload) {
-  const object = payload?.data?.object
-  if (object === null || typeof object !== 'object') return
-
-  let persistent
-
-  switch (payload.type) {
-    case 'payment_intent.succeeded':
-      persistent = {
-        [addresses.PAYMENT_SUCCESS]: {
-          integration: 'stripe',
-          id: object.id,
-          amount: object.amount,
-          currency: object.currency,
-          livemode: object.livemode,
-          payment_method: object.payment_method,
-        },
-      }
-      break
-
-    case 'payment_intent.payment_failed':
-      persistent = {
-        [addresses.PAYMENT_FAILURE]: {
-          integration: 'stripe',
-          id: object.id,
-          amount: object.amount,
-          currency: object.currency,
-          'last_payment_error.code': object.last_payment_error?.code,
-          'last_payment_error.decline_code': object.last_payment_error?.decline_code,
-          'last_payment_error.payment_method.id': object.last_payment_error?.payment_method?.id,
-          'last_payment_error.payment_method.type': object.last_payment_error?.payment_method?.type,
-          livemode: object.livemode,
-        },
-      }
-      break
-
-    case 'payment_intent.canceled':
-      persistent = {
-        [addresses.PAYMENT_CANCELLATION]: {
-          integration: 'stripe',
-          id: object.id,
-          amount: object.amount,
-          cancellation_reason: object.cancellation_reason,
-          currency: object.currency,
-          livemode: object.livemode,
-        },
-      }
-      break
-
-    default:
-      return
-  }
-
-  waf.run({ persistent })
-}
-
-function handleResults (actions, req, res, rootSpan, abortController) {
-  if (!actions || !req || !res || !rootSpan || !abortController) return
-
-  const blockingAction = getBlockingAction(actions)
-  if (blockingAction) {
-    block(req, res, rootSpan, abortController, blockingAction)
-  }
-}
-
 function disable () {
   isEnabled = false
-  config = null
 
   RuleManager.clearAllRules()
 
@@ -528,51 +134,17 @@ function disable () {
 
   apiSecurity.disable()
 
-  // Channel#unsubscribe() is undefined for non active channels
-  if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
-  if (multerParser.hasSubscribers) multerParser.unsubscribe(onRequestBodyParsed)
-  if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
-  if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
-  if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
-  if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
-  if (passportUser.hasSubscribers) passportUser.unsubscribe(onPassportDeserializeUser)
-  if (expressSession.hasSubscribers) expressSession.unsubscribe(onExpressSession)
-  if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
-  if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
-  if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)
-  if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
-  if (fastifyBodyParser.hasSubscribers) fastifyBodyParser.unsubscribe(onRequestBodyParsed)
-  if (fastifyQueryParams.hasSubscribers) fastifyQueryParams.unsubscribe(onRequestQueryParsed)
-  if (fastifyCookieParser.hasSubscribers) fastifyCookieParser.unsubscribe(onRequestCookieParser)
-  if (fastifyPathParams.hasSubscribers) fastifyPathParams.unsubscribe(onRequestProcessParams)
-  if (routerParam.hasSubscribers) routerParam.unsubscribe(onRequestProcessParams)
-  if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
-  if (fastifyResponseChannel.hasSubscribers) fastifyResponseChannel.unsubscribe(onResponseBody)
-  if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
-  if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseOperation)
-  if (informationalResponse.hasSubscribers) informationalResponse.unsubscribe(onResponseOperation)
-  if (stripeCheckoutSessionCreate.hasSubscribers) stripeCheckoutSessionCreate.unsubscribe(onStripeCheckoutSessionCreate)
-  if (stripePaymentIntentCreate.hasSubscribers) stripePaymentIntentCreate.unsubscribe(onStripePaymentIntentCreate)
-  if (stripeConstructEvent.hasSubscribers) stripeConstructEvent.unsubscribe(onStripeConstructEvent)
-  if (lambdaStartInvocation.hasSubscribers) lambdaStartInvocation.unsubscribe(lambda.onLambdaStartInvocation)
-  if (lambdaEndInvocation.hasSubscribers) lambdaEndInvocation.unsubscribe(lambda.onLambdaEndInvocation)
-}
+  httpRequest.setConfig(undefined)
 
-/**
- * @param {Record<string, unknown>} src
- * @param {string} omit
- */
-function copyHeadersOmitting (src, omit) {
-  const filtered = {}
-  for (const key of Object.keys(src)) {
-    if (key !== omit) filtered[key] = src[key]
+  // Channel#unsubscribe() is undefined for non active channels
+  for (const [channel, handler] of channelHandlers) {
+    if (channel.hasSubscribers) channel.unsubscribe(handler)
   }
-  return filtered
 }
 
 module.exports = {
   enable,
   disable,
-  incomingHttpStartTranslator,
-  incomingHttpEndTranslator,
+  incomingHttpStartTranslator: httpRequest.incomingHttpStartTranslator,
+  incomingHttpEndTranslator: httpRequest.incomingHttpEndTranslator,
 }

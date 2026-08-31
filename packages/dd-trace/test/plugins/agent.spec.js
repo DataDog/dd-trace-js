@@ -1,11 +1,15 @@
 'use strict'
 
-const dc = require('node:diagnostics_channel')
 const assert = require('node:assert/strict')
+const dc = require('node:diagnostics_channel')
+const { once } = require('node:events')
+const http = require('node:http')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { httpAgent } = require('../../src/exporters/common/agents')
+const propagationHash = require('../../src/propagation-hash')
 const agent = require('./agent')
 
 const instrumentationsSymbol = Symbol.for('_ddtrace_instrumentations')
@@ -38,6 +42,111 @@ describe('test agent helper', () => {
       await agent.load([])
       const secondId = global._ddtrace._tracer._config.tags['runtime-id']
       assert.notStrictEqual(secondId, firstId)
+    })
+
+    it('removes the exporter keep-alive socket from the shared pool on close', async () => {
+      const tracer = await agent.load([])
+      const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
+      const traceReceived = agent.assertSomeTraces(() => {})
+
+      tracer.trace('test', () => {})
+      await traceReceived
+
+      while (!(origin in httpAgent.freeSockets)) {
+        await once(httpAgent, 'free')
+      }
+
+      await agent.close()
+      assert.strictEqual(origin in httpAgent.sockets, false)
+      assert.strictEqual(origin in httpAgent.freeSockets, false)
+      assert.strictEqual(origin in httpAgent.requests, false)
+    })
+
+    it('finishes closing when an exporter socket resets', async () => {
+      const tracer = await agent.load([])
+      const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
+      const traceReceived = agent.assertSomeTraces(() => {})
+
+      tracer.trace('test', () => {})
+      await traceReceived
+
+      while (!(origin in httpAgent.freeSockets)) {
+        await once(httpAgent, 'free')
+      }
+
+      const [exporterSocket] = httpAgent.freeSockets[origin]
+      const resetError = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })
+      const resetObserved = once(exporterSocket, 'error')
+
+      /**
+       * @param {string} event
+       */
+      function resetAfterCloseListener (event) {
+        if (event !== 'close') return
+
+        exporterSocket.removeListener('newListener', resetAfterCloseListener)
+        queueMicrotask(() => {
+          exporterSocket.emit('error', resetError)
+          exporterSocket.destroy()
+        })
+      }
+      exporterSocket.on('newListener', resetAfterCloseListener)
+
+      const [, [observedReset]] = await Promise.all([agent.close(), resetObserved])
+      assert.strictEqual(observedReset, resetError)
+      assert.strictEqual(origin in httpAgent.sockets, false)
+      assert.strictEqual(origin in httpAgent.freeSockets, false)
+      assert.strictEqual(origin in httpAgent.requests, false)
+    })
+
+    it('finishes closing with active and queued exporter requests', async () => {
+      const remoteConfigurationEnabled = process.env.DD_REMOTE_CONFIGURATION_ENABLED
+      const telemetryEnabled = process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
+
+      try {
+        await agent.load([])
+        const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
+        agent.server.prependOnceListener('connection', socket => socket.pause())
+        const activeRequest = http.request({
+          agent: httpAgent,
+          host: '127.0.0.1',
+          port: agent.port,
+        })
+        const socketAssigned = once(activeRequest, 'socket')
+        const activeRequestErrored = once(activeRequest, 'error')
+        activeRequest.end()
+        const [socket] = await socketAssigned
+        const socketFreeListenerCount = socket.listenerCount('free')
+
+        const queuedRequest = http.request({
+          agent: httpAgent,
+          host: '127.0.0.1',
+          port: agent.port,
+        })
+        const queuedRequestErrored = once(queuedRequest, 'error')
+        queuedRequest.end()
+        assert.strictEqual(httpAgent.requests[origin].length, 1)
+
+        await Promise.all([agent.close(), activeRequestErrored, queuedRequestErrored])
+
+        assert.strictEqual(socket.listenerCount('free'), socketFreeListenerCount)
+        assert.strictEqual(origin in httpAgent.sockets, false)
+        assert.strictEqual(origin in httpAgent.freeSockets, false)
+        assert.strictEqual(origin in httpAgent.requests, false)
+      } finally {
+        if (remoteConfigurationEnabled === undefined) {
+          delete process.env.DD_REMOTE_CONFIGURATION_ENABLED
+        } else {
+          process.env.DD_REMOTE_CONFIGURATION_ENABLED = remoteConfigurationEnabled
+        }
+        if (telemetryEnabled === undefined) {
+          delete process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+        } else {
+          process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = telemetryEnabled
+        }
+      }
     })
 
     it('rebuilds the tracer when tracerConfig differs between consecutive loads', async () => {
@@ -109,6 +218,19 @@ describe('test agent helper', () => {
       const configured = global._ddtrace._pluginManager._configsByName
       assert.ok(configured.express, `express missing, configured = ${Object.keys(configured)}`)
       assert.notStrictEqual(configured.http?.enabled, true)
+    })
+
+    it('clears the propagation-hash config on agent.close', async () => {
+      process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
+      try {
+        await agent.load([])
+        assert.strictEqual(propagationHash.isEnabled(), true)
+
+        await agent.close()
+        assert.strictEqual(propagationHash.isEnabled(), false)
+      } finally {
+        delete process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
+      }
     })
 
     // Single-eval invariant: each `datadog-instrumentations/*.js` file evaluates

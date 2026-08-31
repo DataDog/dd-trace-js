@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const os = require('node:os')
 const fs = require('node:fs')
@@ -38,7 +39,7 @@ describe('RASP - lfi', () => {
 
   withVersions('express', 'express', expressVersion => {
     if (semver.intersects(expressVersion, '<=4.10.5') && NODE_MAJOR >= 24) {
-      // eslint-disable-next-line mocha/no-pending-tests
+      // Express 4.10.5 and older cannot start on Node.js 24.
       describe.skip(`refusing to run tests as express@${expressVersion} is incompatible with Node.js ${NODE_MAJOR}`)
       return
     }
@@ -46,11 +47,8 @@ describe('RASP - lfi', () => {
     withVersions('express', 'ejs', ejsVersion => {
       let app, server
 
-      before(() => {
-        return agent.load(['http', 'express'], { client: false })
-      })
-
-      before((done) => {
+      before(async () => {
+        await agent.load(['http', 'express'], { client: false })
         const express = require(`../../../../../versions/express@${expressVersion}`).get()
         // const ejs = require(`../../../../../versions/ejs@${ejsVersion}`).get()
         const expressApp = express()
@@ -70,12 +68,11 @@ describe('RASP - lfi', () => {
           },
         }))
 
-        server = expressApp.listen(0, () => {
-          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({
-            baseURL: `http://localhost:${port}`,
-          })
-          done()
+        server = expressApp.listen(0)
+        await once(server, 'listening')
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+        axios = Axios.create({
+          baseURL: `http://localhost:${port}`,
         })
       })
 
@@ -171,7 +168,7 @@ describe('RASP - lfi', () => {
           args.forEach(arg => {
             try {
               fs.unlinkSync(arg)
-            } catch (e) {
+            } catch {
 
             }
           })
@@ -250,7 +247,7 @@ describe('RASP - lfi', () => {
           afterEach(() => {
             try {
               fs.rmdirSync(dirname)
-            } catch (e) {
+            } catch {
               // some ops are blocked
             }
           })
@@ -264,7 +261,7 @@ describe('RASP - lfi', () => {
             onfinish: (todelete) => {
               try {
                 fs.rmdirSync(todelete)
-              } catch (e) {
+              } catch {
                 // some ops are blocked
               }
             },
@@ -377,7 +374,7 @@ describe('RASP - lfi', () => {
           afterEach(() => {
             try {
               fs.rmdirSync(dirname)
-            } catch (e) {
+            } catch {
             }
           })
 
@@ -460,11 +457,8 @@ describe('RASP - lfi', () => {
   describe('without express', () => {
     let app, server
 
-    before(() => {
-      return agent.load(['http'], { client: false })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['http'], { client: false })
       const http = require('http')
       server = http.createServer((req, res) => {
         if (app) {
@@ -482,13 +476,11 @@ describe('RASP - lfi', () => {
         },
       }))
 
-      server.listen(0, () => {
-        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
-          baseURL: `http://localhost:${port}`,
-        })
-
-        done()
+      server.listen(0)
+      await once(server, 'listening')
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({
+        baseURL: `http://localhost:${port}`,
       })
     })
 

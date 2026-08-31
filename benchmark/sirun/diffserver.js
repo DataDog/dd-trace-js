@@ -35,7 +35,7 @@ function getMetas () {
       try {
         const meta = require(path.join(__dirname, dirent.name, 'meta.json'))
         metas[meta.name] = meta
-      } catch (e) {
+      } catch {
         // just keep going
       }
     }

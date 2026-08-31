@@ -38,6 +38,8 @@ const {
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { cachedExec } = require('./git-cache')
 
+/** @typedef {NonNullable<ReturnType<string['match']>>} RegExpMatch */
+
 const legacyStorage = storage('legacy')
 
 const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
@@ -62,7 +64,7 @@ function sanitizedExec (
       let result = cachedExec(cmd, flags, { stdio: 'pipe' }).toString()
 
       if (shouldTrim) {
-        result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
+        result = result.replaceAll(/(\r\n|\n|\r)/g, '')
       }
 
       if (durationMetric) {
@@ -116,12 +118,12 @@ function isShallowRepository () {
 
 function getGitVersion () {
   const gitVersionString = sanitizedExec('git', ['version'])
-  const gitVersionMatches = /** @type {RegExpMatchArray} */ (gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/))
+  const gitVersionMatches = /** @type {RegExpMatch} */ (gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/))
   try {
     return {
-      major: Number.parseInt(gitVersionMatches[1]),
-      minor: Number.parseInt(gitVersionMatches[2]),
-      patch: Number.parseInt(gitVersionMatches[3]),
+      major: Number.parseInt(gitVersionMatches[1], 10),
+      minor: Number.parseInt(gitVersionMatches[2], 10),
+      patch: Number.parseInt(gitVersionMatches[3], 10),
     }
   } catch {
     return null

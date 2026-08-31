@@ -13,6 +13,16 @@ const rawExpectedSchema = {
       serviceName: 'test',
     },
   },
+  poolAcquire: {
+    v0: {
+      opName: 'pg.pool.acquire',
+      serviceName: 'test-postgres',
+    },
+    v1: {
+      opName: 'postgresql.pool.acquire',
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {

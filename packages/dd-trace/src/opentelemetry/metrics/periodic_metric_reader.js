@@ -109,7 +109,7 @@ class PeriodicMetricReader {
   /**
    * Creates a new PeriodicMetricReader instance.
    *
-   * @param {OtlpHttpMetricExporter} exporter - Metric exporter for sending to Datadog Agent
+   * @param {import('./otlp_http_metric_exporter')} exporter - Metric exporter for sending to Datadog Agent
    * @param {number} exportInterval - Export interval in milliseconds
    * @param {string} temporalityPreference - Temporality preference: DELTA, CUMULATIVE, or LOWMEMORY
    * @param {number} maxBatchedQueueSize - Maximum number of measurements to queue before dropping
@@ -197,14 +197,33 @@ class PeriodicMetricReader {
 
   /**
    * Forces an immediate collection and export of all metrics.
-   * @returns {void}
+   * @param {Function} [done] Called after the metric export completes
    */
-  forceFlush () {
+  forceFlush (done) {
     if (this.#isShutdown) {
       log.warn('PeriodicMetricReader is shutdown. %d measurement(s) were dropped', this.#droppedCount)
+      done?.()
       return
     }
-    this.#collectAndExport()
+    let pending = 2
+    const complete = () => {
+      if (--pending === 0) done?.()
+    }
+
+    // Snapshot requests already active before starting this flush's export.
+    try {
+      if (typeof this.exporter.flush === 'function') this.exporter.flush(complete)
+      else complete()
+    } catch (error) {
+      log.error('Error flushing OTLP metrics:', error)
+      complete()
+    }
+    try {
+      this.#collectAndExport(complete)
+    } catch (error) {
+      log.error('Error exporting OTLP metrics:', error)
+      complete()
+    }
   }
 
   /**
@@ -250,7 +269,8 @@ class PeriodicMetricReader {
    *
    * @param {Function} [callback] - Called after export completes
    */
-  #collectAndExport (callback = () => {}) {
+  #collectAndExport (callback) {
+    // Observable instruments must be collected even without synchronous measurements.
     // Atomically drain measurements for export. New measurements can be recorded
     // during export without interfering with this batch.
     const allMeasurements = this.#measurements
@@ -292,7 +312,7 @@ class PeriodicMetricReader {
     }
 
     if (allMeasurements.length === 0) {
-      callback()
+      callback?.()
       return
     }
 

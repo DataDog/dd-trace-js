@@ -72,6 +72,7 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
+      error,
       onDone,
     }) => {
       this._exportPendingWorkerTraces()
@@ -115,6 +116,14 @@ class CucumberPlugin extends CiPlugin {
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
+      if (error) {
+        for (const testSuiteSpan of this._testSuiteSpansByTestSuite.values()) {
+          testSuiteSpan.setTag(TEST_STATUS, 'fail')
+          testSuiteSpan.setTag('error', error)
+        }
+        this.testSessionSpan.setTag('error', error)
+        this.testModuleSpan.setTag('error', error)
+      }
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
@@ -308,6 +317,7 @@ class CucumberPlugin extends CiPlugin {
       isNew,
       isEfdRetry,
       isFlakyRetry,
+      isExternalRetry,
       isAttemptToFix,
       isAttemptToFixRetry,
       hasFailedAllRetries,
@@ -348,9 +358,12 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(ERROR_MESSAGE, errorMessage)
       }
 
-      if (isFlakyRetry > 0) {
+      if (isFlakyRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+      } else if (isExternalRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
       }
 
       if (hasFailedAllRetries) {

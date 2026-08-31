@@ -21,14 +21,14 @@ class ContextManager {
     const storedSpan = store ? trace.getSpan(store) : null
 
     // Convert DD baggage to OTel format
-    const baggages = getAllBaggageItems()
-    const hasBaggage = Object.keys(baggages).length > 0
+    let entries
+    for (const [key, value] of Object.entries(getAllBaggageItems())) {
+      entries ??= {}
+      entries[key] = { value }
+    }
+
     let otelBaggages
-    if (hasBaggage) {
-      const entries = {}
-      for (const [key, value] of Object.entries(baggages)) {
-        entries[key] = { value }
-      }
+    if (entries !== undefined) {
       otelBaggages = propagation.createBaggage(entries)
     }
 

@@ -13,6 +13,7 @@ const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
+const { getServerStatusValidator } = require('./status-validator')
 const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
 const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
 
@@ -34,6 +35,7 @@ const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const contexts = new WeakMap()
+const requests = new WeakMap()
 
 // TODO: change this to no longer rely on creating a dummy plugin to be able to access startSpan
 function createWebPlugin (tracer, config = {}) {
@@ -59,7 +61,7 @@ const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
-    const validateStatus = getStatusValidator(config)
+    const validateStatus = getServerStatusValidator(config)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
@@ -127,6 +129,7 @@ const web = {
     context.tracer = tracer
     context.span = span
     context.res = res
+    requests.set(span, req)
 
     this.setConfig(req, config)
     addRequestTags(context, this.TYPE)
@@ -219,7 +222,7 @@ const web = {
     const store = legacyStorage.getStore()
     const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
 
-    let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    let childOf = pubsubSpan || this.extractIncomingServerContext(tracer, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
@@ -230,6 +233,10 @@ const web = {
     }
 
     return startSpanHelper(tracer, name, { childOf }, traceCtx, config)
+  },
+
+  extractIncomingServerContext (tracer, headers) {
+    return tracer.extract(FORMAT_HTTP_HEADERS, normalizeHeadersCarrier(headers))
   },
 
   // Validate a request's status code and then add error tags if necessary
@@ -307,6 +314,7 @@ const web = {
     web.finishMiddleware(context)
 
     web.finishSpan(context, spanType)
+    requests.delete(context.span)
 
     finishInferredProxySpan(context)
   },
@@ -336,6 +344,9 @@ const web = {
   getContext (req) {
     return contexts.get(req)
   },
+  getRequest (span) {
+    return requests.get(span)
+  },
   setRouteOrEndpointTag (req) {
     const context = contexts.get(req)
 
@@ -345,10 +356,25 @@ const web = {
   },
 }
 
+function normalizeHeadersCarrier (headers) {
+  if (!headers || typeof headers.get !== 'function' || typeof headers[Symbol.iterator] !== 'function') {
+    return headers
+  }
+
+  const carrier = {}
+  for (const [key, value] of headers) {
+    carrier[String(key).toLowerCase()] = value
+  }
+  return carrier
+}
+
 function addAllowHeaders (req, res, headers) {
   const allowHeaders = splitHeader(headers['access-control-allow-headers'])
   const requestHeaders = splitHeader(req.headers['access-control-request-headers'])
   const contextHeaders = [
+    'baggage',
+    'traceparent',
+    'tracestate',
     'x-datadog-origin',
     'x-datadog-parent-id',
     'x-datadog-sampled', // Deprecated, but still accept it in case it's sent.
@@ -376,7 +402,7 @@ function isOriginAllowed (req, headers) {
 }
 
 function splitHeader (str) {
-  return typeof str === 'string' ? str.split(/\s*,\s*/) : []
+  return typeof str === 'string' ? str.split(',').map((header) => header.trim()) : []
 }
 
 function addRequestTags (context, spanType) {
@@ -531,19 +557,6 @@ function getHeadersToRecord (config) {
     log.error('Expected `headers` to be an array of strings.')
   }
   return []
-}
-
-function isNot500ErrorCode (code) {
-  return code < 500
-}
-
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-  return isNot500ErrorCode
 }
 
 const noop = () => {}

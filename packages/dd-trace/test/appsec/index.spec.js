@@ -155,9 +155,26 @@ describe('AppSec Index', function () {
       IS_SERVERLESS: false,
     }
 
+    // The request/response/auth handlers moved into ./handlers/*; stub their
+    // dependencies there so publishing to real channels runs the real handlers
+    // against the same fakes the assertions below rely on.
+    const httpRequestHandlers = proxyquire('../../src/appsec/handlers/http-request', {
+      '../../plugins/util/web': web,
+      '../api_security': apiSecurity,
+    })
+    const httpResponseHandlers = proxyquire('../../src/appsec/handlers/http-response', {
+      '../../plugins/util/web': web,
+      '../api_security': apiSecurity,
+      '../blocking': blocking,
+    })
+    const authHandlers = proxyquire('../../src/appsec/handlers/auth', {
+      '../../plugins/util/web': web,
+      '../../log': log,
+      '../user_tracking': UserTracking,
+    })
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
-      '../plugins/util/web': web,
       './blocking': blocking,
       './user_tracking': UserTracking,
       './telemetry': appsecTelemetry,
@@ -165,6 +182,9 @@ describe('AppSec Index', function () {
       './api_security': apiSecurity,
       './rasp': rasp,
       '../serverless': serverless,
+      './handlers/http-request': httpRequestHandlers,
+      './handlers/http-response': httpResponseHandlers,
+      './handlers/auth': authHandlers,
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))

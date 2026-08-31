@@ -32,7 +32,7 @@ function waitForKafka () {
               replicationFactor: 1,
             }],
           })
-        } catch (e) {
+        } catch {
           // Ignore since this will fail when the topic already exists.
         } finally {
           await admin.disconnect()

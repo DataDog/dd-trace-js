@@ -43,7 +43,7 @@ class EventSerializer {
 
   /**
    * Returns the destination URL for the near-OOM export subprocess, or nothing when this exporter
-   * does not support OOM export. Overridden by {@link AgentExporter} and {@link FileExporter}.
+   * does not support OOM export. Overridden by `AgentExporter` and `FileExporter`.
    *
    * @returns {URL | undefined}
    */

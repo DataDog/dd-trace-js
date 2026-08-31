@@ -64,6 +64,10 @@ describe('noop', () => {
     llmobs.submitEvaluation()
   })
 
+  it('using "submitFeedback" should not throw', () => {
+    llmobs.submitFeedback()
+  })
+
   it('using "flush" should not throw', () => {
     llmobs.flush()
   })
@@ -74,6 +78,10 @@ describe('noop', () => {
 
   it('using "deregisterProcessor" should not throw', () => {
     llmobs.deregisterProcessor()
+  })
+
+  it('exposes the no-op experiments facade', () => {
+    assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
   })
 
   it('using "annotationContext" should not throw', () => {

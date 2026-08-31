@@ -25,6 +25,8 @@ const bodyPublished = new WeakSet()
 let lastPublishedError
 let lastPublishedReq
 
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
+
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
 
@@ -81,7 +83,7 @@ function wrapAddHook (addHook) {
  * @param {string} name Lifecycle phase the hook was registered against.
  * @param {Function} fn User-supplied hook.
  * @param {unknown} thisArg `this` Fastify passes to the hook.
- * @param {ArrayLike<unknown>} args Fastify's positional args; the dispatcher always
+ * @param {ArgumentsLike} args Fastify's positional args; the dispatcher always
  *   places `done` as the trailing positional (see fastify/lib/hooks.js hookIterator,
  *   onSendHookRunner, preParsingHookRunner, onRequestAbortHookRunner).
  */
@@ -144,6 +146,7 @@ function wrapHookDone (ctx, request, reply, req, name, doneCallback) {
     ctx.error = error
     publishError(ctx)
 
+    // eslint-disable-next-line no-restricted-syntax -- arbitrary cookie names; publishing {} sets a WAF address
     const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
 
     if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
@@ -191,6 +194,7 @@ function preHandler (request, reply, done) {
   const res = getRes(reply)
   const ctx = { req, res }
 
+  // eslint-disable-next-line no-restricted-syntax -- arbitrary body keys; publishing {} sets a WAF address
   const hasBody = request.body && Object.keys(request.body).length > 0
 
   // For multipart/form-data, the body is not available until after preValidation hook

@@ -24,6 +24,8 @@ const {
   TEST_NAME,
   TEST_BROWSER_NAME,
   TEST_RETRY_REASON_TYPES,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const { PLAYWRIGHT_VERSION } = process.env
@@ -40,14 +42,13 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   // TODO: Remove this once we drop suppport for v5
-  const contextNewVersions = (...args) => {
-    if (satisfies(version, '>=1.38.0') || version === 'latest') {
-      context(...args)
-    }
-  }
+  const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
+    const failureScreenshotHandoffTest = satisfies(version, '>=1.60.0') || version === 'latest'
+      ? it
+      : global.it.skip
 
     let cwd, webAppPort, webAppServer
 
@@ -239,6 +240,63 @@ versions.forEach((version) => {
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
+      failureScreenshotHandoffTest(
+        'keeps failure screenshots aligned when EFD skips a scheduled retry',
+        async (receiver, run) => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': 1,
+              },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({ playwright: {} })
+
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+                PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: 'only-on-failure',
+                PLAYWRIGHT_WORKERS: '1',
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-efd-failure-screenshot',
+              },
+            }
+          )
+          const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+            proc,
+            ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+              const failedTests = payloads
+                .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] ===
+                  'efd failure screenshot alignment uploads a failure screenshot')
+
+              assert.strictEqual(failedTests.length, 2)
+              for (const failedTest of failedTests) {
+                assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+                assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+              }
+              assert.strictEqual(mediaPayloads.length, 2)
+            },
+            { hardTimeout: 60_000 }
+          )
+
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+          assert.strictEqual(exitCode, 1)
+        }
+      )
+
       it('overrides slow test retries with the EFD retry count environment variable', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
@@ -369,6 +427,7 @@ versions.forEach((version) => {
             for (const repeatedTest of repeatedTests) {
               assert.strictEqual(repeatedTest.meta[TEST_IS_NEW], 'true')
               assert.ok(!(TEST_IS_RETRY in repeatedTest.meta))
+              assert.ok(!(TEST_EARLY_FLAKE_ABORT_REASON in repeatedTest.meta))
               assert.ok(!(TEST_RETRY_REASON in repeatedTest.meta))
             }
           }, 45_000)

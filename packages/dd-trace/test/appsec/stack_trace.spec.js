@@ -92,7 +92,7 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       try {
         reportStackTrace(rootSpan, stackId, callSiteList)
-      } catch (e) {
+      } catch {
         assert.fail()
       }
     })

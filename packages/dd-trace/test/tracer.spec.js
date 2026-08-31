@@ -50,6 +50,129 @@ describe('Tracer', () => {
     })
   })
 
+  describe('flushAll', () => {
+    let originalVercel
+    let flushServerlessTelemetry
+    let registerTelemetryFlusher
+
+    beforeEach(() => {
+      originalVercel = process.env.VERCEL
+      process.env.VERCEL = '1'
+      const serverless = proxyquire('../src/serverless', {})
+      const flush = proxyquire('../src/flush', { './serverless': serverless })
+      const VercelTracer = proxyquire('../src/tracer', {
+        './flush': flush,
+        './serverless': serverless,
+      })
+      tracer = new VercelTracer(config)
+      tracer._exporter.setUrl = sinon.stub()
+      tracer._exporter.export = sinon.stub()
+      tracer._prioritySampler.configure = sinon.stub()
+      flushServerlessTelemetry = flush.flushServerlessTelemetry
+      registerTelemetryFlusher = flush.registerTelemetryFlusher
+    })
+
+    afterEach(() => {
+      if (originalVercel === undefined) delete process.env.VERCEL
+      else process.env.VERCEL = originalVercel
+    })
+
+    it('flushes registered telemetry pipelines with the configured trace exporter', () => {
+      tracer._exporter.flush = sinon.stub().callsFake(done => done())
+      const telemetryFlusher = sinon.stub().callsFake(done => done())
+      const unregister = registerTelemetryFlusher(telemetryFlusher)
+      let completed = false
+
+      tracer.flushAll(() => { completed = true })
+
+      sinon.assert.calledOnce(tracer._exporter.flush)
+      sinon.assert.calledOnce(telemetryFlusher)
+      assert.strictEqual(completed, true)
+      unregister()
+    })
+
+    it('flushes post-trace telemetry after the trace exporter completes', () => {
+      let traceDone
+      tracer._exporter.flush = sinon.stub().callsFake(done => { traceDone = done })
+      const runtimeMetricsFlusher = sinon.stub().callsFake(done => done())
+      const unregister = registerTelemetryFlusher(runtimeMetricsFlusher, { afterTrace: true })
+      const done = sinon.spy()
+
+      tracer.flushAll(done)
+
+      sinon.assert.notCalled(runtimeMetricsFlusher)
+      traceDone()
+      sinon.assert.calledOnce(runtimeMetricsFlusher)
+      sinon.assert.calledOnce(done)
+      unregister()
+    })
+
+    it('flushes registered telemetry pipelines without a trace exporter', () => {
+      const telemetryFlusher = sinon.stub().callsFake(done => done())
+      const unregister = registerTelemetryFlusher(telemetryFlusher)
+      const done = sinon.spy()
+
+      flushServerlessTelemetry(done)
+
+      sinon.assert.calledOnce(telemetryFlusher)
+      sinon.assert.calledOnce(done)
+      unregister()
+    })
+
+    it('waits for callback flushers that return a synchronous status', () => {
+      let flushDone
+      const telemetryFlusher = sinon.stub().callsFake(done => {
+        flushDone = done
+        return false
+      })
+      const unregister = registerTelemetryFlusher(telemetryFlusher)
+      const done = sinon.spy()
+
+      try {
+        flushServerlessTelemetry(done)
+
+        sinon.assert.notCalled(done)
+        flushDone()
+        sinon.assert.calledOnce(done)
+      } finally {
+        unregister()
+      }
+    })
+
+    it('bounds configured telemetry flushing', () => {
+      const timeout = sinon.stub(global, 'setTimeout')
+      const clearTimeout = sinon.stub(global, 'clearTimeout')
+      const done = sinon.spy()
+      const unregister = registerTelemetryFlusher(() => {})
+
+      try {
+        flushServerlessTelemetry(done, { timeout: 2_000 })
+
+        sinon.assert.calledWith(timeout, sinon.match.func, 2_000)
+        timeout.firstCall.args[0]()
+        sinon.assert.calledOnce(done)
+        sinon.assert.called(clearTimeout)
+      } finally {
+        unregister()
+        timeout.restore()
+        clearTimeout.restore()
+      }
+    })
+
+    it('does not retain telemetry flushers outside a supported platform', () => {
+      delete process.env.VERCEL
+      const serverless = proxyquire('../src/serverless', {})
+      const flush = proxyquire('../src/flush', { './serverless': serverless })
+      const telemetryFlusher = sinon.stub()
+      const unregister = flush.registerTelemetryFlusher(telemetryFlusher)
+
+      flush.flushServerlessTelemetry(sinon.spy())
+
+      sinon.assert.notCalled(telemetryFlusher)
+      unregister()
+    })
+  })
+
   describe('trace', () => {
     it('should run the callback with a new span', () => {
       tracer.trace('name', {}, span => {
@@ -445,6 +568,23 @@ describe('Tracer', () => {
     it('should log the service discovery warning when log level allows warnings', () => {
       assert.ok(countWarningsAtLevel('warn') >= 1,
         'expected service discovery warning to be emitted at log level warn')
+    })
+  })
+
+  describe('MicroVM service discovery metadata', () => {
+    it('should defer storing metadata while a MicroVM image is being built', () => {
+      const storeConfig = sinon.stub()
+      const PatchedTracer = proxyquire('../src/tracer', {
+        './serverless': {
+          IS_SERVERLESS: true,
+        },
+        './tracer_metadata': storeConfig,
+      })
+
+      // eslint-disable-next-line no-new
+      new PatchedTracer(getConfig({ service: 'service' }))
+
+      sinon.assert.notCalled(storeConfig)
     })
   })
 })

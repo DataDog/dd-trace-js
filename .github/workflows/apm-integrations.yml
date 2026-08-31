@@ -71,6 +71,7 @@ jobs:
       PLUGINS: aerospike
       SERVICES: aerospike
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
+      DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node
@@ -170,6 +171,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/upstream
       - uses: ./.github/actions/plugins/integration-test
+
+  browser-bunyan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: browser-bunyan
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/plugins/test
 
   bullmq:
     runs-on: ubuntu-latest
@@ -486,6 +497,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-express
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
 
   express-mongo-sanitize:
     runs-on: ubuntu-latest
@@ -997,6 +1012,7 @@ jobs:
           - "14.2.35"
           - "15.0.0"
           - "15.4.0"
+          - "15.4.1"
           - "*"
         include:
           - range: "*"

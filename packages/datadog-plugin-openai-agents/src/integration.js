@@ -15,6 +15,9 @@ const { AGENTS_ERROR_TYPE, applyError, deriveSpanName } = require('./util')
 
 const COMPONENT = 'openai-agents'
 const DEFAULT_MODEL_PROVIDER = 'openai'
+// Bounds the agents-core parent-chain walk so a cyclic chain from a future
+// agents-core version can't spin on the span-start hot path.
+const MAX_ANCESTOR_WALK = 32
 const MODEL_BASE_URL_STORE_KEY = Symbol('openai-agents.model-base-url')
 const legacyStorage = storage('legacy')
 
@@ -37,7 +40,18 @@ const KIND_TO_SPAN_KIND = {
  *   metadata?: Record<string, unknown>,
  *   groupId?: string,
  *   llmobsParentStore?: object,
+ *   activeSpanCount: number,
+ *   completionRequested: boolean,
  * }} LLMObsTraceInfo
+ */
+
+/**
+ * @typedef {{
+ *   parentId: string | null,
+ *   traceId?: string,
+ *   activeChildCount: number,
+ *   ended: boolean,
+ * }} UntracedSpanInfo
  */
 
 /**
@@ -49,6 +63,7 @@ class OpenAIAgentsIntegration {
   #tracer
   #config
   #enabled = false
+  #llmobsEnabled = true
   #service
   /**
    * LLMObs is gated independently of APM tracing: when DD_LLMOBS_ENABLED is
@@ -59,6 +74,12 @@ class OpenAIAgentsIntegration {
   #tagger
   /** @type {Map<string, import('../../dd-trace/src/opentracing/span')>} */
   #oaiToDdSpan = new Map()
+  /**
+   * agents-core spans we deliberately don't trace (`task` / `turn`). Ended
+   * nodes stay walkable only while an observed child callback is still active.
+   * @type {Map<string, UntracedSpanInfo>}
+   */
+  #untracedSpans = new Map()
   /** @type {Map<string, LLMObsTraceInfo>} */
   #traceInfo = new Map()
 
@@ -75,19 +96,67 @@ class OpenAIAgentsIntegration {
   /**
    * Apply plugin lifecycle configuration.
    *
-   * @param {{ enabled?: boolean, service?: string }} [config]
+   * @param {{ enabled?: boolean, llmobs?: boolean, service?: string }} [config]
    */
   configure (config) {
     this.#enabled = !!config?.enabled
+    this.#llmobsEnabled = config?.llmobs !== false
     this.#service = config?.service
   }
 
   /**
-   * @param {string} spanId agents-core spanId
+   * Resolve the dd-trace span for an agents-core spanId. When the id belongs to
+   * a span type we don't trace — agents-core >=0.14 runs model calls inside a
+   * `turn` span — the nearest traced ancestor's span is returned so callers
+   * still activate the enclosing agent span.
+   *
+   * @param {string | undefined | null} spanId agents-core spanId
    * @returns {import('../../dd-trace/src/opentracing/span') | undefined}
    */
   getDDSpan (spanId) {
-    return this.#oaiToDdSpan.get(spanId)
+    return this.#oaiToDdSpan.get(this.#nearestTracedAncestorId(spanId))
+  }
+
+  /**
+   * Remember an untraced agents-core span's parent so the chain stays walkable.
+   *
+   * @param {object} oaiSpan
+   */
+  recordUntracedSpan (oaiSpan) {
+    const { spanId } = oaiSpan
+    if (!spanId || this.#untracedSpans.has(spanId)) return
+
+    const parentId = oaiSpan.parentId ?? null
+    this.#untracedSpans.set(spanId, {
+      parentId,
+      traceId: oaiSpan.traceId,
+      activeChildCount: 0,
+      ended: false,
+    })
+    this.#retainUntracedParent(parentId)
+    this.#spanStarted(oaiSpan.traceId)
+  }
+
+  /**
+   * Mark an untraced span callback complete. Its ancestry remains available
+   * until every observed child callback has completed.
+   *
+   * @param {object} oaiSpan
+   */
+  endUntracedSpan (oaiSpan) {
+    const info = this.#untracedSpans.get(oaiSpan.spanId)
+    if (!info || info.ended) return
+
+    // agents-core does not end its trace when the run throws. In 0.14 the
+    // failure can live on the root task before any agent span exists, making
+    // this structural callback the only opportunity to finish the workflow.
+    if (oaiSpan.error && this.#isTopLevelSpan(oaiSpan)) {
+      this.#requestWorkflowCompletion(oaiSpan.traceId, oaiSpan)
+    }
+
+    info.ended = true
+    this.#pruneUntracedSpan(oaiSpan.spanId, info)
+    this.#spanEnded(info.traceId)
   }
 
   /**
@@ -114,6 +183,7 @@ class OpenAIAgentsIntegration {
       ddSpan.finish()
     }
     this.#oaiToDdSpan.clear()
+    this.#untracedSpans.clear()
     this.#traceInfo.clear()
   }
 
@@ -138,53 +208,74 @@ class OpenAIAgentsIntegration {
       groupId: oaiTrace.groupId || undefined,
       metadata: oaiTrace.metadata,
       llmobsParentStore,
+      activeSpanCount: 0,
+      completionRequested: false,
     })
 
-    this.#tagger.registerLLMObsSpan(ddSpan, {
-      kind: 'workflow',
-      name,
-      integration: COMPONENT,
-      parent: llmobsParentStore?.span,
-      sessionId: oaiTrace.groupId || undefined,
-    })
-    if (LLMObsTagger.tagMap.has(ddSpan)) {
-      llmobsStorage.enterWith({ ...llmobsParentStore, span: ddSpan })
+    if (this.#isLLMObsEnabled()) {
+      this.#tagger.registerLLMObsSpan(ddSpan, {
+        kind: 'workflow',
+        name,
+        integration: COMPONENT,
+        parent: llmobsParentStore?.span,
+        sessionId: oaiTrace.groupId || undefined,
+      })
+      if (LLMObsTagger.tagMap.has(ddSpan)) {
+        llmobsStorage.enterWith({ ...llmobsParentStore, span: ddSpan })
+      }
     }
   }
 
   endTrace (oaiTrace) {
-    this.#completeWorkflowSpan(oaiTrace.traceId)
+    this.#requestWorkflowCompletion(oaiTrace.traceId)
   }
 
   /**
-   * Finish the workflow dd-trace span and clear its bookkeeping. Used by both
-   * agents-core's normal `Trace.end()` path and the orphan-recovery path
-   * (when `withTrace` skips its end callback because the body threw). When
-   * `rootAgentSpan` is provided, its `error` field is reflected onto the
-   * workflow span before finishing.
+   * Request workflow completion after all observed span callbacks finish.
+   * Error tags are applied immediately so the agents-core span does not need
+   * to be retained while completion is pending.
    *
    * @param {string | undefined} traceId
-   * @param {object} [rootAgentSpan] - parentless oai-span that ended in error.
+   * @param {object} [rootSpan] - top-level oai-span that ended in error.
    */
-  #completeWorkflowSpan (traceId, rootAgentSpan) {
+  #requestWorkflowCompletion (traceId, rootSpan) {
     if (!traceId) return
     const ddSpan = this.#oaiToDdSpan.get(traceId)
     if (!ddSpan) return
     const info = this.#traceInfo.get(traceId)
 
-    if (rootAgentSpan?.error) {
+    if (rootSpan?.error) {
       ddSpan.setTag('error', true)
       ddSpan.setTag('error.type', AGENTS_ERROR_TYPE)
-      if (rootAgentSpan.error.message) {
-        ddSpan.setTag('error.message', rootAgentSpan.error.message)
+      if (rootSpan.error.message) {
+        ddSpan.setTag('error.message', rootSpan.error.message)
       }
     }
 
+    if (info) {
+      if (!info.completionRequested) {
+        info.completionRequested = true
+        if (LLMObsTagger.tagMap.has(ddSpan)) {
+          llmobsStorage.enterWith(info.llmobsParentStore)
+        }
+      }
+      if (info.activeSpanCount > 0) return
+    }
+
+    this.#completeWorkflowSpan(traceId)
+  }
+
+  /**
+   * Finish the workflow dd-trace span and clear its bookkeeping.
+   *
+   * @param {string} traceId
+   */
+  #completeWorkflowSpan (traceId) {
+    const ddSpan = this.#oaiToDdSpan.get(traceId)
+    if (!ddSpan) return
+
     if (this.#isLLMObsEnabled()) this.#setTraceAttributes(ddSpan, traceId)
     ddSpan.finish()
-    if (info && LLMObsTagger.tagMap.has(ddSpan)) {
-      llmobsStorage.enterWith(info.llmobsParentStore)
-    }
     this.#oaiToDdSpan.delete(traceId)
     this.#traceInfo.delete(traceId)
   }
@@ -204,6 +295,8 @@ class OpenAIAgentsIntegration {
     })
 
     this.#oaiToDdSpan.set(spanId, ddSpan)
+    this.#retainUntracedParent(oaiSpan.parentId)
+    this.#spanStarted(oaiSpan.traceId)
 
     if (this.#isLLMObsEnabled()) {
       const llmobsOptions = {
@@ -230,49 +323,57 @@ class OpenAIAgentsIntegration {
     const ddSpan = this.#oaiToDdSpan.get(spanId)
     if (!ddSpan) return
 
-    applyError(ddSpan, oaiSpan)
+    try {
+      applyError(ddSpan, oaiSpan)
 
-    if (oaiSpan.spanData?.type === 'handoff') {
-      const spanName = deriveSpanName(oaiSpan)
-      ddSpan.setOperationName(spanName)
-      if (this.#isLLMObsEnabled()) this.#tagger.setName(ddSpan, spanName)
-    }
+      if (oaiSpan.spanData?.type === 'handoff') {
+        const spanName = deriveSpanName(oaiSpan)
+        ddSpan.setOperationName(spanName)
+        if (this.#isLLMObsEnabled()) this.#tagger.setName(ddSpan, spanName)
+      }
 
-    if (this.#isLLMObsEnabled()) {
-      const spanData = oaiSpan.spanData
-      switch (spanData?.type) {
-        case 'response':
-          this.#setResponseAttributes(ddSpan, oaiSpan)
-          this.#updateTraceInfoOutput(oaiSpan)
-          break
-        case 'generation':
-          this.#setGenerationAttributes(ddSpan, oaiSpan)
-          this.#updateTraceInfoOutput(oaiSpan)
-          break
-        case 'function':
-          this.#tagger.tagTextIO(ddSpan, spanData.input ?? '', spanData.output ?? '')
-          break
-        case 'handoff':
-          this.#tagger.tagTextIO(ddSpan, spanData.from_agent ?? '', spanData.to_agent ?? '')
-          break
-        case 'agent':
-          this.#setAgentAttributes(ddSpan, oaiSpan)
-          break
-        case 'custom':
-          if (spanData.data && typeof spanData.data === 'object') {
-            this.#tagger.tagMetadata(ddSpan, spanData.data)
-          }
-          break
+      if (this.#isLLMObsEnabled()) {
+        const spanData = oaiSpan.spanData
+        switch (spanData?.type) {
+          case 'response':
+            this.#setResponseAttributes(ddSpan, oaiSpan)
+            this.#updateTraceInfoOutput(oaiSpan)
+            break
+          case 'generation':
+            this.#setGenerationAttributes(ddSpan, oaiSpan)
+            this.#updateTraceInfoOutput(oaiSpan)
+            break
+          case 'function':
+            this.#tagger.tagTextIO(ddSpan, spanData.input ?? '', spanData.output ?? '')
+            break
+          case 'handoff':
+            this.#tagger.tagTextIO(ddSpan, spanData.from_agent ?? '', spanData.to_agent ?? '')
+            break
+          case 'agent':
+            this.#setAgentAttributes(ddSpan, oaiSpan)
+            break
+          case 'custom':
+            if (spanData.data && typeof spanData.data === 'object') {
+              this.#tagger.tagMetadata(ddSpan, spanData.data)
+            }
+            break
+        }
+      }
+
+      // agents-core's withTrace skips Trace.end() when its callback throws, so
+      // an errored top-level span is our last chance to finalize the workflow.
+      if (oaiSpan.error && this.#isTopLevelSpan(oaiSpan)) {
+        this.#requestWorkflowCompletion(oaiSpan.traceId, oaiSpan)
+      }
+    } finally {
+      try {
+        ddSpan.finish()
+      } finally {
+        this.#oaiToDdSpan.delete(spanId)
+        this.#releaseUntracedParent(oaiSpan.parentId)
+        this.#spanEnded(oaiSpan.traceId)
       }
     }
-
-    ddSpan.finish()
-    // agents-core's withTrace skips Trace.end() when its callback throws, so an
-    // errored parentless span is our last chance to finalize the workflow.
-    if (oaiSpan.parentId == null && oaiSpan.error) {
-      this.#completeWorkflowSpan(oaiSpan.traceId, oaiSpan)
-    }
-    this.#oaiToDdSpan.delete(spanId)
   }
 
   // ── Per-type attribute setters ──────────────────────────────────────────────
@@ -360,7 +461,7 @@ class OpenAIAgentsIntegration {
   #llmSpanParentAgentName (oaiSpan) {
     const traceInfo = this.#traceInfo.get(oaiSpan.traceId)
     if (!traceInfo?.currentTopLevelAgentSpanId) return
-    if (oaiSpan.parentId !== traceInfo.currentTopLevelAgentSpanId) return
+    if (!this.#hasUntracedPathToAncestor(oaiSpan.parentId, traceInfo.currentTopLevelAgentSpanId)) return
     return traceInfo.currentTopLevelAgentName
   }
 
@@ -401,6 +502,7 @@ class OpenAIAgentsIntegration {
 
     this.#tagger.tagTextIO(ddSpan, inputValue, outputValue)
 
+    // eslint-disable-next-line no-restricted-syntax -- agents-core builds metadata before the plugin receives it
     if (info.metadata && Object.keys(info.metadata).length > 0) {
       this.#tagger.tagMetadata(ddSpan, info.metadata)
     }
@@ -412,13 +514,12 @@ class OpenAIAgentsIntegration {
     const info = this.#traceInfo.get(oaiSpan.traceId)
     if (!info) return
 
-    const parentId = oaiSpan.parentId
     const type = oaiSpan.spanData?.type
 
     // Identify the first top-level agent span under the root trace and
     // stash its display name so `${agentName} (LLM)` doesn't have to read
     // the dd-trace span context's private fields later.
-    if (type === 'agent' && parentId == null) {
+    if (type === 'agent' && this.#isTopLevelSpan(oaiSpan)) {
       info.currentTopLevelAgentSpanId = oaiSpan.spanId
       info.currentTopLevelAgentName = spanName
     }
@@ -427,9 +528,9 @@ class OpenAIAgentsIntegration {
     // as the workflow-level input source.
     if (
       (type === 'response' || type === 'generation') &&
-      parentId &&
+      info.currentTopLevelAgentSpanId &&
       !info.inputOaiSpan &&
-      parentId === info.currentTopLevelAgentSpanId
+      this.#hasUntracedPathToAncestor(oaiSpan.parentId, info.currentTopLevelAgentSpanId)
     ) {
       info.inputOaiSpan = oaiSpan
     }
@@ -440,9 +541,8 @@ class OpenAIAgentsIntegration {
     if (!info) return
 
     if (
-      oaiSpan.parentId &&
       info.currentTopLevelAgentSpanId &&
-      oaiSpan.parentId === info.currentTopLevelAgentSpanId
+      this.#hasUntracedPathToAncestor(oaiSpan.parentId, info.currentTopLevelAgentSpanId)
     ) {
       info.outputOaiSpan = oaiSpan
     }
@@ -451,16 +551,130 @@ class OpenAIAgentsIntegration {
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   #resolveParent (oaiSpan) {
-    const parentId = oaiSpan.parentId
-    const traceId = oaiSpan.traceId
-    if (parentId) {
-      const parent = this.#oaiToDdSpan.get(parentId)
-      if (parent) return parent
+    return this.getDDSpan(oaiSpan.parentId) ?? this.#oaiToDdSpan.get(oaiSpan.traceId)
+  }
+
+  /**
+   * Walk the agents-core parent chain from `spanId`, skipping spans we don't
+   * trace, and return the first id that maps to a dd-trace span. Returns
+   * `undefined` when the walk reaches the trace root (or a span we never saw),
+   * which callers read as "no traced ancestor".
+   *
+   * @param {string | undefined | null} spanId agents-core spanId to start from
+   * @returns {string | undefined}
+   */
+  #nearestTracedAncestorId (spanId) {
+    let currentId = spanId
+    for (let depth = 0; currentId != null && depth < MAX_ANCESTOR_WALK; depth++) {
+      if (this.#oaiToDdSpan.has(currentId)) return currentId
+      currentId = this.#untracedSpans.get(currentId)?.parentId
     }
-    if (traceId) {
-      const root = this.#oaiToDdSpan.get(traceId)
-      if (root) return root
+  }
+
+  /**
+   * True when `spanId` reaches `ancestorId` through only untraced structural
+   * spans. Unlike #nearestTracedAncestorId, this still recognizes an ancestor
+   * whose dd-trace span has already finished and been removed from the live map.
+   *
+   * @param {string | undefined | null} spanId agents-core spanId to start from
+   * @param {string} ancestorId agents-core ancestor spanId
+   * @returns {boolean}
+   */
+  #hasUntracedPathToAncestor (spanId, ancestorId) {
+    let currentId = spanId
+    for (let depth = 0; currentId != null && depth < MAX_ANCESTOR_WALK; depth++) {
+      if (currentId === ancestorId) return true
+      currentId = this.#untracedSpans.get(currentId)?.parentId
     }
+    return false
+  }
+
+  /**
+   * True when nothing but untraced spans sits between this span and the trace
+   * root. Stricter than `#nearestTracedAncestorId(…) === undefined`, which also
+   * answers "undefined" for a parent we simply never saw — that must not be
+   * mistaken for top-level, or an error would finalize the workflow span early.
+   *
+   * @param {object} oaiSpan
+   * @returns {boolean}
+   */
+  #isTopLevelSpan (oaiSpan) {
+    let currentId = oaiSpan.parentId
+    for (let depth = 0; depth < MAX_ANCESTOR_WALK; depth++) {
+      if (currentId == null) return true
+      const info = this.#untracedSpans.get(currentId)
+      if (!info) return false
+      currentId = info.parentId
+    }
+    return false
+  }
+
+  /**
+   * Keep a structural parent alive until this child callback completes.
+   *
+   * @param {string | undefined | null} parentId
+   */
+  #retainUntracedParent (parentId) {
+    const info = this.#untracedSpans.get(parentId)
+    if (info) info.activeChildCount++
+  }
+
+  /**
+   * Release a structural parent and iteratively prune any ended, childless
+   * ancestors. Each iteration deletes one node, so even a cyclic parent chain
+   * terminates when it reaches the first node it already removed.
+   *
+   * @param {string | undefined | null} parentId
+   */
+  #releaseUntracedParent (parentId) {
+    let currentId = parentId
+    while (currentId != null) {
+      const info = this.#untracedSpans.get(currentId)
+      if (!info || info.activeChildCount === 0) return
+
+      info.activeChildCount--
+      if (!info.ended || info.activeChildCount > 0) return
+
+      this.#untracedSpans.delete(currentId)
+      currentId = info.parentId
+    }
+  }
+
+  /**
+   * Remove an ended structural span once no observed child still needs it.
+   *
+   * @param {string} spanId
+   * @param {UntracedSpanInfo} info
+   */
+  #pruneUntracedSpan (spanId, info) {
+    if (info.activeChildCount > 0) return
+    this.#untracedSpans.delete(spanId)
+    this.#releaseUntracedParent(info.parentId)
+  }
+
+  /**
+   * Count a span callback whose end may arrive after trace completion.
+   *
+   * @param {string | undefined} traceId
+   */
+  #spanStarted (traceId) {
+    const info = this.#traceInfo.get(traceId)
+    if (info) info.activeSpanCount++
+  }
+
+  /**
+   * Release one observed span callback and complete the trace when it becomes
+   * quiescent. Structural ancestry prunes independently with each subtree.
+   *
+   * @param {string | undefined} traceId
+   */
+  #spanEnded (traceId) {
+    const info = this.#traceInfo.get(traceId)
+    if (!info) return
+    if (info.activeSpanCount > 0) info.activeSpanCount--
+    if (info.activeSpanCount > 0) return
+
+    if (info.completionRequested) this.#completeWorkflowSpan(traceId)
   }
 
   /**
@@ -470,7 +684,7 @@ class OpenAIAgentsIntegration {
    * @returns {boolean}
    */
   #isLLMObsEnabled () {
-    return !!this.#config.llmobs?.DD_LLMOBS_ENABLED
+    return this.#llmobsEnabled && !!this.#config.llmobs?.DD_LLMOBS_ENABLED
   }
 
   /**

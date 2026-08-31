@@ -16,10 +16,15 @@ const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
 const { ERROR_MESSAGE, ERROR_STACK } = require('../../packages/dd-trace/src/constants')
 const {
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_NAME,
+  TEST_CODE_COVERAGE_ENABLED,
   TEST_CODE_OWNERS,
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
+  TEST_ITR_SKIPPING_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_IS_RUM_ACTIVE,
@@ -32,6 +37,7 @@ const {
   TEST_PARAMETERS,
   TEST_RETRY_REASON,
   TEST_RETRY_REASON_TYPES,
+  TEST_SKIPPED_BY_ITR,
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_STATUS,
@@ -73,6 +79,7 @@ function getTestByName (tests, name) {
 describe(`vitest@${vitestVersion} Browser Mode`, function () {
   this.timeout(180_000)
 
+  const runtimeEfdSuiteAdmissionIt = isLegacyBrowserProvider ? it.skip : it
   let childProcess
   let cwd
   let receiver
@@ -97,8 +104,9 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     await receiver.stop()
   })
 
-  async function runVitest (testFile, extraEnv = {}, expectedExitCode = 0) {
-    childProcess = exec('./node_modules/.bin/vitest run', {
+  async function runVitest (testFile, extraEnv = {}, expectedExitCode = 0, extraArguments = []) {
+    const cliArguments = extraArguments.length > 0 ? ` ${extraArguments.join(' ')}` : ''
+    childProcess = exec(`./node_modules/.bin/vitest run${cliArguments}`, {
       cwd,
       env: {
         ...getCiVisAgentlessConfig(receiver.port),
@@ -181,6 +189,50 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     const [exitCode] = await Promise.all([
       runVitest('browser-reporting.mjs'),
       payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('handles known test names containing a closing script tag', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-reporting.mjs'
+    receiver.setSettings({ known_tests_enabled: true })
+    receiver.setKnownTests({
+      vitest: {
+        [testSuite]: [
+          'known test containing </script> in its name',
+        ],
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      assert.strictEqual(getTestByName(
+        tests,
+        'vitest browser reporting runs the test body in the browser'
+      ).meta[TEST_STATUS], 'pass')
+      assert.strictEqual(getTestByName(
+        tests,
+        'vitest browser reporting reports skipped browser tests'
+      ).meta[TEST_STATUS], 'skip')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-reporting.mjs', {
+        VITEST_BROWSER_CONNECT_TIMEOUT: '5000',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('handles test commands containing a closing script tag', async () => {
+    const exitCode = await runVitest('browser-reporting.mjs', {
+      VITEST_BROWSER_CONNECT_TIMEOUT: '5000',
+    }, 0, [
+      "--testNamePattern='runs the test body|</script>'",
     ])
 
     assert.strictEqual(exitCode, 0, testOutput)
@@ -483,32 +535,65 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
   })
 
   it('reports mixed Node and browser projects without duplicate events', async () => {
-    const payloadsPromise = gatherEvents(events => {
-      assert.strictEqual(getEventContents(events, 'test_session_end').length, 1)
-      assert.strictEqual(getEventContents(events, 'test_module_end').length, 1)
-      assert.strictEqual(getEventContents(events, 'test_suite_end').length, 2)
-
-      const tests = getEventContents(events, 'test')
-      assert.strictEqual(tests.length, 3)
-
-      const nodeTest = getTestByName(tests, 'keeps Node worker instrumentation active')
-      assert.strictEqual(nodeTest.meta[TEST_STATUS], 'pass')
-      assert.strictEqual(nodeTest.meta[TEST_TYPE], 'test')
-      assert.ok(!(TEST_BROWSER_NAME in nodeTest.meta))
-
-      const browserTest = getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
-      assert.strictEqual(browserTest.meta[TEST_STATUS], 'pass')
-      assert.strictEqual(browserTest.meta[TEST_TYPE], 'browser')
-      assert.strictEqual(browserTest.meta[TEST_BROWSER_NAME], 'chromium')
+    const nodeSuite = 'ci-visibility/vitest-browser-tests/mixed-node.mjs'
+    receiver.setSettings({
+      itr_enabled: true,
+      code_coverage: true,
+      coverage_report_upload_enabled: false,
+      tests_skipping: true,
     })
+    receiver.setSuitesToSkip([{
+      type: 'suite',
+      attributes: { suite: nodeSuite },
+    }])
 
-    const [exitCode] = await Promise.all([
-      runVitest(undefined, {
-        VITEST_BROWSER_MODE: undefined,
-        VITEST_MIXED_BROWSER_MODE: '1',
-      }),
-      payloadsPromise,
-    ])
+    const runPromise = runVitest(undefined, {
+      VITEST_BROWSER_MODE: undefined,
+      VITEST_MIXED_BROWSER_MODE: '1',
+    })
+    const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) =>
+        url === '/api/v2/citestcycle' ||
+        url === '/api/v2/citestcov' ||
+        url === '/api/v2/ci/tests/skippable',
+      payloads => {
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/citestcov'), false)
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), false)
+
+        const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+        const metadata = cyclePayloads.flatMap(({ payload }) => payload.metadata)
+        for (const metadataEntry of metadata) {
+          assert.ok(!(DD_CAPABILITIES_TEST_IMPACT_ANALYSIS in metadataEntry.test))
+        }
+
+        const events = getEvents(cyclePayloads)
+        assert.strictEqual(getEventContents(events, 'test_session_end').length, 1)
+        assert.strictEqual(getEventContents(events, 'test_module_end').length, 1)
+        assert.strictEqual(getEventContents(events, 'test_suite_end').length, 2)
+
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 3)
+
+        const nodeTest = getTestByName(tests, 'keeps Node worker instrumentation active')
+        assert.strictEqual(nodeTest.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(nodeTest.meta[TEST_TYPE], 'test')
+        assert.ok(!(TEST_BROWSER_NAME in nodeTest.meta))
+        assert.ok(!(TEST_SKIPPED_BY_ITR in nodeTest.meta))
+
+        const browserTest = getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
+        assert.strictEqual(browserTest.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(browserTest.meta[TEST_TYPE], 'browser')
+        assert.strictEqual(browserTest.meta[TEST_BROWSER_NAME], 'chromium')
+
+        const [testSession] = getEventContents(events, 'test_session_end')
+        assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+        assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+      },
+      { hardTimeout: 60_000 }
+    )
+
+    const [exitCode] = await Promise.all([runPromise, payloadsPromise])
 
     assert.strictEqual(exitCode, 0, testOutput)
   })
@@ -549,8 +634,10 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
-  if (!isLegacyBrowserProvider) {
-    it('honors object-form retries before quarantining browser failures', async () => {
+  {
+    const objectRetryTest = isLegacyBrowserProvider ? it.skip : it
+
+    objectRetryTest('honors object-form retries before quarantining browser failures', async () => {
       const testSuite = 'ci-visibility/vitest-browser-tests/browser-object-retry-quarantine.mjs'
       receiver.setSettings({
         test_management: {
@@ -592,7 +679,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
-    it('quarantines failures when an object-form retry condition stops retries', async () => {
+    objectRetryTest('quarantines failures when an object-form retry condition stops retries', async () => {
       const testSuite = 'ci-visibility/vitest-browser-tests/browser-conditional-retry-quarantine.mjs'
       receiver.setSettings({
         test_management: {
@@ -660,6 +747,38 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
           assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
         }
       }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-efd.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  runtimeEfdSuiteAdmissionIt('stops browser EFD retries when the new-suite threshold is exceeded', async () => {
+    receiver.setSettings({
+      early_flake_detection: {
+        enabled: true,
+        slow_test_retries: {
+          '5s': 2,
+        },
+        faulty_session_threshold: 0,
+      },
+      known_tests_enabled: true,
+    })
+    receiver.setKnownTests({ vitest: {} })
+
+    const payloadsPromise = gatherEvents(events => {
+      const [testSession] = getEventContents(events, 'test_session_end')
+      assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+      assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 1)
+      assert.strictEqual(tests[0].meta[TEST_IS_NEW], 'true')
+      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
     })
 
     const [exitCode] = await Promise.all([
@@ -800,6 +919,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     ])
 
     assert.strictEqual(exitCode, 0, testOutput)
+    assert.match(testOutput, /Disabled: 1 test skipped\./)
   })
 })
 

@@ -145,7 +145,11 @@ class TestOptimizationHttpCache {
         validationMode: Boolean(this._validationManifestPath),
       })
       const testLevel = options.testLevel || 'suite'
-      logSkippableSuitesResponse(result, testLevel)
+      logSkippableSuitesResponse(
+        result,
+        testLevel,
+        options.isCoverageReportUploadEnabled && options.isLineCoverageSupported !== false
+      )
       const skippableItems = parsedResponse.data.filter(({ type }) => type === testLevel)
       incrementCountMetric(
         testLevel === 'test'

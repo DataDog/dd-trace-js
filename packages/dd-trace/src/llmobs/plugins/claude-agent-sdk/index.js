@@ -8,7 +8,7 @@ const { splitModel } = require('../../../../../datadog-plugin-claude-agent-sdk/s
 const subagentToolIds = new Set()
 
 function normalizeToolOutputString (raw) {
-  const footerIndex = raw.search(/\s*agentId: [^\s]+ \(use SendMessage\b/)
+  const footerIndex = raw.search(/agentId: \S+ \(use SendMessage\b/)
   if (footerIndex === -1) return raw
 
   return raw.slice(0, footerIndex).trimEnd()
@@ -18,12 +18,15 @@ function getToolOutputText (raw) {
   if (raw == null) return
 
   if (Array.isArray(raw)) {
-    const output = []
+    let output = ''
+    let separator = ''
     for (const block of raw) {
       const text = getToolOutputText(block)
-      if (text) output.push(text)
+      if (!text) continue
+      output += separator + text
+      separator = '\n'
     }
-    return output.join('\n') || undefined
+    return output
   }
 
   if (raw.type === 'tool_result') return getToolOutputText(raw.content)

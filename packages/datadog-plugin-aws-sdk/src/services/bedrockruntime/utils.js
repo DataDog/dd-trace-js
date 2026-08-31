@@ -487,16 +487,18 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
   const toolCalls = []
   const toolResults = []
 
-  for (const block of contentBlocks || []) {
-    if (block == null || typeof block !== 'object') continue
-    if (typeof block.text === 'string') {
-      content += block.text
-    } else if (block.toolUse) {
-      toolCalls.push(buildToolCall(block.toolUse))
-    } else if (block.toolResult) {
-      toolResults.push(buildToolResult(block.toolResult))
-    } else {
-      content += `[Unsupported content type: ${getContentBlockType(block)}]`
+  if (contentBlocks) {
+    for (const block of contentBlocks) {
+      if (block == null || typeof block !== 'object') continue
+      if (typeof block.text === 'string') {
+        content += block.text
+      } else if (block.toolUse) {
+        toolCalls.push(buildToolCall(block.toolUse))
+      } else if (block.toolResult) {
+        toolResults.push(buildToolResult(block.toolResult))
+      } else {
+        content += `[Unsupported content type: ${getContentBlockType(block)}]`
+      }
     }
   }
 
@@ -572,14 +574,17 @@ function buildUsage (usage = {}) {
  */
 function extractConverseToolDefinitions (params) {
   const toolDefinitions = []
-  for (const tool of params.toolConfig?.tools || []) {
-    const toolSpec = tool?.toolSpec
-    if (!toolSpec?.name) continue
-    toolDefinitions.push({
-      name: toolSpec.name,
-      description: toolSpec.description ?? '',
-      schema: toolSpec.inputSchema ?? {},
-    })
+  const tools = params.toolConfig?.tools
+  if (tools) {
+    for (const tool of tools) {
+      const toolSpec = tool?.toolSpec
+      if (!toolSpec?.name) continue
+      toolDefinitions.push({
+        name: toolSpec.name,
+        description: toolSpec.description ?? '',
+        schema: toolSpec.inputSchema ?? {},
+      })
+    }
   }
   return toolDefinitions
 }
@@ -593,13 +598,17 @@ function extractConverseToolDefinitions (params) {
  */
 function extractRequestParamsConverse (params) {
   const prompt = []
-  for (const block of params.system || []) {
-    if (typeof block?.text === 'string') prompt.push({ content: block.text, role: 'system' })
+  if (params.system) {
+    for (const block of params.system) {
+      if (typeof block?.text === 'string') prompt.push({ content: block.text, role: 'system' })
+    }
   }
-  for (const msg of params.messages || []) {
-    if (msg == null || typeof msg !== 'object') continue
-    const message = extractMessagesFromConverseContent(msg.role || 'user', msg.content)
-    if (message) prompt.push(message)
+  if (params.messages) {
+    for (const msg of params.messages) {
+      if (msg == null || typeof msg !== 'object') continue
+      const message = extractMessagesFromConverseContent(msg.role || 'user', msg.content)
+      if (message) prompt.push(message)
+    }
   }
 
   const { temperature, topP, maxTokens, stopSequences } = params.inferenceConfig || {}
@@ -632,7 +641,7 @@ function extractTextAndResponseReasonConverse (response) {
  * response, spread across start/delta chunks. We reassemble those chunks
  * into a normalized content-block array and reuse the non-stream extractor.
  *
- * @param {Array<object>} chunks - Ordered ConverseStreamOutput events.
+ * @param {Array<object> | undefined} chunks - Ordered ConverseStreamOutput events.
  * @returns {Generation}
  */
 function extractTextAndResponseReasonConverseFromStream (chunks) {
@@ -641,29 +650,31 @@ function extractTextAndResponseReasonConverseFromStream (chunks) {
   let usage = {}
   const blocksByIdx = new Map()
 
-  for (const chunk of chunks || []) {
-    if (chunk.messageStart?.role) {
-      role = chunk.messageStart.role
-    } else if (chunk.messageStop?.stopReason) {
-      stopReason = chunk.messageStop.stopReason
-    } else if (chunk.metadata?.usage) {
-      usage = chunk.metadata.usage
-    } else if (chunk.contentBlockStart?.start?.toolUse) {
-      const { contentBlockIndex, start: { toolUse } } = chunk.contentBlockStart
-      blocksByIdx.set(contentBlockIndex, {
-        toolUse: { toolUseId: toolUse.toolUseId, name: toolUse.name, inputStr: '' },
-      })
-    } else if (chunk.contentBlockDelta) {
-      const { contentBlockIndex, delta } = chunk.contentBlockDelta
-      if (typeof delta?.text === 'string') {
-        const block = blocksByIdx.get(contentBlockIndex) ?? {}
-        block.text = (block.text ?? '') + delta.text
-        blocksByIdx.set(contentBlockIndex, block)
-      } else if (typeof delta?.toolUse?.input === 'string') {
-        const block = blocksByIdx.get(contentBlockIndex) ?? { toolUse: { inputStr: '' } }
-        block.toolUse ??= { inputStr: '' }
-        block.toolUse.inputStr += delta.toolUse.input
-        blocksByIdx.set(contentBlockIndex, block)
+  if (chunks) {
+    for (const chunk of chunks) {
+      if (chunk.messageStart?.role) {
+        role = chunk.messageStart.role
+      } else if (chunk.messageStop?.stopReason) {
+        stopReason = chunk.messageStop.stopReason
+      } else if (chunk.metadata?.usage) {
+        usage = chunk.metadata.usage
+      } else if (chunk.contentBlockStart?.start?.toolUse) {
+        const { contentBlockIndex, start: { toolUse } } = chunk.contentBlockStart
+        blocksByIdx.set(contentBlockIndex, {
+          toolUse: { toolUseId: toolUse.toolUseId, name: toolUse.name, inputStr: '' },
+        })
+      } else if (chunk.contentBlockDelta) {
+        const { contentBlockIndex, delta } = chunk.contentBlockDelta
+        if (typeof delta?.text === 'string') {
+          const block = blocksByIdx.get(contentBlockIndex) ?? {}
+          block.text = (block.text ?? '') + delta.text
+          blocksByIdx.set(contentBlockIndex, block)
+        } else if (typeof delta?.toolUse?.input === 'string') {
+          const block = blocksByIdx.get(contentBlockIndex) ?? { toolUse: { inputStr: '' } }
+          block.toolUse ??= { inputStr: '' }
+          block.toolUse.inputStr += delta.toolUse.input
+          blocksByIdx.set(contentBlockIndex, block)
+        }
       }
     }
   }

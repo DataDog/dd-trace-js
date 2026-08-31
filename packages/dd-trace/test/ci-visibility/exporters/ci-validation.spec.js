@@ -31,6 +31,25 @@ const { createWindowsFileReferenceFs } = require('../validation-test-helpers')
 
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
 const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
+const IN_MEMORY_DIRECTORY_STAT = {
+  dev: 1n,
+  ino: 1n,
+  isDirectory: () => true,
+  isSymbolicLink: () => false,
+}
+const IN_MEMORY_FILE_STAT = {
+  isFile: () => true,
+  nlink: 1,
+}
+const IN_MEMORY_OUTPUT_FS = {
+  closeSync: () => {},
+  fstatSync: () => IN_MEMORY_FILE_STAT,
+  lstatSync: () => IN_MEMORY_DIRECTORY_STAT,
+  mkdirSync: () => {},
+  openSync: () => 1,
+  renameSync: () => {},
+  writeFileSync: () => {},
+}
 
 describe('CI validation offline output', () => {
   let outputRoot
@@ -230,7 +249,11 @@ describe('CI validation offline output', () => {
   })
 
   it('accepts the last output file and rejects the first file beyond the limit', () => {
-    const sink = new CiValidationSink(outputRoot)
+    const { CiValidationSink: InMemoryCiValidationSink } =
+      proxyquire('../../../src/ci-visibility/exporters/ci-validation/sink', {
+        'node:fs': IN_MEMORY_OUTPUT_FS,
+      })
+    const sink = new InMemoryCiValidationSink(outputRoot)
     const payload = Buffer.from(msgpack.encode({ version: 1, events: [] }))
     for (let index = 0; index <= MAX_OUTPUT_FILES; index++) sink.writeTestCycle(payload)
     sink.writeSummary()

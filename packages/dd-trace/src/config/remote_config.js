@@ -236,7 +236,7 @@ const optionLookupTable = {
 
 const transformers = {
   tracing_sampling_rules (samplingRules) {
-    for (const rule of (samplingRules || [])) {
+    for (const rule of samplingRules) {
       if (rule.tags) {
         const reformattedTags = {}
         for (const tag of rule.tags) {

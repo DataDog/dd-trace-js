@@ -6,6 +6,7 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 
+const { debugChannel } = require('../../src/log/channels')
 const {
   computePathwayHash,
   encodePathwayContext,
@@ -14,6 +15,7 @@ const {
   decodePathwayContextBase64,
   DsmPathwayCodec,
 } = require('../../src/datastreams/pathway')
+const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
 
 describe('encoding', () => {
   it('hash should always give the same value', () => {
@@ -179,6 +181,31 @@ describe('encoding', () => {
     assert.strictEqual(typeof carrier['dd-pathway-ctx-base64'], 'string')
   })
 
+  it('decodes a message that has no carrier while debug logging is active', () => {
+    const subscriber = () => {}
+    debugChannel.subscribe(subscriber)
+
+    try {
+      assert.strictEqual(DsmPathwayCodec.decode(undefined), undefined)
+    } finally {
+      debugChannel.unsubscribe(subscriber)
+    }
+  })
+
+  it('should encode to the JSON field size producers reserve as PATHWAY_FIELD_BYTES', () => {
+    const nowNs = Date.now() * 1e6
+    const ctx = {
+      hash: computePathwayHash('test-service', 'test-env',
+        ['direction:out', 'type:eventbridge'], Buffer.from('0000000000000000', 'hex')),
+      pathwayStartNs: nowNs,
+      edgeStartNs: nowNs,
+    }
+
+    const [key, value] = Object.entries(DsmPathwayCodec.encode(ctx))[0]
+
+    assert.strictEqual(Buffer.byteLength(`,${JSON.stringify(key)}:${JSON.stringify(value)}`), PATHWAY_FIELD_BYTES)
+  })
+
   it('returns undefined when the pathway context has no hash', () => {
     const contextWithoutHash = /** @type {{ hash: Buffer, pathwayStartNs: number, edgeStartNs: number }} */ ({})
 
@@ -199,5 +226,39 @@ describe('encoding', () => {
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 
     assert.strictEqual(decodedCtx.hash.toString(), ctx.hash.toString())
+  })
+
+  it('should resolve a repeated base64 pathway field to the last one', () => {
+    const carrier = {
+      'dd-pathway-ctx-base64': ['pgeYnLTHrPrE58Cfj2LI2cOfj2I=', 'Z7CzXmXArPrE58Cfj2LI2cOfj2I='],
+    }
+
+    const decodedCtx = DsmPathwayCodec.decode(carrier)
+
+    const expectedHash = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
+    assert.strictEqual(decodedCtx.hash.toString(), expectedHash.toString())
+  })
+
+  it('should resolve a repeated deprecated pathway field to the last one', () => {
+    const ctx = {
+      pathwayStartNs: 1685673482722000000,
+      edgeStartNs: 1685673506404000000,
+      hash: computePathwayHash('test-service', 'test-env',
+        ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex')),
+    }
+    const carrier = {
+      'dd-pathway-ctx': ['Z7CzXmXArPrE58Cfj2LI2cOfj2I=', encodePathwayContextBase64(ctx)],
+    }
+
+    const decodedCtx = DsmPathwayCodec.decode(carrier)
+
+    assert.strictEqual(decodedCtx.hash.toString(), ctx.hash.toString())
+    assert.strictEqual(decodedCtx.pathwayStartNs, ctx.pathwayStartNs)
+    assert.strictEqual(decodedCtx.edgeStartNs, ctx.edgeStartNs)
+  })
+
+  it('returns undefined when the carrier has no pathway field', () => {
+    assert.strictEqual(DsmPathwayCodec.decode({}), undefined)
   })
 })

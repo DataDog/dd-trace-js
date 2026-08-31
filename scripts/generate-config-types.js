@@ -253,9 +253,11 @@ function generateEnvVarConfigTypes (supportedConfigurations) {
     const type = getEnvVarType(propertyName, entry)
 
     envVarTypes.set(canonicalName, type)
-    for (const alias of entry.aliases ?? []) {
-      if (!supportedConfigurations[alias] && !envVarTypes.has(alias)) {
-        envVarTypes.set(alias, type)
+    if ((entry.aliases) != null) {
+      for (const alias of entry.aliases) {
+        if (!supportedConfigurations[alias] && !envVarTypes.has(alias)) {
+          envVarTypes.set(alias, type)
+        }
       }
     }
   }

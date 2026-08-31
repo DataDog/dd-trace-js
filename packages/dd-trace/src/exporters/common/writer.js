@@ -8,19 +8,42 @@ const request = require('./request')
 const { safeJSONStringify } = require('./util')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
+const noop = () => {}
 
 class Writer {
-  constructor ({ url, beforeFirstFlush }) {
+  #deliveryTracker
+
+  constructor ({ url, beforeFirstFlush, deliveryTracker }) {
     this._url = url
     this._beforeFirstFlush = beforeFirstFlush
+    this.#deliveryTracker = deliveryTracker
   }
 
   #isFirstFlush = true
 
-  flush (done = () => {}) {
+  /**
+   * Flushes queued telemetry, retaining delivery on supported serverless platforms.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flush (done, options) {
+    if (this.#deliveryTracker) {
+      return this.#deliveryTracker.track(callback => this.flushDirect(callback, options), done)
+    }
+    this.flushDirect(done, options)
+  }
+
+  /**
+   * Flushes queued telemetry without registering serverless delivery retention.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flushDirect (done = noop, options) {
     const count = this._encoder.count()
 
-    if (!request.writable) {
+    if (!request.writable && options?.deadline === undefined) {
       this._encoder.reset()
       done()
     } else if (count > 0) {
@@ -44,23 +67,28 @@ class Writer {
         done()
         return
       }
-      this._sendPayload(payload, count, done)
+      if (options === undefined) {
+        this._sendPayload(payload, count, done)
+      } else {
+        this._sendPayload(payload, count, done, options)
+      }
     } else {
       done()
     }
   }
 
-  append (payload) {
-    if (!request.writable) {
+  append (payload, options) {
+    if (!request.writable && options?.deadline === undefined) {
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
-      return
+      return false
     }
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
 
     this._encode(payload)
+    return true
   }
 
   _encode (payload) {

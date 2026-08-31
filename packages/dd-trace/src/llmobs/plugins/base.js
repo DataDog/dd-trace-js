@@ -84,9 +84,11 @@ class LLMObsPlugin extends TracingPlugin {
   }
 
   configure (config) {
-    // we do not want to enable any LLMObs plugins if it is disabled on the tracer
+    // we do not want to enable any LLMObs plugins if it is disabled on the tracer, or if the
+    // integration opted out via `tracer.use(<name>, { llmobs: false })`. Opting out only disables
+    // the LLMObs layer: the integration keeps emitting APM spans and propagating trace context.
     const llmobsEnabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
-    if (llmobsEnabled === false) {
+    if (llmobsEnabled === false || config?.llmobs === false) {
       config = typeof config === 'boolean' ? false : { ...config, enabled: false } // override to false
     }
     super.configure(config)

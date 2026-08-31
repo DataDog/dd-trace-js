@@ -117,4 +117,17 @@ describe('LLMObsSpanWriter', () => {
     assert.strictEqual(payload[0].event_type, 'span')
     assert.deepStrictEqual(payload[0].spans, events)
   })
+
+  it('marks experiment-scoped payload envelopes', () => {
+    writer = new LLMObsSpanWriter(config)
+
+    const events = [
+      { name: 'experiment-row', _dd: { scope: 'experiments' } },
+    ]
+
+    const payload = writer.makePayload(events)
+
+    assert.strictEqual(payload[0]['_dd.scope'], 'experiments')
+    assert.deepStrictEqual(payload[0].spans, events)
+  })
 })

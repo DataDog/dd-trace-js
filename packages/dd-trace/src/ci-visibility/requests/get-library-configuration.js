@@ -1,8 +1,11 @@
 'use strict'
 
 const getConfig = require('../../config')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const id = require('../../id')
 const log = require('../../log')
+const { EARLY_FLAKE_DETECTION_RETRY_BUCKETS, createEfdRetryPolicy } = require('../efd-retry-policy')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -11,25 +14,23 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
 } = require('../telemetry')
-const { writeSettingsToCache } = require('../test-optimization-cache')
 const { MAX_RETRIES, validateSettingsResponse } = require('../test-optimization-http-cache-schema')
 const request = require('./request')
 
-const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
 const DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES = Object.freeze({
   '5s': 10,
   '10s': 5,
   '30s': 3,
   '5m': 2,
 })
+const DEFAULT_EARLY_FLAKE_DETECTION_RETRY_POLICY =
+  createEfdRetryPolicy(DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES)
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
-const EARLY_FLAKE_DETECTION_RETRY_BUCKETS = Object.keys(DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES)
 
 /**
  * @typedef {object} EarlyFlakeDetectionSettings
  * @property {boolean} enabled
- * @property {number} numRetries
- * @property {Readonly<Record<string, number>>} slowTestRetries
+ * @property {import('../efd-retry-policy').EfdRetryPolicy} retryPolicy
  * @property {number} faultyThreshold
  */
 
@@ -90,20 +91,17 @@ function parseEarlyFlakeDetectionSettings (value, isKnownTestsEnabled) {
   if (!isRecord(value) || value.enabled !== true) {
     return {
       enabled: false,
-      numRetries: DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
-      slowTestRetries: DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES,
+      retryPolicy: DEFAULT_EARLY_FLAKE_DETECTION_RETRY_POLICY,
       faultyThreshold: DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
     }
   }
 
   let isValid = true
-  let numRetries = DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES
-  let slowTestRetries = DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES
+  let retryPolicy = DEFAULT_EARLY_FLAKE_DETECTION_RETRY_POLICY
   if (Object.hasOwn(value, 'slow_test_retries')) {
     const parsedSlowTestRetries = parseSlowTestRetries(value.slow_test_retries)
     if (parsedSlowTestRetries) {
-      slowTestRetries = parsedSlowTestRetries
-      numRetries = parsedSlowTestRetries['5s'] ?? DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES
+      retryPolicy = createEfdRetryPolicy(parsedSlowTestRetries)
     } else {
       isValid = false
     }
@@ -120,8 +118,7 @@ function parseEarlyFlakeDetectionSettings (value, isKnownTestsEnabled) {
 
   return {
     enabled: isKnownTestsEnabled && isValid,
-    numRetries,
-    slowTestRetries,
+    retryPolicy,
     faultyThreshold,
   }
 }
@@ -180,8 +177,7 @@ function parseLibraryConfigurationResponse (rawJson, config = getConfig(), optio
     isItrEnabled: attributes.itr_enabled === true,
     requireGit: attributes.require_git === true,
     isEarlyFlakeDetectionEnabled: earlyFlakeDetection.enabled,
-    earlyFlakeDetectionNumRetries: earlyFlakeDetection.numRetries,
-    earlyFlakeDetectionSlowTestRetries: earlyFlakeDetection.slowTestRetries,
+    earlyFlakeDetectionRetryPolicy: earlyFlakeDetection.retryPolicy,
     earlyFlakeDetectionFaultyThreshold: earlyFlakeDetection.faultyThreshold,
     isFlakyTestRetriesEnabled,
     isDiEnabled: attributes.di_enabled === true && isFlakyTestRetriesEnabled,
@@ -243,8 +239,8 @@ function getLibraryConfiguration ({
   }
 
   if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/libraries/tests/services/setting')
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
   } else {
     if (!config.DD_API_KEY) {
       return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
@@ -288,8 +284,6 @@ function getLibraryConfiguration ({
         const settings = parseLibraryConfigurationResponse(res, config)
 
         incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)
-
-        writeSettingsToCache(settings)
 
         done(null, settings)
       } catch (err) {

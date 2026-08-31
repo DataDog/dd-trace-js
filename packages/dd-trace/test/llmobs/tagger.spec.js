@@ -1058,6 +1058,126 @@ describe('tagger', () => {
           )
         })
       })
+
+      describe('tagging image parts appropriately', () => {
+        it('tags a span with inline base64 and attachment_key image parts', () => {
+          const inputData = [
+            {
+              role: 'user',
+              content: 'what is in this image',
+              imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=' }],
+            },
+          ]
+          const outputData = [
+            {
+              role: 'assistant',
+              content: 'a pixel',
+              imageParts: [{ mimeType: 'image/jpeg', attachmentKey: 'key-123' }],
+            },
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, inputData, outputData)
+          assert.deepStrictEqual(Tagger.tagMap.get(span), {
+            '_ml_obs.meta.input.messages': [
+              {
+                role: 'user',
+                content: 'what is in this image',
+                image_parts: [{ mime_type: 'image/png', content: 'iVBORw0KGgo=' }],
+              },
+            ],
+            '_ml_obs.meta.output.messages': [
+              {
+                role: 'assistant',
+                content: 'a pixel',
+                image_parts: [{ mime_type: 'image/jpeg', attachment_key: 'key-123' }],
+              },
+            ],
+          })
+        })
+
+        it('tags audio and image parts on the same message independently', () => {
+          const inputData = [
+            {
+              role: 'user',
+              content: 'both',
+              audioParts: [{ mimeType: 'audio/wav', content: 'aGVsbG8=' }],
+              imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=' }],
+            },
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, inputData, undefined)
+          assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.input.messages'], [
+            {
+              role: 'user',
+              content: 'both',
+              audio_parts: [{ mime_type: 'audio/wav', content: 'aGVsbG8=' }],
+              image_parts: [{ mime_type: 'image/png', content: 'iVBORw0KGgo=' }],
+            },
+          ])
+        })
+
+        it('throws for a non-object image part', () => {
+          const messages = [{ content: 'a', imageParts: [5] }]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: 'Image part must be an object.' }
+          )
+        })
+
+        it('throws for a missing mimeType', () => {
+          const messages = [{ content: 'a', imageParts: [{ content: 'iVBORw0KGgo=' }] }]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: 'Image part mimeType must be a non-empty string.' }
+          )
+        })
+
+        it('throws when neither content nor attachmentKey is present', () => {
+          const messages = [{ content: 'a', imageParts: [{ mimeType: 'image/png' }] }]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: "Image part must have either 'content' or 'attachmentKey'." }
+          )
+        })
+
+        it('throws when both content and attachmentKey are present', () => {
+          const messages = [
+            { content: 'a', imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=', attachmentKey: 'k' }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: "Image part must have only one of 'content' or 'attachmentKey', not both." }
+          )
+        })
+
+        it('throws with an invalid_io_messages tag for a non-string content', () => {
+          const messages = [{ content: 'a', imageParts: [{ mimeType: 'image/png', content: 5 }] }]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            err =>
+              err.message === 'Image part content must be a base64-encoded string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
+          )
+        })
+
+        it('throws with an invalid_io_messages tag for a non-string attachmentKey', () => {
+          const messages = [{ content: 'a', imageParts: [{ mimeType: 'image/png', attachmentKey: 5 }] }]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            err =>
+              err.message === 'Image part attachmentKey must be a string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
+          )
+        })
+      })
     })
 
     describe('tagEmbeddingIO', () => {

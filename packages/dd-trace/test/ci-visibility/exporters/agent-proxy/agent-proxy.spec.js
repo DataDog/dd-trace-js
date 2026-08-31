@@ -7,6 +7,7 @@ const { describe, it, beforeEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
 const nock = require('nock')
+const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../../../dd-trace/test/setup/core')
@@ -14,6 +15,7 @@ const AgentProxyCiVisibilityExporterBase = require('../../../../src/ci-visibilit
 const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentless/writer')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
+const { FINAL_FLUSH_TIMEOUT } = require('../../../../src/ci-visibility/final-flush')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
 const { clearCache } = require('../../../../src/agent/info')
 const { defaults: { hostname, port } } = require('../../../../src/config/defaults')
@@ -38,6 +40,49 @@ describe('AgentProxyCiVisibilityExporter', () => {
   const queryDelay = 50
   const tags = {}
 
+  function createControlledExporter () {
+    const writers = []
+    let finishAgentInfo
+    let requestOptions
+
+    class Writer {
+      constructor () {
+        this.append = sinon.spy()
+        this.flush = sinon.spy(done => done?.())
+        writers.push(this)
+      }
+    }
+
+    const ControlledExporterBase = proxyquire('../../../../src/ci-visibility/exporters/agent-proxy', {
+      '../../../agent/info': {
+        fetchAgentInfo (agentUrl, callback, options) {
+          finishAgentInfo = callback
+          requestOptions = options
+        },
+      },
+      '../../../exporters/agent/writer': Writer,
+      '../agentless/writer': Writer,
+      '../agentless/coverage-writer': Writer,
+    })
+    class ControlledExporter extends ControlledExporterBase {
+      constructor (config) {
+        super({ testOptimization: {}, ...config })
+      }
+    }
+
+    const exporter = new ControlledExporter({ url, tags })
+    return {
+      exporter,
+      finishAgentInfo (...args) {
+        finishAgentInfo(...args)
+      },
+      getRequestOptions () {
+        return requestOptions
+      },
+      writers,
+    }
+  }
+
   it('should query /info right when it is instantiated', async () => {
     const scope = nock(url)
       .get('/info')
@@ -50,6 +95,142 @@ describe('AgentProxyCiVisibilityExporter', () => {
     assert.notStrictEqual(agentProxyCiVisibilityExporter, null)
     await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
     assert.strictEqual(scope.isDone(), true)
+  })
+
+  it('exports buffered data and flushes it when initialization finishes within the final deadline', async () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const controlled = createControlledExporter()
+      const trace = [{ type: 'test' }]
+      const done = sinon.spy()
+
+      controlled.exporter.export(trace)
+      controlled.exporter.flush(done)
+
+      const requestOptions = controlled.getRequestOptions()
+      assert.strictEqual(requestOptions.signal.aborted, false)
+      assert.strictEqual(requestOptions.deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
+
+      controlled.finishAgentInfo(null, { endpoints: ['/evp_proxy/v2'] })
+      await Promise.resolve()
+
+      assert.strictEqual(controlled.writers.length, 2)
+      sinon.assert.calledOnceWithExactly(controlled.writers[0].append, trace)
+      for (const writer of controlled.writers) {
+        sinon.assert.calledOnce(writer.flush)
+        assert.strictEqual(writer.flush.firstCall.args[1].deadline, requestOptions.deadline)
+      }
+      sinon.assert.calledOnceWithExactly(done, undefined)
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('exports suite events before buffered module and session events after initialization', async () => {
+    const controlled = createControlledExporter()
+    const suiteEvent = { type: 'test_suite_end', span_id: '1' }
+    const moduleAndSessionEvents = [
+      { type: 'test_module_end' },
+      { type: 'test_session_end' },
+    ]
+    const done = sinon.spy()
+
+    controlled.exporter.export([suiteEvent])
+    controlled.exporter.export(moduleAndSessionEvents)
+    controlled.exporter.flush(done)
+
+    controlled.finishAgentInfo(null, { endpoints: ['/evp_proxy/v2'] })
+    await Promise.resolve()
+
+    sinon.assert.calledWithExactly(controlled.writers[0].append.firstCall, [suiteEvent])
+    sinon.assert.calledWithExactly(controlled.writers[0].append.secondCall, moduleAndSessionEvents)
+    sinon.assert.calledOnceWithExactly(done, undefined)
+  })
+
+  it('aborts initialization and uses the fallback writer for later sessions', async () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const controlled = createControlledExporter()
+      const firstDone = sinon.spy()
+      const firstTrace = [{ type: 'test' }]
+      const firstCoverage = { traceId: '1', spanId: '1', files: [] }
+
+      controlled.exporter.export(firstTrace)
+      controlled.exporter.exportCoverage(firstCoverage)
+      controlled.exporter.flush(firstDone)
+      const { signal } = controlled.getRequestOptions()
+
+      clock.tick(FINAL_FLUSH_TIMEOUT)
+
+      assert.strictEqual(signal.aborted, true)
+      assert.strictEqual(signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+      sinon.assert.calledOnceWithExactly(firstDone, signal.reason)
+
+      controlled.finishAgentInfo(signal.reason)
+      await Promise.resolve()
+      clock.tick(100)
+
+      sinon.assert.calledOnce(firstDone)
+      assert.strictEqual(controlled.writers.length, 1)
+      sinon.assert.notCalled(controlled.writers[0].append)
+      assert.deepStrictEqual(controlled.exporter.getUncodedTraces(), [])
+      assert.deepStrictEqual(controlled.exporter._coverageBuffer, [])
+
+      const secondDone = sinon.spy()
+      const secondTrace = [{ type: 'test' }]
+      controlled.exporter.export(secondTrace)
+      controlled.exporter.flush(secondDone)
+
+      sinon.assert.calledOnceWithExactly(controlled.writers[0].append, secondTrace)
+      sinon.assert.calledOnce(controlled.writers[0].flush)
+      sinon.assert.calledOnceWithExactly(secondDone, undefined)
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('keeps overlapping initialization owned by the latest final flush', async () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const controlled = createControlledExporter()
+      const firstDone = sinon.spy()
+      const firstTrace = [{ type: 'test', name: 'first session' }]
+
+      controlled.exporter.export(firstTrace)
+      controlled.exporter.flush(firstDone)
+      const requestOptions = controlled.getRequestOptions()
+
+      clock.tick(FINAL_FLUSH_TIMEOUT / 2)
+
+      const secondDone = sinon.spy()
+      const secondTrace = [{ type: 'test', name: 'second session' }]
+      controlled.exporter.export(secondTrace)
+      controlled.exporter.flush(secondDone)
+
+      assert.strictEqual(requestOptions.deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
+
+      clock.tick(FINAL_FLUSH_TIMEOUT / 2)
+
+      assert.strictEqual(requestOptions.signal.aborted, false)
+      sinon.assert.calledOnce(firstDone)
+      assert.strictEqual(firstDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+      sinon.assert.notCalled(secondDone)
+
+      controlled.finishAgentInfo(new Error('agent info unavailable'))
+      await Promise.resolve()
+
+      assert.strictEqual(controlled.writers.length, 1)
+      sinon.assert.calledWithExactly(controlled.writers[0].append.firstCall, firstTrace)
+      sinon.assert.calledWithExactly(controlled.writers[0].append.secondCall, secondTrace)
+      sinon.assert.calledOnce(controlled.writers[0].flush)
+      sinon.assert.calledOnceWithExactly(secondDone, undefined)
+
+      clock.tick(20_000)
+      sinon.assert.calledOnce(firstDone)
+      sinon.assert.calledOnce(secondDone)
+    } finally {
+      clock.restore()
+    }
   })
 
   it('should store traces and coverages as is until the query to /info is resolved', async () => {

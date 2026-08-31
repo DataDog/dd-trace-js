@@ -53,6 +53,7 @@ const {
   TEST_COMMAND,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { FINAL_FLUSH_TIMEOUT } = require('../../packages/dd-trace/src/ci-visibility/final-flush')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR } = require('../../version')
 const { version: ddTraceVersion } = require('../../package.json')
@@ -66,9 +67,9 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+const esmIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28 ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
-// TODO: add ESM tests
 describe(`jest@${JEST_VERSION} commonJS`, () => {
   let receiver
   let childProcess
@@ -86,9 +87,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
     ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
-    'office-addin-mock',
-    'winston',
+    'bunyan',
     'jest-image-snapshot',
+    'office-addin-mock',
+    'pino',
+    'winston',
   ].filter(Boolean), true)
 
   before(function () {
@@ -1631,6 +1634,291 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  context('winston mocking', () => {
+    it('should allow winston to be mocked and verify createLogger is called', async () => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-mock-bypass-require/winston-mock-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
+    })
+  })
+
+  context('Pino and Bunyan module loading', () => {
+    for (const loggerName of ['pino', 'bunyan']) {
+      for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
+        it(`respects Jest ${resolutionType} for ${loggerName}`, async () => {
+          let testOutput = ''
+          // Ensure the native bypass still defers to Jest when its resolution is customized.
+          const resolutionConfig = resolutionType === 'moduleNameMapper'
+            ? {
+                CONFIG_MODULE_NAME_MAPPER: JSON.stringify({
+                  [`^${loggerName}$`]: '<rootDir>/ci-visibility/jest-mock-bypass-require/mapped-logger.js',
+                }),
+              }
+            : {
+                CONFIG_RESOLVER: '<rootDir>/ci-visibility/jest-mock-bypass-require/logger-resolver.js',
+              }
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                ...resolutionConfig,
+                TEST_LOGGER: loggerName,
+                TESTS_TO_RUN: 'jest-mock-bypass-require/mapped-logger-test',
+                USE_CONFIG_FILE: '1',
+                USE_JEST_RUN: '1',
+              },
+            }
+          )
+          childProcess.stdout.on('data', chunk => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr.on('data', chunk => {
+            testOutput += chunk.toString()
+          })
+
+          const [code] = await once(childProcess, 'exit')
+          assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+        })
+      }
+
+      it(`instruments ${loggerName} after another suite mocks it`, async () => {
+        let testOutput = ''
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+            assert.strictEqual(payloads.length, 1, testOutput)
+
+            const [{ headers, logMessage, url }] = payloads
+            assert.strictEqual(headers['content-type'], 'application/json')
+            assert.strictEqual(headers['dd-api-key'], 'api-key')
+            assert.strictEqual(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`)
+            assert.strictEqual(logMessage.length, 1)
+
+            const [{ dd, msg }] = logMessage
+            assert.strictEqual(msg, 'real logger after mock')
+            assert.strictEqual(dd.service, 'my-service')
+            assert.match(dd.trace_id, /^\d+$/)
+            assert.match(dd.span_id, /^\d+$/)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+              DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+              DD_API_KEY: 'api-key',
+              DD_SERVICE: 'my-service',
+              TEST_LOGGER: loggerName,
+              // Run the mocked suite first to expose bypass state leaking between Jest runtimes.
+              TEST_SEQUENCER: './ci-visibility/jest-mock-bypass-require/test-sequencer.js',
+              TESTS_TO_RUN: `jest-mock-bypass-require/(${loggerName}-mock|z-real-logger)-test`,
+              USE_JEST_RUN: '1',
+            },
+          }
+        )
+        childProcess.stdout.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+
+        const [[code]] = await Promise.all([
+          once(childProcess, 'exit'),
+          logsPromise,
+        ])
+
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+      })
+    }
+  })
+
+  context('ESM logger loading', () => {
+    for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
+      esmIt(`respects Jest ESM ${resolutionType}`, async () => {
+        let testOutput = ''
+        const resolutionConfig = resolutionType === 'moduleNameMapper'
+          ? {
+              CONFIG_MODULE_NAME_MAPPER: JSON.stringify({
+                '^winston$': '<rootDir>/ci-visibility/jest-mock-bypass-require/mapped-logger.js',
+              }),
+            }
+          : {
+              CONFIG_RESOLVER: '<rootDir>/ci-visibility/jest-mock-bypass-require/logger-resolver.js',
+            }
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              ...resolutionConfig,
+              CONFIG_TEST_MATCH: '**/ci-visibility/jest-mock-bypass-require/esm-mapped-logger-test.mjs',
+              NODE_OPTIONS: '-r dd-trace/ci/init --experimental-vm-modules',
+              TEST_LOGGER: 'winston',
+              USE_CONFIG_FILE: '1',
+              USE_JEST_RUN: '1',
+            },
+          }
+        )
+        childProcess.stdout.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+
+        const [code] = await once(childProcess, 'exit')
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+      })
+    }
+
+    esmIt('does not resolve loggers for unrelated CommonJS ESM imports', async () => {
+      let testOutput = ''
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '-r dd-trace/ci/init ' +
+              '--require ./ci-visibility/jest-mock-bypass-require/track-logger-resolution.js ' +
+              '--experimental-vm-modules',
+            TESTS_TO_RUN: 'jest-mock-bypass-require/esm-unrelated-cjs-test.mjs',
+            USE_JEST_RUN: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.doesNotMatch(testOutput, /\[unexpected logger resolution\]/)
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
+    esmIt('instruments a statically imported logger through a renamed symlink', async () => {
+      const loggerModulePath = path.join(cwd, 'node_modules', 'winston')
+      const linkedLoggerPath = path.join(cwd, 'linked-logger')
+      const linkedLoggerModulePath = path.join(linkedLoggerPath, 'node_modules', 'winston')
+      const linkedLoggerIndexPath = path.join(linkedLoggerPath, 'index.js')
+      const linkedLoggerPackagePath = path.join(linkedLoggerPath, 'package.json')
+      fs.mkdirSync(path.dirname(linkedLoggerModulePath), { recursive: true })
+      fs.renameSync(loggerModulePath, linkedLoggerModulePath)
+      fs.writeFileSync(linkedLoggerIndexPath, "module.exports = require('./node_modules/winston')\n")
+      fs.writeFileSync(linkedLoggerPackagePath, '{"name":"winston","main":"index.js"}\n')
+
+      try {
+        fs.symlinkSync(linkedLoggerPath, loggerModulePath, 'junction')
+        assert.strictEqual(fs.realpathSync(loggerModulePath), fs.realpathSync(linkedLoggerPath))
+
+        let testOutput = ''
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+            assert.strictEqual(payloads.length, 1, testOutput)
+
+            const [{ headers, logMessage, url }] = payloads
+            assert.strictEqual(headers['content-type'], 'application/json')
+            assert.strictEqual(headers['dd-api-key'], 'api-key')
+            assert.strictEqual(url, '/api/v2/logs?ddsource=winston&service=my-service')
+            assert.strictEqual(logMessage.length, 1)
+
+            const [{ dd, message }] = logMessage
+            assert.strictEqual(message, 'linked logger')
+            assert.strictEqual(dd.service, 'my-service')
+            assert.match(dd.trace_id, /^\d+$/)
+            assert.match(dd.span_id, /^\d+$/)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+              DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+              DD_API_KEY: 'api-key',
+              DD_SERVICE: 'my-service',
+              NODE_OPTIONS: '-r dd-trace/ci/init --experimental-vm-modules',
+              TESTS_TO_RUN: 'jest-mock-bypass-require/esm-linked-logger-test.mjs',
+              USE_JEST_RUN: '1',
+            },
+          }
+        )
+        childProcess.stdout.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+
+        const [[code]] = await Promise.all([
+          once(childProcess, 'exit'),
+          logsPromise,
+        ])
+
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+      } finally {
+        if (fs.existsSync(loggerModulePath)) fs.unlinkSync(loggerModulePath)
+        fs.renameSync(linkedLoggerModulePath, loggerModulePath)
+        fs.unlinkSync(linkedLoggerIndexPath)
+        fs.unlinkSync(linkedLoggerPackagePath)
+        fs.rmdirSync(path.join(linkedLoggerPath, 'node_modules'))
+        fs.rmdirSync(linkedLoggerPath)
+      }
+    })
+
+    for (const loggerName of ['winston', 'pino', 'bunyan']) {
+      esmIt(`respects Jest ESM mocks for ${loggerName}`, async () => {
+        let testOutput = ''
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '-r dd-trace/ci/init --experimental-vm-modules',
+              TEST_LOGGER: loggerName,
+              TESTS_TO_RUN: 'jest-mock-bypass-require/esm-mock-test.mjs',
+              USE_JEST_RUN: '1',
+            },
+          }
+        )
+        childProcess.stdout.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+
+        const [code] = await once(childProcess, 'exit')
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+      })
+    }
+  })
+
   context('when using off timing imports', () => {
     onlyLatestIt('reports test suite errors when waitForUnhandledRejections=true', async () => {
       const eventsPromise = receiver
@@ -1909,9 +2197,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     assert.strictEqual(childProcess.exitCode, 1)
   })
 
-  it('does not hang if server is not available and logs an error', (done) => {
+  it('bounds the final flush if the server is not available and logs an error', async function () {
+    this.timeout(FINAL_FLUSH_TIMEOUT + 20_000)
     // Very slow intake
-    receiver.setWaitingTime(30000)
+    receiver.setWaitingTime(FINAL_FLUSH_TIMEOUT + 30_000)
     // Needs to run with the CLI if we want --forceExit to work
     childProcess = exec(
       'node ./node_modules/jest/bin/jest --config config-jest.js --forceExit',
@@ -1924,17 +2213,72 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
       }
     )
-    childProcess.on('exit', () => {
-      assert.match(testOutput, /Jest's '--forceExit' flag has been passed/)
-      assert.match(testOutput, /Timeout waiting for the tracer to flush/)
-      done()
-    })
     childProcess.stdout?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
     childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      once(childProcess.stdout, 'end'),
+      once(childProcess.stderr, 'end'),
+    ])
+
+    assert.match(testOutput, /Jest's '--forceExit' flag has been passed/)
+    assert.match(testOutput, /Error flushing Test Optimization data/)
+  })
+
+  it('reports the session when a custom reporter rejects runCLI', async function () {
+    this.timeout(20_000)
+    childProcess = exec(
+      'node ./node_modules/jest/bin/jest --config config-jest.js',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          CONFIG_TEST_MATCH: '**/ci-visibility/test/ci-visibility-test.js',
+          JEST_THROWING_REPORTER: '1',
+        },
+      }
+    )
+
+    const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end')?.content
+        const testModule = events.find(event => event.type === 'test_module_end')?.content
+        const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        assert.ok(testSession)
+        assert.ok(testModule)
+        assert.strictEqual(testSuites.length, 1)
+        assert.strictEqual(tests.length, 1)
+
+        const [testSuite] = testSuites
+        for (const event of [testSession, testModule]) {
+          assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(event.error, 1)
+          assert.match(event.meta[ERROR_MESSAGE], /custom reporter failed/)
+        }
+        assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(testSuite.test_session_id.toString(), testSession.test_session_id.toString())
+        assert.strictEqual(testSuite.test_module_id.toString(), testModule.test_module_id.toString())
+        assert.strictEqual(tests[0].test_suite_id.toString(), testSuite.test_suite_id.toString())
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      receiverPromise,
+    ])
+
+    assert.notStrictEqual(exitCode, 0)
   })
 
   it('grabs the jest displayName config and sets tag in tests and suites', (done) => {

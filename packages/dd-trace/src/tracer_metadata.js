@@ -2,6 +2,13 @@
 
 const tracerVersion = require('../../../version').VERSION
 
+// Service discovery reads this metadata after tracer initialization; retaining the handle keeps
+// the backing memfd open for the process lifetime.
+let metadataHandle
+
+/**
+ * @param {import('./config/config-base')} config
+ */
 function storeConfig (config) {
   try {
     // Load binding first to not import other modules if it throws
@@ -18,6 +25,18 @@ function storeConfig (config) {
       ? (processTags.serialized || null)
       : null
 
+    // OTEP-4947 thread-context writer metadata, published as part of the
+    // OTel process context so an out-of-process reader can decode the
+    // on-wire record: the attribute key map (libdatadog prepends the
+    // implicit `datadog.local_root_span_id` at wire index 0, so we only
+    // supply our own additional keys), the schema-version string, and
+    // the V8 layout constants the reader needs. Gated on the same config
+    // flag that activates the writer; undefined when off or when
+    // @datadog/pprof isn't installed to provide the values.
+    const threadlocalMetadata = config.DD_TRACE_OTEL_CTX_ENABLED
+      ? require('./otel-thread-ctx').getThreadLocalMetadata()
+      : undefined
+
     const metadata = new processDiscovery.TracerMetadata(
       config.tags['runtime-id'],
       tracerVersion,
@@ -26,10 +45,12 @@ function storeConfig (config) {
       config.env || null,
       config.version || null,
       processTagsSerialized,
-      containerId || null
+      containerId || null,
+      threadlocalMetadata
     )
 
-    return processDiscovery.storeMetadata(metadata)
+    metadataHandle = processDiscovery.storeMetadata(metadata)
+    return metadataHandle
   } catch {
     // Either libdatadog or process-discovery is unavailable.
   }

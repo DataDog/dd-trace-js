@@ -4,8 +4,10 @@ const { readFileSync } = require('node:fs')
 const { extname } = require('node:path')
 
 const getConfig = require('../../config')
-const request = require('../../exporters/common/request')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const log = require('../../log')
+const request = require('../exporters/request')
 
 const UPLOAD_TIMEOUT_MS = 30_000
 const TEST_SCREENSHOT_ENDPOINT_PREFIX = '/api/v2/ci/test-runs/'
@@ -74,10 +76,12 @@ function toIdempotencyQueryValue (idempotencyKey) {
  * @param {URL} options.url - The base URL for the screenshot upload
  * @param {boolean} [options.isEvpProxy] - Whether to upload through the Agent's evp_proxy
  * @param {string} [options.evpProxyPrefix] - The evp_proxy path prefix (e.g. '/evp_proxy/v4')
+ * @param {number} [options.deadline] - Absolute finalization deadline in epoch milliseconds
+ * @param {AbortSignal} [options.signal] - Signal used to cancel the upload
  * @param {Function} callback - Callback function (err)
  */
 function uploadTestScreenshot (
-  { filePath, traceId, idempotencyKey, capturedAtMs, url, isEvpProxy, evpProxyPrefix },
+  { filePath, traceId, idempotencyKey, capturedAtMs, url, isEvpProxy, evpProxyPrefix, deadline, signal },
   callback
 ) {
   const { DD_API_KEY } = getConfig()
@@ -125,13 +129,16 @@ function uploadTestScreenshot (
     path: `${basePath}?${query}`,
     timeout: UPLOAD_TIMEOUT_MS,
     url,
+    deadline,
+    retryUntilDeadline: false,
+    signal,
   }
 
   if (isEvpProxy) {
     // Agent mode: prefix the evp_proxy path, tell the proxy which subdomain to forward to, and
     // drop the API key — the Agent injects it. The query params survive the proxy.
-    options.path = `${evpProxyPrefix}${basePath}?${query}`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = `${joinEVPProxyPath(evpProxyPrefix, basePath)}?${query}`
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
   } else {
     options.headers['DD-API-KEY'] = DD_API_KEY
   }

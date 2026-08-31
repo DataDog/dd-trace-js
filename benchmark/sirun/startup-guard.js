@@ -26,7 +26,7 @@ let statsd
 function loopStart () {
   loopStartedAt = process.hrtime.bigint()
   if (process.env.SIRUN_READY_FD) {
-    require('fs').writeSync(parseInt(process.env.SIRUN_READY_FD), 'x')
+    require('fs').writeSync(parseInt(process.env.SIRUN_READY_FD, 10), 'x')
   } else {
     process.stderr.write('startup-guard: SIRUN_READY_FD is not set, startup time will be included in measurements\n')
   }

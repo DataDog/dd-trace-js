@@ -8,14 +8,16 @@ const process = require('process')
 const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
 const log = require('../log')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
-const { createMetricsClient } = require('./client')
+const { createMetricsClient, subscribeToIdentityRefresh } = require('./client')
 
 const eventLoopDelayResolution = 4
-const EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 || (NODE_MAJOR === 26 && NODE_MINOR >= 5)
+const EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 ||
+  (NODE_MAJOR === 26 && NODE_MINOR >= 5) ||
+  (NODE_MAJOR === 24 && NODE_MINOR >= 19)
 
 // @datadog/native-metrics is only needed on Node versions where
 // monitorEventLoopDelay's samplePerIteration option is unavailable.
-// TODO: remove @datadog/native-metrics and this branch once Node < 26.5 is no longer supported.
+// TODO: remove @datadog/native-metrics and this branch once all supported Node versions provide this option.
 const NATIVE_METRICS_REQUIRED = !EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE
 
 let nativeMetrics = null
@@ -25,6 +27,8 @@ let client = null
 let lastTime = 0
 let lastCpuUsage = null
 let eventLoopDelayObserver = null
+let capture = null
+let unsubscribeIdentityRefresh = null
 
 // !!!!!!!!!!!
 //  IMPORTANT
@@ -46,6 +50,7 @@ module.exports = {
     const trackGc = config.runtimeMetrics.gc !== false
 
     client = createMetricsClient(config)
+    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config)
 
     if (trackGc) {
       startGCObserver()
@@ -74,11 +79,10 @@ module.exports = {
     lastTime = performance.now()
 
     if (nativeMetrics) {
-      interval = setInterval(() => {
+      capture = () => {
         captureNativeMetrics(trackEventLoop, trackGc)
         captureCommonMetrics(trackEventLoop)
-        client.flush()
-      }, flushIntervalMs)
+      }
     } else {
       lastCpuUsage = process.cpuUsage()
 
@@ -90,16 +94,20 @@ module.exports = {
         eventLoopDelayObserver.enable()
       }
 
-      interval = setInterval(() => {
+      capture = () => {
         captureCpuUsage()
         captureCommonMetrics(trackEventLoop)
         captureHeapSpace()
         if (trackEventLoop) {
           captureEventLoopDelay()
         }
-        client.flush()
-      }, flushIntervalMs)
+      }
     }
+
+    interval = setInterval(() => {
+      capture()
+      client.flush()
+    }, flushIntervalMs)
 
     interval.unref?.()
   },
@@ -111,7 +119,10 @@ module.exports = {
     clearInterval(interval)
     interval = null
 
+    unsubscribeIdentityRefresh?.()
+    unsubscribeIdentityRefresh = null
     client = null
+    capture = null
     lastCpuUsage = null
 
     gcObserver?.disconnect()
@@ -155,6 +166,12 @@ module.exports = {
 
   decrement (name, tag) {
     this.count(name, -1, tag)
+  },
+
+  flush (done) {
+    if (!client) return done?.()
+    capture?.()
+    client.flush(done)
   },
 }
 

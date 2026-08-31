@@ -7,9 +7,24 @@ const routerMountPaths = new WeakMap() // to track mount paths for router instan
 const layerMeta = new WeakMap() // per-layer middleware dispatch metadata (resolved name + route matchers)
 const appMountedRouters = new WeakSet() // to track routers mounted via app.use()
 
+/**
+ * @typedef {object} LayerMeta
+ * @property {string} [name]
+ * @property {string} [captureRoute]
+ * @property {boolean} [needMultiMatch]
+ * @property {Array<{ path?: string, regex?: RegExp }> & {
+ *   hasStarPath?: boolean,
+ *   hasSlashPath?: boolean
+ * }} [matchers]
+ */
+
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
 
 const routeAddedChannel = channel('apm:express:route:added')
+
+/**
+ * @typedef {{ stack?: Array<{ route?: unknown, handle?: ExpressRouter }> }} ExpressRouter
+ */
 
 /**
  * Joins two URL path segments into a single path
@@ -57,12 +72,14 @@ function collectRoutesFromRouter (router, prefix) {
       const fullPaths = getRouteFullPaths(route, prefix)
 
       for (const fullPath of fullPaths) {
-        for (const [method, enabled] of Object.entries(route.methods || {})) {
-          if (!enabled) continue
-          routeAddedChannel.publish({
-            method: normalizeMethodName(method),
-            path: fullPath,
-          })
+        if (route.methods) {
+          for (const [method, enabled] of Object.entries(route.methods)) {
+            if (!enabled) continue
+            routeAddedChannel.publish({
+              method: normalizeMethodName(method),
+              path: fullPath,
+            })
+          }
         }
       }
     } else if (layer.handle?.stack?.length) {
@@ -121,10 +138,19 @@ function getRouterMountPaths (router) {
   return [...paths]
 }
 
+/**
+ * @param {object} layer
+ * @param {LayerMeta} meta
+ * @returns {void}
+ */
 function setLayerMeta (layer, meta) {
   layerMeta.set(layer, meta)
 }
 
+/**
+ * @param {object} layer
+ * @returns {LayerMeta | undefined}
+ */
 function getLayerMeta (layer) {
   return layerMeta.get(layer)
 }
@@ -157,6 +183,8 @@ function isAppMounted (router) {
  * Express accepts strings, regex, arrays (possibly nested), or
  * no mount path at all; this helper returns the flattened set of paths along
  * with the index where actual middleware arguments start.
+ *
+ * @param {unknown} path First `use()` argument, which may be a mount path or already a middleware.
  */
 function extractMountPaths (path) {
   const hasMount = typeof path === 'string' || path instanceof RegExp || Array.isArray(path)
@@ -174,6 +202,9 @@ function extractMountPaths (path) {
 
 /**
  * Detect cycle router graphs.
+ *
+ * @param {ExpressRouter | undefined} router
+ * @param {Set<ExpressRouter>} [stack]
  */
 function hasRouterCycle (router, stack = new Set()) {
   if (!router?.stack?.length) return false

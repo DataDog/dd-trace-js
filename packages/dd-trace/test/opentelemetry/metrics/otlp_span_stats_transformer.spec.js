@@ -10,7 +10,7 @@ const { EXPLICIT_BOUNDS_SECONDS } = OtlpStatsTransformer
 const { SpanBuckets } = require('../../../src/span_stats')
 const { getProtobufTypes } = require('../../../src/opentelemetry/otlp/protobuf_loader')
 const { HTTP_STATUS_CODE, HTTP_METHOD, HTTP_ROUTE, SPAN_KIND, GRPC_STATUS_CODE } = require('../../../../../ext/tags')
-const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../../../src/constants')
+const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('../../../src/constants')
 
 const METRIC_NAME = 'traces.span.sdk.metrics.duration'
 const RESOURCE_ATTRS = {
@@ -20,7 +20,6 @@ const RESOURCE_ATTRS = {
   'service.version': '1.2.3',
   'deployment.environment.name': 'test',
 }
-const DEFAULT_SERVICE = 'svc'
 const BUCKET_SIZE_NS = 10 * 1e9
 
 function makeSpan (overrides = {}) {
@@ -42,16 +41,16 @@ function makeTopLevelSpan (overrides = {}) {
   return makeSpan({ metrics: { [TOP_LEVEL_KEY]: 1 }, ...overrides })
 }
 
-function makeBucket (spans) {
-  const bucket = new SpanBuckets()
+function makeBucket (spans, includeTraceRoot) {
+  const bucket = new SpanBuckets(includeTraceRoot)
   for (const span of spans) {
     bucket.forSpan(span).record(span)
   }
   return bucket
 }
 
-function makeDrained (timeNs, spans) {
-  return [{ timeNs, bucket: makeBucket(spans) }]
+function makeDrained (timeNs, spans, includeTraceRoot) {
+  return [{ timeNs, bucket: makeBucket(spans, includeTraceRoot) }]
 }
 
 /**
@@ -77,11 +76,11 @@ describe('OtlpStatsTransformer', () => {
     ({ protoMetricsService, protoAggregationTemporality } = getProtobufTypes())
   })
 
-  describe('JSON format (default mode)', () => {
+  describe('JSON format', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', false, DEFAULT_SERVICE)
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json')
     })
 
     it('emits a single histogram metric with the correct name, unit and temporality', () => {
@@ -97,6 +96,7 @@ describe('OtlpStatsTransformer', () => {
 
     it('maps span dimensions to OTel and dd.* data-point attributes', () => {
       const span = makeSpan({
+        parent_id: { equals: () => true },
         meta: {
           [HTTP_STATUS_CODE]: 404,
           [HTTP_METHOD]: 'POST',
@@ -104,22 +104,104 @@ describe('OtlpStatsTransformer', () => {
           [SPAN_KIND]: 'server',
           [GRPC_STATUS_CODE]: 'OK',
           [ORIGIN_KEY]: 'synthetics',
+          [SVC_SRC_KEY]: 'integration',
         },
       })
-      const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
+      const payload = JSON.parse(transformer.transform(
+        makeDrained(12340000000000, [span], true),
+        BUCKET_SIZE_NS
+      ))
+      const dataPoint = dataPointsOf(payload)[0]
 
-      assert.deepStrictEqual(attrMapOf(dataPointsOf(payload)[0]), {
+      assert.deepStrictEqual(attrMapOf(dataPoint), {
         'span.name': 'GET /foo',
-        'span.kind': 'server',
+        'service.name': 'svc',
+        'span.kind': 'SPAN_KIND_SERVER',
         'http.response.status_code': 404,
         'http.request.method': 'POST',
         'http.route': '/users/:id',
         'rpc.response.status_code': 'OK',
+        'status.code': 'STATUS_CODE_OK',
         'datadog.operation.name': 'test.op',
         'datadog.span.type': 'web',
         'datadog.origin': 'synthetics',
+        'datadog.svc_src': 'integration',
         'datadog.span.top_level': false,
+        'datadog.is_trace_root': true,
       })
+      assert.deepStrictEqual(
+        dataPoint.attributes.filter(({ key }) => key === 'datadog.span.top_level' || key === 'datadog.is_trace_root'),
+        [
+          { key: 'datadog.is_trace_root', value: { boolValue: true } },
+          { key: 'datadog.span.top_level', value: { boolValue: false } },
+        ]
+      )
+    })
+
+    it('coalesces span.kind aliases that map to the same exported attribute', () => {
+      const spans = [
+        makeSpan({ meta: { [SPAN_KIND]: 'server' } }),
+        makeSpan({ meta: { [SPAN_KIND]: 'SPAN_KIND_SERVER' } }),
+      ]
+      const drained = makeDrained(12340000000000, spans)
+      assert.strictEqual(drained[0].bucket.size, 2)
+
+      const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
+      const points = dataPointsOf(payload)
+
+      assert.strictEqual(points.length, 1)
+      assert.strictEqual(points[0].count, 2)
+      assert.strictEqual(attrMapOf(points[0])['span.kind'], 'SPAN_KIND_SERVER')
+    })
+
+    it('defaults missing and unknown span.kind values to SPAN_KIND_INTERNAL', () => {
+      const spans = [
+        makeSpan(),
+        makeSpan({ meta: { [HTTP_STATUS_CODE]: 200, [SPAN_KIND]: 'unknown' } }),
+        makeSpan({ meta: { [HTTP_STATUS_CODE]: 200, [SPAN_KIND]: 'SPAN_KIND_UNSPECIFIED' } }),
+        makeSpan({ meta: { [HTTP_STATUS_CODE]: 200, [SPAN_KIND]: 'toString' } }),
+        makeSpan({ meta: { [HTTP_STATUS_CODE]: 200, [SPAN_KIND]: 'constructor' } }),
+      ]
+      const drained = makeDrained(12340000000000, spans)
+      assert.strictEqual(drained[0].bucket.size, 5)
+
+      const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
+      const points = dataPointsOf(payload)
+
+      assert.strictEqual(points.length, 1)
+      assert.strictEqual(points[0].count, 5)
+      assert.strictEqual(attrMapOf(points[0])['span.kind'], 'SPAN_KIND_INTERNAL')
+    })
+
+    it('keeps root and non-root distributions separate when datadog.is_trace_root is exported', () => {
+      const spans = [
+        makeSpan({ parent_id: { equals: () => true } }),
+        makeSpan({ parent_id: { equals: () => false } }),
+      ]
+      const payload = JSON.parse(transformer.transform(
+        makeDrained(12340000000000, spans, true),
+        BUCKET_SIZE_NS
+      ))
+      const points = dataPointsOf(payload)
+
+      assert.strictEqual(points.length, 2)
+      assert.deepStrictEqual(points.map(point =>
+        point.attributes.find(({ key }) => key === 'datadog.is_trace_root').value
+      ), [{ boolValue: true }, { boolValue: false }])
+    })
+
+    it('omits datadog.is_trace_root when its value is unknown', () => {
+      const drained = makeDrained(12340000000000, [makeSpan()], true)
+
+      const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
+
+      assert.ok(!dataPointsOf(payload)[0].attributes.some(({ key }) => key === 'datadog.is_trace_root'))
+    })
+
+    it('omits datadog.svc_src when service source is empty', () => {
+      const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [makeSpan()]), BUCKET_SIZE_NS))
+
+      assert.ok(!dataPointsOf(payload)[0].attributes.some(({ key }) => key === 'datadog.svc_src'))
     })
 
     it('emits the raw grpc.status.code name upper-cased as rpc.response.status_code', () => {
@@ -136,15 +218,22 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], 'UNAVAILABLE')
     })
 
-    it('omits optional attributes when not present on the span', () => {
+    it('omits optional dimensions when not present on the span', () => {
       const payload = JSON.parse(
-        transformer.transform(makeDrained(12340000000000, [makeSpan({ meta: {} })]), BUCKET_SIZE_NS)
+        transformer.transform(makeDrained(12340000000000, [makeSpan({ type: '', meta: {} })]), BUCKET_SIZE_NS)
       )
-      const keys = dataPointsOf(payload)[0].attributes.map(a => a.key)
+      const attrs = attrMapOf(dataPointsOf(payload)[0])
 
-      for (const key of ['http.response.status_code', 'http.request.method', 'http.route', 'span.kind']) {
-        assert.ok(!keys.includes(key), `${key} should be omitted`)
+      for (const key of [
+        'http.response.status_code',
+        'http.request.method',
+        'http.route',
+        'datadog.span.type',
+        'datadog.svc_src',
+      ]) {
+        assert.ok(!(key in attrs), `${key} should be omitted`)
       }
+      assert.strictEqual(attrs['span.kind'], 'SPAN_KIND_INTERNAL')
     })
 
     it('converts duration to seconds with fixed bounds and a sketch-derived distribution', () => {
@@ -162,14 +251,14 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dp.bucketCounts.filter(c => c > 0).length, 2)
     })
 
-    it('marks error data points with status.code=ERROR and ok data points without it', () => {
+    it('marks error data points with status.code=STATUS_CODE_ERROR and ok data points with STATUS_CODE_OK', () => {
       const spans = [makeTopLevelSpan(), makeTopLevelSpan({ error: 1 })]
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS))
       const points = dataPointsOf(payload)
 
-      const ok = points.find(dp => attrMapOf(dp)['datadog.span.top_level'] === true && !attrMapOf(dp)['status.code'])
-      const err = points.find(dp => attrMapOf(dp)['status.code'] === 2)
-      assert.ok(ok, 'ok data point should carry no status.code')
+      const ok = points.find(dp => attrMapOf(dp)['status.code'] === 'STATUS_CODE_OK')
+      const err = points.find(dp => attrMapOf(dp)['status.code'] === 'STATUS_CODE_ERROR')
+      assert.ok(ok, 'ok data point should carry status.code=STATUS_CODE_OK')
       assert.strictEqual(attrMapOf(err)['datadog.span.top_level'], true)
     })
 
@@ -179,8 +268,8 @@ describe('OtlpStatsTransformer', () => {
       const points = dataPointsOf(payload)
 
       assert.strictEqual(points.length, 2)
-      const ok = points.find(dp => !attrMapOf(dp)['status.code'])
-      const err = points.find(dp => attrMapOf(dp)['status.code'] === 2)
+      const ok = points.find(dp => attrMapOf(dp)['status.code'] === 'STATUS_CODE_OK')
+      const err = points.find(dp => attrMapOf(dp)['status.code'] === 'STATUS_CODE_ERROR')
       assert.strictEqual(ok.count, 2)
       assert.strictEqual(err.count, 1)
       assert.strictEqual(attrMapOf(ok)['datadog.span.top_level'], true)
@@ -221,7 +310,21 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(resourceAttrs['deployment.environment.name'], 'test')
     })
 
-    it('emits a single scopeMetrics and tags data points whose service differs from the default', () => {
+    it('replaces cached resource attributes', () => {
+      const localTransformer = new OtlpStatsTransformer({ 'datadog.runtime_id': 'initial-id' }, 'http/json')
+
+      localTransformer.updateResourceAttributes({ 'datadog.runtime_id': 'refreshed-id' })
+
+      const payload = JSON.parse(
+        localTransformer.transform(makeDrained(12340000000000, [makeSpan()]), BUCKET_SIZE_NS)
+      )
+      assert.deepStrictEqual(payload.resourceMetrics[0].resource.attributes, [{
+        key: 'datadog.runtime_id',
+        value: { stringValue: 'refreshed-id' },
+      }])
+    })
+
+    it('emits a single scopeMetrics and tags every data point with service.name, including the default service', () => {
       const drained = makeDrained(12340000000000, [
         makeSpan({ service: 'svc', resource: 'GET /foo' }),
         makeSpan({ service: 'svc-other', resource: 'GET /bar' }),
@@ -234,7 +337,7 @@ describe('OtlpStatsTransformer', () => {
       const serviceByResource = Object.fromEntries(
         dataPointsOf(payload).map(dp => [attrMapOf(dp)['span.name'], attrMapOf(dp)['service.name']])
       )
-      assert.strictEqual(serviceByResource['GET /foo'], undefined)
+      assert.strictEqual(serviceByResource['GET /foo'], 'svc')
       assert.strictEqual(serviceByResource['GET /bar'], 'svc-other')
     })
 
@@ -258,37 +361,11 @@ describe('OtlpStatsTransformer', () => {
     })
   })
 
-  describe('JSON format (OTel-semantics mode)', () => {
-    let transformer
-
-    before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', true, DEFAULT_SERVICE)
-    })
-
-    it('emits only OTel attributes (no dd.*) while keeping status.code on errors', () => {
-      const span = makeTopLevelSpan({
-        error: 1,
-        meta: { [HTTP_STATUS_CODE]: 500, [HTTP_METHOD]: 'GET' },
-      })
-      const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
-      const attrs = attrMapOf(dataPointsOf(payload)[0])
-
-      assert.ok(
-        !Object.keys(attrs).some(k => k.startsWith('datadog.')),
-        'no datadog.* attributes in OTel-semantics mode'
-      )
-      assert.deepStrictEqual(
-        { name: attrs['span.name'], method: attrs['http.request.method'], status: attrs['status.code'] },
-        { name: 'GET /foo', method: 'GET', status: 2 }
-      )
-    })
-  })
-
   describe('protobuf format', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/protobuf', false, DEFAULT_SERVICE)
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/protobuf')
     })
 
     it('emits a valid ExportMetricsServiceRequest with a single duration metric', () => {
@@ -302,7 +379,10 @@ describe('OtlpStatsTransformer', () => {
 
     it('uses delta temporality and native typed attribute values', () => {
       const delta = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_DELTA
-      const spans = [makeSpan({ resource: 'GET /a' }), makeTopLevelSpan({ error: 1, resource: 'GET /b' })]
+      const spans = [
+        makeSpan({ resource: 'GET /a' }),
+        makeTopLevelSpan({ error: 1, resource: 'GET /b', meta: { [SVC_SRC_KEY]: 'integration' } }),
+      ]
       const buf = transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS)
       const decoded = protoMetricsService.decode(buf)
       const metric = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
@@ -310,14 +390,17 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(metric.histogram.aggregationTemporality, delta)
       const okNotTopLevel = metric.histogram.dataPoints.find(dp =>
         dp.attributes.some(a => a.key === 'datadog.span.top_level' && a.value.boolValue === false) &&
-        !dp.attributes.some(a => a.key === 'status.code')
+        dp.attributes.some(a => a.key === 'status.code' && a.value.stringValue === 'STATUS_CODE_OK')
       )
       const errTopLevel = metric.histogram.dataPoints.find(dp =>
-        dp.attributes.some(a => a.key === 'status.code' && Number(a.value.intValue) === 2) &&
+        dp.attributes.some(a => a.key === 'status.code' && a.value.stringValue === 'STATUS_CODE_ERROR') &&
         dp.attributes.some(a => a.key === 'datadog.span.top_level' && a.value.boolValue === true)
       )
       assert.ok(okNotTopLevel, 'should have ok not-top-level data point')
       assert.ok(errTopLevel, 'should have error top-level data point')
+      assert.ok(errTopLevel.attributes.some(a =>
+        a.key === 'datadog.svc_src' && a.value.stringValue === 'integration'
+      ), 'service source should be an OTLP string')
     })
   })
 })

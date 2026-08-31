@@ -136,7 +136,7 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
           log => {
             assert.match(
               log,
-              /\nError during ddtrace instrumentation of application, aborting.\nReferenceError: this is a test error\n {4}at /m
+              /\nError during ddtrace instrumentation of application, aborting.\nReferenceError: this is a test error\n {4}at /
             )
             assert.match(log, /\nfalse\n/)
           }, []))

@@ -108,7 +108,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
     value = JSON.stringify(cloneObj, null, 2)
 
     if (counter > 0) {
-      const segments = []
+      let formattedValue = ''
       let outputLength = 0
       let pos = 0
       let rangeKeyIndex = value.indexOf(STRINGIFY_RANGE_KEY)
@@ -133,13 +133,14 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
               start,
               end: start + originalValue.length,
             })
-            segments.push(value.slice(pos, rangeKeyIndex), originalValue)
+            formattedValue += value.slice(pos, rangeKeyIndex)
+            formattedValue += originalValue
             outputLength += cleanLength + originalValue.length
             pos = rangeKeyIndex + matchValue.length
           } else {
             // can't happen, the only way to this to happen is
             // if the JSON has a value starting with the value of STRINGIFY_SENSITIVE_NOT_STRING_KEY
-            segments.push(value.slice(pos, rangeKeyIndex + STRINGIFY_SENSITIVE_NOT_STRING_KEY.length + 1))
+            formattedValue += value.slice(pos, rangeKeyIndex + STRINGIFY_SENSITIVE_NOT_STRING_KEY.length + 1)
             outputLength += cleanLength + STRINGIFY_SENSITIVE_NOT_STRING_KEY.length + 1
             pos = rangeKeyIndex + STRINGIFY_SENSITIVE_NOT_STRING_KEY.length + 1
           }
@@ -150,15 +151,15 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
 
             sensitiveRanges.push({
               start,
-              end: start + Number.parseInt(regexRes[1]),
+              end: start + Number.parseInt(regexRes[1], 10),
             })
-            segments.push(value.slice(pos, rangeKeyIndex))
+            formattedValue += value.slice(pos, rangeKeyIndex)
             outputLength += cleanLength
             pos = rangeKeyIndex + regexRes[0].length
           } else {
             // can't happen, the only way to this to happen is
             // if the JSON has a value starting with the value of STRINGIFY_SENSITIVE_KEY
-            segments.push(value.slice(pos, rangeKeyIndex + STRINGIFY_SENSITIVE_KEY.length))
+            formattedValue += value.slice(pos, rangeKeyIndex + STRINGIFY_SENSITIVE_KEY.length)
             outputLength += cleanLength + STRINGIFY_SENSITIVE_KEY.length
             pos = rangeKeyIndex + STRINGIFY_SENSITIVE_KEY.length
           }
@@ -175,13 +176,13 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
             }))
             ranges.push(...updatedRanges)
 
-            segments.push(value.slice(pos, rangeKeyIndex))
+            formattedValue += value.slice(pos, rangeKeyIndex)
             outputLength += cleanLength
             pos = rangeKeyIndex + regexRes[0].length
           } else {
             // can't happen, the only way to this to happen is
             // if the JSON has a value starting with the value of STRINGIFY_RANGE_KEY
-            segments.push(value.slice(pos, rangeKeyIndex + STRINGIFY_RANGE_KEY.length))
+            formattedValue += value.slice(pos, rangeKeyIndex + STRINGIFY_RANGE_KEY.length)
             outputLength += cleanLength + STRINGIFY_RANGE_KEY.length
             pos = rangeKeyIndex + STRINGIFY_RANGE_KEY.length
           }
@@ -190,8 +191,8 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
         rangeKeyIndex = value.indexOf(STRINGIFY_RANGE_KEY, pos)
       }
 
-      segments.push(value.slice(pos))
-      value = segments.join('')
+      formattedValue += value.slice(pos)
+      value = formattedValue
     }
   } else {
     value = JSON.stringify(obj, null, 2)

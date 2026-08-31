@@ -99,7 +99,7 @@ function splitLines (carry, chunk) {
  *   stdoutEnded: boolean,
  *   stderrEnded: boolean,
  *   code: number|null,
- *   signal: NodeJS.Signals|null,
+ *   signal: keyof import('node:os').SignalConstants|null,
  *   outBuf: {stream: 'stdout'|'stderr', text: string}[],
  *   stderrErrBuf: string[],
  *   failureBuf: string[],
@@ -262,7 +262,7 @@ async function main () {
   let interrupted = false
 
   /**
-   * @param {NodeJS.ErrnoException} error
+   * @param {Error & { code?: string }} error
    */
   const onPipeError = (error) => {
     if (!error || error.code !== 'EPIPE') return
@@ -277,7 +277,7 @@ async function main () {
   process.stderr.on('error', onPipeError)
 
   /**
-   * @param {NodeJS.Signals} signal
+   * @param {keyof import('node:os').SignalConstants} signal
    */
   const onSignal = (signal) => {
     if (interrupted) return
@@ -351,7 +351,7 @@ async function main () {
   let idx = 0
   let running = 0
   let failures = 0
-  /** @type {{file: string, code: number|null, signal: NodeJS.Signals|null}[]} */
+  /** @type {{file: string, code: number|null, signal: keyof import('node:os').SignalConstants|null}[]} */
   const failed = []
 
   /** @type {Entry[]} */

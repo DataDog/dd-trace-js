@@ -8,11 +8,16 @@ const http = require('node:http')
 const { execSync, spawn } = require('node:child_process')
 const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
 const axios = require('axios')
+const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const { satisfies } = require('semver')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
+const { storage } = require('../../datadog-core')
+const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
+require('../../datadog-instrumentations/src/next')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
@@ -20,9 +25,46 @@ const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
 
+function getCompiledRuntimeHook (runtime) {
+  return instrumentations.next.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
+}
+
+function getDisabledRuntimeHooks () {
+  const hooks = []
+  const channels = new Map()
+  const getChannel = name => {
+    if (!channels.has(name)) {
+      channels.set(name, {
+        hasSubscribers: false,
+        publish: () => { throw new Error(`unexpected ${name} publish`) },
+        runStores: () => { throw new Error(`unexpected ${name} instrumentation`) },
+      })
+    }
+    return channels.get(name)
+  }
+
+  const loadNext = proxyquire.noPreserveCache()
+  loadNext('../../datadog-instrumentations/src/next', {
+    '../../datadog-shimmer': {
+      wrap (target, method, wrapper) {
+        target[method] = wrapper(target[method])
+      },
+    },
+    '../../dd-trace/src/opentelemetry/span-ending-hook': {},
+    './helpers/instrument': {
+      channel: getChannel,
+      addHook: (metadata, hook) => hooks.push({ ...metadata, hook }),
+    },
+  })
+
+  return runtime => hooks.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
+}
+
 describe('Plugin', function () {
   let server
   let port
+  let downstreamServer
+  let downstreamPort
 
   // These next versions have a dependency which uses a deprecated node buffer
   describe('next', () => {
@@ -31,8 +73,27 @@ describe('Plugin', function () {
     withVersions('next', 'next', min, version => {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
+      before(done => {
+        downstreamServer = http.createServer((_req, res) => {
+          res.writeHead(204)
+          res.end()
+        }).listen(0, '127.0.0.1', () => {
+          downstreamPort = downstreamServer.address().port
+          done()
+        })
+      })
+
+      after(done => downstreamServer.close(done))
+
       const startServer = (
-        { withConfig, standalone, serverFile = 'server' },
+        {
+          withConfig,
+          standalone,
+          withHttp = true,
+          httpResourceRenamingEnabled = false,
+          serverFile = 'server',
+          httpServerErrorStatuses,
+        },
         schemaVersion = 'v0',
         defaultToGlobalService = false
       ) => {
@@ -52,14 +113,21 @@ describe('Plugin', function () {
               ...process.env,
               VERSION: version,
               PORT: 0,
+              DOWNSTREAM_URL: `http://127.0.0.1:${downstreamPort}/downstream`,
+              DOWNSTREAM_PORT: String(downstreamPort),
               DD_TRACE_AGENT_PORT: agent.server.address().port,
               WITH_CONFIG: withConfig,
+              WITH_HTTP: String(withHttp),
+              WITH_HTTP_RESOURCE_RENAMING: String(httpResourceRenamingEnabled),
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
               // eslint-disable-next-line n/no-path-concat
               NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
               HOSTNAME: '127.0.0.1',
               TIMES_HOOK_CALLED: 0,
+              ...(httpServerErrorStatuses === undefined
+                ? undefined
+                : { DD_TRACE_HTTP_SERVER_ERROR_STATUSES: httpServerErrorStatuses }),
             },
           })
 
@@ -114,7 +182,7 @@ describe('Plugin', function () {
         // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
         try {
           execSync('yarn install', { cwd })
-        } catch (e) { // retry in case of error from registry
+        } catch { // retry in case of error from registry
           execSync('yarn install', { cwd })
         }
 
@@ -308,12 +376,36 @@ describe('Plugin', function () {
 
                 assert.strictEqual(spans[0].name, 'web.request')
                 assert.strictEqual(spans[0].resource, 'GET /api/hello/[name]')
+                assert.strictEqual(spans[0].meta['http.endpoint'], undefined)
+                assert.strictEqual(spans[1].name, 'next.request')
+                assert.strictEqual(spans[1].parent_id.toString(), spans[0].span_id.toString())
               })
               .then(done)
               .catch(done)
 
             axios
               .get(`http://127.0.0.1:${port}/api/hello/world`)
+              .catch(done)
+          })
+
+          it('should preserve an upstream-established route on the HTTP parent', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = traces[0]
+
+                assert.strictEqual(spans[0].name, 'web.request')
+                assert.strictEqual(spans[0].resource, 'GET /upstream/[id]')
+                assert.strictEqual(spans[0].meta['http.route'], '/upstream/[id]')
+                assert.strictEqual(spans[1].name, 'next.request')
+                assert.strictEqual(spans[1].resource, 'GET /api/hello/[name]')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/api/hello/world`, {
+                headers: { 'x-test-upstream-route': '/upstream/[id]' },
+              })
               .catch(done)
           })
 
@@ -349,6 +441,36 @@ describe('Plugin', function () {
               .get(`http://127.0.0.1:${port}/api/hello/world?createChildSpan=true`)
               .catch(done)
           })
+
+          if (satisfies(pkg.version, '>=15.4.1')) {
+            it('should create one Pages API request span with a downstream HTTP child span', () => {
+              const tracingPromise = agent.assertSomeTraces(traces => {
+                const spans = traces[0]
+                const nextRequestSpans = spans.filter(span => span.name === 'next.request')
+
+                assert.strictEqual(nextRequestSpans.length, 1)
+
+                const nextRequestSpan = nextRequestSpans[0]
+                assertObjectContains(nextRequestSpan, {
+                  resource: 'GET /api/hello/downstream',
+                  meta: {
+                    'next.page': '/api/hello/downstream',
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                  },
+                })
+
+                const downstreamSpan = spans.find(span => span.name === 'http.request' &&
+                  span.parent_id.toString() === nextRequestSpan.span_id.toString())
+                assert.ok(downstreamSpan, 'downstream HTTP client span should be a child of next.request')
+              })
+
+              return Promise.all([
+                axios.get(`http://127.0.0.1:${port}/api/hello/downstream`),
+                tracingPromise,
+              ])
+            })
+          }
         })
 
         describe('for pages', () => {
@@ -525,34 +647,76 @@ describe('Plugin', function () {
 
             return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
           })
+
+          it('should not replace an upstream parent route for static files', () => {
+            const tracingPromise = agent
+              .assertSomeTraces(traces => {
+                const spans = traces[0]
+
+                assert.strictEqual(spans[0].name, 'web.request')
+                assert.strictEqual(spans[0].resource, 'GET /upstream/[id]')
+                assert.strictEqual(spans[0].meta['http.route'], '/upstream/[id]')
+                assert.strictEqual(spans[1].name, 'next.request')
+                assert.strictEqual(spans[1].resource, 'GET /public/*')
+              })
+
+            return Promise.all([
+              axios.get(`http://127.0.0.1:${port}/test.txt`, {
+                headers: { 'x-test-upstream-route': '/upstream/[id]' },
+              }),
+              tracingPromise,
+            ])
+          })
         })
 
         describe('when an error happens', () => {
-          it('should not die', done => {
-            agent
-              .assertSomeTraces(_traces => { })
-              .then(done)
-              .catch(done)
+          it('should attach a Pages API error to the request span', () => {
+            const tracingPromise = agent
+              .assertSomeTraces(traces => {
+                const nextRequestSpans = traces[0].filter(span => span.name === 'next.request')
 
-            axios
-              .get(`http://127.0.0.1:${port}/api/error/boom`)
-              .catch((response) => {
-                assert.deepStrictEqual(response.statusCode, 500)
+                assert.strictEqual(nextRequestSpans.length, 1)
+                assertObjectContains(nextRequestSpans[0], {
+                  resource: 'GET /api/error/[name]',
+                  error: 1,
+                  meta: {
+                    'http.status_code': '500',
+                  },
+                })
+
+                if (satisfies(pkg.version, '>=15.4.1')) {
+                  assertObjectContains(nextRequestSpans[0], {
+                    meta: {
+                      'error.message': 'oh no',
+                      'error.type': 'Error',
+                    },
+                  })
+                  assert.ok(nextRequestSpans[0].meta['error.stack'])
+                }
               })
+
+            return Promise.all([
+              axios
+                .get(`http://127.0.0.1:${port}/api/error/boom`)
+                .catch(error => assert.strictEqual(error.response?.status, 500)),
+              tracingPromise,
+            ])
           })
         })
       })
 
       if (satisfies(pkg.version, '>=13.4.0')) {
         describe('with app directory', () => {
-          startServer({ withConfig: false, standalone: false })
+          startServer({ withConfig: false, standalone: false, httpResourceRenamingEnabled: true })
 
           it('should infer the correct resource path for appDir routes', done => {
             agent
               .assertSomeTraces(traces => {
                 const spans = traces[0]
+                const nextRequestSpans = spans.filter(span => span.name === 'next.request')
 
-                assert.strictEqual(spans[1].resource, 'GET /api/appDir/[name]')
+                assert.strictEqual(nextRequestSpans.length, 1)
+                assert.strictEqual(nextRequestSpans[0].resource, 'GET /api/appDir/[name]')
               })
               .then(done)
               .catch(done)
@@ -575,8 +739,108 @@ describe('Plugin', function () {
 
             axios.get(`http://127.0.0.1:${port}/appDir/hello`)
           })
+
+          if (satisfies(pkg.version, '>=15.4.1')) {
+            it('should trace an app route handler and its downstream request exactly once', () => {
+              const tracePromise = agent.assertSomeTraces(traces => {
+                const spans = traces[0]
+                const requestSpans = spans.filter(span => span.name === 'next.request')
+                const routeSpan = requestSpans.find(span => span.resource === 'GET /api/appRouteTrace/[name]')
+                const httpSpan = spans.find(span => span.name === 'web.request')
+                const downstreamSpan = spans.find(span => span.name === 'http.request' &&
+                  span.meta['http.url'] === `http://127.0.0.1:${downstreamPort}/downstream`)
+
+                assert.strictEqual(requestSpans.length, 1)
+                assert.ok(routeSpan)
+                assert.ok(httpSpan)
+                assert.strictEqual(httpSpan.resource, 'GET /api/appRouteTrace/[name]')
+                assert.strictEqual(httpSpan.meta['http.route'], '/api/appRouteTrace/[name]')
+                assert.strictEqual(httpSpan.meta['http.endpoint'], '/api/appRouteTrace/{param:int}')
+                assert.ok(downstreamSpan)
+                assert.strictEqual(downstreamSpan.parent_id.toString(), routeSpan.span_id.toString())
+              })
+
+              return Promise.all([
+                axios.get(`http://127.0.0.1:${port}/api/appRouteTrace/123`),
+                tracePromise,
+              ])
+            })
+
+            it('should trace a server-rendered app page and its downstream request exactly once', () => {
+              const tracePromise = agent.assertSomeTraces(traces => {
+                const spans = traces[0]
+                const requestSpans = spans.filter(span => span.name === 'web.request')
+                const nextRequestSpan = spans.find(span => span.name === 'next.request')
+                const downstreamSpan = spans.find(span => span.name === 'http.request' &&
+                  span.meta['http.url'] === `http://127.0.0.1:${downstreamPort}/app-page-downstream`)
+
+                assert.strictEqual(spans.filter(span => span.parent_id === 0n).length, 1)
+                assert.strictEqual(requestSpans.length, 1)
+                assert.strictEqual(requestSpans[0].resource, 'GET /appPageTraceShape/[name]')
+                assert.strictEqual(nextRequestSpan?.resource, 'GET /appPageTraceShape/[name]')
+                assert.ok(downstreamSpan)
+                assert.strictEqual(downstreamSpan.parent_id.toString(), nextRequestSpan.span_id.toString())
+              })
+
+              return Promise.all([
+                axios.get(`http://127.0.0.1:${port}/appPageTraceShape/test`),
+                tracePromise,
+              ])
+            })
+
+            it('should attach a thrown app page error to the request span', done => {
+              agent
+                .assertSomeTraces(traces => {
+                  const spans = traces[0]
+                  const nextRequestSpan = spans.find(span => span.name === 'next.request')
+
+                  assert.ok(nextRequestSpan, 'next.request span should exist')
+                  assertObjectContains(nextRequestSpan, {
+                    resource: 'GET /appDir/page-error',
+                    error: 1,
+                    meta: {
+                      'http.status_code': '500',
+                      'error.message': 'thrown app page error',
+                      'error.type': 'Error',
+                    },
+                  })
+                  assert.ok(nextRequestSpan.meta['error.stack'])
+                })
+                .then(done)
+                .catch(done)
+
+              axios
+                .get(`http://127.0.0.1:${port}/appDir/page-error`)
+                .catch(error => {
+                  if (error.response?.status !== 500) done(error)
+                })
+            })
+          }
         })
       }
+
+      describe('with configured HTTP server error statuses', () => {
+        startServer({
+          withConfig: false,
+          standalone: false,
+          httpServerErrorStatuses: '200',
+        })
+
+        it('should mark a configured status code as an error', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assertObjectContains(traces[0][1], {
+                name: 'next.request',
+                error: 1,
+                meta: {
+                  'http.status_code': '200',
+                },
+              })
+            }),
+            axios.get(`http://127.0.0.1:${port}/api/hello/world`),
+          ])
+        })
+      })
 
       describe('with configuration', () => {
         startServer({ withConfig: true, standalone: false })
@@ -736,6 +1000,193 @@ describe('Plugin', function () {
           })
         }
       })
+
+      describe('without HTTP instrumentation', () => {
+        startServer({ withConfig: false, standalone: false, withHttp: false })
+
+        it('should continue incoming distributed context', done => {
+          agent
+            .assertSomeTraces(traces => {
+              const spans = traces[0]
+
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].name, 'next.request')
+              assert.strictEqual(spans[0].trace_id.toString(), '1234')
+              assert.strictEqual(spans[0].parent_id.toString(), '5678')
+            })
+            .then(done)
+            .catch(done)
+
+          axios
+            .get(`http://127.0.0.1:${port}/api/hello/world`, {
+              headers: {
+                'x-datadog-trace-id': '1234',
+                'x-datadog-parent-id': '5678',
+                'x-datadog-sampling-priority': '1',
+              },
+            })
+            .catch(done)
+        })
+      })
+    })
+  })
+})
+
+describe('compiled Next runtimes', () => {
+  it('bypasses all runtime wrappers without Next subscribers', () => {
+    const getHook = getDisabledRuntimeHooks()
+    const cases = [
+      ['app-route', 'AppRouteRouteModule', 'handle', [{ headers: {}, method: 'GET' }, {}]],
+      ['pages-api', 'PagesAPIRouteModule', 'render', [{ headers: {}, method: 'GET' }, { statusCode: 200 }, {}]],
+      ['app-page', 'AppPageRouteModule', 'render', [{ headers: {}, method: 'GET' }, { statusCode: 200 }, {}]],
+    ]
+
+    for (const [runtime, exportName, method, args] of cases) {
+      const returned = {}
+      class RouteModule {
+        [method] (...received) {
+          assert.strictEqual(this, routeModule)
+          assert.deepStrictEqual(received, args)
+          return returned
+        }
+      }
+      const routeModule = new RouteModule()
+
+      const hook = getHook(runtime)
+      hook({ [exportName]: RouteModule })
+
+      assert.strictEqual(routeModule[method](...args), returned)
+    }
+  })
+
+  describe('as the first tracing entrypoint', () => {
+    before(async () => {
+      await agent.load('next')
+      dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
+    })
+    after(() => agent.close())
+
+    it('traces an App Route lifecycle with status and incoming context', async () => {
+      class AppRouteRouteModule {
+        definition = { pathname: '/api/first-entry' }
+
+        handle () {
+          return Promise.resolve({ status: 201 })
+        }
+      }
+      const runtimeHook = getCompiledRuntimeHook('app-route')
+      runtimeHook({ AppRouteRouteModule })
+
+      const request = {
+        headers: {
+          'x-datadog-trace-id': '1234',
+          'x-datadog-parent-id': '5678',
+          'x-datadog-sampling-priority': '1',
+        },
+        method: 'GET',
+        url: '/api/first-entry',
+      }
+      const lifecycle = []
+      const onStart = () => lifecycle.push('start')
+      const onPage = () => lifecycle.push('page')
+      const onFinish = () => lifecycle.push('finish')
+      dc.channel('apm:next:request:start').subscribe(onStart)
+      dc.channel('apm:next:page:load').subscribe(onPage)
+      dc.channel('apm:next:request:finish').subscribe(onFinish)
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          name: 'next.request',
+          resource: 'GET /api/first-entry',
+          meta: {
+            'http.status_code': '201',
+            'next.page': '/api/first-entry',
+          },
+        })
+        assert.strictEqual(span.trace_id.toString(), '1234')
+        assert.strictEqual(span.parent_id.toString(), '5678')
+      })
+
+      assert.strictEqual(storage('legacy').getStore(), undefined)
+      const response = await new AppRouteRouteModule().handle(request, {})
+      assert.strictEqual(response.status, 201)
+      await trace
+      assert.deepStrictEqual(lifecycle, ['start', 'page', 'finish'])
+      dc.channel('apm:next:request:start').unsubscribe(onStart)
+      dc.channel('apm:next:page:load').unsubscribe(onPage)
+      dc.channel('apm:next:request:finish').unsubscribe(onFinish)
+    })
+
+    it('records Pages API errors and status without an existing request store', async () => {
+      class PagesAPIRouteModule {
+        definition = { page: '/api/first-entry' }
+
+        render (_req, res, context) {
+          res.statusCode = 503
+          context.onError(new Error('Pages API first-entry error'))
+          return Promise.resolve()
+        }
+      }
+      const runtimeHook = getCompiledRuntimeHook('pages-api')
+      runtimeHook({ PagesAPIRouteModule })
+
+      const response = { statusCode: 200 }
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          name: 'next.request',
+          resource: 'GET /api/first-entry',
+          error: 1,
+          meta: {
+            'http.status_code': '503',
+            'error.message': 'Pages API first-entry error',
+            'error.type': 'Error',
+          },
+        })
+      })
+
+      assert.strictEqual(storage('legacy').getStore(), undefined)
+      await new PagesAPIRouteModule().render({ headers: {}, method: 'GET', url: '/api/first-entry' }, response, {
+        page: '/api/first-entry',
+      })
+      await trace
+    })
+
+    it('records App Page errors and status without an existing request store', async () => {
+      class AppPageRouteModule {
+        definition = { pathname: '/first-entry' }
+
+        render () {
+          return Promise.reject(new Error('App Page first-entry error'))
+        }
+      }
+      const runtimeHook = getCompiledRuntimeHook('app-page')
+      runtimeHook({ AppPageRouteModule })
+
+      const response = { statusCode: 200 }
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          name: 'next.request',
+          resource: 'GET /first-entry',
+          error: 1,
+          meta: {
+            'http.status_code': '500',
+            'error.message': 'App Page first-entry error',
+            'error.type': 'Error',
+          },
+        })
+      })
+
+      assert.strictEqual(storage('legacy').getStore(), undefined)
+      await assert.rejects(
+        new AppPageRouteModule().render({ headers: {}, method: 'GET', url: '/first-entry' }, response, {
+          page: '/first-entry',
+        }),
+        /App Page first-entry error/
+      )
+      assert.strictEqual(response.statusCode, 500)
+      await trace
     })
   })
 })

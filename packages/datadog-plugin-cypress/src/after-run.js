@@ -1,5 +1,9 @@
 'use strict'
 
 const cypressPlugin = require('./cypress-plugin')
+const { shouldDeferLegacyFinalization } = require('./finalization')
 
-module.exports = cypressPlugin.afterRun.bind(cypressPlugin)
+module.exports = function afterRun () {
+  if (shouldDeferLegacyFinalization()) return
+  return cypressPlugin.afterRun.apply(cypressPlugin, arguments)
+}

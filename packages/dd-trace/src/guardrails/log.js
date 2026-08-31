@@ -2,20 +2,11 @@
 
 /* eslint-disable no-console */
 
+var logLevels = require('../log/levels')
 var isTrue = require('./util').isTrue
 
 var DD_TRACE_DEBUG = process.env.DD_TRACE_DEBUG
 var DD_TRACE_LOG_LEVEL = process.env.DD_TRACE_LOG_LEVEL
-
-var logLevels = {
-  trace: 20,
-  debug: 20,
-  info: 30,
-  warn: 40,
-  error: 50,
-  critical: 50,
-  off: 100
-}
 
 var logLevel = isTrue(DD_TRACE_DEBUG)
   ? Number(DD_TRACE_LOG_LEVEL) || logLevels.debug

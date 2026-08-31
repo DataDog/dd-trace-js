@@ -128,7 +128,7 @@ withVersions('hono', 'hono', version => {
     it('should publish to errorChannel when middleware throws', async () => {
       try {
         await axios.get(`http://localhost:${port}/error`)
-      } catch (e) {
+      } catch {
         // Expected to fail
       }
 

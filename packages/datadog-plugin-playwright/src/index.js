@@ -79,6 +79,9 @@ function isPlaywrightFailureScreenshot (attachment) {
 class PlaywrightPlugin extends CiPlugin {
   static id = 'playwright'
 
+  #isFinalizingAfterError = false
+  #pendingTestFinishCallbacks = new Map()
+
   constructor (...args) {
     super(...args)
 
@@ -99,6 +102,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:session:start', ({ isFailureScreenshotEnabled }) => {
+      this.#isFinalizingAfterError = false
       if (!getConfig().testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED) return
 
       if (!isFailureScreenshotEnabled) {
@@ -127,8 +131,21 @@ class PlaywrightPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      error,
       onDone,
     }) => {
+      if (error) {
+        this.#isFinalizingAfterError = true
+        for (const testSuiteSpan of this._testSuiteSpansByTestSuiteAbsolutePath.values()) {
+          testSuiteSpan.setTag(TEST_STATUS, 'fail')
+          testSuiteSpan.setTag('error', error)
+        }
+        for (const [finishTest, abortController] of this.#pendingTestFinishCallbacks) {
+          finishTest(SCREENSHOT_UPLOAD_RESULT_ERROR)
+          abortController.abort()
+        }
+      }
+
       const finishSession = () => {
         this.testModuleSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -139,14 +156,17 @@ class PlaywrightPlugin extends CiPlugin {
         if (isEarlyFlakeDetectionFaulty) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
         }
-        if (status === 'fail' && this.numFailedSuites > 0) {
+        let sessionError = error
+        if (!sessionError && status === 'fail' && this.numFailedSuites > 0) {
           let errorMessage = `Test suites failed: ${this.numFailedSuites}.`
           if (this.numFailedTests > 0) {
             errorMessage += ` Tests failed: ${this.numFailedTests}`
           }
-          const error = new Error(errorMessage)
-          this.testModuleSpan.setTag('error', error)
-          this.testSessionSpan.setTag('error', error)
+          sessionError = new Error(errorMessage)
+        }
+        if (sessionError) {
+          this.testModuleSpan.setTag('error', sessionError)
+          this.testSessionSpan.setTag('error', sessionError)
         }
 
         if (isTestManagementTestsEnabled) {
@@ -304,16 +324,16 @@ class PlaywrightPlugin extends CiPlugin {
         }
       }
 
-      if (!formattedTestSpan || !screenshots) {
+      if (!formattedTestSpan || !screenshots || this.#isFinalizingAfterError) {
         exportTraces()
         return
       }
 
       this.pendingTestFinishes++
-      const uploadStarted = this.uploadTestScreenshots({
-        screenshots,
-        traceId: formattedTestSpan.trace_id.toString(10),
-      }, (screenshotUploadResult) => {
+      const abortController = new AbortController()
+      const finishTest = (screenshotUploadResult) => {
+        if (!this.#pendingTestFinishCallbacks.delete(finishTest)) return
+
         const screenshotUploadTag = getScreenshotUploadTag(screenshotUploadResult)
         if (screenshotUploadTag) {
           formattedTestSpan.meta[screenshotUploadTag] = 'true'
@@ -323,11 +343,16 @@ class PlaywrightPlugin extends CiPlugin {
         if (this.pendingTestFinishes === 0 && this.finishSession) {
           this.finishSession()
         }
-      })
+      }
+      this.#pendingTestFinishCallbacks.set(finishTest, abortController)
+      const uploadStarted = this.uploadTestScreenshots({
+        screenshots,
+        traceId: formattedTestSpan.trace_id.toString(10),
+        signal: abortController.signal,
+      }, finishTest)
       if (uploadStarted) return
 
-      this.pendingTestFinishes--
-      exportTraces()
+      finishTest()
     })
 
     this.addBind('ci:playwright:test:start', (ctx) => {
@@ -485,7 +510,7 @@ class PlaywrightPlugin extends CiPlugin {
         {
           hasCodeOwners: !!span.context().getTag(TEST_CODE_OWNERS),
           isNew,
-          isRum: isRUMActive,
+          isRum: isRUMActive === 'true' || undefined,
           browserDriver: 'playwright',
           isQuarantined,
           isDisabled,
@@ -496,7 +521,15 @@ class PlaywrightPlugin extends CiPlugin {
 
       finishAllTraceSpans(span)
       if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
-        this.tracer._exporter.flush(onDone)
+        try {
+          this.tracer._exporter.flush(onDone)
+        } catch (error) {
+          // A synchronous flush failure must still release the worker, otherwise it hangs.
+          // Log rather than rethrow: an exception from this diagnostics-channel subscriber
+          // would surface as an uncaught error in the worker and crash the user's test run.
+          onDone?.()
+          log.error('Error flushing traces at Playwright worker shutdown', error)
+        }
       }
     })
 
@@ -507,6 +540,7 @@ class PlaywrightPlugin extends CiPlugin {
       testSourceLine,
       browserName,
       isNew,
+      isAttemptToFix,
       isDisabled,
       isModified,
       isQuarantined,
@@ -532,6 +566,9 @@ class PlaywrightPlugin extends CiPlugin {
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
       }
+      if (isAttemptToFix) {
+        span.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+      }
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
@@ -552,10 +589,11 @@ class PlaywrightPlugin extends CiPlugin {
    * @param {object} options - Upload options
    * @param {Array<object>} options.screenshots - Playwright test attachments
    * @param {string} options.traceId - Test trace id used as the screenshot key
+   * @param {AbortSignal} options.signal - Signal used to cancel uploads during error finalization
    * @param {(result: string|undefined) => void} onDone - Completion callback
    * @returns {boolean} Whether at least one upload was started
    */
-  uploadTestScreenshots ({ screenshots, traceId }, onDone) {
+  uploadTestScreenshots ({ screenshots, traceId, signal }, onDone) {
     const exporter = this.tracer?._exporter
     if (!Array.isArray(screenshots) || !screenshots.length ||
       !exporter?.canUploadTestScreenshots?.() ||
@@ -581,6 +619,7 @@ class PlaywrightPlugin extends CiPlugin {
         traceId,
         idempotencyKey: `${traceId}:${basename(filePath)}`,
         capturedAtMs: getScreenshotCapturedAtMs(filePath, filePath),
+        signal,
       }, (error, uploaded = true) => {
         if (uploaded) {
           uploadResults[resultIndex] = error

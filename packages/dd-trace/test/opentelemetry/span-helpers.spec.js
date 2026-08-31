@@ -24,6 +24,8 @@ const {
 /**
  * Lightweight DatadogSpan-shaped fixture. Just enough to exercise each helper's
  * contract; no DD-tracer wiring or scope-manager interaction.
+ *
+ * @param {{ ended?: boolean }} [options]
  */
 function createMockDdSpan ({ ended = false } = {}) {
   const tags = {}

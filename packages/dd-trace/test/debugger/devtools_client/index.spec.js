@@ -97,7 +97,8 @@ describe('onPause', function () {
     sampledProbeIndexes = new Int32Array(installProbeSampler())
 
     state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })
-    proxyquire.noCallThru()('../../../src/debugger/devtools_client/status', { './config': config })
+    const loadStatus = proxyquire.noCallThru()
+    loadStatus('../../../src/debugger/devtools_client/status', { './config': config })
     const collector = proxyquire('../../../src/debugger/devtools_client/snapshot/collector', { '../session': session })
     const redaction = proxyquire('../../../src/debugger/devtools_client/snapshot/redaction', { '../config': config })
     const processor = proxyquire('../../../src/debugger/devtools_client/snapshot/processor', {

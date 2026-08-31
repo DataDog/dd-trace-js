@@ -12,6 +12,9 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
 const { setup, withAwsSdkVersions } = require('./spec_helpers')
+
+const LOCALSTACK_TIMEOUT_MS = 5000
+
 /* eslint-disable no-console */
 async function resetLocalStackDynamo () {
   try {
@@ -146,7 +149,8 @@ describe('Plugin', () => {
             }
 
             // For AWS SDK v2, we need to promisify the function
-            return util.promisify(boundFn)(...args)
+            const boundFnAsync = util.promisify(boundFn)
+            return boundFnAsync(...args)
           }
         }
 
@@ -168,9 +172,10 @@ describe('Plugin', () => {
                 'aws.request.body.Item.name': 'redacted',
                 'aws.request.body.Item.data.S': 'test-data',
               },
-            })
+            }, { timeoutMs: LOCALSTACK_TIMEOUT_MS })
 
-            const operation = () => promisify(dynamo.putItem)({
+            const putItemAsync = promisify(dynamo.putItem)
+            const operation = () => putItemAsync({
               TableName: oneKeyTableName,
               Item: {
                 name: { S: 'test-name' },
@@ -193,9 +198,10 @@ describe('Plugin', () => {
                 'aws.request.body.Key.name.S': 'test-name',
                 'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data',
               },
-            })
+            }, { timeoutMs: LOCALSTACK_TIMEOUT_MS })
 
-            const operation = () => promisify(dynamo.updateItem)({
+            const updateItemAsync = promisify(dynamo.updateItem)
+            const operation = () => updateItemAsync({
               TableName: oneKeyTableName,
               Key: {
                 name: { S: 'test-name' },
@@ -222,9 +228,10 @@ describe('Plugin', () => {
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Key.name.S': 'test-name',
               },
-            })
+            }, { timeoutMs: LOCALSTACK_TIMEOUT_MS })
 
-            const operation = () => promisify(dynamo.deleteItem)({
+            const deleteItemAsync = promisify(dynamo.deleteItem)
+            const operation = () => deleteItemAsync({
               TableName: oneKeyTableName,
               Key: {
                 name: { S: 'test-name' },
@@ -236,7 +243,8 @@ describe('Plugin', () => {
 
           it('adds request and response payloads as flattened tags for getItem', async () => {
             // First put an item for later retrieval
-            await promisify(dynamo.putItem)({
+            const putItemAsync = promisify(dynamo.putItem)
+            await putItemAsync({
               TableName: oneKeyTableName,
               Item: {
                 name: { S: 'test-get-name' },
@@ -259,9 +267,10 @@ describe('Plugin', () => {
                 'aws.response.body.Item.name.S': 'test-get-name',
                 'aws.response.body.Item.data': 'redacted',
               },
-            })
+            }, { timeoutMs: LOCALSTACK_TIMEOUT_MS })
 
-            const operation = () => promisify(dynamo.getItem)({
+            const getItemAsync = promisify(dynamo.getItem)
+            const operation = () => getItemAsync({
               TableName: oneKeyTableName,
               Key: {
                 name: { S: 'test-get-name' },
@@ -312,7 +321,7 @@ describe('Plugin', () => {
                   })
                 }
               }
-            })
+            }, { timeoutMs: LOCALSTACK_TIMEOUT_MS })
 
             DynamoDb.dynamoPrimaryKeyConfig = null
 
@@ -325,7 +334,8 @@ describe('Plugin', () => {
                 env: '{"OneKeyTable": ["name"]}',
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation () {
-                  return promisify(dynamo.putItem)({
+                  const putItemAsync = promisify(dynamo.putItem)
+                  return putItemAsync({
                     TableName: oneKeyTableName,
                     Item: {
                       name: { S: 'test1' },
@@ -340,7 +350,8 @@ describe('Plugin', () => {
               return testSpanPointers({
                 env: '{"DifferentTable": ["test"]}',
                 operation () {
-                  return promisify(dynamo.putItem)({
+                  const putItemAsync = promisify(dynamo.putItem)
+                  return putItemAsync({
                     TableName: oneKeyTableName,
                     Item: {
                       name: { S: 'test2' },
@@ -355,7 +366,8 @@ describe('Plugin', () => {
               return testSpanPointers({
                 env: null,
                 operation () {
-                  return promisify(dynamo.putItem)({
+                  const putItemAsync = promisify(dynamo.putItem)
+                  return putItemAsync({
                     TableName: oneKeyTableName,
                     Item: {
                       name: { S: 'test3' },
@@ -370,7 +382,8 @@ describe('Plugin', () => {
               return testSpanPointers({
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation () {
-                  return promisify(dynamo.updateItem)({
+                  const updateItemAsync = promisify(dynamo.updateItem)
+                  return updateItemAsync({
                     TableName: oneKeyTableName,
                     Key: { name: { S: 'test1' } },
                     AttributeUpdates: {
@@ -388,7 +401,8 @@ describe('Plugin', () => {
               return testSpanPointers({
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation () {
-                  return promisify(dynamo.deleteItem)({
+                  const deleteItemAsync = promisify(dynamo.deleteItem)
+                  return deleteItemAsync({
                     TableName: oneKeyTableName,
                     Key: { name: { S: 'test1' } },
                   })
@@ -410,7 +424,8 @@ describe('Plugin', () => {
                   '9682c132f1900106a792f166d0619e0b',
                 ],
                 operation () {
-                  return promisify(dynamo.transactWriteItems)({
+                  const transactWriteItemsAsync = promisify(dynamo.transactWriteItems)
+                  return transactWriteItemsAsync({
                     TransactItems: [
                       {
                         Put: {
@@ -456,7 +471,8 @@ describe('Plugin', () => {
                   '9682c132f1900106a792f166d0619e0b',
                 ],
                 operation () {
-                  return promisify(dynamo.batchWriteItem)({
+                  const batchWriteItemAsync = promisify(dynamo.batchWriteItem)
+                  return batchWriteItemAsync({
                     RequestItems: {
                       [oneKeyTableName]: [
                         {
@@ -488,7 +504,8 @@ describe('Plugin', () => {
                 env: '{"TwoKeyTable": ["id", "binary"]}',
                 expectedHashes: 'cc32f0e49ee05d3f2820ccc999bfe306',
                 operation () {
-                  return promisify(dynamo.putItem)({
+                  const putItemAsync = promisify(dynamo.putItem)
+                  return putItemAsync({
                     TableName: twoKeyTableName,
                     Item: {
                       id: { N: '1' },
@@ -503,7 +520,8 @@ describe('Plugin', () => {
               return testSpanPointers({
                 env: '{"DifferentTable": ["test"]}',
                 operation () {
-                  return promisify(dynamo.putItem)({
+                  const putItemAsync = promisify(dynamo.putItem)
+                  return putItemAsync({
                     TableName: twoKeyTableName,
                     Item: {
                       id: { N: '2' },
@@ -517,7 +535,8 @@ describe('Plugin', () => {
             it('should not add links or error for putItem when config is missing', function () {
               return testSpanPointers({
                 operation () {
-                  return promisify(dynamo.putItem)({
+                  const putItemAsync = promisify(dynamo.putItem)
+                  return putItemAsync({
                     TableName: twoKeyTableName,
                     Item: {
                       id: { N: '3' },
@@ -541,7 +560,8 @@ describe('Plugin', () => {
                 env: '{"TwoKeyTable": ["id", "binary"]}',
                 expectedHashes: '5dac7d25254d596482a3c2c187e51046',
                 operation () {
-                  return promisify(dynamo.updateItem)({
+                  const updateItemAsync = promisify(dynamo.updateItem)
+                  return updateItemAsync({
                     TableName: twoKeyTableName,
                     Key: {
                       id: { N: '100' },
@@ -571,7 +591,8 @@ describe('Plugin', () => {
                 env: '{"TwoKeyTable": ["id", "binary"]}',
                 expectedHashes: 'c356b0dd48c734d889e95122750c2679',
                 operation () {
-                  return promisify(dynamo.deleteItem)({
+                  const deleteItemAsync = promisify(dynamo.deleteItem)
+                  return deleteItemAsync({
                     TableName: twoKeyTableName,
                     Key: {
                       id: { N: '200' },
@@ -596,7 +617,8 @@ describe('Plugin', () => {
                   '8a6f801cc4e7d1d5e0dd37e0904e6316',
                 ],
                 operation () {
-                  return promisify(dynamo.transactWriteItems)({
+                  const transactWriteItemsAsync = promisify(dynamo.transactWriteItems)
+                  return transactWriteItemsAsync({
                     TransactItems: [
                       {
                         Put: {
@@ -648,7 +670,8 @@ describe('Plugin', () => {
                   '8a6f801cc4e7d1d5e0dd37e0904e6316',
                 ],
                 operation () {
-                  return promisify(dynamo.batchWriteItem)({
+                  const batchWriteItemAsync = promisify(dynamo.batchWriteItem)
+                  return batchWriteItemAsync({
                     RequestItems: {
                       [twoKeyTableName]: [
                         {

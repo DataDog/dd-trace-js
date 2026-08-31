@@ -21,7 +21,6 @@ variables:
   # would build an arm64 leg with amd64 binaries (exec format error). Pin amd64.
   BASE_CI_IMAGE_PLATFORM: linux/amd64
 
-  SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
   SLS_CI_BRANCH: main
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
@@ -131,40 +130,21 @@ benchmark:
 
 benchmark-serverless:
   stage: benchmarks
-  image: $SLS_CI_IMAGE
-  tags: ["arch:amd64"]
-  when: on_success
-  rules:
-    - if: $CI_COMMIT_BRANCH == 'master'
-      interruptible: false
-    - interruptible: true
-  needs:
-    - benchmark-serverless-trigger
-  script:
-    - curl -OL "https://binaries.ddbuild.io/dd-source/authanywhere/LATEST/authanywhere-linux-amd64"
-    - mv "authanywhere-linux-amd64" /bin/authanywhere
-    - chmod +x /bin/authanywhere
-    - BTI_CI_API_TOKEN=$(authanywhere --audience rapid-devex-ci)
-    - >-
-      BTI_RESPONSE=$(curl --silent --request GET \
-        --header "$BTI_CI_API_TOKEN" \  --header "Content-Type: application/vnd.api+json" \
-        "https://bti-ci-api.us1.ddbuild.io/internal/ci/gitlab/token?owner=DataDog&repository=serverless-tools")
-    - GITLAB_TOKEN=$(echo "$BTI_RESPONSE" | jq -r '.token // empty')
-    - git clone https://serverless-tools:${GITLAB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
-    - ./ci/check_trigger_status.sh
-
-benchmark-serverless-trigger:
-  stage: benchmarks
   needs: []
-  rules:
-    - if: $CI_COMMIT_BRANCH == 'master'
-      interruptible: false
-    - interruptible: true
   trigger:
     project: DataDog/serverless-tools
     branch: $SLS_CI_BRANCH
     strategy: depend
-  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
+    - if: $RELEASE_ALLOW_BENCHMARK_FAILURES == "true"
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == 'master'
+      interruptible: false
+      allow_failure: false
+    - interruptible: true
+      allow_failure: false
   variables:
     UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
     UPSTREAM_PROJECT_URL: $CI_PROJECT_URL

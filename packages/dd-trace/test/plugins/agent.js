@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const { once } = require('node:events')
 const http = require('http')
 const util = require('util')
 const { setTimeout: wait } = require('timers/promises')
@@ -12,6 +13,7 @@ const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
+const { httpAgent } = require('../../src/exporters/common/agents')
 
 // Modules that close over the previous `Config` / `TracerProxy` singletons.
 // Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
@@ -61,9 +63,15 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'FUNCTIONS_WORKER_RUNTIME',
   'GCP_PROJECT',
   'K_SERVICE',
+  'VERCEL',
+  'VERCEL_ENV',
+  'VERCEL_PROJECT_ID',
+  'VERCEL_REGION',
   'WEBSITE_SKU',
   // lambda RITM target path (computed once at module load)
   'LAMBDA_TASK_ROOT',
+  // MicroVM clone-resume identity reseed hook registration
+  'AWS_LAMBDA_MICROVM_IMAGE_ARN',
   // serverless service-name fallbacks (Config singleton)
   'WEBSITE_SITE_NAME',
   // azure metadata payload (cached at first build)
@@ -132,6 +140,38 @@ function envChangedSince (snapshot) {
     if (!seen.has(key)) return true
   }
   return false
+}
+
+/**
+ * @param {import('node:net').Socket} socket
+ */
+function waitForExporterTransition (socket) {
+  return new Promise(resolve => {
+    function done () {
+      socket.removeListener('close', done)
+      socket.removeListener('free', done)
+      resolve()
+    }
+
+    socket.once('close', done)
+    socket.once('free', done)
+  })
+}
+
+/**
+ * @param {import('node:net').Socket} socket
+ */
+function waitForSocketClose (socket) {
+  return new Promise(resolve => socket.once('close', resolve))
+}
+
+/**
+ * @param {string} origin
+ */
+async function waitForExporterIdle (origin) {
+  while (httpAgent.sockets[origin]) {
+    await waitForExporterTransition(httpAgent.sockets[origin][0])
+  }
 }
 
 // Captured at agent.js evaluation, before any `before` hook runs.
@@ -742,7 +782,6 @@ module.exports = {
    *
    * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   assertSomeTraces (callback, options) {
     return runCallbackAgainstTraces(callback, options, traceHandlers)
@@ -772,7 +811,6 @@ module.exports = {
    *
    * @param {testAssertionSpanCallback|Record<string|symbol, unknown>} callbackOrExpected - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   assertFirstTraceSpan (callbackOrExpected, options) {
     return runCallbackAgainstTraces(function (traces) {
@@ -799,7 +837,6 @@ module.exports = {
    *
    * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   expectPipelineStats (callback, options) {
     return runCallbackAgainstTraces(callback, options, statsHandlers)
@@ -860,17 +897,15 @@ module.exports = {
    * The next `agent.load` decides for itself whether to reuse the cached
    * tracer or rebuild it; tests do not pass options here.
    */
-  close () {
+  async close () {
     if (listener === null) {
-      return Promise.resolve()
+      return
     }
 
-    listener.close()
+    const closingListener = listener
+    const closingServer = this.server
+    const origin = httpAgent.getName({ host: '127.0.0.1', port: this.port })
     listener = null
-    for (const socket of sockets) {
-      socket.end()
-    }
-    sockets = []
     agent = null
     disarmHandlers(traceHandlers)
     disarmHandlers(statsHandlers)
@@ -880,6 +915,9 @@ module.exports = {
       tracer.use(plugin, { enabled: false })
     }
     loadedPlugins.clear()
+    // The propagation-hash singleton is not in `RELOAD_EVICTION_IDS`, so the
+    // `Config` this tracer installed would stay live for every later spec file.
+    require('../../src/propagation-hash').configure(null)
     // Force the next `agent.load` through the gate-fired rebuild path
     // so cross-file leaks (`code_origin` tags sticking across files,
     // `router`'s path-stack accumulating, …) cannot silently inherit
@@ -891,14 +929,22 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    return /** @type {Promise<void>} */ (new Promise(resolve => {
-      this.server.on('close', () => {
-        this.server = null
-        this.port = null
+    const serverClosed = once(closingServer, 'close')
 
-        resolve()
-      })
-    }))
+    closingListener.close()
+    for (const socket of sockets) {
+      socket.end()
+    }
+    sockets = []
+
+    await waitForExporterIdle(origin)
+
+    const exporterSockets = httpAgent.freeSockets[origin] ?? []
+    const exporterSocketsClosed = exporterSockets.map(waitForSocketClose)
+
+    await Promise.all([serverClosed, ...exporterSocketsClosed])
+    this.server = null
+    this.port = null
   },
 
   setAvailableEndpoints (newEndpoints) {

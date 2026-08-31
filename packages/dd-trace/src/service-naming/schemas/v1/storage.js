@@ -82,7 +82,7 @@ const storage = {
       serviceSource: optionServiceSource,
     },
     pg: {
-      opName: () => 'postgresql.query',
+      opName: ({ operation = 'query' }) => `postgresql.${operation}`,
       serviceName: withFunction,
       serviceSource: optionServiceSource,
     },

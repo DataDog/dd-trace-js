@@ -3,7 +3,21 @@
 const { parseLiteralEnvironmentPrefix } = require('./literal-environment')
 
 const MAX_SCRIPT_EXPANSIONS = 16
-const DYNAMIC_VALUE_PATTERN = /[$`]|\r|\n|%[^%\s]+%|![^!\s]+!/
+const DYNAMIC_VALUE_PATTERN = /[$`\r\n]|%[^%\s]+%|![^!\s]+!/
+const RESERVED_PACKAGE_MANAGER_COMMANDS = {
+  pnpm: new Set([
+    'add', 'audit', 'bin', 'c', 'config', 'create', 'deploy', 'dlx', 'env', 'exec', 'fetch', 'i', 'import', 'init',
+    'install', 'link', 'list', 'ln', 'ls', 'outdated', 'pack', 'patch', 'patch-commit', 'prune', 'publish', 'rebuild',
+    'remove', 'rm', 'root', 'self-update', 'server', 'setup', 'store', 'uninstall', 'unlink', 'up', 'update', 'view',
+    'why',
+  ]),
+  yarn: new Set([
+    'add', 'audit', 'bin', 'cache', 'check', 'config', 'constraints', 'create', 'dedupe', 'dlx', 'exec', 'global',
+    'help', 'import', 'info', 'init', 'install', 'link', 'list', 'node', 'npm', 'outdated', 'owner', 'pack', 'patch',
+    'plugin', 'policies', 'publish', 'rebuild', 'remove', 'set', 'stage', 'tag', 'team', 'unlink', 'unplug', 'up',
+    'upgrade', 'version', 'versions', 'why', 'workspace', 'workspaces',
+  ]),
+}
 
 /**
  * Expands bounded local package-script references without executing them.
@@ -45,7 +59,7 @@ function expandCommand (command, scripts, path, stack, state) {
     if (stack.has(invocation.script)) {
       return { error: `local package-script cycle includes ${invocation.script}` }
     }
-    const lifecycleNames = invocation.manager === 'npm'
+    const lifecycleNames = invocation.manager === 'npm' || invocation.manager === 'bun'
       ? [`pre${invocation.script}`, `post${invocation.script}`]
           .filter(name => typeof scripts[name] === 'string')
       : []
@@ -60,8 +74,11 @@ function expandCommand (command, scripts, path, stack, state) {
       const nextStack = new Set(stack)
       nextStack.add(invocation.script)
       nextStack.add(scriptName)
+      const scriptCommand = scriptName === invocation.script && invocation.arguments
+        ? `${scripts[scriptName]} ${invocation.arguments}`
+        : scripts[scriptName]
       const expanded = expandCommand(
-        scripts[scriptName],
+        scriptCommand,
         scripts,
         [...path, segment],
         nextStack,
@@ -129,13 +146,24 @@ function getPackageScriptInvocation (command) {
   const literalPrefix = parseLiteralEnvironmentPrefix(command)
   const source = command.slice(literalPrefix.length).trim()
     .replace(/^(?:c8|nyc)(?:\.cmd)?\s+/, '')
-  const match = /^(npm(?:\.cmd)?|pnpm(?:\.cmd)?|yarn(?:pkg)?(?:\.cmd)?)\s+(?:(run|run-script)\s+)?([\w:-]+)$/
+  const match = /^(bun|npm(?:\.cmd)?|pnpm(?:\.cmd)?|yarn(?:pkg)?(?:\.cmd)?)\s+(?:(run|run-script)\s+)?([\w:-]+)(?:\s+(.+))?$/
     .exec(source)
   if (!match) return
 
-  const manager = match[1].replace(/\.cmd$/i, '')
+  const manager = match[1].replace(/\.cmd$/i, '').replace(/^yarnpkg$/, 'yarn')
   if (manager === 'npm' && !match[2] && !['restart', 'start', 'stop', 'test'].includes(match[3])) return
-  return { manager, script: match[3] }
+  if (manager === 'bun' && match[2] !== 'run') return
+  if (!match[2] && RESERVED_PACKAGE_MANAGER_COMMANDS[manager]?.has(match[3])) return
+  const args = match[4]?.trim()
+  const separatedArguments = args ? /^--(?:\s+(.+))?$/.exec(args) : undefined
+  if (['npm', 'pnpm'].includes(manager) && args && !separatedArguments) return
+  const scriptArguments = ['npm', 'pnpm'].includes(manager) ? separatedArguments?.[1]?.trim() : args
+  if (scriptArguments && !splitLiteralAndChain(scriptArguments)) return
+  return {
+    ...(scriptArguments ? { arguments: scriptArguments } : {}),
+    manager,
+    script: match[3],
+  }
 }
 
 module.exports = { expandLocalPackageScripts }

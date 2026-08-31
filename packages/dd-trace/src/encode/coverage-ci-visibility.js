@@ -110,7 +110,6 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   _encodePayloadStart (bytes) {
     const payload = {
       version: COVERAGE_PAYLOAD_VERSION,
-      coverages: [],
     }
     bytes.writeMapPrefix(COVERAGE_KEYS_LENGTH)
     this._encodeString(bytes, 'version')

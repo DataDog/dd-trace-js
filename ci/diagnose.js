@@ -72,11 +72,11 @@ const TEXT_FILE_NAMES = new Set([
 
 const NODE_OPTIONS_RE = /\bNODE_OPTIONS\b/
 const INIT_PRELOAD_TARGET =
-  String.raw`(?:dd-trace\/ci\/init|(?:[^\s'"]*[\/\\])?node_modules[\/\\]dd-trace[\/\\]ci[\/\\]init|\.\/ci\/init)`
+  String.raw`(?:dd-trace/ci/init|(?:[^\s'"]*[/\\])?node_modules[/\\]dd-trace[/\\]ci[/\\]init|\./ci/init)`
 const INIT_PRELOAD_RE =
-  new RegExp(String.raw`(?:^|[\s='"])(?:-r|--require)(?:=|\s+)['"]?${INIT_PRELOAD_TARGET}(?:\.js)?['"]?(?=$|\s|["'])`)
+  new RegExp(String.raw`(?:^|[\s='"])(?:-r|--require)(?:=|\s+)['"]?${INIT_PRELOAD_TARGET}(?:\.js)?['"]?(?=$|[\s"'])`)
 const REGISTER_PRELOAD_RE =
-  /(?:^|[\s='"])(?:--import|-r|--require)(?:=|\s+)['"]?dd-trace\/register(?:\.js)?['"]?(?=$|\s|["'])/
+  /(?:^|[\s='"])(?:--import|-r|--require)(?:=|\s+)['"]?dd-trace\/register(?:\.js)?['"]?(?=$|[\s"'])/
 const WRONG_INIT_RE = /dd-trace\/(?:init|initialize\.mjs)\b|require\(['"]dd-trace['"]\)\.init\s*\(/
 const DIRECT_CI_INIT_RE = /(?:require\(|import\s+)['"]dd-trace\/ci\/init(?:\.js)?['"]/
 const CI_DISABLED_RE = /DD_CIVISIBILITY_ENABLED["'\s:=]+(?:false|0)\b/i
@@ -86,21 +86,21 @@ const AGENTLESS_ENABLED_RE = /DD_CIVISIBILITY_AGENTLESS_ENABLED["'\s:=]+(?:true|
 const API_KEY_RE = /\b(?:DD_API_KEY|DATADOG_API_KEY)\b/
 const SERVICE_RE = /\bDD_SERVICE\b/
 const OTEL_OTLP_RE = /OTEL_TRACES_EXPORTER["'\s:=]+otlp\b/i
-const WATCH_MODE_RE = /(?:^|\s)(?:watch|--watch|--watchAll)(?!(?:=false)(?:\s|$))(?:\s|=|$)/
+const WATCH_MODE_RE = /(?:^|\s)(?:watch|--watch|--watchAll)(?!=false(?:\s|$))(?:\s|=|$)/
 
 const CYPRESS_MANUAL_PLUGIN_RE = /dd-trace\/ci\/cypress\/(?:plugin|after-run|after-spec)\b/
 const CYPRESS_SUPPORT_RE = /dd-trace\/ci\/cypress\/support\b/
 const CYPRESS_SUPPORT_DISABLED_RE = /supportFile\s*:\s*false|"supportFile"\s*:\s*false/
 const CUCUMBER_RUNNER_COMMAND_RE = new RegExp(
   String.raw`(?:^|(?:&&|\|\||[;|])\s*)` +
-  String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s;&|]+)|` +
-  String.raw`cross-env|env|npx|nyc|c8|npm\s+exec|pnpm\s+exec|yarn\s+exec|--?[^\s;&|]+)\s+)*` +
-  String.raw`(?:(?:[^\s"';&|]+[\/\\])?(?:cucumber-js(?:\.cmd)?|cucumber(?:\.cmd)?)|` +
-  String.raw`node(?:\.exe)?\s+(?:[^\s"';&|]+[\/\\])?bin[\/\\]cucumber\.js)` +
+  String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"';&|][^\s;&|]*)|` +
+  String.raw`cross-env|env|npx|nyc|c8|npm\s+exec|pnpm\s+exec|yarn\s+exec|-[^\s;&|]+)\s+)*` +
+  String.raw`(?:(?:[^\s"';&|]+[/\\])?(?:cucumber-js(?:\.cmd)?|cucumber(?:\.cmd)?)|` +
+  String.raw`node(?:\.exe)?\s+(?:[^\s"';&|]+[/\\])?bin[/\\]cucumber\.js)` +
   String.raw`(?=$|[\s"';&|])`
 )
 const CUCUMBER_PARALLEL_RE =
-  /\bcucumber(?:-js)?\b[\s\S]{0,200}\s--parallel\b|--parallel\b[\s\S]{0,200}\bcucumber(?:-js)?\b/
+  /\bcucumber(?:-js)?\b[\s\S]{0,200}\s--parallel\b|--parallel\b[\s\S]{1,200}\bcucumber(?:-js)?\b/
 const JEST_FORCE_EXIT_RE = /\bforceExit\s*:\s*true\b|--forceExit\b|"forceExit"\s*:\s*true/
 const JEST_JASMINE_RE = /jest-jasmine2/
 
@@ -224,7 +224,7 @@ const UNSUPPORTED_FRAMEWORKS = [
  *
  * @param {object} [options] diagnosis options
  * @param {string} [options.root] repository path to inspect
- * @param {NodeJS.ProcessEnv} [options.env] environment to inspect
+ * @param {typeof process.env} [options.env] environment to inspect
  * @param {Function} [options.execFile] command runner used for git checks
  * @param {string} [options.gitExecutable] trusted git executable used for git checks
  * @param {number} [options.maxFiles] maximum number of text files to scan
@@ -506,8 +506,10 @@ function checkSupportedFrameworks (results, frameworks) {
       )
     }
 
-    for (const note of framework.notes || []) {
-      addResult(results, 'info', `${framework.name} capability note`, note)
+    if (framework.notes) {
+      for (const note of framework.notes) {
+        addResult(results, 'info', `${framework.name} capability note`, note)
+      }
     }
   }
 }
@@ -542,7 +544,7 @@ function checkUnsupportedFrameworks (results, unsupported, supported) {
  * @param {Array<object>} results mutable result list
  * @param {Array<object>} frameworks detected supported frameworks
  * @param {object} evidence repository evidence
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  */
 function checkInitialization (results, frameworks, evidence, env) {
   if (!frameworks.length) return
@@ -770,7 +772,7 @@ function checkCypressConfiguration (results, evidence) {
  * @param {Array<object>} results mutable result list
  * @param {Array<object>} workflowFiles scanned CI workflow files
  * @param {object} evidence repository evidence
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  */
 function checkCiConfiguration (results, workflowFiles, evidence, env) {
   if (!workflowFiles.length) {
@@ -876,7 +878,7 @@ function checkCiConfiguration (results, workflowFiles, evidence, env) {
  *
  * @param {Array<object>} results mutable result list
  * @param {string} root repository root
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  * @param {Function} execFile command runner
  * @param {string|undefined} gitExecutable trusted git executable
  */
@@ -959,7 +961,7 @@ function checkGit (results, root, env, execFile, gitExecutable) {
  * Checks current environment variables relevant to Test Optimization.
  *
  * @param {Array<object>} results mutable result list
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  * @param {object} evidence repository evidence
  */
 function checkCurrentEnvironment (results, env, evidence) {
@@ -1039,7 +1041,7 @@ function checkCurrentEnvironment (results, env, evidence) {
  * Checks current CI provider metadata.
  *
  * @param {Array<object>} results mutable result list
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  */
 function checkCurrentCiMetadata (results, env) {
   const providerDetected = CURRENT_ENV_PROVIDER_KEYS.some(key => env[key])
@@ -1372,7 +1374,7 @@ function detectUnsupportedFrameworks (definitions, manifests, scripts) {
  * Collects useful boolean evidence from scanned files and environment.
  *
  * @param {Array<object>} textFiles scanned text files
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  * @returns {object} evidence object
  */
 function collectEvidence (textFiles, env) {
@@ -1876,7 +1878,7 @@ function isTestSetupOrCiFile (file) {
   if (/^(?:jest|config-jest|vitest|vite|playwright|cypress|cucumber)\.config\./.test(basename)) return true
   if (/^\.mocharc\./.test(basename)) return true
   if (basename === 'cypress.json') return true
-  if (/(?:setup|bootstrap)/i.test(basename)) return true
+  if (/setup|bootstrap/i.test(basename)) return true
   if (relativePath.startsWith('cypress/support/')) return true
 
   return false
@@ -1888,7 +1890,7 @@ function isTestSetupOrCiFile (file) {
  * @param {Function} execFile command runner
  * @param {string} root repository root
  * @param {string|undefined} gitExecutable trusted git executable
- * @param {NodeJS.ProcessEnv} env credential-free git environment
+ * @param {typeof process.env} env credential-free git environment
  * @returns {boolean} true if git runs
  */
 function canRunGit (execFile, root, gitExecutable, env) {
@@ -1908,7 +1910,7 @@ function canRunGit (execFile, root, gitExecutable, env) {
  * @param {Function} execFile command runner
  * @param {string} root repository root
  * @param {string} gitExecutable trusted git executable
- * @param {NodeJS.ProcessEnv} env credential-free git environment
+ * @param {typeof process.env} env credential-free git environment
  * @param {string[]} args git arguments
  * @returns {string} command output
  */
@@ -1952,8 +1954,8 @@ function findTrustedGitExecutable () {
  * Creates the minimal environment needed by read-only local git metadata commands.
  *
  * @param {string|undefined} gitExecutable trusted git executable
- * @param {NodeJS.ProcessEnv} sourceEnv source environment
- * @returns {NodeJS.ProcessEnv} credential-free git environment
+ * @param {typeof process.env} sourceEnv source environment
+ * @returns {typeof process.env} credential-free git environment
  */
 function getGitEnvironment (gitExecutable, sourceEnv) {
   const env = {
@@ -2065,7 +2067,7 @@ function hasRegisterInNodeOptions (nodeOptions) {
 /**
  * Checks whether environment contains branch or tag metadata.
  *
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  * @returns {boolean} true if branch metadata exists
  */
 function hasBranchMetadata (env) {
@@ -2089,7 +2091,7 @@ function hasBranchMetadata (env) {
 /**
  * Checks whether environment contains commit SHA metadata.
  *
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  * @returns {boolean} true if SHA metadata exists
  */
 function hasShaMetadata (env) {

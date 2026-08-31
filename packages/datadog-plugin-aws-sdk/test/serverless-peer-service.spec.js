@@ -7,7 +7,7 @@ const { after, before, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const helpers = require('./kinesis_helpers')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Plugin', () => {
   describe('Serverless', function () {
@@ -53,7 +53,7 @@ describe('Plugin', () => {
           // ignore error if the table already exists
           if (typeof dynamo.createTable === 'function') {
             const createTable = toPromise(dynamo, dynamo.createTable)
-            try { await createTable(getCreateTableParams()) } catch (_) {}
+            try { await createTable(getCreateTableParams()) } catch {}
           }
         })
 
@@ -303,6 +303,40 @@ describe('Plugin', () => {
         })
       })
 
+      describe('EventBridge-Serverless', () => {
+        let eventbridge
+
+        const eventbridgeClientName = moduleName === '@aws-sdk/smithy-client'
+          ? '@aws-sdk/client-eventbridge'
+          : 'aws-sdk'
+
+        before(function () {
+          const lib = require(`../../../versions/${eventbridgeClientName}@${version}`).get()
+          // 2.3.0 predates the EventBridge rename and only ships CloudWatch Events; the oldest
+          // fixtures ship neither, so there is no client to point at LocalStack.
+          const EventBridge = lib.EventBridge || lib.CloudWatchEvents
+          if (!EventBridge) this.skip()
+
+          eventbridge = new EventBridge({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
+        })
+
+        it('propagates peer.service from aws span to underlying http span', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const peerService = 'events.us-east-1.amazonaws.com'
+              const spans = traces[0]
+              const awsSpan = spans.find(span => span.name === 'aws.request')
+              const httpSpan = spans.find(span => span.name === 'http.request')
+              assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+              assert.strictEqual(httpSpan.meta['peer.service'], peerService)
+            }, { timeoutMs: 15000 }),
+            callViaPromise(eventbridge, 'putEvents', {
+              Entries: [{ Detail: '{"id":1}', DetailType: 'invoice.created', Source: 'checkout' }],
+            }),
+          ])
+        })
+      })
+
       describe('S3-Serverless', () => {
         let s3
         const bucketName = 's3-bucket-name-test'
@@ -359,6 +393,7 @@ function toPromise (client, fn) {
       return result.promise()
     }
 
-    return promisify(fn)(...args)
+    const fnAsync = promisify(fn)
+    return fnAsync(...args)
   }
 }

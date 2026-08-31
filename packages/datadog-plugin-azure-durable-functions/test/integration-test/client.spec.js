@@ -111,6 +111,8 @@ describe('esm', () => {
  * - spawns process for azure func start commands
  * - connects to azurite (running in container)
  *    then runs the durable function locally
+ *
+ * @param {number} agentPort port the fake agent listens on
  */
 async function spawnPluginIntegrationTestProc (agentPort) {
   const cwd = sandboxCwd()

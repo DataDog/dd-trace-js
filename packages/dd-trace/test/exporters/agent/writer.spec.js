@@ -57,6 +57,7 @@ function describeWriter (protocolVersion) {
 
     Writer = proxyquire('../../../src/exporters/agent/writer', {
       '../common/request': request,
+      '../../ci-visibility/exporters/request': request,
       '../../encode/0.4': { AgentEncoder },
       '../../encode/0.5': { AgentEncoder },
       '../../../../../package.json': { version: 'tracerVersion' },
@@ -106,6 +107,20 @@ function describeWriter (protocolVersion) {
 
     it('should call callback when empty', (done) => {
       writer.flush(done)
+    })
+
+    it('routes flushes through the configured delivery tracker', (done) => {
+      const deliveryTracker = { track: sinon.spy((flush, done) => flush(done)) }
+      writer = new Writer({ url, prioritySampler, protocolVersion, deliveryTracker })
+
+      writer.flush(() => {
+        try {
+          sinon.assert.calledOnce(deliveryTracker.track)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
     })
 
     it('should flush its traces to the agent, and call callback', (done) => {
@@ -172,6 +187,36 @@ function describeWriter (protocolVersion) {
         )
         done()
       })
+    })
+
+    it('should propagate terminal errors during a bounded Test Optimization flush', (done) => {
+      const error = new Error('agent unavailable')
+      const deadline = Date.now() + 10_000
+      request.yieldsAsync(error, null, 503)
+      encoder.count.returns(1)
+      writer = new Writer({ url, prioritySampler, protocolVersion, isTestOptimization: true })
+
+      writer.flush((flushError) => {
+        assert.strictEqual(flushError, error)
+        assert.strictEqual(request.firstCall.args[1].deadline, deadline)
+        done()
+      }, { deadline })
+    })
+
+    it('should wait for Test Optimization requests already in flight during a bounded final flush', () => {
+      request.resetBehavior()
+      writer = new Writer({ url, prioritySampler, protocolVersion, isTestOptimization: true })
+      encoder.count.onFirstCall().returns(1).returns(0)
+      writer.flush()
+
+      const done = sinon.spy()
+      const deadline = Date.now() + 10_000
+      writer.flush(done, { deadline })
+
+      sinon.assert.notCalled(done)
+      assert.strictEqual(request.firstCall.args[1].deadline, deadline)
+      request.firstCall.args[2](null, response, 200)
+      sinon.assert.calledOnceWithExactly(done, undefined)
     })
 
     it('should update sampling rates', (done) => {

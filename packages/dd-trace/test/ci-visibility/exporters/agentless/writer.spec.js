@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -11,9 +13,14 @@ let writer
 let span
 let request
 let encoder
+let encoderArgs
 let coverageEncoder
 let url
 let log
+let incrementCountMetric
+let agent
+let getAgent
+let tags
 
 describe('CI Visibility Writer', () => {
   beforeEach(() => {
@@ -35,8 +42,12 @@ describe('CI Visibility Writer', () => {
     log = {
       error: sinon.spy(),
     }
+    incrementCountMetric = sinon.stub()
+    agent = {}
+    getAgent = sinon.stub().returns(agent)
 
-    const AgentlessCiVisibilityEncoder = function () {
+    const AgentlessCiVisibilityEncoder = function (...args) {
+      encoderArgs = args
       return encoder
     }
 
@@ -51,12 +62,21 @@ describe('CI Visibility Writer', () => {
     }
 
     Writer = proxyquire('../../../../src/ci-visibility/exporters/agentless/writer', {
-      '../../../exporters/common/request': request,
+      '../agents': { getAgent },
+      '../request': request,
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
+      '../../../ci-visibility/telemetry': { incrementCountMetric },
       '../../../log': log,
     })
-    writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' }, coverageUrl: url })
+    tags = { 'runtime-id': 'runtime-id' }
+    writer = new Writer({ url, tags, coverageUrl: url })
+  })
+
+  describe('constructor', () => {
+    it('should pass the live tags object (not a copied runtime-id) to the encoder', () => {
+      assert.strictEqual(encoderArgs[1].tags, tags)
+    })
   })
 
   describe('append', () => {
@@ -100,6 +120,7 @@ describe('CI Visibility Writer', () => {
           headers: {
             'Content-Type': 'application/msgpack',
           },
+          agent,
         })
         done()
       })
@@ -115,6 +136,11 @@ describe('CI Visibility Writer', () => {
 
         writer.flush(() => {
           sinon.assert.calledWith(log.error, 'Error sending CI agentless payload', error)
+          sinon.assert.calledWithExactly(
+            incrementCountMetric,
+            'endpoint_payload.dropped',
+            { endpoint: 'test_cycle' }
+          )
           done()
         })
       })

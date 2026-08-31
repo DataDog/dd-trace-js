@@ -91,14 +91,16 @@ function cleanupGeneratedFiles (manifest, { keep = false } = {}) {
     filesRemoved: 0,
     filesRetained: 0,
   }
-  for (const framework of manifest.frameworks || []) {
-    const strategy = framework.generatedTestStrategy
-    addCleanupOutcome(
-      outcome,
-      cleanupPaths(getSafeCleanupPaths(framework, strategy, { includeGeneratedFiles: true })),
-      'files'
-    )
-    addCleanupOutcome(outcome, cleanupCreatedDirectories(framework.project.root), 'directories')
+  if (manifest.frameworks) {
+    for (const framework of manifest.frameworks) {
+      const strategy = framework.generatedTestStrategy
+      addCleanupOutcome(
+        outcome,
+        cleanupPaths(getSafeCleanupPaths(framework, strategy, { includeGeneratedFiles: true })),
+        'files'
+      )
+      addCleanupOutcome(outcome, cleanupCreatedDirectories(framework.project.root), 'directories')
+    }
   }
   outcome.status = outcome.filesRetained > 0 || outcome.directoriesRetained > 0
     ? 'incomplete'
@@ -168,13 +170,15 @@ function initializeRuntimeCleanupFiles (framework, strategy) {
   if (initializedCleanupStrategies.has(strategy)) return
 
   const generatedFiles = new Set((strategy.files || []).map(file => validateGeneratedFilePath(framework, file.path)))
-  for (const cleanupPath of strategy.cleanupPaths || []) {
-    const filename = validateCleanupPath(framework, cleanupPath)
-    if (generatedFiles.has(filename) || isDirectory(filename) || !isNamespacedRuntimeFile(filename)) continue
-    if (fs.existsSync(filename)) {
-      throw new Error(`Refusing to delete pre-existing generated validation runtime file: ${filename}`)
+  if (strategy.cleanupPaths) {
+    for (const cleanupPath of strategy.cleanupPaths) {
+      const filename = validateCleanupPath(framework, cleanupPath)
+      if (generatedFiles.has(filename) || isDirectory(filename) || !isNamespacedRuntimeFile(filename)) continue
+      if (fs.existsSync(filename)) {
+        throw new Error(`Refusing to delete pre-existing generated validation runtime file: ${filename}`)
+      }
+      authorizedRuntimeCleanupFiles.set(filename, authorizePathForCleanup(framework.project.root, filename))
     }
-    authorizedRuntimeCleanupFiles.set(filename, authorizePathForCleanup(framework.project.root, filename))
   }
   initializedCleanupStrategies.add(strategy)
 }
@@ -183,20 +187,24 @@ function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
   if (!strategy) return []
 
   const generatedFiles = new Set()
-  for (const file of strategy.files || []) {
-    generatedFiles.add(validateGeneratedFilePath(framework, file.path))
+  if (strategy.files) {
+    for (const file of strategy.files) {
+      generatedFiles.add(validateGeneratedFilePath(framework, file.path))
+    }
   }
 
   const cleanupPaths = []
-  for (const cleanupPath of strategy.cleanupPaths || []) {
-    const filename = validateCleanupPath(framework, cleanupPath)
-    if (generatedFiles.has(filename)) {
-      if (includeGeneratedFiles && writtenGeneratedFiles.has(filename)) cleanupPaths.push(filename)
-      continue
-    }
+  if (strategy.cleanupPaths) {
+    for (const cleanupPath of strategy.cleanupPaths) {
+      const filename = validateCleanupPath(framework, cleanupPath)
+      if (generatedFiles.has(filename)) {
+        if (includeGeneratedFiles && writtenGeneratedFiles.has(filename)) cleanupPaths.push(filename)
+        continue
+      }
 
-    if (authorizedRuntimeCleanupFiles.has(filename)) {
-      cleanupPaths.push(filename)
+      if (authorizedRuntimeCleanupFiles.has(filename)) {
+        cleanupPaths.push(filename)
+      }
     }
   }
 
@@ -264,10 +272,12 @@ function authorizePathForCleanup (root, filename) {
 }
 
 function pinRuntimeCleanupParents (strategy) {
-  for (const cleanupPath of strategy.cleanupPaths || []) {
-    const authorization = authorizedRuntimeCleanupFiles.get(path.resolve(cleanupPath))
-    if (authorization && authorization.physicalParent === undefined) {
-      pinCleanupParent(authorization, cleanupPath)
+  if (strategy.cleanupPaths) {
+    for (const cleanupPath of strategy.cleanupPaths) {
+      const authorization = authorizedRuntimeCleanupFiles.get(path.resolve(cleanupPath))
+      if (authorization && authorization.physicalParent === undefined) {
+        pinCleanupParent(authorization, cleanupPath)
+      }
     }
   }
 }

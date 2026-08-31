@@ -32,11 +32,7 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   // TODO: Remove this once we drop suppport for v5
-  const contextNewVersions = (...args) => {
-    if (satisfies(version, '>=1.38.0') || version === 'latest') {
-      context(...args)
-    }
-  }
+  const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
@@ -267,9 +263,14 @@ versions.forEach((version) => {
         proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
         proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
-        await once(proc, 'exit')
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), () => {
+            assert.match(testOutput, /detected as new but their names contain dynamic data/)
+          })
 
-        assert.match(testOutput, /detected as new but their names contain dynamic data/)
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        // Dynamic names differ between discovery and worker processes, so Playwright cannot find these tests.
+        assert.strictEqual(exitCode, 1, testOutput)
       })
     })
   })

@@ -1,12 +1,15 @@
 'use strict'
 
+// No optional chaining or nullish coalescing in this file: Cypress 12 bundles it with webpack 4,
+// whose parser predates both, and its babel-loader skips node_modules.
+
 let rumFlushWaitMillis = 500
 let rumTestExecutionIdCookieName
 
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
 let knownTestsForSuite = []
-let earlyFlakeDetectionNumRetries = 0
+let earlyFlakeDetectionSchedulingRetryCount = 0
 let isTestManagementEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
@@ -336,7 +339,7 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
     } else if (isModified && isEarlyFlakeDetectionEnabled) {
       disableFrameworkRetries(test)
       retryMessage = 'to detect flakes because it is modified'
-      retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, [
+      retriedTests = getRetriedTests(test, earlyFlakeDetectionSchedulingRetryCount, [
         '_ddIsModified',
         '_ddIsEfdRetry',
         isKnownTestsEnabled && isNewTest(test) && '_ddIsNew',
@@ -344,7 +347,7 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
     } else if (isNew && isEarlyFlakeDetectionEnabled) {
       disableFrameworkRetries(test)
       retryMessage = 'to detect flakes because it is new'
-      retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
+      retriedTests = getRetriedTests(test, earlyFlakeDetectionSchedulingRetryCount, ['_ddIsNew', '_ddIsEfdRetry'])
     }
 
     testsWithRetries.push(...retriedTests)
@@ -406,6 +409,7 @@ beforeEach(function () {
       rumCookiePromise = setRumCorrelationCookie(traceId)
     }
     if (shouldSkip) {
+      // Test Optimization requested this runtime skip through the Cypress support hook.
       this.skip()
     }
     if (rumCookiePromise) {
@@ -428,7 +432,7 @@ before(function () {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
       isKnownTestsEnabled = suiteConfig.isKnownTestsEnabled
       knownTestsForSuite = suiteConfig.knownTestsForSuite
-      earlyFlakeDetectionNumRetries = suiteConfig.earlyFlakeDetectionNumRetries
+      earlyFlakeDetectionSchedulingRetryCount = suiteConfig.earlyFlakeDetectionSchedulingRetryCount
       isTestManagementEnabled = suiteConfig.isTestManagementEnabled
       testManagementAttemptToFixRetries = suiteConfig.testManagementAttemptToFixRetries
       testManagementTests = suiteConfig.testManagementTests

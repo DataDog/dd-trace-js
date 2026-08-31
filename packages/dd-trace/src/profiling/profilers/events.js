@@ -2,7 +2,7 @@
 
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const {
-  Function,
+  Function: PprofFunction,
   Label,
   Line,
   Location,
@@ -124,13 +124,13 @@ class GCDecorator {
     }
     let reasonLabel = this.reasonLabels[flags]
     if (!reasonLabel) {
-      const reasons = []
+      let reasonStr = ''
       for (const [key, value] of Object.entries(this.flagObj)) {
         if (value & flags) {
-          reasons.push(key)
+          if (reasonStr) reasonStr += ','
+          reasonStr += key
         }
       }
-      const reasonStr = reasons.join(',')
       reasonLabel = labelFromStr(this.stringTable, this.reasonLabelKey, reasonStr)
       this.reasonLabels[flags] = reasonLabel
     }
@@ -256,7 +256,7 @@ class EventSerializer {
     // A synthetic single-frame location to serve as the location for timeline
     // samples. We need these as the profiling backend (mimicking official pprof
     // tool's behavior) ignores these.
-    const fn = new Function({ id: this.functions.length + 1, name: this.stringTable.dedup('') })
+    const fn = new PprofFunction({ id: this.functions.length + 1, name: this.stringTable.dedup('') })
     this.functions.push(fn)
     const line = new Line({ functionId: fn.id })
     const location = new Location({ id: this.locations.length + 1, line: [line] })

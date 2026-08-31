@@ -61,7 +61,7 @@ jobs:
             versions.getLatestPlaywrightSpecifier() === 'latest' \
               ? versions.latest \
               : versions.latestSupportedByNode18")
-          echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$PLAYWRIGHT_VERSION" >> "$GITHUB_OUTPUT"
           echo "Playwright version: $PLAYWRIGHT_VERSION"
       - name: Cache Playwright browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -72,6 +72,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-testopt-${{ matrix.version }}
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   playwright-image:
     strategy:
@@ -117,11 +121,13 @@ jobs:
               IMAGE_TAG="$OLDEST_TAG"
               ;;
           esac
-          echo "images=$IMAGES" >> $GITHUB_OUTPUT
-          echo "pw-version=$PW_VERSION" >> $GITHUB_OUTPUT
-          echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          {
+            echo "images=$IMAGES"
+            echo "pw-version=$PW_VERSION"
+            echo "image-tag=$IMAGE_TAG"
+          } >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
-        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -242,12 +248,25 @@ jobs:
       - run: npm run test:instrumentations:ci
         env:
           PLUGINS: webdriverio
-      - run: npm run test:integration:webdriverio:coverage
+      - uses: ./.github/actions/upload-junit-artifacts
+        id: webdriverio_instrumentation_upload
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}-instrumentation
+      - name: Clear uploaded instrumentation JUnit reports
+        if: "!cancelled() && steps.webdriverio_instrumentation_upload.outcome == 'success'"
+        run: rm -f ./*.xml
+      - id: webdriverio_integration
+        run: npm run test:integration:webdriverio:coverage
         env:
           WEBDRIVERIO_VERSION: ${{ matrix.webdriverio-version }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-webdriverio-${{ matrix.node-version }}-${{ matrix.webdriverio-version }}
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled() && steps.webdriverio_integration.outcome != 'skipped'"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}-integration
 
   integration-jest:
     strategy:
@@ -260,6 +279,13 @@ jobs:
           - jest.core
           - jest.tia-efd
           - jest.test-management
+        test-pattern:
+          - ''
+        include:
+          - version: oldest
+            jest-version: 25.5.1
+            spec: jest.tia-efd
+            test-pattern: '^jest@25[.]5[.]1 commonJS early flake detection retries new tests$'
     name: integration-jest (${{ matrix.jest-version }}, node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
@@ -276,28 +302,19 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: npm run test:integration:jest:coverage
+      - name: Simulate the v5 release line for Jest 25 compatibility
+        if: matrix.jest-version == '25.5.1'
+        run: npm pkg set version=5.0.0
+      - run: npm run test:integration:jest:coverage -- --grep "$JEST_TEST_PATTERN"
         env:
           NODE_OPTIONS: "-r ./ci/init"
           JEST_VERSION: ${{ matrix.jest-version }}
+          JEST_TEST_PATTERN: ${{ matrix.test-pattern }}
           SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-jest-${{ matrix.version }}-${{ matrix.jest-version }}
-
-  # Unit tests for `packages/datadog-plugin-jest`. The `integration-jest` matrix above only runs
-  # `integration-tests/jest/*.spec.js`, so this is the only CI invocation whose glob expands to
-  # cover `packages/datadog-plugin-jest/test/util.spec.js`.
-  jest:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    env:
-      PLUGINS: jest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/plugins/test
 
   dependency-helpers:
     runs-on: ubuntu-latest
@@ -352,9 +369,9 @@ jobs:
         run: |
           DOCKER_HASH=$(sha256sum .github/selenium/Dockerfile | cut -c1-8)
           IMAGE="ghcr.io/datadog/dd-trace-js/selenium-tools:${DOCKER_HASH}"
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
-        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -472,7 +489,7 @@ jobs:
           else
             RESOLVED="${{ matrix.cypress-version }}"
           fi
-          echo "resolved=$RESOLVED" >> $GITHUB_OUTPUT
+          echo "resolved=$RESOLVED" >> "$GITHUB_OUTPUT"
       - name: Cache Cypress binary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -501,6 +518,7 @@ jobs:
         version: [oldest, latest]
         spec:
           - vitest.core
+          - vitest.tia
           - vitest.test-management
           - vitest.advanced
           - vitest.msw
@@ -561,6 +579,10 @@ jobs:
       - run: npm run test:instrumentations
         env:
           PLUGINS: vitest-main
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}-instrumentation
       - run: npm run test:integration:vitest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"

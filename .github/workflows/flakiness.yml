@@ -49,9 +49,9 @@ jobs:
       - run: node scripts/flakiness.mjs
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
-      - run: cat flakiness.md >> $GITHUB_STEP_SUMMARY
+      - run: cat flakiness.md >> "$GITHUB_STEP_SUMMARY"
       - id: slack
-        run: echo "report=$(cat flakiness.txt)" >> $GITHUB_OUTPUT
+        run: echo "report=$(cat flakiness.txt)" >> "$GITHUB_OUTPUT"
       - uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v2.1.0
         if: github.event_name == 'schedule'
         with:

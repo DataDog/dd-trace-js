@@ -113,7 +113,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     }
 
     if (maxTokens) {
-      metadata.maxTokens = Number.parseInt(maxTokens)
+      metadata.maxTokens = Number.parseInt(maxTokens, 10)
     }
 
     this._tagger.tagMetadata(span, metadata)

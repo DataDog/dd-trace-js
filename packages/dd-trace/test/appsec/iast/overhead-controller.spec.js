@@ -479,13 +479,13 @@ describe('Overhead controller', () => {
           agent.subscribe(handler)
           testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
             if (url === FIRST_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).catch(done)
             } else if (url === SECOND_REQUEST) {
               requestResolvers[FIRST_REQUEST]()
               requestResolvers[SECOND_REQUEST]()
             }
           })
-          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).then().catch(done)
+          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).catch(done)
         })
 
         it('should detect vulnerabilities in both if max concurrent is 2', (done) => {
@@ -523,7 +523,7 @@ describe('Overhead controller', () => {
           agent.subscribe(handler)
           testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
             if (url === FIRST_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).catch(done)
             } else if (url === SECOND_REQUEST) {
               setImmediate(() => {
                 requestResolvers[FIRST_REQUEST]()
@@ -537,7 +537,7 @@ describe('Overhead controller', () => {
               })
             }
           })
-          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).then().catch(done)
+          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).catch(done)
         })
 
         it('should recovery requests budget', function (done) {
@@ -587,13 +587,13 @@ describe('Overhead controller', () => {
           agent.subscribe(handler)
           testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
             if (url === FIRST_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).catch(done)
             } else if (url === SECOND_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${THIRD_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${THIRD_REQUEST}`).catch(done)
             } else if (url === THIRD_REQUEST) {
               requestResolvers[FIRST_REQUEST]()
             } else if (url === FOURTH_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).catch(done)
             } else if (url === FIFTH_REQUEST) {
               requestResolvers[SECOND_REQUEST]()
             }
@@ -601,7 +601,7 @@ describe('Overhead controller', () => {
 
           testRequestEventEmitter.on(TEST_REQUEST_FINISHED, (url) => {
             if (url === FIRST_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${FOURTH_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${FOURTH_REQUEST}`).catch(done)
             } else if (url === SECOND_REQUEST) {
               requestResolvers[THIRD_REQUEST]()
               requestResolvers[FOURTH_REQUEST]()
@@ -609,7 +609,7 @@ describe('Overhead controller', () => {
             }
           })
 
-          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).then().catch(done)
+          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).catch(done)
         })
 
         it('should add _dd.iast.enabled tag even when no vulnerability is detected', (done) => {
@@ -652,7 +652,7 @@ describe('Overhead controller', () => {
               })
             }
           })
-          axios.get(`http://localhost:${serverConfig.port}${SECURE_REQUEST}`).then().catch(done)
+          axios.get(`http://localhost:${serverConfig.port}${SECURE_REQUEST}`).catch(done)
         })
       }
 

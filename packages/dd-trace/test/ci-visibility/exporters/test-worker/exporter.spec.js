@@ -9,17 +9,26 @@ const sinon = require('sinon')
 
 require('../../../../../dd-trace/test/setup/core')
 const TestWorkerCiVisibilityExporter = proxyquire('../../../../src/ci-visibility/exporters/test-worker', {
-  '../../../config': () => proxyquire.noPreserveCache()('../../../../src/config', {})(),
+  '../../../config': () => {
+    const loadConfig = proxyquire.noPreserveCache()
+    const createConfig = loadConfig('../../../../src/config', {})
+    return createConfig()
+  },
 })
 
 const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
+  VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
 } = require('../../../../src/plugins/util/test')
 
 describe('CI Visibility Test Worker Exporter', () => {
@@ -108,6 +117,18 @@ describe('CI Visibility Test Worker Exporter', () => {
       sinon.assert.calledOnce(onDone)
     })
 
+    it('reports an IPC send error after all writers settle', () => {
+      const error = new Error('IPC channel closed')
+      process.send = sinon.stub().callsFake((payload, callback) => callback(error))
+      const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      const onDone = sinon.spy()
+
+      jestWorkerExporter.export([{ type: 'test' }])
+      jestWorkerExporter.flush(onDone)
+
+      sinon.assert.calledOnceWithExactly(onDone, error)
+    })
+
     it('does not break if process.send is undefined', () => {
       delete process.send
       const trace = [{ type: 'test' }]
@@ -134,6 +155,17 @@ describe('CI Visibility Test Worker Exporter', () => {
       cucumberWorkerExporter.export(traceSecond)
       cucumberWorkerExporter.flush()
       sinon.assert.calledWith(send, [CUCUMBER_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+    })
+
+    it('can export telemetry', () => {
+      const telemetry = { type: 'ciVisEvent', name: 'test_event' }
+      const cucumberWorkerExporter = new TestWorkerCiVisibilityExporter()
+      cucumberWorkerExporter.exportTelemetry(telemetry)
+      cucumberWorkerExporter.flush()
+      sinon.assert.calledWith(
+        send,
+        [CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])]
+      )
     })
 
     it('signals completion after traces flush', () => {
@@ -179,6 +211,14 @@ describe('CI Visibility Test Worker Exporter', () => {
       mochaWorkerExporter.export(traceSecond)
       mochaWorkerExporter.flush()
       sinon.assert.calledWith(send, [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+    })
+
+    it('can export telemetry', () => {
+      const telemetry = { type: 'ciVisEvent', name: 'test_event' }
+      const mochaWorkerExporter = new TestWorkerCiVisibilityExporter()
+      mochaWorkerExporter.exportTelemetry(telemetry)
+      mochaWorkerExporter.flush()
+      sinon.assert.calledWith(send, [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])])
     })
 
     it('can export DI logs', () => {
@@ -245,6 +285,14 @@ describe('CI Visibility Test Worker Exporter', () => {
       sinon.assert.calledWith(send, [PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
     })
 
+    it('can export telemetry', () => {
+      const telemetry = { type: 'ciVisEvent', name: 'test_event' }
+      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
+      playwrightWorkerExporter.exportTelemetry(telemetry)
+      playwrightWorkerExporter.flush()
+      sinon.assert.calledWith(send, [PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])])
+    })
+
     it('does not break if process.send is undefined', () => {
       delete process.send
       const trace = [{ type: 'test' }]
@@ -271,6 +319,31 @@ describe('CI Visibility Test Worker Exporter', () => {
       vitestWorkerExporter.export(traceSecond)
       vitestWorkerExporter.flush()
       sinon.assert.calledWith(send, [VITEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+    })
+
+    it('can export coverages', () => {
+      process.env.DD_VITEST_WORKER = '1'
+      const coverage = { sessionId: '1', suiteId: '1', files: ['test.js'] }
+      const coverageSecond = { sessionId: '2', suiteId: '2', files: ['test2.js'] }
+      const vitestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      vitestWorkerExporter.exportCoverage(coverage)
+      vitestWorkerExporter.exportCoverage(coverageSecond)
+      vitestWorkerExporter.flush()
+      sinon.assert.calledWith(send,
+        [VITEST_WORKER_COVERAGE_PAYLOAD_CODE, JSON.stringify([coverage, coverageSecond])]
+      )
+    })
+
+    it('can export telemetry', () => {
+      process.env.DD_VITEST_WORKER = '1'
+      const telemetry = { type: 'ciVisEvent', name: 'code_coverage_started' }
+      const vitestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      vitestWorkerExporter.exportTelemetry(telemetry)
+      vitestWorkerExporter.flush()
+      sinon.assert.calledWith(
+        send,
+        [VITEST_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])]
+      )
     })
 
     it('wraps the payload for legacy tinypool workers (vitest <4)', () => {

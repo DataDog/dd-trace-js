@@ -6,7 +6,7 @@ const RemoteConfigCapabilities = require('../remote_config/capabilities')
  * Configures remote config handlers for openfeature feature flagging
  *
  * @param {import('../remote_config')} rc - RemoteConfig instance
- * @param {() => import('./flagging_provider')} getOpenfeatureProxy
+ * @param {() => InstanceType<ReturnType<typeof import('./flagging_provider')>>} getOpenfeatureProxy
  * @param {boolean} subscribe - Whether Agent Remote Config owns UFC delivery
  */
 function enable (rc, getOpenfeatureProxy, subscribe) {

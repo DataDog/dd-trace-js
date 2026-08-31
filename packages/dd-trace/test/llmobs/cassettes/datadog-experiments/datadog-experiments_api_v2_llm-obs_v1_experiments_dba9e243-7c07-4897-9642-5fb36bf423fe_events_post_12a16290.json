@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/experiments/dba9e243-7c07-4897-9642-5fb36bf423fe/events",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "3982"
+    },
+    "body": "{\"data\":{\"type\":\"experiments\",\"attributes\":{\"metrics\":[{\"metric_source\":\"custom\",\"label\":\"nonempty\",\"span_id\":\"579d0080104aaa01\",\"trace_id\":\"6a6d152700000000579d0080104aaa01\",\"timestamp_ms\":1785533735794,\"tags\":[\"source:rich-vcr-test\",\"experiment_id:dba9e243-7c07-4897-9642-5fb36bf423fe\"],\"experiment_id\":\"dba9e243-7c07-4897-9642-5fb36bf423fe\",\"metric_type\":\"boolean\",\"boolean_value\":true},{\"metric_source\":\"custom\",\"label\":\"len\",\"span_id\":\"579d0080104aaa01\",\"trace_id\":\"6a6d152700000000579d0080104aaa01\",\"timestamp_ms\":1785533735794,\"tags\":[\"source:rich-vcr-test\",\"experiment_id:dba9e243-7c07-4897-9642-5fb36bf423fe\"],\"experiment_id\":\"dba9e243-7c07-4897-9642-5fb36bf423fe\",\"metric_type\":\"score\",\"score_value\":5},{\"metric_source\":\"custom\",\"label\":\"label\",\"span_id\":\"579d0080104aaa01\",\"trace_id\":\"6a6d152700000000579d0080104aaa01\",\"timestamp_ms\":1785533735794,\"tags\":[\"source:rich-vcr-test\",\"experiment_id:dba9e243-7c07-4897-9642-5fb36bf423fe\"],\"experiment_id\":\"dba9e243-7c07-4897-9642-5fb36bf423fe\",\"metric_type\":\"categorical\",\"categorical_value\":\"match\"},{\"metric_source\":\"custom\",\"label\":\"details\",\"span_id\":\"579d0080104aaa01\",\"trace_id\":\"6a6d152700000000579d0080104aaa01\",\"timestamp_ms\":1785533735794,\"tags\":[\"source:rich-vcr-test\",\"experiment_id:dba9e243-7c07-4897-9642-5fb36bf423fe\"],\"experiment_id\":\"dba9e243-7c07-4897-9642-5fb36bf423fe\",\"metric_type\":\"json\",\"json_value\":{\"actual\":\"APPLE\",\"expected\":\"APPLE\"}},{\"metric_source\":\"custom\",\"label\":\"nonempty\",\"span_id\":\"66c44826da849c1b\",\"trace_id\":\"6a6d15270000000066c44826da849c1b\",\"timestamp_ms\":1785533735795,\"tags\":[\"source:rich-vcr-test\",\"experiment_id:dba9e243-7c07-4897-9642-5fb36bf423fe\"],\"experiment_id\":\"dba9e243-7c07-4897-9642-5fb36bf423fe\",\"metric_type\":\"boolean\",\"boolean_value\":true},{\"metric_source\":\"custom\",\"label\":\"len\",\"span_id\":\"66c44826da849c1b\",\"trace_id\":\"6a6d15270000000066c44826da849c1b\",\"timestamp_ms\":1785533735795,\"tags\":[\"source:rich-vcr-test\",\"experiment_id:dba9e243-7c07-4897-9642-5fb36bf423fe\"],\"experiment_id\":\"dba9e243-7c07-4897-9642-5fb36bf423fe\",\"metric_type\":\"score\",\"score_value\":3},{\"metric_source\":\"custom\",\"label\":\"label\",\"span_id\":\"66c44826da849c1b\",\"trace_id\":\"6a6d15270000000066c44826da849c1b\",\"timestamp_ms\":1785533735795,\"tags\":[\"source:rich-vcr-test\",\"experiment_id:dba9e243-7c07-4897-9642-5fb36bf423fe\"],\"experiment_id\":\"dba9e243-7c07-4897-9642-5fb36bf423fe\",\"metric_type\":\"categorical\",\"categorical_value\":\"match\"},{\"metric_source\":\"custom\",\"label\":\"details\",\"span_id\":\"66c44826da849c1b\",\"trace_id\":\"6a6d15270000000066c44826da849c1b\",\"timestamp_ms\":1785533735795,\"tags\":[\"source:rich-vcr-test\",\"experiment_id:dba9e243-7c07-4897-9642-5fb36bf423fe\"],\"experiment_id\":\"dba9e243-7c07-4897-9642-5fb36bf423fe\",\"metric_type\":\"json\",\"json_value\":{\"actual\":\"CAR\",\"expected\":\"CAR\"}}],\"spans\":[{\"span_id\":\"579d0080104aaa01\",\"trace_id\":\"6a6d152700000000579d0080104aaa01\",\"project_id\":\"5645ffb8-c97e-4ce4-89f2-c41931318fd9\",\"dataset_id\":\"78a7925a-6924-4bd4-9b6e-0e2fcc61a747\",\"name\":\"task\",\"start_ns\":1785533735793000000,\"duration\":151625,\"status\":\"ok\",\"meta\":{\"input\":{\"q\":\"apple\"},\"output\":{\"answer\":\"APPLE\"},\"expected_output\":\"APPLE\",\"metadata\":{\"row\":0}},\"tags\":[\"source:rich-vcr-test\",\"experiment_id:dba9e243-7c07-4897-9642-5fb36bf423fe\",\"run_id:527a4795cf46811d\",\"run_iteration:0\",\"dataset_id:78a7925a-6924-4bd4-9b6e-0e2fcc61a747\",\"dataset_record_id:72c42c47-1949-4b6c-8d5f-dc89d1116b53\"]},{\"span_id\":\"66c44826da849c1b\",\"trace_id\":\"6a6d15270000000066c44826da849c1b\",\"project_id\":\"5645ffb8-c97e-4ce4-89f2-c41931318fd9\",\"dataset_id\":\"78a7925a-6924-4bd4-9b6e-0e2fcc61a747\",\"name\":\"task\",\"start_ns\":1785533735794000000,\"duration\":151167,\"status\":\"ok\",\"meta\":{\"input\":{\"q\":\"car\"},\"output\":{\"answer\":\"CAR\"},\"expected_output\":\"CAR\",\"metadata\":{\"row\":1}},\"tags\":[\"source:rich-vcr-test\",\"experiment_id:dba9e243-7c07-4897-9642-5fb36bf423fe\",\"run_id:527a4795cf46811d\",\"run_iteration:0\",\"dataset_id:78a7925a-6924-4bd4-9b6e-0e2fcc61a747\",\"dataset_record_id:8139a365-5aa4-41c0-aa39-7b13a49f5301\"]}]}}}"
+  },
+  "response": {
+    "status": {
+      "code": 202,
+      "message": "Accepted"
+    },
+    "headers": {
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "0",
+      "date": "Fri, 31 Jul 2026 21:35:35 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": ""
+  }
+}

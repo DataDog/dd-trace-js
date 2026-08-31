@@ -1,6 +1,6 @@
 'use strict'
 
-const NoopExperiments = require('./experiments/noop')
+let NoopExperiments
 
 class NoopLLMObs {
   constructor (noopTracer) {
@@ -12,6 +12,7 @@ class NoopLLMObs {
   }
 
   get experiments () {
+    NoopExperiments ??= require('./experiments/noop')
     return new NoopExperiments('LLM Observability is not enabled')
   }
 
@@ -79,6 +80,8 @@ class NoopLLMObs {
   }
 
   submitEvaluation (llmobsSpanContext, options) {}
+
+  submitFeedback (options) {}
 
   flush () {}
 

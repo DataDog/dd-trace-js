@@ -4,7 +4,11 @@ const fs = require('node:fs')
 const os = require('node:os')
 const { URL, format } = require('node:url')
 
-const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const { channel } = require('dc-polyfill')
+
+const exporters = require('../../../../ext/exporters')
+const createRfdc = require('../../../../vendor/dist/rfdc')
+const rfdc = createRfdc({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
@@ -14,6 +18,7 @@ const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
+  getServerlessPlatformTags,
   IS_SERVERLESS,
   getIsGCPFunction,
   getIsAzureFunction,
@@ -40,7 +45,28 @@ const {
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
 
-const RUNTIME_ID = uuid()
+const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
+  exporters.CUCUMBER_WORKER,
+  exporters.JEST_WORKER,
+  exporters.MOCHA_WORKER,
+  exporters.PLAYWRIGHT_WORKER,
+  exporters.VITEST_WORKER,
+])
+
+let runtimeId
+
+channel('datadog:identity:update').subscribe(refreshRuntimeId)
+
+/**
+ * Lazily generates the process-wide runtime ID on first access instead of at module load,
+ * so modules that merely require this file without constructing a Config never pay for it.
+ *
+ * @returns {string}
+ */
+function getRuntimeId () {
+  runtimeId ??= uuid()
+  return runtimeId
+}
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -194,8 +220,11 @@ class Config extends ConfigBase {
     this.debug = log.configure(options)
 
     // Process stable config warnings, if any
-    for (const warning of this.stableConfig?.warnings ?? []) {
-      log.warn(warning)
+    const stableConfigWarnings = this.stableConfig?.warnings
+    if (stableConfigWarnings) {
+      for (const warning of stableConfigWarnings) {
+        log.warn(warning)
+      }
     }
 
     this.#applyDefaults()
@@ -466,9 +495,13 @@ class Config extends ConfigBase {
 
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
     // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
-    // that don't set the sampler still get parent-based sampling.
+    // that don't set the sampler still get parent-based sampling. Electron exporter spans go over
+    // the Electron SDK's IPC bridge rather than OTLP (see opentracing/tracer.js), so an
+    // OTEL_TRACES_EXPORTER=otlp set for an unrelated telemetry pipeline shouldn't also override
+    // dd-trace's own sampling policy in that case.
     if (!trackedConfigOrigins.has('sampleRate') &&
-        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || this.OTEL_TRACES_EXPORTER === 'otlp')) {
+        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
+          (this.OTEL_TRACES_EXPORTER === 'otlp' && this.experimental.exporter !== 'electron'))) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
@@ -494,7 +527,8 @@ class Config extends ConfigBase {
     if (!this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
         (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
-        trackedConfigOrigins.has('llmobs.mlApp'))) {
+        trackedConfigOrigins.has('llmobs.mlApp') ||
+        trackedConfigOrigins.has('llmobs.projectName'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
@@ -585,7 +619,13 @@ class Config extends ConfigBase {
     if (this.version) {
       this.tags.version = this.version
     }
-    this.tags['runtime-id'] = RUNTIME_ID
+    this.tags['runtime-id'] = getRuntimeId()
+    const platformTags = getServerlessPlatformTags()
+    if (platformTags) {
+      for (let i = 0; i < platformTags.length; i += 2) {
+        this.tags[platformTags[i]] ??= platformTags[i + 1]
+      }
+    }
 
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
@@ -593,9 +633,9 @@ class Config extends ConfigBase {
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
-    // TODO: Should this unconditionally be disabled?
-    if (getEnvironmentVariable('JEST_WORKER_ID') &&
-        !trackedConfigOrigins.has('telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED')) {
+    const isTestOptimizationWorker = this.isCiVisibility &&
+      TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.experimental.exporter)
+    if (isTestOptimizationWorker) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 
@@ -764,4 +804,16 @@ function getConfig (options) {
     configInstance = new Config(options)
   }
   return configInstance
+}
+
+/**
+ * Regenerates the runtime ID.
+ *
+ * Used for Lambda MicroVM `/run` lifecycle hooks, giving each clone a distinct runtime identity.
+ *
+ * @param {import('./config-base')} config
+ */
+function refreshRuntimeId (config) {
+  runtimeId = uuid()
+  config.tags['runtime-id'] = runtimeId
 }

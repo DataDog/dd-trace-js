@@ -8,20 +8,13 @@ const { PATHWAY_HASH, DSM_TRANSACTION_ID, DSM_TRANSACTION_CHECKPOINT } = require
 const log = require('../log')
 const processTags = require('../process-tags')
 const propagationHash = require('../propagation-hash')
-const { CONTEXT_PROPAGATION_KEY_BASE64, computePathwayHash } = require('./pathway')
+const { computePathwayHash } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
-const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero } = require('./size')
+const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero, PATHWAY_FIELD_BYTES } = require('./size')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
-
-// A direction:out checkpoint estimates the size cost of the header the
-// producer plugin will inject. The pathway context is always 20 binary
-// bytes, encoded as 28 base64 chars; together with the header key and
-// JSON framing (matching the prior `JSON.stringify({key: value})` byte
-// count minus 1), this is a fixed value.
-const PATHWAY_HEADER_BYTES = CONTEXT_PROPAGATION_KEY_BASE64.length + 28 + 6
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -289,10 +282,19 @@ class DataStreamsProcessor {
     if (this.flushInterval === 0) this.onInterval()
   }
 
-  setCheckpoint (edgeTags, span, ctx, payloadSize = 0) {
+  /**
+   * @param {string[]} edgeTags Direction tag first.
+   * @param {import('../opentracing/span')|null} span
+   * @param {object|null|undefined} ctx Parent pathway context.
+   * @param {number} [payloadSize] Bytes the caller built, before any propagation context.
+   * @param {number} [pathwayContextSize] Bytes the pathway context adds to an outbound payload.
+   *   Most producers size their payload before this call hands them the context to inject, so they
+   *   cannot measure it and take the default estimate. Pass `0` to report the payload alone.
+   * @returns {object|undefined}
+   */
+  setCheckpoint (edgeTags, span, ctx, payloadSize = 0, pathwayContextSize = PATHWAY_FIELD_BYTES) {
     if (!this.enabled) return
     const nowNs = Date.now() * 1e6
-    // Callers must place the direction tag at index 0.
     const direction = edgeTags[0]
     let pathwayStartNs = nowNs
     let edgeStartNs = nowNs
@@ -337,14 +339,15 @@ class DataStreamsProcessor {
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
       hash,
-      edgeStartNs,
+      // start the next hop's edge clock here so edge latency stays per-hop
+      edgeStartNs: nowNs,
       pathwayStartNs,
       previousDirection: direction,
       closestOppositeDirectionHash,
       closestOppositeDirectionEdgeStart,
     }
     if (direction === 'direction:out') {
-      payloadSize += PATHWAY_HEADER_BYTES
+      payloadSize += pathwayContextSize
     }
     const checkpoint = {
       currentTimestamp: nowNs,

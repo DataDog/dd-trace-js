@@ -171,13 +171,14 @@ function assertOneTestPerSuiteExecution (suites, tests) {
 }
 
 /**
- * Extracts events and verifies the WebdriverIO run stayed in reporting-only mode.
+ * Extracts events and verifies the WebdriverIO run kept TIA disabled.
  *
  * @param {object[]} payloads
  * @param {string} requestedVersion
+ * @param {string} frameworkAdapter
  * @returns {{session: object, module: object, suites: object[], tests: object[]}}
  */
-function getReportingEvents (payloads, requestedVersion) {
+function getReportingEvents (payloads, requestedVersion, frameworkAdapter) {
   const settingsRequests = payloads.filter(({ url }) =>
     url.endsWith('/api/v2/libraries/tests/services/setting'))
   const advancedRequests = payloads.filter(({ url }) =>
@@ -190,7 +191,7 @@ function getReportingEvents (payloads, requestedVersion) {
   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
   assert.strictEqual(settingsRequests.length, 1)
-  assert.strictEqual(advancedRequests.length, 0)
+  assert.strictEqual(advancedRequests.length, 0, JSON.stringify(advancedRequests.map(({ url }) => url)))
   assert.strictEqual(sessions.length, 1, JSON.stringify({
     events: events.map(event => ({
       name: event.content?.name,
@@ -228,7 +229,7 @@ function getReportingEvents (payloads, requestedVersion) {
     }
   }
   for (const event of [...suites, ...tests]) {
-    assert.strictEqual(event.meta[TEST_FRAMEWORK_ADAPTER], 'mocha')
+    assert.strictEqual(event.meta[TEST_FRAMEWORK_ADAPTER], frameworkAdapter)
   }
   assertEventHierarchy(sessions[0], modules[0], suites, tests)
 
@@ -252,6 +253,7 @@ for (const version of versions) {
 
     useSandbox([
       `@wdio/cli@${version}`,
+      `@wdio/jasmine-framework@${version}`,
       `@wdio/local-runner@${version}`,
       `@wdio/mocha-framework@${version}`,
     ], true, ['./integration-tests/webdriverio/fixtures/*'])
@@ -283,9 +285,12 @@ for (const version of versions) {
      * @param {number} expectedWebDriverSessions
      * @param {(events: ReturnType<typeof getReportingEvents>) => void} assertEvents
      * @param {number} [expectedExitCode]
+     * @param {object} [options]
+     * @param {string} [options.framework]
      * @returns {Promise<void>}
      */
-    async function runScenario (scenario, expectedWebDriverSessions, assertEvents, expectedExitCode = 0) {
+    async function runScenario (scenario, expectedWebDriverSessions, assertEvents, expectedExitCode = 0, options = {}) {
+      const { framework = 'mocha' } = options
       const initialWebDriverSessionCount = webDriver.getSessionCount()
       childProcess = exec('./node_modules/.bin/wdio run ./wdio.conf.js', {
         cwd,
@@ -293,6 +298,7 @@ for (const version of versions) {
           ...getCiVisAgentlessConfig(receiver.port),
           NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
           DD_TEST_SESSION_NAME: 'webdriverio-integration-test',
+          WEBDRIVERIO_FRAMEWORK: framework,
           WEBDRIVERIO_SCENARIO: scenario,
           WEBDRIVER_PORT: String(webDriver.port),
         },
@@ -307,7 +313,7 @@ for (const version of versions) {
       const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,
         undefined,
-        payloads => assertEvents(getReportingEvents(payloads, version)),
+        payloads => assertEvents(getReportingEvents(payloads, version, framework)),
         { hardTimeout: 45_000 }
       )
 
@@ -347,6 +353,205 @@ for (const version of versions) {
         )
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
       })
+    })
+
+    it('reports parallel Jasmine workers as one session', async () => {
+      await runScenario('parallel', 2, ({ session, suites, tests }) => {
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(session.meta[MOCHA_IS_PARALLEL], 'true')
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.deepStrictEqual(
+          suites.map(suite => suite.meta[TEST_SUITE]).sort(),
+          ['first.e2e.js', 'second.e2e.js']
+        )
+        assert.deepStrictEqual(
+          tests.map(test => test.meta['test.webdriverio.worker']).sort(),
+          ['first', 'second']
+        )
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('reports Jasmine pass, fail, and skip statuses', async () => {
+      await runScenario('jasmineStatuses', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(suites[0].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites[0].meta[TEST_SUITE], 'jasmine-statuses.e2e.js')
+        assert.strictEqual(tests.length, 3)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'pass', 'skip'])
+        assert.strictEqual(
+          tests.find(test => test.meta[TEST_STATUS] === 'pass').meta['test.webdriverio.worker'],
+          'jasmine'
+        )
+        assert.match(tests.find(test => test.meta[TEST_STATUS] === 'fail').meta['error.message'], /expected WebdriverIO/)
+      }, 1, { framework: 'jasmine' })
+    })
+
+    it('reports failures before Jasmine loads', async () => {
+      await runScenario('preFrameworkFailure', 0, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 0)
+        assert.strictEqual(tests.length, 0)
+      }, 1, { framework: 'jasmine' })
+    })
+
+    it('reports Jasmine specs that fail while loading', async () => {
+      await runScenario('loadFailure', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(suites[0].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites[0].meta[TEST_SUITE], 'load-fail.e2e.js')
+        assert.strictEqual(tests.length, 0)
+      }, 1, { framework: 'jasmine' })
+    })
+
+    it('reports sequential Jasmine workers as one session', async () => {
+      await runScenario('serial', 2, ({ session, suites, tests }) => {
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(session.meta[MOCHA_IS_PARALLEL], undefined)
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('reports grouped Jasmine specs from one worker', async () => {
+      await runScenario('grouped', 1, ({ suites, tests }) => {
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
+        assertOneTestPerSuiteExecution(suites, tests)
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('reports an empty grouped Jasmine spec as skipped', async () => {
+      await runScenario('groupedEmpty', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(suites.length, 2)
+        assert.deepStrictEqual(
+          suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
+          [
+            ['empty.e2e.js', 'skip'],
+            ['first.e2e.js', 'pass'],
+          ]
+        )
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('attributes a Jasmine hook-only failure to its grouped spec', async () => {
+      await runScenario('hookFailure', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 2)
+        assert.deepStrictEqual(
+          suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
+          [
+            ['first.e2e.js', 'pass'],
+            ['hook-fail.e2e.js', 'fail'],
+          ]
+        )
+        assertOneTestPerSuiteExecution(suites, tests)
+      }, 1, { framework: 'jasmine' })
+    })
+
+    it('reports a Jasmine afterAll failure on its suite', async () => {
+      await runScenario('jasmineAfterAllFailure', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(suites[0].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites[0].meta[TEST_SUITE], 'jasmine-after-all-fail.e2e.js')
+        assert.match(suites[0].meta['error.message'], /expected WebdriverIO Jasmine afterAll failure/)
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('reports a Jasmine global afterAll failure on its suite', async () => {
+      await runScenario('jasmineGlobalAfterAllFailure', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 2)
+        assert.deepStrictEqual(
+          suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
+          [
+            ['first.e2e.js', 'pass'],
+            ['jasmine-global-after-all-fail.e2e.js', 'fail'],
+          ]
+        )
+        const failedSuite = suites.find(suite => suite.meta[TEST_STATUS] === 'fail')
+        assert.match(failedSuite.meta['error.message'], /expected WebdriverIO Jasmine global afterAll failure/)
+        assert.strictEqual(tests.length, 2)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'pass'])
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('starts Jasmine parent spans before tests when settings are delayed', async () => {
+      receiver.setSettingsResponseDelay(1_000)
+
+      await runScenario('jasmineDelayedSettings', 1, ({ session, module, suites, tests }) => {
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(tests.length, 1)
+        const test = tests[0]
+        const testEnd = test.start + BigInt(test.duration)
+
+        for (const parent of [session, module, suites[0]]) {
+          assert.ok(parent.start <= test.start)
+          assert.ok(parent.start + BigInt(parent.duration) >= testEnd)
+        }
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('keeps the Jasmine test span active in per-test hooks', async () => {
+      await runScenario('jasmineHooks', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(suites[0].meta[TEST_STATUS], 'pass')
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+        assert.strictEqual(tests[0].meta['test.webdriverio.jasmine.before-each'], 'active')
+        assert.strictEqual(tests[0].meta['test.webdriverio.jasmine.after-each'], 'active')
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('preserves tracer preload for Jasmine with runnerEnv.NODE_OPTIONS', async () => {
+      await runScenario('runnerEnvNodeOptions', 1, ({ suites, tests }) => {
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta['test.webdriverio.worker'], 'runner-env-node-options')
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('reports Jasmine whole-spec retries in one session', async () => {
+      await runScenario('specFileRetries', 2, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(session.meta[MOCHA_IS_PARALLEL], undefined)
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'pass'])
+        assertOneTestPerSuiteExecution(suites, tests)
+
+        const suiteStatusById = new Map(suites.map(suite => [
+          suite.test_suite_id.toString(10),
+          suite.meta[TEST_STATUS],
+        ]))
+        for (const test of tests) {
+          assert.strictEqual(
+            test.meta[TEST_STATUS],
+            suiteStatusById.get(test.test_suite_id.toString(10))
+          )
+        }
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('reports multiple Jasmine capabilities in one session', async () => {
+      await runScenario('multipleCapabilities', 2, ({ session, suites, tests }) => {
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(session.meta[MOCHA_IS_PARALLEL], 'true')
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
+        assertOneTestPerSuiteExecution(suites, tests)
+      }, 0, { framework: 'jasmine' })
     })
 
     it('reports failures before Mocha loads', async () => {

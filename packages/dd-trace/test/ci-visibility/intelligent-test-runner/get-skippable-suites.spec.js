@@ -73,6 +73,14 @@ const SKIPPABLE_RESPONSE_WITH_COVERAGE = {
   },
 }
 
+const SKIPPABLE_RESPONSE_WITH_NULL_COVERAGE = {
+  ...SKIPPABLE_RESPONSE,
+  meta: {
+    ...SKIPPABLE_RESPONSE.meta,
+    coverage: null,
+  },
+}
+
 const SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE = {
   data: [
     {
@@ -114,7 +122,7 @@ function cacheKeyForParams (params) {
     params.sha, params.service, params.env, params.repositoryUrl,
     params.osPlatform, params.osVersion, params.osArchitecture,
     params.runtimeName, params.runtimeVersion, params.testLevel, params.custom,
-    params.isCoverageReportUploadEnabled || false,
+    Boolean(params.isCoverageReportUploadEnabled && params.isLineCoverageSupported !== false),
   ])
 }
 
@@ -187,6 +195,20 @@ describe('get-skippable-suites', () => {
         'src/file1.js': 'gA==',
         'src/file2.js': 'IA==',
       })
+      done()
+    })
+  })
+
+  it('should accept null coverage metadata when coverage report upload is disabled', (done) => {
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_NULL_COVERAGE))
+
+    getSkippableSuites(DEFAULT_PARAMS, (err, skippableSuites, correlationId, coverage) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      assert.strictEqual(coverage, undefined)
       done()
     })
   })
@@ -269,6 +291,36 @@ describe('get-skippable-suites', () => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
       assert.strictEqual(correlationId, 'corr-123')
+      sinon.assert.calledWithExactly(log.debug, 'Number of received skippable %ss: %d', 'suite', 2)
+      sinon.assert.neverCalledWith(
+        log.debug,
+        'Received %d skippable %s candidates; excluded %d because line coverage is missing; %d remain.',
+        sinon.match.any,
+        sinon.match.any,
+        sinon.match.any,
+        sinon.match.any
+      )
+      sinon.assert.notCalled(log.warn)
+      done()
+    })
+  })
+
+  it('should keep suites with missing line coverage when line coverage is unsupported', (done) => {
+    const params = {
+      ...DEFAULT_PARAMS,
+      isCoverageReportUploadEnabled: true,
+      isLineCoverageSupported: false,
+    }
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE))
+
+    getSkippableSuites(params, (err, skippableSuites, correlationId) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      sinon.assert.calledWithExactly(log.debug, 'Number of received skippable %ss: %d', 'suite', 2)
+      sinon.assert.notCalled(log.warn)
       done()
     })
   })
@@ -373,10 +425,18 @@ describe('parseSkippableSuitesResponse', () => {
     assert.deepStrictEqual(result, {
       skippableSuites: [{ suite: 'suite1.spec.js', name: 'test 1' }],
       correlationId: 'corr-123',
-      coverage: {},
+      coverage: undefined,
       numReceivedSkippableItems: 1,
       numExcludedByMissingLineCoverage: 0,
     })
+  })
+
+  it('leaves coverage undefined when the response carries none', () => {
+    const withoutCoverage = parseSkippableSuitesResponse(JSON.stringify({ data: [], meta: {} }))
+    const withEmptyCoverage = parseSkippableSuitesResponse(JSON.stringify({ data: [], meta: { coverage: {} } }))
+
+    assert.strictEqual(withoutCoverage.coverage, undefined)
+    assert.strictEqual(withEmptyCoverage.coverage, undefined)
   })
 
   it('filters missing line coverage when coverage report upload is enabled', () => {
@@ -388,6 +448,18 @@ describe('parseSkippableSuitesResponse', () => {
     assert.deepStrictEqual(result.skippableSuites, ['suite2.spec.js'])
     assert.strictEqual(result.numReceivedSkippableItems, 2)
     assert.strictEqual(result.numExcludedByMissingLineCoverage, 1)
+  })
+
+  it('keeps missing line coverage when line coverage is unsupported', () => {
+    const result = parseSkippableSuitesResponse(JSON.stringify(SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE), {
+      testLevel: 'suite',
+      isCoverageReportUploadEnabled: true,
+      isLineCoverageSupported: false,
+    })
+
+    assert.deepStrictEqual(result.skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+    assert.strictEqual(result.numReceivedSkippableItems, 2)
+    assert.strictEqual(result.numExcludedByMissingLineCoverage, 0)
   })
 
   it('validates skippable tests response shape when requested', () => {
@@ -406,6 +478,13 @@ describe('parseSkippableSuitesResponse', () => {
         { validateRequiredFields: true }
       ),
       /Invalid skippable tests response: data entry suite must be a string/
+    )
+    assert.throws(
+      () => parseSkippableSuitesResponse(
+        JSON.stringify({ data: [], meta: { coverage: [] } }),
+        { validateRequiredFields: true }
+      ),
+      /Invalid skippable tests response: meta.coverage must be an object/
     )
   })
 })

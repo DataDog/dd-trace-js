@@ -148,7 +148,7 @@ describe('RASP', () => {
 
       try {
         await axios.get('/crash')
-      } catch (e) {
+      } catch {
         return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
           setTimeout(() => {
             if (hasOutput) {
@@ -176,7 +176,7 @@ describe('RASP', () => {
 
         try {
           await axios.get('/crash-and-recovery-A')
-        } catch (e) {
+        } catch {
           return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             setTimeout(() => {
               if (hasOutput) {
@@ -199,7 +199,7 @@ describe('RASP', () => {
 
         try {
           await axios.get('/crash-and-recovery-B')
-        } catch (e) {
+        } catch {
           return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             setTimeout(() => {
               if (hasOutput) {
@@ -251,7 +251,7 @@ describe('RASP', () => {
       it('should crash as expected after block in domain request', async () => {
         try {
           await axios.get('/ssrf/http/should-block-in-domain?host=localhost/ifconfig.pro')
-        } catch (e) {
+        } catch {
           return await testAppCrashesAsExpected()
         }
 
@@ -276,7 +276,7 @@ describe('RASP', () => {
       it('should crash as expected after a requiest block when error is unhandled', async () => {
         try {
           await axios.get('/ssrf/http/unhandled-error?host=localhost/ifconfig.pro')
-        } catch (e) {
+        } catch {
           return await testAppCrashesAsExpected()
         }
 

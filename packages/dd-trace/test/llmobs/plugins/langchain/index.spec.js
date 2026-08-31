@@ -121,6 +121,44 @@ describe('integrations', () => {
     })
   })
 
+  describe('langchain with llmobs disabled', () => {
+    const { assertNoLlmObsSpans } = useLlmObs({
+      plugin: 'langchain',
+      pluginConfig: { llmobs: false },
+    })
+
+    withVersions('langchain', ['@langchain/core'], (version) => {
+      let disabledTool
+
+      beforeEach(() => {
+        disabledTool = require(`../../../../../../versions/@langchain/core@${version}`)
+          .get('@langchain/core/tools')
+          .tool
+      })
+
+      it('does not create an LLMObs span for a tool invocation', async function () {
+        if (!disabledTool) this.skip()
+
+        const add = disabledTool(
+          ({ a, b }) => a + b,
+          {
+            name: 'add',
+            description: 'A tool that adds two numbers',
+            schema: {
+              a: { type: 'number' },
+              b: { type: 'number' },
+            },
+          }
+        )
+
+        const result = await add.invoke({ a: 1, b: 2 })
+        assert.equal(result, 3)
+
+        await assertNoLlmObsSpans()
+      })
+    })
+  })
+
   describe('langchain', () => {
     const { getEvents } = useLlmObs({ plugin: 'langchain' })
 

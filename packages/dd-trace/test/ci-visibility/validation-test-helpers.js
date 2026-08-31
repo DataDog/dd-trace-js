@@ -123,6 +123,15 @@ function removeFixture (root) {
   fs.rmSync(root, { force: true, recursive: true })
 }
 
+function withRepositoryFixture (options, callback) {
+  const fixture = createRepositoryFixture(options)
+  try {
+    return callback(fixture)
+  } finally {
+    removeFixture(fixture.root)
+  }
+}
+
 /**
  * Emulates a volume whose file reference numbers carry a Windows sequence number above the 48-bit
  * file index, so distinct paths round to one number outside the safe integer range.
@@ -163,4 +172,5 @@ module.exports = {
   createRepositoryFixture,
   createWindowsFileReferenceFs,
   removeFixture,
+  withRepositoryFixture,
 }

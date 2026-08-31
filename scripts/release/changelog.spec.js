@@ -2,9 +2,18 @@
 
 const assert = require('node:assert/strict')
 
-const { createReleaseChangelog } = require('./changelog')
+const { appendChangedPaths, createReleaseChangelog, isInternalOnly } = require('./changelog')
 
+/**
+ * @param {number} number
+ * @returns {string}
+ */
 const prLink = (number) => `[#${number}](https://github.com/DataDog/dd-trace-js/pull/${number})`
+
+/**
+ * @param {string} login
+ * @returns {string}
+ */
 const avatar = (login) => `[<img src="https://github.com/${login}.png?size=48" width="24" height="24" ` +
   `alt="@${login}" title="@${login}" />](https://github.com/${login})`
 
@@ -149,13 +158,13 @@ describe('release changelog', () => {
       {
         sha: 'abc001',
         subject: 'fix(core): keep existing behavior stable (#9001)',
-        author: '@alice',
+        contributors: [{ name: '@alice', login: 'alice' }],
       },
     ], [
       {
         sha: 'abc002',
         subject: 'feat(opentelemetry)!: remove legacy propagation mode (#9002)',
-        author: '@bob',
+        contributors: [{ name: '@bob', login: 'bob' }],
       },
       {
         sha: 'abc003',
@@ -315,31 +324,159 @@ describe('release changelog', () => {
     assert.deepStrictEqual(changelog.warnings, [])
   })
 
+  it('uses pull request product labels before conventional commit scopes', () => {
+    const changelog = createReleaseChangelog([
+      {
+        sha: 'abc001',
+        subject: 'fix(openai): block unsafe prompts (#9001)',
+        labels: ['ai-guard', 'appsec'],
+      },
+      {
+        sha: 'abc002',
+        subject: 'fix(google-pubsub): preserve pathway context (#9002)',
+        labels: ['datastreams'],
+      },
+      {
+        sha: 'abc003',
+        subject: 'feat(ci): add impacted test detection (#9003)',
+        labels: ['test-optimization'],
+      },
+      {
+        sha: 'abc004',
+        subject: 'fix(core): preserve OpenTelemetry attributes (#9004)',
+        labels: ['open-telemetry'],
+      },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      '### Features',
+      `- **Test Optimization:** Add impacted test detection ${prLink(9003)}`,
+      '',
+      '### Fixes',
+      `- **AppSec / AI Guard:** Block unsafe prompts ${prLink(9001)}`,
+      `- **Data Streams Monitoring:** Preserve pathway context ${prLink(9002)}`,
+      `- **OpenTelemetry:** Preserve OpenTelemetry attributes ${prLink(9004)}`,
+      '',
+    ].join('\n'))
+  })
+
+  it('classifies renamed files using both paths', () => {
+    const publicToInternalFiles = []
+
+    appendChangedPaths(publicToInternalFiles, [
+      { filename: 'scripts/release/metadata.js', previous_filename: 'packages/dd-trace/src/metadata.js' },
+    ])
+
+    assert.deepStrictEqual(publicToInternalFiles, [
+      'scripts/release/metadata.js',
+      'packages/dd-trace/src/metadata.js',
+    ])
+    assert.strictEqual(isInternalOnly(publicToInternalFiles), false)
+
+    const internalToInternalFiles = []
+
+    appendChangedPaths(internalToInternalFiles, [
+      { filename: 'scripts/release/metadata.js', previous_filename: 'scripts/release/old-metadata.js' },
+    ])
+
+    assert.strictEqual(isInternalOnly(internalToInternalFiles), true)
+  })
+
+  it('classifies public release-note types from changed paths', () => {
+    const changelog = createReleaseChangelog([
+      {
+        sha: 'abc001',
+        subject: 'feat(test-optimization): cover a browser fixture (#9001)',
+        files: ['integration-tests/vitest/vitest.browser.spec.js'],
+      },
+      {
+        sha: 'abc002',
+        subject: 'docs(release): document the proposal script (#9002)',
+        files: ['scripts/release/README.md'],
+      },
+      {
+        sha: 'abc003',
+        subject: 'fix(core): preserve runtime context (#9003)',
+        files: [
+          'packages/dd-trace/src/index.js',
+          'packages/dd-trace/test/index.spec.js',
+        ],
+      },
+      {
+        sha: 'abc004',
+        subject: 'docs(types): document the public tracer API (#9004)',
+        files: ['docs/API.md'],
+      },
+      {
+        sha: 'abc005',
+        subject: 'fix(core): preserve context without changed paths (#9005)',
+        files: [],
+      },
+    ])
+
+    assert.strictEqual(changelog.isMinor, false)
+    assert.strictEqual(changelog.markdown, [
+      '### Fixes',
+      `- **General:** Preserve context without changed paths ${prLink(9005)}`,
+      `- **General:** Preserve runtime context ${prLink(9003)}`,
+      '',
+      '### Documentation',
+      `- **General:** Document the public tracer API ${prLink(9004)}`,
+      '',
+      '### Internal (CI, Testing, Benchmarking)',
+      `- **release:** Document the proposal script ${prLink(9002)}`,
+      `- **Test Optimization:** Cover a browser fixture ${prLink(9001)}`,
+      '',
+    ].join('\n'))
+  })
+
   it('keeps production dependency bumps and drops development and instrumented ones', () => {
     const changelog = createReleaseChangelog([
-      { sha: 'abc001', subject: 'chore(deps): bump form-data from 4.0.5 to 4.0.6 (#8918)' },
+      {
+        sha: 'abc001',
+        subject: 'chore(deps): bump form-data from 4.0.5 to 4.0.6 (#8918)',
+        files: ['package.json', 'yarn.lock'],
+      },
       {
         sha: 'abc002',
         subject: 'chore(deps): bump protobufjs from 8.4.2 to 8.6.0 in /vendor in the ' +
           'vendor-minor-and-patch-dependencies group across 1 directory (#8851)',
+        files: ['vendor/package.json', 'vendor/package-lock.json'],
       },
       {
         sha: 'abc003',
         subject: 'chore(deps): bump the runtime-minor-and-patch-dependencies group across 1 directory ' +
           'with 3 updates (#8920)',
+        files: ['package.json', 'yarn.lock'],
       },
       {
         sha: 'abc004',
         subject: 'chore(deps-dev): bump the dev-minor-and-patch-dependencies group across 1 directory ' +
           'with 4 updates (#8854)',
+        contributors: [{ name: '@dependabot', login: 'dependabot' }],
+        files: ['package.json', 'yarn.lock'],
       },
       {
         sha: 'abc005',
         subject: 'chore(deps): bump @anthropic-ai/sdk from 0.101.0 to 0.102.0 in ' +
           '/packages/dd-trace/test/plugins/versions in the ai-and-llm group across 1 directory (#8852)',
+        files: ['packages/dd-trace/test/plugins/versions/package.json', 'yarn.lock'],
       },
-      { sha: 'abc006', subject: 'chore(deps): bump the serverless group across 1 directory with 8 updates (#8929)' },
-      { sha: 'abc007', subject: 'chore(deps): bump markdown-it from 14.1.1 to 14.2.0 in /docs (#8932)' },
+      {
+        sha: 'abc006',
+        subject: 'chore(deps): bump the serverless group across 1 directory with 8 updates (#8929)',
+        files: ['integration-tests/serverless/package.json', 'yarn.lock'],
+      },
+      {
+        sha: 'abc007',
+        subject: 'chore(deps): bump markdown-it from 14.1.1 to 14.2.0 in /docs (#8932)',
+        files: ['docs/package.json', 'yarn.lock'],
+      },
+      {
+        sha: 'abc008',
+        subject: 'chore(deps): refresh transitive dependencies (#8933)',
+        files: ['yarn.lock'],
+      },
     ])
 
     assert.strictEqual(changelog.markdown, [
@@ -372,12 +509,27 @@ describe('release changelog', () => {
     ))
   })
 
-  it('renders contributor avatars on a single line and leaves non-handle names as text', () => {
+  it('renders only linked contributors and prefers them over name-only duplicates', () => {
     const changelog = createReleaseChangelog([
-      { sha: 'abc001', subject: 'feat(appsec): add thing (#1)', author: '@Zoe' },
-      { sha: 'abc002', subject: 'fix(profiling): fix thing (#2)', author: '@alice' },
-      { sha: 'abc003', subject: 'ci(release): tweak the workflow (#3)', author: '@Zoe' },
-      { sha: 'abc004', subject: 'fix(core): another thing (#4)', author: 'Jane Doe' },
+      {
+        sha: 'abc001',
+        subject: 'feat(appsec): add thing (#1)',
+        contributors: [
+          { name: 'alice' },
+          { name: '@Zoe', login: 'Zoe' },
+        ],
+      },
+      {
+        sha: 'abc002',
+        subject: 'fix(profiling): fix thing (#2)',
+        contributors: [
+          { name: '@alice', login: 'alice' },
+          { name: '@bob', login: 'bob' },
+          { name: '@Zoe', login: 'Zoe' },
+          { name: 'bob' },
+          { name: 'Jane Doe' },
+        ],
+      },
     ])
 
     assert.strictEqual(changelog.markdown, [
@@ -385,27 +537,27 @@ describe('release changelog', () => {
       `- **AppSec:** Add thing ${prLink(1)}`,
       '',
       '### Fixes',
-      `- **General:** Another thing ${prLink(4)}`,
       `- **Profiling:** Fix thing ${prLink(2)}`,
-      '',
-      '### Internal (CI, Testing, Benchmarking)',
-      `- **release:** Tweak the workflow ${prLink(3)}`,
       '',
       '### Contributors',
       '',
-      `${avatar('alice')} ${avatar('Zoe')} Jane Doe`,
+      `${avatar('alice')} ${avatar('bob')} ${avatar('Zoe')}`,
       '',
     ].join('\n'))
   })
 
-  it('omits the Contributors section when no entry carries an author', () => {
+  it('omits the contributor footer without GitHub accounts', () => {
     const changelog = createReleaseChangelog([
-      { sha: 'abc001', subject: 'fix(appsec): handle thing (#1)' },
+      {
+        sha: 'abc001',
+        subject: 'fix(core): fix thing (#1)',
+        contributors: [{ name: '[Jane](https://example.com)' }],
+      },
     ])
 
     assert.strictEqual(changelog.markdown, [
       '### Fixes',
-      `- **AppSec:** Handle thing ${prLink(1)}`,
+      `- **General:** Fix thing ${prLink(1)}`,
       '',
     ].join('\n'))
   })

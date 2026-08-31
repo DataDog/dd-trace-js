@@ -15,15 +15,18 @@ const sinon = require('sinon')
 const MochaPlugin = require('../../datadog-plugin-mocha/src')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
+const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
   adjustRunnerFailuresForTestOptimization,
   efdTests,
 } = require('../src/mocha/utils')
 const {
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_HAS_DYNAMIC_NAME,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_NAME,
   TEST_STATUS,
   TEST_SUITE,
@@ -50,6 +53,36 @@ const fixtureModulePath = path.join(
   'build',
   'index.js'
 )
+const runnerFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-runner.mjs')
+const runnerFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'runner',
+  'build',
+  'index.js'
+)
+const jasmineFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-jasmine-framework.mjs')
+const jasmineFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'jasmine-framework',
+  'build',
+  'index.js'
+)
+const jasmineCoreFixturePath = path.join(__dirname, 'fixtures', 'jasmine-core.js')
+const jasmineCoreFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  'jasmine-core',
+  'lib',
+  'jasmine-core',
+  'jasmine.js'
+)
 const launcherFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-launcher.mjs')
 const launcherFixtureModulePath = path.join(
   __dirname,
@@ -57,6 +90,16 @@ const launcherFixtureModulePath = path.join(
   'node_modules',
   '@wdio',
   'cli',
+  'build',
+  'index.js'
+)
+const utilsFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-utils.mjs')
+const utilsFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'utils',
   'build',
   'index.js'
 )
@@ -80,6 +123,155 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /orchestrion:@wdio\/local-runner:LocalRunner_shutdown/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+  })
+
+  it('rewrites the ESM worker runner and waits before worker exit', () => {
+    const source = fs.readFileSync(runnerFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, runnerFixtureModulePath, 'module')
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/runner:BaseReporter_waitForSync/)
+    assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+  })
+
+  it('rewrites the ESM Jasmine adapter and reporter', () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineAdapter_init/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineAdapter_run/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_specDone/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_specStarted/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_suiteDone/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_suiteStarted/)
+    assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+  })
+
+  it('rewrites the ESM WebdriverIO test-function wrapper', () => {
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/utils:executeAsync/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/utils:testFrameworkFnWrapper/)
+  })
+
+  it('rewrites legacy and modern Jasmine spec lifecycles', () => {
+    const source = fs.readFileSync(jasmineCoreFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineCoreFixtureModulePath)
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:jasmine-core:Spec_execute/)
+    assert.match(rewrittenSource, /orchestrion:jasmine-core:Spec_attemptDone/)
+  })
+
+  it('runs the WebdriverIO retry callback before a failed test is retried', async () => {
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const callbacks = []
+    const retries = { attempts: 0, limit: 2 }
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const subscriber = {
+      start (ctx) {
+        ctx.retryCallback = error => {
+          callbacks.push(error.message)
+        }
+      },
+    }
+    let attempts = 0
+
+    executeAsyncCh.subscribe(subscriber)
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+
+      const { executeAsync } = await import(pathToFileURL(outputPath))
+      const result = await executeAsync(() => {
+        attempts++
+        if (attempts === 1) {
+          throw new Error('failed attempt')
+        }
+        return attempts
+      }, retries)
+
+      assert.strictEqual(result, 2)
+      assert.strictEqual(retries.attempts, 1)
+      assert.deepStrictEqual(callbacks, ['failed attempt'])
+    } finally {
+      executeAsyncCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('honors WebdriverIO retry limits changed by the callback', async () => {
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const failedRetries = { attempts: 0, limit: 1 }
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const subscriber = {
+      start (ctx) {
+        ctx.retryCallback = () => {
+          failedRetries.limit = 0
+        }
+      },
+    }
+    let failedAttempts = 0
+
+    executeAsyncCh.subscribe(subscriber)
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+
+      const { executeAsync } = await import(pathToFileURL(outputPath))
+      await assert.rejects(executeAsync(() => {
+        failedAttempts++
+        throw new Error('failed attempt')
+      }, failedRetries), /failed attempt/)
+
+      assert.strictEqual(failedAttempts, 1)
+      assert.strictEqual(failedRetries.attempts, 0)
+    } finally {
+      executeAsyncCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('preserves WebdriverIO retries when the retry callback rejects', async () => {
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const retries = { attempts: 0, limit: 1 }
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const subscriber = {
+      start (ctx) {
+        ctx.retryCallback = () => Promise.reject(new Error('observability callback failed'))
+      },
+    }
+    let attempts = 0
+
+    executeAsyncCh.subscribe(subscriber)
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+
+      const { executeAsync } = await import(pathToFileURL(outputPath))
+      const result = await executeAsync(() => {
+        attempts++
+        if (attempts === 1) {
+          throw new Error('test failed')
+        }
+        return 'passed'
+      }, retries)
+
+      assert.strictEqual(result, 'passed')
+      assert.strictEqual(attempts, 2)
+      assert.strictEqual(retries.attempts, 1)
+    } finally {
+      executeAsyncCh.unsubscribe(subscriber)
+    }
   })
 
   it('waits for coordinator shutdown before preserving a LocalRunner.shutdown rejection', async () => {
@@ -119,6 +311,121 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(steps, ['asyncEnd', 'coordinator', 'rejected'])
     } finally {
       shutdownCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('waits for worker completion before Runner._shutdown emits exit', async () => {
+    const source = fs.readFileSync(runnerFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, runnerFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-runner-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const reporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync')
+    const steps = []
+    const subscriber = {
+      asyncEnd (context) {
+        steps.push('asyncEnd')
+        context.resolveCallback = onDone => {
+          setImmediate(() => {
+            steps.push('logs')
+            onDone()
+          })
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    reporterWaitForSyncCh.subscribe(subscriber)
+
+    try {
+      const { Runner } = await import(pathToFileURL(outputPath))
+      const runner = new Runner()
+      runner.onEvent = (event, code) => steps.push(`${event}:${code}`)
+      const resultPromise = runner._shutdown(0)
+
+      await Promise.resolve()
+
+      assert.deepStrictEqual(steps, ['asyncEnd'])
+      assert.strictEqual(await resultPromise, 0)
+      assert.deepStrictEqual(steps, ['asyncEnd', 'logs', 'exit:0'])
+    } finally {
+      reporterWaitForSyncCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('waits for coordinator readiness before resolving JasmineAdapter.init', async () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-init-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const initCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
+    const steps = []
+    const subscriber = {
+      asyncEnd (context) {
+        steps.push('asyncEnd')
+        context.resolveCallback = onDone => {
+          setImmediate(() => {
+            steps.push('coordinator')
+            onDone()
+          })
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    initCh.subscribe(subscriber)
+
+    try {
+      const { JasmineAdapter } = await import(pathToFileURL(outputPath))
+      const adapter = new JasmineAdapter([])
+      const resultPromise = adapter.init()
+
+      await Promise.resolve()
+
+      assert.deepStrictEqual(steps, ['asyncEnd'])
+      assert.strictEqual(await resultPromise, adapter)
+      assert.deepStrictEqual(steps, ['asyncEnd', 'coordinator'])
+    } finally {
+      initCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('waits for Jasmine worker reporting before preserving a JasmineAdapter.run rejection', async () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const runCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_run')
+    const runError = new Error('Jasmine run failed')
+    const steps = []
+    const subscriber = {
+      asyncEnd (context) {
+        steps.push('asyncEnd')
+        context.rejectCallback = onDone => {
+          setImmediate(() => {
+            steps.push('worker')
+            onDone()
+          })
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    runCh.subscribe(subscriber)
+
+    try {
+      const { JasmineAdapter } = await import(pathToFileURL(outputPath))
+      const resultPromise = new JasmineAdapter([]).run(runError)
+
+      await Promise.resolve()
+
+      assert.deepStrictEqual(steps, ['asyncEnd'])
+      await assert.rejects(resultPromise, error => {
+        steps.push('rejected')
+        return error === runError
+      })
+      assert.deepStrictEqual(steps, ['asyncEnd', 'worker', 'rejected'])
+    } finally {
+      runCh.unsubscribe(subscriber)
     }
   })
 
@@ -200,11 +507,613 @@ describe('webdriverio instrumentation', () => {
         libraryConfig: {},
         repositoryRoot: process.cwd(),
         testFramework: 'webdriverio',
+        testFrameworkAdapter: 'mocha',
       })
 
       assert.strictEqual(plugin.testFramework, 'webdriverio')
+      assert.strictEqual(plugin.testFrameworkAdapter, 'mocha')
     } finally {
       plugin.configure(false)
+    }
+  })
+
+  it('falls back to ATR when the Jasmine EFD retry policy has no retries', () => {
+    const { plugin } = createJasminePlugin({
+      earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy(),
+      flakyTestRetriesCount: 1,
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isKnownTestsEnabled: true,
+      knownTests: { mocha: {} },
+    })
+    const file = path.join(process.cwd(), 'zero-efd-retries.spec.js')
+    const result = createJasmineResult('zero EFD retries', file, 'failed')
+
+    try {
+      reportJasmineSpecStarted(result, file)
+
+      const test = plugin._webdriverioJasmineState.tests.get(result.id)
+      assert.strictEqual(test.isEarlyFlakeDetection, false)
+      assert.strictEqual(test.isAtr, true)
+      assert.strictEqual(test.retryCount, 1)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('uses repository-relative paths for impacted Jasmine tests', () => {
+    const sourceRoot = path.join(process.cwd(), 'packages', 'browser-tests')
+    const file = path.join(sourceRoot, 'impacted.spec.js')
+    const { plugin } = createJasminePlugin({
+      isImpactedTestsEnabled: true,
+      modifiedFiles: {
+        'packages/browser-tests/impacted.spec.js': [1],
+      },
+    })
+    const result = createJasmineResult('impacted test', file, 'passed')
+
+    try {
+      plugin.sourceRoot = sourceRoot
+      reportJasmineSpecStarted(result, file)
+
+      const test = plugin._webdriverioJasmineState.tests.get(result.id)
+      assert.strictEqual(test.isModified, true)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('starts managed Jasmine retry spans after retry setup settles', async () => {
+    const retryCh = channel('ci:mocha:test:retry')
+    const { plugin, spans } = createJasminePlugin({
+      flakyTestRetriesCount: 1,
+      isFlakyTestRetriesEnabled: true,
+    })
+    const file = path.join(process.cwd(), 'managed-retry.spec.js')
+    const result = createJasmineResult('managed-retry', file, 'failed')
+    let finishRetrySetup
+    const retrySetup = new Promise(resolve => {
+      finishRetrySetup = resolve
+    })
+    const onRetry = ({ promises }) => {
+      promises.setProbePromise = retrySetup
+    }
+    const onComplete = sinon.spy()
+    const spec = {
+      execute: sinon.spy(),
+      id: result.id,
+      queueableFn: { fn () {} },
+      reset: sinon.spy(),
+    }
+    const executeContext = {
+      arguments: [() => {}, onComplete, true, {}],
+      self: spec,
+    }
+
+    retryCh.subscribe(onRetry)
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_execute:start').runStores(executeContext, () => {})
+
+      const attemptContext = { result: 'failed', self: spec }
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish(attemptContext)
+      assert.strictEqual(attemptContext.result, 'passed')
+
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [{
+          ...result,
+          failedExpectations: [{ message: 'managed retry failure' }],
+        }],
+        self: { _specs: [file] },
+      })
+      executeContext.arguments[1]()
+
+      assert.strictEqual(spans.length, 1)
+      assert.strictEqual(spec.execute.callCount, 0)
+
+      finishRetrySetup()
+      await retrySetup
+      await Promise.resolve()
+
+      assert.strictEqual(spans.length, 2)
+      assert.strictEqual(spec.execute.callCount, 1)
+      assert.strictEqual(onComplete.callCount, 0)
+    } finally {
+      retryCh.unsubscribe(onRetry)
+      plugin.configure(false)
+    }
+  })
+
+  it('finishes Failed Test Replay before the next Jasmine spec starts', async () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-reporter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const { plugin, spans } = createJasminePlugin({})
+    const file = path.join(process.cwd(), 'failed-test-replay.spec.js')
+    const firstResult = createJasmineResult('captures a replay', file, 'failed')
+    const secondResult = createJasmineResult('runs after the replay', file, 'passed')
+    let finishReplay
+    const replayFinished = new Promise(resolve => {
+      finishReplay = resolve
+    })
+
+    sinon.stub(plugin, 'waitForDiBreakpointHits').returns(replayFinished)
+    fs.writeFileSync(outputPath, rewrittenSource)
+
+    try {
+      const { JasmineReporter } = await import(pathToFileURL(outputPath))
+      const reporter = new JasmineReporter([file])
+      reportJasmineSpecStarted(firstResult, file)
+      plugin._webdriverioJasmineState.tests.get(firstResult.id)._ddShouldWaitForHitProbe = true
+
+      const reportFirstSpec = Promise.resolve(reporter.specDone(firstResult)).then(() => {
+        reportJasmineSpecStarted(secondResult, file)
+      })
+      await Promise.resolve()
+
+      assert.strictEqual(spans.length, 1)
+
+      finishReplay()
+      await reportFirstSpec
+
+      assert.strictEqual(spans.length, 2)
+      assert.strictEqual(plugin.activeTestSpan, spans[1])
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('installs Failed Test Replay on the first Jasmine failure after a passing attempt', () => {
+    const { plugin } = createJasminePlugin({
+      earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 2 }),
+      isDiEnabled: true,
+      isEarlyFlakeDetectionEnabled: true,
+      isKnownTestsEnabled: true,
+      knownTests: { mocha: {} },
+    })
+    const file = path.join(process.cwd(), 'delayed-failure.spec.js')
+    const result = createJasmineResult('delayed failure', file, 'failed')
+    result.failedExpectations = [{ message: 'delayed failure' }]
+    const addDiProbe = sinon.stub(plugin, 'addDiProbe').returns({
+      file,
+      line: 1,
+      setProbePromise: Promise.resolve(),
+      stackIndex: 0,
+    })
+    sinon.stub(plugin, 'prepareDiBreakpointHitWait')
+    plugin.di = {}
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      const test = plugin._webdriverioJasmineState.tests.get(result.id)
+      test.attempt = 1
+      test.statuses.push('pass')
+      test.willRetry = true
+
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+
+      assert.strictEqual(addDiProbe.callCount, 1)
+      assert.strictEqual(test.hasFailedAttempt, true)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('starts native WebdriverIO retry spans after retry setup settles', async () => {
+    const retryCh = channel('ci:mocha:test:retry')
+    const { plugin, spans } = createJasminePlugin({})
+    const file = path.join(process.cwd(), 'native-retry.spec.js')
+    const result = createJasmineResult('native-retry', file, 'failed')
+    const retries = { attempts: 0, limit: 1 }
+    let finishRetrySetup
+    const retrySetup = new Promise(resolve => {
+      finishRetrySetup = resolve
+    })
+    const onRetry = ({ promises }) => {
+      promises.setProbePromise = retrySetup
+    }
+
+    retryCh.subscribe(onRetry)
+    try {
+      reportJasmineSpecStarted(result, file)
+      const wrapperContext = {
+        arguments: [undefined, 'Test', { specFn () {} }, undefined, undefined, undefined, 1],
+      }
+      const executeAsyncContext = { arguments: [undefined, retries] }
+      channel('tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start').runStores(wrapperContext, () => {
+        channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
+      })
+
+      const retryPromise = executeAsyncContext.retryCallback(new Error('native retry failure'))
+      assert.strictEqual(spans.length, 1)
+
+      finishRetrySetup()
+      await retryPromise
+
+      assert.strictEqual(spans.length, 2)
+
+      retryCh.unsubscribe(onRetry)
+      assert.strictEqual(executeAsyncContext.retryCallback(new Error('immediate native retry failure')), undefined)
+      assert.strictEqual(spans.length, 3)
+    } finally {
+      retryCh.unsubscribe(onRetry)
+      plugin.configure(false)
+    }
+  })
+
+  it('does not apply ATR to Jasmine hook failures', () => {
+    const { plugin, spans } = createJasminePlugin({
+      flakyTestRetriesCount: 1,
+      isFlakyTestRetriesEnabled: true,
+    })
+    const file = path.join(process.cwd(), 'hook-failure.spec.js')
+    const result = createJasmineResult('hook-failure', file, 'failed')
+    const spec = { id: result.id }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      const wrapperContext = {
+        arguments: [undefined, 'Hook', { specFn () {} }, undefined, undefined, undefined, 1],
+      }
+      channel('tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start').runStores(wrapperContext, () => {
+        channel('tracing:orchestrion:@wdio/utils:executeAsync:error').publish({})
+      })
+
+      const attemptContext = { result: 'failed', self: spec }
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish(attemptContext)
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+
+      assert.strictEqual(attemptContext.result, 'failed')
+      assert.strictEqual(spans.length, 1)
+      assert.strictEqual(plugin._webdriverioJasmineState.tests.size, 0)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('does not apply ATR to expectation-based Jasmine hook failures', () => {
+    const { plugin, spans } = createJasminePlugin({
+      flakyTestRetriesCount: 1,
+      isFlakyTestRetriesEnabled: true,
+    })
+    const file = path.join(process.cwd(), 'expectation-hook-failure.spec.js')
+    const result = createJasmineResult('expectation-hook-failure', file, 'failed')
+    result.failedExpectations = []
+    const spec = { id: result.id }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      const wrapperContext = {
+        arguments: [undefined, 'Hook', { specFn () {} }, undefined, undefined, undefined, 1],
+      }
+      channel('tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start').runStores(wrapperContext, () => {
+        channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores({
+          arguments: [undefined, { attempts: 0, limit: 0 }],
+        }, () => {
+          result.failedExpectations.push({ message: 'hook expectation failed' })
+          channel('tracing:orchestrion:@wdio/utils:executeAsync:asyncEnd').publish({})
+        })
+      })
+
+      const attemptContext = { result: 'failed', self: spec }
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish(attemptContext)
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+
+      assert.strictEqual(attemptContext.result, 'failed')
+      assert.strictEqual(spans.length, 1)
+      assert.strictEqual(plugin._webdriverioJasmineState.tests.size, 0)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('does not mistake test-body expectations for Jasmine hook failures', () => {
+    const { plugin } = createJasminePlugin({
+      flakyTestRetriesCount: 1,
+      isFlakyTestRetriesEnabled: true,
+    })
+    const file = path.join(process.cwd(), 'test-expectation-failure.spec.js')
+    const result = createJasmineResult('test-expectation-failure', file, 'failed')
+    result.failedExpectations = []
+    const spec = { id: result.id }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      result.failedExpectations.push({ message: 'test expectation failed' })
+      const wrapperContext = {
+        arguments: [undefined, 'Hook', { specFn () {} }, undefined, undefined, undefined, 1],
+      }
+      channel('tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start').runStores(wrapperContext, () => {
+        channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores({
+          arguments: [undefined, { attempts: 0, limit: 0 }],
+        }, () => {
+          channel('tracing:orchestrion:@wdio/utils:executeAsync:asyncEnd').publish({})
+        })
+      })
+
+      const attemptContext = { result: 'failed', self: spec }
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish(attemptContext)
+
+      assert.strictEqual(attemptContext.result, 'passed')
+      assert.strictEqual(plugin._webdriverioJasmineState.tests.get(result.id).hasFinalHookFailure, false)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('releases completed Jasmine test records while preserving their terminal status', () => {
+    const { plugin, spans } = createJasminePlugin({})
+    const file = path.join(process.cwd(), 'completed.spec.js')
+    const result = createJasmineResult('completed', file, 'passed')
+    const spec = { id: result.id }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+
+      const attemptContext = { result: 'passed', self: spec }
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish(attemptContext)
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+
+      assert.strictEqual(plugin._webdriverioJasmineState.tests.size, 0)
+      assert.deepStrictEqual([...plugin._webdriverioJasmineState.completedTestStatuses], [[result.id, 'passed']])
+
+      const lateAttemptContext = { result: 'failed', self: spec }
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish(lateAttemptContext)
+      reportJasmineSpecStarted(result, file)
+
+      assert.strictEqual(lateAttemptContext.result, 'passed')
+      assert.strictEqual(spans.length, 1)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('keeps skipped Jasmine EFD tests skipped', () => {
+    const { plugin, spans } = createJasminePlugin({
+      earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 2 }),
+      isEarlyFlakeDetectionEnabled: true,
+      isKnownTestsEnabled: true,
+      knownTests: { mocha: {} },
+    })
+    const file = path.join(process.cwd(), 'skipped-efd.spec.js')
+    const result = createJasmineResult('skipped-efd', file, 'excluded')
+    const spec = { id: result.id }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+
+      const attemptContext = { result: 'excluded', self: spec }
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish(attemptContext)
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+
+      assert.strictEqual(attemptContext.result, 'excluded')
+      assert.strictEqual(spans.length, 1)
+      assert.strictEqual(plugin._webdriverioJasmineState.suiteStatuses.get(file), 'skip')
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('keeps skipped Jasmine attempt-to-fix tests skipped', () => {
+    const file = path.join(process.cwd(), 'skipped-attempt-to-fix.spec.js')
+    const testName = 'skipped attempt to fix'
+    const testFinishes = []
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const { plugin, spans } = createJasminePlugin({
+      isTestManagementTestsEnabled: true,
+      testManagementAttemptToFixRetries: 2,
+      testManagementTests: {
+        mocha: {
+          suites: {
+            'skipped-attempt-to-fix.spec.js': {
+              tests: {
+                [testName]: { properties: { attempt_to_fix: true } },
+              },
+            },
+          },
+        },
+      },
+    })
+    const result = createJasmineResult(testName, file, 'excluded')
+    const spec = { id: result.id }
+    const onTestFinish = context => testFinishes.push(context)
+
+    testFinishCh.subscribe(onTestFinish)
+    try {
+      reportJasmineSpecStarted(result, file)
+
+      const attemptContext = { result: 'excluded', self: spec }
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish(attemptContext)
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+
+      assert.strictEqual(attemptContext.result, 'excluded')
+      assert.strictEqual(spans.length, 1)
+      assert.strictEqual(plugin._webdriverioJasmineState.suiteStatuses.get(file), 'skip')
+      assert.strictEqual(testFinishes.length, 1)
+      assert.strictEqual(testFinishes[0].status, 'skip')
+      assert.strictEqual(testFinishes[0].finalStatus, 'skip')
+      assert.strictEqual(testFinishes[0].attemptToFixPassed, false)
+      assert.strictEqual(testFinishes[0].attemptToFixFailed, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      plugin.configure(false)
+    }
+  })
+
+  it('marks disabled Jasmine specs pending before their hooks are queued', () => {
+    const file = path.join(process.cwd(), 'disabled-hook.spec.js')
+    const testName = 'disabled hook'
+    const { plugin } = createJasminePlugin({
+      isTestManagementTestsEnabled: true,
+      testManagementTests: {
+        mocha: {
+          suites: {
+            'disabled-hook.spec.js': {
+              tests: {
+                [testName]: { properties: { disabled: true } },
+              },
+            },
+          },
+        },
+      },
+    })
+    const result = createJasmineResult(testName, file, 'pending')
+    const spec = {
+      id: result.id,
+      pend: sinon.spy(),
+      queueableFn: { fn () {} },
+      result,
+    }
+    const executeContext = {
+      arguments: [() => {}, () => {}, false, {}],
+      self: spec,
+    }
+
+    try {
+      channel('tracing:orchestrion:jasmine-core:Spec_execute:start').runStores(executeContext, () => {})
+
+      assert.strictEqual(spec.pend.callCount, 1)
+      assert.strictEqual(spec.pend.firstCall.args[0], 'Skipped by Datadog Test Management')
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('keeps Jasmine suite results reported before configuration completes', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const knownTestsCh = channel('ci:mocha:known-tests')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const modifiedFilesCh = channel('ci:mocha:modified-files')
+    const testManagementTestsCh = channel('ci:mocha:test-management-tests')
+    const testSessionStartCh = channel('ci:mocha:session:start')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
+    const testSuiteStartCh = channel('ci:mocha:test-suite:start')
+    const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+    const sessionStarts = []
+    const sessionFinishes = []
+    const suiteErrors = []
+    const suiteStarts = []
+    const suiteFinishes = []
+    let advancedFeatureRequests = 0
+    let configurationRequests = 0
+    let finishConfiguration
+
+    function onTestFinish () {}
+    function onAdvancedFeatureRequest () {
+      advancedFeatureRequests++
+    }
+    function onLibraryConfiguration (request) {
+      configurationRequests++
+      assert.strictEqual(request.basicReportingOnly, undefined)
+      assert.strictEqual(request.disableTestImpactAnalysis, true)
+      assert.strictEqual(request.testFramework, 'webdriverio')
+      finishConfiguration = () => request.onDone({
+        libraryConfig: {},
+        repositoryRoot: process.cwd(),
+      })
+    }
+    function onSessionStart (event) {
+      sessionStarts.push(event)
+    }
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+    function onSuiteError (event) {
+      suiteErrors.push(event.error)
+    }
+    function onSuiteStart (event) {
+      suiteStarts.push(event)
+    }
+    function onSuiteFinish (event) {
+      suiteFinishes.push(event)
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    knownTestsCh.subscribe(onAdvancedFeatureRequest)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    modifiedFilesCh.subscribe(onAdvancedFeatureRequest)
+    testManagementTestsCh.subscribe(onAdvancedFeatureRequest)
+    testSessionStartCh.subscribe(onSessionStart)
+    testSessionFinishCh.subscribe(onSessionFinish)
+    testSuiteErrorCh.subscribe(onSuiteError)
+    testSuiteStartCh.subscribe(onSuiteStart)
+    testSuiteFinishCh.subscribe(onSuiteFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'jasmine',
+          rootDir: process.cwd(),
+        },
+      }
+      const failedFile = path.join(process.cwd(), 'jasmine-failed.spec.js')
+      const passedFile = path.join(process.cwd(), 'jasmine-passed.spec.js')
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, [failedFile, passedFile])
+      worker.emit('message', {
+        name: WORKER_READY,
+        content: { testFrameworkAdapter: 'jasmine' },
+      })
+
+      reportSuiteFinish(worker, failedFile, 'fail', {
+        message: 'expected Jasmine suite failure',
+        stack: 'Error: expected Jasmine suite failure',
+      })
+      reportSuiteFinish(worker, passedFile)
+      assert.ok(finishConfiguration)
+      finishConfiguration()
+      await new Promise(setImmediate)
+
+      worker.emit('exit', { exitCode: 1, retries: 0 })
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(configurationRequests, 1)
+      assert.strictEqual(advancedFeatureRequests, 0)
+      assert.strictEqual(sessionStarts.length, 1)
+      assert.strictEqual(sessionStarts[0].testFramework, 'webdriverio')
+      assert.strictEqual(sessionStarts[0].testFrameworkAdapter, 'jasmine')
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(suiteErrors.length, 1)
+      assert.strictEqual(suiteErrors[0].message, 'expected Jasmine suite failure')
+      assert.strictEqual(suiteErrors[0].stack, 'Error: expected Jasmine suite failure')
+      assert.deepStrictEqual(suiteStarts.map(event => event.testSuiteAbsolutePath), [failedFile, passedFile])
+      assert.deepStrictEqual(suiteFinishes.map(event => event.status), ['fail', 'pass'])
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      knownTestsCh.unsubscribe(onAdvancedFeatureRequest)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      modifiedFilesCh.unsubscribe(onAdvancedFeatureRequest)
+      testManagementTestsCh.unsubscribe(onAdvancedFeatureRequest)
+      testSessionStartCh.unsubscribe(onSessionStart)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+      testSuiteErrorCh.unsubscribe(onSuiteError)
+      testSuiteStartCh.unsubscribe(onSuiteStart)
+      testSuiteFinishCh.unsubscribe(onSuiteFinish)
     }
   })
 
@@ -245,6 +1154,7 @@ describe('webdriverio instrumentation', () => {
     const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
     const testManagementTestsCh = channel('ci:mocha:test-management-tests')
     const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
+    const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
     const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
     const sessionStarts = []
@@ -252,6 +1162,7 @@ describe('webdriverio instrumentation', () => {
     const suiteStarts = []
     const suiteFinishes = []
     const workerLogPayloads = []
+    const workerTelemetryPayloads = []
     const workerTracePayloads = []
     let advancedFeatureRequests = 0
     let configurationRequests = 0
@@ -304,8 +1215,7 @@ describe('webdriverio instrumentation', () => {
       request.onDone({
         isTestDynamicInstrumentationEnabled: true,
         libraryConfig: {
-          earlyFlakeDetectionNumRetries: 5,
-          earlyFlakeDetectionSlowTestRetries: { '5s': 5 },
+          earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
           earlyFlakeDetectionFaultyThreshold: 30,
           flakyTestRetriesCount: 5,
           isCodeCoverageEnabled: true,
@@ -342,6 +1252,9 @@ describe('webdriverio instrumentation', () => {
     function onWorkerLogs (event) {
       workerLogPayloads.push(event)
     }
+    function onWorkerTelemetry (event) {
+      workerTelemetryPayloads.push(event)
+    }
 
     testFinishCh.subscribe(onTestFinish)
     knownTestsCh.subscribe(onKnownTestsRequest)
@@ -354,6 +1267,7 @@ describe('webdriverio instrumentation', () => {
     testSuiteFinishCh.subscribe(onSuiteFinish)
     testManagementTestsCh.subscribe(onTestManagementTestsRequest)
     workerReportLogsCh.subscribe(onWorkerLogs)
+    workerReportTelemetryCh.subscribe(onWorkerTelemetry)
     workerReportTraceCh.subscribe(onWorkerTrace)
 
     try {
@@ -436,6 +1350,11 @@ describe('webdriverio instrumentation', () => {
         name: 'workerEvent',
         args: [MOCHA_WORKER_LOGS_PAYLOAD_CODE, 'first-logs'],
       })
+      firstWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, 'first-telemetry'],
+      })
 
       assert.strictEqual(firstWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(firstWorker.sentMessages[0].content.requestId, 'first-request')
@@ -443,8 +1362,7 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
       assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
         earlyFlakeDetectionFaultyThreshold: 30,
-        earlyFlakeDetectionNumRetries: 5,
-        earlyFlakeDetectionSlowTestRetries: { '5s': 5 },
+        earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
         flakyTestRetriesCount: 5,
         isCodeCoverageEnabled: false,
         isCoverageReportUploadEnabled: false,
@@ -514,6 +1432,7 @@ describe('webdriverio instrumentation', () => {
         },
       ])
       assert.deepStrictEqual(workerLogPayloads, ['first-logs'])
+      assert.deepStrictEqual(workerTelemetryPayloads, ['first-telemetry'])
       assert.deepStrictEqual(suiteFinishes.map(({ status }) => status), ['fail', 'pass'])
       assert.strictEqual(consoleWarn.callCount, 1)
       assert.match(consoleWarn.firstCall.args[0], /Attempt to fix failed/)
@@ -530,6 +1449,7 @@ describe('webdriverio instrumentation', () => {
       testSuiteFinishCh.unsubscribe(onSuiteFinish)
       testManagementTestsCh.unsubscribe(onTestManagementTestsRequest)
       workerReportLogsCh.unsubscribe(onWorkerLogs)
+      workerReportTelemetryCh.unsubscribe(onWorkerTelemetry)
       workerReportTraceCh.unsubscribe(onWorkerTrace)
       consoleWarn.restore()
       if (originalNodeOptions === undefined) {
@@ -537,6 +1457,70 @@ describe('webdriverio instrumentation', () => {
       } else {
         process.env.NODE_OPTIONS = originalNodeOptions
       }
+    }
+  })
+
+  it('scopes test management summaries to each coordinator', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const consoleWarn = sinon.stub(console, 'warn')
+    const runs = [
+      {
+        file: path.join(process.cwd(), 'first.spec.js'),
+        localRunner: { config: { framework: 'mocha', rootDir: process.cwd() } },
+        testName: 'first test',
+        worker: createWorker(),
+      },
+      {
+        file: path.join(process.cwd(), 'second.spec.js'),
+        localRunner: { config: { framework: 'mocha', rootDir: process.cwd() } },
+        testName: 'second test',
+        worker: createWorker(),
+      },
+    ]
+
+    function onTestFinish () {}
+
+    testFinishCh.subscribe(onTestFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      for (let index = 0; index < runs.length; index++) {
+        const { file, localRunner, worker } = runs[index]
+        registerWorker(localRunner, worker, file)
+        requestConfiguration(worker, file, `request-${index}`)
+      }
+      await new Promise(setImmediate)
+
+      for (const { file, testName, worker } of runs) {
+        worker.emit('message', [
+          MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+          JSON.stringify([[{
+            meta: {
+              [TEST_MANAGEMENT_IS_QUARANTINED]: 'true',
+              [TEST_NAME]: testName,
+              [TEST_STATUS]: 'fail',
+              [TEST_SUITE]: path.basename(file),
+            },
+          }]]),
+        ])
+        worker.emit('exit', { exitCode: 0, retries: 0 })
+      }
+
+      await finishLocalRunner(runs[0].localRunner)
+
+      assert.strictEqual(consoleWarn.callCount, 1)
+      assert.match(consoleWarn.firstCall.args[0], /first\.spec\.js › first test/)
+      assert.doesNotMatch(consoleWarn.firstCall.args[0], /second\.spec\.js › second test/)
+
+      await finishLocalRunner(runs[1].localRunner)
+
+      assert.strictEqual(consoleWarn.callCount, 2)
+      assert.match(consoleWarn.secondCall.args[0], /second\.spec\.js › second test/)
+      assert.doesNotMatch(consoleWarn.secondCall.args[0], /first\.spec\.js › first test/)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      consoleWarn.restore()
     }
   })
 
@@ -601,6 +1585,66 @@ describe('webdriverio instrumentation', () => {
       const worker = createWorker()
       registerWorker(localRunner, worker, [knownFile, currentNewFile])
       requestConfiguration(worker, [knownFile, currentNewFile], 'first-request')
+      await new Promise(setImmediate)
+
+      const { configuration } = worker.sentMessages[0].content
+      assert.strictEqual(configuration.isEarlyFlakeDetectionEnabled, false)
+      assert.strictEqual(configuration.isEarlyFlakeDetectionFaulty, true)
+      assert.strictEqual(configuration.isKnownTestsEnabled, false)
+
+      worker.emit('exit', { exitCode: 0, retries: 0 })
+      await finishLocalRunner(localRunner)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      knownTestsCh.unsubscribe(onKnownTestsRequest)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('marks missing framework known-tests data as faulty independently of the threshold', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const knownTestsCh = channel('ci:mocha:known-tests')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+
+    function onTestFinish () {}
+    function onKnownTestsRequest (request) {
+      request.onDone({ knownTests: { 'not-webdriverio': {} } })
+    }
+    function onLibraryConfiguration (request) {
+      request.onDone({
+        libraryConfig: {
+          earlyFlakeDetectionFaultyThreshold: 100,
+          isEarlyFlakeDetectionEnabled: true,
+          isKnownTestsEnabled: true,
+        },
+        repositoryRoot: process.cwd(),
+      })
+    }
+    function onSessionFinish (event) {
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    knownTestsCh.subscribe(onKnownTestsRequest)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'jasmine',
+          rootDir: process.cwd(),
+        },
+      }
+      const worker = createWorker()
+      const file = path.join(process.cwd(), 'new.spec.js')
+
+      registerWorker(localRunner, worker, file)
+      requestConfiguration(worker, file, 'missing-framework')
       await new Promise(setImmediate)
 
       const { configuration } = worker.sentMessages[0].content
@@ -1006,6 +2050,78 @@ function createWorker () {
 }
 
 /**
+ * Creates a configured Jasmine worker plugin with observable test spans.
+ *
+ * @param {object} libraryConfig
+ * @returns {{plugin: MochaPlugin, spans: object[]}}
+ */
+function createJasminePlugin (libraryConfig) {
+  const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
+  const spans = []
+  sinon.stub(plugin, 'startTestSpan').callsFake(() => {
+    const tags = {}
+    const context = {
+      _isFinished: false,
+      _trace: { started: [] },
+      getTags: () => tags,
+    }
+    const span = {
+      context: () => context,
+      finish: () => {
+        context._isFinished = true
+      },
+      setTag: (name, value) => {
+        tags[name] = value
+      },
+    }
+    context._trace.started.push(span)
+    spans.push(span)
+    return span
+  })
+  plugin.configure({ enabled: true })
+  channel('ci:mocha:worker:configuration').publish({
+    libraryConfig,
+    repositoryRoot: process.cwd(),
+    specs: [],
+    testFramework: 'webdriverio',
+    testFrameworkAdapter: 'jasmine',
+  })
+  return { plugin, spans }
+}
+
+/**
+ * Creates a Jasmine reporter result.
+ *
+ * @param {string} id
+ * @param {string} file
+ * @param {string} status
+ * @returns {object}
+ */
+function createJasmineResult (id, file, status) {
+  return {
+    description: id,
+    file,
+    fullName: id,
+    id,
+    status,
+  }
+}
+
+/**
+ * Reports the start of a Jasmine spec.
+ *
+ * @param {object} result
+ * @param {string} file
+ * @returns {void}
+ */
+function reportJasmineSpecStarted (result, file) {
+  channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specStarted:end').publish({
+    arguments: [result],
+    self: { _specs: [file] },
+  })
+}
+
+/**
  * Publishes the LocalRunner.run lifecycle for one worker.
  *
  * @param {object} localRunner
@@ -1069,16 +2185,17 @@ function requestConfiguration (worker, file, requestId) {
  * @param {EventEmitter} worker
  * @param {string} file
  * @param {string} [status]
+ * @param {{message?: string, stack?: string}} [error]
  * @returns {void}
  */
-function reportSuiteFinish (worker, file, status = 'pass') {
+function reportSuiteFinish (worker, file, status = 'pass', error) {
   worker.emit('message', {
     origin: 'datadog',
     name: 'workerEvent',
     args: {
       name: SUITE_FINISH,
       content: {
-        results: [{ file, status }],
+        results: [{ error, file, status }],
       },
     },
   })

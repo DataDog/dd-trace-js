@@ -230,7 +230,7 @@ describe('Plugin', () => {
             })
 
             total++
-          }).catch(() => {}, { timeoutMs: 100 })
+          }, { timeoutMs: 100 }).catch(() => {})
 
           s3.putObject({
             Bucket: bucketName,

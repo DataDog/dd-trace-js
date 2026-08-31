@@ -97,7 +97,7 @@ withVersions('stripe', 'stripe', version => {
           amount_discount = subtotal * 0.1
         }
 
-        amount_shipping = parseInt(amount_shipping)
+        amount_shipping = parseInt(amount_shipping, 10)
 
         const amount_total = subtotal - amount_discount + amount_shipping
 

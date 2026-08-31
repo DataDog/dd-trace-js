@@ -1,7 +1,8 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
+const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
+const { getKafkaMessageSize } = require('./utils')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
@@ -29,12 +30,13 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   /**
    *
    * @typedef {object} ProducerResponseItem
-   * @property {string} topic
+   * @property {string} topicName
    * @property {number} partition
    * @property {import('kafkajs/utils/long').Long} [offset]
    * @property {import('kafkajs/utils/long').Long} [baseOffset]
    *
    * @param {ProducerResponseItem} response
+   * @param {string} [clusterId]
    * @returns {ProducerBacklog}
    */
   transformProduceResponse (response, clusterId) {
@@ -76,7 +78,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
     for (const message of messages) {
       if (message !== null && typeof message === 'object') {
-        const payloadSize = getMessageSize(message)
+        const payloadSize = getKafkaMessageSize(message)
         const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
 
         if (clusterId) {

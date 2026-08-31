@@ -20,6 +20,7 @@ const origRequire = Module.prototype.require
 module.exports = Hook
 
 let moduleHooks = Object.create(null)
+let hookedModuleCount = 0
 let cache = Object.create(null)
 let patching = Object.create(null)
 let patchedRequire = null
@@ -36,6 +37,11 @@ const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
  * @overload
  * @param {string[]} modules list of modules to hook into
  * @param {Function} onrequire callback to be executed upon encountering module
+ */
+/**
+ * @param {string[]} modules list of modules to hook into
+ * @param {object | Function} [options] hook options, or the `onrequire` callback
+ * @param {Function} [onrequire] callback to be executed upon encountering module
  */
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
@@ -59,6 +65,7 @@ function Hook (modules, options, onrequire) {
         hooks.push(onrequire)
       } else {
         moduleHooks[mod] = [onrequire]
+        hookedModuleCount++
       }
     }
   }
@@ -200,6 +207,7 @@ Hook.reset = function () {
   patching = Object.create(null)
   cache = Object.create(null)
   moduleHooks = Object.create(null)
+  hookedModuleCount = 0
 }
 
 function findProjectRoot (startDir) {
@@ -216,16 +224,20 @@ function findProjectRoot (startDir) {
 
 Hook.prototype.unhook = function () {
   for (const mod of this.modules) {
-    const hooks = (moduleHooks[mod] || []).filter(hook => hook !== this.onrequire)
+    const registeredHooks = moduleHooks[mod]
+    if (registeredHooks === undefined) continue
+
+    const hooks = registeredHooks.filter(hook => hook !== this.onrequire)
 
     if (hooks.length > 0) {
       moduleHooks[mod] = hooks
     } else {
       delete moduleHooks[mod]
+      hookedModuleCount--
     }
   }
 
-  if (Object.keys(moduleHooks).length === 0) {
+  if (hookedModuleCount === 0) {
     Hook.reset()
   }
 }

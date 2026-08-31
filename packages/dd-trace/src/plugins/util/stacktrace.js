@@ -184,6 +184,9 @@ function isDDInstrumentationFile (fileName) {
  * This function extracts the `myscript.js:10:3` part, passes it, returns the file name, line number, and column
  * number and sets the `index` to the start of the whole location string.
  *
+ * @param {string} stack the stack trace, or the nested location string when recursing
+ * @param {number} start index of the first character of the frame in `stack`
+ * @param {number} index index to start parsing backwards from
  * @returns {[string, string, string, number]|undefined}
  */
 function parseLocation (stack, start, index) {

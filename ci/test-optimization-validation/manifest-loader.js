@@ -81,6 +81,9 @@ function getManifestPaths (manifest) {
       [`${prefix}.ciWiring.configFile`, framework.ciWiring?.configFile],
       [`${prefix}.ciWiring.workingDirectory`, framework.ciWiring?.workingDirectory]
     )
+    for (const [index, fallback] of (framework.validation?.fallbackTests || []).entries()) {
+      paths.push([`${prefix}.validation.fallbackTests[${index}].testFile`, fallback.testFile])
+    }
     for (const [index, configFile] of (framework.project?.configFiles || []).entries()) {
       paths.push([`${prefix}.project.configFiles[${index}]`, configFile])
     }

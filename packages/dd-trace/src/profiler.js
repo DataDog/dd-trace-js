@@ -20,7 +20,7 @@ module.exports = {
 
   /**
    * Declares the set of custom label keys that will be used with
-   * {@link runWithLabels}.
+   * `runWithLabels`.
    *
    * @param {Iterable<string>} keys - Custom label key names
    */
