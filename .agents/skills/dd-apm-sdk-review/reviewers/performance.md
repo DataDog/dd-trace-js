@@ -47,32 +47,34 @@ CPU overhead alone is the lowest priority — it's a cost issue, not a correctne
 
 ## Universal checks (language-agnostic — the runtime-specific mechanism for each is in `dd-apm-sdk-review-overrides/reviewers/performance.md`)
 
-1. **Per-call allocation on a hot path** — an object/closure/string/box that isn't trivially short-lived (retained, returned, captured, or passed across a boundary).
+Each check below carries a stable slug in backticks. Cite checks by slug, never by list position — the numbering is display order only and may be reordered; a slug never changes once assigned.
+
+1. `per-call-allocation` — **Per-call allocation on a hot path** — an object/closure/string/box that isn't trivially short-lived (retained, returned, captured, or passed across a boundary).
   - Confidence: flag-with-confidence if clearly retained; flag-as-measure if lifetime is borderline.
   - Severity: SEV-2/3 (→ SEV-1 if unbounded).
   - Fix: reuse, pool, dense/positional storage, defer out of the hot path.
-2. **Repeat work across calls** — string concat / case-conversion / regex compile / format / parse recomputed each hot-path call on a recurring input, or allocating each time.
+2. `repeat-work-across-calls` — **Repeat work across calls** — string concat / case-conversion / regex compile / format / parse recomputed each hot-path call on a recurring input, or allocating each time.
   - Confidence: flag-with-confidence.
   - Severity: SEV-2/3.
-  - Fix: memoize (bounded — see #3) or compile/compute once and hoist.
-3. **Unbounded memory / collection** — a cache/map/collection with no size *and* byte bound, or keyed by a high-cardinality input (per-request data, raw strings, user-supplied dimensions).
+  - Fix: memoize (bounded — see `unbounded-memory`) or compile/compute once and hoist.
+3. `unbounded-memory` — **Unbounded memory / collection** — a cache/map/collection with no size *and* byte bound, or keyed by a high-cardinality input (per-request data, raw strings, user-supplied dimensions).
   - Confidence: flag-with-confidence (unboundedness is structurally visible).
   - Severity: **SEV-1**.
   - Fix: bound by count *and* bytes, or don't cache/aggregate the high-cardinality input at all. Never flag the *absence* of a cache on open-cardinality input — not caching it is the correct choice.
   - If the growth is attacker-triggerable via external input, also worth a security finding — that's the security lane's call, not yours to escalate.
-4. **Expensive work on the critical path that could be deferred** — heavy compute / parse / normalize / serialize / I/O / lock on the synchronous request or span-finish path, that could be moved.
+4. `deferrable-critical-path-work` — **Expensive work on the critical path that could be deferred** — heavy compute / parse / normalize / serialize / I/O / lock on the synchronous request or span-finish path, that could be moved.
   - Confidence: flag-as-consider (deferability is contextual).
   - Severity: SEV-1/2.
   - Fix: defer to background/writer thread or task, lazy-compute, batch.
-5. **Polymorphic/indirect dispatch on a hot path** — a hot call site that defeats the runtime's inlining/optimization (real for JIT and JIT-like runtimes; less relevant for pure interpreters or AOT-compiled code — check `dd-apm-sdk-review-overrides/reviewers/performance.md`).
+5. `polymorphic-dispatch` — **Polymorphic/indirect dispatch on a hot path** — a hot call site that defeats the runtime's inlining/optimization (real for JIT and JIT-like runtimes; less relevant for pure interpreters or AOT-compiled code — check `dd-apm-sdk-review-overrides/reviewers/performance.md`).
   - Confidence: flag-as-measure.
   - Severity: SEV-2/3.
   - Fix: keep hot call sites monomorphic/stable; specialize.
-6. **FFI / native-boundary or cross-runtime crossing on a hot path** — a crossing per-span/per-item (not batched), or transporting strings/objects rather than primitives/IDs.
+6. `native-boundary-crossing` — **FFI / native-boundary or cross-runtime crossing on a hot path** — a crossing per-span/per-item (not batched), or transporting strings/objects rather than primitives/IDs.
   - Confidence: flag-with-confidence (boundary cost is mechanism-determined).
   - Severity: SEV-1/2 (SEV-1 if it blocks/pins under concurrency).
   - Fix: batch (one per flush, not per item); transport interned IDs, not strings; keep crossings off the hot/concurrency path.
-7. **Escape / allocation-elision defeated by a refactor** — a previously-local, cheap object now escapes (stored, returned, captured by a closure, passed to a non-inlined call) → a silent allocation on a hot path.
+7. `escape-elision-defeated` — **Escape / allocation-elision defeated by a refactor** — a previously-local, cheap object now escapes (stored, returned, captured by a closure, passed to a non-inlined call) → a silent allocation on a hot path.
   - Confidence: flag-as-measure ("may now escape and allocate; verify with a profiler").
   - Severity: SEV-2/3.
   - Fix: keep it local; avoid the escaping store/capture.
