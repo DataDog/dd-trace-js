@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 require('../setup/core')
@@ -16,6 +17,16 @@ const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_load
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const BatchLogRecordProcessor = require('../../src/opentelemetry/logs/batch_log_processor')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+function getVercelBatchLogRecordProcessor () {
+  process.env.VERCEL = '1'
+  const serverless = proxyquire.noPreserveCache()('../../src/serverless', {})
+  return proxyquire.noPreserveCache()('../../src/opentelemetry/logs/batch_log_processor', {
+    '../../serverless': serverless,
+  })
+}
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -144,10 +155,10 @@ describe('OpenTelemetry Logs', () => {
 
   describe('Logs Export', () => {
     it('waits for an in-flight export during forceFlush', () => {
-      process.env.VERCEL = '1'
+      const VercelBatchLogRecordProcessor = getVercelBatchLogRecordProcessor()
       let exportDone
       let flushDone
-      const processor = new BatchLogRecordProcessor({
+      const processor = new VercelBatchLogRecordProcessor({
         export: (records, done) => { exportDone = done },
         flush: (done) => { flushDone = done },
       }, 60_000, 1)
@@ -164,7 +175,7 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('drains queued batches and waits for earlier size-triggered exports', () => {
-      process.env.VERCEL = '1'
+      const VercelBatchLogRecordProcessor = getVercelBatchLogRecordProcessor()
       const batches = []
       const callbacks = []
       const flushCallbacks = []
@@ -173,7 +184,7 @@ describe('OpenTelemetry Logs', () => {
         if (activeExports !== 0) return
         while (flushCallbacks.length > 0) flushCallbacks.shift()()
       }
-      const processor = new BatchLogRecordProcessor({
+      const processor = new VercelBatchLogRecordProcessor({
         export: (records, done) => {
           batches.push(records)
           activeExports++
@@ -206,9 +217,9 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('waits for an earlier export when the boundary batch throws', () => {
-      process.env.VERCEL = '1'
+      const VercelBatchLogRecordProcessor = getVercelBatchLogRecordProcessor()
       let priorFlushDone
-      const processor = new BatchLogRecordProcessor({
+      const processor = new VercelBatchLogRecordProcessor({
         export: sinon.stub()
           .onFirstCall().callsFake(() => {})
           .onSecondCall().throws(new Error('encode failed')),
@@ -227,10 +238,10 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('does not wait for records emitted after the flush boundary', () => {
-      process.env.VERCEL = '1'
+      const VercelBatchLogRecordProcessor = getVercelBatchLogRecordProcessor()
       const exports = []
       let firstExportDone
-      const processor = new BatchLogRecordProcessor({
+      const processor = new VercelBatchLogRecordProcessor({
         export: (records, done) => {
           exports.push(records.map(record => record.body))
           if (records[0].body === 'before') firstExportDone = done
@@ -919,6 +930,24 @@ describe('OpenTelemetry Logs', () => {
       exporter.export([{ body: 'test', severityNumber: 9, timestamp: [1700000000, 0] }], () => {})
 
       assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
+    })
+  })
+
+  describe('Identity refresh', () => {
+    it('exports resource attributes rebuilt after identity refresh', () => {
+      const validator = mockOtlpExport((decoded) => {
+        const runtimeId = decoded.resourceLogs[0].resource.attributes.find(
+          attribute => attribute.key === 'runtime-id'
+        )
+        assert.strictEqual(runtimeId.value.stringValue, 'refreshed-id')
+      })
+      const { config, logs } = setupLogs()
+
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+      logs.getLogger('test-logger').emit({ body: 'test' })
+
+      validator()
     })
   })
 })

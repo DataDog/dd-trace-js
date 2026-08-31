@@ -20,6 +20,7 @@ import eslintCarrierFields from './eslint-rules/eslint-carrier-fields.mjs'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintNoCallResultInvocation from './eslint-rules/eslint-no-call-result-invocation.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
 import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
 import eslintNoUnnecessaryArrayJoin from './eslint-rules/eslint-no-unnecessary-array-join.mjs'
@@ -470,6 +471,7 @@ export default [
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
+          'eslint-no-call-result-invocation': eslintNoCallResultInvocation,
           'eslint-no-process-env-disable': eslintNoProcessEnvDisable,
           'eslint-no-unnecessary-array-join': eslintNoUnnecessaryArrayJoin,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
@@ -515,7 +517,7 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline',
       }],
-      'eslint-rules/eslint-safe-typeof-object': 'error',
+      'eslint-rules/eslint-no-call-result-invocation': 'error',
       'eslint-rules/eslint-no-private-tags-access': ['error', {
         allowFiles: [
           // The span_context implementation defines and reads `_tags` directly.
@@ -546,6 +548,7 @@ export default [
         ],
       }],
       'eslint-rules/eslint-require-export-exists': 'error',
+      'eslint-rules/eslint-safe-typeof-object': 'error',
       'import/no-extraneous-dependencies': 'error',
       // 72 errors. Instrumentation has to publish its finish event after invoking the wrapped
       // callback, so returning the callback call would drop the event.
@@ -996,11 +999,16 @@ export default [
       // TODO: Re-enable this rule once we have a way to fix the false positives or have Node.js report better errors.
       'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
+      'mocha/consistent-structure': 'off',
+      'mocha/handle-done-callback': 'off',
+      'mocha/limit-timeout': ['error', { mode: 'disallowDisabled' }],
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
+      'mocha/no-async-in-sync-tests': 'off',
+      'mocha/no-conditional-tests': 'off',
       'mocha/no-mocha-arrows': 'off',
-      'mocha/no-setup-in-describe': 'off',
-      'mocha/no-sibling-hooks': 'off',
-      'mocha/no-top-level-hooks': 'off',
+      'mocha/no-pending-tests': 'off',
+      'mocha/no-root-hooks': 'off',
+      'mocha/no-setup-in-suite': 'off',
       'n/handle-callback-err': 'off',
       'n/no-extraneous-require': ['error', {
         allowModules: [

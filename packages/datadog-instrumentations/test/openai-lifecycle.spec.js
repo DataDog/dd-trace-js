@@ -24,14 +24,12 @@ class FakeAPIPromise {
     return Promise.resolve(this._rawResponse)
   }
 
+  _thenUnwrap (cb) {
+    return new FakeAPIPromise(cb(this._body), this.responsePromise)
+  }
+
   then (onFulfilled, onRejected) {
     return this.parse().then(onFulfilled, onRejected)
-  }
-}
-
-class FakeUnwrappableAPIPromise extends FakeAPIPromise {
-  _thenUnwrap (cb) {
-    return new FakeAPIPromise(cb(this._body))
   }
 }
 
@@ -135,6 +133,7 @@ describe('openai lifecycle instrumentation', () => {
 
   before(() => {
     hookCallbacks = loadOpenAIInstrumentation()
+    applyShim(hookCallbacks, 'core/api-promise', 'APIPromise', FakeAPIPromise)
   })
 
   describe('chat.completions.create', () => {
@@ -336,7 +335,7 @@ describe('openai lifecycle instrumentation', () => {
       ])
       const body = { choices: [{ message: { role: 'assistant', content: '{"ok":true}' } }] }
       const completions = new Completions()
-      completions._nextApiPromise = new FakeUnwrappableAPIPromise(body)
+      completions._nextApiPromise = new FakeAPIPromise(body)
 
       const args = [{ messages: [{ role: 'user', content: 'Hi' }] }]
       return completions.create(...args)._thenUnwrap(result => ({ ...result, parsed: { ok: true } })).parse()
