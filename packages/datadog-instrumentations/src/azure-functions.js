@@ -55,7 +55,7 @@ function traceOrchestrationHandler (handler, functionName) {
     if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, args)
 
     const orchestrationBinding = args[0]
-    if (orchestrationBinding?.isReplaying !== false) return handler.apply(this, args)
+    if (orchestrationBinding?.isReplaying) return handler.apply(this, args)
 
     const traceContext = args[1]?.traceContext
     return azureDurableFunctionsChannel.tracePromise(
