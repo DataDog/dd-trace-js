@@ -2,7 +2,7 @@
 
 const log = require('../../log')
 const { ExperimentsClient } = require('./client')
-const { Dataset, DatasetRecord } = require('./dataset')
+const { Dataset } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
@@ -72,21 +72,7 @@ class Experiments {
       : (descriptionOrOptions ?? {})
     const client = this.#clientForOperation(options.projectName)
     const dataset = new Dataset(client, name, options.description ?? '')
-    const recordIds = new Set()
-    if ((options.records) != null) {
-      for (const record of options.records) {
-        if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
-          throw new Error('record id must be a non-empty string')
-        }
-        if (record.id !== undefined) {
-          if (recordIds.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)
-          recordIds.add(record.id)
-        }
-        dataset.addRecord(
-          new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id, record.tags)
-        )
-      }
-    }
+    if ((options.records) != null) dataset.addRecords(options.records)
     return dataset
   }
 

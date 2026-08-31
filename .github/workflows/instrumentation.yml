@@ -35,6 +35,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-esbuild
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
 
   webpack:
     runs-on: ubuntu-latest
@@ -50,6 +54,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-webpack
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
 
   instrumentation-ai:
     runs-on: ubuntu-latest
@@ -183,6 +191,16 @@ jobs:
       id-token: write
     env:
       PLUGINS: crypto
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-cypress-config:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: cypress-config
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test

@@ -1,5 +1,7 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+const uuid = require('../../../vendor/dist/crypto-randomuuid')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
@@ -7,12 +9,17 @@ const { getEnvironmentVariable } = require('./config/helper')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager, startupLog } = require('./startup-log')
-const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const { IS_SERVERLESS, initializeServerlessTelemetry, supportsServerlessTelemetryRetention } = require('./serverless')
+const {
+  IS_AWS_LAMBDA_MICROVM,
+  IS_SERVERLESS,
+  NODE_BUNDLES_OPENSSL,
+  initializeServerlessTelemetry,
+  supportsServerlessTelemetryRetention,
+} = require('./serverless')
 const { flushServerlessTelemetry, registerTelemetryFlusher } = require('./flush')
 const processTags = require('./process-tags')
 const { isTrue } = require('./util')
@@ -41,6 +48,20 @@ const OFFLINE_VALIDATION_EXPORTERS = new Set([
 const OPENFEATURE_STATE_NOOP = 0
 const OPENFEATURE_STATE_LAZY = 1
 const OPENFEATURE_STATE_ACTIVE = 2
+
+let dynamicInstrumentation
+
+function getDynamicInstrumentation () {
+  dynamicInstrumentation ??= require('./debugger')
+  return dynamicInstrumentation
+}
+
+const UUID_POOL_SIZE = 128
+
+const BUNDLED_OPENSSL_WARNING = 'This Node.js build bundles its own OpenSSL, so its random number ' +
+  'generator is not reseeded when a MicroVM clone resumes and trace IDs may repeat across clones. ' +
+  'Install Node.js from the Amazon Linux 2023 repositories (for example `dnf install nodejs22`) so it ' +
+  'links the base image\'s snapsafe OpenSSL.'
 
 class LazyModule {
   constructor (provider) {
@@ -144,6 +165,10 @@ class Tracer extends NoopProxy {
     try {
       const config = getConfig(options) // TODO: support dynamic code config
 
+      if (IS_AWS_LAMBDA_MICROVM) {
+        this.#registerMicroVmRunHook(config)
+      }
+
       // Add config dependent process tags
       processTags.initialize(config)
 
@@ -215,7 +240,7 @@ class Tracer extends NoopProxy {
         }
 
         if (config.dynamicInstrumentation.enabled) {
-          DynamicInstrumentation.start(config, rc)
+          getDynamicInstrumentation().start(config, rc)
         }
 
         const openfeatureRemoteConfig = require('./openfeature/remote_config')
@@ -276,7 +301,9 @@ class Tracer extends NoopProxy {
         this._modules.rewriter.enable(config)
       }
 
-      if (config.DD_TRACE_ENABLED && config.testOptimization.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
+      if (config.isCiVisibility &&
+        config.DD_TRACE_ENABLED &&
+        config.testOptimization.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
         this._testApiManualPlugin = new TestApiManualPlugin(this)
         // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
@@ -284,7 +311,7 @@ class Tracer extends NoopProxy {
         // are lazily configured when the library is imported.
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
-      if (config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
+      if (config.isCiVisibility && config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
         if (config.DD_API_KEY) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
@@ -297,7 +324,7 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
+      if (config.isCiVisibility && config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
         const getDynamicInstrumentationClient = require('./ci-visibility/dynamic-instrumentation')
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
@@ -308,6 +335,42 @@ class Tracer extends NoopProxy {
     }
 
     return this
+  }
+
+  /**
+   * Listens for the MicroVM /run lifecycle event and triggers a one-time
+   * identity reset on first fire.
+   *
+   * @param {import('./config/config-base')} config
+   */
+  #registerMicroVmRunHook (config) {
+    // Node reseeds its CSPRNG from the kernel on clone resume only when it links the base image's
+    // snapsafe libcrypto; a bundled OpenSSL keeps the snapshot's DRBG state, so the refresh below
+    // cannot produce distinct IDs. Logged at registration, during the image build, where the
+    // Dockerfile can still be fixed — not once per clone.
+    if (NODE_BUNDLES_OPENSSL) {
+      log.error(BUNDLED_OPENSSL_WARNING)
+    }
+
+    const ch = channel('http.server.request.start')
+
+    const onHttpRequest = ({ request }) => {
+      if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
+        ch.unsubscribe(onHttpRequest)
+        drainUuidPool()
+        channel('datadog:identity:update').publish(config)
+        if (this._tracingInitialized) {
+          const storeTracerMetadata = require('./tracer_metadata')
+          const metadata = storeTracerMetadata(config)
+          if (metadata === undefined) {
+            log.warn('Could not store tracer configuration for service discovery')
+          }
+        }
+        channel('datadog:identity:refresh').publish(config)
+      }
+    }
+
+    ch.subscribe(onHttpRequest)
   }
 
   /**
@@ -404,7 +467,7 @@ class Tracer extends NoopProxy {
     if (this._tracingInitialized) {
       this._tracer.configure(config)
       this._pluginManager.configure(config)
-      DynamicInstrumentation.configure(config)
+      dynamicInstrumentation?.configure(config)
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
     }
@@ -421,6 +484,9 @@ class Tracer extends NoopProxy {
    */
   #updateDebugger (config, rc) {
     const shouldBeEnabled = config.dynamicInstrumentation.enabled
+    if (!shouldBeEnabled && dynamicInstrumentation === undefined) return
+
+    const DynamicInstrumentation = getDynamicInstrumentation()
     const isCurrentlyStarted = DynamicInstrumentation.isStarted()
 
     if (shouldBeEnabled) {
@@ -502,6 +568,21 @@ function isOfflineTestOptimizationValidation () {
  */
 function isOfflineValidationExporter (options) {
   return OFFLINE_VALIDATION_EXPORTERS.has(options?.experimental?.exporter)
+}
+
+/**
+ * Discards Node's buffered UUID entropy, so the identity subscribers draw from bytes generated
+ * after the clone resumed.
+ *
+ * `crypto.randomUUID()` serves `kBatchSize` (128, see `lib/internal/crypto/random.js`) UUIDs from one
+ * process-wide pool and refills it only when its cursor wraps back to 0. A full cycle crosses the
+ * cursor exactly once from any starting position, and the position is not observable, so the count
+ * has to be the batch size rather than the number of UUIDs we need.
+ */
+function drainUuidPool () {
+  for (let index = 0; index < UUID_POOL_SIZE; index++) {
+    uuid()
+  }
 }
 
 module.exports = Tracer

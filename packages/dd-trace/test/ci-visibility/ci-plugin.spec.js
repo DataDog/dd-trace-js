@@ -340,23 +340,10 @@ describe('CiPlugin', () => {
     sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
   })
 
-  it('defers worker suite events when the exporter supports late test suite updates', () => {
+  it('exports worker traces normally', () => {
     const plugin = createPlugin('vitest_worker')
-    const exportTraceWithDeferredTestSuite = sinon.spy()
     const exportTrace = sinon.spy()
     const trace = [{ type: 'test_suite_end', meta: {} }]
-    plugin.tracer._exporter = { export: exportTrace, exportTraceWithDeferredTestSuite }
-
-    plugin._exportWorkerTraceOrBuffer(trace)
-
-    sinon.assert.calledOnceWithExactly(exportTraceWithDeferredTestSuite, trace)
-    sinon.assert.notCalled(exportTrace)
-  })
-
-  it('exports worker traces normally when late test suite updates are unsupported', () => {
-    const plugin = createPlugin('vitest_worker')
-    const exportTrace = sinon.spy()
-    const trace = [{ type: 'test', meta: {} }]
     plugin.tracer._exporter = { export: exportTrace }
 
     plugin._exportWorkerTraceOrBuffer(trace)

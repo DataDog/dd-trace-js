@@ -36,9 +36,26 @@ describe('module', () => {
   let registerTelemetryFlusher
   let unregisterTelemetryFlusher
   let originalVercel
+  let llmobsModuleProxyRequireMeta
 
   /** @type {import('sinon').SinonStub} */
   let startupLogStub
+
+  function loadLlmobsModule () {
+    llmobsModule = proxyquire('../../../dd-trace/src/llmobs', llmobsModuleProxyRequireMeta)
+    removeDestroyHandler()
+  }
+
+  function loadLlmobsModuleOnVercel () {
+    process.env.VERCEL = '1'
+    const loadServerless = proxyquire.noPreserveCache()
+    llmobsModuleProxyRequireMeta['../serverless'] = loadServerless(
+      '../../../dd-trace/src/serverless',
+      {}
+    )
+    proxyquire.preserveCache()
+    loadLlmobsModule()
+  }
 
   beforeEach(() => {
     originalVercel = process.env.VERCEL
@@ -62,7 +79,7 @@ describe('module', () => {
     unregisterTelemetryFlusher = sinon.stub()
     registerTelemetryFlusher = sinon.stub().returns(unregisterTelemetryFlusher)
 
-    const llmobsModuleProxyRequireMeta = {
+    llmobsModuleProxyRequireMeta = {
       './writers/spans': LLMObsSpanWriterSpy,
       './writers/evaluations': LLMObsEvalMetricsWriterSpy,
       '../flush': { registerTelemetryFlusher },
@@ -91,9 +108,7 @@ describe('module', () => {
       }
     }
 
-    llmobsModule = proxyquire('../../../dd-trace/src/llmobs', llmobsModuleProxyRequireMeta)
-
-    removeDestroyHandler()
+    loadLlmobsModule()
   })
 
   afterEach(() => {
@@ -467,7 +482,7 @@ describe('module', () => {
   })
 
   it('registers both LLMObs writers for lifecycle flushing', () => {
-    process.env.VERCEL = '1'
+    loadLlmobsModuleOnVercel()
     llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
     const done = sinon.spy()
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
@@ -488,7 +503,7 @@ describe('module', () => {
   })
 
   it('continues flushing when one LLMObs writer throws', () => {
-    process.env.VERCEL = '1'
+    loadLlmobsModuleOnVercel()
     llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
     const done = sinon.spy()
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
@@ -515,7 +530,7 @@ describe('module', () => {
   })
 
   it('retains destroyed writers until every lifecycle flush completes', () => {
-    process.env.VERCEL = '1'
+    loadLlmobsModuleOnVercel()
     const retiredUnregister = sinon.stub()
     registerTelemetryFlusher.onSecondCall().returns(retiredUnregister)
     llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
@@ -537,7 +552,7 @@ describe('module', () => {
   })
 
   it('retires reinitialized writers until their destroy callbacks complete', () => {
-    process.env.VERCEL = '1'
+    loadLlmobsModuleOnVercel()
     const initialUnregister = sinon.stub()
     const retiredUnregister = sinon.stub()
     const replacementUnregister = sinon.stub()
@@ -571,7 +586,7 @@ describe('module', () => {
   })
 
   it('completes transport selection for writers retired during initialization', () => {
-    process.env.VERCEL = '1'
+    loadLlmobsModuleOnVercel()
     llmobsModule.enable({ llmobs: { mlApp: 'test' } })
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
     const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue

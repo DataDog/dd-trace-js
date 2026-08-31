@@ -63,7 +63,8 @@ describe('otel-thread-ctx', () => {
   let setActive
 
   function loadModule (overrides = {}) {
-    return proxyquire.noPreserveCache()('../src/otel-thread-ctx', {
+    const loadOtelThreadCtx = proxyquire.noPreserveCache()
+    return loadOtelThreadCtx('../src/otel-thread-ctx', {
       '@datadog/pprof': overrides.pprof || pprofStub,
       '../../datadog-core/src/storage': overrides.storage || storageStub,
       './storage-channels': overrides.storageChannels || storageChannelsStub,

@@ -12,7 +12,7 @@ const semver = require('semver')
 const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange, resolvePluginVersions } = require('../packages/dd-trace/test/plugins/versions')
-const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
+const { dependencies: latests, resolutions } = require('../packages/dd-trace/test/plugins/versions/package.json')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const mapWithConcurrency = require('./helpers/concurrency')
@@ -354,6 +354,7 @@ async function assertWorkspaces () {
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
+    resolutions,
     workspaces: {
       packages: [...workspaces].sort(),
     },

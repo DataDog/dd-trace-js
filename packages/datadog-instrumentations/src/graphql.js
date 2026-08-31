@@ -6,20 +6,19 @@ const { addHook, getHooks } = require('./helpers/instrument')
 // - graphql: execute, parse, validate (CJS + ESM)
 // - @graphql-tools/executor: execute, normalizedExecutor (CJS + ESM)
 // See helpers/rewriter/instrumentations/graphql.js for the full config.
-//
-// The plugin (packages/datadog-plugin-graphql/src/execute.js) handles the
-// `apm:graphql:execute:start` AppSec/WAF contract from inside its bindStart:
-// publishing the channel synchronously runs subscribers, and an
-// `abortController.abort()` from a subscriber is observed by replacing
-// `ctx.arguments[0]` with an object whose getters throw AbortError. The
-// orchestrion-emitted wrapper's `catch { ...; throw err }` block propagates
-// that throw to the caller of graphql.execute. No outer wrap needed.
-
 for (const hook of getHooks('graphql')) {
   addHook(hook, exports => exports)
 }
 
 for (const hook of getHooks('@graphql-tools/executor')) {
+  addHook(hook, exports => exports)
+}
+
+// Multiple graphql-jit rewrites share each build file; register one hook per file.
+const graphqlJitFiles = new Set()
+for (const hook of getHooks('graphql-jit')) {
+  if (graphqlJitFiles.has(hook.file)) continue
+  graphqlJitFiles.add(hook.file)
   addHook(hook, exports => exports)
 }
 

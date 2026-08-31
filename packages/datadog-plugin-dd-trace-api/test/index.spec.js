@@ -35,10 +35,12 @@ const stubbedConfigurations = {
 }
 
 const configHelperPath = require.resolve('../../dd-trace/src/config/helper')
-const reloadedDefaults = proxyquire.noPreserveCache()(require.resolve('../../dd-trace/src/config/defaults'), {
+const loadDefaults = proxyquire.noPreserveCache()
+const reloadedDefaults = loadDefaults(require.resolve('../../dd-trace/src/config/defaults'), {
   './supported-configurations.json': stubbedConfigurations,
 })
-const reloadedConfigHelper = proxyquire.noPreserveCache()(configHelperPath, {
+const loadConfigHelper = proxyquire.noPreserveCache()
+const reloadedConfigHelper = loadConfigHelper(configHelperPath, {
   './supported-configurations.json': stubbedConfigurations,
   './defaults': reloadedDefaults,
 })

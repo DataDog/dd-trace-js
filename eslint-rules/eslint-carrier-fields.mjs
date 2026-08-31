@@ -7,6 +7,38 @@ const carrierSource = readFileSync(new URL('../packages/dd-trace/src/carrier.js'
 const { legacyBaggagePrefix, propagationHeaders } = parseCarrierModel(carrierSource)
 
 /**
+ * @typedef {object} CarrierWrite
+ * @property {'write'} type
+ * @property {import('eslint').Scope.Variable} variable
+ * @property {import('estree').Node} expression
+ * @property {boolean} preserve
+ */
+
+/**
+ * @typedef {object} CarrierCheck
+ * @property {'check' | 'return'} type
+ * @property {import('estree').Node} expression
+ * @property {import('estree').Node} node
+ */
+
+/**
+ * @typedef {object} CarrierCall
+ * @property {'call'} type
+ * @property {import('estree').CallExpression} node
+ */
+
+/** @typedef {CarrierWrite | CarrierCheck | CarrierCall} CarrierEvent */
+
+/**
+ * @typedef {object} CodePathFrame
+ * @property {import('estree').Node} node
+ * @property {Set<import('eslint').CodePathSegment>} currentSegments
+ * @property {Set<import('eslint').CodePathSegment>} segments
+ * @property {Map<import('eslint').CodePathSegment, CarrierEvent[]>} events
+ * @property {Map<import('eslint').CodePathSegment, Set<import('eslint').Scope.Variable>>} outputs
+ */
+
+/**
  * @param {import('estree').Identifier | import('estree').Expression | import('estree').Super} node
  * @returns {boolean}
  */
@@ -113,6 +145,9 @@ export default {
     const sourceCode = context.sourceCode
     const carrierFunctions = new Set()
     const carrierModuleIdentifiers = new Set()
+    const carrierReturningFunctions = new Set()
+    const codePathFrames = []
+    const completedCodePathFrames = []
     const strictCarrierIdentifiers = context.options[0]?.strictCarrierIdentifiers === true
 
     /**
@@ -122,6 +157,248 @@ export default {
     function isCarrierModuleReference (node) {
       return isCarrierModuleRequire(node) ||
         (node.type === 'Identifier' && carrierModuleIdentifiers.has(node.name))
+    }
+
+    /**
+     * @param {import('estree').Node} node
+     * @returns {import('eslint').Scope.Variable | undefined}
+     */
+    function findVariable (node) {
+      if (node.type !== 'Identifier') return
+
+      let scope = sourceCode.getScope(node)
+      while (scope) {
+        const variable = scope.set.get(node.name)
+        if (variable) return variable
+        scope = scope.upper
+      }
+    }
+
+    /**
+     * @param {import('estree').Node} node
+     * @param {Set<import('eslint').Scope.Variable>} taintedVariables
+     * @param {Set<import('eslint').Scope.Variable>} [seenVariables]
+     * @returns {boolean}
+     */
+    function isCarrierReference (node, taintedVariables, seenVariables) {
+      if (isCarrierIdentifier(node)) return true
+
+      if (node.type === 'LogicalExpression') {
+        return isCarrierReference(node.left, taintedVariables, seenVariables) ||
+          isCarrierReference(node.right, taintedVariables, seenVariables)
+      }
+      if (node.type === 'ConditionalExpression') {
+        return isCarrierReference(node.consequent, taintedVariables, seenVariables) ||
+          isCarrierReference(node.alternate, taintedVariables, seenVariables)
+      }
+      if (node.type === 'CallExpression') {
+        const localFunction = findLocalFunction(node.callee)
+        return localFunction !== undefined && carrierReturningFunctions.has(localFunction)
+      }
+      const variable = findVariable(node)
+      if (variable === undefined) return false
+      if (taintedVariables.has(variable)) return true
+      if (seenVariables?.has(variable) || variable.defs.length !== 1) return false
+
+      const [definition] = variable.defs
+      if (definition.type !== 'Variable' || definition.parent.kind !== 'const' ||
+          definition.node.id.type !== 'Identifier' || !definition.node.init) return false
+
+      seenVariables ??= new Set()
+      seenVariables.add(variable)
+      return isCarrierReference(definition.node.init, taintedVariables, seenVariables)
+    }
+
+    /**
+     * @param {CarrierEvent} event
+     * @returns {void}
+     */
+    function recordCodePathEvent (event) {
+      const codePathFrame = codePathFrames[codePathFrames.length - 1]
+      for (const segment of codePathFrame.currentSegments) {
+        let events = codePathFrame.events.get(segment)
+        if (!events) {
+          events = []
+          codePathFrame.events.set(segment, events)
+        }
+        events.push(event)
+      }
+    }
+
+    /**
+     * @param {import('estree').Node} expression
+     * @param {import('estree').Node} node
+     * @returns {void}
+     */
+    function recordCarrierCheck (expression, node) {
+      if (strictCarrierIdentifiers) recordCodePathEvent({ type: 'check', expression, node })
+    }
+
+    /**
+     * @param {CarrierWrite} event
+     * @param {Set<import('eslint').Scope.Variable>} taintedVariables
+     * @returns {void}
+     */
+    function applyCarrierWrite (event, taintedVariables) {
+      const tainted = (event.preserve && taintedVariables.has(event.variable)) ||
+        isCarrierReference(event.expression, taintedVariables)
+      if (tainted) {
+        taintedVariables.add(event.variable)
+      } else {
+        taintedVariables.delete(event.variable)
+      }
+    }
+
+    /**
+     * @param {import('eslint').CodePathSegment} segment
+     * @param {Map<import('eslint').CodePathSegment, Set<import('eslint').Scope.Variable>>} outputs
+     * @returns {Set<import('eslint').Scope.Variable>}
+     */
+    function getCodePathInput (segment, outputs) {
+      const taintedVariables = new Set()
+      const previousSegments = segment.reachable ? segment.prevSegments : segment.allPrevSegments
+      for (const previous of previousSegments) {
+        const output = outputs.get(previous)
+        if (!output) continue
+        for (const variable of output) taintedVariables.add(variable)
+      }
+      return taintedVariables
+    }
+
+    /**
+     * @param {import('estree').CallExpression} node
+     * @param {Set<import('eslint').Scope.Variable>} taintedVariables
+     * @returns {void}
+     */
+    function checkCarrierCall (node, taintedVariables) {
+      if (node.callee.type === 'Identifier' &&
+          (carrierFunctions.has(node.callee.name) ||
+            isCheckedLocalCarrierFunction(node.callee, node.arguments, taintedVariables))) return
+
+      for (const argument of node.arguments) {
+        if (argument.type !== 'SpreadElement' && isCarrierReference(argument, taintedVariables)) {
+          report(argument, 'noDirectCarrierAccess')
+        }
+      }
+    }
+
+    /**
+     * @param {CodePathFrame} frame
+     * @returns {void}
+     */
+    function computeCodePathOutputs (frame) {
+      const { outputs } = frame
+      let changed
+      do {
+        changed = false
+        for (const segment of frame.segments) {
+          const taintedVariables = getCodePathInput(segment, outputs)
+          for (const event of frame.events.get(segment) || []) {
+            if (event.type === 'write') applyCarrierWrite(event, taintedVariables)
+          }
+          // Outputs grow monotonically, so unchanged cardinality means unchanged membership.
+          if (outputs.get(segment)?.size !== taintedVariables.size) {
+            outputs.set(segment, taintedVariables)
+            changed = true
+          }
+        }
+      } while (changed)
+    }
+
+    /**
+     * @param {CodePathFrame} frame
+     * @returns {void}
+     */
+    function recordCarrierReturningFunctions (frame) {
+      if (carrierReturningFunctions.has(frame.node)) return
+
+      for (const segment of frame.segments) {
+        const taintedVariables = getCodePathInput(segment, frame.outputs)
+        for (const event of frame.events.get(segment) || []) {
+          if (event.type === 'write') {
+            applyCarrierWrite(event, taintedVariables)
+          } else if (event.type === 'return' && isCarrierReference(event.expression, taintedVariables)) {
+            carrierReturningFunctions.add(frame.node)
+            return
+          }
+        }
+      }
+    }
+
+    /**
+     * @param {CodePathFrame} frame
+     * @returns {void}
+     */
+    function checkCodePath (frame) {
+      for (const segment of frame.segments) {
+        const taintedVariables = getCodePathInput(segment, frame.outputs)
+        for (const event of frame.events.get(segment) || []) {
+          if (event.type === 'write') {
+            applyCarrierWrite(event, taintedVariables)
+          } else if (event.type === 'check' && isCarrierReference(event.expression, taintedVariables)) {
+            report(event.node, 'noDirectCarrierAccess')
+          } else if (event.type === 'call') {
+            checkCarrierCall(event.node, taintedVariables)
+          }
+        }
+      }
+    }
+
+    function analyzeCodePaths () {
+      for (const frame of completedCodePathFrames) computeCodePathOutputs(frame)
+
+      let returningFunctionCount
+      do {
+        returningFunctionCount = carrierReturningFunctions.size
+        for (const frame of completedCodePathFrames) recordCarrierReturningFunctions(frame)
+        if (carrierReturningFunctions.size !== returningFunctionCount) {
+          for (const frame of completedCodePathFrames) computeCodePathOutputs(frame)
+        }
+      } while (carrierReturningFunctions.size !== returningFunctionCount)
+
+      for (const frame of completedCodePathFrames) checkCodePath(frame)
+    }
+
+    /**
+     * @param {import('estree').Node} node
+     * @returns {import('estree').FunctionDeclaration | import('estree').FunctionExpression |
+     *   import('estree').ArrowFunctionExpression | undefined}
+     */
+    function findLocalFunction (node) {
+      const variable = findVariable(node)
+      if (variable === undefined || variable.defs.length !== 1) return
+      for (const reference of variable.references) {
+        if (!reference.init && reference.isWrite()) return
+      }
+
+      const [definition] = variable.defs
+      if (definition.type === 'FunctionName') return definition.node
+
+      const { init } = definition.node
+      if (init?.type === 'FunctionExpression' || init?.type === 'ArrowFunctionExpression') return init
+    }
+
+    /**
+     * Local functions are checked by this same rule, so carriers can
+     * safely pass through carrier-named parameters unless the binding is reassigned.
+     *
+     * @param {import('estree').Identifier} callee
+     * @param {Array<import('estree').Expression | import('estree').SpreadElement>} callArguments
+     * @param {Set<import('eslint').Scope.Variable>} taintedVariables
+     * @returns {boolean}
+     */
+    function isCheckedLocalCarrierFunction (callee, callArguments, taintedVariables) {
+      const localFunction = findLocalFunction(callee)
+      if (localFunction === undefined || carrierReturningFunctions.has(localFunction)) return false
+
+      const parameters = localFunction.params
+      for (let index = 0; index < callArguments.length; index++) {
+        const argument = callArguments[index]
+        if (argument.type === 'SpreadElement' || !isCarrierReference(argument, taintedVariables)) continue
+        const parameter = parameters[index]
+        if (parameter?.type !== 'Identifier' || !isCarrierIdentifier(parameter)) return false
+      }
+      return true
     }
 
     /**
@@ -210,26 +487,24 @@ export default {
      * @returns {boolean}
      */
     function checkObjectPattern (pattern, target) {
-      let reported = false
+      let handled = false
       for (const property of pattern.properties) {
         if (property.type === 'RestElement') {
-          if (strictCarrierIdentifiers && isCarrierIdentifier(target)) {
-            report(property, 'noDirectCarrierAccess')
-            reported = true
-          }
+          recordCarrierCheck(target, property)
+          handled = strictCarrierIdentifiers
           continue
         }
 
         const name = getPropertyName(property, resolveString)
         if (name && isManagedHeaderAccess(name, target)) {
           report(property, 'useCarrierField')
-          reported = true
-        } else if (strictCarrierIdentifiers && isCarrierIdentifier(target)) {
-          report(property, 'noDirectCarrierAccess')
-          reported = true
+          handled = true
+        } else if (strictCarrierIdentifiers) {
+          recordCarrierCheck(target, property)
+          handled = true
         }
       }
-      return reported
+      return handled
     }
 
     /**
@@ -243,17 +518,74 @@ export default {
 
     return {
       /**
+       * @param {import('eslint').CodePath} codePath
+       * @param {import('estree').Node} node
+       * @returns {void}
+       */
+      onCodePathStart (codePath, node) {
+        codePathFrames.push({
+          node,
+          currentSegments: new Set(),
+          segments: new Set([codePath.initialSegment]),
+          events: new Map(),
+          outputs: new Map(),
+        })
+      },
+
+      onCodePathEnd () {
+        const frame = codePathFrames.pop()
+        if (!strictCarrierIdentifiers) return
+        completedCodePathFrames.push(frame)
+        if (frame.node.type === 'Program') analyzeCodePaths()
+      },
+
+      /**
+       * @param {import('eslint').CodePathSegment} segment
+       * @returns {void}
+       */
+      onCodePathSegmentStart (segment) {
+        const codePathFrame = codePathFrames[codePathFrames.length - 1]
+        codePathFrame.currentSegments.add(segment)
+        codePathFrame.segments.add(segment)
+      },
+
+      /**
+       * @param {import('eslint').CodePathSegment} segment
+       * @returns {void}
+       */
+      onCodePathSegmentEnd (segment) {
+        codePathFrames[codePathFrames.length - 1].currentSegments.delete(segment)
+      },
+
+      /**
+       * @param {import('eslint').CodePathSegment} segment
+       * @returns {void}
+       */
+      onUnreachableCodePathSegmentStart (segment) {
+        const codePathFrame = codePathFrames[codePathFrames.length - 1]
+        codePathFrame.currentSegments.add(segment)
+        codePathFrame.segments.add(segment)
+      },
+
+      /**
+       * @param {import('eslint').CodePathSegment} segment
+       * @returns {void}
+       */
+      onUnreachableCodePathSegmentEnd (segment) {
+        codePathFrames[codePathFrames.length - 1].currentSegments.delete(segment)
+      },
+
+      /**
        * @param {import('estree').MemberExpression} node
        * @returns {void}
        */
-      MemberExpression (node) {
+      'MemberExpression:exit' (node) {
         const name = getMemberName(node, resolveString)
-        const carrierObject = isCarrierIdentifier(node.object)
 
         if (name && isManagedHeaderAccess(name, node.object)) {
           report(node, 'useCarrierField')
-        } else if (strictCarrierIdentifiers && carrierObject) {
-          report(node, 'noDirectCarrierAccess')
+        } else {
+          recordCarrierCheck(node.object, node)
         }
       },
 
@@ -272,14 +604,14 @@ export default {
        * @param {import('estree').BinaryExpression} node
        * @returns {void}
        */
-      BinaryExpression (node) {
+      'BinaryExpression:exit' (node) {
         if (node.operator !== 'in') return
 
         const name = resolveString(node.left)
         if (name && isManagedHeaderAccess(name, node.right)) {
           report(node, 'useCarrierField')
-        } else if (strictCarrierIdentifiers && isCarrierIdentifier(node.right)) {
-          report(node, 'noDirectCarrierAccess')
+        } else {
+          recordCarrierCheck(node.right, node)
         }
       },
 
@@ -287,7 +619,7 @@ export default {
        * @param {import('estree').CallExpression} node
        * @returns {void}
        */
-      CallExpression (node) {
+      'CallExpression:exit' (node) {
         const callsCarrierModuleMember = node.callee.type === 'MemberExpression' &&
           isCarrierModuleReference(node.callee.object)
         if (callsCarrierModuleMember) {
@@ -300,42 +632,43 @@ export default {
           const name = resolveString(reflectiveAccess.key)
           if (name && isManagedHeaderAccess(name, reflectiveAccess.target)) {
             report(node, 'useCarrierField')
-          } else if (strictCarrierIdentifiers && isCarrierIdentifier(reflectiveAccess.target)) {
-            report(node, 'noDirectCarrierAccess')
+          } else {
+            recordCarrierCheck(reflectiveAccess.target, node)
           }
           return
         }
 
         if (!strictCarrierIdentifiers || node.callee.type === 'Super') return
         if (node.callee.type === 'MemberExpression' && node.callee.object.type === 'ThisExpression') return
-        if (node.callee.type === 'Identifier' && carrierFunctions.has(node.callee.name)) return
-
-        for (const argument of node.arguments) {
-          if (argument.type !== 'SpreadElement' && isCarrierIdentifier(argument)) {
-            report(argument, 'noDirectCarrierAccess')
-          }
-        }
+        recordCodePathEvent({ type: 'call', node })
       },
 
       /**
        * @param {import('estree').SpreadElement} node
        * @returns {void}
        */
-      SpreadElement (node) {
-        if (strictCarrierIdentifiers && isCarrierIdentifier(node.argument)) {
-          report(node, 'noDirectCarrierAccess')
-        }
+      'SpreadElement:exit' (node) {
+        recordCarrierCheck(node.argument, node)
       },
 
       /**
        * @param {import('estree').AssignmentExpression} node
        * @returns {void}
        */
-      AssignmentExpression (node) {
-        if (node.left.type !== 'ObjectPattern') return
-        const reported = checkObjectPattern(node.left, node.right)
-        if (!reported && strictCarrierIdentifiers && isCarrierIdentifier(node.right)) {
-          report(node, 'noDirectCarrierAccess')
+      'AssignmentExpression:exit' (node) {
+        if (node.left.type === 'ObjectPattern') {
+          if (!checkObjectPattern(node.left, node.right)) recordCarrierCheck(node.right, node)
+          return
+        }
+
+        const variable = findVariable(node.left)
+        if (variable) {
+          recordCodePathEvent({
+            type: 'write',
+            variable,
+            expression: node.right,
+            preserve: node.operator === '||=' || node.operator === '??=',
+          })
         }
       },
 
@@ -343,7 +676,7 @@ export default {
        * @param {import('estree').VariableDeclarator} node
        * @returns {void}
        */
-      VariableDeclarator (node) {
+      'VariableDeclarator:exit' (node) {
         if (node.id.type === 'Identifier' && node.init && isCarrierModuleRequire(node.init)) {
           carrierModuleIdentifiers.add(node.id.name)
         }
@@ -361,10 +694,41 @@ export default {
         }
         recordCarrierFunctions(node)
         if (node.id.type === 'ObjectPattern' && node.init) {
-          const reported = checkObjectPattern(node.id, node.init)
-          if (!reported && strictCarrierIdentifiers && isCarrierIdentifier(node.init)) {
-            report(node, 'noDirectCarrierAccess')
+          if (!checkObjectPattern(node.id, node.init)) recordCarrierCheck(node.init, node)
+        } else if (node.id.type === 'Identifier' && node.init) {
+          const variable = findVariable(node.id)
+          if (variable) {
+            recordCodePathEvent({ type: 'write', variable, expression: node.init, preserve: false })
           }
+        }
+      },
+
+      /**
+       * @param {import('estree').ArrowFunctionExpression} node
+       * @returns {void}
+       */
+      'ArrowFunctionExpression:exit' (node) {
+        if (node.body.type !== 'BlockStatement') {
+          recordCodePathEvent({ type: 'return', expression: node.body, node })
+        }
+      },
+
+      /**
+       * @param {import('estree').ReturnStatement} node
+       * @returns {void}
+       */
+      'ReturnStatement:exit' (node) {
+        if (node.argument) recordCodePathEvent({ type: 'return', expression: node.argument, node })
+      },
+
+      /**
+       * @param {import('estree').UpdateExpression} node
+       * @returns {void}
+       */
+      'UpdateExpression:exit' (node) {
+        const variable = findVariable(node.argument)
+        if (variable) {
+          recordCodePathEvent({ type: 'write', variable, expression: node, preserve: false })
         }
       },
     }
