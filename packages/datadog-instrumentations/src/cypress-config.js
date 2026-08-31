@@ -790,22 +790,18 @@ function createConfigWrapper (originalConfigFile, wrapperDirectory) {
   //   supported. Guards against ES-module-default shape so TS-authored
   //   configs using `export default` still work.
   const body = isEsm
-    ? [
-        `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
-        `import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}`,
-        '',
-        'export default cypressConfig.wrapConfig(originalConfig)',
-        '',
-      ].join('\n')
-    : [
-        `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})`,
-        `const originalExports = require(${JSON.stringify(originalConfigFile)})`,
-        'const originalConfig = originalExports && originalExports.__esModule',
-        '  ? originalExports.default',
-        '  : originalExports',
-        'module.exports = cypressConfig.wrapConfig(originalConfig)',
-        '',
-      ].join('\n')
+    ? `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}
+import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}
+
+export default cypressConfig.wrapConfig(originalConfig)
+`
+    : `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})
+const originalExports = require(${JSON.stringify(originalConfigFile)})
+const originalConfig = originalExports && originalExports.__esModule
+  ? originalExports.default
+  : originalExports
+module.exports = cypressConfig.wrapConfig(originalConfig)
+`
 
   writeExclusiveFile(wrapperFile, body)
   return wrapperFile
