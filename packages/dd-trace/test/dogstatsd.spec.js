@@ -86,7 +86,8 @@ describe('dogstatsd', () => {
     registerTelemetryFlusher = sinon.stub()
     createServerlessDeliveryTracker = sinon.stub()
 
-    const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
+    const loadDogstatsd = proxyquire.noPreserveCache().noCallThru()
+    const dogstatsd = loadDogstatsd('../src/dogstatsd', {
       dgram,
       '../../datadog-core': datadogCore,
       './flush': { registerTelemetryFlusher },
@@ -571,7 +572,8 @@ describe('dogstatsd', () => {
       sendRequest.onFirstCall().callsArgWith(2, capacityError, undefined, undefined, undefined, true)
       sendRequest.onSecondCall().callsArgWith(2, capacityError, undefined, undefined, undefined, true)
       sendRequest.onThirdCall().callsArgWith(2, null, '', 200, {})
-      const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
+      const loadDogstatsd = proxyquire.noPreserveCache().noCallThru()
+      const dogstatsd = loadDogstatsd('../src/dogstatsd', {
         dgram,
         '../../datadog-core': datadogCore,
         './exporters/common/docker': docker,
@@ -787,7 +789,10 @@ describe('dogstatsd', () => {
   })
 
   it('calls the flush callback after UDP accepts the metrics', (done) => {
-    udp4.send = sinon.stub().callsFake((...args) => args.at(-1)())
+    udp4.send = sinon.stub().callsFake((...args) => {
+      const callback = args.at(-1)
+      callback()
+    })
     client = createDogStatsDClient()
 
     client.gauge('test.avg', 1)
@@ -1001,7 +1006,8 @@ describe('dogstatsd', () => {
     const request = sinon.stub().callsFake((buffer, options, callback) => {
       callback(new Error('connection refused'))
     })
-    const { DogStatsDClient: FailingDogStatsDClient } = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
+    const loadDogstatsd = proxyquire.noPreserveCache().noCallThru()
+    const { DogStatsDClient: FailingDogStatsDClient } = loadDogstatsd('../src/dogstatsd', {
       dgram,
       '../../datadog-core': datadogCore,
       './exporters/common/docker': docker,
@@ -1287,7 +1293,8 @@ describe('dogstatsd', () => {
     it('should send the Docker entity ID when available', () => {
       docker.entityId = 'ci-1234'
 
-      const { CustomMetrics } = proxyquire.noPreserveCache()('../src/dogstatsd', {
+      const loadDogstatsd = proxyquire.noPreserveCache()
+      const { CustomMetrics } = loadDogstatsd('../src/dogstatsd', {
         dgram,
         './exporters/common/docker': docker,
       })

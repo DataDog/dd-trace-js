@@ -60,8 +60,9 @@ describe('OpenTelemetry Meter Provider', () => {
     metrics.disable()
     const config = getConfigFresh()
     if (config.DD_METRICS_OTEL_ENABLED) {
+      const loadMetrics = proxyquire.noPreserveCache()
       const { initializeOpenTelemetryMetrics } =
-        proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
+        loadMetrics('../../src/opentelemetry/metrics', {})
       initializeOpenTelemetryMetrics(config)
     }
     return { config, meterProvider: metrics.getMeterProvider() }
@@ -679,7 +680,8 @@ describe('OpenTelemetry Meter Provider', () => {
 
       meter.createCounter('in-flight').add(1)
       reader.forceFlush(firstDone)
-      flushes.shift()()
+      const flush = flushes.shift()
+      flush()
       meter.createCounter('boundary').add(1)
       reader.forceFlush(done)
 

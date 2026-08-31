@@ -759,7 +759,8 @@ describe('OpenTelemetry Traces', () => {
 
     it('DatadogTracer uses the OTLP exporter when OTEL_TRACES_EXPORTER=otlp', () => {
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
-      const DatadogTracer = proxyquire.noPreserveCache()('../../src/opentracing/tracer', {})
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
       const tracer = new DatadogTracer(getConfigFresh())
       assert(tracer._exporter instanceof OtlpHttpTraceExporter,
         'Exporter should be the OTLP exporter when OTEL_TRACES_EXPORTER=otlp')
@@ -767,7 +768,8 @@ describe('OpenTelemetry Traces', () => {
 
     it('DatadogTracer does not use the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp', () => {
       delete process.env.OTEL_TRACES_EXPORTER
-      const DatadogTracer = proxyquire.noPreserveCache()('../../src/opentracing/tracer', {})
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
       const tracer = new DatadogTracer(getConfigFresh())
       assert(!(tracer._exporter instanceof OtlpHttpTraceExporter),
         'Exporter should not be the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp')
@@ -775,7 +777,8 @@ describe('OpenTelemetry Traces', () => {
 
     it('DatadogTracer prefers the Electron exporter over OTLP when OTEL_TRACES_EXPORTER=otlp', () => {
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
-      const DatadogTracer = proxyquire.noPreserveCache()('../../src/opentracing/tracer', {})
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
       const ElectronExporter = require('../../src/exporters/electron')
       const config = getConfigFresh({ experimental: { exporter: 'electron' } })
       const tracer = new DatadogTracer(config)
