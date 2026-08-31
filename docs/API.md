@@ -309,6 +309,17 @@ tracer.trace('checkout', span => {
 
 If the exception leaves the traced callback, `tracer.trace()` records it as a span error automatically.
 
+Set the `error` tag to `false` to keep the automatic exception metadata without marking that span as failed:
+
+```javascript
+return tracer.trace('checkout', span => {
+  span.setTag('error', false)
+  return authorizePayment()
+})
+```
+
+This changes only that span. The exception still leaves the traced callback.
+
 <h3 id="tracer-wrap">tracer.wrap(name[, options], fn)</h3>
 
 This method works very similarly to `tracer.trace()` except it wraps a function so that `tracer.trace()` is called automatically every time the function is called. This makes it easier to patch entire functions that have already been defined, or that are returned from code that cannot be edited easily.
