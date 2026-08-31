@@ -15,17 +15,18 @@ describe('integrations', () => {
   let StateGraph
   let Annotation
   let langchainMessages
+  let langgraphModule
 
   describe('langgraph', () => {
     const { getEvents } = useLlmObs({ plugin: ['langgraph', 'langchain'] })
 
     withVersions('langgraph', '@langchain/langgraph', (version) => {
       beforeEach(() => {
-        const langgraph = require(`../../../../../../versions/@langchain/langgraph@${version}`).get()
+        langgraphModule = require(`../../../../../../versions/@langchain/langgraph@${version}`)
+        const langgraph = langgraphModule.get()
         StateGraph = langgraph.StateGraph
         Annotation = langgraph.Annotation
-        langchainMessages = require(`../../../../../../versions/@langchain/langgraph@${version}`)
-          .get('@langchain/core/messages')
+        langchainMessages = langgraphModule.get('@langchain/core/messages')
       })
 
       describe('Pregel.stream', () => {
@@ -255,11 +256,10 @@ describe('integrations', () => {
         })
 
         it('does not mark graph interrupts as errors', async () => {
-          const versionModule = require(`../../../../../../versions/@langchain/langgraph@${version}`)
           const { Command, END, interrupt, MemorySaver, START } =
-            versionModule.get()
-          const { tool } = versionModule.get('@langchain/core/tools')
-          const { z } = versionModule.get('zod')
+            langgraphModule.get()
+          const { tool } = langgraphModule.get('@langchain/core/tools')
+          const { z } = langgraphModule.get('zod')
           const StateAnnotation = Annotation.Root({
             result: Annotation(),
           })
