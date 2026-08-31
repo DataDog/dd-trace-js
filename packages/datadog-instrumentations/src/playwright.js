@@ -614,7 +614,15 @@ function getTestSuiteError (testSuiteAbsolutePath) {
   if (errors.length === 1) {
     return errors[0]
   }
-  return new Error(`${errors.length} errors in this test suite:\n${errors.map(e => e.message).join('\n------\n')}`)
+  let errorMessages = ''
+  let isFirstError = true
+  for (const error of errors) {
+    if (!isFirstError) errorMessages += '\n------\n'
+    errorMessages += error.message
+    isFirstError = false
+  }
+
+  return new Error(`${errors.length} errors in this test suite:\n${errorMessages}`)
 }
 
 function getTestByTestId (dispatcher, testId) {
