@@ -229,6 +229,13 @@ describe('Plugin', () => {
                 `insert test.${collectionName}`,
                 `update test.${collectionName}`,
               ].sort())
+
+              const updateSpan = children.find(span => span.resource === `update test.${collectionName}`)
+              assert.strictEqual(updateSpan.meta['mongodb.query'], '{"a":1}')
+
+              const deleteResource = (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`
+              const deleteSpan = children.find(span => span.resource === deleteResource)
+              assert.strictEqual(deleteSpan.meta['mongodb.query'], '{"a":2}')
             }, {
               spanResourceMatch: /^bulkWrite test\./,
               timeoutMs: traceTimeoutMs,
@@ -417,6 +424,35 @@ describe('Plugin', () => {
               tracePromise,
               assert.rejects(operationPromise),
             ])
+          })
+
+          it('should preserve server errors for malformed raw write commands', async () => {
+            const cases = [
+              { command: { update: collectionName, updates: {} }, resource: 'update test.$cmd' },
+              { command: { delete: collectionName, deletes: {} }, resource: 'delete test.$cmd' },
+            ]
+
+            for (const { command, resource } of cases) {
+              const tracePromise = agent.assertFirstTraceSpan({
+                resource,
+                meta: {
+                  'mongodb.query': '[]',
+                },
+              }, { spanResourceMatch: /^(?:update|delete) test\.\$cmd$/ })
+
+              const operationPromise = new Promise((resolve, reject) => {
+                const promise = db.command(command, error => error ? reject(error) : resolve())
+                promise?.then(resolve, reject)
+              })
+
+              await Promise.all([
+                assert.rejects(operationPromise, error => {
+                  assert.notStrictEqual(error.name, 'TypeError')
+                  return true
+                }),
+                tracePromise,
+              ])
+            }
           })
 
           it('should sanitize buffers as values and not as objects', async () => {
