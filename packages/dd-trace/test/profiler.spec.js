@@ -62,11 +62,12 @@ describe('profiler', () => {
     FakeSSIHeuristics.resetHistory()
     log.debug.resetHistory()
     log.error.resetHistory()
-    ssiHeuristics = undefined
 
-    // profiler.js tracks `started` at module scope; reset it so a prior test's enabled profiler
-    // doesn't make this test's start() a no-op.
+    // profiler.js tracks `started`/armed heuristics at module scope; reset both so a prior test's
+    // state doesn't leak in. Disarming here calls the fake's onTriggered() against whichever
+    // `ssiHeuristics` instance is still current, so null the test-local variable only afterwards.
     publishConfig('false')
+    ssiHeuristics = undefined
     profilingModule.profiler.stop.resetHistory()
   })
 
@@ -130,6 +131,32 @@ describe('profiler', () => {
       // deregisters the trigger callback once it has fired
       sinon.assert.calledTwice(ssiHeuristics.onTriggered)
       assert.strictEqual(ssiHeuristics.onTriggered.secondCall.args[0], undefined)
+    })
+
+    it('disarms the SSI heuristics when a later publish disables the profiler', () => {
+      publishConfig('auto')
+      sinon.assert.calledOnce(FakeSSIHeuristics)
+
+      publishConfig('false')
+
+      // deregisters the trigger callback (registered when arming) so a heuristic that fires
+      // later can't start the profiler behind this decision's back
+      sinon.assert.calledTwice(ssiHeuristics.onTriggered)
+      assert.strictEqual(ssiHeuristics.onTriggered.secondCall.args[0], undefined)
+      assert.strictEqual(ssiHeuristics.triggeredCallback, undefined)
+    })
+
+    it('disarms the SSI heuristics when a later publish unconditionally enables the profiler', () => {
+      publishConfig('auto')
+      sinon.assert.calledOnce(FakeSSIHeuristics)
+
+      publishConfig('true')
+
+      sinon.assert.calledTwice(ssiHeuristics.onTriggered)
+      assert.strictEqual(ssiHeuristics.onTriggered.secondCall.args[0], undefined)
+      assert.strictEqual(ssiHeuristics.triggeredCallback, undefined)
+      // the profiler was already started by the unconditional 'true' publish
+      sinon.assert.calledOnce(profilingModule.profiler.start)
     })
 
     it('does not re-arm the SSI heuristics on a repeated auto publish before it triggers', () => {

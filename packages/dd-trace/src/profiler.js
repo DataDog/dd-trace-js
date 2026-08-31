@@ -28,6 +28,12 @@ function getSSIHeuristicsModule () {
   return ssiHeuristicsModule
 }
 
+function disarmSSIHeuristics () {
+  if (!armedSSIHeuristics) return
+  armedSSIHeuristics.onTriggered() // deregister this callback
+  armedSSIHeuristics = undefined
+}
+
 /**
  * @param {import('./config/config-base')} config - Tracer configuration
  * @returns {boolean} whether the profiler is running after this call
@@ -82,10 +88,14 @@ module.runWithLabels = function (labels, fn) {
 configUpdateChannel.subscribe((config) => {
   const enabled = config.profiling.DD_PROFILING_ENABLED
   if (enabled === 'true') {
+    // A non-auto value means the SSI heuristics no longer get a say; disarm so a trigger that
+    // fires after this publish can't start the profiler behind this decision's back.
+    disarmSSIHeuristics()
     // Leave an already-running profiler alone; otherwise an unrelated remote-config publish
     // (e.g. an unrelated sampling-rate change) would restart it on every update.
     if (!module.started) module.started = module.start(config)
   } else if (enabled === 'false') {
+    disarmSSIHeuristics()
     // Only touch the profiling layer if it was actually running, so a disabled profiler never
     // forces the profiling engine (and its native crashtracker binding) to load.
     if (module.started) module.stop()
@@ -100,9 +110,10 @@ configUpdateChannel.subscribe((config) => {
     armedSSIHeuristics = new SSIHeuristics(config)
     armedSSIHeuristics.start()
     armedSSIHeuristics.onTriggered(() => {
+      // Since disarmSSIHeuristics() runs on every non-auto publish, reaching this callback
+      // guarantees the latest published value is still 'auto'.
       if (!module.started) module.started = module.start(config)
-      armedSSIHeuristics.onTriggered() // deregister this callback
-      armedSSIHeuristics = undefined
+      disarmSSIHeuristics()
     })
   }
 })
