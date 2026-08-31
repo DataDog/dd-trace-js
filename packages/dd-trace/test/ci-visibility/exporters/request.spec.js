@@ -70,6 +70,20 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
   })
 
+  it('keeps the ordinary attempt cap when deadline retries are disabled', () => {
+    const done = sinon.spy()
+    request('payload', { deadline: Date.now() + 30_000, retryUntilDeadline: false }, done)
+    const error = Object.assign(new Error('unavailable'), { status: 503 })
+
+    pendingRequests[0].callback(error, null, 503, {})
+    clock.tick(6000)
+    pendingRequests[1].callback(error, null, 503, {})
+    clock.tick(6000)
+
+    assert.strictEqual(pendingRequests.length, 2)
+    sinon.assert.calledOnceWithExactly(done, error, null, 503, {})
+  })
+
   for (const statusCode of [408, 429, 500, 599]) {
     it(`retries a ${statusCode} response during a background flush`, () => {
       const done = sinon.spy()

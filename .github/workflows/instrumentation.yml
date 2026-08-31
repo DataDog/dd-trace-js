@@ -203,6 +203,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test
 
+  instrumentation-cypress-config:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: cypress-config
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/instrumentations/test
+
   instrumentation-express-mongo-sanitize:
     runs-on: ubuntu-latest
     permissions:
