@@ -39,19 +39,25 @@ describe('encode', () => {
   let encodePayload
   let cacheStringPayloads
   let cacheLowReusePayload
+  let disableCrossPayloadCache
 
   describe('without configuration', () => {
     beforeEach(() => {
       logger = {
         debug: sinon.stub(),
       }
-      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false, flushInterval: 0 })
-      const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
+      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false })
+      const { createAgentEncoder } = proxyquire('../../src/encode/0.4-cross-payload', {
         '../log': logger,
         '../config': getConfig,
+        './0.4': proxyquire('../../src/encode/0.4', {
+          '../log': logger,
+          '../config': getConfig,
+        }),
       })
       writer = { flush: sinon.spy() }
-      encoder = new AgentEncoder(writer)
+      disableCrossPayloadCache = sinon.spy()
+      encoder = createAgentEncoder(writer, disableCrossPayloadCache)
       data = [{
         trace_id: id('1234abcd1234abcd'),
         span_id: id('1234abcd1234abcd'),
@@ -230,7 +236,7 @@ describe('encode', () => {
     })
 
     it('should not retain encoded strings across buffered payloads', () => {
-      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false, flushInterval: 2000 })
+      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false })
       const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
         '../log': logger,
         '../config': getConfig,
@@ -317,6 +323,23 @@ describe('encode', () => {
       assert.strictEqual(write.withArgs(candidates[508]).callCount, 3)
     })
 
+    it('should not let long strings consume cross-payload candidate entries', () => {
+      const candidates = []
+      for (let index = 0; index < 509; index++) {
+        candidates.push(`${index}-${'a'.repeat(257)}`)
+      }
+      const accepted = 'candidate-after-long-strings'
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      data[0].meta = metaFromKeys([...candidates, accepted])
+      encodePayload()
+      data[0].meta = metaFromKeys([accepted])
+      encodePayload()
+      encodePayload()
+
+      assert.strictEqual(write.withArgs(accepted).callCount, 2)
+    })
+
     it('should stop learning cross-payload strings after 8 payloads', () => {
       const accepted = 'learned-in-payload-8'
       const rejected = 'first-seen-in-payload-8'
@@ -337,9 +360,9 @@ describe('encode', () => {
       assert.strictEqual(write.withArgs(rejected).callCount, 3)
     })
 
-    it('should relearn after the first payload with 32 misses and fewer than 64 hits', () => {
+    it('should relearn after 32 misses with fewer than 32 hits', () => {
       const retained = []
-      for (let index = 0; index < 59; index++) {
+      for (let index = 0; index < 27; index++) {
         retained.push(`insufficient-retained-${index}`)
       }
       const write = sinon.spy(encoder._stringBytes, 'write')
@@ -354,15 +377,32 @@ describe('encode', () => {
       encodePayload()
 
       cacheLowReusePayload(retained, 'second-miss')
-      data[0].meta = metaFromKeys([retained[58]])
+      data[0].meta = metaFromKeys([retained[26]])
       encodePayload()
 
-      assert.strictEqual(write.withArgs(retained[58]).callCount, 3)
+      assert.strictEqual(write.withArgs(retained[26]).callCount, 3)
+    })
+
+    it('should relearn after a low-cardinality payload stops using the cache', () => {
+      const retained = 'retained-before-low-cardinality-payload'
+      const write = sinon.spy(encoder._stringBytes, 'write')
+
+      cacheStringPayloads([retained], 8)
+      data[0].type = 'new-type'
+      data[0].name = 'new-name'
+      data[0].resource = 'new-resource'
+      data[0].service = 'new-service'
+      data[0].meta = metaFromKeys(['new-key'])
+      encodePayload()
+      data[0].meta = metaFromKeys([retained])
+      encodePayload()
+
+      assert.strictEqual(write.withArgs(retained).callCount, 3)
     })
 
     it('should disable cross-payload caching after two low-reuse payloads', () => {
       const retained = []
-      for (let index = 0; index < 59; index++) {
+      for (let index = 0; index < 27; index++) {
         retained.push(`disabled-retained-${index}`)
       }
       const value = 'stable-after-two-low-reuse-payloads'
@@ -379,6 +419,7 @@ describe('encode', () => {
       encodePayload()
 
       assert.strictEqual(write.withArgs(value).callCount, 3)
+      sinon.assert.calledOnce(disableCrossPayloadCache)
     })
 
     it('should disable cross-payload caching when no strings repeat during learning', () => {
@@ -413,11 +454,12 @@ describe('encode', () => {
       encodePayload()
 
       assert.strictEqual(write.withArgs(value).callCount, 3)
+      sinon.assert.calledOnce(disableCrossPayloadCache)
     })
 
-    it('should keep cross-payload caching after 32 misses with 64 hits', () => {
+    it('should keep cross-payload caching after 32 misses with 32 hits', () => {
       const retained = []
-      for (let index = 0; index < 60; index++) {
+      for (let index = 0; index < 28; index++) {
         retained.push(`useful-retained-${index}`)
       }
       const write = sinon.spy(encoder._stringBytes, 'write')
@@ -425,30 +467,26 @@ describe('encode', () => {
       cacheStringPayloads(retained, 8)
 
       cacheLowReusePayload(retained, 'useful-miss')
-      data[0].meta = metaFromKeys([retained[59]])
+      data[0].meta = metaFromKeys([retained[27]])
       encodePayload()
 
-      assert.strictEqual(write.withArgs(retained[59]).callCount, 2)
+      assert.strictEqual(write.withArgs(retained[27]).callCount, 2)
     })
 
     it('should clear a low-reuse strike after a useful payload', () => {
       const retained = []
-      for (let index = 0; index < 60; index++) {
+      for (let index = 0; index < 27; index++) {
         retained.push(`recovered-retained-${index}`)
       }
       const value = 'stable-after-low-reuse-recovery'
       const write = sinon.spy(encoder._stringBytes, 'write')
 
       cacheStringPayloads(retained, 8)
-      cacheLowReusePayload(retained.slice(0, 59), 'first-recovery-miss')
+      cacheLowReusePayload(retained, 'first-recovery-miss')
       cacheStringPayloads(retained, 8)
-      const keys = retained.slice()
-      for (let miss = 0; miss < 31; miss++) {
-        keys.push(`useful-recovery-miss-${miss}`)
-      }
-      data[0].meta = metaFromKeys(keys)
+      data[0].meta = metaFromKeys([retained[0]])
       encodePayload()
-      cacheLowReusePayload(retained.slice(0, 59), 'second-recovery-miss')
+      cacheLowReusePayload(retained, 'second-recovery-miss')
 
       data[0].meta = metaFromKeys([value])
       encodePayload()

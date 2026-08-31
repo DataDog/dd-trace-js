@@ -12,14 +12,6 @@ const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 // strings this long (events JSON, stack traces, large query bodies) — they
 // are unique per span, so the cache hit rate stays near zero anyway.
 const STRING_CACHE_BYPASS_LIMIT = 1024
-// Cross-payload entries retain encoded span identity fields and map keys.
-// Promote only consecutive repeats, and cap both generations so cardinality
-// cannot turn the cache into unbounded process-lifetime state.
-const CROSS_PAYLOAD_CACHE_LIMIT = 256
-const CROSS_PAYLOAD_CANDIDATE_LIMIT = 512
-const CROSS_PAYLOAD_LEARNING_PAYLOAD_LIMIT = 8
-const CROSS_PAYLOAD_MISS_LIMIT = 32
-const CROSS_PAYLOAD_STRING_LIMIT = 256
 
 // Pre-encoded static keys + value-prefix bytes; the hot encode loop emits
 // each via one Uint8Array.set instead of routing through the string cache.
@@ -241,8 +233,6 @@ function lazyEncodedTraceBufferLogger (bytes, start, end) {
 }
 
 class AgentEncoder {
-  #crossPayloadState
-
   #limit
   #writer
   #config
@@ -256,21 +246,6 @@ class AgentEncoder {
     this.#writer = writer
     this._reset()
     this.#config = getConfig()
-    if (this.constructor === AgentEncoder && this.#config.flushInterval === 0) {
-      this.#crossPayloadState = {
-        activeForPayload: true,
-        cacheDisabled: false,
-        hitCount: 0,
-        learningPayloadCount: 0,
-        lowUseCount: 0,
-        missCount: 0,
-        payloadStringCount: 0,
-        payloadStrings: undefined,
-        previousPayloadStrings: undefined,
-        stringCount: 0,
-        stringMap: undefined,
-      }
-    }
     this.#debugEncoding = this.#config.DD_TRACE_ENCODING_DEBUG
     // Pick the per-span formatter once so the hot loop pays no per-span
     // config check. The native path keeps the raw `span_events` slot for
@@ -345,7 +320,6 @@ class AgentEncoder {
 
     const formatSpan = this.#formatSpan
     const stringMap = this._stringMap
-    const cacheAcrossPayloads = this.#crossPayloadState !== undefined
     // Snapshot the string buffer so we can detect a mid-encode resize and
     // release the old backing store afterwards (see `#refreshStringCache`).
     const stringBufferAtStart = this._stringBytes.buffer
@@ -365,19 +339,11 @@ class AgentEncoder {
       // Replaces up to ten separate `bytes.reserve` calls per span with one.
       let typeEntry
       if (span.type) {
-        typeEntry = stringMap[span.type] ?? (cacheAcrossPayloads
-          ? this.#cacheStringAcrossPayloads(span.type)
-          : this._cacheString(span.type))
+        typeEntry = stringMap[span.type] ?? this._cacheString(span.type)
       }
-      const nameEntry = stringMap[span.name] ?? (cacheAcrossPayloads
-        ? this.#cacheStringAcrossPayloads(span.name)
-        : this._cacheString(span.name))
-      const resourceEntry = stringMap[span.resource] ?? (cacheAcrossPayloads
-        ? this.#cacheStringAcrossPayloads(span.resource)
-        : this._cacheString(span.resource))
-      const serviceEntry = stringMap[span.service] ?? (cacheAcrossPayloads
-        ? this.#cacheStringAcrossPayloads(span.service)
-        : this._cacheString(span.service))
+      const nameEntry = stringMap[span.name] ?? this._cacheString(span.name)
+      const resourceEntry = stringMap[span.resource] ?? this._cacheString(span.resource)
+      const serviceEntry = stringMap[span.service] ?? this._cacheString(span.service)
       const nameLen = nameEntry.length
       const resourceLen = resourceEntry.length
       const serviceLen = serviceEntry.length
@@ -498,49 +464,13 @@ class AgentEncoder {
   #refreshStringCache () {
     const newBuffer = this._stringBytes.buffer
     const stringMap = this._stringMap
-    const crossPayloadStringMap = this.#crossPayloadState?.stringMap
     for (const key of Object.keys(stringMap)) {
       const old = stringMap[key]
-      if (crossPayloadStringMap?.[key] === old) continue
       stringMap[key] = newBuffer.subarray(old.byteOffset, old.byteOffset + old.length)
     }
   }
 
   _reset () {
-    let crossPayloadState = this.#crossPayloadState
-    if (crossPayloadState !== undefined) {
-      crossPayloadState.previousPayloadStrings = undefined
-      if (!crossPayloadState.cacheDisabled &&
-        crossPayloadState.lowUseCount > 0 &&
-        crossPayloadState.hitCount >= CROSS_PAYLOAD_MISS_LIMIT * 2 &&
-        crossPayloadState.missCount < CROSS_PAYLOAD_MISS_LIMIT) {
-        crossPayloadState.lowUseCount = 0
-      }
-      if (crossPayloadState.cacheDisabled) {
-        if (crossPayloadState.lowUseCount >= 2) {
-          this.#crossPayloadState = undefined
-          crossPayloadState = undefined
-        } else {
-          crossPayloadState.cacheDisabled = false
-          crossPayloadState.learningPayloadCount = 0
-          crossPayloadState.stringCount = 0
-          crossPayloadState.stringMap = undefined
-        }
-      }
-      if (crossPayloadState !== undefined) {
-        if (this._stringMap !== undefined) {
-          crossPayloadState.learningPayloadCount++
-        }
-        if (crossPayloadState.learningPayloadCount < CROSS_PAYLOAD_LEARNING_PAYLOAD_LIMIT) {
-          crossPayloadState.previousPayloadStrings = crossPayloadState.payloadStrings
-        }
-        crossPayloadState.payloadStrings = undefined
-        crossPayloadState.payloadStringCount = 0
-        crossPayloadState.hitCount = 0
-        crossPayloadState.missCount = 0
-        crossPayloadState.activeForPayload = false
-      }
-    }
     this._traceCount = 0
     this._traceBytes.reset()
     this._stringCount = 0
@@ -548,9 +478,6 @@ class AgentEncoder {
     this._stringMap = Object.create(null)
 
     this._cacheString('')
-    if (crossPayloadState !== undefined) {
-      crossPayloadState.activeForPayload = true
-    }
   }
 
   // TODO: Use BigInt instead.
@@ -626,58 +553,6 @@ class AgentEncoder {
     return entry
   }
 
-  /**
-   * @param {string} value
-   */
-  #cacheStringAcrossPayloads (value) {
-    const crossPayloadState = this.#crossPayloadState
-    let learningAcrossPayloads = false
-    if (crossPayloadState.activeForPayload) {
-      learningAcrossPayloads = crossPayloadState.learningPayloadCount <
-        CROSS_PAYLOAD_LEARNING_PAYLOAD_LIMIT
-      if (crossPayloadState.stringMap !== undefined) {
-        const entry = crossPayloadState.stringMap[value]
-        if (entry !== undefined) {
-          crossPayloadState.hitCount++
-          this._stringMap[value] = entry
-          return entry
-        }
-      }
-      if (!learningAcrossPayloads) {
-        crossPayloadState.missCount++
-        if (crossPayloadState.missCount === CROSS_PAYLOAD_MISS_LIMIT) {
-          crossPayloadState.activeForPayload = false
-          if (crossPayloadState.hitCount < CROSS_PAYLOAD_MISS_LIMIT * 2) {
-            crossPayloadState.cacheDisabled = true
-            crossPayloadState.lowUseCount++
-          }
-        }
-      }
-    }
-
-    let entry = this._cacheString(value)
-
-    if (crossPayloadState.activeForPayload && learningAcrossPayloads &&
-      crossPayloadState.stringCount < CROSS_PAYLOAD_CACHE_LIMIT &&
-      entry.length <= CROSS_PAYLOAD_STRING_LIMIT) {
-      const previousPayloadStrings = crossPayloadState.previousPayloadStrings
-      const repeated = previousPayloadStrings?.[value] !== undefined
-
-      if (repeated) {
-        entry = Buffer.from(entry)
-        crossPayloadState.stringMap ??= Object.create(null)
-        crossPayloadState.stringMap[value] = entry
-        crossPayloadState.stringCount++
-        this._stringMap[value] = entry
-      } else if (crossPayloadState.payloadStringCount < CROSS_PAYLOAD_CANDIDATE_LIMIT) {
-        crossPayloadState.payloadStrings ??= Object.create(null)
-        crossPayloadState.payloadStrings[value] = true
-        crossPayloadState.payloadStringCount++
-      }
-    }
-    return entry
-  }
-
   _writeArrayPrefix (buffer, offset, count) {
     buffer[offset++] = 0xDD
     buffer.writeUInt32BE(count, offset)
@@ -708,16 +583,13 @@ class AgentEncoder {
     const countOffset = headerOffset + keyPrefixLen
 
     const stringMap = this._stringMap
-    const cacheAcrossPayloads = this.#crossPayloadState !== undefined
     let count = 0
 
     for (const key of Object.keys(value)) {
       const entryValue = value[key]
       if (typeof entryValue !== 'string' && typeof entryValue !== 'number') continue
 
-      const keyEntry = stringMap[key] ?? (cacheAcrossPayloads
-        ? this.#cacheStringAcrossPayloads(key)
-        : this._cacheString(key))
+      const keyEntry = stringMap[key] ?? this._cacheString(key)
       const keyEntryLen = keyEntry.length
       const writeOffset = bytes.length
 
