@@ -4,10 +4,9 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../../integration-tests/helpers')
 describe('RASP - lfi - integration - sync', () => {
-  let axios, cwd, appFile, agent, proc
+  let cwd, appFile, agent, proc
 
   useSandbox(
     ['express', 'fs'],
@@ -30,7 +29,6 @@ describe('RASP - lfi - integration - sync', () => {
         DD_APPSEC_RULES: path.join(cwd, 'resources', 'lfi_rasp_rules.json'),
       },
     })
-    axios = Axios.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
@@ -38,24 +36,25 @@ describe('RASP - lfi - integration - sync', () => {
     await agent.stop()
   })
 
+  /**
+   * @param {string} url
+   */
+  async function request (url) {
+    const response = await fetch(new URL(url, proc.url))
+    await response.arrayBuffer()
+    return response
+  }
+
   it('should block a sync endpoint getting the error from apm:express:middleware:error', async () => {
-    try {
-      await axios.get('/lfi/sync?file=/etc/passwd')
-    } catch (e) {
-      if (!e.response) {
-        throw e
-      }
+    const response = await request('/lfi/sync?file=/etc/passwd')
+    assert.strictEqual(response.status, 403)
 
-      assert.strictEqual(e.response.status, 403)
-      return await agent.assertMessageReceived(({ headers, payload }) => {
-        assert.ok(
-          Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'),
-          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
-        )
-        assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-lfi-rule-id-1"/)
-      })
-    }
-
-    throw new Error('Request should be blocked')
+    return agent.assertMessageReceived(({ headers, payload }) => {
+      assert.ok(
+        Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'),
+        `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+      )
+      assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-lfi-rule-id-1"/)
+    })
   })
 })

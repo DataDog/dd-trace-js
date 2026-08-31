@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 
 const path = require('node:path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
 const {
@@ -16,7 +15,7 @@ const {
 } = require('../../../../../integration-tests/helpers')
 
 describe('RASP - command_injection - integration', () => {
-  let axios, cwd, appFile, agent, proc
+  let cwd, appFile, agent, proc
 
   useSandbox(
     ['express'],
@@ -42,7 +41,6 @@ describe('RASP - command_injection - integration', () => {
         DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json'),
       },
     })
-    axios = Axios.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
@@ -50,62 +48,66 @@ describe('RASP - command_injection - integration', () => {
     await agent.stop()
   })
 
+  /**
+   * @param {string} url
+   */
+  async function request (url) {
+    const response = await fetch(new URL(url, proc.url))
+    await response.arrayBuffer()
+    return response
+  }
+
+  /**
+   * @param {string} url
+   * @param {number} [ruleId]
+   * @param {string} [variant]
+   */
   async function testRequestBlocked (url, ruleId = 3, variant = 'shell') {
-    try {
-      await axios.get(url)
-    } catch (e) {
-      if (!e.response) {
-        throw e
-      }
+    const response = await request(url)
+    assert.strictEqual(response.status, 403)
 
-      assert.strictEqual(e.response.status, 403)
+    let appsecTelemetryReceived = false
 
-      let appsecTelemetryReceived = false
+    const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
+      assert.ok(
+        Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'),
+        `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+      )
+      assert.match(payload[0][0].meta['_dd.appsec.json'], new RegExp(`"rasp-command_injection-rule-id-${ruleId}"`))
+    }, 4_000)
 
-      const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.ok(
-          Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'),
-          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
-        )
-        assert.match(payload[0][0].meta['_dd.appsec.json'], new RegExp(`"rasp-command_injection-rule-id-${ruleId}"`))
-      }, 4_000)
+    const checkTelemetry = agent.assertTelemetryReceived({
+      fn: ({ headers, payload }) => {
+        const namespace = payload.payload.namespace
 
-      const checkTelemetry = agent.assertTelemetryReceived({
-        fn: ({ headers, payload }) => {
-          const namespace = payload.payload.namespace
+        // Only check telemetry received in appsec namespace and ignore others
+        if (namespace === 'appsec') {
+          appsecTelemetryReceived = true
+          const series = payload.payload.series
+          const evalSerie = series.find(s => s.metric === 'rasp.rule.eval')
+          const matchSerie = series.find(s => s.metric === 'rasp.rule.match')
 
-          // Only check telemetry received in appsec namespace and ignore others
-          if (namespace === 'appsec') {
-            appsecTelemetryReceived = true
-            const series = payload.payload.series
-            const evalSerie = series.find(s => s.metric === 'rasp.rule.eval')
-            const matchSerie = series.find(s => s.metric === 'rasp.rule.match')
+          assert.ok(evalSerie)
+          assert.ok(evalSerie.tags.includes('rule_type:command_injection'), `Got: ${inspect(evalSerie.tags)}`)
+          assert.ok(evalSerie.tags.includes(`rule_variant:${variant}`), `Got: ${inspect(evalSerie.tags)}`)
+          assert.strictEqual(evalSerie.type, 'count')
 
-            assert.ok(evalSerie)
-            assert.ok(evalSerie.tags.includes('rule_type:command_injection'), `Got: ${inspect(evalSerie.tags)}`)
-            assert.ok(evalSerie.tags.includes(`rule_variant:${variant}`), `Got: ${inspect(evalSerie.tags)}`)
-            assert.strictEqual(evalSerie.type, 'count')
+          assert.ok(matchSerie)
+          assert.ok(matchSerie.tags.includes('rule_type:command_injection'), `Got: ${inspect(matchSerie.tags)}`)
+          assert.ok(matchSerie.tags.includes(`rule_variant:${variant}`), `Got: ${inspect(matchSerie.tags)}`)
+          assert.strictEqual(matchSerie.type, 'count')
+        } else {
+          assert.fail('namespace should be appsec')
+        }
+      },
+      requestType: 'generate-metrics',
+      timeout: 4_000,
+      resolveAtFirstSuccess: true,
+    })
 
-            assert.ok(matchSerie)
-            assert.ok(matchSerie.tags.includes('rule_type:command_injection'), `Got: ${inspect(matchSerie.tags)}`)
-            assert.ok(matchSerie.tags.includes(`rule_variant:${variant}`), `Got: ${inspect(matchSerie.tags)}`)
-            assert.strictEqual(matchSerie.type, 'count')
-          } else {
-            assert.fail('namespace should be appsec')
-          }
-        },
-        requestType: 'generate-metrics',
-        timeout: 4_000,
-        resolveAtFirstSuccess: true,
-      })
+    await Promise.all([checkMessages, checkTelemetry])
 
-      await Promise.all([checkMessages, checkTelemetry])
-
-      assert.strictEqual(appsecTelemetryReceived, true)
-      return
-    }
-
-    throw new Error('Request should be blocked')
+    assert.strictEqual(appsecTelemetryReceived, true)
   }
 
   describe('with shell', () => {

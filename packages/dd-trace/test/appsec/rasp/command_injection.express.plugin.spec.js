@@ -3,7 +3,6 @@
 const assert = require('node:assert')
 const path = require('node:path')
 
-const Axios = require('axios')
 const { describe, it, beforeEach, before, after } = require('mocha')
 
 const agent = require('../../plugins/agent')
@@ -15,24 +14,28 @@ const { checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require
 
 describe('RASP - command_injection', () => {
   withVersions('express', 'express', expressVersion => {
-    let app, server, axios
+    let app, server, baseUrl
+
+    /**
+     * @param {string} url
+     */
+    async function request (url) {
+      const response = await fetch(new URL(url, baseUrl))
+      await response.arrayBuffer()
+      return response
+    }
+
     function testShellBlockingAndSafeRequests () {
       it('should block the threat', async () => {
-        try {
-          await axios.get('/?dir=$(cat /etc/passwd 1>%262 ; echo .)')
-        } catch (e) {
-          if (!e.response) {
-            throw e
-          }
+        const response = await request('/?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+        assert.strictEqual(response.ok, false)
 
-          return checkRaspExecutedAndHasThreat(agent, 'rasp-command_injection-rule-id-3')
-        }
-
-        assert.fail('Request should be blocked')
+        return checkRaspExecutedAndHasThreat(agent, 'rasp-command_injection-rule-id-3')
       })
 
       it('should not block safe request', async () => {
-        await axios.get('/?dir=.')
+        const response = await request('/?dir=.')
+        assert.strictEqual(response.ok, true)
 
         return checkRaspExecutedAndNotThreat(agent)
       })
@@ -40,21 +43,15 @@ describe('RASP - command_injection', () => {
 
     function testNonShellBlockingAndSafeRequests () {
       it('should block the threat', async () => {
-        try {
-          await axios.get('/?command=/usr/bin/reboot')
-        } catch (e) {
-          if (!e.response) {
-            throw e
-          }
+        const response = await request('/?command=/usr/bin/reboot')
+        assert.strictEqual(response.ok, false)
 
-          return checkRaspExecutedAndHasThreat(agent, 'rasp-command_injection-rule-id-4')
-        }
-
-        assert.fail('Request should be blocked')
+        return checkRaspExecutedAndHasThreat(agent, 'rasp-command_injection-rule-id-4')
       })
 
       it('should not block safe request', async () => {
-        await axios.get('/?command=.')
+        const response = await request('/?command=.')
+        assert.strictEqual(response.ok, true)
 
         return checkRaspExecutedAndNotThreat(agent)
       })
@@ -82,9 +79,7 @@ describe('RASP - command_injection', () => {
 
       server = expressApp.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
-          baseURL: `http://localhost:${port}`,
-        })
+        baseUrl = `http://localhost:${port}`
 
         done()
       })
