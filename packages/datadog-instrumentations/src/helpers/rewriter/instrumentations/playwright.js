@@ -6,6 +6,18 @@ module.exports = [
   {
     module: {
       name: 'playwright',
+      versionRange: '>=1.38.0',
+      filePath: 'lib/index.js',
+    },
+    functionQuery: {
+      functionName: 'shouldCaptureVideo',
+      kind: 'Sync',
+    },
+    channelName: 'shouldCaptureVideo',
+  },
+  {
+    module: {
+      name: 'playwright',
       versionRange: '>=1.38.0 <1.60.0',
       filePath: 'lib/worker/testInfo.js',
     },

@@ -939,6 +939,46 @@ versions.forEach((version) => {
         assert.strictEqual(warningCount, 1, testOutput)
       })
 
+      it('does not upload a user attachment named like a recorder video when video capture is off',
+        async (receiver, run) => {
+          let testOutput = ''
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-manual-video-${++screenshotRunId}`,
+                PLAYWRIGHT_AUTO_NAMED_MANUAL_VIDEO: 'true',
+                DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              },
+            }
+          )
+          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+          const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+            proc,
+            ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const failedTest = payloads
+                .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+              assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+              const videos = payloads.filter(({ media }) => media?.contentType === 'video/webm')
+              assert.strictEqual(videos.length, 0, `user-provided video should not upload\n${testOutput}`)
+            },
+            { hardTimeout: 60000 }
+          )
+
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+          assert.strictEqual(exitCode, 1)
+        })
+
       // This race relies on Playwright 1.60 keeping the matching worker trace pending after testEnd.
       deferredFailureScreenshotTest(
         'uploads a failure screenshot deferred by test code',

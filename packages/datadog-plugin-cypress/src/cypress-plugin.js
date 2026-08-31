@@ -493,6 +493,7 @@ class CypressPlugin {
   loggedAttemptToFixTests = new Set()
   uploadedScreenshotPaths = new Set()
   uploadedVideoPaths = new Set()
+  pendingVideoUploads = []
   screenshotUploadPromisesByTraceId = new Map()
   screenshotUploadAbortControllers = new Set()
   afterScreenshotHandler = undefined
@@ -584,6 +585,7 @@ class CypressPlugin {
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
     this.uploadedVideoPaths = new Set()
+    this.pendingVideoUploads = []
     this.screenshotUploadPromisesByTraceId = new Map()
     this.screenshotUploadAbortControllers = new Set()
     this.lastFinishedTest = null
@@ -1309,6 +1311,7 @@ class CypressPlugin {
       log.warn('Attemping to call afterRun without initializating the plugin first')
       return
     }
+    this.uploadPendingTestSuiteVideos()
     if (this.testSessionSpan && this.testModuleSpan) {
       const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
@@ -1643,8 +1646,8 @@ class CypressPlugin {
       }
     }
 
-    if (latestError || getSuiteStatus(stats) === 'fail') {
-      this.uploadTestSuiteVideo({
+    if (error || latestError || getSuiteStatus(stats) === 'fail') {
+      this.pendingVideoUploads.push({
         filePath: video,
         testSessionId: this.testSessionSpan?.context().toTraceId(),
         testSuiteId: this.testSuiteSpan?.context().toSpanId(),
@@ -1772,6 +1775,17 @@ class CypressPlugin {
       idempotencyKey: `${testSessionId}:${testSuiteId}:${basename(filePath)}`,
       capturedAtMs: Date.now(),
     }, noop)
+  }
+
+  /**
+   * Starts queued Cypress video uploads after Cypress has compressed the source files.
+   *
+   * @returns {void}
+   */
+  uploadPendingTestSuiteVideos () {
+    const pendingVideoUploads = this.pendingVideoUploads
+    this.pendingVideoUploads = []
+    for (const uploadOptions of pendingVideoUploads) this.uploadTestSuiteVideo(uploadOptions)
   }
 
   getTasks () {

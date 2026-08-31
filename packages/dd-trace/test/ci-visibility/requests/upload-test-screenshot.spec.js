@@ -11,7 +11,7 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-const { getAgent } = require('../../../src/ci-visibility/exporters/agents')
+const { getAgent, getMediaAgent } = require('../../../src/ci-visibility/exporters/agents')
 
 describe('ci-visibility/requests/upload-test-screenshot', () => {
   const traceId = '1234567890123456789'
@@ -196,7 +196,7 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
         url: new URL('http://localhost:8126'),
       }, () => {})
 
-      const [bodyFactory, { path, headers, retryUntilDeadline, transport }] = requestStub.firstCall.args
+      const [bodyFactory, { path, headers, agent, retryUntilDeadline, transport }] = requestStub.firstCall.args
       assert.strictEqual(typeof bodyFactory, 'function')
       const body = bodyFactory()
       assert.strictEqual(body.constructor.name, 'ReadStream')
@@ -206,6 +206,8 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(headers['Content-Length'], 9)
       assert.strictEqual(retryUntilDeadline, false)
       assert.strictEqual(transport, videoRequestStub)
+      assert.strictEqual(agent, getMediaAgent(new URL('http://localhost:8126')))
+      assert.notStrictEqual(agent, getAgent(new URL('http://localhost:8126')))
     })
 
     it('uploads Cypress videos to the test-suite endpoint', () => {

@@ -7,7 +7,7 @@ const getConfig = require('../../config')
 const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
 const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const log = require('../../log')
-const { getAgent } = require('../exporters/agents')
+const { getAgent, getMediaAgent } = require('../exporters/agents')
 const request = require('../exporters/request')
 const videoRequest = require('./video-request')
 
@@ -161,7 +161,7 @@ function uploadTestMedia (options, callback) {
     path: `${basePath}?${query}`,
     timeout: UPLOAD_TIMEOUT_MS,
     url,
-    agent: getAgent(url),
+    agent: kind === 'video' ? getMediaAgent(url) : getAgent(url),
     deadline,
     retryUntilDeadline: false,
     signal,

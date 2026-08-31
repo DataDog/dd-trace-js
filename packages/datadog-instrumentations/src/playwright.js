@@ -70,6 +70,7 @@ const createRootSuiteCh = tracingChannel('orchestrion:playwright:createRootSuite
 const artifactsRecorderScreenshotPathCh =
   tracingChannel('orchestrion:playwright:ArtifactsRecorder_createScreenshotAttachmentPath')
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
+const shouldCaptureVideoCh = tracingChannel('orchestrion:playwright:shouldCaptureVideo')
 const testInfoOutputPathCh = tracingChannel('orchestrion:playwright:TestInfoImpl_outputPath')
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
 
@@ -153,6 +154,7 @@ const PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE = /(?:^|[\\/])test-failed-\d+\.png$/
 const PLAYWRIGHT_FAILURE_VIDEO_PATH_RE = /(?:^|[\\/])video(?:-\d+)?\.webm$/
 const automaticFailureScreenshotPaths = new Set()
 const automaticFailureVideoPaths = new Set()
+const videoCaptureTestInfos = new WeakSet()
 
 /**
  * Returns whether Playwright's internal screenshot recorder created an attachment.
@@ -1762,14 +1764,29 @@ function recordAutomaticFailureScreenshotPath (ctx) {
  */
 function recordAutomaticFailureVideoPath (ctx) {
   if (isFailureVideoUploadEnabled &&
+    videoCaptureTestInfos.has(ctx.self) &&
     typeof ctx.result === 'string' &&
     PLAYWRIGHT_FAILURE_VIDEO_PATH_RE.test(ctx.result)) {
     automaticFailureVideoPaths.add(ctx.result)
   }
 }
 
+/**
+ * Marks test info instances for which Playwright's private recorder enabled video capture.
+ *
+ * @param {object} ctx - Orchestrion context
+ * @returns {void}
+ */
+function recordAutomaticVideoCapture (ctx) {
+  const testInfo = ctx.arguments?.[1]
+  if (isFailureVideoUploadEnabled && ctx.result === true && testInfo) {
+    videoCaptureTestInfos.add(testInfo)
+  }
+}
+
 artifactsRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreenshotPath })
 snapshotRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreenshotPath })
+shouldCaptureVideoCh.subscribe({ end: recordAutomaticVideoCapture })
 testInfoOutputPathCh.subscribe({ end: recordAutomaticFailureVideoPath })
 
 if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5

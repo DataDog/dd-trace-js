@@ -74,6 +74,26 @@ describe('ci-visibility/requests/video-request', () => {
     controller.abort()
   })
 
+  it('destroys an aborted request after its body finishes', done => {
+    const controller = new AbortController()
+    const req = new PassThrough()
+    req.setTimeout = sinon.stub()
+    const requestVideo = proxyquire('../../../src/ci-visibility/requests/video-request', {
+      'node:http': {
+        ...http,
+        request: () => req,
+      },
+    })
+
+    req.once('finish', () => controller.abort())
+    requestVideo(Readable.from('video-content'), getOptions({ signal: controller.signal }), error => {
+      assert.strictEqual(error.name, 'AbortError')
+      assert.strictEqual(req.writableFinished, true)
+      assert.strictEqual(req.destroyed, true)
+      done()
+    })
+  })
+
   it('marks a body read error as non-retriable', done => {
     const readError = Object.assign(new Error('video disappeared'), { code: 'ENOENT' })
     const body = new Readable({
