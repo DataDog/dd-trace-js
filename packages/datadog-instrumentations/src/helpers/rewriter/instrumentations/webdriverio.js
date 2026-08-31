@@ -206,6 +206,24 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
+    astQuery: 'FunctionDeclaration[id.name=/^url[0-9]*$/] ' +
+      'IfStatement[test.object.type="ThisExpression"][test.property.name="isBidi"], ' +
+      'FunctionDeclaration[id.name=/^url[0-9]*$/] ' +
+      'IfStatement[test.operator="&&"][test.left.object.type="ThisExpression"]' +
+      '[test.left.property.name="isBidi"]',
+    channelName: 'url',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumPreloadGenerator',
+      callbackThis: true,
+    },
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
     astQuery: 'FunctionDeclaration[async][id.name=/^url[0-9]*$/] ReturnStatement > ' +
       'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
     channelName: 'url',
@@ -222,6 +240,24 @@ module.exports = [
       kind: 'Async',
     },
     channelName: 'url',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name=/^url[0-9]*$/] ' +
+      'IfStatement[test.object.type="ThisExpression"][test.property.name="isBidi"], ' +
+      'FunctionDeclaration[id.name=/^url[0-9]*$/] ' +
+      'IfStatement[test.operator="&&"][test.left.object.type="ThisExpression"]' +
+      '[test.left.property.name="isBidi"]',
+    channelName: 'url',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumPreloadGenerator',
+      callbackThis: true,
+    },
   },
   {
     module: {

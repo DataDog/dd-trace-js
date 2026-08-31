@@ -1163,10 +1163,23 @@ class MochaPlugin extends CiPlugin {
    */
   * #retryWebdriverioJasmineTestAfterRumCleanup (context, test, error) {
     const cleanup = context.rumCleanupGenerator?.()
+    let browsers
     if (cleanup) {
-      yield * cleanup
+      browsers = yield * cleanup
     }
     yield this.#retryWebdriverioJasmineTest(test, error)
+
+    if (!browsers?.length) return
+
+    const correlationContext = {
+      isRumActive: true,
+      testExecutionId: undefined,
+    }
+    setRumTestCorrelation(correlationContext, test.span)
+    const correlation = context.rumCorrelationGenerator?.(browsers, correlationContext.testExecutionId)
+    if (correlation) {
+      yield * correlation
+    }
   }
 
   /**
