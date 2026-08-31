@@ -364,11 +364,11 @@
 /.github/editorconfig-checker/ @DataDog/dd-trace-js @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /.github/selenium/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/.github/chainguard/ @DataDog/dd-trace-js @DataDog/sdlc-security
-/.github/codeql_config.yml @DataDog/dd-trace-js @DataDog/sdlc-security
+/.github/chainguard/ @DataDog/sdlc-security
+/.github/codeql_config.yml @DataDog/sdlc-security
 /.github/workflows/*.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/*.yaml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js @DataDog/sdlc-security @dd-octo-sts
+/.github/workflows/codeql-analysis.yml @DataDog/sdlc-security @dd-octo-sts
 /.github/workflows/mirror-image.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
 /.github/workflows/all-green.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
 /.github/workflows/audit.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
