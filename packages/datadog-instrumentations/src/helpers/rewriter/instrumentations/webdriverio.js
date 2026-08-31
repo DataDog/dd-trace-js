@@ -316,6 +316,22 @@ module.exports = [
       '[test.left.property.name="limit"][test.right.object.name="retries"]' +
       '[test.right.property.name="attempts"]',
     channelName: 'executeAsync',
+    transform: 'awaitContextCallbackAtStart',
+    transformOptions: {
+      callbackName: 'rumStartGenerator',
+    },
+  },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="executeAsync"] CatchClause ' +
+      'IfStatement[test.operator=">"][test.left.object.name="retries"]' +
+      '[test.left.property.name="limit"][test.right.object.name="retries"]' +
+      '[test.right.property.name="attempts"]',
+    channelName: 'executeAsync',
     transform: 'awaitContextCallback',
     transformOptions: {
       callbackArgumentNames: ['err'],

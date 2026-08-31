@@ -142,6 +142,17 @@ async function runGenerator (generator) {
   return step.value
 }
 
+/**
+ * Cleans retained browser state through the same lifecycle used at worker exit.
+ *
+ * @returns {Promise<void>}
+ */
+async function cleanupRumState () {
+  const context = {}
+  tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync').asyncEnd.publish(context)
+  if (context.resolveGenerator) await runGenerator(context.resolveGenerator())
+}
+
 describe('webdriverio instrumentation', () => {
   it('rewrites the ESM launcher scheduler', () => {
     const source = fs.readFileSync(launcherFixturePath, 'utf8')
@@ -198,6 +209,7 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveGenerator/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectGenerator/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rumStartGenerator/)
     assert.match(rewrittenSource, /__apm\$ctx\.retryGenerator/)
   })
 
@@ -225,15 +237,15 @@ describe('webdriverio instrumentation', () => {
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
     const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
     const calls = []
+    const rumStates = []
     const browser = {
-      addInitScript: sinon.stub().callsFake(() => {
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
         calls.push('add-preload')
-        return Promise.resolve({
-          remove: () => {
-            calls.push('remove-preload')
-            return Promise.resolve()
-          },
-        })
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push('remove-preload')
+        return Promise.resolve()
       }),
       capabilities: {},
       deleteCookies: sinon.stub().callsFake(() => {
@@ -250,6 +262,14 @@ describe('webdriverio instrumentation', () => {
           })
         })
         .onSecondCall().callsFake(() => {
+          calls.push('detect-at-test-end')
+          return Promise.resolve({
+            isRumActive: true,
+            isRumInstrumented: true,
+            rumSamplingRate: 100,
+          })
+        })
+        .onThirdCall().callsFake(() => {
           calls.push('cleanup')
           return Promise.resolve(false)
         }),
@@ -272,6 +292,7 @@ describe('webdriverio instrumentation', () => {
       }),
     }
     const correlate = context => {
+      rumStates.push(context.isRumActive)
       context.testExecutionId = '1234'
     }
     correlationCh.subscribe(correlate)
@@ -282,7 +303,6 @@ describe('webdriverio instrumentation', () => {
       await url3.call(browser, 'https://example.test', { wait: 'none' })
 
       assert.deepStrictEqual(calls, [
-        'handle',
         'add-preload',
         'handle',
         'navigate:none',
@@ -292,6 +312,17 @@ describe('webdriverio instrumentation', () => {
       const testContext = { arguments: [undefined, 'Test'] }
       testFunctionCh.asyncEnd.publish(testContext)
       await runGenerator(testContext.resolveGenerator(testContext))
+
+      assert.deepStrictEqual(calls.slice(4), [
+        'detect-at-test-end',
+      ])
+      assert.deepStrictEqual(rumStates, [undefined, true])
+
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runGenerator(afterEachContext.resolveGenerator(afterEachContext))
 
       assert.deepStrictEqual(calls.slice(5), [
         'remove-preload',
@@ -329,7 +360,12 @@ describe('webdriverio instrumentation', () => {
           isRumInstrumented: true,
           rumSamplingRate: 100,
         })
-        .onSecondCall().resolves(false),
+        .onSecondCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onThirdCall().resolves(false),
       navigateTo: sinon.stub().callsFake(() => {
         calls.push('navigate')
         return Promise.reject(navigationError)
@@ -353,50 +389,73 @@ describe('webdriverio instrumentation', () => {
       testFunctionCh.asyncEnd.publish(testContext)
       await runGenerator(testContext.resolveGenerator(testContext))
 
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runGenerator(afterEachContext.resolveGenerator(afterEachContext))
+
       assert.deepStrictEqual(calls, [
         'navigate',
         'set',
         `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
       ])
-      assert.strictEqual(browser.execute.callCount, 2)
+      assert.strictEqual(browser.execute.callCount, 3)
     } finally {
       correlationCh.unsubscribe(correlate)
     }
   })
 
-  it('does not retain a standalone RUM browser when no test correlation is available', async () => {
+  it('correlates a page loaded by a suite hook before the test function runs', async () => {
     require('../src/webdriverio')
 
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
     const urlCh = tracingChannel('orchestrion:webdriverio:url')
-    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const calls = []
+    let hasTestSpan = false
     const browser = {
       capabilities: {},
-      deleteCookies: sinon.stub().resolves(),
-      execute: sinon.stub().resolves({
-        isRumActive: true,
-        isRumInstrumented: true,
-        rumSamplingRate: 100,
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete')
+        return Promise.resolve()
       }),
-      setCookies: sinon.stub().resolves(),
+      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
+        ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
+        : false)),
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push('set')
+        return Promise.resolve()
+      }),
     }
-    const skipCorrelation = () => {}
-    correlationCh.subscribe(skipCorrelation)
+    const correlate = context => {
+      if (hasTestSpan) context.testExecutionId = 'suite-test-id'
+    }
+    correlationCh.subscribe(correlate)
 
     try {
       const navigationContext = { self: browser }
       urlCh.asyncEnd.publish(navigationContext)
       await runGenerator(navigationContext.resolveGenerator(navigationContext))
 
-      const testContext = { arguments: [undefined, 'Test'] }
-      testFunctionCh.asyncEnd.publish(testContext)
+      hasTestSpan = true
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { executeAsync } = await import(pathToFileURL(outputPath))
+      await executeAsync(() => {
+        calls.push('test')
+      }, { attempts: 0, limit: 0 })
 
-      assert.strictEqual(testContext.resolveGenerator, undefined)
-      assert.strictEqual(browser.execute.callCount, 1)
-      assert.strictEqual(browser.setCookies.callCount, 0)
-      assert.strictEqual(browser.deleteCookies.callCount, 0)
+      assert.deepStrictEqual(calls, ['set', 'test'])
+      assert.deepStrictEqual(browser.setCookies.firstCall.args, [{
+        name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+        value: 'suite-test-id',
+      }])
     } finally {
-      correlationCh.unsubscribe(skipCorrelation)
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
     }
   })
 
@@ -519,7 +578,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('cleans RUM before preserving a failed beforeEach hook rejection', async () => {
+  it('keeps RUM correlated after a failed beforeEach hook', async () => {
     require('../src/webdriverio')
 
     const source = fs.readFileSync(utilsFixturePath, 'utf8')
@@ -573,15 +632,15 @@ describe('webdriverio instrumentation', () => {
 
       assert.deepStrictEqual(calls, [
         'set',
-        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
       ])
-      assert.strictEqual(browser.execute.callCount, 2)
+      assert.strictEqual(browser.execute.callCount, 1)
     } finally {
       correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
     }
   })
 
-  it('cleans RUM after test and afterEach hook navigations', async () => {
+  it('keeps same-page afterEach activity correlated before cleanup', async () => {
     require('../src/webdriverio')
 
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
@@ -604,12 +663,7 @@ describe('webdriverio instrumentation', () => {
           rumSamplingRate: 100,
         })
         .onSecondCall().resolves(false)
-        .onThirdCall().resolves({
-          isRumActive: true,
-          isRumInstrumented: true,
-          rumSamplingRate: 100,
-        })
-        .onCall(3).resolves(false),
+        .onThirdCall().resolves(false),
       setCookies: sinon.stub().callsFake((cookie) => {
         calls.push(`set:${cookie.value}`)
         return Promise.resolve()
@@ -641,7 +695,6 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(calls, [
         'set:1234',
         'user-after-test',
-        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
       ])
       assert.strictEqual(browser.execute.callCount, 2)
 
@@ -651,9 +704,6 @@ describe('webdriverio instrumentation', () => {
       testFunctionCh.asyncEnd.publish(beforeEachContext)
       assert.strictEqual(beforeEachContext.resolveGenerator, undefined)
 
-      const afterEachNavigationContext = { self: browser }
-      urlCh.asyncEnd.publish(afterEachNavigationContext)
-      await runGenerator(afterEachNavigationContext.resolveGenerator(afterEachNavigationContext))
       calls.push('user-after-each')
 
       const afterEachContext = {
@@ -665,18 +715,16 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(calls, [
         'set:1234',
         'user-after-test',
-        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
-        'set:1234',
         'user-after-each',
         `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
       ])
-      assert.strictEqual(browser.execute.callCount, 4)
+      assert.strictEqual(browser.execute.callCount, 3)
     } finally {
       correlationCh.unsubscribe(correlate)
     }
   })
 
-  it('preloads and clears cross-origin RUM correlation without loading application pages', async () => {
+  it('preloads RUM correlation in current and future browsing contexts', async () => {
     require('../src/webdriverio')
 
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
@@ -685,15 +733,14 @@ describe('webdriverio instrumentation', () => {
     const calls = []
     let preloadScript
     const browser = {
-      addInitScript: sinon.stub().callsFake((script, ...args) => {
+      scriptAddPreloadScript: sinon.stub().callsFake((options) => {
         calls.push('add-preload')
-        preloadScript = { args, script }
-        return Promise.resolve({
-          remove: () => {
-            calls.push('remove-preload')
-            return Promise.resolve()
-          },
-        })
+        preloadScript = options.functionDeclaration
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push('remove-preload')
+        return Promise.resolve()
       }),
       capabilities: {},
       deleteCookies: sinon.stub().callsFake(() => {
@@ -729,28 +776,23 @@ describe('webdriverio instrumentation', () => {
       urlCh.asyncEnd.publish(firstNavigationContext)
       await runGenerator(firstNavigationContext.resolveGenerator(firstNavigationContext))
 
-      assert.ok(preloadScript)
-      const originalDocument = globalThis.document
-      try {
-        globalThis.document = { cookie: '' }
-        preloadScript.script(...preloadScript.args)
-        assert.strictEqual(
-          globalThis.document.cookie,
-          `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=1234; path=/`
-        )
-      } finally {
-        if (originalDocument === undefined) {
-          delete globalThis.document
-        } else {
-          globalThis.document = originalDocument
-        }
-      }
+      assert.strictEqual(
+        preloadScript,
+        `() => { globalThis.document.cookie = "${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=1234; path=/" }`
+      )
 
       const testContext = { arguments: [undefined, 'Test'] }
       testFunctionCh.asyncEnd.publish(testContext)
       await runGenerator(testContext.resolveGenerator(testContext))
 
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runGenerator(afterEachContext.resolveGenerator(afterEachContext))
+
       assert.deepStrictEqual(calls, [
+        'switch:window-a',
         'set-current',
         'add-preload',
         'remove-preload',
@@ -761,7 +803,11 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(browser.storageDeleteCookies.firstCall.args, [{
         filter: { name: RUM_TEST_EXECUTION_ID_COOKIE_NAME },
       }])
-      assert.strictEqual(browser.execute.callCount, 2)
+      assert.deepStrictEqual(browser.scriptAddPreloadScript.firstCall.args, [{
+        functionDeclaration: preloadScript,
+      }])
+      assert.deepStrictEqual(browser.scriptRemovePreloadScript.firstCall.args, [{ script: 'rum-preload' }])
+      assert.strictEqual(browser.execute.callCount, 3)
     } finally {
       correlationCh.unsubscribe(correlate)
     }
@@ -773,13 +819,14 @@ describe('webdriverio instrumentation', () => {
     const executeAsyncContext = {}
     let currentWindowHandle = 'window-a'
     const browser = {
-      addInitScript: sinon.stub().resolves({ remove: sinon.stub().resolves() }),
       capabilities: {},
       deleteCookies: sinon.stub().resolves(),
       execute: sinon.stub().resolves(false),
       getWindowHandle: sinon.stub().callsFake(() => Promise.resolve(currentWindowHandle)),
       getWindowHandles: sinon.stub().resolves(['window-a', 'window-b']),
       isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
       setCookies: sinon.stub().resolves(),
       storageDeleteCookies: sinon.stub().resolves(),
       switchToWindow: sinon.stub().callsFake((windowHandle) => {
@@ -800,9 +847,73 @@ describe('webdriverio instrumentation', () => {
       [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'retry-execution-id' }],
       [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'retry-execution-id' }],
     ])
-    assert.strictEqual(browser.addInitScript.callCount, 2)
+    assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
 
     await runGenerator(executeAsyncContext.rumCleanupGenerator())
+  })
+
+  it('preserves Mocha RUM correlation across a native WebdriverIO retry', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const calls = []
+    let attempts = 0
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete')
+        return Promise.resolve()
+      }),
+      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
+        ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
+        : false)),
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push('set')
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      context.testExecutionId = 'mocha-attempt-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runGenerator(navigationContext.resolveGenerator(navigationContext))
+
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { executeAsync } = await import(pathToFileURL(outputPath))
+      const result = await executeAsync(() => {
+        attempts++
+        calls.push(`attempt:${attempts}`)
+        if (attempts === 1) throw new Error('retry me')
+        return 'passed'
+      }, { attempts: 0, limit: 1 })
+
+      assert.strictEqual(result, 'passed')
+      assert.deepStrictEqual(calls, [
+        'set',
+        'attempt:1',
+        'set',
+        'attempt:2',
+      ])
+
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runGenerator(afterEachContext.resolveGenerator(afterEachContext))
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
   })
 
   it('cleans RUM in every open browser window and restores the original window', async () => {
@@ -848,7 +959,16 @@ describe('webdriverio instrumentation', () => {
       testFunctionCh.asyncEnd.publish(testContext)
       await runGenerator(testContext.resolveGenerator(testContext))
 
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runGenerator(afterEachContext.resolveGenerator(afterEachContext))
+
       assert.deepStrictEqual(calls, [
+        'switch:window-a',
+        'switch:window-b',
+        'switch:window-a',
         'switch:window-a',
         'delete',
         'switch:window-b',
