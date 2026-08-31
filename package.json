@@ -174,6 +174,7 @@
     "packages/*/lib/**/*",
     "packages/*/src/**/*",
     "packages/datadog-instrumentations/orchestrion.yml",
+    "packages/datadog-turbopack/README.md",
     "README.md",
     "register.js",
     "vendor/dist/**/*.d.ts",
@@ -203,7 +204,10 @@
   "devDependencies": {
     "@actions/core": "^3.0.1",
     "@actions/github": "^9.1.1",
+    "@babel/generator": "^7.29.7",
     "@babel/helpers": "^8.0.0",
+    "@babel/parser": "^7.29.7",
+    "@babel/traverse": "^7.29.7",
     "@eslint/eslintrc": "^3.3.6",
     "@eslint/js": "^10.0.1",
     "@eslint/plugin-kit": "^0.7.2",
