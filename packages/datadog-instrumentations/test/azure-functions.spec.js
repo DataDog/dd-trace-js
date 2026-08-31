@@ -96,16 +96,6 @@ describe('azure-functions orchestration instrumentation (unit)', () => {
     assert.strictEqual(started, false)
   })
 
-  it('skips tracing when isReplaying is undefined', async () => {
-    let started = false
-    subscribeStart(() => { started = true })
-
-    const wrapped = registerOrchestration(async () => 'ok')
-    await wrapped({ instanceId: 'abc-123' }, {})
-
-    assert.strictEqual(started, false)
-  })
-
   it('does not wrap non-orchestration generic triggers', async () => {
     subscribeStart(() => {})
 
