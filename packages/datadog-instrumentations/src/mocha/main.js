@@ -536,7 +536,10 @@ function stopCurrentHook (runner, hook) {
     if (test) {
       if (hook.parent?._afterEach?.includes(hook) || hook.parent?._afterAll?.includes(hook)) {
         markTestTerminal(runner, test)
-        if (!test._ddTestFinishStarted) runnerTestEndHandlers.get(runner)?.(test)
+        if (!test._ddTestFinishStarted) {
+          const onTestEnd = runnerTestEndHandlers.get(runner)
+          onTestEnd?.(test)
+        }
       } else {
         markTestPending(runner, test)
       }
@@ -763,14 +766,18 @@ function wrapRunnerEmit (Runner) {
             const test = hook.ctx?.currentTest
             if (test && hook.parent?._afterEach?.includes(hook)) {
               markTestTerminal(this, test)
-              if (!test._ddTestFinishStarted) runnerTestEndHandlers.get(this)?.(test)
+              if (!test._ddTestFinishStarted) {
+                const onTestEnd = runnerTestEndHandlers.get(this)
+                onTestEnd?.(test)
+              }
             }
           } else if (event === 'pending' || event === 'pass' || event === 'fail' || event === 'retry' ||
             event === 'test end') {
             const test = arguments[1]
             stopAfterEachHooks(this, test)
             if (event === 'test end' && !test._ddTestFinishStarted) {
-              runnerTestEndHandlers.get(this)?.(test)
+              const onTestEnd = runnerTestEndHandlers.get(this)
+              onTestEnd?.(test)
             }
           }
         }
