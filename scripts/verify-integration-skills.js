@@ -402,6 +402,37 @@ function verifySourcePattern (filename, pattern, description) {
 }
 
 /**
+ * @param {string} pattern
+ * @param {string[]} requiredOwners
+ * @param {string} description
+ * @returns {void}
+ */
+function verifyCodeownersRule (pattern, requiredOwners, description) {
+  const filename = '.github/CODEOWNERS'
+  const absoluteFilename = path.join(root, filename)
+  const sourceExists = existsSync(absoluteFilename)
+  check(sourceExists, `missing source contract file ${filename}`)
+  if (!sourceExists) return
+
+  let owners
+  for (const line of read(filename).split('\n')) {
+    const [candidatePattern, ...candidateOwners] = line.trim().split(/\s+/)
+    if (candidatePattern === pattern) owners = new Set(candidateOwners)
+  }
+
+  let hasRequiredOwners = owners !== undefined
+  if (hasRequiredOwners) {
+    for (const owner of requiredOwners) {
+      if (!owners.has(owner)) {
+        hasRequiredOwners = false
+        break
+      }
+    }
+  }
+  check(hasRequiredOwners, `${filename}: ${description}`)
+}
+
+/**
  * @param {string} directory
  * @param {string[]} suffixes
  * @returns {string[]}
@@ -1382,14 +1413,16 @@ function verifySourceContracts () {
 
   verifySymlink('.claude/skills/apm-integrations', '../../.agents/skills/apm-integrations')
   verifySymlink('.claude/skills/serverless-integrations', '../../.agents/skills/serverless-integrations')
-  verifySourcePattern(
-    '.github/CODEOWNERS',
-    /^\/\.agents\/skills\/apm-integrations\/ @DataDog\/apm-idm-js$/m,
+  verifySymlink('.cursor/skills/apm-integrations', '../../.agents/skills/apm-integrations')
+  verifySymlink('.cursor/skills/serverless-integrations', '../../.agents/skills/serverless-integrations')
+  verifyCodeownersRule(
+    '/.agents/skills/apm-integrations/',
+    ['@DataDog/apm-idm-js'],
     'missing APM skill ownership'
   )
-  verifySourcePattern(
-    '.github/CODEOWNERS',
-    /^\/\.agents\/skills\/serverless-integrations\/ @DataDog\/serverless-aws @DataDog\/apm-serverless$/m,
+  verifyCodeownersRule(
+    '/.agents/skills/serverless-integrations/',
+    ['@DataDog/serverless-aws', '@DataDog/apm-serverless'],
     'missing serverless skill ownership'
   )
 
