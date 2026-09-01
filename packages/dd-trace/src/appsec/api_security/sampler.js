@@ -55,7 +55,7 @@ function disable () {
  * @param {boolean} record When true and the decision is SAMPLE, records the endpoint in the TTL cache
  * @returns {'sample' | 'missing_route' | 'skip'}
  */
-function sampleRootSpanRequest (rootSpan, { method, statusCode, route, blocked = false }, record = false) {
+function sampleRootSpanRequest (rootSpan, { method, statusCode, route, blocked = false } = {}, record = false) {
   if (!enabled) return SamplingDecision.SKIP
 
   if (!rootSpan) return SamplingDecision.SKIP
@@ -189,7 +189,7 @@ function isRejected (rootSpan) {
 
 function getSpanPriority (span) {
   const spanContext = span.context?.()
-  const priority = spanContext._sampling?.priority
+  const priority = spanContext?._sampling?.priority
 
   return priority == null ? priority : Number(priority)
 }

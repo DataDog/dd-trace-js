@@ -453,6 +453,28 @@ describe('API Security Sampler', () => {
       )
     })
 
+    // This entry point is exported for callers outside dd-trace (e.g. the Lambda layer), so a
+    // malformed call must degrade to a decision instead of throwing into the user's handler.
+    describe('malformed input', () => {
+      it('returns SKIP when the request argument is missing entirely', () => {
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span), SamplingDecision.SKIP)
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, undefined, true), SamplingDecision.SKIP)
+      })
+
+      it('treats a root span without context() as having no sampling decision yet', () => {
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest({}, request, true), SamplingDecision.SAMPLE)
+      })
+
+      it('treats a root span whose context() returns undefined the same way', () => {
+        const spanWithoutContext = { context: sinon.stub().returns(undefined) }
+
+        assert.strictEqual(
+          apiSecuritySampler.sampleRootSpanRequest(spanWithoutContext, request, true),
+          SamplingDecision.SAMPLE
+        )
+      })
+    })
+
     it('should treat an empty string route as a valid route', () => {
       assert.strictEqual(
         apiSecuritySampler.sampleRootSpanRequest(span, { ...request, route: '' }, true),
