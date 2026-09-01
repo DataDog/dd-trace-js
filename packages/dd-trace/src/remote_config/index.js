@@ -386,7 +386,7 @@ class RemoteConfig {
         if (this.#fetcher === undefined) throw error
 
         log.error('[RC] Could not parse the config file at path %s', path, error)
-        this.#fetcher.setConfigState(path, ERROR, error.toString())
+        this.#reportConfigState(path, ERROR, error.toString())
         continue
       }
 
@@ -445,7 +445,7 @@ class RemoteConfig {
       if (item !== undefined) {
         item.apply_state = outcome.state
         item.apply_error = outcome.error
-        this.#fetcher?.setConfigState(path, outcome.state, outcome.error)
+        this.#reportConfigState(path, outcome.state, outcome.error)
       }
     }
 
@@ -556,8 +556,21 @@ class RemoteConfig {
       if (action === 'unapply') {
         this.appliedConfigs.delete(item.path)
       } else if (item.apply_state === UNACKNOWLEDGED) {
-        this.#fetcher?.setConfigState(item.path, UNACKNOWLEDGED, '')
+        this.#reportConfigState(item.path, UNACKNOWLEDGED, '')
       }
+    }
+  }
+
+  /**
+   * @param {string} path
+   * @param {number} applyState
+   * @param {string} applyError
+   */
+  #reportConfigState (path, applyState, applyError) {
+    try {
+      this.#fetcher?.setConfigState(path, applyState, applyError)
+    } catch (error) {
+      log.error('[RC] Could not report remote config apply state for path %s', path, error)
     }
   }
 
@@ -573,7 +586,7 @@ class RemoteConfig {
 
     item.apply_state = applyState
     item.apply_error = applyError
-    this.#fetcher?.setConfigState(item.path, applyState, applyError)
+    this.#reportConfigState(item.path, applyState, applyError)
   }
 
   /**

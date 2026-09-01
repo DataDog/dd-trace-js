@@ -300,10 +300,19 @@ describe('RemoteConfig', () => {
       await poll()
 
       fetcher.setConfigState.resetHistory()
+      log.error.resetHistory()
+      const error = new Error('state unavailable')
+      fetcher.setConfigState.throws(error)
       acknowledgements[0]()
       acknowledgements[1]()
 
       sinon.assert.calledOnceWithExactly(fetcher.setConfigState, removedPath, ACKNOWLEDGED, '')
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        '[RC] Could not report remote config apply state for path %s',
+        removedPath,
+        error
+      )
       assert.strictEqual(rc.appliedConfigs.get(replacedPath).version, 2)
     })
 
@@ -447,6 +456,19 @@ describe('RemoteConfig', () => {
       sinon.assert.calledOnceWithExactly(log.errorWithoutTelemetry, '[RC] Error in request', error)
     })
 
+    it('should continue polling after invalid native changes', async () => {
+      rc.setProductHandler('LIVE_DEBUGGING', noop)
+      fetcher.fetchChanges.resolves([undefined])
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        '[RC] Could not apply remote config update',
+        sinon.match.instanceOf(TypeError)
+      )
+    })
+
     it('should continue when the native client rejects subscription updates', async () => {
       const error = new Error('subscription failed')
       rc.setProductHandler('LIVE_DEBUGGING', noop)
@@ -530,25 +552,48 @@ describe('RemoteConfig', () => {
       assert.strictEqual(rc.appliedConfigs.get(modifyPath).apply_state, ERROR)
     })
 
-    it('should contain native apply-state failures', async () => {
+    it('should contain native apply-state failures and continue reconciliation', async () => {
       const error = new Error('state unavailable')
-      const path = 'datadog/42/ASM_FEATURES/config/config'
-      rc.setBatchHandler(['ASM_FEATURES'], transaction => transaction.ack(path))
+      const firstPath = 'datadog/42/ASM_FEATURES/first/config'
+      const secondPath = 'datadog/42/ASM_FEATURES/second/config'
+      rc.setBatchHandler(['ASM_FEATURES'], transaction => {
+        transaction.ack(firstPath)
+        transaction.ack(secondPath)
+      })
       rc.subscribeProducts('ASM_FEATURES')
-      fetcher.setConfigState.throws(error)
-      fetcher.fetchChanges.resolves([{
-        kind: 'add',
-        path,
-        product: 'ASM_FEATURES',
-        configId: 'config',
-        version: 1,
-        contents: '{}',
-      }])
+      fetcher.setConfigState.onFirstCall().throws(error)
+      fetcher.fetchChanges.resolves([
+        {
+          kind: 'add',
+          path: firstPath,
+          product: 'ASM_FEATURES',
+          configId: 'first',
+          version: 1,
+          contents: '{}',
+        },
+        {
+          kind: 'add',
+          path: secondPath,
+          product: 'ASM_FEATURES',
+          configId: 'second',
+          version: 1,
+          contents: '{}',
+        },
+      ])
 
       await poll()
 
-      sinon.assert.calledOnceWithExactly(log.error, '[RC] Could not apply remote config update', error)
-      assert.strictEqual(rc.appliedConfigs.size, 0)
+      sinon.assert.calledTwice(fetcher.setConfigState)
+      sinon.assert.calledWithExactly(fetcher.setConfigState, firstPath, ACKNOWLEDGED, '')
+      sinon.assert.calledWithExactly(fetcher.setConfigState, secondPath, ACKNOWLEDGED, '')
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        '[RC] Could not report remote config apply state for path %s',
+        firstPath,
+        error
+      )
+      assert.strictEqual(rc.appliedConfigs.get(firstPath).apply_state, ACKNOWLEDGED)
+      assert.strictEqual(rc.appliedConfigs.get(secondPath).apply_state, ACKNOWLEDGED)
     })
   })
 
