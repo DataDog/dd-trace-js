@@ -331,7 +331,7 @@ module.exports = [
     },
     astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression TryStatement',
     channelName: 'testFrameworkFnWrapper',
-    transform: 'awaitContextCallbackAtStart',
+    transform: 'awaitContextCallbackAtTryStart',
     transformOptions: {
       callbackName: 'rumCleanupCallback',
     },
@@ -359,7 +359,7 @@ module.exports = [
       '[test.left.property.name="limit"][test.right.object.name="retries"]' +
       '[test.right.property.name="attempts"]',
     channelName: 'executeAsync',
-    transform: 'awaitContextCallbackAtStart',
+    transform: 'awaitContextCallbackAtTryStart',
     transformOptions: {
       callbackName: 'rumStartCallback',
     },
