@@ -1168,4 +1168,17 @@ export default [
       'n/no-extraneous-require': 'off',
     },
   },
+  {
+    name: 'dd-trace/package-source',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-no-unnecessary-array-join': ['error', {
+        reportLiteralArrayJoins: true,
+        reportMapJoinChains: true,
+      }],
+    },
+  },
 ]
