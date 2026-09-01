@@ -3054,6 +3054,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
+          const numRuns = NUM_RETRIES_EFD + 1
           const testNames = ['fail first occasionally fails', 'fail second occasionally fails']
           assert.deepStrictEqual([...new Set(tests.map(test => test.meta[TEST_NAME]))].sort(), testNames)
           for (const testName of testNames) {
@@ -3063,8 +3064,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               testRuns.filter(test => test.meta[TEST_IS_RETRY] === 'true').length,
               NUM_RETRIES_EFD
             )
-            assert.strictEqual(statuses.filter(status => status === 'pass').length, 2)
-            assert.strictEqual(statuses.filter(status => status === 'fail').length, 2)
+            assert.strictEqual(statuses.filter(status => status === 'pass').length, Math.ceil(numRuns / 2))
+            assert.strictEqual(statuses.filter(status => status === 'fail').length, Math.floor(numRuns / 2))
           }
         })
 
