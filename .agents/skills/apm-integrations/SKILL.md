@@ -40,8 +40,8 @@ unresolved evidence. Omit workflow recaps and consulted-file inventories unless 
 ## Choose the hook
 
 Use Orchestrion when a source function can be matched. It handles CJS/ESM and sync, promise, callback, and iterator
-lifecycles without replacing runtime properties. Read [Orchestrion](references/orchestrion.md) only after choosing
-it.
+lifecycles without replacing the matched source function at runtime. Read [Orchestrion](references/orchestrion.md)
+only after choosing it.
 
 Use shimmer only when the required boundary is runtime-created, must mutate arguments before subscribers run, or
 belongs to an identity-sensitive return or emitted event. Leave one short comment at the hook naming that concrete
