@@ -94,8 +94,8 @@ class LLMObs extends NoopLLMObs {
   /**
    * Retrieve and resolve a managed prompt.
    * @param {string} promptId
-   * @param {object} [options]
-   * @returns {Promise<import('./prompts/prompt')>}
+   * @param {import('../../../../index').llmobs.GetPromptOptions} [options]
+   * @returns {Promise<import('../../../../index').llmobs.ManagedPrompt>}
    */
   getPrompt (promptId, options) {
     return this.#getPromptManager().getPrompt(promptId, options)
@@ -104,7 +104,7 @@ class LLMObs extends NoopLLMObs {
   /**
    * Refresh the selector implied by the current environment.
    * @param {string} promptId
-   * @returns {Promise<import('./prompts/prompt') | undefined>}
+   * @returns {Promise<import('../../../../index').llmobs.ManagedPrompt | undefined>}
    */
   refreshPrompt (promptId) {
     return this.#getPromptManager().refreshPrompt(promptId)
@@ -112,7 +112,7 @@ class LLMObs extends NoopLLMObs {
 
   /**
    * Clear managed prompt caches.
-   * @param {{hot?: boolean, warm?: boolean}} [options]
+   * @param {import('../../../../index').llmobs.ClearPromptCacheOptions} [options]
    * @returns {void}
    */
   clearPromptCache (options = {}) {
@@ -122,9 +122,9 @@ class LLMObs extends NoopLLMObs {
   /**
    * Create a prompt.
    * @param {string} promptId
-   * @param {Array<{role: string, content: string}>} template
-   * @param {object} [options]
-   * @returns {Promise<object>}
+   * @param {import('../../../../index').llmobs.PromptTemplateMessage[]} template
+   * @param {import('../../../../index').llmobs.CreatePromptOptions} [options]
+   * @returns {Promise<import('../../../../index').llmobs.PromptResponse>}
    */
   createPrompt (promptId, template, options) {
     return this.#getPromptManager().createPrompt(promptId, template, options)
@@ -133,9 +133,9 @@ class LLMObs extends NoopLLMObs {
   /**
    * Create a prompt version.
    * @param {string} promptId
-   * @param {Array<{role: string, content: string}>} template
-   * @param {object} [options]
-   * @returns {Promise<object>}
+   * @param {import('../../../../index').llmobs.PromptTemplateMessage[]} template
+   * @param {import('../../../../index').llmobs.CreatePromptVersionOptions} [options]
+   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse>}
    */
   createPromptVersion (promptId, template, options) {
     return this.#getPromptManager().createPromptVersion(promptId, template, options)
@@ -144,8 +144,8 @@ class LLMObs extends NoopLLMObs {
   /**
    * Update prompt metadata.
    * @param {string} promptId
-   * @param {object} options
-   * @returns {Promise<object>}
+   * @param {import('../../../../index').llmobs.UpdatePromptOptions} options
+   * @returns {Promise<import('../../../../index').llmobs.PromptResponse>}
    */
   updatePrompt (promptId, options) {
     return this.#getPromptManager().updatePrompt(promptId, options)
@@ -155,8 +155,8 @@ class LLMObs extends NoopLLMObs {
    * Update prompt-version metadata.
    * @param {string} promptId
    * @param {number} version
-   * @param {object} options
-   * @returns {Promise<object>}
+   * @param {import('../../../../index').llmobs.UpdatePromptVersionOptions} options
+   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse>}
    */
   updatePromptVersion (promptId, version, options) {
     return this.#getPromptManager().updatePromptVersion(promptId, version, options)
@@ -165,7 +165,7 @@ class LLMObs extends NoopLLMObs {
   /**
    * Delete a prompt.
    * @param {string} promptId
-   * @returns {Promise<object>}
+   * @returns {Promise<import('../../../../index').llmobs.DeletedPromptResponse>}
    */
   deletePrompt (promptId) {
     return this.#getPromptManager().deletePrompt(promptId)
@@ -173,7 +173,7 @@ class LLMObs extends NoopLLMObs {
 
   /**
    * List prompts.
-   * @returns {Promise<object[]>}
+   * @returns {Promise<import('../../../../index').llmobs.PromptResponse[]>}
    */
   listPrompts () {
     return this.#getPromptManager().listPrompts()
@@ -182,7 +182,7 @@ class LLMObs extends NoopLLMObs {
   /**
    * List prompt versions.
    * @param {string} promptId
-   * @returns {Promise<object[]>}
+   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse[]>}
    */
   listPromptVersions (promptId) {
     return this.#getPromptManager().listPromptVersions(promptId)
