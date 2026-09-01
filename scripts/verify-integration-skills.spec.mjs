@@ -155,8 +155,8 @@ module.exports = StoragePlugin
   'integration-tests/helpers/index.js': "'destructure' | 'direct' | 'namespace'\n",
   'packages/dd-trace/src/lambda/index.js': 'module.exports = {}\n',
   'packages/dd-trace/src/lambda/README.md': '# Lambda\n',
-  '.github/CODEOWNERS': `/.agents/skills/apm-integrations/ @DataDog/apm-idm-js
-/.agents/skills/serverless-integrations/ @DataDog/serverless-aws @DataDog/apm-serverless
+  '.github/CODEOWNERS': `/.agents/skills/apm-integrations/ @DataDog/dd-trace-js @DataDog/apm-idm-js
+/.agents/skills/serverless-integrations/ @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/datadog-plugin-fixture-extra/ @DataDog/apm-idm-js
 /packages/datadog-plugin-fixture/ @DataDog/apm-idm-js
 `,
@@ -212,6 +212,10 @@ function runTool (args = [], mutate) {
     mkdirSync(claudeSkills, { recursive: true })
     symlinkSync('../../.agents/skills/apm-integrations', join(claudeSkills, 'apm-integrations'))
     symlinkSync('../../.agents/skills/serverless-integrations', join(claudeSkills, 'serverless-integrations'))
+    const cursorSkills = join(root, '.cursor', 'skills')
+    mkdirSync(cursorSkills, { recursive: true })
+    symlinkSync('../../.agents/skills/apm-integrations', join(cursorSkills, 'apm-integrations'))
+    symlinkSync('../../.agents/skills/serverless-integrations', join(cursorSkills, 'serverless-integrations'))
     mutate?.(root)
 
     const { status, stdout, stderr } = spawnSync(process.execPath, [verifierPath, ...args], {
@@ -277,6 +281,10 @@ describe('verify-integration-skills', () => {
       rmSync(join(root, '.claude/skills/apm-integrations'))
       rmSync(join(root, '.claude/skills/serverless-integrations'))
       mkdirSync(join(root, '.claude/skills/serverless-integrations'))
+      rmSync(join(root, '.cursor/skills/apm-integrations'))
+      rmSync(join(root, '.cursor/skills/serverless-integrations'))
+      mkdirSync(join(root, '.cursor/skills/serverless-integrations'))
+      rmSync(join(root, '.github/CODEOWNERS'))
       rmSync(join(root, 'vendor/package-lock.json'))
     })
 
@@ -286,7 +294,22 @@ describe('verify-integration-skills', () => {
     assert.match(stderr, /missing source contract directory packages\/dd-trace\/src\/lambda/)
     assert.match(stderr, /missing discovery link \.claude\/skills\/apm-integrations/)
     assert.match(stderr, /serverless-integrations: must be a symbolic link/)
+    assert.match(stderr, /missing discovery link \.cursor\/skills\/apm-integrations/)
+    assert.match(stderr, /\.cursor\/skills\/serverless-integrations: must be a symbolic link/)
+    assert.match(stderr, /missing source contract file \.github\/CODEOWNERS/)
     assert.match(stderr, /missing source contract file vendor\/package-lock\.json/)
+  })
+
+  it('rejects incomplete skill ownership', () => {
+    const { status, stderr } = runTool([], (root) => {
+      writeFixtureFile(root, '.github/CODEOWNERS', `/.agents/skills/apm-integrations/ @DataDog/dd-trace-js
+/.agents/skills/serverless-integrations/ @DataDog/dd-trace-js @DataDog/apm-serverless
+`)
+    })
+
+    assert.strictEqual(status, 1)
+    assert.match(stderr, /missing APM skill ownership/)
+    assert.match(stderr, /missing serverless skill ownership/)
   })
 
   it('rejects a skill without frontmatter', () => {
