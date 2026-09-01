@@ -40,7 +40,7 @@ describe('Bedrock recursion regression', () => {
           assert.ok(payload.flat().some(span => span.name === 'ai.generateText'))
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+        const spawned = spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           'bedrock-recursion.mjs',
           agent.port,
@@ -54,6 +54,8 @@ describe('Bedrock recursion regression', () => {
           },
           ['--stack-size=128']
         )
+        proc = spawned.proc
+        await spawned.completed
 
         await received
       }).timeout(20000)

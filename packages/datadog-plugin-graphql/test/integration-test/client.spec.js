@@ -46,7 +46,9 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'graphql.parse'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        proc = spawned.proc
+        await spawned.completed
 
         await res
       }).timeout(50000)

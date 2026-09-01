@@ -64,7 +64,7 @@ describe('esm', () => {
           )
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+        const spawned = spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           variants[variant],
           agent.port,
@@ -72,6 +72,8 @@ describe('esm', () => {
             NODE_OPTIONS: '--import dd-trace/initialize.mjs',
           }
         )
+        proc = spawned.proc
+        await spawned.completed
 
         await res
       }).timeout(20000)

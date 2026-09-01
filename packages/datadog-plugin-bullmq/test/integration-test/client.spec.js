@@ -50,7 +50,9 @@ describe('esm', () => {
             assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.add'), true)
           })
 
-          proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+          const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+          proc = spawned.proc
+          await spawned.completed
 
           await res
         }).timeout(60000)
@@ -68,7 +70,9 @@ describe('esm', () => {
             assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.addBulk'), true)
           })
 
-          proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+          const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+          proc = spawned.proc
+          await spawned.completed
 
           await res
         }).timeout(60000)
@@ -92,11 +96,13 @@ describe('esm', () => {
             assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.add'), true)
           })
 
-          proc = await spawnPluginIntegrationTestProcAndExpectExit(
+          const spawned = spawnPluginIntegrationTestProcAndExpectExit(
             sandboxCwd(),
             variants[variant],
             agent.port
           )
+          proc = spawned.proc
+          await spawned.completed
 
           await res
         }).timeout(60000)
@@ -120,13 +126,15 @@ describe('esm', () => {
             assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.processJob'), true)
           })
 
-          proc = await spawnPluginIntegrationTestProcAndExpectExit(
+          const spawned = spawnPluginIntegrationTestProcAndExpectExit(
             sandboxCwd(),
             variants[variant],
             agent.port,
             // Disable Redis/ioredis instrumentation to avoid hitting max active requests limit
             { DD_TRACE_REDIS_ENABLED: 'false', DD_TRACE_IOREDIS_ENABLED: 'false' }
           )
+          proc = spawned.proc
+          await spawned.completed
 
           await res
         }).timeout(60000)
