@@ -3059,7 +3059,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           for (const testName of testNames) {
             const testRuns = tests.filter(test => test.meta[TEST_NAME] === testName)
             const statuses = testRuns.map(test => test.meta[TEST_STATUS])
-            assert.ok(testRuns.filter(test => test.meta[TEST_IS_RETRY] === 'true').length >= NUM_RETRIES_EFD)
+            assert.strictEqual(
+              testRuns.filter(test => test.meta[TEST_IS_RETRY] === 'true').length,
+              NUM_RETRIES_EFD
+            )
             assert.ok(statuses.includes('pass'))
             assert.ok(statuses.includes('fail'))
           }
