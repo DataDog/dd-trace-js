@@ -487,6 +487,57 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with OTel semantics enabled', () => {
+        const connectClient = (path = `/${route}?active=true`) => {
+          client = new WebSocket(`ws://localhost:${clientPort}${path}`)
+          return client
+        }
+
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          await agent.load(['ws'], [{
+            service: 'some',
+            traceWebsocketMessagesEnabled: true,
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+
+          wsServer = new WebSocket.Server({ port: 0 })
+          await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
+        })
+
+        afterEach(() => {
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
+        })
+
+        afterEach(async () => {
+          await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          await agent.close()
+        })
+
+        it('uses the OTel HTTP server resource for the connection span', () => {
+          wsServer.on('connection', ws => ws.close())
+          connectClient()
+
+          return agent.assertSomeTraces(traces => {
+            const span = findSpan(traces, span => span.name === 'web.request' && span.type === 'websocket')
+            assertObjectContains(span, {
+              resource: 'GET',
+              meta: {
+                'http.request.method': 'GET',
+              },
+            })
+          })
+        })
+      })
+
       describe('with service configuration', () => {
         const connectClient = (path = `/${route}?active=true`, options) => {
           client = new WebSocket(`ws://localhost:${clientPort}${path}`, options)

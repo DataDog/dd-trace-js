@@ -412,6 +412,20 @@ describe('Plugin Manager', () => {
       })
     })
 
+    it('forwards the HTTP server error status origin', () => {
+      const getOrigin = sinon.stub().withArgs('DD_TRACE_HTTP_SERVER_ERROR_STATUSES').returns('default')
+      pm.configure(makeTracerConfig({
+        DD_TRACE_HTTP_SERVER_ERROR_STATUSES: '500-599',
+        getOrigin,
+      }))
+      loadChannel.publish({ name: 'two' })
+
+      sinon.assert.calledOnce(getOrigin)
+      sinon.assert.calledWithMatch(Two.prototype.configure, {
+        DD_TRACE_HTTP_SERVER_ERROR_STATUSES_ORIGIN: 'default',
+      })
+    })
+
     it('forwards graphql global options to the graphql plugin under their plugin-facing names', () => {
       pm.configure(makeTracerConfig({
         DD_TRACE_GRAPHQL_COLLAPSE: false,

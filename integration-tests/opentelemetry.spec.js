@@ -432,9 +432,8 @@ describe('opentelemetry', function () {
     // `ChildProcess` does not replay an `exit` that already fired.
     const exitPromise = waitForExit(proc, 10_000)
 
-    await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
-
-    const [spans] = await Promise.all([spansPromise, exitPromise])
+    const requestPromise = getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
+    const [spans] = await Promise.all([spansPromise, exitPromise, requestPromise])
 
     assert.strictEqual(spans.length, 9)
 

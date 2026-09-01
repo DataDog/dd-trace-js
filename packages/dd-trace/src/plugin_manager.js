@@ -221,6 +221,10 @@ module.exports = class PluginManager {
       sharedConfig.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES_ORIGIN =
         tracerConfig.getOrigin('DD_TRACE_HTTP_CLIENT_ERROR_STATUSES')
     }
+    if (DD_TRACE_HTTP_SERVER_ERROR_STATUSES !== undefined) {
+      sharedConfig.DD_TRACE_HTTP_SERVER_ERROR_STATUSES_ORIGIN =
+        tracerConfig.getOrigin('DD_TRACE_HTTP_SERVER_ERROR_STATUSES')
+    }
 
     if (logInjection !== undefined) {
       sharedConfig.logInjection = logInjection

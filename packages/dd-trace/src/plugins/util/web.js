@@ -318,8 +318,7 @@ const web = {
     if (context.finished && !req.stream) return
 
     // `addRequestTags` is idempotent: in the normal HTTP path it ran during
-    // `web.startSpan`. Serverless callers (e.g. Azure Functions) skip
-    // `web.startSpan` and rely on this call to do the request-side work.
+    // `web.startSpan`, and this call applies any framework config installed afterwards.
     addRequestTags(context, spanType)
     // Configured-header tagging runs at finish time. Framework plugins
     // (connect, express, ...) install their own config via `setFramework`
@@ -463,8 +462,7 @@ function addRequestTags (context, spanType) {
   // other HTTP attributes, which are renamed centrally in span_format) it is set
   // here directly when OTel semantics are enabled.
   if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-    // Establish ownership before propagation can sample. Serverless callers reach this from
-    // `web.finishSpan`, after the handler ran, so an existing resource belongs to the application.
+    // Establish ownership before propagation can sample.
     if (ownsResource(spanContext)) {
       setInstrumentationHttpResource(span, otelHttpResourceName(req.method))
     }

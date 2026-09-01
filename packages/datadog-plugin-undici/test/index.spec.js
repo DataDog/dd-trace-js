@@ -85,15 +85,17 @@ describe('Plugin', () => {
 
         it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
           const app = express()
-          app.get('/user', (req, res) => {
+          app.all('/user', (req, res) => {
             res.status(200).send()
           })
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
               assertObjectContains(span, {
+                resource: 'HTTP',
                 meta: {
                   'span.kind': 'client',
-                  'http.request.method': 'GET',
+                  'http.request.method': '_OTHER',
+                  'http.request.method_original': 'PROPFIND',
                   'url.full': `http://localhost:${port}/user`,
                   'server.address': 'localhost',
                   'server.port': String(port),
@@ -106,7 +108,25 @@ describe('Plugin', () => {
               assert.ok(!Object.hasOwn(span.meta, 'out.host'))
             }).then(done).catch(done)
 
-            fetch.fetch(`http://localhost:${port}/user`, { method: 'GET' })
+            fetch.fetch(`http://localhost:${port}/user`, { method: 'PROPFIND' })
+          })
+        })
+
+        it('sets error.type to the status code on a 5xx response', done => {
+          const app = express()
+          app.get('/broken', (req, res) => {
+            res.status(503).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                error: 1,
+                meta: { 'error.type': '503', 'http.response.status_code': '503' },
+              })
+            }).then(done).catch(done)
+
+            fetch.fetch(`http://localhost:${port}/broken`)
           })
         })
       })

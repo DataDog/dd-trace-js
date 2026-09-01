@@ -82,9 +82,11 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
               assertObjectContains(span, {
+                resource: 'HTTP',
                 meta: {
                   'span.kind': 'client',
-                  'http.request.method': 'GET',
+                  'http.request.method': '_OTHER',
+                  'http.request.method_original': 'PROPFIND',
                   'url.full': `${protocol}://localhost:${port}/user`,
                   'server.address': 'localhost',
                   'http.response.status_code': '200',
@@ -98,7 +100,28 @@ describe('Plugin', () => {
             }).then(done).catch(done)
 
             const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
-            const req = client.request({ ':path': '/user', ':method': 'GET' })
+            const req = client.request({ ':path': '/user', ':method': 'PROPFIND' })
+            req.on('error', done)
+            req.end()
+          })
+        })
+
+        it('sets error.type to the status code on a 5xx response', done => {
+          const app = (stream, headers) => {
+            stream.respond({ ':status': 503 })
+            stream.end()
+          }
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                error: 1,
+                meta: { 'error.type': '503', 'http.response.status_code': '503' },
+              })
+            }).then(done).catch(done)
+
+            const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
+            const req = client.request({ ':path': '/broken' })
             req.on('error', done)
             req.end()
           })

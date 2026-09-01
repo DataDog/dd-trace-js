@@ -6,6 +6,7 @@ const { HTTP_HEADERS } = require('../../../ext/formats')
 const { getSegment } = require('../../dd-trace/src/util')
 const {
   INSTRUMENTATION_HTTP_RESOURCE,
+  otelHttpResourceName,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const {
   createWebSocketSpanContext,
@@ -59,7 +60,11 @@ class WSServerPlugin extends TracingPlugin {
       'resource.name': resourceName,
       'span.kind': 'server',
     }
-    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) meta[INSTRUMENTATION_HTTP_RESOURCE] = resourceName
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      const httpResource = otelHttpResourceName(options.method)
+      meta['resource.name'] = httpResource
+      meta[INSTRUMENTATION_HTTP_RESOURCE] = httpResource
+    }
 
     const span = this.startSpan(this.operationName(), {
       service,

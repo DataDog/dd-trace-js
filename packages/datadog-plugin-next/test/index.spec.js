@@ -1316,7 +1316,8 @@ describe('compiled Next runtimes', () => {
           return Promise.resolve({ status: 201 })
         }
       }
-      getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
+      const instrumentAppRouteRuntime = getCompiledRuntimeHook('app-route')
+      instrumentAppRouteRuntime({ AppRouteRouteModule })
       const routeModule = new AppRouteRouteModule()
       const server = http.createServer(async (req, res) => {
         try {

@@ -6,11 +6,13 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../../setup/core')
+const priority = require('../../../../../ext/priority')
 const tagsExt = require('../../../../../ext/tags')
 const {
   HTTP_STATUS_ERROR,
   INSTRUMENTATION_HTTP_RESOURCE,
 } = require('../../../src/plugins/util/http-otel-semantics')
+const PrioritySampler = require('../../../src/priority_sampler')
 
 const ERROR = tagsExt.ERROR
 const HTTP_CLIENT_IP = tagsExt.HTTP_CLIENT_IP
@@ -19,6 +21,7 @@ const HTTP_REQUEST_HEADERS = tagsExt.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tagsExt.HTTP_RESPONSE_HEADERS
 const HTTP_ROUTE = tagsExt.HTTP_ROUTE
 const RESOURCE_NAME = tagsExt.RESOURCE_NAME
+const USER_KEEP = priority.USER_KEEP
 
 describe('plugins/util/web', () => {
   let web
@@ -125,12 +128,13 @@ describe('plugins/util/web', () => {
     })
 
     for (const value of ['500-599', ' 500 - 599 ']) {
-      it(`should use the default matcher for the explicit default range ${JSON.stringify(value)}`, () => {
+      it(`should apply the explicit default-shaped range ${JSON.stringify(value)}`, () => {
         const config = web.normalizeConfig({ DD_TRACE_HTTP_SERVER_ERROR_STATUSES: value })
 
         assert.strictEqual(config.validateStatus(499), true)
         assert.strictEqual(config.validateStatus(500), false)
         assert.strictEqual(config.validateStatus(599), false)
+        assert.strictEqual(config.validateStatus(600), true)
       })
     }
 
@@ -307,13 +311,14 @@ describe('plugins/util/web', () => {
     // is set here (the socket isn't available at serialization).
     it('sets network.peer.address from the socket when OTel semantics are enabled', () => {
       const otelConfig = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      req.method = 'PROPFIND'
       req.socket = { remoteAddress: '10.0.0.1' }
 
       const span = web.startSpan(tracer, otelConfig, req, res, 'test.request')
 
       assert.strictEqual(span.context().getTag('network.peer.address'), '10.0.0.1')
-      assert.strictEqual(span.context().getTag('resource.name'), req.method)
-      assert.strictEqual(span.context().getTag(INSTRUMENTATION_HTTP_RESOURCE), req.method)
+      assert.strictEqual(span.context().getTag('resource.name'), 'HTTP')
+      assert.strictEqual(span.context().getTag(INSTRUMENTATION_HTTP_RESOURCE), 'HTTP')
     })
 
     it('does not set network.peer.address when OTel semantics are disabled', () => {
@@ -787,15 +792,60 @@ describe('plugins/util/web', () => {
         DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
         resourceRenamingEnabled: true,
       })
+      req.method = 'PROPFIND'
       span = web.startSpan(tracer, config, req, res, 'test.request')
       tags = span.context().getTags()
       context = web.getContext(req)
 
       web.setRoute(req, '/users/:id')
+
+      assert.strictEqual(tags[RESOURCE_NAME], 'HTTP /users/:id')
+      assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'HTTP /users/:id')
+
+      const prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0,
+        rules: [{ sampleRate: 1, resource: 'HTTP /users/:id' }],
+      })
+      prioritySampler.sample(span.context())
+      assert.strictEqual(span.context()._sampling.priority, USER_KEEP)
+
+      const setTag = sinon.spy(span, 'setTag')
       web.finishAll(context)
 
+      sinon.assert.neverCalledWith(setTag, RESOURCE_NAME)
+      sinon.assert.neverCalledWith(setTag, INSTRUMENTATION_HTTP_RESOURCE)
+      assert.strictEqual(tags[RESOURCE_NAME], 'HTTP /users/:id')
+      assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'HTTP /users/:id')
+    })
+
+    it('updates the OTel instrumentation resource when finish resolves an entered route', () => {
+      config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      span = web.startSpan(tracer, config, req, res, 'test.request')
+      tags = span.context().getTags()
+
+      web.enterRoute(req, '/users/:id')
+      web.finishAll(web.getContext(req))
+
+      assert.strictEqual(tags[HTTP_ROUTE], '/users/:id')
       assert.strictEqual(tags[RESOURCE_NAME], 'GET /users/:id')
       assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'GET /users/:id')
+    })
+
+    it('updates an OTel route assembled from multiple framework segments', () => {
+      config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      req.method = 'PROPFIND'
+      span = web.startSpan(tracer, config, req, res, 'test.request')
+      tags = span.context().getTags()
+
+      web.enterRoute(req, '/api')
+      web.enterRoute(req, '/users/:id')
+      span.setTag(HTTP_ROUTE, '/api/users/:id')
+
+      web.setRoute(req, '/users/:id')
+
+      assert.strictEqual(tags[HTTP_ROUTE], '/users/:id')
+      assert.strictEqual(tags[RESOURCE_NAME], 'HTTP /users/:id')
+      assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'HTTP /users/:id')
     })
 
     it('preserves a user resource when the route resolves under OTel semantics', () => {
@@ -833,6 +883,16 @@ describe('plugins/util/web', () => {
 
       assert.strictEqual(tags[RESOURCE_NAME], 'user-resource')
       assert.ok(!Object.hasOwn(tags, INSTRUMENTATION_HTTP_RESOURCE))
+    })
+
+    it('preserves an application resource when OTel semantics are disabled', () => {
+      span = web.startSpan(tracer, config, req, res, 'test.request')
+      tags = span.context().getTags()
+      span.setTag(RESOURCE_NAME, 'user-resource')
+
+      web.finishAll(web.getContext(req))
+
+      assert.strictEqual(tags[RESOURCE_NAME], 'user-resource')
     })
   })
 

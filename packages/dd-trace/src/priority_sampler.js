@@ -20,11 +20,6 @@ const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
 const SamplingRule = require('./sampling_rule')
 const { formatKnuthRate } = require('./util')
-const {
-  INSTRUMENTATION_HTTP_RESOURCE,
-  isInstrumentationOwnedResource,
-  otelHttpResourceName,
-} = require('./plugins/util/http-otel-semantics')
 
 const {
   SAMPLING_MECHANISM_DEFAULT,
@@ -68,10 +63,9 @@ class PrioritySampler {
    *
    * @param {string} env - The environment name (e.g., "production", "staging").
    * @param {SamplingConfig} [config] - The configuration object for sampling.
-   * @param {import('./config')} [tracerConfig] - Read for DD_TRACE_OTEL_SEMANTICS_ENABLED.
    */
-  constructor (env, config, tracerConfig) {
-    this.configure(env, config, tracerConfig)
+  constructor (env, config) {
+    this.configure(env, config)
     this.update({})
   }
 
@@ -79,11 +73,9 @@ class PrioritySampler {
    *
    * @param {string} env
    * @param {SamplingConfig} config
-   * @param {import('./config')} [tracerConfig]
    */
-  configure (env, config = {}, tracerConfig = {}) {
+  configure (env, config = {}) {
     const { sampleRate, provenance, rateLimit = 100, rules } = config
-    this._otelHttpSemanticsEnabled = tracerConfig.DD_TRACE_OTEL_SEMANTICS_ENABLED === true
     this._env = env
     this._rules = this.#normalizeRules(rules || [], sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
@@ -113,48 +105,10 @@ class PrioritySampler {
     if (!span) return
 
     const context = this._getContext(span)
-    // A completed decision is immutable: propagation re-asking must not rewrite the resource.
-    if (context._sampling.priority !== undefined) return
-
     const root = context._trace.started[0]
 
-    // `root` is not always a full span here (noop spans, the standalone sampler's plain
-    // roots), so resolving its context outside this guard throws.
-    if (this._otelHttpSemanticsEnabled && typeof root?.context === 'function') {
-      const rootContext = root.context()
-      const tags = rootContext.getTags()
-      const method = tags['http.method']
-      if (method !== undefined) {
-        // Sampling can run before route resolution; fall back to the method-only name.
-        const samplingResource = otelHttpResourceName(method, tags['http.route'])
-        const instrumentationResource = tags[INSTRUMENTATION_HTTP_RESOURCE]
-        const resourceName = tags['resource.name']
-        const resource = tags.resource
-        // Both spellings have to still be the instrumentation's. The extra marker check is this
-        // site's own rule, not part of ownership: the sampler never establishes a resource on a
-        // span the instrumentation has not named.
-        const resourceIsOwnedByInstrumentation =
-          instrumentationResource !== undefined &&
-          isInstrumentationOwnedResource(resourceName, instrumentationResource) &&
-          isInstrumentationOwnedResource(resource, instrumentationResource)
-        const resourceIsUnset = resourceName === undefined && resource === undefined
-        if (resourceIsOwnedByInstrumentation && resourceIsUnset) {
-          tags['resource.name'] = samplingResource
-        } else if (resourceIsOwnedByInstrumentation) {
-          if (tags.resource !== undefined) {
-            tags.resource = samplingResource
-          }
-          if (tags['resource.name'] !== undefined) {
-            tags['resource.name'] = samplingResource
-          }
-        }
-        if (resourceIsOwnedByInstrumentation) {
-          tags[INSTRUMENTATION_HTTP_RESOURCE] = samplingResource
-        }
-      }
-    }
-
     // TODO: remove the decision maker tag when priority is less than AUTO_KEEP
+    if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
     log.trace(span, auto)

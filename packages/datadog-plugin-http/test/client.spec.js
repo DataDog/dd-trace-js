@@ -74,7 +74,7 @@ describe('Plugin', () => {
 
         it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
           const app = express()
-          app.get('/user', (req, res) => {
+          app.all('/user', (req, res) => {
             res.status(200).send()
           })
 
@@ -83,10 +83,11 @@ describe('Plugin', () => {
               // OpenTelemetry attribute names are present...
               assertObjectContains(span, {
                 type: 'http',
-                resource: 'GET',
+                resource: 'HTTP',
                 meta: {
                   'span.kind': 'client',
-                  'http.request.method': 'GET',
+                  'http.request.method': '_OTHER',
+                  'http.request.method_original': 'PROPFIND',
                   'url.full': `${protocol}://localhost:${port}/user`,
                   'server.address': 'localhost',
                   // Every attribute leaves on the agent protocol as a `meta` string.
@@ -102,7 +103,7 @@ describe('Plugin', () => {
               assert.ok(!Object.hasOwn(span.meta, 'error.type'))
             }).then(done).catch(done)
 
-            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, { method: 'PROPFIND' }, res => {
               res.on('data', () => {})
             })
             req.end()

@@ -187,6 +187,12 @@ describe('http-otel-semantics', () => {
       assert.deepStrictEqual(meta, { 'span.kind': 'server' })
     })
 
+    it('removes status provenance when a hook cleared every HTTP attribute', () => {
+      const { meta } = run({ 'span.kind': 'server', [HTTP_STATUS_ERROR]: 'true' })
+
+      assert.deepStrictEqual(meta, { 'span.kind': 'server' })
+    })
+
     it('normalizes an unknown HTTP method to _OTHER and preserves the original', () => {
       const { meta } = run({ 'span.kind': 'server', 'http.method': 'PROPFIND', 'http.url': 'http://h/p' })
 
@@ -224,6 +230,8 @@ describe('http-otel-semantics', () => {
     it('falls back to the scheme default port for a client without an explicit port', () => {
       assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'https://h/p' }).meta['server.port'], '443')
       assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'http://h/p' }).meta['server.port'], '80')
+      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'wss://h/p' }).meta['server.port'], '443')
+      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'ws://h/p' }).meta['server.port'], '80')
       assert.strictEqual(
         run({ 'span.kind': 'client', 'http.url': 'http://h:8080/p' }, { 'network.destination.port': 8080 })
           .meta['server.port'],
@@ -331,7 +339,7 @@ describe('http-otel-semantics', () => {
     }
 
     // Whether an HTTP status makes the span an error is decided at capture time,
-    // from the configured error-status ranges (see http-error-statuses.js). Trace
+    // from the configured error-status ranges (see status-validator.js). Trace
     // stats run after this transform and consume that same decision. The transform only derives
     // `error.type` from the decision the span already carries, and never changes
     // `error` itself.

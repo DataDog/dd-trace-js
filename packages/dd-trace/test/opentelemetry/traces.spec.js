@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const fs = require('node:fs')
 const http = require('node:http')
 const https = require('node:https')
 
@@ -229,42 +230,25 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(otlpSpan.parentSpanId.length, 16, 'parentSpanId must be 16 hex chars (8 bytes)')
     })
 
-    it('applies the root sampling priority to every span in a trace', () => {
+    it('applies the trace sampling priority to every span', () => {
       const transformer = new OtlpTraceTransformer({})
-      const root = createMockSpan({
-        parent_id: id('0'),
-        metrics: { _sampling_priority_v1: 0 },
-      })
-      const child = createMockSpan({
-        span_id: id('abcdef1234567891'),
-        parent_id: root.span_id,
-        metrics: { _sampling_priority_v1: 2 },
-      })
+      for (const [priority, flags] of [[0, 0], [2, 1]]) {
+        const root = createMockSpan({
+          parent_id: id('0'),
+          metrics: { _sampling_priority_v1: priority },
+        })
+        const child = createMockSpan({
+          span_id: id('abcdef1234567891'),
+          parent_id: root.span_id,
+          metrics: { _sampling_priority_v1: priority },
+        })
 
-      const decoded = decodePayload(transformer.transformSpans([child, root]))
-      const spans = decoded.resourceSpans[0].scopeSpans[0].spans
+        const decoded = decodePayload(transformer.transformSpans([root, child]))
+        const spans = decoded.resourceSpans[0].scopeSpans[0].spans
 
-      assert.strictEqual(spans[0].flags, 0)
-      assert.strictEqual(spans[1].flags, 0)
-    })
-
-    it('sets the sampled flag on every span when the root is kept', () => {
-      const transformer = new OtlpTraceTransformer({})
-      const root = createMockSpan({
-        parent_id: id('0'),
-        metrics: { _sampling_priority_v1: 2 },
-      })
-      const child = createMockSpan({
-        span_id: id('abcdef1234567891'),
-        parent_id: root.span_id,
-        metrics: {},
-      })
-
-      const decoded = decodePayload(transformer.transformSpans([root, child]))
-      const spans = decoded.resourceSpans[0].scopeSpans[0].spans
-
-      assert.strictEqual(spans[0].flags, 1)
-      assert.strictEqual(spans[1].flags, 1)
+        assert.strictEqual(spans[0].flags, flags)
+        assert.strictEqual(spans[1].flags, flags)
+      }
     })
 
     it('maps span kind correctly', () => {
@@ -903,6 +887,23 @@ describe('OpenTelemetry Traces', () => {
       const tracer = new DatadogTracer(config)
       assert(tracer._exporter instanceof ElectronExporter,
         'Exporter should be the Electron exporter even when OTEL_TRACES_EXPORTER=otlp')
+    })
+
+    it('DatadogTracer keeps the Lambda log exporter when an OTLP endpoint is empty', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+      const LogExporter = require('../../src/exporters/log')
+      sinon.stub(fs, 'existsSync').returns(false)
+
+      for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+        process.env[key] = ''
+        const tracer = new DatadogTracer(getConfigFresh())
+
+        assert(tracer._exporter instanceof LogExporter, key)
+        delete process.env[key]
+      }
     })
   })
 

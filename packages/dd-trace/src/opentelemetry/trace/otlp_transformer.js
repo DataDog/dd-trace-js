@@ -137,17 +137,8 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   #transformScopeSpans (spans) {
     let traceKey
     let traceIdHigh
-    const samplingByTrace = new Map()
-    for (const span of spans) {
-      const priority = span.metrics?.[SAMPLING_PRIORITY_KEY]
-      if (!Number.isFinite(priority)) continue
-      const key = span.trace_id.toString(16)
-      const isRoot = !span.parent_id || span.parent_id.equals(ZERO_ID)
-      const current = samplingByTrace.get(key)
-      if (current === undefined || (isRoot && !current.isRoot)) {
-        samplingByTrace.set(key, { priority, isRoot })
-      }
-    }
+    const priority = spans[0]?.metrics?.[SAMPLING_PRIORITY_KEY]
+    const flags = Number.isFinite(priority) && priority > 0 ? 1 : 0
     const otlpSpans = spans.map((span) => {
       // `_dd.p.tid` lives only on the first-in-chunk span of each trace.
       // Reset at each trace boundary for batching of multiple traces.
@@ -156,8 +147,6 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         traceKey = key
         traceIdHigh = span.meta?.[TRACE_ID_128]?.toLowerCase()
       }
-      const priority = samplingByTrace.get(key)?.priority
-      const flags = priority !== undefined && priority > 0 ? 1 : 0
       return this.#transformSpan(span, traceIdHigh, flags)
     })
     return [{
