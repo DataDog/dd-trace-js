@@ -41,7 +41,7 @@ function makeConfig (overrides = {}) {
     DD_LLMOBS_PROMPTS_CACHE_DIR: undefined,
     DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 60,
     DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: false,
-    DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS: 5,
+    DD_LLMOBS_PROMPTS_TIMEOUT: 5,
     env: undefined,
     site: 'datadoghq.com',
     ...overrides,
@@ -67,7 +67,7 @@ describe('PromptManager', () => {
   it('normalizes decimal durations to integer milliseconds', () => {
     const manager = new PromptManager(makeConfig({
       DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 12.3456,
-      DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS: 2.3456,
+      DD_LLMOBS_PROMPTS_TIMEOUT: 2.3456,
     }), () => provider)
 
     assert.strictEqual(manager.ttlMs, 12_346)

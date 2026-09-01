@@ -117,7 +117,7 @@ export interface GeneratedConfig {
   DD_LLMOBS_PROMPTS_CACHE_DIR: string | undefined;
   DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: number;
   DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: boolean;
-  DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS: number;
+  DD_LLMOBS_PROMPTS_TIMEOUT: number;
   DD_LOGS_OTEL_ENABLED: boolean;
   DD_METRICS_OTEL_ENABLED: boolean;
   DD_MINI_AGENT_PATH: string | undefined;
@@ -770,7 +770,7 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_PROMPTS_CACHE_DIR: string | undefined;
   DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: number;
   DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: boolean;
-  DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS: number;
+  DD_LLMOBS_PROMPTS_TIMEOUT: number;
   DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;

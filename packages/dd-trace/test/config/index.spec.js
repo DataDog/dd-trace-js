@@ -1014,7 +1014,7 @@ describe('Config', () => {
       DD_LLMOBS_PROMPTS_CACHE_DIR: undefined,
       DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 60,
       DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: false,
-      DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS: 5,
+      DD_LLMOBS_PROMPTS_TIMEOUT: 5,
       llmobs: {
         agentlessEnabled: undefined,
         DD_LLMOBS_ENABLED: false,
@@ -1161,7 +1161,7 @@ describe('Config', () => {
       { name: 'DD_LLMOBS_PROMPTS_CACHE_DIR', value: null, origin: 'default' },
       { name: 'DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS', value: 60, origin: 'default' },
       { name: 'DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED', value: false, origin: 'default' },
-      { name: 'DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS', value: 5, origin: 'default' },
+      { name: 'DD_LLMOBS_PROMPTS_TIMEOUT', value: 5, origin: 'default' },
       { name: 'DD_TEST_FAILED_TEST_REPLAY_ENABLED', value: true, origin: 'default' },
       { name: 'DD_LOGS_INJECTION', value: true, origin: 'default' },
       { name: 'lookup', value: dns.lookup, origin: 'default' },
@@ -3894,14 +3894,14 @@ describe('Config', () => {
       process.env.DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS = '12.5'
       process.env.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED = 'true'
       process.env.DD_LLMOBS_PROMPTS_CACHE_DIR = '/tmp/prompts'
-      process.env.DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS = '2.5'
+      process.env.DD_LLMOBS_PROMPTS_TIMEOUT = '2.5'
 
       const config = getConfig()
 
       assert.strictEqual(config.DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS, 12.5)
       assert.strictEqual(config.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED, true)
       assert.strictEqual(config.DD_LLMOBS_PROMPTS_CACHE_DIR, '/tmp/prompts')
-      assert.strictEqual(config.DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS, 2.5)
+      assert.strictEqual(config.DD_LLMOBS_PROMPTS_TIMEOUT, 2.5)
     })
   })
 
