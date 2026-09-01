@@ -205,14 +205,28 @@ function recordLLMObsUserProcessorCalled (error, value = 1) {
   llmobsMetrics.count('user_processor_called', tags).inc(value)
 }
 
+/**
+ * @param {'hot_cache'|'warm_cache'|'registry'|'resolve'|'fallback'|'ff'} source
+ * @param {number} [value]
+ */
 function recordPromptSource (source, value = 1) {
   llmobsMetrics.count('prompt.source', { from: source }).inc(value)
 }
 
+/**
+ * @param {'NotFound'|'FetchError'} errorType
+ * @param {number} [value]
+ */
 function recordPromptFetchError (errorType, value = 1) {
   llmobsMetrics.count('prompt.fetch.error', { error_type: errorType }).inc(value)
 }
 
+/**
+ * @param {'GET'|'POST'|'PATCH'|'DELETE'} method
+ * @param {string} errorType
+ * @param {number} status
+ * @param {number} [value]
+ */
 function recordPromptCrudError (method, errorType, status, value = 1) {
   llmobsMetrics.count('prompt.crud.error', {
     method,
