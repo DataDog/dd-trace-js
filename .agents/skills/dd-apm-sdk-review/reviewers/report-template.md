@@ -39,6 +39,7 @@ Target: <branch>...<base>   Files: <n>   Mode: parallel | sequential | DEGRADED 
 ---
 ## Rule files used
 - coherence: reviewers/coherence.md
+- correctness: reviewers/correctness.md
 - security: reviewers/security.md + .agents/dd-apm-sdk-review-overrides/reviewers/security.md
 - design: reviewers/design.md (no override for this repo)
 - performance: reviewers/performance.md + .agents/dd-apm-sdk-review-overrides/reviewers/performance.md

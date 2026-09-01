@@ -15,7 +15,7 @@ allowed-tools:
 
 You are the **orchestrator**. You do not review the code yourself. You determine what changed, delegate to the reviewers in the roster below, then consolidate.
 
-If this skill is invoked twice in a row on the same set of changes, let the user know and no-op this skill. This is intentionally expensive as it is intended as a push gate.
+If this skill is invoked twice in a row on the same set of changes **and the prior invocation actually completed with a verdict**, let the user know and no-op this skill. This is intentionally expensive as it is intended as a push gate. A prior run that was interrupted, timed out, or reported `NOT VERIFIED`/`review not performed` did not complete — always retry in that case rather than no-oping.
 
 ## Step 0 — Load repo context
 
@@ -111,6 +111,7 @@ Also note, for the reviewers' benefit:
 | reviewer | generic prompt (core, this folder) | this repo's override (if any) |
 |---|---|---|
 | Coherence | [reviewers/coherence.md](./reviewers/coherence.md) | — (fully language-agnostic) |
+| Correctness | [reviewers/correctness.md](./reviewers/correctness.md) | — (fully language-agnostic) |
 | Security | [reviewers/security.md](./reviewers/security.md) | `.agents/dd-apm-sdk-review-overrides/reviewers/security.md` |
 | Design | [reviewers/design.md](./reviewers/design.md) | `.agents/dd-apm-sdk-review-overrides/reviewers/design.md` |
 | Performance | [reviewers/performance.md](./reviewers/performance.md) | `.agents/dd-apm-sdk-review-overrides/reviewers/performance.md` |
@@ -164,11 +165,11 @@ If the user overrides an unresolved P0 finding, record it verbatim in the PR des
 
 ## Scope and escape hatches
 
-This review is required for code-bearing changes. "Code-bearing" means anything shipped to users, plus tests, benchmarks, developer tooling, CI configuration, and agent instructions under `.agents/` / `.claude/`. Tests and tooling count because a weakened assertion, a newly flaky test, or a loosened lint rule is exactly what the maintainability and conventions lanes are for, and because CI config and agent instructions change how all future work gets done. It does **not** apply to prose documentation, pure reverts, or release mechanics.
+This review is required for code-bearing changes. "Code-bearing" means anything shipped to users, plus tests, benchmarks, developer tooling, CI configuration, and agent instructions under `.agents/` / `.claude/`. Tests and tooling count because a weakened assertion, a newly flaky test, or a loosened lint rule is exactly what the maintainability and conventions lanes are for, and because CI config and agent instructions change how all future work gets done. It does **not** apply to prose documentation, release mechanics, or a revert whose resulting diff is prose-only. A revert that removes or restores shipped code, tests, or tooling stays in scope — it can reintroduce a defect exactly like any other code-bearing change.
 
 Degrade before you skip. No subagent capability is **not** a reason to skip the review: Step 2 mode 3 exists for exactly that case, so run the perspectives as sequential passes and label the report `DEGRADED MODE`. No network only stops cross-SDK verification — that lane reports `NOT VERIFIED` and every other lane still runs.
 
-Only when even a degraded pass is impossible — context overflow, timeout, the skill's own files unreadable — say `review not performed: <reason>` and let the push proceed. **A missing tool is never a P0 finding**, but it is also not a licence to push unreviewed when a reduced review was available. Opening a *draft* PR to discuss a disputed finding is always allowed.
+Only when even a degraded pass is impossible — context overflow, timeout, the skill's own files unreadable — say `review not performed: <reason>` and **ask the human to explicitly authorize pushing unreviewed** before it proceeds; do not let the push continue on your own judgment. This mirrors the authorization the human must already give to override an unresolved P0 finding (Step 4) — an absent review is not a weaker case than an unresolved finding. **A missing tool is never a P0 finding**, but it is also not a licence to push unreviewed when a reduced review was available. Opening a *draft* PR to discuss a disputed finding is always allowed.
 
 ## Related skills in this repo
 
