@@ -1,5 +1,6 @@
 'use strict'
 
+const { createSiteUrl } = require('../exporters/common/url')
 const getGitMetadata = require('../git_metadata')
 
 /**
@@ -9,6 +10,8 @@ const getGitMetadata = require('../git_metadata')
 module.exports = function getDebuggerConfig (config, inputPath) {
   const { commitSHA, repositoryUrl } = getGitMetadata(config)
   const agentless = config.DD_AGENTLESS_ENABLED
+  const agentlessUrl = agentless ? createSiteUrl(config.site, 'debugger-intake') : undefined
+  if (agentless && agentlessUrl === undefined) return
 
   return {
     agentless,
@@ -24,7 +27,7 @@ module.exports = function getDebuggerConfig (config, inputPath) {
     repositoryUrl,
     runtimeId: config.tags['runtime-id'],
     service: config.service,
-    url: agentless ? `https://debugger-intake.${config.site}` : config.url.toString(),
+    url: agentless ? agentlessUrl.origin : config.url.toString(),
     version: config.version,
     inputPath,
   }

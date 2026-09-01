@@ -5,6 +5,7 @@ const { channel } = require('dc-polyfill')
 const uuid = require('../../../../vendor/dist/crypto-randomuuid')
 const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
+const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 const { getExtraServices } = require('../service-naming/extra-services')
 const getGitMetadata = require('../git_metadata')
@@ -119,6 +120,11 @@ class RemoteConfig {
         log.error('[RC] DD_API_KEY is required for agentless Remote Config; Remote Config is disabled')
         return
       }
+      const siteUrl = createSiteUrl(config.site)
+      if (siteUrl === undefined) {
+        log.error('[RC] Invalid DD_SITE for agentless Remote Config: %s; Remote Config is disabled', config.site)
+        return
+      }
 
       try {
         this.#fetcher = createAgentlessFetcher({
@@ -131,7 +137,7 @@ class RemoteConfig {
           processTags: processTags.tagsArray,
           language: 'node',
           tracerVersion,
-          url: `https://${config.site}`,
+          url: siteUrl.origin,
           timeoutMs: AGENTLESS_REQUEST_TIMEOUT_MS,
           apiKey: config.DD_API_KEY,
           hostname: config.hostname,

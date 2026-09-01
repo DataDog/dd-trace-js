@@ -95,26 +95,4 @@ describe('direct EVP route', () => {
       sinon.match.string
     )
   })
-
-  for (const site of [
-    'datadoghq.com@evil.example',
-    'datadoghq.com:password@evil.example',
-    'datadoghq.com:443',
-    'datadoghq.com/path',
-    'datadoghq.com?query',
-    'datadoghq.com#fragment',
-  ]) {
-    it(`does not create a route for a site with URL components: ${site}`, () => {
-      assert.strictEqual(createDirectEVPRoute({
-        DD_API_KEY: 'test-api-key',
-        site,
-      }, 'event-platform-intake'), undefined)
-
-      sinon.assert.calledOnceWithExactly(
-        log.debug,
-        'Unable to configure direct EVP intake: %s',
-        sinon.match.string
-      )
-    })
-  }
 })

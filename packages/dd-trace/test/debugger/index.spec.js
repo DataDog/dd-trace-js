@@ -143,6 +143,18 @@ describe('debugger/index', () => {
       assert.strictEqual(workerConfig.url, 'https://debugger-intake.us3.datadoghq.com')
     })
 
+    it('should not start agentless Dynamic Instrumentation for an invalid site', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'datadoghq.com@evil.example'
+
+      DynamicInstrumentation.start(config, rc)
+
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+      sinon.assert.notCalled(Worker)
+      sinon.assert.notCalled(rc.setProductHandler)
+    })
+
     it('should unref all handles to prevent keeping process alive', () => {
       DynamicInstrumentation.start(config, rc)
 
@@ -263,6 +275,19 @@ describe('debugger/index', () => {
         url: 'http://localhost:8126/',
         version: '1.2.3',
       })
+    })
+
+    it('should ignore an invalid agentless site', () => {
+      DynamicInstrumentation.start(config, rc)
+      const configPort = messageChannels[2].port2
+      configPort.postMessage.resetHistory()
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'datadoghq.com@evil.example'
+
+      DynamicInstrumentation.configure(config)
+
+      sinon.assert.notCalled(configPort.postMessage)
     })
   })
 

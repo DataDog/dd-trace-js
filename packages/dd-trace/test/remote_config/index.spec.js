@@ -415,6 +415,28 @@ describe('RemoteConfig', () => {
       await poll()
     })
 
+    it('should stop when the site is invalid', async () => {
+      config.site = 'datadoghq.com@evil.example'
+      RemoteConfigFetcher.resetHistory()
+      setStorage.resetHistory()
+      scheduler.start.resetHistory()
+      log.error.resetHistory()
+
+      rc = new RemoteConfig(config)
+      rc.setProductHandler('LIVE_DEBUGGING', noop)
+
+      sinon.assert.notCalled(RemoteConfigFetcher)
+      sinon.assert.notCalled(setStorage)
+      sinon.assert.notCalled(scheduler.start)
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        '[RC] Invalid DD_SITE for agentless Remote Config: %s; Remote Config is disabled',
+        config.site
+      )
+
+      await poll()
+    })
+
     it('should continue polling after native client failures', async () => {
       const error = new Error('request failed')
       rc.setProductHandler('LIVE_DEBUGGING', noop)
