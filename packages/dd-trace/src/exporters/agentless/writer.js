@@ -7,6 +7,7 @@ const getConfig = require('../../config')
 const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
 
+const { canSendApiKey } = require('../common/url')
 const BaseWriter = require('../common/writer')
 const { AgentEncoder } = require('../../encode/0.4')
 const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
@@ -20,6 +21,7 @@ const legacyStorage = storage('legacy')
  */
 class AgentlessWriter extends BaseWriter {
   #apiKeyMissing = false
+  #apiKeyUnsafeReceiver = false
   #exporter
   #exporterApiKey
   #exporterEnv
@@ -98,7 +100,20 @@ class AgentlessWriter extends BaseWriter {
 
     // The WASM transport performs its HTTP request in JavaScript. Keep that
     // internal request out of the instrumented application's traces.
-    legacyStorage.run({ noop: true }, () => this.#getExporter(DD_API_KEY).sendV04(data, done, log))
+    try {
+      legacyStorage.run({ noop: true }, () => {
+        const exporter = this.#applyConfiguration(DD_API_KEY)
+        if (exporter) {
+          exporter.sendV04(data, done, log)
+        } else {
+          done()
+        }
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error('Failed to send %d trace(s) to the agentless intake: %s', count, message)
+      done()
+    }
   }
 
   /**
@@ -114,9 +129,18 @@ class AgentlessWriter extends BaseWriter {
 
   /**
    * @param {string} apiKey - Datadog API key.
-   * @returns {import('@datadog/libdatadog').AgentlessExporter}
+   * @returns {import('@datadog/libdatadog').AgentlessExporter|undefined}
    */
-  #getExporter (apiKey) {
+  #applyConfiguration (apiKey) {
+    if (!canSendApiKey(this._url.protocol, this._url.hostname)) {
+      if (!this.#apiKeyUnsafeReceiver) {
+        this.#apiKeyUnsafeReceiver = true
+        log.warn('DD_API_KEY will not be sent because the configured receiver is neither HTTPS nor loopback.')
+      }
+      return
+    }
+    this.#apiKeyUnsafeReceiver = false
+
     const { env, runtimeID } = this.#metadata
     if (
       this.#exporter &&

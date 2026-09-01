@@ -37,6 +37,7 @@ describe('AgentlessWriter', () => {
     log = {
       debug: sinon.stub(),
       error: sinon.stub(),
+      warn: sinon.stub(),
     }
     const AgentEncoder = function (...args) {
       encoderArgs = args
@@ -124,6 +125,48 @@ describe('AgentlessWriter', () => {
     done()
     await flush
     assert.strictEqual(flushed, true)
+  })
+
+  it('contains synchronous data-pipeline construction failures', async () => {
+    const error = { toString: () => 'exporter unavailable' }
+    createAgentlessExporter.callsFake(() => { throw error })
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.calledWithExactly(
+      log.error,
+      'Failed to send %d trace(s) to the agentless intake: %s',
+      1,
+      'exporter unavailable'
+    )
+  })
+
+  it('contains synchronous data-pipeline send failures', async () => {
+    exporter.sendV04.throws(new Error('send failed'))
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.calledWithExactly(
+      log.error,
+      'Failed to send %d trace(s) to the agentless intake: %s',
+      1,
+      'send failed'
+    )
+  })
+
+  it('does not give the API key to a non-loopback HTTP receiver', async () => {
+    writer = new AgentlessWriter({ url: new URL('http://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.notCalled(createAgentlessExporter)
+    sinon.assert.notCalled(exporter.sendV04)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'DD_API_KEY will not be sent because the configured receiver is neither HTTPS nor loopback.'
+    )
   })
 
   it('reuses the pipeline exporter while its endpoint and API key are unchanged', async () => {

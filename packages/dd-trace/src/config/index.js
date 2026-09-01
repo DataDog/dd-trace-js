@@ -179,6 +179,19 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
   }
 }
 
+/**
+ * @param {Config} config
+ * @param {ConfigPath} name
+ */
+function clearAndTrack (config, name) {
+  if (get(config, name) === undefined) return
+
+  changeTracker.calculated.add(name)
+  set(config, name, undefined)
+  generateTelemetry(undefined, 'calculated', name)
+  trackedConfigOrigins.set(name, 'calculated')
+}
+
 module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
@@ -407,11 +420,6 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('dogstatsd.hostname')) {
       setAndTrack(this, 'dogstatsd.hostname', agentHostname)
     }
-    // Disable log injection when OTEL logs are enabled
-    // OTEL logs and DD log injection are mutually exclusive
-    if (this.DD_LOGS_OTEL_ENABLED) {
-      setAndTrack(this, 'logInjection', false)
-    }
     if (this.DD_METRICS_OTEL_ENABLED &&
         trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
         this.OTEL_METRICS_EXPORTER === 'none') {
@@ -504,6 +512,14 @@ class Config extends ConfigBase {
           (this.OTEL_TRACES_EXPORTER === 'otlp' && this.experimental.exporter !== 'electron'))) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
+    }
+
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
+      clearAndTrack(this, 'sampleRate')
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
+      setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', false)
     }
 
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
@@ -649,6 +665,8 @@ class Config extends ConfigBase {
 
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
       setAndTrack(this, 'runtimeMetrics.enabled', false)
+      setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
+      setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
       setAndTrack(this, 'dsmEnabled', false)
       setAndTrack(this, 'dynamicInstrumentation.enabled', false)
       setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
@@ -660,8 +678,6 @@ class Config extends ConfigBase {
       }
     }
 
-    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
-      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
     if (agentlessTracingEnabled && !this.isCiVisibility) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
@@ -676,6 +692,12 @@ class Config extends ConfigBase {
       if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
         setAndTrack(this, 'traceId128BitGenerationEnabled', false)
       }
+    }
+
+    // Disable log injection when OTEL logs are enabled
+    // OTEL logs and DD log injection are mutually exclusive
+    if (this.DD_LOGS_OTEL_ENABLED) {
+      setAndTrack(this, 'logInjection', false)
     }
 
     // Apply all fallbacks to the calculated config.

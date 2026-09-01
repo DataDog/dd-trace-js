@@ -10,7 +10,7 @@ const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { isLoopbackHost, parseUrl } = require('./url')
+const { canSendApiKey, parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const {
@@ -54,7 +54,7 @@ function request (data, options, callback) {
   // rather than drop the request: the agent proxies telemetry with its own key, while an https
   // intake URL is required to authenticate agentless traffic.
   const hasApiKey = options.headers['dd-api-key'] !== undefined || options.headers['DD-API-KEY'] !== undefined
-  if (hasApiKey && options.protocol === 'http:' && !isLoopbackHost(options.hostname)) {
+  if (hasApiKey && !canSendApiKey(options.protocol, options.hostname)) {
     log.error(
       'Not sending the Datadog API key over a non-TLS connection to %s. Configure an https intake URL.',
       options.hostname
