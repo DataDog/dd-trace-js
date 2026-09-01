@@ -36,13 +36,17 @@ not a repo checkout.
 Do not skip any part of this **otherwise**. `git diff` alone is wrong — it cannot see untracked files, and new files are usually the most important part of a change.
 
 ```bash
-# 1. Resolve the TARGET: the branch this work will merge INTO. Never @{u} - that
+# 1. Resolve the TARGET: the commit this work will merge INTO. Never @{u} - that
 #    is this same branch on the remote, so once you have pushed, the merge base
 #    is HEAD and the diff comes back empty. Never assume the trunk either: on a
-#    stacked branch the parent is another feature branch.
-PR_JSON=$(gh pr view --json baseRefName,title,labels 2>/dev/null)
-TARGET=$(echo "$PR_JSON" | jq -r '"origin/" + .baseRefName' 2>/dev/null)
-if [ -z "$TARGET" ]; then
+#    stacked branch the parent is another feature branch. Never build "origin/<branch>"
+#    from baseRefName either: on a cross-repo PR, `origin` is the contributor's fork,
+#    not the base repository, so that name can resolve to a stale fork branch or nothing.
+#    baseRefOid is the base repository's actual commit and has no such ambiguity.
+PR_JSON=$(gh pr view --json baseRefOid,baseRefName,title,labels 2>/dev/null)
+TARGET=$(echo "$PR_JSON" | jq -r '.baseRefOid' 2>/dev/null)
+BASE_REF_NAME=$(echo "$PR_JSON" | jq -r '.baseRefName' 2>/dev/null)
+if [ -z "$TARGET" ] || [ "$TARGET" = "null" ]; then
   # No PR yet, or gh failed to resolve one (e.g. a stacked branch with no PR open):
   # do NOT silently fall back to origin/master. Stop and ask the human/agent to
   # confirm the actual merge target before computing any diff or running reviewers.
@@ -57,7 +61,7 @@ PR_LABELS=$(echo "$PR_JSON" | jq -r '[.labels[].name] | join(", ")' 2>/dev/null)
 echo "PR title: ${PR_TITLE:-<none>}"
 echo "PR labels: ${PR_LABELS:-<none>}"
 git log --oneline -5
-echo "reviewing against: $TARGET"      # say this in the report; ask if it looks wrong
+echo "reviewing against: $BASE_REF_NAME ($TARGET)"      # say this in the report; ask if it looks wrong
 
 # 2. Committed delta against the merge base with that target
 git rev-parse --is-shallow-repository   # if true, merge-base may not resolve
@@ -77,7 +81,10 @@ git diff                                # unstaged. If a worktree edit reverses 
 
 # 4. Untracked file contents (no git diff will show these). Untracked file
 #    names come from the working tree and are untrusted input: enumerate them
-#    NUL-safely and never let a name be parsed as an option.
+#    NUL-safely and never let a name be parsed as an option. Scan each file's
+#    content for secrets BEFORE printing it — this is the first point any of
+#    these files reach a transcript, so redacting later (Step 2) is too late:
+#    the raw value would already sit in this context and any retained logs.
 git ls-files --others --exclude-standard -z | while IFS= read -r -d '' f; do
   # `--no-index` exits 1 when it finds a difference, which it always will here -
   # that's success, not an error. Only a higher exit code is a real failure
@@ -90,6 +97,8 @@ git ls-files --others --exclude-standard -z | while IFS= read -r -d '' f; do
   fi
 done
 ```
+
+Do not run the block above blind. Read each untracked file's diff output as it is produced (or read the file directly instead of shelling out) and check it for tokens, API keys, private keys, connection strings, `.env` values, and anything shaped like a long random secret before letting that output stand in your context. If a file looks like a credential, redact the value at first sight — `[REDACTED — see location]`, keeping the `path:line` — and treat the printed diff as already-redacted from that point on. Committed, staged, and unstaged content (steps 2-3) get the same treatment: scan as you read the `git diff` output, not after.
 
 If the repository is shallow or the target upstream is absent, the merge base yields nothing, and on a clean checkout the worktree diffs are empty too — so the committed work becomes invisible and the next step would conclude there is nothing to review. Do not treat the worktree as the whole change set: `git fetch --deepen 50` or `--unshallow`, or ask for the committed diff. If neither is possible, report the committed portion as `NOT VERIFIED (no merge base)` rather than letting the gate pass on a change set it never saw.
 
@@ -133,7 +142,7 @@ As you resolve this roster (checking, for each lens, whether its override file e
 
 Two lenses are the exception: **Codebase conventions** needs to run a repo-defined check-only command (e.g. a formatter's check mode) to verify formatting, and **Cross-SDK consistency** needs `gh` or another read-only network lookup to compare against other SDKs. Neither can do its stated job on `Read`/`Grep`/`Glob` alone. Grant exactly those two reviewers a narrowly scoped, non-mutating `Bash` (or equivalent) restricted to the specific check-only commands their override names — never a general shell — or, if your harness can't scope `Bash` that tightly, have the orchestrator run those specific commands itself in Step 1 and pass the results into the reviewer's prompt instead of granting it a tool. Do not let either lens silently degrade to `NOT VERIFIED` just because the default restriction was applied uniformly: `NOT VERIFIED` never blocks the gate, so an unscoped blanket restriction here quietly removes formatting and cross-SDK verification from every review. If your harness has no per-subagent tool scoping at all, note that as a capability gap in the report rather than silently running reviewers unrestricted.
 
-**Before you hand anything over, scan the diff for secrets.** Step 1 prints the contents of committed, staged, and unstaged changes, so a credential that was accidentally committed or staged is now in your context — and delegating it verbatim would put it in every reviewer's context too, which is exactly what their own rules forbid. Look for tokens, API keys, private keys, connection strings, `.env` values, and anything shaped like a long random secret. Replace each value with `[REDACTED — see location]`, keep the `path:line`, and delegate the redacted diff. Report the leak by location, tell the human immediately, and route it through this repo's disclosure process: a committed credential needs rotating, not just deleting. Never paste the value into the report, a PR, or a reviewer prompt.
+**Before you hand anything over, confirm the diff is free of secrets.** You should already have redacted anything credential-shaped as you read Step 1's output (see the note there — redacting only at delegation time is too late, since the value already sat in your own context first). Treat this as a second pass, not the first: re-check the change set you are about to hand to reviewers for tokens, API keys, private keys, connection strings, `.env` values, and anything shaped like a long random secret, and replace each with `[REDACTED — see location]` (keeping the `path:line`) before delegating. Report any leak by location, tell the human immediately, and route it through this repo's disclosure process: a committed credential needs rotating, not just deleting. Never paste the value into the report, a PR, or a reviewer prompt.
 
 Give every reviewer:
 
