@@ -5,6 +5,7 @@ instruction_files:
   - .agents/skills/dd-apm-sdk-review/SKILL.md
   - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
   - .agents/skills/dd-apm-sdk-review/reviewers/coherence.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/correctness.md
   - .agents/skills/dd-apm-sdk-review/reviewers/security.md
   - .agents/skills/dd-apm-sdk-review/reviewers/design.md
   - .agents/skills/dd-apm-sdk-review/reviewers/performance.md
@@ -25,6 +26,7 @@ presets:
       - js-perf-lens-ungated-publish-001
       - js-perf-pipeline-full-review-002
       - js-coherence-comment-contradicts-code-003
+      - js-correctness-inverted-condition-009
       - js-security-secret-into-log-004
       - js-design-bypasses-config-registration-005
       - js-maintainability-silent-catch-006

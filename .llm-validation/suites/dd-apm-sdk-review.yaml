@@ -39,6 +39,40 @@ cases:
       - Invents a Datadog-internal collection/utility type that doesn't exist in this
         repo's real toolkit (e.g. a fictitious `BoundedMap` helper).
 
+  - id: js-correctness-inverted-condition-009
+    files:
+      - .agents/skills/dd-apm-sdk-review/reviewers/correctness.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
+    input: |
+      Apply this repo's correctness-review criteria (reviewers/correctness.md and _common.md) to
+      the following change. No git checkout available — this snippet is the entire change to
+      review.
+
+      ```js
+      // Skip sampling when the span budget has been exhausted.
+      function shouldSample (spanCount, maxSpans) {
+        return spanCount < maxSpans
+      }
+
+      function onSpanFinish (span, tracer) {
+        if (shouldSample(tracer.spanCount, tracer.maxSpans)) {
+          return
+        }
+        tracer.record(span)
+      }
+      ```
+    expected_criteria:
+      - Flags that `onSpanFinish` records spans once the budget is exhausted and skips
+        recording while under budget — the condition is inverted relative to the comment's
+        stated intent ("skip sampling when the span budget has been exhausted").
+      - Cites the concrete failure case, e.g. spanCount below maxSpans returns early and never
+        calls `tracer.record`, while spanCount at or above maxSpans falls through and records.
+      - Does not comment on architecture, style, or performance — only the logic defect.
+    bad_signals:
+      - Approves the change or treats the inverted condition as a style nit.
+      - Comments on module placement, naming, or allocation cost instead of the logic defect.
+      - Flags the defect without naming a concrete input/state that demonstrates it.
+
   - id: js-perf-pipeline-full-review-002
     files:
       - .agents/skills/dd-apm-sdk-review/SKILL.md

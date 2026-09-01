@@ -21,6 +21,7 @@ const DEPENDENCY_PRODUCT = 'Dependencies'
 const INTERNAL_PATH_PATTERNS = [
   /^\.agents\//,
   /^\.claude\//,
+  /^\.cursor\//,
   /^\.github\//,
   /^\.gitlab(?:-ci\.yml|\/)/,
   /^\.llm-validation\//,
