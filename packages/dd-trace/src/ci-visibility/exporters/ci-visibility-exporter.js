@@ -157,32 +157,34 @@ const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 const MAX_COVERAGE_REPORT_FLAGS = 32
 
+/**
+ * @param {string} tags
+ * @param {string} key
+ * @param {string | undefined} value
+ */
 function appendLogTag (tags, key, value) {
-  if (value !== undefined) {
-    tags.push(`${key}:${value}`)
-  }
+  if (value === undefined) return tags
+
+  const tag = `${key}:${value}`
+  return tags ? `${tags},${tag}` : tag
 }
 
 function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSha) {
-  const tags = []
+  let tags = ''
   if (Array.isArray(logMessage.ddtags)) {
-    for (const tag of logMessage.ddtags) {
-      tags.push(tag)
-    }
+    tags = logMessage.ddtags.join(',')
   } else if (logMessage.ddtags) {
-    for (const tag of logMessage.ddtags.split(',')) {
-      tags.push(tag)
-    }
+    tags = logMessage.ddtags
   }
 
-  appendLogTag(tags, 'env', env)
-  appendLogTag(tags, 'version', version)
-  appendLogTag(tags, 'debugger_version', tracerVersion)
-  appendLogTag(tags, 'host_name', hostname)
-  appendLogTag(tags, GIT_COMMIT_SHA, gitCommitSha)
-  appendLogTag(tags, GIT_REPOSITORY_URL, gitRepositoryUrl)
+  tags = appendLogTag(tags, 'env', env)
+  tags = appendLogTag(tags, 'version', version)
+  tags = appendLogTag(tags, 'debugger_version', tracerVersion)
+  tags = appendLogTag(tags, 'host_name', hostname)
+  tags = appendLogTag(tags, GIT_COMMIT_SHA, gitCommitSha)
+  tags = appendLogTag(tags, GIT_REPOSITORY_URL, gitRepositoryUrl)
 
-  return tags.join(',')
+  return tags
 }
 
 class CiVisibilityExporter extends BufferingExporter {
