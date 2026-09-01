@@ -13,6 +13,7 @@ const gc = globalThis.gc ?? vm.runInNewContext('gc')
 v8.setFlagsFromString('--no-expose-gc')
 
 const DdTelemetryPlugin = require('../../../../src/llmobs/plugins/ai/ddTelemetry')
+const { NAME } = require('../../../../src/llmobs/constants/tags')
 
 const toolCreationCh = channel('tracing:orchestrion:ai:tool:start')
 
@@ -114,7 +115,6 @@ describe('AI LLMObs ddTelemetry plugin', () => {
     }
     plugin._tagger = tagger
 
-    const nameTag = '_ml_obs.name'
     const formatToolCall = (i) => {
       const description = `description-${i}`
       toolCreationCh.publish({
@@ -138,10 +138,10 @@ describe('AI LLMObs ddTelemetry plugin', () => {
 
     const recentSpan = { tags: {} }
     plugin.setToolTags(recentSpan, { 'ai.toolCall.id': `call-${DdTelemetryPlugin.TOOL_CALL_NAME_CACHE_MAX}` })
-    assert.equal(recentSpan.tags[nameTag], `tool-${DdTelemetryPlugin.TOOL_CALL_NAME_CACHE_MAX}`)
+    assert.equal(recentSpan.tags[NAME], `tool-${DdTelemetryPlugin.TOOL_CALL_NAME_CACHE_MAX}`)
 
     const evictedSpan = { tags: {} }
     plugin.setToolTags(evictedSpan, { 'ai.toolCall.id': 'call-0' })
-    assert.equal(evictedSpan.tags[nameTag], undefined)
+    assert.equal(evictedSpan.tags[NAME], undefined)
   })
 })
