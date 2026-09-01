@@ -6,6 +6,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
+
 describe('AppSec Lambda handler', () => {
   let lambda
   let waf
@@ -14,9 +16,10 @@ describe('AppSec Lambda handler', () => {
   let log
   let addresses
 
-  const fakeSpan = () => {
+  const fakeSpan = (sampling) => {
     const tags = {}
     const spanContext = {
+      _sampling: sampling,
       getTag (key) { return tags[key] },
     }
     return {
@@ -393,6 +396,34 @@ describe('AppSec Lambda handler', () => {
       const other = invoke(fakeSpan(), { statusCode: '201' })
 
       assert.deepStrictEqual(other[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+    })
+
+    it('should not sample when the trace is rejected', () => {
+      const persistent = invoke(fakeSpan({ priority: AUTO_REJECT }))
+
+      assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
+      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+    })
+
+    it('should not sample when the trace is rejected by the user', () => {
+      const persistent = invoke(fakeSpan({ priority: USER_REJECT }))
+
+      assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+    })
+
+    it('should not report missing_route for a rejected trace without route', () => {
+      invoke(fakeSpan({ priority: AUTO_REJECT }), { route: undefined })
+
+      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+    })
+
+    it('should leave the TTL slot free after a rejected trace', () => {
+      invoke(fakeSpan({ priority: AUTO_REJECT }))
+      const kept = invoke(fakeSpan())
+
+      assert.deepStrictEqual(kept[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
     })
 
     it('should report missing_route when the event carried no route', () => {
