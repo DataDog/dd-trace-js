@@ -124,10 +124,8 @@ class PromptAPIError extends Error {
 
 function normalizeItem (item) {
   if (!isPlainObject(item)) return item
-  const normalized = { ...item }
-  if (normalized.id === undefined && normalized.ID !== undefined) normalized.id = normalized.ID
-  normalized.ID = undefined
-  normalized.labels = undefined
+  const { ID, labels, ...normalized } = item
+  if (normalized.id === undefined && ID !== undefined) normalized.id = ID
   return normalized
 }
 

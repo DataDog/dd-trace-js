@@ -556,7 +556,7 @@ describe('PromptManager', () => {
     })
   })
 
-  it('handles empty and invalid successful bodies and suppresses deprecated backend fields', async () => {
+  it('handles empty and invalid successful bodies and omits deprecated backend fields', async () => {
     const manager = new PromptManager(makeConfig(), () => provider)
     fetchStub.onFirstCall().resolves(response(204))
     fetchStub.onSecondCall().resolves(response(200, 'not json{'))
@@ -568,8 +568,8 @@ describe('PromptManager', () => {
     assert.deepStrictEqual(await manager.deletePrompt('p'), {})
     await assert.rejects(manager.listPrompts(), { name: 'PromptServerError', status: 200 })
     assert.deepStrictEqual(await manager.listPrompts(), [
-      { id: 'one', prompt_id: 'p1', ID: undefined, labels: undefined },
-      { id: 'two', prompt_id: 'p2', ID: undefined, labels: undefined },
+      { id: 'one', prompt_id: 'p1' },
+      { id: 'two', prompt_id: 'p2' },
     ])
   })
 
