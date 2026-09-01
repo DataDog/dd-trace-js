@@ -66,6 +66,16 @@ describe('exporter', () => {
     assert.strictEqual(require('../src/exporter').requiresLambdaLogExporter(), true)
   })
 
+  it('should require the Lambda log transport when configured OTLP endpoints are empty', () => {
+    for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env[key] = ''
+
+      assert.strictEqual(require('../src/exporter').requiresLambdaLogExporter(), true, key)
+      delete process.env[key]
+    }
+  })
+
   it('should yield to either explicitly configured OTLP endpoint in Lambda', () => {
     // `createOtlpTraceExporter` reads the trace-specific one, so both have to count.
     for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {

@@ -66,8 +66,8 @@ function requiresLambdaLogExporter () {
 
   // `createOtlpTraceExporter` reads the trace-specific endpoint and `Config` fills in a default
   // for it, so only the environment shows whether the caller chose one.
-  return getEnvironmentVariable('OTEL_EXPORTER_OTLP_ENDPOINT') === undefined &&
-    getEnvironmentVariable('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT') === undefined
+  return !getEnvironmentVariable('OTEL_EXPORTER_OTLP_ENDPOINT') &&
+    !getEnvironmentVariable('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT')
 }
 
 module.exports.usesLambdaLogExporter = usesLambdaLogExporter
