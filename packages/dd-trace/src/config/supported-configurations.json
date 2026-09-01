@@ -1368,7 +1368,7 @@
         "default": null
       }
     ],
-    "DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS": [
+    "DD_LLMOBS_PROMPTS_CACHE_TTL": [
       {
         "implementation": "A",
         "type": "decimal",

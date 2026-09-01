@@ -39,7 +39,7 @@ function makeConfig (overrides = {}) {
     DD_API_KEY: 'api-key',
     DD_APP_KEY: 'app-key',
     DD_LLMOBS_PROMPTS_CACHE_DIR: undefined,
-    DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 60,
+    DD_LLMOBS_PROMPTS_CACHE_TTL: 60,
     DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: false,
     DD_LLMOBS_PROMPTS_TIMEOUT: 5,
     env: undefined,
@@ -66,7 +66,7 @@ describe('PromptManager', () => {
 
   it('normalizes decimal durations to integer milliseconds', () => {
     const manager = new PromptManager(makeConfig({
-      DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 12.3456,
+      DD_LLMOBS_PROMPTS_CACHE_TTL: 12.3456,
       DD_LLMOBS_PROMPTS_TIMEOUT: 2.3456,
     }), () => provider)
 
@@ -84,7 +84,7 @@ describe('PromptManager', () => {
       prompt_version_uuid: undefined,
       ID: 'backend-version-id',
     })))
-    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 0 }), () => provider)
+    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
 
     const latest = await manager.getPrompt('greeting')
     const exact = await manager.getPrompt('a/b', {
@@ -158,7 +158,7 @@ describe('PromptManager', () => {
       if (outcome instanceof Error) provider.resolveObjectEvaluation.rejects(outcome)
       else provider.resolveObjectEvaluation.resolves(outcome)
       fetchStub.resolves(response(200, promptResponse()))
-      const manager = new PromptManager(makeConfig({ env: 'production', DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 0 }),
+      const manager = new PromptManager(makeConfig({ env: 'production', DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }),
         () => provider)
 
       const prompt = await manager.getPrompt('greeting')
@@ -172,7 +172,7 @@ describe('PromptManager', () => {
   it('sends the JSON:API resolve body and omits absent targeting fields', async () => {
     fetchStub.onFirstCall().resolves(response(200, promptResponse()))
     fetchStub.onSecondCall().resolves(response(200, promptResponse()))
-    const manager = new PromptManager(makeConfig({ env: 'production', DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 0 }),
+    const manager = new PromptManager(makeConfig({ env: 'production', DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }),
       () => provider)
 
     await manager.getPrompt('greeting', { targetingKey: 'user-1', attributes: { tier: 'gold' } })
@@ -204,7 +204,7 @@ describe('PromptManager', () => {
 
   it('rejects with the fetch reason when no fallback is provided', async () => {
     fetchStub.resolves(response(404, { detail: 'missing' }))
-    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 0 }), () => provider)
+    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
 
     await assert.rejects(manager.getPrompt('greeting'), {
       message: "Prompt 'greeting' could not be fetched and no fallback was provided: missing",
@@ -224,7 +224,7 @@ describe('PromptManager', () => {
 
   it('disables hot and warm caching when TTL is zero', async () => {
     fetchStub.resolves(response(200, promptResponse()))
-    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 0 }), () => provider)
+    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
 
     await manager.getPrompt('greeting')
     await manager.getPrompt('greeting')
@@ -535,7 +535,7 @@ describe('PromptManager', () => {
     const timeout = sinon.stub(AbortSignal, 'timeout').returns(new AbortController().signal)
     fetchStub.onFirstCall().resolves(response(404, { detail: 'missing' }))
     fetchStub.onSecondCall().resolves(response(500, { detail: 'boom' }))
-    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: 0 }), () => provider)
+    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
 
     const fallback = await manager.getPrompt('greeting', { fallback: 'local' })
     await assert.rejects(manager.listPrompts(), { name: 'PromptServerError' })

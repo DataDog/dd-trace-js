@@ -41,7 +41,7 @@ describe('sdk prompts', () => {
     const config = getConfigFresh({})
     config.DD_API_KEY = 'api-key'
     config.DD_LLMOBS_PROMPTS_CACHE_DIR = cacheDir
-    config.DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS = 60
+    config.DD_LLMOBS_PROMPTS_CACHE_TTL = 60
     const cache = new WarmCache({
       cacheDir,
       ttlMs: 60_000,
