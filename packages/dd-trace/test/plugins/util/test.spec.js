@@ -404,11 +404,13 @@ describe('getTestSessionName', () => {
   let originalEnv
 
   function getTestSessionNameWithMajor (ddMajor) {
-    const lage = proxyquire.noPreserveCache()('../../../src/ci-visibility/lage', {
+    const loadLage = proxyquire.noPreserveCache()
+    const lage = loadLage('../../../src/ci-visibility/lage', {
       '../../../../version': { DD_MAJOR: ddMajor },
     })
 
-    return proxyquire.noPreserveCache()('../../../src/plugins/util/test', {
+    const loadTest = proxyquire.noPreserveCache()
+    return loadTest('../../../src/plugins/util/test', {
       '../../ci-visibility/lage': lage,
     }).getTestSessionName
   }
@@ -782,7 +784,8 @@ describe('attempt to fix summary', () => {
 describe('test management summary', () => {
   it('does not read report configuration for unmanaged tests', () => {
     const getValueFromEnvSources = sinon.stub()
-    const { recordTestManagementExecution: recordExecution } = proxyquire.noPreserveCache()(
+    const loadTest = proxyquire.noPreserveCache()
+    const { recordTestManagementExecution: recordExecution } = loadTest(
       '../../../src/plugins/util/test',
       {
         '../../config/helper': {

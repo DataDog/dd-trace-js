@@ -8,6 +8,8 @@ const { keepTrace } = require('../../priority_sampler')
 const { ASM } = require('../../standalone/product')
 const { isBlocked } = require('../blocking')
 
+/** @typedef {import('../../opentracing/span')} DatadogSpan */
+
 const MAX_SIZE = 4096
 
 const SamplingDecision = Object.freeze({
@@ -44,6 +46,53 @@ function disable () {
 }
 
 /**
+ * @param {DatadogSpan} rootSpan Span the sampling decision is attached to
+ * @param {object} request
+ * @param {string} request.method
+ * @param {number|string} request.statusCode
+ * @param {string|null} request.route Tri-state: a route string, an empty string (still a valid
+ *   route — dd-trace-js represents the express root path '/' as an empty path segment), or
+ *   `null` meaning no route information at all.
+ * @param {boolean} [request.blocked] Whether the response was blocked by ASM
+ * @param {boolean} record When true and the decision is SAMPLE, records the endpoint in the TTL cache
+ * @returns {'sample' | 'missing_route' | 'skip'}
+ */
+function sampleRootSpanRequest (rootSpan, request, record = false) {
+  if (!enabled) return SamplingDecision.SKIP
+
+  if (!rootSpan) return SamplingDecision.SKIP
+
+  if (isRejected(rootSpan)) return SamplingDecision.SKIP
+
+  const { method, statusCode, route, blocked = false } = request ?? {}
+
+  if (!method || !statusCode) {
+    log.warn('[ASM] Unsupported groupkey for API security')
+    return SamplingDecision.SKIP
+  }
+
+  if (isRoutelessRecord(route, record)) {
+    if (isNotFound(statusCode) || blocked) return SamplingDecision.SKIP
+    return SamplingDecision.MISSING_ROUTE
+  }
+
+  const key = buildSamplingKey(method, route, statusCode)
+  if (sampledRequests.has(key)) return SamplingDecision.SKIP
+
+  if (asmStandaloneEnabled) {
+    keepTrace(rootSpan, ASM)
+  }
+
+  if (record) {
+    sampledRequests.set(key, undefined)
+  }
+
+  return SamplingDecision.SAMPLE
+}
+
+/**
+ * Node HTTP adapter over {@link sampleRootSpanRequest}.
+ *
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
  * @param {boolean} record When true and the decision is SAMPLE, records the endpoint in the TTL cache
@@ -55,66 +104,54 @@ function sampleRequest (req, res, record = false) {
   const rootSpan = web.root(req)
   if (!rootSpan) return SamplingDecision.SKIP
 
-  if (!asmStandaloneEnabled) {
-    let priority = getSpanPriority(rootSpan)
-    if (!priority) {
-      rootSpan._prioritySampler?.sample(rootSpan)
-      priority = getSpanPriority(rootSpan)
-    }
+  if (isRejected(rootSpan)) return SamplingDecision.SKIP
 
-    if (priority === AUTO_REJECT || priority === USER_REJECT) {
-      return SamplingDecision.SKIP
-    }
-  }
+  const statusCode = res.statusCode
+  const route = getRouteOrEndpoint(web.getContext(req), statusCode)
 
-  const resolved = resolveSamplingKey(req, res)
-  if (!resolved) return SamplingDecision.SKIP
-
-  if (record && resolved.route === null) {
-    if (resolved.status === 404 || isBlocked(res)) return SamplingDecision.SKIP
-    return SamplingDecision.MISSING_ROUTE
-  }
-
-  if (sampledRequests.has(resolved.key)) return SamplingDecision.SKIP
-
-  if (asmStandaloneEnabled) {
-    keepTrace(rootSpan, ASM)
-  }
-
-  if (record) {
-    sampledRequests.set(resolved.key, undefined)
-  }
-
-  return SamplingDecision.SAMPLE
+  return sampleRootSpanRequest(rootSpan, {
+    method: req.method,
+    statusCode,
+    route,
+    blocked: isRoutelessRecord(route, record) && !isNotFound(statusCode) ? isBlocked(res) : false,
+  }, record)
 }
 
 /**
- * @param {import('http').IncomingMessage} req
- * @param {import('http').ServerResponse} res
- * @returns {boolean} Whether this request's endpoint is currently recorded in the TTL cache.
+ * Whether this is a request with no route information
+ *
+ * @param {string|null} route
+ * @param {boolean} record
+ * @returns {boolean}
  */
-function wasSampled (req, res) {
-  const resolved = resolveSamplingKey(req, res)
-  return resolved !== null && sampledRequests.has(resolved.key)
+function isRoutelessRecord (route, record) {
+  return record && route === null
 }
 
-function resolveSamplingKey (req, res) {
-  const method = req.method
-  const status = res.statusCode
-
-  if (!method || !status) {
-    log.warn('[ASM] Unsupported groupkey for API security')
-    return null
-  }
-
-  const context = web.getContext(req)
-  const route = getRouteOrEndpoint(context, status)
-
-  // route === null signals "no route information at all". An empty string is still a valid
-  // route (dd-trace-js represents the express root path '/' as an empty path segment).
-  return { method, status, route, key: method + (route ?? '') + status }
+/**
+ * @param {number|string} statusCode
+ * @returns {boolean}
+ */
+function isNotFound (statusCode) {
+  return Number(statusCode) === 404
 }
 
+/**
+ * @param {string} method
+ * @param {string|null} route A route string, an empty string (still a valid route), or `null`
+ * @param {number|string} statusCode
+ * @returns {string}
+ */
+function buildSamplingKey (method, route, statusCode) {
+  return method + (route ?? '') + statusCode
+}
+
+/**
+ * @param {{ paths?: string[], span?: object }} [context] Web context of the request
+ * @param {number|string} statusCode
+ * @returns {string|null} A route string, an empty string (still a valid route), or `null` when no
+ *   route information is available.
+ */
 function getRouteOrEndpoint (context, statusCode) {
   // The router plugin populates `context.paths` whenever the framework matched something.
   // For express's root '/' route the matched path is normalized to '' (see datadog-plugin-router),
@@ -125,7 +162,7 @@ function getRouteOrEndpoint (context, statusCode) {
     return paths.join('')
   }
 
-  if (statusCode === 404) return null
+  if (isNotFound(statusCode)) return null
 
   const endpoint = context?.span?.context()?.getTag?.('http.endpoint')
   if (endpoint) return endpoint
@@ -133,15 +170,38 @@ function getRouteOrEndpoint (context, statusCode) {
   return null
 }
 
+/**
+ * Whether the span's trace is dropped, forcing the sampling decision if none was made yet.
+ *
+ * Always false under ASM standalone: there the trace is kept via `keepTrace(rootSpan, ASM)`
+ * regardless of the APM sampling decision.
+ *
+ * @param {DatadogSpan} rootSpan
+ * @returns {boolean}
+ */
+function isRejected (rootSpan) {
+  if (asmStandaloneEnabled) return false
+
+  let priority = getSpanPriority(rootSpan)
+  if (priority == null) {
+    rootSpan._prioritySampler?.sample(rootSpan)
+    priority = getSpanPriority(rootSpan)
+  }
+
+  return priority === AUTO_REJECT || priority === USER_REJECT
+}
+
 function getSpanPriority (span) {
   const spanContext = span.context?.()
-  return spanContext._sampling?.priority
+  const priority = spanContext?._sampling?.priority
+
+  return priority == null ? priority : Number(priority)
 }
 
 module.exports = {
   configure,
   disable,
   sampleRequest,
-  wasSampled,
+  sampleRootSpanRequest,
   SamplingDecision,
 }

@@ -29,7 +29,13 @@ const log = {
       const stack = logRecord.stack.split('\n')
       const fn = stack[1].replace(/^\s+at ([^\s]+) .+/, '$1')
       const options = { depth: 2, breakLength: Infinity, compact: true, maxArrayLength: Infinity }
-      const params = args.map(a => inspect(a, options)).join(', ')
+      let params = ''
+      let isFirstParameter = true
+      for (const argument of args) {
+        if (!isFirstParameter) params += ', '
+        params += inspect(argument, options)
+        isFirstParameter = false
+      }
 
       stack[0] = `Trace: ${fn}(${params})`
 

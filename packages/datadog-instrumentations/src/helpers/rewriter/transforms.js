@@ -10,7 +10,8 @@
 
 const assert = require('node:assert')
 
-const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const createRfdc = require('../../../../../vendor/dist/rfdc')
+const clone = createRfdc({ proto: false, circles: false })
 
 const { parse, query } = require('./compiler')
 

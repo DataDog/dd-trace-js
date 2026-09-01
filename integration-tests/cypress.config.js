@@ -15,7 +15,8 @@ module.exports = defineConfig({
       : { testIsolation: process.env.CYPRESS_TEST_ISOLATION !== 'false' }),
     setupNodeEvents (on, config) {
       if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {
-        require('cypress-fail-fast/plugin')(on, config)
+        const createPlugin = require('cypress-fail-fast/plugin')
+        createPlugin(on, config)
       }
       if (process.env.CYPRESS_ENABLE_AFTER_RUN_CUSTOM) {
         const ddAfterRun = require('dd-trace/ci/cypress/after-run')
@@ -58,7 +59,8 @@ module.exports = defineConfig({
         return ddTracePlugin(wrappedOn, config)
       }
       if (process.env.CYPRESS_ENABLE_MANUAL_PLUGIN) {
-        return require('dd-trace/ci/cypress/plugin')(on, config)
+        const createPlugin = require('dd-trace/ci/cypress/plugin')
+        return createPlugin(on, config)
       }
     },
     specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',

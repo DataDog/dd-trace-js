@@ -487,7 +487,8 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', conf))
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('test-config', conf))
 
         sinon.assert.calledWith(config.setRemoteConfig, conf)
         sinon.assert.calledWith(tracer.configure, config)
@@ -500,7 +501,8 @@ describe('TracerProxy', () => {
         })
         proxy.init()
 
-        handlers.get('APM_TRACING')(createApmTracingTransaction('debugger-disabled', {
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('debugger-disabled', {
           dynamic_instrumentation_enabled: false,
         }))
 
@@ -516,7 +518,8 @@ describe('TracerProxy', () => {
         })
         proxy.init()
 
-        handlers.get('APM_TRACING')(createApmTracingTransaction('debugger-enabled', {
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('debugger-enabled', {
           dynamic_instrumentation_enabled: true,
         }))
 
@@ -531,7 +534,8 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        handlers.get('AGENT_CONFIG')('apply', {
+        const handleAgentConfig = handlers.get('AGENT_CONFIG')
+        handleAgentConfig('apply', {
           config: {
             log_level: logLevel,
           },
@@ -551,7 +555,8 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        handlers.get('AGENT_TASK')('apply', {
+        const handleAgentTask = handlers.get('AGENT_TASK')
+        handleAgentTask('apply', {
           args: task,
           task_type: 'tracer_flare',
           uuid: 'd53fc8a4-8820-47a2-aa7d-d565582feb81',
@@ -571,8 +576,9 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        handlers.get('AGENT_CONFIG')('apply', conf)
-        handlers.get('AGENT_CONFIG')('unapply', conf)
+        const handleAgentConfig = handlers.get('AGENT_CONFIG')
+        handleAgentConfig('apply', conf)
+        handleAgentConfig('unapply', conf)
 
         sinon.assert.called(flare.disable)
       })
@@ -606,7 +612,8 @@ describe('TracerProxy', () => {
         proxy.openfeature // Trigger lazy loading
 
         const flagConfig = { flags: { 'test-flag': {} } }
-        handlers.get('FFE_FLAGS')('apply', flagConfig)
+        const handleFfeFlags = handlers.get('FFE_FLAGS')
+        handleFfeFlags('apply', flagConfig)
 
         sinon.assert.calledWith(openfeatureProvider.setConfiguration, flagConfig)
       })
@@ -619,7 +626,8 @@ describe('TracerProxy', () => {
         proxy.init()
 
         const flagConfig = { flags: { 'test-flag': {} } }
-        handlers.get('FFE_FLAGS')('apply', flagConfig)
+        const handleFfeFlags = handlers.get('FFE_FLAGS')
+        handleFfeFlags('apply', flagConfig)
 
         sinon.assert.notCalled(DatadogTracer)
         sinon.assert.calledOnce(OpenFeatureProvider)
@@ -645,7 +653,8 @@ describe('TracerProxy', () => {
         proxy.openfeature // Trigger lazy loading
 
         const flagConfig = { flags: { 'modified-flag': {} } }
-        handlers.get('FFE_FLAGS')('modify', flagConfig)
+        const handleFfeFlags = handlers.get('FFE_FLAGS')
+        handleFfeFlags('modify', flagConfig)
 
         sinon.assert.calledWith(openfeatureProvider.setConfiguration, flagConfig)
       })
@@ -657,10 +666,12 @@ describe('TracerProxy', () => {
         proxy.init()
         const boundProvider = proxy.openfeature
 
-        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: true }, 'modify'))
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: true }, 'modify'))
 
         const flagConfig = { flags: { 'test-flag': {} } }
-        handlers.get('FFE_FLAGS')('apply', flagConfig)
+        const handleFfeFlags = handlers.get('FFE_FLAGS')
+        handleFfeFlags('apply', flagConfig)
 
         sinon.assert.calledOnce(OpenFeatureProvider)
         assert.strictEqual(proxy.openfeature, boundProvider)
@@ -678,8 +689,9 @@ describe('TracerProxy', () => {
         proxy.init()
 
         const provider = proxy.openfeature
-        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-disable', { DD_TRACE_ENABLED: false }))
-        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('ffe-disable', { DD_TRACE_ENABLED: false }))
+        handleApmTracing(createApmTracingTransaction('ffe-enable', { DD_TRACE_ENABLED: true }, 'modify'))
 
         assert.strictEqual(proxy.openfeature, provider)
         sinon.assert.calledOnce(OpenFeatureProvider)
@@ -696,8 +708,9 @@ describe('TracerProxy', () => {
         proxy.init()
         const sdk = proxy.aiguard
 
-        handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: false }))
-        handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: false }))
+        handleApmTracing(createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: true }, 'modify'))
 
         assert.strictEqual(proxy.aiguard, sdk)
         sinon.assert.calledOnce(AIGuardSdk)
@@ -723,12 +736,13 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(iast.enable)
 
         let conf = { DD_TRACE_ENABLED: false }
-        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf))
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('test-config-1', conf))
         sinon.assert.notCalled(appsec.disable)
         sinon.assert.notCalled(iast.disable)
 
         conf = { DD_TRACE_ENABLED: true }
-        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf, 'modify'))
+        handleApmTracing(createApmTracingTransaction('test-config-1', conf, 'modify'))
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(AppsecSdk)
         sinon.assert.notCalled(appsec.enable)
@@ -759,12 +773,13 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
         let conf = { DD_TRACE_ENABLED: false }
-        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf))
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('test-config-2', conf))
         sinon.assert.called(appsec.disable)
         sinon.assert.called(iast.disable)
 
         conf = { DD_TRACE_ENABLED: true }
-        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf, 'modify'))
+        handleApmTracing(createApmTracingTransaction('test-config-2', conf, 'modify'))
         sinon.assert.calledTwice(appsec.enable)
         sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
         sinon.assert.calledTwice(iast.enable)
@@ -1534,8 +1549,10 @@ describe('TracerProxy', () => {
     beforeEach(async () => {
       // Real (not proxied) config/remote_config/dogstatsd modules, so this test proves the
       // actual production wiring — not that mocks were called correctly.
-      RealConfig = proxyquire.noPreserveCache()('../src/config', {})
-      RealRemoteConfig = proxyquire.noPreserveCache()('../src/remote_config', {})
+      const loadConfig = proxyquire.noPreserveCache()
+      RealConfig = loadConfig('../src/config', {})
+      const loadRemoteConfig = proxyquire.noPreserveCache()
+      RealRemoteConfig = loadRemoteConfig('../src/remote_config', {})
 
       udp4Send = sinon.spy()
       const udp4 = { send: udp4Send, on: sinon.stub(), unref: sinon.stub() }
@@ -1543,7 +1560,8 @@ describe('TracerProxy', () => {
       udp4.unref.returns(udp4)
       const dgram = { createSocket: sinon.stub().returns(udp4) }
       const dns = { lookup: sinon.stub().callsFake((hostname, callback) => callback(null, hostname, 4)) }
-      const RealCustomMetrics = proxyquire.noPreserveCache()('../src/dogstatsd', { dgram }).CustomMetrics
+      const loadCustomMetrics = proxyquire.noPreserveCache()
+      const RealCustomMetrics = loadCustomMetrics('../src/dogstatsd', { dgram }).CustomMetrics
 
       storeConfig = sinon.stub().callsFake(metadataConfig => {
         storedRuntimeId = metadataConfig.tags['runtime-id']
