@@ -769,8 +769,10 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_PROJECT_NAME: string | undefined;
   DD_LLMOBS_PROMPTS_CACHE_DIR: string | undefined;
   DD_LLMOBS_PROMPTS_CACHE_TTL: number;
+  DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: number;
   DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: boolean;
   DD_LLMOBS_PROMPTS_TIMEOUT: number;
+  DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS: number;
   DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;

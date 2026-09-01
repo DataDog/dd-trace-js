@@ -3891,10 +3891,10 @@ describe('Config', () => {
 
   context('LLMObs prompts', () => {
     it('parses prompt cache and timeout environment values in seconds', () => {
-      process.env.DD_LLMOBS_PROMPTS_CACHE_TTL = '12.5'
+      process.env.DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS = '12.5'
       process.env.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED = 'true'
       process.env.DD_LLMOBS_PROMPTS_CACHE_DIR = '/tmp/prompts'
-      process.env.DD_LLMOBS_PROMPTS_TIMEOUT = '2.5'
+      process.env.DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS = '2.5'
 
       const config = getConfig()
 

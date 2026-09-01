@@ -1372,7 +1372,10 @@
       {
         "implementation": "A",
         "type": "decimal",
-        "default": "60"
+        "default": "60",
+        "aliases": [
+          "DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS"
+        ]
       }
     ],
     "DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED": [
@@ -1386,7 +1389,10 @@
       {
         "implementation": "A",
         "type": "decimal",
-        "default": "5.0"
+        "default": "5.0",
+        "aliases": [
+          "DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS"
+        ]
       }
     ],
     "DD_LLMOBS_SAMPLE_RATE": [
