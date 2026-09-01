@@ -105,7 +105,10 @@ describe('AgentlessExporter', () => {
 
       Exporter = proxyquire('../../../src/exporters/agentless', {
         './writer': Writer,
-        '../common/docker': { entityId: 'container-id' },
+        '../common/docker': {
+          containerId: 'container-id',
+          entityId: 'ci-container-id',
+        },
       })
 
       exporter = new Exporter({
@@ -121,6 +124,30 @@ describe('AgentlessExporter', () => {
         languageName: 'nodejs',
         containerID: 'container-id',
       })
+    })
+
+    it('should omit container metadata when only an entity ID is available', () => {
+      const writerOptions = {}
+      /** @param {object} options */
+      const Writer = function (options) {
+        Object.assign(writerOptions, options)
+        return writer
+      }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+        '../common/docker': {
+          containerId: undefined,
+          entityId: 'in-1234',
+        },
+      })
+
+      exporter = new Exporter({
+        site: 'datadoghq.com',
+        tags: { 'runtime-id': 'test-uuid' },
+      })
+
+      assert.strictEqual(Object.hasOwn(writerOptions.metadata, 'containerID'), false)
     })
 
     it('should reflect a runtime id updated on config after construction', () => {
