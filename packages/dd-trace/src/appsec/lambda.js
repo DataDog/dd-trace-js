@@ -116,13 +116,15 @@ function onLambdaEndInvocation (data) {
       persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS] = filteredHeaders
     }
 
-    const samplingDecision = apiSecurity.sampleRootSpanRequest(span, {
-      method,
-      statusCode,
-      route: route ?? null,
-      // The tracer does not block in Lambda yet, so a response is never a blocked one.
-      blocked: false,
-    }, true)
+    const samplingDecision = statusCode
+      ? apiSecurity.sampleRootSpanRequest(span, {
+        method,
+        statusCode,
+        route: route ?? null,
+        // The tracer does not block in Lambda yet, so a response is never a blocked one.
+        blocked: false,
+      }, true)
+      : apiSecurity.SamplingDecision.SKIP
 
     if (samplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
       persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
