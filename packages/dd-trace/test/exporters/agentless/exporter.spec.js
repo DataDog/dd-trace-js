@@ -105,6 +105,7 @@ describe('AgentlessExporter', () => {
 
       Exporter = proxyquire('../../../src/exporters/agentless', {
         './writer': Writer,
+        '../common/docker': { entityId: 'container-id' },
       })
 
       exporter = new Exporter({
@@ -118,7 +119,56 @@ describe('AgentlessExporter', () => {
         env: 'production',
         runtimeID: 'test-uuid',
         languageName: 'nodejs',
+        containerID: 'container-id',
       })
+    })
+
+    it('should reflect a runtime id updated on config after construction', () => {
+      const writerOptions = {}
+      const Writer = function (opts) {
+        Object.assign(writerOptions, opts)
+        return writer
+      }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+      })
+
+      const config = {
+        site: 'datadoghq.com',
+        env: 'production',
+        tags: { 'runtime-id': 'test-uuid' },
+      }
+
+      exporter = new Exporter(config)
+
+      config.tags['runtime-id'] = 'new-uuid'
+
+      assert.strictEqual(writerOptions.metadata.runtimeID, 'new-uuid')
+    })
+
+    it('should reflect an env updated on config after construction', () => {
+      const writerOptions = {}
+      const Writer = function (opts) {
+        Object.assign(writerOptions, opts)
+        return writer
+      }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+      })
+
+      const config = {
+        site: 'datadoghq.com',
+        env: 'production',
+        tags: { 'runtime-id': 'test-uuid' },
+      }
+
+      exporter = new Exporter(config)
+
+      config.env = 'staging'
+
+      assert.strictEqual(writerOptions.metadata.env, 'staging')
     })
   })
 

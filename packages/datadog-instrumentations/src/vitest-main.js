@@ -1207,7 +1207,6 @@ function getFinishWrapper (exitOrClose) {
       status: runError ? 'fail' : (areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state)),
       testCodeCoverageLinesTotal,
       error,
-      isTestSessionFinalizationError: Boolean(runError),
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,

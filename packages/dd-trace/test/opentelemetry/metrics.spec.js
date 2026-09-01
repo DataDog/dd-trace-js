@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('assert')
-const { EventEmitter } = require('node:events')
 const http = require('http')
 const { format, inspect } = require('util')
 
@@ -9,14 +8,16 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { metrics } = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
 const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
-const OtlpHttpMetricExporter = require('../../src/opentelemetry/metrics/otlp_http_metric_exporter')
 const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -59,8 +60,9 @@ describe('OpenTelemetry Meter Provider', () => {
     metrics.disable()
     const config = getConfigFresh()
     if (config.DD_METRICS_OTEL_ENABLED) {
+      const loadMetrics = proxyquire.noPreserveCache()
       const { initializeOpenTelemetryMetrics } =
-        proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
+        loadMetrics('../../src/opentelemetry/metrics', {})
       initializeOpenTelemetryMetrics(config)
     }
     return { config, meterProvider: metrics.getMeterProvider() }
@@ -665,416 +667,126 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Lifecycle', () => {
-    it('exposes Promise lifecycle methods on the global meter provider', async () => {
+    function completeNext (callbacks) {
+      const callback = callbacks.shift()
+      callback()
+    }
+
+    it('exposes callback lifecycle methods on the global meter provider', () => {
       const callbacks = {}
       const reader = {
         forceFlush: done => { callbacks.forceFlush = done },
         shutdown: done => { callbacks.shutdown = done },
       }
       const provider = new MeterProvider({ reader })
+      const forceFlushDone = sinon.spy()
+      const shutdownDone = sinon.spy()
 
-      const flush = provider.forceFlush()
-      assert(flush instanceof Promise)
-      let flushed = false
-      flush.then(() => { flushed = true })
-      await Promise.resolve()
-      assert.strictEqual(flushed, false)
+      assert.strictEqual(provider.forceFlush(forceFlushDone), undefined)
+      sinon.assert.notCalled(forceFlushDone)
       callbacks.forceFlush()
-      await flush
+      sinon.assert.calledOnce(forceFlushDone)
 
-      const shutdown = provider.shutdown()
-      assert(shutdown instanceof Promise)
+      assert.strictEqual(provider.shutdown(shutdownDone), undefined)
+      sinon.assert.notCalled(shutdownDone)
       callbacks.shutdown()
-      await shutdown
+      sinon.assert.calledOnce(shutdownDone)
     })
 
-    it('rejects the provider lifecycle Promise when export fails', async () => {
-      const failure = new Error('export failed')
-      const reader = {
-        forceFlush: done => { done(failure) },
-        shutdown: done => { done(failure) },
-      }
-      const provider = new MeterProvider({ reader })
-
-      await assert.rejects(provider.forceFlush(), failure)
-      await assert.rejects(provider.shutdown(), failure)
-    })
-
-    it('times out forceFlush without cancelling or bypassing the serialized exports', async () => {
-      const clock = sinon.useFakeTimers()
+    it('serializes forceFlush exports', async () => {
       const exports = []
-      const exporter = {
-        export: (batch, done) => { exports.push(done) },
-        shutdown: done => { done() },
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-      const counter = provider.getMeter('test').createCounter('requests')
+      const flushes = []
+      const reader = new PeriodicMetricReader({
+        export: (metrics, done) => { exports.push(done) },
+        flush: done => { flushes.push(done) },
+      }, 60_000, 'DELTA', 1024)
+      const meter = new MeterProvider({ reader }).getMeter('test')
+      const firstDone = sinon.spy()
+      const done = sinon.spy()
 
-      try {
-        counter.add(1)
-        const timedOut = provider.forceFlush({ timeoutMillis: 10 })
-        const timeoutRejection = assert.rejects(timedOut, { name: 'TimeoutError' })
-        counter.add(2)
-        const queued = provider.forceFlush()
+      meter.createCounter('in-flight').add(1)
+      reader.forceFlush(firstDone)
+      meter.createCounter('boundary').add(1)
+      reader.forceFlush(done)
 
-        await clock.tickAsync(10)
-        await timeoutRejection
-        assert.strictEqual(exports.length, 1)
-
-        exports[0]({ code: 0 })
-        await clock.tickAsync(0)
-        assert.strictEqual(exports.length, 2)
-        exports[1]({ code: 0 })
-        await queued
-        await provider.shutdown()
-      } finally {
-        clock.restore()
-      }
-    })
-
-    it('keeps shutdown terminal when the caller times out before the reader finishes', async () => {
-      const clock = sinon.useFakeTimers()
-      const exports = []
-      const shutdowns = []
-      const exporter = {
-        export: (batch, done) => { exports.push(done) },
-        shutdown: done => { shutdowns.push(done) },
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-      const counter = provider.getMeter('test').createCounter('requests')
-
-      try {
-        counter.add(1)
-        const shutdown = provider.shutdown({ timeoutMillis: 10 })
-        const timeoutRejection = assert.rejects(shutdown, { name: 'TimeoutError' })
-
-        await provider.shutdown()
-        await provider.forceFlush()
-        counter.add(2)
-        assert.strictEqual(exports.length, 1)
-
-        await clock.tickAsync(10)
-        await timeoutRejection
-        exports[0]({ code: 0 })
-        assert.strictEqual(shutdowns.length, 1)
-        shutdowns[0]()
-        await provider.forceFlush()
-        assert.strictEqual(exports.length, 1)
-      } finally {
-        clock.restore()
-      }
-    })
-
-    it('serializes concurrent forceFlush exports and waits for each HTTP outcome', async () => {
-      const exports = []
-      const exporter = {
-        export: (batch, done) => { exports.push({ batch, done }) },
-        shutdown: done => { done() },
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-      const counter = provider.getMeter('test').createCounter('requests')
-
-      counter.add(1)
-      const first = provider.forceFlush()
-      counter.add(2)
-      const second = provider.forceFlush()
-
+      sinon.assert.notCalled(done)
       assert.strictEqual(exports.length, 1)
-      exports[0].done({ code: 0 })
-      await first
-      assert.strictEqual(exports.length, 2)
-      exports[1].done({ code: 0 })
-      await second
-      await provider.shutdown()
-    })
-
-    it('coalesces periodic collections while an export is in flight', async () => {
-      const clock = sinon.useFakeTimers()
-      const exports = []
-      const exporter = {
-        export: (batch, done) => { exports.push(done) },
-        shutdown: done => { done() },
-      }
-      const reader = new PeriodicMetricReader(exporter, 100, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-      const gauge = provider.getMeter('test').createObservableGauge('temperature')
-      gauge.addCallback(result => { result.observe(20) })
-
-      try {
-        await clock.tickAsync(300)
-        assert.strictEqual(exports.length, 1)
-        exports[0]({ code: 0 })
-        await Promise.resolve()
-        assert.strictEqual(exports.length, 1)
-
-        const shutdown = provider.shutdown()
-        assert.strictEqual(exports.length, 2)
-        exports[1]({ code: 0 })
-        await shutdown
-      } finally {
-        clock.restore()
-      }
-    })
-
-    it('rejects forceFlush after the HTTP export reports a failure', async () => {
-      const failure = new Error('HTTP 500')
-      const exporter = {
-        export: (batch, done) => { done({ code: 1, error: failure }) },
-        shutdown: done => { done() },
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-
-      provider.getMeter('test').createCounter('requests').add(1)
-
-      await assert.rejects(provider.forceFlush(), failure)
-      await provider.shutdown()
-    })
-
-    it('advances the export queue once when an exporter calls back twice', async () => {
-      const exports = []
-      const exporter = {
-        export: (batch, done) => { exports.push(done) },
-        shutdown: done => { done() },
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-      const counter = provider.getMeter('test').createCounter('requests')
-
-      counter.add(1)
-      const first = provider.forceFlush()
-      counter.add(2)
-      const second = provider.forceFlush()
-
       exports[0]({ code: 0 })
-      exports[0]({ code: 1, error: new Error('late request error') })
-      await first
-      assert.strictEqual(exports.length, 2)
-      exports[1]({ code: 0 })
-      await second
-      await provider.shutdown()
-    })
-
-    it('continues draining exports when a completion callback throws', async () => {
-      const exports = []
-      const exporter = {
-        export: (batch, done) => { exports.push(done) },
-        shutdown: done => { done() },
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-      const counter = provider.getMeter('test').createCounter('requests')
-
-      counter.add(1)
-      reader.forceFlush(() => { throw new Error('callback failed') })
-      counter.add(2)
-      const second = provider.forceFlush()
-
-      exports[0]({ code: 0 })
+      sinon.assert.notCalled(firstDone)
+      completeNext(flushes)
+      sinon.assert.calledOnce(firstDone)
       await Promise.resolve()
       assert.strictEqual(exports.length, 2)
       exports[1]({ code: 0 })
-      await second
-      await provider.shutdown()
+      sinon.assert.notCalled(done)
+      completeNext(flushes)
+      sinon.assert.calledOnce(done)
+      reader.shutdown()
+      completeNext(flushes)
     })
 
-    it('drains a large lifecycle queue without exhausting the call stack', async () => {
+    it('waits for an earlier export when the boundary export throws', () => {
+      let priorDone
+      const reader = new PeriodicMetricReader({
+        export: sinon.stub().throws(new Error('encode failed')),
+        flush: done => { priorDone = done },
+      }, 60_000, 'DELTA', 1024)
+      const meter = new MeterProvider({ reader }).getMeter('test')
+      const done = sinon.spy()
+
+      meter.createCounter('boundary').add(1)
+      reader.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      priorDone()
+      sinon.assert.calledOnceWithMatch(done, { message: 'encode failed' })
+      reader.shutdown()
+      priorDone()
+    })
+
+    it('waits for an in-flight export before shutting down', async () => {
       const exports = []
+      const flushes = []
       const exporter = {
-        export: (batch, done) => { exports.push(done) },
+        export: (metrics, done) => { exports.push(done) },
+        flush: done => { flushes.push(done) },
         shutdown: sinon.spy(done => { done() }),
       }
       const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
       const provider = new MeterProvider({ reader })
-
-      provider.getMeter('test').createCounter('requests').add(1)
-      const first = provider.forceFlush()
-      const flushes = Array.from({ length: 5_000 }, () => provider.forceFlush())
-      const final = provider.shutdown()
-
-      exports[0]({ code: 0 })
-      await Promise.all([first, ...flushes, final])
-      sinon.assert.calledOnce(exporter.shutdown)
-    })
-
-    it('notifies every shutdown callback when one throws', () => {
-      const exports = []
-      const exporter = {
-        export: (batch, done) => { exports.push(done) },
-        shutdown: done => { done() },
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-      const secondDone = sinon.spy()
-
-      provider.getMeter('test').createCounter('requests').add(1)
-      reader.shutdown(() => { throw new Error('callback failed') })
-      reader.shutdown(secondDone)
-
-      exports[0]({ code: 0 })
-      sinon.assert.calledOnce(secondDone)
-    })
-
-    it('isolates callbacks after shutdown completes', async () => {
-      const exporter = {
-        export: sinon.spy(),
-        shutdown: done => { done() },
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
+      const forceFlushDone = sinon.spy()
       const done = sinon.spy()
 
-      await provider.shutdown()
-
-      reader.forceFlush(() => { throw new Error('callback failed') })
-      reader.shutdown(() => { throw new Error('callback failed') })
-      reader.shutdown(done)
-      sinon.assert.calledOnce(done)
-    })
-
-    it('waits for an in-flight export before performing the final shutdown export', async () => {
-      const exports = []
-      const shutdown = sinon.spy(done => { done() })
-      const exporter = {
-        export: (batch, done) => { exports.push({ batch, done }) },
-        shutdown,
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-      const counter = provider.getMeter('test').createCounter('requests')
-
-      counter.add(1)
-      const flush = provider.forceFlush()
-      counter.add(2)
-      const final = provider.shutdown()
+      provider.getMeter('test').createCounter('requests').add(1)
+      provider.forceFlush(forceFlushDone)
+      provider.getMeter('test').createCounter('final').add(1)
+      assert.strictEqual(provider.shutdown(done), undefined)
 
       assert.strictEqual(exports.length, 1)
-      sinon.assert.notCalled(shutdown)
-      exports[0].done({ code: 0 })
-      await flush
+      sinon.assert.notCalled(exporter.shutdown)
+      exports[0]({ code: 0 })
+      completeNext(flushes)
+      sinon.assert.calledOnce(forceFlushDone)
+      await Promise.resolve()
+
       assert.strictEqual(exports.length, 2)
-      sinon.assert.notCalled(shutdown)
-      exports[1].done({ code: 0 })
-      await final
-      sinon.assert.calledOnce(shutdown)
-    })
-
-    it('shuts down the exporter and rejects when the final export fails', async () => {
-      const failure = new Error('final export failed')
-      const shutdown = sinon.spy(done => { done() })
-      const exporter = {
-        export: (batch, done) => { done({ code: 1, error: failure }) },
-        shutdown,
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-
-      provider.getMeter('test').createCounter('requests').add(1)
-
-      await assert.rejects(provider.shutdown(), failure)
-      sinon.assert.calledOnce(shutdown)
-    })
-
-    it('treats repeated shutdown and forceFlush after shutdown as successful no-ops', async () => {
-      const exporter = {
-        export: sinon.spy(),
-        shutdown: sinon.spy(done => { done() }),
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-
-      await provider.shutdown()
-      await provider.shutdown()
-      await provider.forceFlush()
-
+      sinon.assert.notCalled(exporter.shutdown)
+      exports[1]({ code: 0 })
+      completeNext(flushes)
       sinon.assert.calledOnce(exporter.shutdown)
-      sinon.assert.notCalled(exporter.export)
-    })
-
-    it('does not contact the exporter when forceFlush has no data', async () => {
-      const exporter = {
-        export: sinon.spy(),
-        shutdown: done => { done() },
-      }
-      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
-      const provider = new MeterProvider({ reader })
-
-      await provider.forceFlush()
-      sinon.assert.notCalled(exporter.export)
-      await provider.shutdown()
-      sinon.assert.notCalled(exporter.export)
-    })
-
-    it('completes an HTTP export once when timeout is followed by a request error', () => {
-      const request = new EventEmitter()
-      request.write = sinon.spy()
-      request.end = sinon.spy()
-      request.destroy = () => { request.emit('error', new Error('socket closed')) }
-      httpStub = sinon.stub(http, 'request').returns(request)
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/v1/metrics', {}, 10, 'http/json', {}
-      )
-      const done = sinon.spy()
-
-      exporter.sendPayload(Buffer.from('{}'), done)
-      request.emit('timeout')
-
       sinon.assert.calledOnce(done)
-      assert.strictEqual(done.firstCall.args[0].code, 1)
-      assert.match(done.firstCall.args[0].error.message, /Request timeout/)
     })
 
-    it('reports the HTTP response outcome to the export callback', () => {
-      const response = new EventEmitter()
-      response.statusCode = 500
-      const request = new EventEmitter()
-      request.write = sinon.spy()
-      request.end = () => { response.emit('data', 'failed'); response.emit('end') }
-      request.destroy = sinon.spy()
-      httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
-        callback(response)
-        return request
-      })
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/v1/metrics', {}, 10, 'http/json', {}
-      )
-      const done = sinon.spy()
-
-      exporter.sendPayload(Buffer.from('{}'), done)
-
-      sinon.assert.calledOnce(done)
-      assert.strictEqual(done.firstCall.args[0].code, 1)
-      assert.match(done.firstCall.args[0].error.message, /HTTP 500: failed/)
-    })
-
-    it('reports a request error to the export callback', () => {
-      const failure = new Error('connection refused')
-      const request = new EventEmitter()
-      request.write = sinon.spy()
-      request.end = () => { request.emit('error', failure) }
-      request.destroy = sinon.spy()
-      httpStub = sinon.stub(http, 'request').returns(request)
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/v1/metrics', {}, 10, 'http/json', {}
-      )
-      const done = sinon.spy()
-
-      exporter.sendPayload(Buffer.from('{}'), done)
-
-      sinon.assert.calledOnceWithExactly(done, { code: 1, error: failure })
-    })
-
-    it('handles shutdown gracefully', async () => {
+    it('handles shutdown gracefully', (done) => {
       setupMetrics()
       const provider = metrics.getMeterProvider()
-      await provider.shutdown()
-      await provider.shutdown() // Second shutdown should be safe
+      provider.shutdown(error => {
+        assert.ifError(error)
+        provider.shutdown(done)
+      })
     })
 
-    it('handles forceFlush', async () => {
+    it('handles forceFlush', (done) => {
       const validator = mockOtlpExport((decoded) => {
         assert(decoded.resourceMetrics)
       })
@@ -1084,8 +796,11 @@ describe('OpenTelemetry Meter Provider', () => {
       meter.createCounter('test').add(1)
 
       const provider = metrics.getMeterProvider()
-      await provider.forceFlush()
-      validator()
+      provider.forceFlush(error => {
+        assert.ifError(error)
+        validator()
+        done()
+      })
     })
 
     it('removes callbacks from observable instruments', (done) => {
@@ -1641,6 +1356,42 @@ describe('OpenTelemetry Meter Provider', () => {
       } finally {
         clock.restore()
       }
+    })
+  })
+
+  describe('Identity refresh', () => {
+    it('exports refreshed resources without resetting the ObservableCounter delta baseline', () => {
+      const clock = sinon.useFakeTimers()
+      const exportedMetrics = []
+      mockOtlpExport((decoded) => {
+        const resourceAttributes = decoded.resourceMetrics[0].resource.attributes
+        const runtimeId = resourceAttributes.find(attribute => attribute.key === 'runtime-id')
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        exportedMetrics.push({
+          runtimeId: runtimeId.value.stringValue,
+          value: counter.sum.dataPoints[0].asInt,
+        })
+      })
+
+      const { config } = setupMetrics()
+      const initialRuntimeId = config.tags['runtime-id']
+      const meter = metrics.getMeter('app')
+      let value = 20
+      meter.createObservableCounter('obs').addCallback((result) => result.observe(value))
+
+      clock.tick(100)
+
+      // Refresh happens after the first export already established a baseline of 20.
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+      value = 25
+
+      clock.tick(100)
+
+      assert.deepStrictEqual(exportedMetrics, [
+        { runtimeId: initialRuntimeId, value: 20 },
+        { runtimeId: 'refreshed-id', value: 5 },
+      ])
     })
   })
 })

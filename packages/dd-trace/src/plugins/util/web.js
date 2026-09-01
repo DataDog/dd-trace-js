@@ -511,9 +511,10 @@ function addResourceTag (context) {
 
   if (spanContext.getTag(RESOURCE_NAME)) return
 
-  const resource = [req.method, spanContext.getTag(HTTP_ROUTE)]
-    .filter(Boolean)
-    .join(' ')
+  let resource = req.method
+  const route = spanContext.getTag(HTTP_ROUTE)
+
+  if (route) resource += ` ${route}`
 
   span.setTag(RESOURCE_NAME, resource)
 }

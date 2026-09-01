@@ -978,7 +978,14 @@ describe('Plugin', () => {
         messages: [
           { role: 'user', content: 'First user message.' },
           { role: 'assistant', content: 'First response.' },
-          { role: 'user', content: 'Last user message.' },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Last user ' },
+              { type: 'image', image: new URL('https://example.com/image.png') },
+              { type: 'text', text: 'message.' },
+            ],
+          },
         ],
         experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
       })
@@ -1021,7 +1028,14 @@ describe('Plugin', () => {
         messages: [
           { role: 'user', content: 'First user message.' },
           { role: 'assistant', content: 'First response.' },
-          { role: 'user', content: 'Last user message.' },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Last user ' },
+              { type: 'image', image: new URL('https://example.com/image.png') },
+              { type: 'text', text: 'message.' },
+            ],
+          },
         ],
         experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
       })
@@ -1654,10 +1668,11 @@ describe('Plugin', () => {
       getPackageRange: getAiSdkBedrockRange,
       buildModel: (BedrockModule, scenario) => {
         const { createAmazonBedrock } = BedrockModule.get()
-        return createAmazonBedrock({
+        const model = createAmazonBedrock({
           region: 'us-east-1',
           fetch: makeMockFetch(`bedrock-${scenario}`),
-        })('anthropic.claude-3-haiku-20240307-v1:0')
+        })
+        return model('anthropic.claude-3-haiku-20240307-v1:0')
       },
       env: {
         AWS_ACCESS_KEY_ID: 'test-access-key',
@@ -1673,10 +1688,11 @@ describe('Plugin', () => {
       getPackageRange: getAiSdkAnthropicOrGoogleRange,
       buildModel: (AnthropicModule, scenario) => {
         const { createAnthropic } = AnthropicModule.get()
-        return createAnthropic({
+        const model = createAnthropic({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`anthropic-${scenario}`),
-        })('claude-3-5-haiku-20241022')
+        })
+        return model('claude-3-5-haiku-20241022')
       },
     })
 
@@ -1725,10 +1741,11 @@ describe('Plugin', () => {
         // `usage.input_tokens_details.cached_tokens`. As OpenAI migrates
         // customers from Chat Completions to Responses, this path should
         // become the more common one.
-        return createOpenAI({
+        const model = createOpenAI({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`openai-responses-${scenario}`),
-        })('gpt-4o-mini')
+        })
+        return model('gpt-4o-mini')
       },
       scenarios: ['cache-read'],
       getExpectedMetrics: openaiExpectedMetrics,
@@ -1745,10 +1762,11 @@ describe('Plugin', () => {
         // prove that the `ai.usage.cachedInputTokens` standardized-attribute
         // path works against a third upstream API shape distinct from the
         // OpenAI-compatible family (which xAI, Mistral OpenAI-mode, etc. share).
-        return createGoogleGenerativeAI({
+        const model = createGoogleGenerativeAI({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`google-${scenario}`),
-        })('gemini-2.5-flash')
+        })
+        return model('gemini-2.5-flash')
       },
       // Google's context caching is a separate API call to create the cache;
       // per-request responses only report cache reads.

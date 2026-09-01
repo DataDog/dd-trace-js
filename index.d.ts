@@ -356,6 +356,16 @@ declare namespace tracer {
     links?: { context: SpanContext, attributes?: Object }[]
   }
 
+  export interface Exception {
+    message: string;
+    name?: string;
+    stack?: string;
+  }
+
+  export type SpanEventAttributeValue =
+    string | number | boolean | Array<string> | Array<number> | Array<boolean>;
+  export type SpanEventAttributes = Record<string, SpanEventAttributeValue>;
+
   /**
    * Span represents a logical unit of work as part of a broader Trace.
    * Examples of span might include remote procedure calls or a in-process
@@ -365,6 +375,14 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
+
+    /**
+     * Records an exception as a span event without marking the span as failed.
+     *
+     * @param exception The exception to record.
+     * @param attributes Additional attributes for the exception event.
+     */
+    recordException (exception: Exception, attributes?: SpanEventAttributes): void;
 
     /**
      * Adds a single link to the span.
@@ -3262,8 +3280,8 @@ declare namespace tracer {
 
   export namespace opentelemetry {
     export interface MeterProvider extends otel.MeterProvider {
-      forceFlush(options?: { timeoutMillis?: number }): Promise<void>;
-      shutdown(options?: { timeoutMillis?: number }): Promise<void>;
+      forceFlush(callback?: (error?: Error) => void): void;
+      shutdown(callback?: (error?: Error) => void): void;
     }
 
     /**
@@ -3854,17 +3872,27 @@ declare namespace tracer {
       metadata?: Array<Record<string, any>>
     ) => any | Promise<any>
 
+    interface DatasetRecord {
+      id: string | null
+      input: JSONType
+      expectedOutput: JSONType
+      metadata: Record<string, JSONType>
+      tags: string[]
+    }
+
+    interface DatasetRecordNew {
+      id?: string
+      inputData: JSONType
+      expectedOutput?: JSONType
+      metadata?: Record<string, JSONType>
+      tags?: string[]
+    }
+
     interface CreateDatasetOptions {
       /** Override the configured project for this dataset. */
       projectName?: string
       description?: string
-      records?: Array<{
-        id?: string,
-        inputData: JSONType,
-        expectedOutput?: JSONType,
-        metadata?: Record<string, JSONType>,
-        tags?: string[]
-      }>
+      records?: DatasetRecordNew[]
     }
 
     interface ExperimentOptions {
@@ -4033,6 +4061,8 @@ declare namespace tracer {
         metadata?: Record<string, JSONType>,
         tags?: string[]
       ): Dataset
+      /** Add multiple records to the dataset. */
+      addRecords (records: DatasetRecordNew[]): Dataset
       /** Update fields on an existing dataset record. */
       update (index: number, fields: {
         input?: JSONType
@@ -4057,13 +4087,7 @@ declare namespace tracer {
       projectName (): string | null | undefined
       version (): number | null
       latestVersion (): number | null
-      records (): Array<{
-        id: string | null,
-        input: JSONType,
-        expectedOutput: JSONType,
-        metadata: Record<string, JSONType>,
-        tags: string[]
-      }>
+      records (): DatasetRecord[]
       /** Return the tags used to filter this dataset. */
       filterTags (): string[]
       /** Dashboard URL for the dataset, or null until pushed. */

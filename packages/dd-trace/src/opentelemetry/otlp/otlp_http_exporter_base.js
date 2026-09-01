@@ -136,9 +136,9 @@ class OtlpHttpExporterBase {
         })
 
         req.once('timeout', () => {
+          req.destroy()
           const error = new Error('Request timeout')
           complete({ code: 1, error })
-          req.destroy()
         })
 
         req.write(payload)

@@ -290,6 +290,25 @@ async function handle () {
 
 Any error from the awaited handler will automatically be added to the span.
 
+<h3 id="recording-handled-exceptions">Recording handled exceptions</h3>
+
+Use `span.recordException()` to add a handled exception as an event without marking the span as failed.
+
+```javascript
+tracer.trace('checkout', span => {
+  try {
+    authorizePayment()
+  } catch (error) {
+    span.recordException(error, {
+      handled: true,
+      'payment.provider': 'example',
+    })
+  }
+})
+```
+
+If the exception leaves the traced callback, `tracer.trace()` records it as a span error automatically.
+
 <h3 id="tracer-wrap">tracer.wrap(name[, options], fn)</h3>
 
 This method works very similarly to `tracer.trace()` except it wraps a function so that `tracer.trace()` is called automatically every time the function is called. This makes it easier to patch entire functions that have already been defined, or that are returned from code that cannot be edited easily.
@@ -476,7 +495,7 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 <h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
 
-dd-trace-js includes experimental support for producing OpenTelemetry metrics through the OpenTelemetry Metrics API and the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
+dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry Metrics SDK. This lightweight implementation is fully compliant with the OpenTelemetry Metrics API and integrates with the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
 
 ```javascript
 require('dd-trace').init()
@@ -517,31 +536,9 @@ cpuGauge.addCallback((result) => {
 })
 ```
 
-Short-lived processes can use Datadog lifecycle extensions modeled after the OpenTelemetry JavaScript SDK's meter provider methods. These methods aren't part of the OpenTelemetry Metrics API's `MeterProvider` interface.
-
-Set `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` to bound each OTLP HTTP request. The value is in milliseconds.
-The optional `timeoutMillis` argument bounds how long the caller waits. Timing out doesn't cancel the underlying work.
-
-```javascript
-const meterProvider = metrics.getMeterProvider()
-
-await meterProvider.forceFlush({ timeoutMillis: 5_000 })
-```
-
-Call `shutdown()` when the application is finished recording metrics. It performs one final export and then stops
-metrics export. Calls to `forceFlush()` after shutdown have no effect.
-
-```javascript
-await meterProvider.shutdown({ timeoutMillis: 5_000 })
-```
-
-For TypeScript, cast the provider to the Datadog implementation type:
-
-```typescript
-import type { opentelemetry as DatadogOpenTelemetry } from 'dd-trace'
-
-const meterProvider = metrics.getMeterProvider() as DatadogOpenTelemetry.MeterProvider
-```
+Short-lived processes can use the callback-based `meterProvider.forceFlush(callback)` extension to wait for export.
+Call `meterProvider.shutdown(callback)` after the final measurement to export once more and stop collection. The optional
+callbacks receive an error when the operation fails. These methods aren't part of the OpenTelemetry Metrics API.
 
 #### Supported Configuration
 

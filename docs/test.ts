@@ -459,6 +459,13 @@ span = tracer.startSpan('test', {
 });
 span = tracer.startSpan('test', { childOf: null })
 span = tracer.startSpan('test', { integrationName: 'testIntegration' })
+span.recordException(new Error('payment declined'), {
+  handled: true,
+  attempt: 1,
+  stages: ['authorize', 'capture']
+})
+// @ts-expect-error Span event attribute arrays must be homogeneous.
+span.recordException(new Error('payment declined'), { stages: ['authorize', 1] })
 
 tracer.trace('test', () => { })
 tracer.trace('test', { tags: { foo: 'bar' } }, () => { })
@@ -560,10 +567,8 @@ provider.register();
 
 const otelTracer: opentelemetry.Tracer = provider.getTracer("name", "version")
 const otelMeterProvider = {} as opentelemetry.MeterProvider
-const otelForceFlush: (options?: { timeoutMillis?: number }) => Promise<void> = otelMeterProvider.forceFlush
-const otelShutdown: (options?: { timeoutMillis?: number }) => Promise<void> = otelMeterProvider.shutdown
-const otelForceFlushOptions: Parameters<typeof otelMeterProvider.forceFlush>[0] = { timeoutMillis: 1_000 }
-const otelShutdownOptions: Parameters<typeof otelMeterProvider.shutdown>[0] = { timeoutMillis: 1_000 }
+const otelForceFlush: (callback?: (error?: Error) => void) => void = otelMeterProvider.forceFlush
+const otelShutdown: (callback?: (error?: Error) => void) => void = otelMeterProvider.shutdown
 
 // OTel supports several time input formats
 otelTracer.startSpan("name", { startTime: new Date() })

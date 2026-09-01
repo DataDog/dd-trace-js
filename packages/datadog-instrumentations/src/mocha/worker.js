@@ -7,6 +7,7 @@ const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper'
 const log = require('../../../dd-trace/src/log')
 const { DD_MAJOR } = require('../../../../version')
 
+const { addMochaRunHooks } = require('./common')
 const {
   runnableWrapper,
   getOnTestHandler,
@@ -29,7 +30,6 @@ const {
   WEBDRIVERIO_WORKER_ENV,
   WORKER_READY,
 } = require('./webdriverio-protocol')
-require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
@@ -360,13 +360,15 @@ function isFailedTestReplayEnabled () {
   return config.isTestDynamicInstrumentationEnabled && config.isDiEnabled
 }
 
-addHook({
-  name: 'mocha',
-  versions: ['>=8.0.0'],
-  file: 'lib/mocha.js',
-}, (Mocha, frameworkVersion) => {
+/**
+ * @param {Function} Mocha
+ * @param {string} frameworkVersion
+ * @returns {Function}
+ */
+function wrapMochaRun (Mocha, frameworkVersion) {
   reportWebdriverioWorkerReady(frameworkVersion)
 
+  // Shimmer is required because run must return its Runner while execution is paused and resumed after configuration.
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
     applyMochaOptions(this.options)
     if (!isWebdriverioWorker || !workerFinishCh.hasSubscribers) {
@@ -438,13 +440,15 @@ addHook({
   })
 
   return Mocha
-})
+}
+
+addMochaRunHooks(['>=8.0.0'], wrapMochaRun)
 
 // Runner is also hooked in mocha/main.js, but in here we only generate test events.
 addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/runner.js',
+  filePattern: String.raw`lib/runner\.(?:c?js)$`,
 }, function (Runner) {
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 

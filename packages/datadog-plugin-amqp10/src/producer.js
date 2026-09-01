@@ -14,9 +14,11 @@ class Amqp10ProducerPlugin extends ProducerPlugin {
 
     const address = getAddress(link)
     const target = getShortName(link)
+    let resource = 'send'
+    if (target) resource += ` ${target}`
 
     this.startSpan({
-      resource: ['send', target].filter(Boolean).join(' '),
+      resource,
       meta: {
         'amqp.link.target.address': target,
         'amqp.link.role': 'sender',

@@ -69,6 +69,7 @@ const log = require('../log')
  */
 
 let agentTelemetry = true
+let getTestOptimizationAgent
 
 /**
  * @param {import('../config/config-base')} config
@@ -145,6 +146,10 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
 
   const isCiVisibilityAgentlessMode = isCiVisibility && testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED
 
+  if (isCiVisibility && getTestOptimizationAgent === undefined) {
+    ({ getAgent: getTestOptimizationAgent } = require('../ci-visibility/exporters/agents'))
+  }
+
   if (isCiVisibilityAgentlessMode) {
     try {
       url = testOptimization.DD_CIVISIBILITY_AGENTLESS_URL ?? new URL(getAgentlessTelemetryEndpoint(config.site))
@@ -163,6 +168,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     path: isCiVisibilityAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
     headers: getHeaders(config, application, reqType),
   }
+  if (isCiVisibility) options.agent = getTestOptimizationAgent(url)
 
   const data = JSON.stringify({
     api_version: 'v2',
@@ -197,6 +203,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         headers: backendHeader,
         path: '/api/v2/apmtelemetry',
       }
+      if (isCiVisibility) backendOptions.agent = getTestOptimizationAgent(backendUrl)
       request(data, backendOptions, (error) => {
         if (error) {
           log.error('Error sending telemetry data', error)

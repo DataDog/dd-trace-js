@@ -113,9 +113,10 @@ describe('Plugin', () => {
               },
             }, { timeoutMs: traceTimeoutMs })
 
+            const insertAsync = promisify(server.insert.bind(server))
             await Promise.all([
               tracePromise,
-              promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }], {}),
+              insertAsync(`test.${collection}`, [{ a: 1 }], {}),
             ])
           })
 
@@ -127,10 +128,11 @@ describe('Plugin', () => {
               assert.strictEqual(span.resource, resource)
             }, { timeoutMs: traceTimeoutMs })
 
+            const commandAsync = promisify(server.command.bind(server))
             await Promise.all([
               tracePromise,
               expectCommandCompletion(
-                promisify(server.command.bind(server))(`test.${collection}`, {
+                commandAsync(`test.${collection}`, {
                   planCacheListPlans: `test.${collection}`,
                   query: {},
                 })
@@ -148,10 +150,11 @@ describe('Plugin', () => {
               assert.strictEqual(span.meta['mongodb.query'], query)
             }, { timeoutMs: traceTimeoutMs })
 
+            const commandAsync = promisify(server.command.bind(server))
             await Promise.all([
               tracePromise,
               expectCommandCompletion(
-                promisify(server.command.bind(server))(`test.${collection}`, {
+                commandAsync(`test.${collection}`, {
                   find: `test.${collection}`,
                   query: {
                     _id: Buffer.from('1234'),
@@ -209,10 +212,11 @@ describe('Plugin', () => {
               assert.strictEqual(span.meta['mongodb.query'], query)
             }, { timeoutMs: traceTimeoutMs })
 
+            const commandAsync = promisify(server.command.bind(server))
             await Promise.all([
               tracePromise,
               expectCommandCompletion(
-                promisify(server.command.bind(server))(`test.${collection}`, {
+                commandAsync(`test.${collection}`, {
                   find: `test.${collection}`,
                   query: {
                     _id: new BSON.ObjectID(id),
@@ -232,10 +236,11 @@ describe('Plugin', () => {
               assert.strictEqual(span.meta['mongodb.query'], query)
             }, { timeoutMs: traceTimeoutMs })
 
+            const commandAsync = promisify(server.command.bind(server))
             await Promise.all([
               tracePromise,
               expectCommandCompletion(
-                promisify(server.command.bind(server))(`test.${collection}`, {
+                commandAsync(`test.${collection}`, {
                   find: `test.${collection}`,
                   query: {
                     _id: '1234',
@@ -301,7 +306,8 @@ describe('Plugin', () => {
             ])
 
             const operationPromise = (async () => {
-              await promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }, { a: 2 }, { a: 3 }], {})
+              const insertAsync = promisify(server.insert.bind(server))
+              await insertAsync(`test.${collection}`, [{ a: 1 }, { a: 2 }, { a: 3 }], {})
 
               const cursor = server.cursor(`test.${collection}`, {
                 find: `test.${collection}`,
@@ -309,9 +315,11 @@ describe('Plugin', () => {
                 batchSize: 1,
               }, { batchSize: 1 })
 
-              await promisify(next)(cursor)
-              await promisify(next)(cursor)
-              await promisify(cursor.kill.bind(cursor))()
+              const nextAsync = promisify(next)
+              await nextAsync(cursor)
+              await nextAsync(cursor)
+              const killAsync = promisify(cursor.kill.bind(cursor))
+              await killAsync()
             })()
 
             await Promise.all([tracePromise, operationPromise])
@@ -337,9 +345,10 @@ describe('Plugin', () => {
               },
             })
 
+            const nextAsync = promisify(next)
             await Promise.all([
               tracePromise,
-              promisify(next)(cursor),
+              nextAsync(cursor),
             ])
           })
 
@@ -415,9 +424,10 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].service, 'custom')
           }, { timeoutMs: traceTimeoutMs })
 
+          const insertAsync = promisify(server.insert.bind(server))
           await Promise.all([
             tracePromise,
-            promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }]),
+            insertAsync(`test.${collection}`, [{ a: 1 }]),
           ])
         })
 
@@ -473,9 +483,10 @@ describe('Plugin', () => {
             assert.strictEqual(injectCommentSpy.getCall(0).returnValue, undefined)
           }, { timeoutMs: traceTimeoutMs })
 
+          const insertAsync = promisify(server.insert.bind(server))
           await Promise.all([
             tracePromise,
-            promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }]),
+            insertAsync(`test.${collection}`, [{ a: 1 }]),
           ])
         })
       })
@@ -517,9 +528,10 @@ describe('Plugin', () => {
             assert.strictEqual(comment, undefined)
           }, { timeoutMs: traceTimeoutMs })
 
+          const insertAsync = promisify(server.insert.bind(server))
           await Promise.all([
             tracePromise,
-            promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }]),
+            insertAsync(`test.${collection}`, [{ a: 1 }]),
           ])
         })
 
@@ -530,10 +542,11 @@ describe('Plugin', () => {
             assert.strictEqual(comment, 'test comment')
           }, { timeoutMs: traceTimeoutMs })
 
+          const commandAsync = promisify(server.command.bind(server))
           await Promise.all([
             tracePromise,
             expectCommandCompletion(
-              promisify(server.command.bind(server))(`test.${collection}`, {
+              commandAsync(`test.${collection}`, {
                 find: `test.${collection}`,
                 query: {
                   _id: Buffer.from('1234'),
@@ -592,9 +605,10 @@ describe('Plugin', () => {
             assert.strictEqual(span.meta['_dd.dbm_trace_injected'], 'true')
           }, { timeoutMs: traceTimeoutMs })
 
+          const insertAsync = promisify(server.insert.bind(server))
           await Promise.all([
             tracePromise,
-            promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }]),
+            insertAsync(`test.${collection}`, [{ a: 1 }]),
           ])
         })
       })
@@ -646,9 +660,10 @@ describe('Plugin', () => {
             )
           }, { timeoutMs: traceTimeoutMs })
 
+          const insertAsync = promisify(server.insert.bind(server))
           await Promise.all([
             tracePromise,
-            promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }]),
+            insertAsync(`test.${collection}`, [{ a: 1 }]),
           ])
         })
 
@@ -670,10 +685,11 @@ describe('Plugin', () => {
             )
           }, { timeoutMs: traceTimeoutMs })
 
+          const commandAsync = promisify(server.command.bind(server))
           await Promise.all([
             tracePromise,
             expectCommandCompletion(
-              promisify(server.command.bind(server))(`test.${collection}`, {
+              commandAsync(`test.${collection}`, {
                 find: `test.${collection}`,
                 query: {
                   _id: Buffer.from('1234'),
@@ -702,10 +718,11 @@ describe('Plugin', () => {
             ])
           }, { timeoutMs: traceTimeoutMs })
 
+          const commandAsync = promisify(server.command.bind(server))
           await Promise.all([
             tracePromise,
             expectCommandCompletion(
-              promisify(server.command.bind(server))(`test.${collection}`, {
+              commandAsync(`test.${collection}`, {
                 find: `test.${collection}`,
                 query: {
                   _id: Buffer.from('1234'),
@@ -766,9 +783,10 @@ describe('Plugin', () => {
             )
           }, { timeoutMs: traceTimeoutMs })
 
+          const insertAsync = promisify(server.insert.bind(server))
           await Promise.all([
             tracePromise,
-            promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }]),
+            insertAsync(`test.${collection}`, [{ a: 1 }]),
           ])
         })
       })
@@ -819,9 +837,10 @@ describe('Plugin', () => {
               )
             }, { timeoutMs: traceTimeoutMs })
 
+            const insertAsync = promisify(server.insert.bind(server))
             await Promise.all([
               tracePromise,
-              promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }]),
+              insertAsync(`test.${collection}`, [{ a: 1 }]),
             ])
           })
       })
