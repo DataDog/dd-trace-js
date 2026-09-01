@@ -29,21 +29,6 @@ describe('pg instrumentation', () => {
 
     function observeQuery () {}
 
-    /**
-     * @param {{ query: (query: object) => void }} client
-     * @param {{ callback?: (error?: Error | null) => void }} query
-     */
-    function executeQueryWithCallback (client, query) {
-      return new Promise((resolve, reject) => {
-        query.callback = error => {
-          if (error) reject(error)
-          else resolve()
-        }
-
-        client.query(query)
-      })
-    }
-
     before(() => {
       return agent.load(['pg'])
     })
@@ -152,17 +137,31 @@ describe('pg instrumentation', () => {
               })
 
               describe('with callback in query object', () => {
-                it('Should not fail if it is not aborted', async () => {
-                  await executeQueryWithCallback(client, new Query('SELECT 1'))
+                // eslint-disable-next-line mocha/handle-done-callback -- Query invokes the assigned callback.
+                it('Should not fail if it is not aborted', (done) => {
+                  const query = new Query('SELECT 1')
+                  query.callback = (error) => {
+                    done(error)
+                  }
+
+                  client.query(query)
                 })
 
-                it('Should abort query', async () => {
+                // eslint-disable-next-line mocha/handle-done-callback -- Query invokes the assigned callback.
+                it('Should abort query', (done) => {
                   queryClientStartChannel.subscribe(abortQuery)
 
-                  await assert.rejects(
-                    executeQueryWithCallback(client, new Query('SELECT 1')),
-                    { message: 'Test' }
-                  )
+                  const query = new Query('SELECT 1')
+                  query.callback = error => {
+                    try {
+                      assert.strictEqual(error.message, 'Test')
+                      done()
+                    } catch (error) {
+                      done(error)
+                    }
+                  }
+
+                  client.query(query)
                 })
               })
 
