@@ -19,6 +19,36 @@ function recordServerlessEvidence (observation) {
   }
 }
 
+function assertReturnBehavior ({ operationName, scenario, returned, thrown, shouldReject }) {
+  if (shouldReject) {
+    assert.ok(thrown, 'instrumentation must preserve SDK rejection behavior')
+    return true
+  }
+
+  assert.ifError(thrown)
+
+  if (operationName === 'supabase.messaging.send') {
+    if (scenario === 'happy') {
+      assert.strictEqual(returned, 'ok', 'instrumentation must preserve the Realtime success result')
+    } else {
+      assert.match(returned, /^(?:error|timed out)$/, 'instrumentation must preserve the Realtime error result')
+    }
+    return true
+  }
+
+  assert.ok(returned && typeof returned === 'object', 'instrumentation must preserve the SDK result object')
+  assert.ok(Object.hasOwn(returned, 'data'), 'instrumentation must preserve the SDK data field')
+  assert.ok(Object.hasOwn(returned, 'error'), 'instrumentation must preserve the SDK error field')
+
+  if (scenario === 'happy') {
+    assert.strictEqual(returned.error, null, 'instrumentation must preserve the successful SDK result')
+  } else {
+    assert.ok(returned.error, 'instrumentation must preserve the SDK error result')
+  }
+
+  return true
+}
+
 async function runServerlessContract ({
   agent,
   tracer,
@@ -81,10 +111,13 @@ async function runServerlessContract ({
   const ownershipVerified = serverlessClassification === 'serverless-child'
     ? operationSpan.parent_id.toString() === rootSpan.span_id.toString()
     : !operationSpan.parent_id || operationSpan.parent_id.toString() === '0'
-  const callerObservedError = Boolean(
-    thrown || returned?.error || returned === 'error' || returned === 'timed out'
-  )
-  const returnBehaviorPreserved = shouldReject ? Boolean(thrown) : !thrown
+  const returnBehaviorPreserved = assertReturnBehavior({
+    operationName,
+    scenario,
+    returned,
+    thrown,
+    shouldReject,
+  })
 
   assert.strictEqual(ownershipVerified, true, 'span ownership must match the serverless route')
   assert.strictEqual(returnBehaviorPreserved, true, 'instrumentation must preserve return behavior')
@@ -113,11 +146,24 @@ async function runServerlessContract ({
     fake_agent_delivery: true,
   })
 
-  if (scenario === 'error') {
-    assert.strictEqual(callerObservedError, true, 'error must remain observable to the caller')
-  }
   return returned
 }
+
+describe('serverless return behavior evidence', () => {
+  it('rejects malformed SDK and Realtime results', () => {
+    assert.throws(() => assertReturnBehavior({
+      operationName: 'supabase.storage.request',
+      scenario: 'happy',
+      returned: { data: [] },
+    }), /SDK error field/)
+
+    assert.throws(() => assertReturnBehavior({
+      operationName: 'supabase.messaging.send',
+      scenario: 'happy',
+      returned: 'timed out',
+    }), /Realtime success result/)
+  })
+})
 
 const testSetup = new TestSetup()
 
