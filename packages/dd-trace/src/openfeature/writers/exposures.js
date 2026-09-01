@@ -11,13 +11,7 @@ const {
   EVP_SUBDOMAIN_HEADER_NAME,
 } = require('../../evp_proxy/constants')
 const { joinEVPProxyPath } = require('../../evp_proxy/path')
-const log = require('../../log')
 const BaseFFEWriter = require('./base')
-
-// Disabled-state cap. Drops invalidate experiment results because the provider's
-// exposure dedupe cache keeps masking dropped events after recovery. The first
-// drop emits a warning and `droppedEventCount` accumulates the cumulative loss.
-const PENDING_MAX_EVENTS = 1000
 
 /**
  * @typedef {object} ExposureRoute
@@ -64,13 +58,13 @@ class ExposuresWriter extends BaseFFEWriter {
   // Disabled until route selection resolves.
   #enabled = false
 
-  /** @type {ExposureEvent[]} */
-  #pendingEvents = []
+  #routeResolved = false
+
+  /** @type {ReturnType<typeof setImmediate> | undefined} */
+  #startupFlushImmediate
 
   /** @type {ExposureContext} */
   #context
-
-  #dropWarned = false
 
   /**
    * @param {import('../../config/config-base')} config - Tracer configuration object
@@ -117,16 +111,20 @@ class ExposuresWriter extends BaseFFEWriter {
    * @returns {void}
    */
   setEnabled (enabled, route) {
+    this.#routeResolved = true
+
     if (route) {
       this.#setRoute(route)
     }
 
     this.#enabled = enabled
 
-    if (enabled && this.#pendingEvents.length > 0) {
-      // Flush all pending events as a batch
-      super.append(this.#pendingEvents)
-      this.#pendingEvents = []
+    if (enabled) {
+      this.#scheduleStartupFlush()
+    } else {
+      this.#cancelStartupFlush()
+      this._buffer = []
+      this._bufferStart = 0
     }
   }
 
@@ -156,50 +154,57 @@ class ExposuresWriter extends BaseFFEWriter {
   }
 
   /**
-   * Appends exposure event(s) to the buffer
+   * Appends exposure event(s) to the buffer.
+   *
    * @param {ExposureEvent|ExposureEvent[]} events - Exposure event(s) to append
+   * @returns {void}
    */
   append (events) {
-    if (this.#enabled) {
-      super.append(events)
-      return
-    }
+    if (this.#routeResolved && !this.#enabled) return
 
-    const eventArray = Array.isArray(events) ? events : [events]
-    this.#pendingEvents.push(...eventArray)
-    if (this.#pendingEvents.length > PENDING_MAX_EVENTS) {
-      const dropped = this.#pendingEvents.length - PENDING_MAX_EVENTS
-      this.#pendingEvents.splice(0, dropped)
-      this._droppedEvents += dropped
-      if (!this.#dropWarned) {
-        this.#dropWarned = true
-        log.warn(
-          '%s dropped exposure event(s) at cap %d. This may invalidate experiment results.',
-          this.constructor.name, PENDING_MAX_EVENTS)
-      }
-    }
+    super.append(events)
   }
 
   /**
-   * @returns {number} Cumulative number of exposure events dropped due to buffer overflow.
-   */
-  get droppedEventCount () {
-    return this._droppedEvents
-  }
-
-  /**
-   * Flushes buffered exposure events to the agent
+   * Flushes buffered exposure events through the selected route.
+   *
+   * @returns {void}
    */
   flush () {
-    if (!this.#enabled) {
-      return
-    }
+    if (!this.#enabled) return
+
+    this.#cancelStartupFlush()
     super.flush()
   }
 
   /**
+   * Flushes startup events after route selection completes.
+   *
+   * @returns {void}
+   */
+  #scheduleStartupFlush () {
+    if (this.#startupFlushImmediate || this._buffer.length === 0) return
+
+    this.#startupFlushImmediate = setImmediate(() => {
+      this.#startupFlushImmediate = undefined
+      this.flush()
+    })
+  }
+
+  /**
+   * Cancels a scheduled drain.
+   *
+   * @returns {void}
+   */
+  #cancelStartupFlush () {
+    if (!this.#startupFlushImmediate) return
+    clearImmediate(this.#startupFlushImmediate)
+    this.#startupFlushImmediate = undefined
+  }
+
+  /**
    * Formats exposure events with service context metadata
-   * @param {Array<ExposureEvent>} events - Array of exposure events
+   * @param {Array<ExposureEvent>} events - Array of exposure events to format
    * @returns {ExposureEventPayload} Formatted payload with service context
    */
   makePayload (events) {
