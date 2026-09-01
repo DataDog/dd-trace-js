@@ -8,6 +8,8 @@ const { keepTrace } = require('../../priority_sampler')
 const { ASM } = require('../../standalone/product')
 const { isBlocked } = require('../blocking')
 
+/** @typedef {import('../../opentracing/span')} DatadogSpan */
+
 const MAX_SIZE = 4096
 
 const SamplingDecision = Object.freeze({
@@ -44,7 +46,7 @@ function disable () {
 }
 
 /**
- * @param {object} rootSpan Span the sampling decision is attached to
+ * @param {DatadogSpan} rootSpan Span the sampling decision is attached to
  * @param {object} request
  * @param {string} request.method
  * @param {number|string} request.statusCode
@@ -55,12 +57,14 @@ function disable () {
  * @param {boolean} record When true and the decision is SAMPLE, records the endpoint in the TTL cache
  * @returns {'sample' | 'missing_route' | 'skip'}
  */
-function sampleRootSpanRequest (rootSpan, { method, statusCode, route, blocked = false } = {}, record = false) {
+function sampleRootSpanRequest (rootSpan, request, record = false) {
   if (!enabled) return SamplingDecision.SKIP
 
   if (!rootSpan) return SamplingDecision.SKIP
 
   if (isRejected(rootSpan)) return SamplingDecision.SKIP
+
+  const { method, statusCode, route, blocked = false } = request ?? {}
 
   if (!method || !statusCode) {
     log.warn('[ASM] Unsupported groupkey for API security')
@@ -172,7 +176,7 @@ function getRouteOrEndpoint (context, statusCode) {
  * Always false under ASM standalone: there the trace is kept via `keepTrace(rootSpan, ASM)`
  * regardless of the APM sampling decision.
  *
- * @param {object} rootSpan
+ * @param {DatadogSpan} rootSpan
  * @returns {boolean}
  */
 function isRejected (rootSpan) {

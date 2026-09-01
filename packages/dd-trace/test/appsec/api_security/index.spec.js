@@ -152,6 +152,18 @@ describe('API Security domain', () => {
 
         sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, undefined)
       })
+
+      it('tolerates a root span without context()', () => {
+        apiSecurity.reportRootSpanRequest({}, SamplingDecision.SAMPLE, undefined)
+
+        sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, undefined)
+      })
+
+      it('tolerates a root span whose context() returns undefined', () => {
+        apiSecurity.reportRootSpanRequest({ context: () => undefined }, SamplingDecision.MISSING_ROUTE, undefined)
+
+        sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecMissingRouteMetric, undefined)
+      })
     })
   })
 })

@@ -5,6 +5,8 @@ const { isSchemaAttribute } = require('../reporter')
 const appsecTelemetry = require('../telemetry')
 const sampler = require('./sampler')
 
+/** @typedef {import('../../opentracing/span')} DatadogSpan */
+
 /**
  * Map a sampling decision into the corresponding API Security telemetry metric.
  *
@@ -13,7 +15,7 @@ const sampler = require('./sampler')
  *   - MISSING_ROUTE: missing_route
  *   - SKIP: no metric emitted
  *
- * @param {object} rootSpan Span the sampling decision was attached to
+ * @param {DatadogSpan} rootSpan Span the sampling decision was attached to
  * @param {'sample' | 'missing_route' | 'skip'} samplingDecision Sampler decision
  * @param {{ attributes?: Record<string, unknown> } | undefined} wafResult WAF run result
  */
@@ -48,7 +50,7 @@ function reportRequest (req, samplingDecision, wafResult) {
 }
 
 function getFramework (rootSpan) {
-  return rootSpan?.context()?.getTag?.('component')
+  return rootSpan?.context?.()?.getTag?.('component')
 }
 
 function hasSchemaAttributes (attributes) {

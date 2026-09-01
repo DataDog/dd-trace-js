@@ -459,6 +459,13 @@ describe('API Security Sampler', () => {
       it('returns SKIP when the request argument is missing entirely', () => {
         assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span), SamplingDecision.SKIP)
         assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, undefined, true), SamplingDecision.SKIP)
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, null, true), SamplingDecision.SKIP)
+      })
+
+      it('returns SKIP for a null request argument while disabled', () => {
+        apiSecuritySampler.disable()
+
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, null, true), SamplingDecision.SKIP)
       })
 
       it('treats a root span without context() as having no sampling decision yet', () => {
