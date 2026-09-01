@@ -67,7 +67,7 @@ function sampleRootSpanRequest (rootSpan, { method, statusCode, route, blocked =
     return SamplingDecision.SKIP
   }
 
-  if (needsBlockedFlag(route, record)) {
+  if (isRoutelessRecord(route, record)) {
     if (Number(statusCode) === 404 || blocked) return SamplingDecision.SKIP
     return SamplingDecision.MISSING_ROUTE
   }
@@ -109,16 +109,18 @@ function sampleRequest (req, res, record = false) {
     method: req.method,
     statusCode,
     route,
-    blocked: needsBlockedFlag(route, record) ? isBlocked(res) : false,
+    blocked: isRoutelessRecord(route, record) && Number(statusCode) !== 404 ? isBlocked(res) : false,
   }, record)
 }
 
 /**
+ * Whether this is a request with no route information
+ *
  * @param {string|null} route
  * @param {boolean} record
  * @returns {boolean}
  */
-function needsBlockedFlag (route, record) {
+function isRoutelessRecord (route, record) {
   return record && route === null
 }
 
@@ -132,6 +134,12 @@ function buildSamplingKey (method, route, statusCode) {
   return method + (route ?? '') + statusCode
 }
 
+/**
+ * @param {{ paths?: string[], span?: object }} [context] Web context of the request
+ * @param {number|string} statusCode
+ * @returns {string|null} A route string, an empty string (still a valid route), or `null` when no
+ *   route information is available.
+ */
 function getRouteOrEndpoint (context, statusCode) {
   // The router plugin populates `context.paths` whenever the framework matched something.
   // For express's root '/' route the matched path is normalized to '' (see datadog-plugin-router),
@@ -163,7 +171,7 @@ function isRejected (rootSpan) {
   if (asmStandaloneEnabled) return false
 
   let priority = getSpanPriority(rootSpan)
-  if (!priority) {
+  if (priority == null) {
     rootSpan._prioritySampler?.sample(rootSpan)
     priority = getSpanPriority(rootSpan)
   }
