@@ -2,7 +2,7 @@
   vars:
     input: |
       Apply this repo's performance-review criteria (reviewers/performance.md, its
-      dd-apm-sdk-review-overrides/reviewers/performance.md override, and _common.md) to the
+      .agents/dd-apm-sdk-review-overrides/reviewers/performance.md override, and _common.md) to the
       following instrumentation wrapper. No git checkout available — this snippet is the
       entire change to review.
 
@@ -123,7 +123,7 @@
   vars:
     input: |
       Apply this repo's security-review criteria (reviewers/security.md, its
-      dd-apm-sdk-review-overrides/reviewers/security.md override, and _common.md) to the
+      .agents/dd-apm-sdk-review-overrides/reviewers/security.md override, and _common.md) to the
       following code. No git checkout available — this snippet is the entire change to
       review. `config.dsn` is a full connection string with an embedded username and
       password, e.g. `amqp://user:password@host:5672`.
@@ -151,7 +151,7 @@
   vars:
     input: |
       Apply this repo's design-review criteria (reviewers/design.md, its
-      dd-apm-sdk-review-overrides/reviewers/design.md override, and _common.md) to the
+      .agents/dd-apm-sdk-review-overrides/reviewers/design.md override, and _common.md) to the
       following code. No git checkout available — this snippet is the entire change to
       review.
 
@@ -179,7 +179,7 @@
   vars:
     input: |
       Apply this repo's maintainability-review criteria (reviewers/maintainability.md, its
-      dd-apm-sdk-review-overrides/reviewers/maintainability.md override, and _common.md) to
+      .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md override, and _common.md) to
       the following code. No git checkout available — this snippet is the entire change to
       review.
 
@@ -209,7 +209,7 @@
   vars:
     input: |
       Apply this repo's codebase-conventions criteria (reviewers/conventions.md, its
-      dd-apm-sdk-review-overrides/reviewers/conventions.md override, and _common.md) to the
+      .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md override, and _common.md) to the
       following code. No git checkout available — this snippet is the entire change to
       review. Assume it ships as part of the npm package, not a test file.
 

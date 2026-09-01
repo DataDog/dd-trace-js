@@ -25,7 +25,6 @@ const INTERNAL_PATH_PATTERNS = [
   /^\.gitlab(?:-ci\.yml|\/)/,
   /^\.llm-validation\//,
   /^\.promptfoo\//,
-  /^dd-apm-sdk-review-overrides\//,
   /^benchmark\//,
   /^integration-tests\//,
   /^scripts\//,

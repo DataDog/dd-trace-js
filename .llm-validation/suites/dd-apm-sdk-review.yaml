@@ -6,10 +6,10 @@ cases:
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/performance.md
       - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
-      - dd-apm-sdk-review-overrides/reviewers/performance.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
     input: |
       Apply this repo's performance-review criteria (reviewers/performance.md, its
-      dd-apm-sdk-review-overrides/reviewers/performance.md override, and _common.md) to the
+      .agents/dd-apm-sdk-review-overrides/reviewers/performance.md override, and _common.md) to the
       following instrumentation wrapper. No git checkout available — this snippet is the
       entire change to review.
 
@@ -105,10 +105,10 @@ cases:
   - id: js-security-secret-into-log-004
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/security.md
-      - dd-apm-sdk-review-overrides/reviewers/security.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
     input: |
       Apply this repo's security-review criteria (reviewers/security.md, its
-      dd-apm-sdk-review-overrides/reviewers/security.md override, and _common.md) to the
+      .agents/dd-apm-sdk-review-overrides/reviewers/security.md override, and _common.md) to the
       following code. No git checkout available — this snippet is the entire change to
       review. `config.dsn` is a full connection string with an embedded username and
       password, e.g. `amqp://user:password@host:5672`.
@@ -139,10 +139,10 @@ cases:
   - id: js-design-bypasses-config-registration-005
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/design.md
-      - dd-apm-sdk-review-overrides/reviewers/design.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
     input: |
       Apply this repo's design-review criteria (reviewers/design.md, its
-      dd-apm-sdk-review-overrides/reviewers/design.md override, and _common.md) to the
+      .agents/dd-apm-sdk-review-overrides/reviewers/design.md override, and _common.md) to the
       following code. No git checkout available — this snippet is the entire change to
       review.
 
@@ -167,10 +167,10 @@ cases:
   - id: js-maintainability-silent-catch-006
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
-      - dd-apm-sdk-review-overrides/reviewers/maintainability.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
     input: |
       Apply this repo's maintainability-review criteria (reviewers/maintainability.md, its
-      dd-apm-sdk-review-overrides/reviewers/maintainability.md override, and _common.md) to
+      .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md override, and _common.md) to
       the following code. No git checkout available — this snippet is the entire change to
       review.
 
@@ -197,10 +197,10 @@ cases:
   - id: js-conventions-async-in-production-path-007
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/conventions.md
-      - dd-apm-sdk-review-overrides/reviewers/conventions.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
     input: |
       Apply this repo's codebase-conventions criteria (reviewers/conventions.md, its
-      dd-apm-sdk-review-overrides/reviewers/conventions.md override, and _common.md) to the
+      .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md override, and _common.md) to the
       following code. No git checkout available — this snippet is the entire change to
       review. Assume it ships as part of the npm package, not a test file.
 

@@ -389,7 +389,7 @@ describe('release changelog', () => {
       { filename: '.llm-validation/eval.json' },
       { filename: '.promptfoo/dd-apm-sdk-review/config.yaml' },
       { filename: '.claude/settings.json' },
-      { filename: 'dd-apm-sdk-review-overrides/reviewers/design.md' },
+      { filename: '.agents/dd-apm-sdk-review-overrides/reviewers/design.md' },
       { filename: '.gitignore' },
     ])
 

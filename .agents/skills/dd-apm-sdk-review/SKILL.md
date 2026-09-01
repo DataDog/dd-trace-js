@@ -19,9 +19,9 @@ If this skill is invoked twice in a row on the same set of changes, let the user
 
 ## Step 0 — Load repo context
 
-Read `../../../dd-apm-sdk-review-overrides/repo-context.md` (fixed path, relative to this skill's own folder — resolves to `<repo-root>/dd-apm-sdk-review-overrides/repo-context.md`) before anything else. It names the other skills that exist in this repo and how they relate to this one — used later for the "Related skills" section of your final report. It is not handed to individual reviewers: none of them need it, since a lens without an override is language-agnostic by design, and a lens with an override gets whatever repo-specific facts it needs from that override file directly.
+Read `../../dd-apm-sdk-review-overrides/repo-context.md` (fixed path, relative to this skill's own folder — resolves to `<repo-root>/.agents/dd-apm-sdk-review-overrides/repo-context.md`) before anything else. It names the other skills that exist in this repo and how they relate to this one — used later for the "Related skills" section of your final report. It is not handed to individual reviewers: none of them need it, since a lens without an override is language-agnostic by design, and a lens with an override gets whatever repo-specific facts it needs from that override file directly.
 
-This skill's own folder (`.agents/skills/dd-apm-sdk-review/`) is a **verbatim copy of the shared core** — never edit it in this repo; changes belong upstream. Everything specific to this repo lives instead in `<repo-root>/dd-apm-sdk-review-overrides/`, a separate folder this repo owns and edits freely.
+This skill's own folder (`.agents/skills/dd-apm-sdk-review/`) is a **verbatim copy of the shared core** — never edit it in this repo; changes belong upstream. Everything specific to this repo lives instead in `<repo-root>/.agents/dd-apm-sdk-review-overrides/`, a separate folder this repo owns and edits freely (a sibling of `.agents/skills/`, not nested inside this skill's own folder).
 
 ## Step 1 — Determine the change set
 
@@ -111,14 +111,14 @@ Also note, for the reviewers' benefit:
 | reviewer | generic prompt (core, this folder) | this repo's override (if any) |
 |---|---|---|
 | Coherence | [reviewers/coherence.md](./reviewers/coherence.md) | — (fully language-agnostic) |
-| Security | [reviewers/security.md](./reviewers/security.md) | `dd-apm-sdk-review-overrides/reviewers/security.md` |
-| Design | [reviewers/design.md](./reviewers/design.md) | `dd-apm-sdk-review-overrides/reviewers/design.md` |
-| Performance | [reviewers/performance.md](./reviewers/performance.md) | `dd-apm-sdk-review-overrides/reviewers/performance.md` |
-| Maintainability | [reviewers/maintainability.md](./reviewers/maintainability.md) | `dd-apm-sdk-review-overrides/reviewers/maintainability.md` |
-| Codebase conventions | [reviewers/conventions.md](./reviewers/conventions.md) | `dd-apm-sdk-review-overrides/reviewers/conventions.md` |
+| Security | [reviewers/security.md](./reviewers/security.md) | `.agents/dd-apm-sdk-review-overrides/reviewers/security.md` |
+| Design | [reviewers/design.md](./reviewers/design.md) | `.agents/dd-apm-sdk-review-overrides/reviewers/design.md` |
+| Performance | [reviewers/performance.md](./reviewers/performance.md) | `.agents/dd-apm-sdk-review-overrides/reviewers/performance.md` |
+| Maintainability | [reviewers/maintainability.md](./reviewers/maintainability.md) | `.agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md` |
+| Codebase conventions | [reviewers/conventions.md](./reviewers/conventions.md) | `.agents/dd-apm-sdk-review-overrides/reviewers/conventions.md` |
 | Cross-SDK consistency | [reviewers/cross-sdk.md](./reviewers/cross-sdk.md) | — (fully language-agnostic) |
 
-The override, if any, lives at `<repo-root>/dd-apm-sdk-review-overrides/reviewers/<perspective>.md` — **not** inside this skill's own folder. Where it exists, hand the reviewer **both** the generic prompt (this folder) and the override (`dd-apm-sdk-review-overrides/`) — the override is additive (repo-specific facts, file paths, commands), never a replacement of the generic rules. Where no override exists yet for this repo, the generic prompt is used alone and the reviewer should say so plainly rather than inventing repo detail.
+The override, if any, lives at `<repo-root>/.agents/dd-apm-sdk-review-overrides/reviewers/<perspective>.md` — **not** inside this skill's own folder. Where it exists, hand the reviewer **both** the generic prompt (this folder) and the override (`.agents/dd-apm-sdk-review-overrides/`) — the override is additive (repo-specific facts, file paths, commands), never a replacement of the generic rules. Where no override exists yet for this repo, the generic prompt is used alone and the reviewer should say so plainly rather than inventing repo detail.
 
 As you resolve this roster (checking, for each lens, whether its override file exists), write down the exact file list per lens — this becomes the "Rule files used" section of the final report ([reviewers/report-template.md](./reviewers/report-template.md)) and is the fastest way for a human to debug why a reviewer did or didn't catch something specific to this repo.
 
@@ -137,7 +137,7 @@ Two lenses are the exception: **Codebase conventions** needs to run a repo-defin
 Give every reviewer:
 
 1. [reviewers/_common.md](./reviewers/_common.md)
-2. the full text of its own `reviewers/<perspective>.md` (generic) — plus `dd-apm-sdk-review-overrides/reviewers/<perspective>.md` when this repo has one
+2. the full text of its own `reviewers/<perspective>.md` (generic) — plus `.agents/dd-apm-sdk-review-overrides/reviewers/<perspective>.md` when this repo has one
 3. the explicit changed-file list and diff from Step 1
 
 Each reviewer's prompt names `_common.md` first and refuses to review without it.
@@ -172,4 +172,4 @@ Only when even a degraded pass is impossible — context overflow, timeout, the 
 
 ## Related skills in this repo
 
-See `dd-apm-sdk-review-overrides/repo-context.md` for the other skills that exist in this specific repo and how this review relates to them. That list is repo-specific and does not belong in the shared core.
+See `.agents/dd-apm-sdk-review-overrides/repo-context.md` for the other skills that exist in this specific repo and how this review relates to them. That list is repo-specific and does not belong in the shared core.

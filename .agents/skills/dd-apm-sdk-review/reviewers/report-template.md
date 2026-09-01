@@ -39,15 +39,15 @@ Target: <branch>...<base>   Files: <n>   Mode: parallel | sequential | DEGRADED 
 ---
 ## Rule files used
 - coherence: reviewers/coherence.md
-- security: reviewers/security.md + dd-apm-sdk-review-overrides/reviewers/security.md
+- security: reviewers/security.md + .agents/dd-apm-sdk-review-overrides/reviewers/security.md
 - design: reviewers/design.md (no override for this repo)
-- performance: reviewers/performance.md + dd-apm-sdk-review-overrides/reviewers/performance.md
+- performance: reviewers/performance.md + .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
 - maintainability: reviewers/maintainability.md (no override for this repo)
 - conventions: reviewers/conventions.md (no override for this repo)
 - cross-sdk: reviewers/cross-sdk.md
 
 ## Related skills in this repo
-- <from `dd-apm-sdk-review-overrides/repo-context.md`, Step 0 - the other skills this repo has and how they relate to this review; omit this section if that file has none>
+- <from `.agents/dd-apm-sdk-review-overrides/repo-context.md`, Step 0 - the other skills this repo has and how they relate to this review; omit this section if that file has none>
 
 ## Checked and fine
 - [performance] no new allocations on the span-start path

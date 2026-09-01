@@ -12,11 +12,11 @@ instruction_files:
   - .agents/skills/dd-apm-sdk-review/reviewers/conventions.md
   - .agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md
   - .agents/skills/dd-apm-sdk-review/reviewers/report-template.md
-  - dd-apm-sdk-review-overrides/reviewers/security.md
-  - dd-apm-sdk-review-overrides/reviewers/design.md
-  - dd-apm-sdk-review-overrides/reviewers/performance.md
-  - dd-apm-sdk-review-overrides/reviewers/maintainability.md
-  - dd-apm-sdk-review-overrides/reviewers/conventions.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
 
 default_level: gate
 presets:

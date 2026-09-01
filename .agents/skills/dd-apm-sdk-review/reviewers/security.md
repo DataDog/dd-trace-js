@@ -6,7 +6,7 @@ Your question: **does this change introduce a vulnerability or expose data it sh
 
 This is a tracer. It runs inside every customer application, sees every request, and ships data to Datadog. A data-exposure bug here is a customer incident, not a bug report.
 
-This file is language-agnostic. This repo's language-specific security footguns — if any have been written yet — live in `dd-apm-sdk-review-overrides/reviewers/security.md`; read it too if it exists.
+This file is language-agnostic. This repo's language-specific security footguns — if any have been written yet — live in `.agents/dd-apm-sdk-review-overrides/reviewers/security.md`; read it too if it exists.
 
 ## Tracer-specific checks (highest value — do these first)
 
