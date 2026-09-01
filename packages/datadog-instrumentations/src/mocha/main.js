@@ -35,6 +35,7 @@ const {
   isMarkedAsUnskippable,
 } = require('../../../dd-trace/src/plugins/util/test')
 
+const { addMochaRunHooks } = require('./common')
 const {
   isNewTest,
   getTestProperties,
@@ -59,8 +60,6 @@ const {
   loggedAttemptToFixTests,
   adjustRunnerFailuresForTestOptimization,
 } = require('./utils')
-
-require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
@@ -536,7 +535,10 @@ function stopCurrentHook (runner, hook) {
     if (test) {
       if (hook.parent?._afterEach?.includes(hook) || hook.parent?._afterAll?.includes(hook)) {
         markTestTerminal(runner, test)
-        if (!test._ddTestFinishStarted) runnerTestEndHandlers.get(runner)?.(test)
+        if (!test._ddTestFinishStarted) {
+          const onTestEnd = runnerTestEndHandlers.get(runner)
+          onTestEnd?.(test)
+        }
       } else {
         markTestPending(runner, test)
       }
@@ -763,14 +765,18 @@ function wrapRunnerEmit (Runner) {
             const test = hook.ctx?.currentTest
             if (test && hook.parent?._afterEach?.includes(hook)) {
               markTestTerminal(this, test)
-              if (!test._ddTestFinishStarted) runnerTestEndHandlers.get(this)?.(test)
+              if (!test._ddTestFinishStarted) {
+                const onTestEnd = runnerTestEndHandlers.get(this)
+                onTestEnd?.(test)
+              }
             }
           } else if (event === 'pending' || event === 'pass' || event === 'fail' || event === 'retry' ||
             event === 'test end') {
             const test = arguments[1]
             stopAfterEachHooks(this, test)
             if (event === 'test end' && !test._ddTestFinishStarted) {
-              runnerTestEndHandlers.get(this)?.(test)
+              const onTestEnd = runnerTestEndHandlers.get(this)
+              onTestEnd?.(test)
             }
           }
         }
@@ -1063,13 +1069,15 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 // In this hook we delay the execution with options.delay to grab library configuration,
 // skippable and known tests.
 // It is called but skipped in parallel mode.
-addHook({
-  name: 'mocha',
-  versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/mocha.js',
-}, (Mocha, frameworkVersion) => {
+/**
+ * @param {Function} Mocha
+ * @param {string} frameworkVersion
+ * @returns {Function}
+ */
+function wrapMochaRun (Mocha, frameworkVersion) {
   warnDeprecatedMochaVersion(frameworkVersion)
 
+  // Shimmer is required because run must return its Runner while execution is paused and resumed after configuration.
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
@@ -1121,12 +1129,14 @@ addHook({
     return runner
   })
   return Mocha
-})
+}
+
+addMochaRunHooks([MINIMUM_MOCHA_VERSION], wrapMochaRun)
 
 addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/cli/run-helpers.js',
+  filePattern: String.raw`lib/cli/run-helpers\.(?:c?js)$`,
 }, (run) => {
   // `runMocha` is an async function
   shimmer.wrap(run, 'runMocha', runMocha => function (...args) {
@@ -1157,7 +1167,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/runner.js',
+  filePattern: String.raw`lib/runner\.(?:c?js)$`,
 }, function (Runner, frameworkVersion) {
   if (patched.has(Runner)) return Runner
 
@@ -1588,7 +1598,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/nodejs/parallel-buffered-runner.js',
+  filePattern: String.raw`lib/nodejs/parallel-buffered-runner\.(?:c?js)$`,
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
     if (!testFinishCh.hasSubscribers) {
@@ -1667,7 +1677,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/nodejs/buffered-worker-pool.js',
+  filePattern: String.raw`lib/nodejs/buffered-worker-pool\.(?:c?js)$`,
 }, (BufferedWorkerPoolPackage, frameworkVersion) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 

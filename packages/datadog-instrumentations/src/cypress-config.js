@@ -67,7 +67,13 @@ function formatFileSystemError (error, fallbackPath) {
  * @returns {void}
  */
 function warnFileCreationFailures (artifact, failures, consequence, customerVisible = false) {
-  const details = failures.map(({ directory, error }) => formatFileSystemError(error, directory)).join('; ')
+  let details = ''
+  let isFirstFailure = true
+  for (const { directory, error } of failures) {
+    if (!isFirstFailure) details += '; '
+    details += formatFileSystemError(error, directory)
+    isFirstFailure = false
+  }
   const message = 'Datadog could not create %s. Attempts failed: %s. %s'
 
   if (customerVisible) {
@@ -790,22 +796,18 @@ function createConfigWrapper (originalConfigFile, wrapperDirectory) {
   //   supported. Guards against ES-module-default shape so TS-authored
   //   configs using `export default` still work.
   const body = isEsm
-    ? [
-        `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
-        `import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}`,
-        '',
-        'export default cypressConfig.wrapConfig(originalConfig)',
-        '',
-      ].join('\n')
-    : [
-        `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})`,
-        `const originalExports = require(${JSON.stringify(originalConfigFile)})`,
-        'const originalConfig = originalExports && originalExports.__esModule',
-        '  ? originalExports.default',
-        '  : originalExports',
-        'module.exports = cypressConfig.wrapConfig(originalConfig)',
-        '',
-      ].join('\n')
+    ? `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}
+import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}
+
+export default cypressConfig.wrapConfig(originalConfig)
+`
+    : `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})
+const originalExports = require(${JSON.stringify(originalConfigFile)})
+const originalConfig = originalExports && originalExports.__esModule
+  ? originalExports.default
+  : originalExports
+module.exports = cypressConfig.wrapConfig(originalConfig)
+`
 
   writeExclusiveFile(wrapperFile, body)
   return wrapperFile
