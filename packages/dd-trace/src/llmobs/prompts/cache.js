@@ -64,7 +64,6 @@ class HotCache {
   /**
    * Read a prompt and its freshness.
    * @param {string} key
-   * @returns {{prompt: ManagedPrompt, stale: boolean} | undefined}
    */
   get (key) {
     if (!this.enabled) return
@@ -79,7 +78,6 @@ class HotCache {
    * @param {string} key
    * @param {ManagedPrompt} prompt
    * @param {number} [ageMs]
-   * @returns {void}
    */
   set (key, prompt, ageMs = 0) {
     if (this.enabled) this.cache.set(key, prompt, { start: performance.now() - ageMs })
@@ -89,7 +87,6 @@ class HotCache {
    * Refresh a stale prompt in the background.
    * @param {string} key
    * @param {object} context
-   * @returns {void}
    */
   refresh (key, context) {
     if (!this.enabled) return
@@ -105,7 +102,6 @@ class HotCache {
   /**
    * Delete one selector.
    * @param {string} key
-   * @returns {void}
    */
   delete (key) {
     if (this.enabled) this.cache.delete(key)
@@ -113,7 +109,6 @@ class HotCache {
 
   /**
    * Clear all hot prompt entries.
-   * @returns {void}
    */
   clear () {
     if (this.enabled) this.cache.clear()
@@ -122,7 +117,6 @@ class HotCache {
   /**
    * Evict every selector for one exact prompt ID.
    * @param {string} promptId
-   * @returns {void}
    */
   evictPrompt (promptId) {
     if (!this.enabled) return
@@ -150,7 +144,6 @@ class WarmCache {
   /**
    * Create a secure cache directory.
    * @param {string} directory
-   * @returns {void}
    */
   #ensureDir (directory) {
     try {
@@ -164,7 +157,6 @@ class WarmCache {
   /**
    * Resolve the collision-safe directory for a prompt ID.
    * @param {string} promptId
-   * @returns {string}
    */
   #promptDir (promptId) {
     return path.join(this.cacheDir, Buffer.from(promptId).toString('base64url') || '_')
@@ -173,7 +165,6 @@ class WarmCache {
   /**
    * Resolve the cache file for a selector key.
    * @param {string} key
-   * @returns {string}
    */
   #path (key) {
     const index = key.lastIndexOf(':')
@@ -183,7 +174,6 @@ class WarmCache {
   /**
    * Restore and validate a prompt from the warm cache.
    * @param {object} data
-   * @returns {ManagedPrompt}
    */
   #deserialize (data) {
     const validTemplate = typeof data?.template === 'string' || (
@@ -207,7 +197,6 @@ class WarmCache {
   /**
    * Read a prompt and its freshness.
    * @param {string} key
-   * @returns {{prompt: ManagedPrompt, stale: boolean, ageMs: number} | undefined}
    */
   get (key) {
     if (!this.enabled) return
@@ -228,7 +217,6 @@ class WarmCache {
    * Store a prompt with restrictive permissions.
    * @param {string} key
    * @param {ManagedPrompt} prompt
-   * @returns {void}
    */
   set (key, prompt) {
     if (!this.enabled) return
@@ -252,7 +240,6 @@ class WarmCache {
   /**
    * Delete one selector.
    * @param {string} key
-   * @returns {void}
    */
   delete (key) {
     try {
@@ -265,7 +252,6 @@ class WarmCache {
   /**
    * Evict every selector for one exact prompt ID.
    * @param {string} promptId
-   * @returns {void}
    */
   evictPrompt (promptId) {
     try {
@@ -277,7 +263,6 @@ class WarmCache {
 
   /**
    * Clear all warm prompt entries.
-   * @returns {void}
    */
   clear () {
     try {
