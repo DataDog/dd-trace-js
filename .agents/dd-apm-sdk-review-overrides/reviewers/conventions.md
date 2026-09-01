@@ -37,8 +37,9 @@ npm run verify:supported-integrations
 npm run verify:electron-package
 npm run verify:workflow-job-names
 npm run test:eslint-rules              # eslint-rules/*.test.mjs
+npm run lint:editorconfig              # requires Docker; covers markdown/agent files eslint ignores
 ```
-Config is `eslint.config.mjs` plus the local rules in `eslint-rules/`. Note markdown is not covered by eslint, but `.editorconfig` is enforced by a checker in CI - `indent_size = 2`, so odd-numbered indentation fails.
+Config is `eslint.config.mjs` plus the local rules in `eslint-rules/`. Note markdown is not covered by eslint, but `.editorconfig` is enforced by a checker in CI - `indent_size = 2`, so odd-numbered indentation fails. Run `lint:editorconfig` rather than eyeballing indentation; if Docker isn't available, report editorconfig as `NOT VERIFIED (no Docker)` instead of skipping it silently.
 
 ## Config options — registration path
 
