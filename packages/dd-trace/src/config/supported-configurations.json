@@ -1382,7 +1382,7 @@
         "default": "false"
       }
     ],
-    "DD_LLMOBS_PROMPTS_TIMEOUT": [
+    "DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS": [
       {
         "implementation": "A",
         "type": "decimal",

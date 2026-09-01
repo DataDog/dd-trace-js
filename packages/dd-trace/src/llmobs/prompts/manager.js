@@ -141,7 +141,7 @@ class PromptManager {
     this.config = config
     this.getProvider = getProvider
     this.ttlMs = Math.round(config.DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS * 1000)
-    this.timeoutMs = Math.round(config.DD_LLMOBS_PROMPTS_TIMEOUT * 1000)
+    this.timeoutMs = Math.round(config.DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS * 1000)
     this.origin = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') || `https://api.${config.site}`
     this.cacheGeneration = 0
     this.fetchTokens = new Map()
