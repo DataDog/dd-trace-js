@@ -1138,8 +1138,13 @@ describe('compiled Next runtimes', () => {
     assert.strictEqual(result, 'response')
   })
 
-  describe('as the first tracing entrypoint', () => {
+  describe('with tracing enabled', () => {
     let tracer
+    let requestHookCalls = 0
+
+    function countRequestHook () {
+      requestHookCalls++
+    }
 
     class RouteModule {
       prepare () {
@@ -1153,7 +1158,11 @@ describe('compiled Next runtimes', () => {
     }
 
     before(async () => {
-      tracer = await agent.load('next')
+      tracer = await agent.load('next', {
+        hooks: {
+          request: countRequestHook,
+        },
+      })
       dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
     })
     after(() => agent.close())
@@ -1218,6 +1227,52 @@ describe('compiled Next runtimes', () => {
       dc.channel('apm:next:page:load').unsubscribe(onPage)
       dc.channel('apm:next:request:finish').unsubscribe(onFinish)
     })
+
+    for (const responseBeforeHandler of [false, true]) {
+      const completionOrder = responseBeforeHandler ? 'response-first' : 'handler-first'
+
+      it(`does not finish a reused App Page lifecycle for ${completionOrder} completion`, async () => {
+        const pathname = `/reused-app-page-${completionOrder}`
+
+        class AppPageRouteModule extends RouteModule {
+          definition = { pathname }
+
+          handleResponse () {
+            if (responseBeforeHandler) response.emit('finish')
+            return Promise.resolve({ value: { status: 200 } })
+          }
+        }
+
+        applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+        const request = { headers: {}, method: 'GET', url: pathname }
+        const response = new http.ServerResponse(request)
+        const routeModule = new AppPageRouteModule()
+        const parentResource = `reused-app-page-${completionOrder}`
+        /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
+        function assertParentTrace (traces) {
+          const [span] = traces[0]
+          assert.strictEqual(requestHookCalls, 0)
+          assert.strictEqual(span.name, parentResource)
+          assert.strictEqual(span.resource, `GET ${pathname}`)
+        }
+        const tracePromise = agent.assertSomeTraces(assertParentTrace, { spanResourceMatch: new RegExp(pathname) })
+        requestHookCalls = 0
+
+        await Promise.all([
+          tracer.trace(parentResource, { integrationName: 'next' }, async () => {
+            await routeModule.prepare(request, response, {})
+            const result = await routeModule.handleResponse({
+              req: request,
+              responseGenerator: () => Promise.resolve(),
+            })
+            if (!responseBeforeHandler) response.emit('finish')
+            return result
+          }),
+          tracePromise,
+        ])
+      })
+    }
 
     it('clears the App Route request association after a synchronous generator error', async () => {
       const nextRequest = {
@@ -1452,60 +1507,74 @@ describe('compiled Next runtimes', () => {
       })
     }
 
-    it('records a foreground App Page error while stale revalidation is pending', async () => {
-      let responseGenerator
-      let continueRevalidation
-      let reportForegroundError
-      let foregroundErrorReported
-      const foregroundError = new Error('foreground postponed render error')
-      const backgroundError = new Error('stale revalidation error')
-      const foregroundErrorTrigger = new Promise(resolve => { reportForegroundError = resolve })
-      const revalidationContinuation = new Promise(resolve => { continueRevalidation = resolve })
+    for (const { foregroundAfterRevalidation, label, reuseError } of [
+      { foregroundAfterRevalidation: false, label: 'while stale revalidation is pending', reuseError: false },
+      { foregroundAfterRevalidation: true, label: 'after stale revalidation reports the same error', reuseError: true },
+    ]) {
+      it(`records a foreground App Page error ${label}`, async () => {
+        let responseGenerator
+        let continueRevalidation
+        let reportForegroundError
+        let foregroundErrorReported
+        const foregroundError = new Error('foreground postponed render error')
+        const backgroundError = reuseError ? foregroundError : new Error('stale revalidation error')
+        const foregroundErrorTrigger = new Promise(resolve => { reportForegroundError = resolve })
+        const revalidationContinuation = new Promise(resolve => { continueRevalidation = resolve })
 
-      class AppPageRouteModule extends RouteModule {
-        definition = { pathname: '/interleaved-error' }
+        class AppPageRouteModule extends RouteModule {
+          definition = { pathname: '/interleaved-error' }
 
-        /** @param {{responseGenerator: () => Promise<unknown>}} options */
-        handleResponse (options) {
-          responseGenerator = options.responseGenerator
-          foregroundErrorReported = foregroundErrorTrigger.then(() => this.onRequestError(options.req, foregroundError))
-          return Promise.resolve({ isMiss: false, isStale: true })
+          /** @param {{responseGenerator: () => Promise<unknown>}} options */
+          handleResponse (options) {
+            responseGenerator = options.responseGenerator
+            foregroundErrorReported = (async () => {
+              await foregroundErrorTrigger
+              await this.onRequestError(options.req, foregroundError)
+            })()
+            return Promise.resolve({ isMiss: false, isStale: true })
+          }
+
+          onRequestError () {
+            return Promise.resolve()
+          }
         }
+        applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
-        onRequestError () {
-          return Promise.resolve()
+        const nodeRequest = { headers: {}, method: 'GET', url: '/interleaved-error' }
+        const request = { ...nodeRequest, originalRequest: nodeRequest }
+        const response = new http.ServerResponse(nodeRequest)
+        const routeModule = new AppPageRouteModule()
+        const trace = agent.assertSomeTraces(traces => {
+          const [span] = traces[0]
+          assert.strictEqual(span.error, 1)
+          assert.strictEqual(span.meta['error.message'], foregroundError.message)
+        })
+
+        await routeModule.prepare(request, response, {})
+        await routeModule.handleResponse({
+          req: request,
+          responseGenerator: async () => {
+            await revalidationContinuation
+            await routeModule.onRequestError(request, backgroundError)
+            throw backgroundError
+          },
+        })
+
+        const revalidation = responseGenerator({ hasResolved: true })
+        if (!foregroundAfterRevalidation) {
+          reportForegroundError()
+          await foregroundErrorReported
         }
-      }
-      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
-
-      const nodeRequest = { headers: {}, method: 'GET', url: '/interleaved-error' }
-      const request = { ...nodeRequest, originalRequest: nodeRequest }
-      const response = new http.ServerResponse(nodeRequest)
-      const routeModule = new AppPageRouteModule()
-      const trace = agent.assertSomeTraces(traces => {
-        const [span] = traces[0]
-        assert.strictEqual(span.error, 1)
-        assert.strictEqual(span.meta['error.message'], foregroundError.message)
+        continueRevalidation()
+        await assert.rejects(revalidation, backgroundError)
+        if (foregroundAfterRevalidation) {
+          reportForegroundError()
+          await foregroundErrorReported
+        }
+        response.emit('finish')
+        await trace
       })
-
-      await routeModule.prepare(request, response, {})
-      await routeModule.handleResponse({
-        req: request,
-        responseGenerator: async () => {
-          await revalidationContinuation
-          await routeModule.onRequestError(request, backgroundError)
-          throw backgroundError
-        },
-      })
-
-      const revalidation = responseGenerator({ hasResolved: true })
-      reportForegroundError()
-      await foregroundErrorReported
-      continueRevalidation()
-      await assert.rejects(revalidation, backgroundError)
-      response.emit('finish')
-      await trace
-    })
+    }
 
     it('does not attach nested fallback revalidation errors to the foreground App Page span', async () => {
       let backgroundRevalidation
@@ -1704,6 +1773,47 @@ describe('compiled Next runtimes', () => {
       })
       response.emit('close')
       finishHandleResponse({ value: { status: 503 } })
+      await result
+      await trace
+    })
+
+    it('records App Page handler errors after the response closes', async () => {
+      let finishHandleResponse
+      const handlerError = new Error('closed response handler error')
+      const handleResponseResult = new Promise(resolve => { finishHandleResponse = resolve })
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/closed-response-error' }
+
+        async handleResponse () {
+          await handleResponseResult
+          throw handlerError
+        }
+      }
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+      const request = { headers: {}, method: 'GET', url: '/closed-response-error' }
+      const response = new http.ServerResponse(request)
+      const routeModule = new AppPageRouteModule()
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          error: 1,
+          meta: {
+            'error.message': handlerError.message,
+            'error.type': 'Error',
+          },
+        })
+        assert.ok(span.meta['error.stack'])
+      }, { spanResourceMatch: /closed-response-error/ })
+
+      await routeModule.prepare(request, response, {})
+      const result = assert.rejects(routeModule.handleResponse({
+        req: request,
+        responseGenerator: () => assert.fail('a cache hit should not invoke the response generator'),
+      }), handlerError)
+      response.emit('close')
+      finishHandleResponse()
       await result
       await trace
     })

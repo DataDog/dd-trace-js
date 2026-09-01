@@ -57,6 +57,7 @@ class NextPlugin extends ServerPlugin {
     if (parentSpan?._integrationName === this.constructor.id) {
       const reusedStore = { ...store, span: parentSpan, req }
       reusedNextRequestStores.add(reusedStore)
+      if (ctx.finishOnResponse) ctx.currentStore = reusedStore
       return reusedStore
     }
 

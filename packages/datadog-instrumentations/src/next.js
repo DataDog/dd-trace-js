@@ -51,7 +51,6 @@ const backgroundRevalidationChannel = channel('apm:next:request:background-reval
 
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
-const requestErrors = new WeakMap()
 const noFallbackErrorPrototypes = new WeakSet()
 // Next.js <= 14.2.6
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
@@ -270,7 +269,6 @@ function wrapServeStatic (serveStatic) {
 
 function publishFinish (ctx, error) {
   publishError(ctx.req, ctx, error)
-  requestErrors.delete(ctx.req)
 
   const maybeNextRequest = nodeNextRequestsToNextRequests.get(ctx.req)
   if (maybeNextRequest) {
@@ -303,21 +301,11 @@ function isNoFallbackError (error) {
 function publishError (req, ctx, error) {
   if (!error || isNoFallbackError(error)) return
 
-  if (ctx) ctx.error = error
-
-  req = req.originalRequest || req
-  let errors = requestErrors.get(req)
-  if (errors?.has(error)) return
-
-  if (!errors) {
-    errors = new Set()
-    requestErrors.set(req, errors)
-  }
-  errors.add(error)
-
   if (ctx) {
+    ctx.error = error
     errorChannel.publish(ctx)
   } else {
+    req = req.originalRequest || req
     errorChannel.publish({ req, error })
   }
 }
@@ -451,12 +439,12 @@ function wrapResponseGenerator (responseGenerator, routeModule, req) {
 function wrapHandleResponse (handleResponse, associateNextRequest) {
   return function (options) {
     const req = options.req
-    const res = routeResponses.get(req)
-    routeResponses.delete(req)
-
     if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
       return handleResponse.apply(this, arguments)
     }
+
+    const res = routeResponses.get(req)
+    routeResponses.delete(req)
 
     const routeModule = res && associateNextRequest ? this : undefined
     options.responseGenerator = wrapResponseGenerator(options.responseGenerator, routeModule, req)
