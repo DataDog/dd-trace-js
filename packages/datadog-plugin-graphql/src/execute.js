@@ -5,6 +5,7 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
+const { recordResolveError } = require('./resolve-error')
 const {
   extractErrorIntoSpanEvent,
   getBaseTypeName,
@@ -381,8 +382,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
       instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
 
-    releaseRootContext(ctx.ddRootCtx, finishPendingFields)
+    const releaseBeforeExecuteHook = ctx.ddRootCtx?.resolveHooksPending === true
+    if (releaseBeforeExecuteHook) releaseRootContext(ctx.ddRootCtx, finishPendingFields)
     this.config.hooks.execute(span, ctx.ddArgs, res)
+    if (!releaseBeforeExecuteHook) releaseRootContext(ctx.ddRootCtx, finishPendingFields)
     span.finish()
   }
 
@@ -428,6 +431,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     field.span = span
     if (rootCtx.config.collapse) {
+      if (field.jitPathKey === false) {
+        field.currentStore.graphqlResolveField = { field }
+      }
       field.nextResolveField = rootCtx.resolveFields
       rootCtx.resolveFields = field
     }
@@ -472,17 +478,17 @@ class GraphQLExecutePlugin extends TracingPlugin {
    * @param {unknown} error
    * @param {unknown} result
    * @param {boolean} [failed]
-   * @param {boolean} [reused]
    */
-  completeResolveSpan (rootCtx, field, error, result, failed = Boolean(error), reused = false) {
+  completeResolveSpan (rootCtx, field, error, result, failed = false) {
     if (rootCtx.resolveFields !== undefined) {
       if (field.endTime !== REUSED_FIELD_END_TIME) {
         field.endTime = rootCtx.executeSpan._getTime()
       }
       if (field.jitPathKey === false) {
         if (failed) recordResolveError(field, error)
-        if (!reused && this.config.hooks.resolve) {
+        if (this.config.hooks.resolve) {
           field.resolveHookContext = createResolveHookContext(field, field.error, result)
+          rootCtx.resolveHooksPending = true
         }
         return
       }
@@ -662,17 +668,6 @@ function wrapResolve (resolve, isJit = false) {
       }
     } else {
       field.endTime = REUSED_FIELD_END_TIME
-      if (!isJit) {
-        /**
-         * @param {unknown} error
-         * @param {unknown} result
-         * @param {boolean} failed
-         */
-        const finishField = (error, result, failed) => {
-          rootCtx.plugin?.completeResolveSpan(rootCtx, field, error, result, failed, true)
-        }
-        return callInAsyncScope(resolve, this, arguments, field.currentStore, finishField)
-      }
       return callInCollapsedScope(
         resolve,
         this,
@@ -1105,7 +1100,7 @@ function callInAsyncScope (fn, thisArg, args, store, callback, isJit) {
     if (typeof result?.then === 'function' && (!isJit || (result !== null && typeof result === 'object'))) {
       return observeThenable(result, callback)
     }
-    callback(null, result, false)
+    callback(null, result)
     return result
   } catch (error) {
     callback(error, undefined, true)
@@ -1145,7 +1140,7 @@ function observeThenable (thenable, callback) {
          * @param {unknown} result
          */
         result => {
-          callback(null, result, false)
+          callback(null, result)
           return onFulfilled ? onFulfilled(result) : result
         },
         /**
@@ -1429,6 +1424,11 @@ function releaseRootContext (rootCtx, finishPendingFields) {
   const endTime = rootCtx.executeSpan._getTime()
   if (rootCtx.resolveFields !== undefined) {
     for (let field = rootCtx.resolveFields; field; field = field.nextResolveField) {
+      const holder = field.currentStore?.graphqlResolveField
+      if (holder?.field === field) {
+        holder.field = undefined
+        field.currentStore.graphqlResolveField = undefined
+      }
       if (field.resolveHookContext) {
         rootCtx.config.hooks.resolve(field.span, field.resolveHookContext)
       }
@@ -1443,22 +1443,6 @@ function releaseRootContext (rootCtx, finishPendingFields) {
   // Resolver-created async resources retain copied stores that all share this owner.
   for (const key of Object.keys(rootCtx)) {
     rootCtx[key] = undefined
-  }
-}
-
-/**
- * @param {object} field
- * @param {unknown} error
- */
-function recordResolveError (field, error) {
-  if (field.error !== undefined) return
-
-  const recordedError = error || new Error('GraphQL resolver rejected without an error')
-  field.error = recordedError
-  field.span.setTag('error', recordedError)
-  if (field.resolveHookContext) {
-    field.resolveHookContext.error = recordedError
-    field.resolveHookContext.result = undefined
   }
 }
 
