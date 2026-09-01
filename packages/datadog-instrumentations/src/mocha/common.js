@@ -38,7 +38,8 @@ addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
   file: 'lib/suite.js',
-}, (Suite) => {
+}, (SuitePackage) => {
+  const Suite = SuitePackage.Suite ?? SuitePackage
   shimmer.wrap(Suite.prototype, 'addTest', addTest => function (test) {
     const callSites = getCallSites()
     const testCallSite = callSites.find(site => site.getFileName() === test.file)
@@ -47,5 +48,5 @@ addHook({
     }
     return addTest.apply(this, arguments)
   })
-  return Suite
+  return SuitePackage
 })

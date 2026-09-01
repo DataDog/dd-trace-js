@@ -1063,13 +1063,15 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 // In this hook we delay the execution with options.delay to grab library configuration,
 // skippable and known tests.
 // It is called but skipped in parallel mode.
-addHook({
-  name: 'mocha',
-  versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/mocha.js',
-}, (Mocha, frameworkVersion) => {
+/**
+ * @param {Function} Mocha
+ * @param {string} frameworkVersion
+ * @returns {Function}
+ */
+function wrapMochaRun (Mocha, frameworkVersion) {
   warnDeprecatedMochaVersion(frameworkVersion)
 
+  // Shimmer is required because run must return its Runner while execution is paused and resumed after configuration.
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
@@ -1121,12 +1123,26 @@ addHook({
     return runner
   })
   return Mocha
-})
+}
 
 addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/cli/run-helpers.js',
+  filePattern: String.raw`lib/mocha\.(?:c?js)$`,
+}, wrapMochaRun)
+
+// Mocha 12's ESM package root loads lib/mocha.cjs before the CJS hook can observe it.
+addHook({
+  name: 'mocha',
+  versions: ['>=12.0.0'],
+  file: 'index.js',
+  patchDefault: true,
+}, wrapMochaRun)
+
+addHook({
+  name: 'mocha',
+  versions: [MINIMUM_MOCHA_VERSION],
+  filePattern: String.raw`lib/cli/run-helpers\.(?:c?js)$`,
 }, (run) => {
   // `runMocha` is an async function
   shimmer.wrap(run, 'runMocha', runMocha => function (...args) {
@@ -1157,7 +1173,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/runner.js',
+  filePattern: String.raw`lib/runner\.(?:c?js)$`,
 }, function (Runner, frameworkVersion) {
   if (patched.has(Runner)) return Runner
 
@@ -1588,7 +1604,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/nodejs/parallel-buffered-runner.js',
+  filePattern: String.raw`lib/nodejs/parallel-buffered-runner\.(?:c?js)$`,
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
     if (!testFinishCh.hasSubscribers) {
@@ -1667,7 +1683,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/nodejs/buffered-worker-pool.js',
+  filePattern: String.raw`lib/nodejs/buffered-worker-pool\.(?:c?js)$`,
 }, (BufferedWorkerPoolPackage, frameworkVersion) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
