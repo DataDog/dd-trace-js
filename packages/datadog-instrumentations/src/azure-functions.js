@@ -12,6 +12,7 @@ const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke'
 const azureDurableFunctionsChannel = dc.tracingChannel('datadog:azure:durable-functions:invoke')
 
 const ORCHESTRATION_TRIGGER_TYPE = 'orchestrationTrigger'
+const ORCHESTRATOR_COMPLETED_EVENT_TYPE = 13
 
 addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (azureFunction) => {
   const { app } = azureFunction
@@ -55,9 +56,16 @@ function traceOrchestrationHandler (handler, functionName) {
     if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, args)
 
     const orchestrationBinding = args[0]
-    if (orchestrationBinding?.isReplaying) return handler.apply(this, args)
-
     const traceContext = args[1]?.traceContext
+
+    // we do not want to trace if the orchestrator has already completed and is being reactivated
+    const history = orchestrationBinding?.history
+    const hasPreviousActivation = history?.some(
+      event => event.EventType === ORCHESTRATOR_COMPLETED_EVENT_TYPE
+    )
+
+    if (hasPreviousActivation) { return handler.apply(this, args) }
+
     return azureDurableFunctionsChannel.tracePromise(
       handler,
       {

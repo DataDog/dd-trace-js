@@ -61,7 +61,7 @@ describe('azure-functions orchestration instrumentation (unit)', () => {
     return options.handler
   }
 
-  it('publishes an Orchestration span context for non-replaying invocations', async () => {
+  it('publishes an Orchestration span context for durable invocations', async () => {
     let started
     subscribeStart((ctx) => { started = ctx })
 
@@ -86,12 +86,18 @@ describe('azure-functions orchestration instrumentation (unit)', () => {
     assert.strictEqual(started.tracestate, 'dd=s:1')
   })
 
-  it('skips tracing when the orchestrator is replaying', async () => {
+  it('skips tracing when the orchestrator has a previous activation', async () => {
     let started = false
     subscribeStart(() => { started = true })
 
     const wrapped = registerOrchestration(async () => 'ok')
-    await wrapped({ isReplaying: true, instanceId: 'abc-123' }, {})
+    const binding = {
+      isReplaying: false,
+      instanceId: 'abc-123',
+      history: [{ EventType: 13 }],
+    }
+
+    await wrapped(binding, {})
 
     assert.strictEqual(started, false)
   })
