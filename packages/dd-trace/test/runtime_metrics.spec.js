@@ -10,6 +10,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { metrics } = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
 
 require('./setup/core')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
@@ -42,6 +43,8 @@ function proxyMetricsClient (Client) {
     },
   })
 }
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 function createGarbage (count = 50) {
   let last = {}
@@ -205,6 +208,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
             increment: wrapSpy(client, client.increment),
             histogram: wrapSpy(client, client.histogram),
             flush: client.flush.bind(client),
+            updateTags: client.updateTags,
           }
         })
 
@@ -215,6 +219,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           increment: sinon.spy(),
           histogram: sinon.spy(),
           flush: sinon.stub().callsFake(done => done?.()),
+          updateTags: sinon.spy(),
         }
 
         const proxiedObject = {
@@ -338,6 +343,32 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           const call = Client.lastCall
           const tags = call.args[0].tags
           assert.ok(!tags.some(tag => tag.startsWith('entrypoint.')), 'expected no entrypoint tags')
+        })
+
+        it('should refresh the DogStatsD client tags when the identity-refresh channel fires', () => {
+          config.tags['runtime-id'] = 'initial-id'
+          config.runtimeMetricsRuntimeId = true
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+          client.updateTags.resetHistory()
+
+          // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place
+          // and then publishing to the shared identity-refresh channel (MicroVM clone resume).
+          config.tags['runtime-id'] = 'refreshed-id'
+          identityRefreshChannel.publish(config)
+
+          sinon.assert.calledOnce(client.updateTags)
+          const tags = client.updateTags.lastCall.args[0]
+          assert.ok(tags.includes('runtime-id:refreshed-id'), `expected tags to include refreshed-id: ${tags}`)
+        })
+
+        it('should stop reacting to identity refresh after stop', () => {
+          runtimeMetrics.stop()
+          client.updateTags.resetHistory()
+
+          identityRefreshChannel.publish(config)
+
+          sinon.assert.notCalled(client.updateTags)
         })
 
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
@@ -1084,6 +1115,7 @@ FakePerformanceObserverForOtlp.instances = []
  *   batchCallbacks: Array<{ cb: Function, observables: object[] }>,
  *   fireBatchCallbacks: () => Map<object, Array<{ v: number, a: object }>>,
  *   fakeMetricsClient: object,
+ *   identityRefreshCalls: Array<{ client: object, config: object, unsubscribe: Function }>,
  * }}
  */
 function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
@@ -1092,6 +1124,7 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
   const records = {}
   const batchCallbacks = []
   const statsdCalls = []
+  const identityRefreshCalls = []
   FakePerformanceObserverForOtlp.instances = []
 
   function makeFactory (type) {
@@ -1146,7 +1179,8 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
 
   const monitorEventLoopDelay = overrides.monitorEventLoopDelay ?? realPerfHooks.monitorEventLoopDelay
 
-  const otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
+  const loadOtlpRuntimeMetrics = proxyquire.noCallThru()
+  const otlpMetrics = loadOtlpRuntimeMetrics('../src/runtime_metrics/otlp_runtime_metrics', {
     '@opentelemetry/api': {
       metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
     },
@@ -1159,6 +1193,11 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     },
     './client': {
       createMetricsClient: () => fakeMetricsClient,
+      subscribeToIdentityRefresh: (client, config) => {
+        const unsubscribe = sinon.spy()
+        identityRefreshCalls.push({ client, config, unsubscribe })
+        return unsubscribe
+      },
     },
   })
 
@@ -1186,6 +1225,7 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     fireBatchCallbacks,
     fakeMetricsClient,
     statsdCalls,
+    identityRefreshCalls,
   }
 }
 
@@ -1454,16 +1494,19 @@ describe('otlp_runtime_metrics', () => {
       removeBatchObservableCallback () {},
     }
     const errorLog = sinon.spy()
-    const otlpMetricsFailing = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
+    const loadOtlpRuntimeMetrics = proxyquire.noCallThru()
+    const otlpMetricsFailing = loadOtlpRuntimeMetrics('../src/runtime_metrics/otlp_runtime_metrics', {
       '@opentelemetry/api': {
         metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) },
       },
       '../log': { debug () {}, error: errorLog },
       './client': {
         createMetricsClient: () => ({ flush () {} }),
+        subscribeToIdentityRefresh: () => () => {},
       },
     })
-    const dispatcher = proxyquire.noCallThru()('../src/runtime_metrics', {
+    const loadRuntimeMetrics = proxyquire.noCallThru()
+    const dispatcher = loadRuntimeMetrics('../src/runtime_metrics', {
       './otlp_runtime_metrics': otlpMetricsFailing,
       '../log': { error: errorLog },
     })
@@ -1515,6 +1558,22 @@ describe('otlp_runtime_metrics', () => {
     otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
     assert.strictEqual(Object.keys(createdInstruments).length, Object.keys(SPEC).length,
       'should register every metric again after stop')
+  })
+
+  it('subscribes the DogStatsD client to identity refresh on start and unsubscribes on stop', () => {
+    const ctx = loadOtlpRuntimeMetricsTestModule()
+    const config = { runtimeMetrics: { eventLoop: true } }
+
+    ctx.otlpMetrics.start(config)
+
+    assert.strictEqual(ctx.identityRefreshCalls.length, 1)
+    assert.strictEqual(ctx.identityRefreshCalls[0].client, ctx.fakeMetricsClient)
+    assert.strictEqual(ctx.identityRefreshCalls[0].config, config)
+    sinon.assert.notCalled(ctx.identityRefreshCalls[0].unsubscribe)
+
+    ctx.otlpMetrics.stop()
+
+    sinon.assert.calledOnce(ctx.identityRefreshCalls[0].unsubscribe)
   })
 })
 

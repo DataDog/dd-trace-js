@@ -10,14 +10,23 @@
 
 const assert = require('node:assert')
 
-const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const createRfdc = require('../../../../../vendor/dist/rfdc')
+const clone = createRfdc({ proto: false, circles: false })
 
 const { parse, query } = require('./compiler')
 
 const functionTypes = new Set(['ArrowFunctionExpression', 'FunctionDeclaration', 'FunctionExpression'])
 const identifierPattern = /^[$A-Z_a-z][$\w]*$/
 
-module.exports = { awaitContextCallback, waitForAsyncEnd }
+module.exports = {
+  awaitContextCallback,
+  configureGraphqlJitCompileObject,
+  configureGraphqlJitDeferredField,
+  configureGraphqlJitExecute,
+  configureGraphqlJitRuntime,
+  configureMercuriusRequest,
+  waitForAsyncEnd,
+}
 
 /**
  * Awaits an optional context callback before continuing through a matched conditional branch.
@@ -96,6 +105,313 @@ function awaitContextCallback (state, node, _parent, ancestry) {
   recheckedBranch.alternate = clone(node.alternate)
   callbackBranch.alternate.body.push(...originalStatements)
   node.consequent.body = callbackStatements
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionDeclaration} node
+ */
+function configureGraphqlJitCompileObject (_state, node) {
+  const resolverConditions = query(node, 'IfStatement[test.name="resolver"]')
+  const compileTypeCalls = query(node, 'CallExpression[callee.name="compileType"]')
+
+  assert.strictEqual(
+    resolverConditions.length,
+    1,
+    'configureGraphqlJitCompileObject: resolver condition not found'
+  )
+  assert.strictEqual(
+    compileTypeCalls.length,
+    1,
+    'configureGraphqlJitCompileObject: inline compile call not found'
+  )
+
+  const [resolverCondition] = resolverConditions
+  const [compileTypeCall] = compileTypeCalls
+  const inlineCompileCall = clone(compileTypeCall)
+  const argumentProperties = query(resolverCondition.consequent, 'Property[key.name="args"]')
+  assert.strictEqual(
+    argumentProperties.length,
+    1,
+    'configureGraphqlJitCompileObject: argument compiler not found'
+  )
+
+  const defaultSetup = parse(`
+    const ddTraceDefault = context.ddTraceDefaultResolvers && !resolver && alwaysDefer === false
+    const ddTraceArguments = ddTraceDefault ? DD_ARGUMENTS : undefined
+  `).body
+  replaceIdentifier(defaultSetup[1], 'DD_ARGUMENTS', argumentProperties[0].value)
+  const [inlineField] = parse(`
+    const ddTraceInline = ddTraceDefault
+      ? context.ddTraceRuntime.compileDefaultField(
+        context,
+        DD_PATH,
+        type,
+        field,
+        DD_FIELD_NODES,
+        originPaths,
+        ddTraceArguments,
+        objectStringify(ddTraceArguments.values),
+        DD_COMPILED
+      )
+      : undefined
+  `).body
+  replaceIdentifier(inlineField, 'DD_PATH', clone(compileTypeCall.arguments[6]))
+  replaceIdentifier(inlineField, 'DD_FIELD_NODES', clone(compileTypeCall.arguments[3]))
+  replaceIdentifier(inlineField, 'DD_COMPILED', inlineCompileCall)
+
+  assert(
+    insertBeforeStatement(node.body, resolverCondition, [...defaultSetup, inlineField]),
+    'configureGraphqlJitCompileObject: could not insert default field setup'
+  )
+  resolverCondition.test = parse('resolver || ddTraceDefault').body[0].expression
+
+  const includedConditions = query(resolverCondition.consequent, 'IfStatement[test.name="alwaysIncluded"]')
+  let defaultBody
+  if (includedConditions.length === 1) {
+    defaultBody = parse(`
+      if (alwaysIncluded) {
+        body(ddTraceInline)
+      } else {
+        body(\`? \${ddTraceInline} : undefined\`)
+      }
+    `).body
+  } else {
+    assert.strictEqual(
+      includedConditions.length,
+      0,
+      'configureGraphqlJitCompileObject: ambiguous included condition'
+    )
+    defaultBody = parse(`
+      body(\`? \${ddTraceInline} : undefined\`)
+    `).body
+  }
+
+  const originalResolverBody = resolverCondition.consequent
+  const [defaultCondition] = parse(`
+    if (ddTraceDefault) {}
+  `).body
+  defaultCondition.consequent.body.push(...defaultBody)
+  defaultCondition.alternate = originalResolverBody
+  resolverCondition.consequent = {
+    type: 'BlockStatement',
+    body: [defaultCondition],
+  }
+}
+
+/**
+ * @param {import('estree').Node} root
+ * @param {string} name
+ * @param {import('estree').Node} replacement
+ */
+function replaceIdentifier (root, name, replacement) {
+  for (const key of Object.keys(root)) {
+    const value = root[key]
+    if (!value || typeof value !== 'object') continue
+    if (value.type === 'Identifier' && value.name === name) {
+      root[key] = clone(replacement)
+    } else {
+      replaceIdentifier(value, name, replacement)
+    }
+  }
+}
+
+/**
+ * @param {import('estree').Node} root
+ * @param {import('estree').Node} target
+ * @param {import('estree').Node[]} statements
+ * @returns {boolean}
+ */
+function insertBeforeStatement (root, target, statements) {
+  for (const key of Object.keys(root)) {
+    const value = root[key]
+    if (Array.isArray(value)) {
+      const index = value.indexOf(target)
+      if (index !== -1) {
+        value.splice(index, 0, ...statements)
+        return true
+      }
+      for (const entry of value) {
+        if (entry && typeof entry === 'object' && insertBeforeStatement(entry, target, statements)) return true
+      }
+    } else if (value && typeof value === 'object' && insertBeforeStatement(value, target, statements)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * @param {import('estree').Node} root
+ * @param {string} selector
+ * @returns {import('estree').Node}
+ */
+function queryOne (root, selector) {
+  const matches = query(root, selector)
+  assert.strictEqual(matches.length, 1, `expected one match for ${selector}`)
+  return matches[0]
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
+  const context = queryOne(node, 'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression')
+  const tracedDeclaration = queryOne(
+    node,
+    'VariableDeclaration:has(VariableDeclarator[id.name="__apm$traced"])'
+  )
+  const tracedBody = queryOne(
+    tracedDeclaration,
+    'VariableDeclarator[id.name="__apm$traced"] > ArrowFunctionExpression > BlockStatement'
+  )
+  const wrappedDeclaration = queryOne(
+    tracedBody,
+    'VariableDeclaration:has(VariableDeclarator[id.name="__apm$wrapped"])'
+  )
+  const wrapped = queryOne(wrappedDeclaration, 'VariableDeclarator[id.name="__apm$wrapped"]')
+  const subscriberGuard = queryOne(
+    node,
+    'IfStatement[test.operator="!"][consequent.type="ReturnStatement"]' +
+      ':has(CallExpression[callee.name="__apm$traced"])'
+  )
+  const activeCall = queryOne(
+    node,
+    'AssignmentExpression[left.object.name="__apm$ctx"][left.property.name="result"] > ' +
+      'CallExpression[callee.name="__apm$traced"]'
+  )
+  assert(wrapped.init, 'configureGraphqlJitExecute: wrapped query has no implementation')
+
+  const createBoundQuery = ancestry.find(ancestor =>
+    ancestor.type === 'FunctionDeclaration' && ancestor.id?.name === 'createBoundQuery'
+  )
+  assert(createBoundQuery, 'configureGraphqlJitExecute: createBoundQuery not found')
+
+  const retDeclaration = queryOne(
+    createBoundQuery,
+    'VariableDeclaration:has(VariableDeclarator[id.name="ret"])'
+  )
+  assert.strictEqual(
+    query(createBoundQuery, 'VariableDeclarator[id.name="__apm$wrapped"]').length,
+    1,
+    'configureGraphqlJitExecute: ambiguous wrapped query declaration'
+  )
+  assert.strictEqual(
+    query(wrapped.init, 'ThisExpression, Super, MetaProperty, Identifier[name="arguments"]').length,
+    0,
+    'configureGraphqlJitExecute: original query depends on its invocation scope'
+  )
+
+  const bindings = parse(`
+    const ddResolvers = compilationContext.resolvers
+    const ddSchema = compilationContext.schema
+  `).body
+  const properties = parse(`({
+    ddDocument: document,
+    ddOperationName: operationName,
+    ddPlan,
+    ddResolvers,
+    ddSchema
+  })`).body[0].expression.properties
+
+  context.properties.push(...properties)
+
+  assert(
+    insertBeforeStatement(createBoundQuery.body, retDeclaration, [...bindings, wrappedDeclaration]),
+    'configureGraphqlJitExecute: could not hoist original query'
+  )
+
+  const fastCall = subscriberGuard.consequent.argument
+  fastCall.callee = parse('__apm$wrapped.apply').body[0].expression
+  fastCall.arguments = parse('call(this, arguments)').body[0].expression.arguments
+  subscriberGuard.consequent = { type: 'BlockStatement', body: [subscriberGuard.consequent] }
+  activeCall.callee = parse('__apm$wrapped.apply').body[0].expression
+  activeCall.arguments = parse('call(this, __apm$arguments)').body[0].expression.arguments
+
+  const statements = node.body.body
+  const subscriberGuardIndex = statements.indexOf(subscriberGuard)
+  const tracedDeclarationIndex = statements.indexOf(tracedDeclaration)
+  assert.notStrictEqual(subscriberGuardIndex, -1, 'configureGraphqlJitExecute: subscriber guard is not top-level')
+  assert.notStrictEqual(tracedDeclarationIndex, -1, 'configureGraphqlJitExecute: traced declaration is not top-level')
+  statements.splice(subscriberGuardIndex, 1)
+  statements.splice(statements.indexOf(tracedDeclaration), 1)
+  statements.unshift(subscriberGuard)
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionDeclaration} node
+ */
+function configureGraphqlJitDeferredField (_state, node) {
+  const declarations = query(node, 'VariableDeclaration:has(VariableDeclarator[id.name="resolverCall"])')
+  const resolverCalls = query(node, 'VariableDeclarator[id.name="resolverCall"]')
+  assert.strictEqual(
+    declarations.length,
+    1,
+    'configureGraphqlJitDeferredField: resolver call declaration not found'
+  )
+  assert.strictEqual(
+    resolverCalls.length,
+    1,
+    'configureGraphqlJitDeferredField: resolver call not found'
+  )
+
+  const [descriptor] = parse(`
+    const ddTraceDescriptorId = context.ddTraceRuntime?.registerField(context, responsePath, {
+      fieldName,
+      fieldNodes,
+      returnType: fieldType,
+      parentType
+    })
+  `).body
+  assert(
+    insertBeforeStatement(node.body, declarations[0], [descriptor]),
+    'configureGraphqlJitDeferredField: could not insert descriptor'
+  )
+
+  const [resolverCall] = resolverCalls
+  const replacement = parse(`
+    DD_CALL.slice(0, -1) +
+      (ddTraceDescriptorId === undefined ? '' : ', ' + ddTraceDescriptorId) +
+      ')'
+  `).body[0].expression
+  replaceIdentifier(replacement, 'DD_CALL', resolverCall.init)
+  resolverCall.init = replacement
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionDeclaration} node
+ */
+function configureGraphqlJitRuntime (_state, node) {
+  node.body.body.unshift(...parse(`
+    const ddTraceRuntime = compilationContext.ddTraceRuntime
+    const ddPlan = ddTraceRuntime?.finalizeCompilation(compilationContext)
+  `).body)
+
+  const contexts = query(node, 'VariableDeclarator[id.name="executionContext"] > ObjectExpression')
+  assert.strictEqual(
+    contexts.length,
+    1,
+    'configureGraphqlJitRuntime: execution context not found'
+  )
+
+  const properties = parse(`({
+    ddTrace: ddTraceRuntime?.startExecution(parsedVariables.coerced)
+  })`).body[0].expression.properties
+  contexts[0].properties.push(...properties)
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').ObjectExpression} node
+ */
+function configureMercuriusRequest (_state, node) {
+  const properties = parse('({ ddCacheLimit: opts.cache })').body[0].expression.properties
+  node.properties.push(...properties)
 }
 
 /**

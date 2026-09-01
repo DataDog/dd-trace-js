@@ -1,5 +1,7 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const uuid = require('../../../../vendor/dist/crypto-randomuuid')
 const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
@@ -12,7 +14,11 @@ const processTags = require('../process-tags')
 const Scheduler = require('./scheduler')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
-const clientId = uuid()
+let clientId = uuid()
+/** @type {{ id: string, client_tracer: { runtime_id: string, tags: string[] } } | undefined} */
+let client
+
+channel('datadog:identity:update').subscribe(refreshIdentity)
 
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
@@ -38,13 +44,6 @@ class RemoteConfig {
     })
 
     const { commitSHA, repositoryUrl } = getGitMetadata(config)
-    const tags = repositoryUrl
-      ? {
-          ...config.tags,
-          [GIT_REPOSITORY_URL]: repositoryUrl,
-          [GIT_COMMIT_SHA]: commitSHA,
-        }
-      : config.tags
 
     const appliedConfigs = this.appliedConfigs = new Map()
 
@@ -84,13 +83,15 @@ class RemoteConfig {
           env: config.env,
           app_version: config.version,
           extra_services: /** @type {string[]} */ ([]),
-          tags: Object.entries(tags).map((pair) => pair.join(':')),
+          tags: getTagsString(config, repositoryUrl, commitSHA),
           [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray,
         },
         capabilities: DEFAULT_CAPABILITY, // updated by `updateCapabilities()`
       },
       cached_target_files: /** @type {RcCachedTargetFile[]} */ ([]), // updated by `parseConfig()`
     }
+
+    client = this.state.client
   }
 
   /**
@@ -573,6 +574,40 @@ function supportsAckCallback (handler) {
   handler[kSupportsAckCallback] = result
 
   return result
+}
+
+/**
+ * @param {import('../config/config-base')} config
+ * @param {string} repositoryUrl
+ * @param {string} commitSHA
+ * @returns {string[]}
+ */
+function getTagsString (config, repositoryUrl, commitSHA) {
+  const tags = repositoryUrl
+    ? {
+        ...config.tags,
+        [GIT_REPOSITORY_URL]: repositoryUrl,
+        [GIT_COMMIT_SHA]: commitSHA,
+      }
+    : config.tags
+  return Object.entries(tags).map((pair) => pair.join(':'))
+}
+
+/**
+ * Regenerates the RC client ID and rebuilds the RC tag list, so subsequent RC polls report the
+ * clone's identity. No-ops on the tags before the first `RemoteConfig` is constructed.
+ *
+ * @param {import('../config/config-base')} config
+ */
+function refreshIdentity (config) {
+  clientId = uuid()
+  if (client !== undefined) {
+    config.tags['_dd.rc.client_id'] = clientId
+    client.id = clientId
+    client.client_tracer.runtime_id = config.tags['runtime-id']
+    const { commitSHA, repositoryUrl } = getGitMetadata(config)
+    client.client_tracer.tags = getTagsString(config, repositoryUrl, commitSHA)
+  }
 }
 
 module.exports = RemoteConfig

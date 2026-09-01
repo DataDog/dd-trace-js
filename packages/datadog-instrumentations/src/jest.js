@@ -344,16 +344,17 @@ function getTestStats (testStatuses) {
 function formatIgnoredFailuresSummary (ignoredFailures) {
   if (!ignoredFailures?.efdFailureCount) return ''
 
-  const items = ignoredFailures.efdNames.map(text => ({ text, suffix: 'Early Flake Detection' }))
-
-  if (items.length === 0) return ''
-
-  const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
-  const more = items.length - shown.length
+  const shown = ignoredFailures.efdNames.slice(0, MAX_IGNORED_TEST_NAMES)
+  const more = ignoredFailures.efdNames.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const formattedItems = shown
-    .map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`)
-    .join('\n') + moreSuffix
+  let formattedItems = ''
+  let isFirstItem = true
+  for (const text of shown) {
+    if (!isFirstItem) formattedItems += '\n'
+    formattedItems += `  • ${text} (Early Flake Detection)`
+    isFirstItem = false
+  }
+  formattedItems += moreSuffix
 
   return `${ignoredFailures.efdFailureCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
 }
@@ -766,7 +767,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
             return test.call(this, testName, testFn, ...callArgs)
           }
-          const eachBind = bind(eachTest).apply(this, eachArgs)
+          const boundTest = bind(eachTest)
+          const eachBind = boundTest.apply(this, eachArgs)
           return eachBind.apply(this, testArgs)
         }
       }
@@ -879,7 +881,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
             return concurrentTest.call(this, testName, testFn, ...callArgs)
           }
-          const eachBind = bind(concurrentEachTest, false, needsEachError).apply(this, eachArgs)
+          const boundTest = bind(concurrentEachTest, false, needsEachError)
+          const eachBind = boundTest.apply(this, eachArgs)
           return eachBind.apply(this, testArgs)
         }
       }
@@ -928,10 +931,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       let jestEach
       try {
-        jestEach = createRequire(path.join(this.rootDir, 'package.json'))('jest-each')
+        const requireFromPath = createRequire(path.join(this.rootDir, 'package.json'))
+        jestEach = requireFromPath('jest-each')
       } catch {
         try {
-          jestEach = createRequire(path.join(process.cwd(), 'package.json'))('jest-each')
+          const requireFromPath = createRequire(path.join(process.cwd(), 'package.json'))
+          jestEach = requireFromPath('jest-each')
         } catch {
           jestEach = undefined
         }

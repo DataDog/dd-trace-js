@@ -62,7 +62,14 @@ function convertVercelPromptToMessages (prompt) {
         if (hasImages) {
           messages.push({ role: 'user', content: contentParts })
         } else {
-          messages.push({ role: 'user', content: contentParts.map(p => p.text).join('\n') })
+          let content = ''
+          let isFirstPart = true
+          for (const part of contentParts) {
+            if (!isFirstPart) content += '\n'
+            content += part.text
+            isFirstPart = false
+          }
+          messages.push({ role: 'user', content })
         }
         break
       }
@@ -161,7 +168,14 @@ function buildTextOutputMessages (inputMessages, text) {
 function buildOutputMessages (inputMessages, content) {
   const toolCalls = content.filter(c => c.type === 'tool-call')
   if (toolCalls.length) return buildToolCallOutputMessages(inputMessages, toolCalls)
-  const text = content.filter(c => c.type === 'text').map(c => c.text).join('\n')
+  let text = ''
+  let isFirstTextPart = true
+  for (const part of content) {
+    if (part.type !== 'text') continue
+    if (!isFirstTextPart) text += '\n'
+    text += part.text
+    isFirstTextPart = false
+  }
   if (text) return buildTextOutputMessages(inputMessages, text)
   return []
 }

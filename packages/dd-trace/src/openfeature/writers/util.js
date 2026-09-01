@@ -75,8 +75,8 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
         headers: {
           [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
         },
-        ...(directRoute && { fallback: directRoute }),
       }
+      if (directRoute) route.fallback = directRoute
       logger.debug('FFE Writer enabled with local EVP route %s', route.basePath)
       setWriterEnabledValue(true, route)
       return

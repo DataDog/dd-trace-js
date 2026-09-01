@@ -16,6 +16,5 @@ describe('WebdriverIO Jasmine statuses', () => {
     assert.fail('expected WebdriverIO Jasmine integration failure')
   })
 
-  // eslint-disable-next-line mocha/no-pending-tests -- this fixture verifies skipped-test reporting.
   xit('reports a skipped test', () => {})
 })
