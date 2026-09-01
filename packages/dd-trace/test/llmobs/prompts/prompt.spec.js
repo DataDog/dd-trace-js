@@ -70,4 +70,18 @@ describe('ManagedPrompt', () => {
     assert.strictEqual(calls, 1)
     for (const prompt of [string, chat, object, callable]) assert.strictEqual(prompt.source, 'fallback')
   })
+
+  it('rejects malformed caller fallbacks immediately', () => {
+    const invalidFallbacks = [
+      { version: 'local-v1' },
+      [{ role: 'user', content: 42 }],
+    ]
+
+    for (const fallback of invalidFallbacks) {
+      assert.throws(() => ManagedPrompt.fromFallback('p', fallback), {
+        name: 'TypeError',
+        message: 'Invalid prompt fallback: expected a string, chat message array, or object with a template',
+      })
+    }
+  })
 })

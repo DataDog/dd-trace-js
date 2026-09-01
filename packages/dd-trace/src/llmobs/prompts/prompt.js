@@ -82,11 +82,20 @@ class ManagedPrompt {
   static fromFallback (promptId, fallback) {
     const value = typeof fallback === 'function' ? fallback() : fallback
     const promptLike = value && !Array.isArray(value) && typeof value === 'object'
+    const template = promptLike ? value.template : value
+    const validTemplate = typeof template === 'string' || (
+      Array.isArray(template) && template.every(message => {
+        return message && typeof message.role === 'string' && typeof message.content === 'string'
+      })
+    )
+    if (!validTemplate) {
+      throw new TypeError('Invalid prompt fallback: expected a string, chat message array, or object with a template')
+    }
     return new ManagedPrompt({
       id: promptId,
       version: String(promptLike && value.version ? value.version : 'fallback'),
       source: 'fallback',
-      template: promptLike ? value.template : value,
+      template,
     })
   }
 }
