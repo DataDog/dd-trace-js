@@ -41,6 +41,7 @@ describe('ASM Trace Tagging rules', () => {
   async function request (url, init) {
     const response = await fetch(new URL(url, proc.url), init)
     await response.arrayBuffer()
+    assert.strictEqual(response.ok, true)
     return response
   }
 
