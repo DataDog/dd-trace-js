@@ -27,6 +27,7 @@ describe('hsts header missing analyzer', () => {
             },
           })
           await response.arrayBuffer()
+          assert.strictEqual(response.ok, true)
         } catch (error) {
           done(error)
         }

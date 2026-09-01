@@ -19,6 +19,7 @@ const {
 async function request (baseUrl, url, options) {
   const response = await fetch(new URL(url, baseUrl), options)
   await response.arrayBuffer()
+  assert.strictEqual(response.ok, true)
   return response
 }
 
