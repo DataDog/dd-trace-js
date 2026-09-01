@@ -38,13 +38,14 @@ Target: <branch>...<base>   Files: <n>   Mode: parallel | sequential | DEGRADED 
 
 ---
 ## Rule files used
+<!-- One line per lens in SKILL.md Step 2's roster: check whether THIS repo has an override for that lens, and append its path only if it does. -->
 - coherence: reviewers/coherence.md
 - correctness: reviewers/correctness.md
-- security: reviewers/security.md + .agents/dd-apm-sdk-review-overrides/reviewers/security.md
-- design: reviewers/design.md (no override for this repo)
-- performance: reviewers/performance.md + .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
-- maintainability: reviewers/maintainability.md (no override for this repo)
-- conventions: reviewers/conventions.md (no override for this repo)
+- security: reviewers/security.md<+ override path, or "(no override for this repo)">
+- design: reviewers/design.md<+ override path, or "(no override for this repo)">
+- performance: reviewers/performance.md<+ override path, or "(no override for this repo)">
+- maintainability: reviewers/maintainability.md<+ override path, or "(no override for this repo)">
+- conventions: reviewers/conventions.md<+ override path, or "(no override for this repo)">
 - cross-sdk: reviewers/cross-sdk.md
 
 ## Related skills in this repo

@@ -81,24 +81,52 @@ git diff                                # unstaged. If a worktree edit reverses 
 
 # 4. Untracked file contents (no git diff will show these). Untracked file
 #    names come from the working tree and are untrusted input: enumerate them
-#    NUL-safely and never let a name be parsed as an option. Scan each file's
-#    content for secrets BEFORE printing it — this is the first point any of
-#    these files reach a transcript, so redacting later (Step 2) is too late:
-#    the raw value would already sit in this context and any retained logs.
+#    NUL-safely and never let a name be parsed as an option. Grep each file for
+#    known secret shapes BEFORE printing its diff — once a tool call emits
+#    content, it has already reached this transcript and any retained logs, so
+#    catching it only after reading the printed output is too late. A grep
+#    error (exit >= 2: unreadable file, bad locale, etc.) must not fall through
+#    to "no match" - fail closed on it exactly like the git diff error below.
+SECRET_GREP='-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|gh[pousr]_[0-9A-Za-z]{20,}|github_pat_[0-9A-Za-z_]{20,}|xox[baprs]-[0-9A-Za-z-]{10,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(DD|DATADOG)_(API|APP)_KEY[[:space:]]*[:=]|_authToken[[:space:]]*='
+# One err_file for the whole loop, not one per file - a file's diff/scan error
+# already gets `cat`ed into the transcript below, so there is nothing left to
+# lose by reusing it, and it means a single cleanup site instead of one per
+# exit path (a leaked temp file per skipped file was an easy bug to reintroduce
+# here). If mktemp itself fails (no writable temp dir), fail loudly instead of
+# silently treating every untracked file as already-scanned.
+err_file=$(mktemp) || { echo "ERROR: mktemp failed, cannot safely scan untracked files" >&2; exit 1; }
+trap 'rm -f "$err_file"' EXIT
 git ls-files --others --exclude-standard -z | while IFS= read -r -d '' f; do
+  grep -IlqE -e "$SECRET_GREP" -- "./$f" 2>"$err_file"
+  grc=$?
+  if [ "$grc" -eq 0 ]; then
+    echo "SUSPECT SECRET (diff not printed): $f - read it yourself, redact, then decide"
+    continue
+  elif [ "$grc" -ge 2 ]; then
+    echo "ERROR: could not scan $f for secrets - treating as suspect rather than skipping the scan" >&2
+    cat "$err_file" >&2
+    echo "SUSPECT SECRET (diff not printed): $f - read it yourself, redact, then decide"
+    continue
+  fi
   # `--no-index` exits 1 when it finds a difference, which it always will here -
-  # that's success, not an error. Only a higher exit code is a real failure
-  # (e.g. the file vanished or became unreadable) - don't let `|| true` mask it.
-  git diff --no-index -- /dev/null "$f"
+  # that's success, not an error. A higher exit code is always a real failure.
+  # Git also returns 1 *with a stderr error* (e.g. "Could not access") when the
+  # second path disappears mid-run, so match the error text rather than mere
+  # presence of stderr - a global diff.external/textconv driver can write
+  # benign progress there on an otherwise-successful diff, and `--no-ext-diff
+  # --no-textconv` only cover a driver configured on *this* command, not one
+  # forced by repo-level config this loop doesn't control.
+  git diff --no-index --no-ext-diff --no-textconv -- /dev/null "./$f" 2>"$err_file"
   rc=$?
-  if [ "$rc" -gt 1 ]; then
+  if [ "$rc" -gt 1 ] || { [ "$rc" -eq 1 ] && grep -qE '^(error|fatal):' "$err_file"; }; then
     echo "ERROR: failed to diff untracked file: $f" >&2
+    cat "$err_file" >&2
     exit 1
   fi
 done
 ```
 
-Do not run the block above blind. Read each untracked file's diff output as it is produced (or read the file directly instead of shelling out) and check it for tokens, API keys, private keys, connection strings, `.env` values, and anything shaped like a long random secret before letting that output stand in your context. If a file looks like a credential, redact the value at first sight — `[REDACTED — see location]`, keeping the `path:line` — and treat the printed diff as already-redacted from that point on. Committed, staged, and unstaged content (steps 2-3) get the same treatment: scan as you read the `git diff` output, not after.
+The grep above only catches known secret *shapes* (cloud keys, tokens with a recognizable prefix, PEM headers) — it is not a substitute for reading the output. Read each printed diff as it is produced (or read the file directly instead of shelling out) and check it for tokens, API keys, private keys, connection strings, `.env` values, and anything shaped like a long random secret that the pattern missed, before letting that output stand in your context. If a file looks like a credential — including one the grep already flagged as a suspect and skipped — redact the value at first sight — `[REDACTED — see location]`, keeping the `path:line` — and treat the printed diff as already-redacted from that point on; never diff a flagged file unredacted just to get around the flag. Committed, staged, and unstaged content (steps 2-3) get the same treatment: scan as you read the `git diff` output, not after.
 
 If the repository is shallow or the target upstream is absent, the merge base yields nothing, and on a clean checkout the worktree diffs are empty too — so the committed work becomes invisible and the next step would conclude there is nothing to review. Do not treat the worktree as the whole change set: `git fetch --deepen 50` or `--unshallow`, or ask for the committed diff. If neither is possible, report the committed portion as `NOT VERIFIED (no merge base)` rather than letting the gate pass on a change set it never saw.
 
@@ -174,7 +202,7 @@ If the user overrides an unresolved P0 finding, record it verbatim in the PR des
 
 ## Scope and escape hatches
 
-This review is required for code-bearing changes. "Code-bearing" means anything shipped to users, plus tests, benchmarks, developer tooling, CI configuration, and agent instructions under `.agents/` / `.claude/`. Tests and tooling count because a weakened assertion, a newly flaky test, or a loosened lint rule is exactly what the maintainability and conventions lanes are for, and because CI config and agent instructions change how all future work gets done. It does **not** apply to prose documentation, release mechanics, or a revert whose resulting diff is prose-only. A revert that removes or restores shipped code, tests, or tooling stays in scope — it can reintroduce a defect exactly like any other code-bearing change.
+This review is required for code-bearing changes. "Code-bearing" means anything shipped to users, plus tests, benchmarks, developer tooling, CI configuration, and agent instructions under `.agents/` / `.claude/` (or wherever else a repo mirrors its skills for a specific editor/agent, e.g. `.cursor/`). Tests and tooling count because a weakened assertion, a newly flaky test, or a loosened lint rule is exactly what the maintainability and conventions lanes are for, and because CI config and agent instructions change how all future work gets done. It does **not** apply to prose documentation, non-executable release metadata (release note text, changelog copy edits), or a revert whose resulting diff is prose-only. Executable release tooling — a release script, a changelog generator, a publish workflow — stays in scope like any other developer tooling: it can break release generation or publication exactly like any other code-bearing change. A revert that removes or restores shipped code, tests, or tooling stays in scope too — it can reintroduce a defect exactly like any other code-bearing change.
 
 Degrade before you skip. No subagent capability is **not** a reason to skip the review: Step 2 mode 3 exists for exactly that case, so run the perspectives as sequential passes and label the report `DEGRADED MODE`. No network only stops cross-SDK verification — that lane reports `NOT VERIFIED` and every other lane still runs.
 
