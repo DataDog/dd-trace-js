@@ -97,6 +97,17 @@ describe('AgentProxyCiVisibilityExporter', () => {
     assert.strictEqual(scope.isDone(), true)
   })
 
+  it('retries agent info initialization within the final flush timeout', () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const controlled = createControlledExporter()
+
+      assert.strictEqual(controlled.getRequestOptions().deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
+    } finally {
+      clock.restore()
+    }
+  })
+
   it('exports buffered data and flushes it when initialization finishes within the final deadline', async () => {
     const clock = sinon.useFakeTimers()
     try {
@@ -108,6 +119,8 @@ describe('AgentProxyCiVisibilityExporter', () => {
       controlled.exporter.flush(done)
 
       const requestOptions = controlled.getRequestOptions()
+      assert.strictEqual(requestOptions.keepProcessAlive, true)
+      assert.strictEqual(requestOptions.timeoutFromCreation, false)
       assert.strictEqual(requestOptions.signal.aborted, false)
       assert.strictEqual(requestOptions.deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
 

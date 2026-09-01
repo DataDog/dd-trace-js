@@ -181,6 +181,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   const payloadSize = reservedPayloadSize ?? getPayloadSize(data)
   let retryTimer
   let attemptTimer
+  let attemptTimerImmediate
   let attemptController
   let settled = false
   let lastError
@@ -199,6 +200,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     settled = true
     clearTimeout(retryTimer)
     clearTimeout(attemptTimer)
+    clearImmediate(attemptTimerImmediate)
     signal?.removeEventListener('abort', onAbort)
     bufferedBytes -= payloadSize
     callback(error, result, statusCode, headers)
@@ -246,13 +248,14 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     if (!commonRequest.writable) {
       waitingForBackpressure = true
       retryTimer = setTimeout(attempt, Math.min(BACKPRESSURE_RETRY_MS, remaining), attemptIndex)
-      retryTimer.unref?.()
+      if (!options.keepProcessAlive) retryTimer.unref?.()
       return
     }
     waitingForBackpressure = false
 
     const attemptOptions = {
       ...options,
+      deferTimeoutAbort: true,
       headers: options.headers ? { ...options.headers } : undefined,
       retry: false,
     }
@@ -264,14 +267,22 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
 
     attemptController = controller
     attemptOptions.signal = controller.signal
-    attemptTimer = setTimeout(() => {
-      attemptTimedOut = true
-      controller.abort(createRequestTimeoutError())
-    }, attemptTimeout)
-    attemptTimer.unref?.()
+    if (options.timeoutFromCreation !== false) {
+      attemptTimer = setTimeout(() => {
+        // Let a response that became ready while the event loop was blocked win before aborting it.
+        attemptTimerImmediate = setImmediate(() => {
+          if (settled || attemptController !== controller) return
+          attemptTimedOut = true
+          controller.abort(createRequestTimeoutError())
+        })
+        if (!options.keepProcessAlive) attemptTimerImmediate.unref?.()
+      }, attemptTimeout)
+      if (!options.keepProcessAlive) attemptTimer.unref?.()
+    }
 
     commonRequest(data, attemptOptions, (error, result, statusCode, headers) => {
       clearTimeout(attemptTimer)
+      clearImmediate(attemptTimerImmediate)
       if (attemptController === controller) attemptController = undefined
       if (settled) return
       if (!error) {
@@ -287,13 +298,13 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
       const isRetriableError =
         attemptTimedOut || isRetriableNetworkError(error) || isUnknownNetworkError ||
           isRetriableHttpStatusCode(responseStatus)
-      const reachedBackgroundAttemptLimit =
-        options.deadline === undefined && attemptIndex >= getMaxAttempts(attemptOptions)
+      const retryUntilDeadline = options.deadline !== undefined && options.retryUntilDeadline !== false
+      const reachedAttemptLimit = !retryUntilDeadline && attemptIndex >= getMaxAttempts(attemptOptions)
       const reachedUnknownNetworkAttemptLimit = isUnknownNetworkError && attemptIndex >= 2
       if (
         options.retry === false ||
         !isRetriableError ||
-        reachedBackgroundAttemptLimit ||
+        reachedAttemptLimit ||
         reachedUnknownNetworkAttemptLimit
       ) {
         complete(requestError, result, statusCode, headers)
@@ -330,7 +341,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
       }
 
       retryTimer = setTimeout(attempt, delay, attemptIndex + 1)
-      retryTimer.unref?.()
+      if (!options.keepProcessAlive) retryTimer.unref?.()
     })
   }
 

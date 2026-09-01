@@ -314,6 +314,64 @@ describe('request', function () {
     assert.strictEqual(callbacks, 1)
   })
 
+  it('lets callers defer a timeout abort until a ready response is processed', async () => {
+    const response = new EventEmitter()
+    response.headers = {}
+    response.statusCode = 200
+    response.setTimeout = sinon.spy()
+
+    let respond
+    let onTimeout
+    const requestMessage = new EventEmitter()
+    requestMessage.abort = sinon.spy()
+    requestMessage.setTimeout = (timeout, callback) => {
+      assert.strictEqual(timeout, 2000)
+      onTimeout = callback
+    }
+    requestMessage.write = sinon.spy()
+    requestMessage.end = sinon.spy()
+
+    /**
+     * @param {object} options
+     * @param {(response: EventEmitter) => void} onResponse
+     */
+    const createRequest = (options, onResponse) => {
+      assert.strictEqual(options.method, 'GET')
+      assert.strictEqual(options.deferTimeoutAbort, true)
+      respond = onResponse
+      return requestMessage
+    }
+    const deferredTimeoutRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+
+    const completed = new Promise(resolve => {
+      deferredTimeoutRequest('', { method: 'GET', retry: false, deferTimeoutAbort: true }, (...args) => resolve(args))
+    })
+
+    onTimeout()
+    respond(response)
+    response.emit('data', Buffer.from('OK'))
+    response.emit('end')
+
+    const [error, result, statusCode] = await completed
+    await new Promise(resolve => setImmediate(resolve))
+
+    assert.strictEqual(error, null)
+    assert.strictEqual(result, 'OK')
+    assert.strictEqual(statusCode, 200)
+    sinon.assert.notCalled(requestMessage.abort)
+  })
+
   it('should handle an http error', done => {
     nock('http://localhost:8080')
       .put('/path')

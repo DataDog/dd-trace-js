@@ -7,6 +7,7 @@ const CiVisibilityExporter = require('../ci-visibility-exporter')
 const request = require('../request')
 const { fetchAgentInfo } = require('../../../agent/info')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
+const { FINAL_FLUSH_TIMEOUT } = require('../../final-flush')
 
 // Product-specific discovery: newest advertised version, skip v3 (citestcycle), gzip if >= v4.
 // Shared `evp_proxy` discovery is an explicit path allowlist and does not cover this contract.
@@ -47,7 +48,16 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
     } = config
 
     const initializationController = new AbortController()
-    const initializationOptions = { signal: initializationController.signal }
+    const initializationOptions = {
+      deadline: Date.now() + FINAL_FLUSH_TIMEOUT,
+      signal: initializationController.signal,
+      // Test runners await agent discovery before starting. A detached retry can let Node exit
+      // while that promise is still pending because promises alone do not keep the event loop alive.
+      keepProcessAlive: true,
+      // Loading a test framework can block the event loop past the payload creation-time timeout.
+      // The transport timeout still bounds each attempt, and the deadline bounds all retries.
+      timeoutFromCreation: false,
+    }
     this._initializationRequest = {
       controller: initializationController,
       options: initializationOptions,
