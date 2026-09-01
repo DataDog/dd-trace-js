@@ -81,20 +81,18 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
    * This essentially acts as a global registry for all tools made through the Vercel AI SDK.
    * @type {Set<AvailableToolArgs>}
    */
-  #availableTools
+  #availableTools = new Set()
 
   /**
    * A mapping of tool call IDs to tool names.
    * This is used to map the tool call ID to the tool name for the output message.
-   * @type {Record<string, string>}
+   * @type {Map<string, string>}
    */
-  #toolCallIdsToName
+  #toolCallIdsToName = new Map()
 
   constructor (...args) {
     super(...args)
 
-    this.#toolCallIdsToName = {}
-    this.#availableTools = new Set()
     toolCreationCh.subscribe(ctx => {
       const toolArgs = ctx.arguments
       const tool = toolArgs[0] ?? {}
@@ -297,7 +295,14 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
 
   setToolTags (span, tags) {
     const toolCallId = tags['ai.toolCall.id']
-    const name = getToolNameFromTags(tags) ?? this.#toolCallIdsToName[toolCallId]
+
+    let name = getToolNameFromTags(tags)
+    if (name == null) {
+      name = this.#toolCallIdsToName.get(toolCallId)
+    } else {
+      this.#toolCallIdsToName.delete(toolCallId)
+    }
+
     if (name) this._tagger._setTag(span, NAME, name)
 
     const input = tags['ai.toolCall.args']
@@ -316,7 +321,7 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
       const toolCallArgs = typeof toolArgs === 'string' ? getJsonStringValue(toolArgs, {}) : toolArgs
       const toolDescription = toolsForModel?.find(tool => toolCall.toolName === tool.name)?.description
       const name = this.findToolName(toolCall.toolName, toolDescription)
-      this.#toolCallIdsToName[toolCall.toolCallId] = name
+      this.#toolCallIdsToName.set(toolCall.toolCallId, name)
 
       formattedToolCalls.push({
         arguments: toolCallArgs,
