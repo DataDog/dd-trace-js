@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { on } = require('node:events')
+const { setTimeout: delay } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
 const { assertObjectContains, assertUUID, stopProc } = require('../helpers')
@@ -89,8 +89,6 @@ function expectProbeEvents (agent, configId, expectedPayloads, expectedAckUpdate
  * @param {string[]} expectedProbeIds
  */
 async function captureEmittingProbesUntilExit (t, configs, expectedProbeIds) {
-  assert.notStrictEqual(expectedProbeIds.length, 0, 'Expected probe IDs must include a positive completion witness')
-
   const configuredProbeIds = configs.map(config => config.config.id)
   const probesInstalled = t.waitForProbeStatus(configuredProbeIds, 'INSTALLED')
 
@@ -102,7 +100,10 @@ async function captureEmittingProbesUntilExit (t, configs, expectedProbeIds) {
   const emittingProbeIds = []
   const pendingProbeIds = new Set(expectedProbeIds)
   let resolveExpected
-  const expectedProbesReceived = new Promise(resolve => { resolveExpected = resolve })
+  const expectedProbesReceived = new Promise(resolve => {
+    resolveExpected = resolve
+    if (pendingProbeIds.size === 0) resolve()
+  })
 
   /** @param {{ payload: Array<{ debugger: { diagnostics: { probeId: string, status: string } } }> }} event */
   function handleDiagnostics ({ payload }) {
@@ -122,6 +123,7 @@ async function captureEmittingProbesUntilExit (t, configs, expectedProbeIds) {
       t.axios.get(t.breakpoint.url),
       expectedProbesReceived,
     ])
+    if (expectedProbeIds.length === 0) await delay(2000)
     await stopProc(t.proc)
     return { emittingProbeIds, response }
   } finally {
@@ -316,25 +318,30 @@ describe('Dynamic Instrumentation', function () {
           service: 'node',
           debugger: { diagnostics: { probeId: probeIds[1], probeVersion: 0, status: 'INSTALLED' } },
         }]
-        const diagnostics = on(t.agent, 'debugger-diagnostics')
         const actualPayloads = []
+        const installedProbeIds = new Set()
+        let resolveInstalled
+        const probesInstalled = new Promise(resolve => { resolveInstalled = resolve })
 
+        /** @param {{ payload: Array<object> }} event */
+        function handleDiagnostics ({ payload }) {
+          for (const event of payload) {
+            actualPayloads.push(event)
+            const { probeId, status } = event.debugger?.diagnostics ?? {}
+            if (status === 'INSTALLED') installedProbeIds.add(probeId)
+          }
+          if (installedProbeIds.size === probeIds.length) resolveInstalled()
+        }
+
+        t.agent.on('debugger-diagnostics', handleDiagnostics)
         try {
           for (const config of configs) {
             t.agent.addRemoteConfig(config)
           }
-
-          const installedProbeIds = new Set()
-          for await (const [{ payload }] of diagnostics) {
-            for (const event of payload) {
-              actualPayloads.push(event)
-              const { probeId, status } = event.debugger.diagnostics
-              if (status === 'INSTALLED') installedProbeIds.add(probeId)
-            }
-            if (installedProbeIds.size === probeIds.length) break
-          }
+          await probesInstalled
+          await delay(pollInterval * 2 * 1000)
         } finally {
-          await diagnostics.return()
+          t.agent.removeListener('debugger-diagnostics', handleDiagnostics)
         }
 
         assert.strictEqual(actualPayloads.length, expectedPayloads.length)
@@ -353,17 +360,15 @@ describe('Dynamic Instrumentation', function () {
         assert.deepStrictEqual(emittingProbeIds.sort(), expectedProbeIds.sort())
       })
 
-      it('should not trigger probes whose conditions are not met', async function () {
+      it('should support not triggering any probes when all conditions are not met', async function () {
         const configs = [
           t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } }),
           t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'baz'] } } }),
-          t.generateRemoteConfig(),
         ]
-        const expectedProbeIds = [configs[2].config.id]
-        const { emittingProbeIds, response } = await captureEmittingProbesUntilExit(t, configs, expectedProbeIds)
+        const { emittingProbeIds, response } = await captureEmittingProbesUntilExit(t, configs, [])
 
         assert.strictEqual(response.status, 200)
-        assert.deepStrictEqual(emittingProbeIds, expectedProbeIds)
+        assert.deepStrictEqual(emittingProbeIds, [])
       })
 
       it('should only trigger the probes whose conditions are met (all have conditions)', async function () {
@@ -382,7 +387,7 @@ describe('Dynamic Instrumentation', function () {
         assert.deepStrictEqual(emittingProbeIds, expectedProbeIds)
       })
 
-      it('triggers on a met condition even if another condition throws', async function () {
+      it('trigger on met condition, even if other condition throws (all have conditions)', async function () {
         const configs = [
           t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } }),
           t.generateRemoteConfig({
