@@ -114,7 +114,6 @@ class NoopLLMObs {
   /**
    * Clear the in-memory and/or persistent prompt caches.
    * @param {import('../../../../index').llmobs.ClearPromptCacheOptions} [options]
-   * @returns {void}
    */
   clearPromptCache (options) {}
 

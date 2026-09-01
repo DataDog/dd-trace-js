@@ -81,7 +81,6 @@ class LLMObs extends NoopLLMObs {
 
   /**
    * Get the lazily-created Prompt Management owner.
-   * @returns {import('./prompts/manager')}
    */
   #getPromptManager () {
     if (!this.#promptManager) {
@@ -113,7 +112,6 @@ class LLMObs extends NoopLLMObs {
   /**
    * Clear managed prompt caches.
    * @param {import('../../../../index').llmobs.ClearPromptCacheOptions} [options]
-   * @returns {void}
    */
   clearPromptCache (options = {}) {
     this.#getPromptManager().clearCache(options)

@@ -43,7 +43,6 @@ function isPlainObject (value) {
  * @param {string} [options.env]
  * @param {string} [options.targetingKey]
  * @param {Record<string, unknown>} [options.attributes]
- * @returns {PromptRequest}
  */
 function promptRequest (promptId, { version, env, targetingKey, attributes = {} } = {}) {
   const requestAttributes = { ...attributes }
@@ -83,7 +82,6 @@ function promptFromData (data, source) {
  * Copy a prompt with a different source.
  * @param {ManagedPrompt} prompt
  * @param {'registry'|'cache'|'fallback'|'ff'|'resolve'} source
- * @returns {ManagedPrompt}
  */
 function withSource (prompt, source) {
   if (source === prompt.source) return prompt
@@ -174,7 +172,6 @@ class PromptManager {
 
   /**
    * Require API authentication before using any prompt path.
-   * @returns {string}
    */
   #requireApiKey () {
     if (!this.config.DD_API_KEY) {
@@ -186,7 +183,6 @@ class PromptManager {
   /**
    * Build a Prompt Management URL.
    * @param {string} path
-   * @returns {string}
    */
   #url (path) {
     return `${this.origin.replace(/\/$/, '')}${path}`
@@ -430,7 +426,6 @@ class PromptManager {
   /**
    * Clear hot and/or warm prompt caches.
    * @param {{hot?: boolean, warm?: boolean}} [options]
-   * @returns {void}
    */
   clearCache ({ hot = true, warm = true } = {}) {
     this.cacheGeneration++
@@ -442,7 +437,6 @@ class PromptManager {
   /**
    * Evict every cached selector for one exact prompt ID.
    * @param {string} promptId
-   * @returns {void}
    */
   #evictPrompt (promptId) {
     this.cacheGeneration++
@@ -455,7 +449,6 @@ class PromptManager {
    * Record a Prompt Management CRUD error.
    * @param {'GET'|'POST'|'PATCH'|'DELETE'} method
    * @param {PromptAPIError} error
-   * @returns {PromptAPIError}
    */
   #recordCrudError (method, error) {
     telemetry.recordPromptCrudError(method, error.name, error.status)
