@@ -185,6 +185,7 @@ function resourceLocator (span) {
  * @property {number} [sampleRate=1] - Deterministic sampling rate in [0, 1].
  * @property {string} [provenance] - Optional provenance/metadata for this rule.
  * @property {number} [maxPerSecond] - Maximum samples per second (rate limit).
+ * @property {boolean} [discard=false] - Whether to fully drop a trace if not kept.
  */
 
 /**
@@ -195,7 +196,7 @@ class SamplingRule {
   /**
    * @param {SamplingRuleConfig} [config]
    */
-  constructor ({ name, service, resource, tags, sampleRate = 1, provenance, maxPerSecond } = {}) {
+  constructor ({ name, service, resource, tags, sampleRate = 1, provenance, maxPerSecond, discard = false } = {}) {
     this.matchers = []
 
     if (name !== undefined) {
@@ -216,6 +217,7 @@ class SamplingRule {
     this._sampler = new Sampler(sampleRate)
     this._limiter = undefined
     this.provenance = provenance
+    this.discard = !!discard
 
     if (Number.isFinite(maxPerSecond)) {
       this._limiter = new RateLimiter(maxPerSecond)

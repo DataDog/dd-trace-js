@@ -216,6 +216,43 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_RULE)
     })
 
+    it('should mark the context for discard when a discard=true rule rejects the trace', () => {
+      prioritySampler = new PrioritySampler('test', {
+        rules: [
+          { sampleRate: 0, service: 'test', resource: /res.*/, discard: true },
+        ],
+      })
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._sampling.priority, USER_REJECT)
+      assert.strictEqual(context._sampling.discard, true)
+    })
+
+    it('should not mark the context for discard when a discard=true rule keeps the trace', () => {
+      prioritySampler = new PrioritySampler('test', {
+        rules: [
+          { sampleRate: 1, service: 'test', resource: /res.*/, discard: true },
+        ],
+      })
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.discard, undefined)
+    })
+
+    it('should not mark the context for discard when the rejecting rule has discard=false', () => {
+      prioritySampler = new PrioritySampler('test', {
+        rules: [
+          { sampleRate: 0, service: 'foo', resource: /res.*/ },
+          { sampleRate: 0, service: 'test', resource: /res.*/ },
+        ],
+      })
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._sampling.priority, USER_REJECT)
+      assert.strictEqual(context._sampling.discard, undefined)
+    })
+
     it('should support a customer-defined remote configuration sampling', () => {
       prioritySampler = new PrioritySampler('test', {
         rules: [

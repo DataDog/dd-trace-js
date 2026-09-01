@@ -56,11 +56,12 @@ class SpanProcessor {
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
+      const discard = spanContext._sampling.discard
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
-        } else {
+        } else if (!discard) {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
           if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
@@ -76,7 +77,7 @@ class SpanProcessor {
         }
       }
 
-      if (formatted.length !== 0 && trace.isRecording !== false) {
+      if (!discard && formatted.length !== 0 && trace.isRecording !== false) {
         this._exporter.export(formatted)
       }
 

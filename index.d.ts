@@ -466,6 +466,13 @@ declare namespace tracer {
      * Maximum number of traces matching this rule to sample per second.
      */
     maxPerSecond?: number
+
+    /**
+     * When `true`, a trace chunk rejected by this rule is fully dropped:
+     * it is excluded from client-side stats and never sent to the Agent.
+     * @default false
+     */
+    discard?: boolean
   }
 
   /**

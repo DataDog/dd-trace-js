@@ -143,6 +143,42 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(trace.finished, [])
   })
 
+  it('should drop the chunk without exporting or formatting when marked for discard', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._sampling.discard = true
+
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(exporter.export)
+    sinon.assert.notCalled(spanFormat)
+    assert.deepStrictEqual(trace.started, [])
+    assert.deepStrictEqual(trace.finished, [])
+  })
+
+  it('should not record span stats for a chunk marked for discard', () => {
+    processor._stats = { onSpanFinished: sinon.stub() }
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._sampling.discard = true
+
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(processor._stats.onSpanFinished)
+  })
+
+  it('should keep not-yet-finished spans active when a chunk is discarded', () => {
+    trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan, finishedSpan]
+    finishedSpan.context()._sampling.discard = true
+
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [activeSpan])
+    assert.deepStrictEqual(trace.finished, [])
+  })
+
   it('should configure span sampler correctly', () => {
     const config = {
       stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
