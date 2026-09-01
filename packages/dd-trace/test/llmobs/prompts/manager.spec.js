@@ -9,6 +9,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const log = require('../../../src/log')
 const telemetry = require('../../../src/llmobs/telemetry')
 const { cacheKey } = require('../../../src/llmobs/prompts/cache')
 const PromptManager = require('../../../src/llmobs/prompts/manager')
@@ -329,6 +330,8 @@ describe('PromptManager', () => {
 
   it('aborts an obsolete background refresh when a manual refresh replaces it', async () => {
     const now = sinon.stub(performance, 'now').returns(100)
+    const warning = sinon.stub(log, 'warn')
+    const fetchError = sinon.stub(telemetry, 'recordPromptFetchError')
     let backgroundSignal
     fetchStub.onFirstCall().resolves(response(200, promptResponse({ version: 1 })))
     fetchStub.onSecondCall().callsFake((...args) => {
@@ -350,6 +353,34 @@ describe('PromptManager', () => {
 
     assert.strictEqual((await manager.getPrompt('greeting')).version, '2')
     sinon.assert.calledThrice(fetchStub)
+    sinon.assert.notCalled(warning)
+    sinon.assert.notCalled(fetchError)
+  })
+
+  it('does not report cache clearing as a fetch failure', async () => {
+    const now = sinon.stub(performance, 'now').returns(100)
+    const warning = sinon.stub(log, 'warn')
+    const fetchError = sinon.stub(telemetry, 'recordPromptFetchError')
+    let backgroundSignal
+    fetchStub.onFirstCall().resolves(response(200, promptResponse()))
+    fetchStub.onSecondCall().callsFake((...args) => {
+      const { signal } = args[1]
+      backgroundSignal = signal
+      return new Promise((resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    const manager = new PromptManager(makeConfig(), () => provider)
+
+    await manager.getPrompt('greeting')
+    now.returns(60_101)
+    await manager.getPrompt('greeting')
+    manager.clearCache()
+    assert.strictEqual(backgroundSignal.aborted, true)
+    await new Promise(setImmediate)
+
+    sinon.assert.notCalled(warning)
+    sinon.assert.notCalled(fetchError)
   })
 
   it('keeps the newest same-selector fetch in the cache', async () => {

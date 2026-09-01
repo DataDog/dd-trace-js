@@ -278,6 +278,7 @@ class PromptManager {
       log.warn('Prompt fetch failed: prompt_id=%s status=%d detail="%s"', request.promptId, response.status, detail)
       return { reason: detail }
     } catch (error) {
+      if (cacheSignal?.aborted) return { reason: 'fetch cancelled' }
       log.warn('Prompt fetch exception: prompt_id=%s: %s', request.promptId, error.message)
       return { reason: error.message }
     }
@@ -306,6 +307,7 @@ class PromptManager {
       return { ...result, cacheable }
     }
 
+    if (signal?.aborted) return { ...result, cacheable }
     telemetry.recordPromptFetchError(result.notFound ? 'NotFound' : 'FetchError')
     if (result.notFound && evictOnNotFound && cacheable) {
       this.hotCache.delete(request.key)
