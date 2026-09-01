@@ -67,7 +67,13 @@ function formatFileSystemError (error, fallbackPath) {
  * @returns {void}
  */
 function warnFileCreationFailures (artifact, failures, consequence, customerVisible = false) {
-  const details = failures.map(({ directory, error }) => formatFileSystemError(error, directory)).join('; ')
+  let details = ''
+  let isFirstFailure = true
+  for (const { directory, error } of failures) {
+    if (!isFirstFailure) details += '; '
+    details += formatFileSystemError(error, directory)
+    isFirstFailure = false
+  }
   const message = 'Datadog could not create %s. Attempts failed: %s. %s'
 
   if (customerVisible) {

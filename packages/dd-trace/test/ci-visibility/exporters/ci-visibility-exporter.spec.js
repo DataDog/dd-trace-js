@@ -1715,6 +1715,33 @@ describe('CI Visibility Exporter', () => {
           },
         }))
       })
+
+      it('preserves string log tags and starts generated tags without a separator', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
+        })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._logsWriter = writer
+        ciVisibilityExporter._canForwardLogs = true
+
+        ciVisibilityExporter.exportDiLogs({}, { message: 'with tags', ddtags: 'custom:value' })
+        ciVisibilityExporter.exportDiLogs({}, { message: 'without tags' })
+
+        assert.strictEqual(
+          writer.append.firstCall.args[0].ddtags,
+          `custom:value,debugger_version:${tracerVersion},host_name:${getHostname()}`
+        )
+        assert.strictEqual(
+          writer.append.secondCall.args[0].ddtags,
+          `debugger_version:${tracerVersion},host_name:${getHostname()}`
+        )
+      })
     })
   })
 
