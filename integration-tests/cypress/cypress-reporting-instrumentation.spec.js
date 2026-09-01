@@ -2237,6 +2237,7 @@ moduleTypes.forEach(({
       cypressPlugin.pendingScreenshotUploads = []
       cypressPlugin.pendingVideoUploads = []
       cypressPlugin._isInit = true
+      sinon.stub(cypressPlugin, '_now').returns(789)
       cypressPlugin.testSessionSpan = { context: () => ({ toTraceId: () => '123' }) }
       cypressPlugin.testSuiteSpan = testSuiteSpan
       const flush = sinon.stub().callsFake(callback => callback())
@@ -2279,7 +2280,7 @@ moduleTypes.forEach(({
       await afterRunPromise
 
       sinon.assert.calledTwice(flush)
-      sinon.assert.calledOnce(testSuiteSpan.finish)
+      sinon.assert.calledOnceWithExactly(testSuiteSpan.finish, 789)
       sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_UPLOADED, 'true')
       sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
     })

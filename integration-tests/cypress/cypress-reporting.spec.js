@@ -1122,6 +1122,7 @@ moduleTypes.forEach(({
         })
 
         onlyAgentlessIt('uploads one Cypress video for a failed test suite', async function () {
+          receiver.setMediaResponseDelay(500)
           const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js', {
             CYPRESS_ENABLE_FAILURE_SCREENSHOTS: undefined,
             DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined,
@@ -1165,6 +1166,11 @@ moduleTypes.forEach(({
                 `/api/v2/ci/test-suites/${testSessionId}/${testSuiteId}/media`
               )
               assert.ok(videoPayload.media.content.length > 0)
+              const suiteEndTimeMs = (Number(suiteEvent.content.start) + Number(suiteEvent.content.duration)) / 1e6
+              assert.ok(
+                suiteEndTimeMs <= videoPayload.media.receivedAtMs + 100,
+                `suite duration should exclude video upload time\n${testOutput}`
+              )
             },
             { hardTimeout: 60000 }
           ).catch((error) => {

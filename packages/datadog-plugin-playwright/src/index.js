@@ -69,6 +69,7 @@ const log = require('../../dd-trace/src/log')
 
 const PLAYWRIGHT_FAILURE_SCREENSHOT_RE = /^test-failed-\d+\.png$/
 const PLAYWRIGHT_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/webm'])
+const noop = () => {}
 
 /**
  * Returns whether an attachment is an automatic Playwright failure screenshot.
@@ -99,6 +100,7 @@ class PlaywrightPlugin extends CiPlugin {
   static id = 'playwright'
 
   #isFinalizingAfterError = false
+  #finishPendingTestFinishes
   #pendingTestFinishCallbacks = new Map()
 
   constructor (...args) {
@@ -108,7 +110,6 @@ class PlaywrightPlugin extends CiPlugin {
     this.numFailedTests = 0
     this.numFailedSuites = 0
     this.pendingTestFinishes = 0
-    this.finishSession = undefined
 
     this.addSub('ci:playwright:test:is-modified', ({
       filePath,
@@ -199,7 +200,7 @@ class PlaywrightPlugin extends CiPlugin {
         }
       }
 
-      const finishSession = () => {
+      const finishSession = (flushDone) => {
         this.testModuleSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.setTag(TEST_STATUS, status)
 
@@ -236,16 +237,16 @@ class PlaywrightPlugin extends CiPlugin {
           autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
         })
         appClosingTelemetry()
-        this.tracer._exporter.flush(onDone)
+        this.tracer._exporter.flush(flushDone)
         this.numFailedTests = 0
         this.numFailedSuites = 0
-        this.finishSession = undefined
       }
 
       if (this.pendingTestFinishes > 0) {
-        this.finishSession = finishSession
+        this.#finishPendingTestFinishes = () => this.tracer._exporter.flush(onDone)
+        finishSession(noop)
       } else {
-        finishSession()
+        finishSession(onDone)
       }
     })
 
@@ -397,8 +398,10 @@ class PlaywrightPlugin extends CiPlugin {
         }
         exportTraces()
         this.pendingTestFinishes--
-        if (this.pendingTestFinishes === 0 && this.finishSession) {
-          this.finishSession()
+        if (this.pendingTestFinishes === 0 && this.#finishPendingTestFinishes) {
+          const finishPendingTestFinishes = this.#finishPendingTestFinishes
+          this.#finishPendingTestFinishes = undefined
+          finishPendingTestFinishes()
         }
       }
       const pendingTestFinish = {

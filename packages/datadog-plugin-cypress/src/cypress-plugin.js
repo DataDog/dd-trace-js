@@ -1532,7 +1532,7 @@ class CypressPlugin {
         })
       }
 
-      testSpanFinishes.push({ testSpan: skippedTestSpan })
+      testSpanFinishes.push({ testSpan: skippedTestSpan, finishTime: this._now() })
     }
 
     // Make sure that reported test statuses are the same as Cypress reports.
@@ -1682,6 +1682,7 @@ class CypressPlugin {
       }
     }
 
+    const testSuiteFinishTime = this._now()
     const suiteFailed = error || latestError || getSuiteStatus(stats) === 'fail'
     const testSuiteSpan = this.testSuiteSpan
     const uploadOptions = {
@@ -1706,11 +1707,12 @@ class CypressPlugin {
         ...uploadOptions,
         testSpanFinishes,
         testSuiteSpan,
+        testSuiteFinishTime,
       })
     } else {
       testSpansPromise = this.finishTestSpans(testSpanFinishes)
       if (testSuiteSpan) {
-        testSuiteSpan.finish()
+        testSuiteSpan.finish(testSuiteFinishTime)
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
     }
@@ -1878,14 +1880,15 @@ class CypressPlugin {
    * @param {object} pendingVideoUpload - Pending video upload and owning spans
    * @param {Array<object>} pendingVideoUpload.testSpanFinishes - Deferred test span finishes
    * @param {object|undefined} pendingVideoUpload.testSuiteSpan - Owning test suite span
+   * @param {number} pendingVideoUpload.testSuiteFinishTime - Suite completion time captured by after:spec
    * @param {string|undefined} uploadResult - Video upload outcome
    * @returns {Promise<null>|undefined}
    */
-  #finishPendingTestSuiteVideo ({ testSpanFinishes, testSuiteSpan }, uploadResult) {
+  #finishPendingTestSuiteVideo ({ testSpanFinishes, testSuiteSpan, testSuiteFinishTime }, uploadResult) {
     const testSpansPromise = this.finishTestSpans(testSpanFinishes, uploadResult)
     if (testSuiteSpan) {
       setVideoUploadTags(testSuiteSpan, uploadResult, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
-      testSuiteSpan.finish()
+      testSuiteSpan.finish(testSuiteFinishTime)
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     }
     return testSpansPromise

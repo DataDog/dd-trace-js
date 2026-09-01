@@ -520,7 +520,7 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('failure videos', () => {
-      it('waits for a pending video upload before the final flush', async (receiver, run) => {
+      it('starts the final flush before a pending video upload finishes', async (receiver, run) => {
         let testOutput = ''
         const proc = run(
           'node ./ci-visibility/playwright-pending-upload-finalization.js',
@@ -550,10 +550,13 @@ versions.forEach((version) => {
 
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 0, testOutput)
-        assert.match(testOutput, /PLAYWRIGHT_FINAL_FLUSH_STARTED/)
+        assert.match(testOutput, /PLAYWRIGHT_FINAL_FLUSH_STARTED_1/)
+        assert.match(testOutput, /PLAYWRIGHT_FINAL_FLUSH_STARTED_2/)
         assert.ok(
-          testOutput.indexOf('PLAYWRIGHT_VIDEO_UPLOAD_FINISHED') <
-            testOutput.indexOf('PLAYWRIGHT_FINAL_FLUSH_STARTED'),
+          testOutput.indexOf('PLAYWRIGHT_FINAL_FLUSH_STARTED_1') <
+            testOutput.indexOf('PLAYWRIGHT_VIDEO_UPLOAD_FINISHED') &&
+            testOutput.indexOf('PLAYWRIGHT_VIDEO_UPLOAD_FINISHED') <
+              testOutput.indexOf('PLAYWRIGHT_FINAL_FLUSH_STARTED_2'),
           testOutput
         )
       })

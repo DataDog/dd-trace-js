@@ -17,17 +17,21 @@ const isPendingVideo = process.env.PLAYWRIGHT_PENDING_VIDEO === 'true'
 if (isPendingVideo) {
   const exporter = tracer._tracer._exporter
   const flush = exporter.flush.bind(exporter)
+  let finishVideo
+  let flushCount = 0
   exporter.canUploadTestVideos = () => true
   exporter.uploadTestVideo = (options, onDone) => {
-    setImmediate(() => {
+    finishVideo = () => {
       // eslint-disable-next-line no-console
       console.log('PLAYWRIGHT_VIDEO_UPLOAD_FINISHED')
       onDone()
-    })
+    }
   }
   exporter.flush = (onDone) => {
+    flushCount++
     // eslint-disable-next-line no-console
-    console.log('PLAYWRIGHT_FINAL_FLUSH_STARTED')
+    console.log(`PLAYWRIGHT_FINAL_FLUSH_STARTED_${flushCount}`)
+    if (flushCount === 1) setImmediate(finishVideo)
     flush(onDone)
   }
 }
