@@ -80,8 +80,14 @@ git diff                                # unstaged. If a worktree edit reverses 
 #    NUL-safely and never let a name be parsed as an option.
 git ls-files --others --exclude-standard -z | while IFS= read -r -d '' f; do
   # `--no-index` exits 1 when it finds a difference, which it always will here -
-  # that's success, not an error. Only a higher exit code is a real failure.
-  git diff --no-index -- /dev/null "$f" || true
+  # that's success, not an error. Only a higher exit code is a real failure
+  # (e.g. the file vanished or became unreadable) - don't let `|| true` mask it.
+  git diff --no-index -- /dev/null "$f"
+  rc=$?
+  if [ "$rc" -gt 1 ]; then
+    echo "ERROR: failed to diff untracked file: $f" >&2
+    exit 1
+  fi
 done
 ```
 
