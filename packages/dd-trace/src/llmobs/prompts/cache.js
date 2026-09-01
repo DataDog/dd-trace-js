@@ -1,6 +1,6 @@
 'use strict'
 
-const { createHash } = require('node:crypto')
+const { createHash, randomUUID } = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -208,7 +208,7 @@ class WarmCache {
   set (key, prompt) {
     if (!this.enabled) return
     const file = this._path(key)
-    const temporary = `${file}.tmp.${process.pid}`
+    const temporary = `${file}.tmp.${process.pid}.${randomUUID()}`
     try {
       this._ensureDir(path.dirname(file))
       if (!this.enabled) return

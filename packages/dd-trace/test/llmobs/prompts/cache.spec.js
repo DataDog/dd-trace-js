@@ -96,6 +96,18 @@ describe('Prompt caches', () => {
     assert.strictEqual(cache.get(slashKey), undefined)
   })
 
+  it('uses a unique temporary file for each warm cache write', () => {
+    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-temporary-'))
+    const cache = new WarmCache({ cacheDir, ...WARM_OPTIONS })
+    const rename = sinon.spy(fs, 'renameSync')
+    const key = cacheKey('prompt', ['latest'])
+
+    cache.set(key, prompt('prompt'))
+    cache.set(key, prompt('prompt'))
+
+    assert.notStrictEqual(rename.firstCall.args[0], rename.secondCall.args[0])
+  })
+
   it('falls back to the temporary directory when no home directory can be resolved', () => {
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-home-'))
     sinon.stub(os, 'homedir').throws(new Error('no home'))
