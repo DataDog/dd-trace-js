@@ -934,6 +934,25 @@ describe('check-require-cache', () => {
     assert.deepStrictEqual(steps, ['setup', 'setup done', 'task'])
   })
 
+  it('should preserve a try block when context callback lookup throws', async () => {
+    const { runAfterSetup } = compileFile('trace-await-context-callback')
+
+    subs = {
+      start (ctx) {
+        Object.defineProperty(ctx, 'beforeStart', {
+          get () {
+            throw new Error('observability callback lookup failed')
+          },
+        })
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_at_try_start')
+    ch.subscribe(subs)
+
+    assert.equal(await runAfterSetup(() => 'passed'), 'passed')
+  })
+
   it('should not use a try block outside the traced function', async () => {
     const filename = resolve(__dirname, 'node_modules', 'test', 'trace-await-context-callback-outer-try.js')
     const source = readFileSync(filename, 'utf8')
@@ -994,6 +1013,33 @@ describe('check-require-cache', () => {
     subs = {
       start (ctx) {
         ctx.beforeContinue = () => Promise.reject(new Error('observability callback failed'))
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback')
+    ch.subscribe(subs)
+
+    const result = await runWithRetry(() => {
+      attempts++
+      if (attempts === 1) throw new Error('first attempt failed')
+      return 'passed'
+    }, { remaining: 1 })
+
+    assert.equal(result, 'passed')
+    assert.equal(attempts, 2)
+  })
+
+  it('should preserve the conditional branch when context callback lookup throws', async () => {
+    const { runWithRetry } = compileFile('trace-await-context-callback')
+    let attempts = 0
+
+    subs = {
+      start (ctx) {
+        Object.defineProperty(ctx, 'beforeContinue', {
+          get () {
+            throw new Error('observability callback lookup failed')
+          },
+        })
       },
     }
 
