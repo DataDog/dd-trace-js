@@ -125,8 +125,8 @@ function normalizeItem (item) {
   if (!isPlainObject(item)) return item
   const normalized = { ...item }
   if (normalized.id === undefined && normalized.ID !== undefined) normalized.id = normalized.ID
-  delete normalized.ID
-  delete normalized.labels
+  normalized.ID = undefined
+  normalized.labels = undefined
   return normalized
 }
 
