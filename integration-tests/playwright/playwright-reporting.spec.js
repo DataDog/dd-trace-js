@@ -1055,6 +1055,31 @@ versions.forEach((version) => {
       await Promise.all([receiverPromise, once(proc, 'exit')])
     })
 
+    it('reports multiple test suite errors', async (receiver, run) => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
+
+          assert.match(
+            testSuiteEvent.meta[ERROR_MESSAGE],
+            /2 errors in this test suite:\n(?:Error: )?first failure\n------\n'second failure'/
+          )
+        })
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: './ci-visibility/playwright-tests-multiple-suite-errors',
+          },
+        }
+      )
+
+      await Promise.all([receiverPromise, once(proc, 'exit')])
+    })
+
     it('does not crash when maxFailures=1 and there is an error', async (receiver, run) => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), payloads => {
