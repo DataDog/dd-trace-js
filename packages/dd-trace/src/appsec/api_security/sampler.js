@@ -68,7 +68,7 @@ function sampleRootSpanRequest (rootSpan, { method, statusCode, route, blocked =
   }
 
   if (isRoutelessRecord(route, record)) {
-    if (Number(statusCode) === 404 || blocked) return SamplingDecision.SKIP
+    if (isNotFound(statusCode) || blocked) return SamplingDecision.SKIP
     return SamplingDecision.MISSING_ROUTE
   }
 
@@ -109,7 +109,7 @@ function sampleRequest (req, res, record = false) {
     method: req.method,
     statusCode,
     route,
-    blocked: isRoutelessRecord(route, record) && Number(statusCode) !== 404 ? isBlocked(res) : false,
+    blocked: isRoutelessRecord(route, record) && !isNotFound(statusCode) ? isBlocked(res) : false,
   }, record)
 }
 
@@ -122,6 +122,14 @@ function sampleRequest (req, res, record = false) {
  */
 function isRoutelessRecord (route, record) {
   return record && route === null
+}
+
+/**
+ * @param {number|string} statusCode
+ * @returns {boolean}
+ */
+function isNotFound (statusCode) {
+  return Number(statusCode) === 404
 }
 
 /**
@@ -150,7 +158,7 @@ function getRouteOrEndpoint (context, statusCode) {
     return paths.join('')
   }
 
-  if (statusCode === 404) return null
+  if (isNotFound(statusCode)) return null
 
   const endpoint = context?.span?.context()?.getTag?.('http.endpoint')
   if (endpoint) return endpoint
