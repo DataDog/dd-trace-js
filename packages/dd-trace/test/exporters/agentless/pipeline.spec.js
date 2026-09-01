@@ -88,8 +88,10 @@ describe('AgentlessWriter data pipeline', () => {
 
     if (zstdDecompressSync) {
       const payload = JSON.parse(zstdDecompressSync(received.payload).toString())
-      const span = payload.traces[0].spans[0]
+      const trace = payload.traces[0]
+      const span = trace.spans[0]
 
+      assert.strictEqual(trace.runtimeID, 'test-runtime-id')
       assert.strictEqual(span.name, 'operation')
       assert.strictEqual(span.resource, 'resource')
       assert.strictEqual(span.service, 'service')

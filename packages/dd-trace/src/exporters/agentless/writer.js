@@ -98,13 +98,7 @@ class AgentlessWriter extends BaseWriter {
 
     // The WASM transport performs its HTTP request in JavaScript. Keep that
     // internal request out of the instrumented application's traces.
-    legacyStorage.run({ noop: true }, () => this.#getExporter(DD_API_KEY).sendV04(data)).then(
-      done,
-      error => {
-        log.error('Failed to send %d trace(s) to the agentless intake: %s', count, error.message)
-        done()
-      }
-    )
+    legacyStorage.run({ noop: true }, () => this.#getExporter(DD_API_KEY).sendV04(data, done, log))
   }
 
   /**
@@ -155,10 +149,7 @@ class AgentlessWriter extends BaseWriter {
   }
 
   #closeExporter () {
-    const closePromise = this.#exporter?.close()
-    closePromise?.catch(error => {
-      log.error('Failed to close the agentless exporter: %s', error.message)
-    })
+    this.#exporter?.close()
     this.#exporter = undefined
     this.#exporterApiKey = undefined
     this.#exporterEnv = undefined

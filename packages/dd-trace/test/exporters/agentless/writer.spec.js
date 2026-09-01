@@ -31,7 +31,7 @@ describe('AgentlessWriter', () => {
     }
     exporter = {
       close: sinon.stub(),
-      sendV04: sinon.stub().resolves(),
+      sendV04: sinon.stub().callsArg(1),
     }
     createAgentlessExporter = sinon.stub().returns(exporter)
     log = {
@@ -80,7 +80,7 @@ describe('AgentlessWriter', () => {
 
     await new Promise(resolve => writer.flush(resolve))
 
-    sinon.assert.calledOnceWithExactly(exporter.sendV04, Buffer.from('v0.4 payload'))
+    sinon.assert.calledOnceWithExactly(exporter.sendV04, Buffer.from('v0.4 payload'), sinon.match.func, log)
     sinon.assert.calledOnceWithExactly(createAgentlessExporter, {
       endpoint: 'https://intake.example/api/v2/spans',
       apiKey: 'test-api-key',
@@ -97,13 +97,33 @@ describe('AgentlessWriter', () => {
   })
 
   it('suppresses instrumentation of the data-pipeline intake request', async () => {
-    exporter.sendV04.callsFake(() => {
+    /**
+     * @param {Buffer} data
+     * @param {() => void} done
+     */
+    exporter.sendV04.callsFake((data, done) => {
       assert.strictEqual(storage('legacy').getHandle()?.noop, true)
-      return Promise.resolve()
+      done()
     })
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
 
     await new Promise(resolve => writer.flush(resolve))
+  })
+
+  it('waits for the data-pipeline completion callback', async () => {
+    exporter.sendV04.resetBehavior()
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+    let flushed = false
+    const flush = new Promise(resolve => writer.flush(() => {
+      flushed = true
+      resolve()
+    }))
+
+    assert.strictEqual(flushed, false)
+    const done = exporter.sendV04.firstCall.args[1]
+    done()
+    await flush
+    assert.strictEqual(flushed, true)
   })
 
   it('reuses the pipeline exporter while its endpoint and API key are unchanged', async () => {
@@ -165,17 +185,6 @@ describe('AgentlessWriter', () => {
     })
   }
 
-  it('logs data-pipeline close failures without propagating them to the application', async () => {
-    exporter.close.rejects(new Error('close failed'))
-    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
-
-    await new Promise(resolve => writer.flush(resolve))
-    writer.setUrl(new URL('https://other-intake.example'))
-    await Promise.resolve()
-
-    sinon.assert.calledWithExactly(log.error, 'Failed to close the agentless exporter: %s', 'close failed')
-  })
-
   it('drops traces without constructing a pipeline exporter when the API key is unavailable', async () => {
     apiKey = undefined
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
@@ -184,16 +193,6 @@ describe('AgentlessWriter', () => {
 
     sinon.assert.notCalled(createAgentlessExporter)
     sinon.assert.notCalled(exporter.sendV04)
-  })
-
-  it('logs data-pipeline send failures without propagating them to the application', async () => {
-    exporter.sendV04.rejects(new Error('intake unavailable'))
-    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
-
-    await new Promise(resolve => writer.flush(resolve))
-
-    sinon.assert.calledWithMatch(log.error, 'Failed to send %d trace(s) to the agentless intake: %s', 1,
-      'intake unavailable')
   })
 
   it('drops traces without constructing a pipeline exporter when the intake URL is unavailable', async () => {
