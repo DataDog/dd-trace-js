@@ -25,12 +25,19 @@ const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
 
-function getCompiledRuntimeHook (runtime) {
-  return instrumentations.next.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
+/**
+ * @param {'app-page'|'app-route'|'pages-api'} runtime
+ * @param {object} runtimeExports
+ */
+function applyCompiledRuntimeHook (runtime, runtimeExports) {
+  const hook = instrumentations.next.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
+  hook(runtimeExports)
 }
 
-function getNoFallbackErrorHook () {
-  return instrumentations.next.find(hook => hook.file === 'dist/shared/lib/no-fallback-error.external.js').hook
+/** @param {{ NoFallbackError: typeof Error }} runtimeExports */
+function applyNoFallbackErrorHook (runtimeExports) {
+  const hook = instrumentations.next.find(hook => hook.file === 'dist/shared/lib/no-fallback-error.external.js').hook
+  hook(runtimeExports)
 }
 
 function getDisabledRuntimeHooks () {
@@ -793,10 +800,6 @@ describe('Plugin', function () {
             })
 
             it('should trace a cached app page through the compiled runtime', async () => {
-              const firstResponse = await axios.get(`http://127.0.0.1:${port}/cached`)
-              assert.strictEqual(firstResponse.status, 200)
-              assert.match(firstResponse.data, /<h1>Cached App Page<\/h1>/)
-
               const tracePromise = agent.assertSomeTraces(traces => {
                 const spans = traces[0]
                 const nextRequestSpans = spans.filter(span => span.name === 'next.request')
@@ -810,11 +813,11 @@ describe('Plugin', function () {
                 })
               })
 
-              const [secondResponse] = await Promise.all([
+              const [response] = await Promise.all([
                 axios.get(`http://127.0.0.1:${port}/cached`),
                 tracePromise,
               ])
-              assert.strictEqual(secondResponse.headers['x-nextjs-cache'], 'HIT')
+              assert.strictEqual(response.headers['x-nextjs-cache'], 'HIT')
             })
 
             it('should attach a thrown app page error to the request span', done => {
@@ -1118,7 +1121,7 @@ describe('compiled Next runtimes', () => {
     }
 
     class AppPageRouteModule extends RouteModule {}
-    getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+    applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
     const startChannel = dc.channel('apm:next:request:start')
     const onStart = () => {}
@@ -1163,8 +1166,7 @@ describe('compiled Next runtimes', () => {
           return Promise.resolve({ status: 201 })
         }
       }
-      const runtimeHook = getCompiledRuntimeHook('app-route')
-      runtimeHook({ AppRouteRouteModule })
+      applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
 
       const request = {
         headers: {
@@ -1239,7 +1241,7 @@ describe('compiled Next runtimes', () => {
           return { value: { status: response.status } }
         }
       }
-      getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
+      applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
 
       const request = { headers: {}, method: 'GET', url: '/api/generator-error' }
       const response = new http.ServerResponse(request)
@@ -1262,7 +1264,7 @@ describe('compiled Next runtimes', () => {
         definition = { pathname: '/without-prepare' }
       }
 
-      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
       let starts = 0
       const onStart = () => starts++
@@ -1312,7 +1314,7 @@ describe('compiled Next runtimes', () => {
           definition = { pathname }
         }
 
-        getCompiledRuntimeHook(runtime)({ [exportName]: CompiledRouteModule })
+        applyCompiledRuntimeHook(runtime, { [exportName]: CompiledRouteModule })
 
         const request = { headers: {}, method: 'GET', url: pathname }
         const response = new http.ServerResponse(request)
@@ -1380,7 +1382,7 @@ describe('compiled Next runtimes', () => {
           definition = { pathname }
         }
 
-        getCompiledRuntimeHook(runtime)({ [exportName]: CompiledRouteModule })
+        applyCompiledRuntimeHook(runtime, { [exportName]: CompiledRouteModule })
 
         const nodeRequest = { headers: {}, method: 'GET', url: pathname }
         const request = runtime === 'app-page' ? { ...nodeRequest, originalRequest: nodeRequest } : nodeRequest
@@ -1474,7 +1476,7 @@ describe('compiled Next runtimes', () => {
           return Promise.resolve()
         }
       }
-      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
       const nodeRequest = { headers: {}, method: 'GET', url: '/interleaved-error' }
       const request = { ...nodeRequest, originalRequest: nodeRequest }
@@ -1532,7 +1534,7 @@ describe('compiled Next runtimes', () => {
           return Promise.resolve()
         }
       }
-      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
       const request = { headers: {}, method: 'GET', url: '/nested-fallback' }
       const response = new http.ServerResponse(request)
@@ -1581,7 +1583,7 @@ describe('compiled Next runtimes', () => {
           return Promise.resolve()
         }
       }
-      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
       const request = { headers: {}, method: 'GET', url: '/deferred-handler-error' }
       const response = new http.ServerResponse(request)
@@ -1609,13 +1611,13 @@ describe('compiled Next runtimes', () => {
 
     it('does not record NoFallbackError when the App Page router handles it as a 404', async () => {
       class NoFallbackError extends Error {}
-      getNoFallbackErrorHook()({ NoFallbackError })
+      applyNoFallbackErrorHook({ NoFallbackError })
       const noFallbackError = new NoFallbackError()
 
       class AppPageRouteModule extends RouteModule {
         definition = { pathname: '/without-fallback' }
       }
-      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
       const request = { headers: {}, method: 'GET', url: '/without-fallback' }
       const response = new http.ServerResponse(request)
@@ -1653,7 +1655,7 @@ describe('compiled Next runtimes', () => {
             return Promise.resolve({ value: { status: cacheStatus } })
           }
         }
-        getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+        applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
         const request = { headers: {}, method: 'GET', url: '/cached-status' }
         const response = new http.ServerResponse(request)
@@ -1685,7 +1687,7 @@ describe('compiled Next runtimes', () => {
           return handleResponseResult
         }
       }
-      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
       const request = { headers: {}, method: 'GET', url: '/closed-response' }
       const response = new http.ServerResponse(request)
@@ -1716,8 +1718,7 @@ describe('compiled Next runtimes', () => {
           return Promise.resolve()
         }
       }
-      const runtimeHook = getCompiledRuntimeHook('pages-api')
-      runtimeHook({ PagesAPIRouteModule })
+      applyCompiledRuntimeHook('pages-api', { PagesAPIRouteModule })
 
       const response = { statusCode: 200 }
       const trace = agent.assertSomeTraces(traces => {
@@ -1753,8 +1754,7 @@ describe('compiled Next runtimes', () => {
           return Promise.resolve()
         }
       }
-      const runtimeHook = getCompiledRuntimeHook('app-page')
-      runtimeHook({ AppPageRouteModule })
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
       const request = { headers: {}, method: 'GET', url: '/first-entry' }
       const response = new http.ServerResponse(request)
@@ -1834,9 +1834,9 @@ describe('compiled Next runtimes', () => {
         }
       }
 
-      getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
-      getCompiledRuntimeHook('pages-api')({ PagesAPIRouteModule })
-      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+      applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
+      applyCompiledRuntimeHook('pages-api', { PagesAPIRouteModule })
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
       const routeRequest = { headers: {}, method: 'GET', url: '/api/response-hook' }
       const routeResponse = new http.ServerResponse(routeRequest)

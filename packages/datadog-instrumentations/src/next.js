@@ -388,7 +388,8 @@ function publishRoutePage (ctx, routeModule, fallbackPage, isAppPath) {
 
   const pageData = getRoutePage(routeModule, fallbackPage)
   if (pageData.page) {
-    pageLoadChannel.publish(isAppPath ? { ...pageData, isAppPath: true } : pageData)
+    if (isAppPath) pageData.isAppPath = true
+    pageLoadChannel.publish(pageData)
   }
 }
 
