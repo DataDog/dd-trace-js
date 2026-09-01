@@ -78,9 +78,11 @@ function awaitContextCallback (state, node, _parent, ancestry) {
  * @returns {void}
  */
 function awaitContextCallbackAtTryStart (state, node, _parent, ancestry) {
-  const tryStatement = node.type === 'TryStatement'
-    ? node
-    : ancestry.find(ancestor => ancestor.type === 'TryStatement')
+  let tryStatement = node.type === 'TryStatement' ? node : undefined
+  for (const ancestor of ancestry) {
+    if (tryStatement || functionTypes.has(ancestor.type)) break
+    if (ancestor.type === 'TryStatement') tryStatement = ancestor
+  }
   assert(tryStatement?.block?.type === 'BlockStatement',
     'awaitContextCallbackAtTryStart: expected an enclosing try statement with a block body')
 
