@@ -139,7 +139,7 @@ describe('probe sampler', function () {
       assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START), 7)
     })
 
-    it('should enforce the sampling interval boundary', function () {
+    it('should skip repeated hits within the sampling interval', function () {
       const sampledProbeIndexes = installSampler()
       const sampler = getSampler()
       assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 0)
@@ -155,6 +155,9 @@ describe('probe sampler', function () {
       now += 1n
 
       assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 200000n, false), true)
+      assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 2)
+
+      assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 200000n, false), false)
       assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 2)
     })
 

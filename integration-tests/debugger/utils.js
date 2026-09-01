@@ -156,13 +156,8 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     generateRemoteConfig: generateRemoteConfig.bind(null, breakpoints[0]),
     generateProbeConfig: generateProbeConfig.bind(null, breakpoints[0]),
 
-    waitForProbeStatus (probeIds, status) {
-      return waitForProbeStatus(t.agent, probeIds, status)
-    },
-
-    captureSnapshotsUntilExit (expectedCount, action) {
-      return captureSnapshotsUntilExit(t, expectedCount, action)
-    },
+    waitForProbeStatus,
+    captureSnapshotsUntilExit,
 
     snapshotReceived () {
       return new Promise((/** @type {(value: object) => void} */ resolve) => {
@@ -228,6 +223,64 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     }
   }
 
+  /**
+   * @param {Iterable<string>} probeIds
+   * @param {string} status
+   * @returns {Promise<Map<string, DebuggerDiagnostics>>}
+   */
+  function waitForProbeStatus (probeIds, status) {
+    const pendingProbeIds = new Set(probeIds)
+    const diagnosticsByProbeId = new Map()
+
+    return new Promise((resolve) => {
+      t.agent.on('debugger-diagnostics', diagnosticsReceived)
+
+      /** @param {{ payload: Array<{ debugger: { diagnostics: DebuggerDiagnostics } }> }} event */
+      function diagnosticsReceived ({ payload }) {
+        for (const { debugger: { diagnostics } } of payload) {
+          if (diagnostics.status !== status || !pendingProbeIds.delete(diagnostics.probeId)) continue
+          diagnosticsByProbeId.set(diagnostics.probeId, diagnostics)
+        }
+
+        if (pendingProbeIds.size !== 0) return
+        t.agent.removeListener('debugger-diagnostics', diagnosticsReceived)
+        resolve(diagnosticsByProbeId)
+      }
+    })
+  }
+
+  /**
+   * @param {number} expectedCount
+   * @param {() => Promise<void>} action
+   * @returns {Promise<DebuggerSnapshot[]>}
+   */
+  async function captureSnapshotsUntilExit (expectedCount, action) {
+    /** @type {DebuggerSnapshot[]} */
+    const snapshots = []
+    let resolveExpectedSnapshots
+    const expectedSnapshotsReceived = new Promise((resolve) => {
+      resolveExpectedSnapshots = resolve
+      if (expectedCount === 0) resolve()
+    })
+
+    /** @param {{ payload: Array<{ debugger: { snapshot: DebuggerSnapshot } }> }} event */
+    function inputReceived ({ payload }) {
+      for (const { debugger: { snapshot } } of payload) {
+        snapshots.push(snapshot)
+      }
+      if (snapshots.length >= expectedCount) resolveExpectedSnapshots()
+    }
+
+    t.agent.on('debugger-input', inputReceived)
+    try {
+      await Promise.all([action(), expectedSnapshotsReceived])
+      await stopProc(t.proc)
+      return snapshots
+    } finally {
+      t.agent.removeListener('debugger-input', inputReceived)
+    }
+  }
+
   useSandbox(dependencies)
 
   before(function () {
@@ -264,65 +317,6 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
   })
 
   return t
-}
-
-/**
- * @param {import('../helpers').FakeAgent} agent
- * @param {Iterable<string>} probeIds
- * @param {string} status
- * @returns {Promise<Map<string, DebuggerDiagnostics>>}
- */
-function waitForProbeStatus (agent, probeIds, status) {
-  const pendingProbeIds = new Set(probeIds)
-  const diagnosticsByProbeId = new Map()
-
-  return new Promise((resolve) => {
-    agent.on('debugger-diagnostics', diagnosticsReceived)
-
-    /** @param {{ payload: Array<{ debugger: { diagnostics: DebuggerDiagnostics } }> }} event */
-    function diagnosticsReceived ({ payload }) {
-      for (const { debugger: { diagnostics } } of payload) {
-        if (diagnostics.status !== status || !pendingProbeIds.delete(diagnostics.probeId)) continue
-        diagnosticsByProbeId.set(diagnostics.probeId, diagnostics)
-      }
-
-      if (pendingProbeIds.size !== 0) return
-      agent.removeListener('debugger-diagnostics', diagnosticsReceived)
-      resolve(diagnosticsByProbeId)
-    }
-  })
-}
-
-/**
- * @param {DebuggerTestEnvironment} t
- * @param {number} expectedCount
- * @param {() => Promise<void>} action
- * @returns {Promise<DebuggerSnapshot[]>}
- */
-async function captureSnapshotsUntilExit (t, expectedCount, action) {
-  /** @type {DebuggerSnapshot[]} */
-  const snapshots = []
-  let resolveExpectedSnapshots
-  const expectedSnapshotsReceived = new Promise((resolve) => {
-    resolveExpectedSnapshots = resolve
-  })
-
-  /** @param {{ payload: Array<{ debugger: { snapshot: DebuggerSnapshot } }> }} event */
-  function inputReceived ({ payload }) {
-    for (const { debugger: { snapshot } } of payload) {
-      snapshots.push(snapshot)
-    }
-    if (snapshots.length >= expectedCount) resolveExpectedSnapshots()
-  }
-
-  t.agent.on('debugger-input', inputReceived)
-  try {
-    await Promise.all([action(), expectedSnapshotsReceived])
-    await stopProc(t.proc)
-    return snapshots
-  } finally {
-    t.agent.removeListener('debugger-input', inputReceived)
-  }
 }
 
 /**

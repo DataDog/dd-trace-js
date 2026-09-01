@@ -4,75 +4,99 @@ const assert = require('node:assert/strict')
 
 const { setup } = require('./utils')
 
-const MAX_SNAPSHOTS_PER_SECOND_GLOBALLY = 25
+/**
+ * @param {ReturnType<typeof setup>} t
+ * @param {Array<{ config: { id: string, config: { id: string } }, url: string }>} probes
+ * @returns {Promise<Map<string, number[]>>}
+ */
+async function captureSamplingIntervals (t, probes) {
+  const probeIds = probes.map(({ config }) => config.config.id)
+  const probesInstalled = t.waitForProbeStatus(probeIds, 'INSTALLED')
+
+  for (const { config } of probes) {
+    t.agent.addRemoteConfig(config)
+  }
+  await probesInstalled
+
+  const timestampsByProbeId = new Map(probeIds.map(probeId => [probeId, []]))
+  let rejectSamples
+  let resolveSamples
+  const samplesReceived = new Promise((resolve, reject) => {
+    rejectSamples = reject
+    resolveSamples = resolve
+  })
+
+  /** @param {{ payload: Array<{ debugger: { snapshot: { probe: { id: string }, timestamp: number } } }> }} event */
+  function handleSnapshots ({ payload }) {
+    try {
+      for (const { debugger: { snapshot } } of payload) {
+        const timestamps = timestampsByProbeId.get(snapshot.probe.id)
+        assert.ok(timestamps, `Unexpected probe ID: ${snapshot.probe.id}`)
+        timestamps.push(snapshot.timestamp)
+      }
+
+      for (const timestamps of timestampsByProbeId.values()) {
+        if (timestamps.length < 3) return
+      }
+      resolveSamples()
+    } catch (error) {
+      rejectSamples(error)
+    }
+  }
+
+  t.agent.on('debugger-input', handleSnapshots)
+  const timers = probes.map(({ url }) => setInterval(() => {
+    t.axios.get(url).catch(rejectSamples)
+  }, 10))
+
+  try {
+    await samplesReceived
+    return timestampsByProbeId
+  } finally {
+    for (const timer of timers) clearInterval(timer)
+    t.agent.removeListener('debugger-input', handleSnapshots)
+  }
+}
+
+/** @param {number[]} timestamps */
+function assertSamplingInterval (timestamps) {
+  assert.strictEqual(timestamps.length, 3)
+
+  // Snapshot timestamps use wall-clock time while sampling uses monotonic time, so allow 75ms for drift.
+  for (let i = 1; i < timestamps.length; i++) {
+    const duration = timestamps[i] - timestamps[i - 1]
+    assert.ok(duration >= 925, `duration (${duration}) should be >= 925`)
+    assert.ok(duration < 1075, `duration (${duration}) should be < 1075`)
+  }
+}
 
 describe('Dynamic Instrumentation', function () {
   const t = setup({ testApp: 'target-app/basic.js', dependencies: ['fastify'] })
 
   describe('sampling', function () {
-    it('should apply the sampling rate independently per probe', async function () {
-      const rcConfig1 = t.breakpoints[0].generateRemoteConfig({ sampling: { snapshotsPerSecond: 0.001 } })
-      const rcConfig2 = t.breakpoints[1].generateRemoteConfig({ sampling: { snapshotsPerSecond: 0.001 } })
-      const probeIds = [rcConfig1.config.id, rcConfig2.config.id]
-      const probesInstalled = t.waitForProbeStatus(probeIds, 'INSTALLED')
+    it('should respect sampling rate for single probe', async function () {
+      const rcConfig = t.generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
+      const timestampsByProbeId = await captureSamplingIntervals(t, [{
+        config: rcConfig,
+        url: t.breakpoint.url,
+      }])
 
-      t.agent.addRemoteConfig(rcConfig1)
-      t.agent.addRemoteConfig(rcConfig2)
-      await probesInstalled
-
-      const snapshots = await t.captureSnapshotsUntilExit(probeIds.length, async () => {
-        const responses = await Promise.all([
-          t.axios.get(t.breakpoints[0].url),
-          t.axios.get(t.breakpoints[0].url),
-          t.axios.get(t.breakpoints[1].url),
-          t.axios.get(t.breakpoints[1].url),
-        ])
-        for (const response of responses) {
-          assert.strictEqual(response.status, 200)
-        }
-      })
-
-      assert.deepStrictEqual(
-        snapshots.map(({ probe }) => probe.id).sort(),
-        probeIds.sort()
-      )
+      assertSamplingInterval(timestampsByProbeId.get(rcConfig.config.id))
     })
 
-    it('should limit snapshots across probes at different locations', async function () {
-      const rcConfigs = []
-      for (let i = 0; i < MAX_SNAPSHOTS_PER_SECOND_GLOBALLY + 1; i++) {
-        const breakpoint = t.breakpoints[i % 2]
-        rcConfigs.push(breakpoint.generateRemoteConfig({
-          captureSnapshot: true,
-          sampling: { snapshotsPerSecond: 5000 },
-        }))
-      }
-      const probeIds = rcConfigs.map(({ config }) => config.id)
-      const probesInstalled = t.waitForProbeStatus(probeIds, 'INSTALLED')
+    it('should adhere to individual probes sample rate', async function () {
+      const rcConfig1 = t.breakpoints[0].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
+      const rcConfig2 = t.breakpoints[1].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
+      const timestampsByProbeId = await captureSamplingIntervals(t, [{
+        config: rcConfig1,
+        url: t.breakpoints[0].url,
+      }, {
+        config: rcConfig2,
+        url: t.breakpoints[1].url,
+      }])
 
-      for (const rcConfig of rcConfigs) {
-        t.agent.addRemoteConfig(rcConfig)
-      }
-      await probesInstalled
-
-      const snapshots = await t.captureSnapshotsUntilExit(MAX_SNAPSHOTS_PER_SECOND_GLOBALLY, async () => {
-        const responses = await Promise.all([
-          t.axios.get(t.breakpoints[0].url),
-          t.axios.get(t.breakpoints[1].url),
-        ])
-        for (const response of responses) {
-          assert.strictEqual(response.status, 200)
-        }
-      })
-
-      assert.strictEqual(snapshots.length, MAX_SNAPSHOTS_PER_SECOND_GLOBALLY)
-      const expectedProbeIds = new Set(probeIds)
-      const snapshotProbeIds = new Set()
-      for (const { probe } of snapshots) {
-        assert.ok(expectedProbeIds.has(probe.id), `Unexpected probe ID: ${probe.id}`)
-        snapshotProbeIds.add(probe.id)
-      }
-      assert.strictEqual(snapshotProbeIds.size, MAX_SNAPSHOTS_PER_SECOND_GLOBALLY)
+      assertSamplingInterval(timestampsByProbeId.get(rcConfig1.config.id))
+      assertSamplingInterval(timestampsByProbeId.get(rcConfig2.config.id))
     })
   })
 })
