@@ -160,6 +160,7 @@ class PromptManager {
     this.origin = origin
     this.cacheGeneration = 0
     this.fetchTokens = new Map()
+    this.pendingFetches = new Map()
     this.hotCache = new HotCache({
       ttlMs: this.ttlMs,
       fetchMethod: (key, stale, { context, signal }) => this.#backgroundFetch(key, context, signal),
@@ -356,7 +357,17 @@ class PromptManager {
       }
     }
 
-    const result = await this.#fetchAndCache(request)
+    let pending = this.pendingFetches.get(request.key)
+    if (!pending) {
+      pending = this.#fetchAndCache(request)
+      this.pendingFetches.set(request.key, pending)
+    }
+    let result
+    try {
+      result = await pending
+    } finally {
+      if (this.pendingFetches.get(request.key) === pending) this.pendingFetches.delete(request.key)
+    }
     if (result.prompt) {
       telemetry.recordPromptSource(request.resolve ? 'resolve' : 'registry')
       return result.prompt
@@ -411,6 +422,7 @@ class PromptManager {
   async refreshPrompt (promptId) {
     this.#requireApiKey()
     const request = promptRequest(promptId, { env: this.config.env })
+    this.pendingFetches.delete(request.key)
     const result = await this.#fetchAndCache(request, { evictOnNotFound: true })
     return result.prompt
   }
@@ -422,6 +434,7 @@ class PromptManager {
    */
   clearCache ({ hot = true, warm = true } = {}) {
     this.cacheGeneration++
+    this.pendingFetches.clear()
     if (hot) this.hotCache.clear()
     if (warm) this.warmCache.clear()
   }
@@ -433,6 +446,7 @@ class PromptManager {
    */
   #evictPrompt (promptId) {
     this.cacheGeneration++
+    this.pendingFetches.clear()
     this.hotCache.evictPrompt(promptId)
     this.warmCache.evictPrompt(promptId)
   }

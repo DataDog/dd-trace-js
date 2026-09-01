@@ -226,6 +226,23 @@ describe('PromptManager', () => {
     })
   })
 
+  it('coalesces concurrent cold fetches while keeping fallbacks caller-specific', async () => {
+    let resolveFetch
+    fetchStub.onFirstCall().returns(new Promise(resolve => { resolveFetch = resolve }))
+    fetchStub.onSecondCall().resolves(response(200, promptResponse({ version: 2 })))
+    const manager = new PromptManager(makeConfig(), () => provider)
+
+    const first = manager.getPrompt('greeting', { fallback: 'first' })
+    const second = manager.getPrompt('greeting', { fallback: 'second' })
+    sinon.assert.calledOnce(fetchStub)
+    resolveFetch(response(500, { detail: 'unavailable' }))
+
+    const prompts = await Promise.all([first, second])
+    assert.deepStrictEqual(prompts.map(prompt => prompt.template), ['first', 'second'])
+    assert.strictEqual((await manager.getPrompt('greeting')).version, '2')
+    sinon.assert.calledTwice(fetchStub)
+  })
+
   it('isolates resolve selectors and canonicalizes attribute order', async () => {
     fetchStub.resolves(response(200, promptResponse()))
     const manager = new PromptManager(makeConfig({ env: 'production' }), () => provider)
