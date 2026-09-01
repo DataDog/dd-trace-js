@@ -66,7 +66,7 @@ esbuildVersions.forEach((version) => {
         spawnProcAndExpectExit(appFile, {
           cwd,
           env: { DD_TRACE_AGENT_URL: `http://localhost:${agent.port}` },
-        }),
+        }).completed,
       ])
     })
   })

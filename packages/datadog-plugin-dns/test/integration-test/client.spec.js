@@ -46,7 +46,9 @@ describe('esm', () => {
           assert.strictEqual(payload[0][0].resource, 'fakedomain.faketld')
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        proc = spawned.proc
+        await spawned.completed
 
         await res
       }).timeout(20000)

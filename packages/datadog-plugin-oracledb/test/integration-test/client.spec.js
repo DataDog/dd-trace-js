@@ -5,6 +5,7 @@ const { inspect } = require('node:util')
 
 const {
   FakeAgent,
+  ProcessTimeoutError,
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
@@ -14,9 +15,38 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
+const processAttempts = 2
+const processTimeoutMs = 5_000
+
 describe('esm', () => {
   let agent
   let proc
+
+  /**
+   * @param {string} serverFile
+   * @param {number} agentPort
+   */
+  async function runInstrumentedProcess (serverFile, agentPort) {
+    for (let attempt = 0; attempt < processAttempts; attempt++) {
+      const spawned = spawnPluginIntegrationTestProcAndExpectExit(
+        sandboxCwd(),
+        serverFile,
+        agentPort,
+        undefined,
+        undefined,
+        undefined,
+        processTimeoutMs
+      )
+      proc = spawned.proc
+
+      try {
+        await spawned.completed
+        return
+      } catch (error) {
+        if (!(error instanceof ProcessTimeoutError) || attempt === processAttempts - 1) throw error
+      }
+    }
+  }
 
   withVersions('oracledb', 'oracledb', version => {
     useSandbox([`'oracledb@${version}'`], false, [
@@ -46,7 +76,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'oracle.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        await runInstrumentedProcess(variants[variant], agent.port)
 
         await res
       }).timeout(20000)

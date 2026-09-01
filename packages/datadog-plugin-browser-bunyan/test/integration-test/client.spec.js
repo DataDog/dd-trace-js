@@ -38,7 +38,7 @@ describe('esm', () => {
     })
     for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+        const spawned = spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           variants[variant],
           agent.port,
@@ -49,6 +49,8 @@ describe('esm', () => {
             assert.ok(Object.hasOwn(jsonObject, 'dd'), `Available keys: ${inspect(Object.keys(jsonObject))}`)
           }
         )
+        proc = spawned.proc
+        await spawned.completed
       }).timeout(20000)
     }
   })

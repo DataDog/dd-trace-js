@@ -37,7 +37,9 @@ describe('esm', () => {
         assert.strictEqual(isFetch, true)
       })
 
-      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port)
+      const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port)
+      proc = spawned.proc
+      await spawned.completed
 
       await res
     }).timeout(50000)

@@ -50,7 +50,9 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'elasticsearch.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        proc = spawned.proc
+        await spawned.completed
 
         await res
       }).timeout(20000)
