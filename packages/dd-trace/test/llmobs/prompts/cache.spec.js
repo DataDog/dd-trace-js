@@ -87,12 +87,14 @@ describe('Prompt caches', () => {
     for (const file of files) assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600)
     assert.strictEqual(files.some(file => file.includes('.tmp.')), false)
 
-    const slashFile = cache._path(slashKey)
+    const slashFile = files.find(file => JSON.parse(fs.readFileSync(file, 'utf8')).prompt.id === 'a/b')
+    assert.ok(slashFile)
+    const serializedPrompt = JSON.parse(fs.readFileSync(slashFile, 'utf8')).prompt
     fs.writeFileSync(slashFile, 'not json')
     assert.strictEqual(cache.get(slashKey), undefined)
     fs.writeFileSync(slashFile, JSON.stringify({ prompt: {}, timestamp: Date.now() }))
     assert.strictEqual(cache.get(slashKey), undefined)
-    fs.writeFileSync(slashFile, JSON.stringify({ prompt: prompt('a/b')._serialize() }))
+    fs.writeFileSync(slashFile, JSON.stringify({ prompt: serializedPrompt }))
     assert.strictEqual(cache.get(slashKey), undefined)
   })
 

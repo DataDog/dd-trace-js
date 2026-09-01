@@ -78,6 +78,17 @@ function promptFromData (data, source) {
   })
 }
 
+/**
+ * Copy a prompt with a different source.
+ * @param {ManagedPrompt} prompt
+ * @param {'registry'|'cache'|'fallback'|'ff'|'resolve'} source
+ * @returns {ManagedPrompt}
+ */
+function withSource (prompt, source) {
+  if (source === prompt.source) return prompt
+  return new ManagedPrompt({ ...prompt, source })
+}
+
 function detailFromBody (body) {
   try {
     return JSON.parse(body)?.detail ?? body
@@ -147,7 +158,7 @@ class PromptManager {
     this.fetchTokens = new Map()
     this.hotCache = new HotCache({
       ttlMs: this.ttlMs,
-      fetchMethod: (key, stale, { context, signal }) => this._backgroundFetch(key, context, signal),
+      fetchMethod: (key, stale, { context, signal }) => this.#backgroundFetch(key, context, signal),
     })
     this.warmCache = new WarmCache({
       cacheDir: config.DD_LLMOBS_PROMPTS_CACHE_DIR,
@@ -160,7 +171,7 @@ class PromptManager {
    * Require API authentication before using any prompt path.
    * @returns {string}
    */
-  _requireApiKey () {
+  #requireApiKey () {
     if (!this.config.DD_API_KEY) {
       throw new PromptAPIError(0, 'DD_API_KEY is required for prompt operations', 'PromptAuthError')
     }
@@ -172,7 +183,7 @@ class PromptManager {
    * @param {string} path
    * @returns {string}
    */
-  _url (path) {
+  #url (path) {
     return `${this.origin.replace(/\/$/, '')}${path}`
   }
 
@@ -181,7 +192,7 @@ class PromptManager {
    * @param {PromptRequest} request
    * @returns {Promise<ManagedPrompt | undefined>}
    */
-  async _fetchFromProvider (request) {
+  async #fetchFromProvider (request) {
     let prompt
     try {
       const context = { ...request.attributes }
@@ -205,8 +216,8 @@ class PromptManager {
    * @param {AbortSignal} [cacheSignal]
    * @returns {Promise<PromptFetchResult>}
    */
-  async _fetchHttp (request, cacheSignal) {
-    const apiKey = this._requireApiKey()
+  async #fetchHttp (request, cacheSignal) {
+    const apiKey = this.#requireApiKey()
     if (request.resolve && !this.config.DD_APP_KEY) {
       return { reason: 'DD_APP_KEY is required to resolve prompts for an environment' }
     }
@@ -234,7 +245,7 @@ class PromptManager {
     }
 
     try {
-      const response = await fetch(this._url(path), {
+      const response = await fetch(this.#url(path), {
         method,
         headers,
         body,
@@ -272,17 +283,17 @@ class PromptManager {
    * @param {{evictOnNotFound?: boolean, hot?: boolean, signal?: AbortSignal}} [options]
    * @returns {Promise<PromptFetchResult>}
    */
-  async _fetchAndCache (request, { evictOnNotFound = false, hot = true, signal } = {}) {
+  async #fetchAndCache (request, { evictOnNotFound = false, hot = true, signal } = {}) {
     const generation = this.cacheGeneration
     const token = Symbol(request.key)
     this.fetchTokens.set(request.key, token)
-    const result = await this._fetchHttp(request, signal)
+    const result = await this.#fetchHttp(request, signal)
     const latest = this.fetchTokens.get(request.key) === token
     if (latest) this.fetchTokens.delete(request.key)
     const cacheable = generation === this.cacheGeneration && latest
     if (result.prompt) {
       if (this.ttlMs > 0 && cacheable) {
-        const cached = result.prompt._withSource(SOURCE_CACHE)
+        const cached = withSource(result.prompt, SOURCE_CACHE)
         if (hot) this.hotCache.set(request.key, cached)
         if (!request.resolve) this.warmCache.set(request.key, cached)
       }
@@ -304,10 +315,10 @@ class PromptManager {
    * @param {AbortSignal} signal
    * @returns {Promise<ManagedPrompt | undefined>}
    */
-  async _backgroundFetch (key, request, signal) {
-    const result = await this._fetchAndCache(request, { evictOnNotFound: true, hot: false, signal })
+  async #backgroundFetch (key, request, signal) {
+    const result = await this.#fetchAndCache(request, { evictOnNotFound: true, hot: false, signal })
     if (!result.cacheable) return
-    if (result.prompt) return result.prompt._withSource(SOURCE_CACHE)
+    if (result.prompt) return withSource(result.prompt, SOURCE_CACHE)
     if (result.notFound) return
     throw new Error(result.reason)
   }
@@ -319,7 +330,7 @@ class PromptManager {
    *   (() => string | object | Array<{role: string, content: string}>) | undefined} fallback
    * @returns {Promise<ManagedPrompt>}
    */
-  async _getHttpPrompt (request, fallback) {
+  async #getHttpPrompt (request, fallback) {
     if (this.ttlMs > 0) {
       const hot = this.hotCache.get(request.key)
       if (hot) {
@@ -339,7 +350,7 @@ class PromptManager {
       }
     }
 
-    const result = await this._fetchAndCache(request)
+    const result = await this.#fetchAndCache(request)
     if (result.prompt) {
       telemetry.recordPromptSource(request.resolve ? 'resolve' : 'registry')
       return result.prompt
@@ -365,10 +376,10 @@ class PromptManager {
    * @returns {Promise<ManagedPrompt>}
    */
   async getPrompt (promptId, options = {}) {
-    this._requireApiKey()
+    this.#requireApiKey()
     const { version, fallback, targetingKey, attributes = {} } = options
     if (version !== undefined) {
-      return this._getHttpPrompt(promptRequest(promptId, { version }), fallback)
+      return this.#getHttpPrompt(promptRequest(promptId, { version }), fallback)
     }
 
     const request = promptRequest(promptId, {
@@ -377,13 +388,13 @@ class PromptManager {
       attributes,
     })
     if (request.resolve) {
-      const prompt = await this._fetchFromProvider(request)
+      const prompt = await this.#fetchFromProvider(request)
       if (prompt) {
         telemetry.recordPromptSource('ff')
         return prompt
       }
     }
-    return this._getHttpPrompt(request, fallback)
+    return this.#getHttpPrompt(request, fallback)
   }
 
   /**
@@ -392,9 +403,9 @@ class PromptManager {
    * @returns {Promise<ManagedPrompt | undefined>}
    */
   async refreshPrompt (promptId) {
-    this._requireApiKey()
+    this.#requireApiKey()
     const request = promptRequest(promptId, { env: this.config.env })
-    const result = await this._fetchAndCache(request, { evictOnNotFound: true })
+    const result = await this.#fetchAndCache(request, { evictOnNotFound: true })
     return result.prompt
   }
 
@@ -414,13 +425,13 @@ class PromptManager {
    * @param {string} promptId
    * @returns {void}
    */
-  _evictPrompt (promptId) {
+  #evictPrompt (promptId) {
     this.cacheGeneration++
     this.hotCache.evictPrompt(promptId)
     this.warmCache.evictPrompt(promptId)
   }
 
-  _recordCrudError (method, error) {
+  #recordCrudError (method, error) {
     telemetry.recordPromptCrudError(method, error.name, error.status)
     return error
   }
@@ -433,9 +444,9 @@ class PromptManager {
    * @param {boolean} requireAppKey
    * @returns {Promise<object | object[]>}
    */
-  async _request (method, path, body, requireAppKey) {
+  async #request (method, path, body, requireAppKey) {
     try {
-      const apiKey = this._requireApiKey()
+      const apiKey = this.#requireApiKey()
       if (requireAppKey && !this.config.DD_APP_KEY) {
         throw new PromptAPIError(0, 'DD_APP_KEY is required for prompt write operations', 'PromptAuthError')
       }
@@ -449,7 +460,7 @@ class PromptManager {
 
       let response
       try {
-        response = await fetch(this._url(path), {
+        response = await fetch(this.#url(path), {
           method,
           headers,
           body: body === undefined ? undefined : JSON.stringify(body),
@@ -469,7 +480,7 @@ class PromptManager {
       }
     } catch (error) {
       const promptError = error instanceof PromptAPIError ? error : new PromptAPIError(0, error.message)
-      throw this._recordCrudError(method, promptError)
+      throw this.#recordCrudError(method, promptError)
     }
   }
 
@@ -486,8 +497,8 @@ class PromptManager {
     if (options.description) body.description = options.description
     if (options.userVersion) body.user_version = options.userVersion
     if (options.envIds !== undefined) body.env_ids = options.envIds
-    const response = await this._request('POST', PROMPTS_PATH, body, true)
-    this._evictPrompt(promptId)
+    const response = await this.#request('POST', PROMPTS_PATH, body, true)
+    this.#evictPrompt(promptId)
     return response
   }
 
@@ -504,8 +515,8 @@ class PromptManager {
     if (options.userVersion) body.user_version = options.userVersion
     if (options.envIds !== undefined) body.env_ids = options.envIds
     const path = `${PROMPTS_PATH}/${encodeURIComponent(promptId)}/versions`
-    const response = await this._request('POST', path, body, true)
-    this._evictPrompt(promptId)
+    const response = await this.#request('POST', path, body, true)
+    this.#evictPrompt(promptId)
     return response
   }
 
@@ -517,20 +528,20 @@ class PromptManager {
    */
   async updatePrompt (promptId, options = {}) {
     try {
-      this._requireApiKey()
+      this.#requireApiKey()
     } catch (error) {
-      throw this._recordCrudError('PATCH', error)
+      throw this.#recordCrudError('PATCH', error)
     }
     if (options.title === undefined && options.description === undefined) {
       const error = new PromptAPIError(0, 'At least one of title or description must be provided',
         'PromptValidationError')
-      throw this._recordCrudError('PATCH', error)
+      throw this.#recordCrudError('PATCH', error)
     }
     const body = {}
     if (options.title !== undefined) body.title = options.title
     if (options.description !== undefined) body.description = options.description
-    const response = await this._request('PATCH', `${PROMPTS_PATH}/${encodeURIComponent(promptId)}`, body, true)
-    this._evictPrompt(promptId)
+    const response = await this.#request('PATCH', `${PROMPTS_PATH}/${encodeURIComponent(promptId)}`, body, true)
+    this.#evictPrompt(promptId)
     return response
   }
 
@@ -543,21 +554,21 @@ class PromptManager {
    */
   async updatePromptVersion (promptId, version, options = {}) {
     try {
-      this._requireApiKey()
+      this.#requireApiKey()
     } catch (error) {
-      throw this._recordCrudError('PATCH', error)
+      throw this.#recordCrudError('PATCH', error)
     }
     if (options.description === undefined && options.envIds === undefined) {
       const error = new PromptAPIError(0, 'At least one of description or envIds must be provided',
         'PromptValidationError')
-      throw this._recordCrudError('PATCH', error)
+      throw this.#recordCrudError('PATCH', error)
     }
     const body = {}
     if (options.description !== undefined) body.description = options.description
     if (options.envIds !== undefined) body.env_ids = options.envIds
     const path = `${PROMPTS_PATH}/${encodeURIComponent(promptId)}/versions/${version}`
-    const response = await this._request('PATCH', path, body, true)
-    this._evictPrompt(promptId)
+    const response = await this.#request('PATCH', path, body, true)
+    this.#evictPrompt(promptId)
     return response
   }
 
@@ -567,8 +578,8 @@ class PromptManager {
    * @returns {Promise<object | object[]>}
    */
   async deletePrompt (promptId) {
-    const response = await this._request('DELETE', `${PROMPTS_PATH}/${encodeURIComponent(promptId)}`, undefined, true)
-    this._evictPrompt(promptId)
+    const response = await this.#request('DELETE', `${PROMPTS_PATH}/${encodeURIComponent(promptId)}`, undefined, true)
+    this.#evictPrompt(promptId)
     return response
   }
 
@@ -577,7 +588,7 @@ class PromptManager {
    * @returns {Promise<object | object[]>}
    */
   listPrompts () {
-    return this._request('GET', PROMPTS_PATH, undefined, false)
+    return this.#request('GET', PROMPTS_PATH, undefined, false)
   }
 
   /**
@@ -586,7 +597,7 @@ class PromptManager {
    * @returns {Promise<object | object[]>}
    */
   listPromptVersions (promptId) {
-    return this._request('GET', `${PROMPTS_PATH}/${encodeURIComponent(promptId)}/versions`, undefined, false)
+    return this.#request('GET', `${PROMPTS_PATH}/${encodeURIComponent(promptId)}/versions`, undefined, false)
   }
 }
 

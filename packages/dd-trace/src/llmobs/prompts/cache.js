@@ -23,6 +23,7 @@ const log = require('../../log')
 const ManagedPrompt = require('./prompt')
 
 const MAX_HOT_ENTRIES = 1024
+const PROMPT_SOURCES = new Set(['registry', 'cache', 'fallback', 'ff', 'resolve'])
 
 function promptIdFromKey (key) {
   return key.slice(0, key.lastIndexOf(':'))
@@ -143,7 +144,7 @@ class WarmCache {
     this.enabled = enabled && ttlMs > 0
     this.ttlMs = ttlMs
     this.cacheDir = cacheDir || defaultCacheDir()
-    if (this.enabled) this._ensureDir(this.cacheDir)
+    if (this.enabled) this.#ensureDir(this.cacheDir)
   }
 
   /**
@@ -151,7 +152,7 @@ class WarmCache {
    * @param {string} directory
    * @returns {void}
    */
-  _ensureDir (directory) {
+  #ensureDir (directory) {
     try {
       fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
     } catch (error) {
@@ -165,7 +166,7 @@ class WarmCache {
    * @param {string} promptId
    * @returns {string}
    */
-  _promptDir (promptId) {
+  #promptDir (promptId) {
     return path.join(this.cacheDir, Buffer.from(promptId).toString('base64url') || '_')
   }
 
@@ -174,9 +175,33 @@ class WarmCache {
    * @param {string} key
    * @returns {string}
    */
-  _path (key) {
+  #path (key) {
     const index = key.lastIndexOf(':')
-    return path.join(this._promptDir(key.slice(0, index)), `${key.slice(index + 1)}.json`)
+    return path.join(this.#promptDir(key.slice(0, index)), `${key.slice(index + 1)}.json`)
+  }
+
+  /**
+   * Restore and validate a prompt from the warm cache.
+   * @param {object} data
+   * @returns {ManagedPrompt}
+   */
+  #deserialize (data) {
+    const validTemplate = typeof data?.template === 'string' || (
+      Array.isArray(data?.template) && data.template.every(message => {
+        return message && typeof message.role === 'string' && typeof message.content === 'string'
+      })
+    )
+    if (
+      typeof data?.id !== 'string' ||
+      typeof data.version !== 'string' ||
+      !PROMPT_SOURCES.has(data.source) ||
+      !validTemplate ||
+      (data.promptUuid !== undefined && typeof data.promptUuid !== 'string') ||
+      (data.promptVersionUuid !== undefined && typeof data.promptVersionUuid !== 'string')
+    ) {
+      throw new TypeError('Invalid managed prompt cache entry')
+    }
+    return new ManagedPrompt(data)
   }
 
   /**
@@ -188,9 +213,9 @@ class WarmCache {
     if (!this.enabled) return
     let result
     try {
-      const data = JSON.parse(fs.readFileSync(this._path(key), 'utf8'))
+      const data = JSON.parse(fs.readFileSync(this.#path(key), 'utf8'))
       if (!Number.isFinite(data.timestamp)) throw new TypeError('Invalid prompt cache timestamp')
-      const prompt = ManagedPrompt._deserialize(data.prompt)
+      const prompt = this.#deserialize(data.prompt)
       const ageMs = Math.max(0, Date.now() - data.timestamp)
       result = { prompt, stale: ageMs > this.ttlMs, ageMs }
     } catch (error) {
@@ -207,12 +232,12 @@ class WarmCache {
    */
   set (key, prompt) {
     if (!this.enabled) return
-    const file = this._path(key)
+    const file = this.#path(key)
     const temporary = `${file}.tmp.${process.pid}.${randomUUID()}`
     try {
-      this._ensureDir(path.dirname(file))
+      this.#ensureDir(path.dirname(file))
       if (!this.enabled) return
-      fs.writeFileSync(temporary, JSON.stringify({ prompt: prompt._serialize(), timestamp: Date.now() }), {
+      fs.writeFileSync(temporary, JSON.stringify({ prompt, timestamp: Date.now() }), {
         encoding: 'utf8',
         mode: 0o600,
       })
@@ -231,7 +256,7 @@ class WarmCache {
    */
   delete (key) {
     try {
-      fs.rmSync(this._path(key), { force: true })
+      fs.rmSync(this.#path(key), { force: true })
     } catch (error) {
       log.debug('Failed to delete prompt from cache: %s', error.message)
     }
@@ -244,7 +269,7 @@ class WarmCache {
    */
   evictPrompt (promptId) {
     try {
-      fs.rmSync(this._promptDir(promptId), { recursive: true, force: true })
+      fs.rmSync(this.#promptDir(promptId), { recursive: true, force: true })
     } catch (error) {
       log.debug('Failed to evict prompt from cache: %s', error.message)
     }
