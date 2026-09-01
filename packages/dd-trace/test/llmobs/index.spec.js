@@ -11,6 +11,8 @@ const { DD_MAJOR } = require('../../../../version')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
 const LLMObsTagger = require('../../src/llmobs/tagger')
 const {
+  PARENT_AGENT_NAME,
+  PARENT_AGENT_SPAN_ID,
   PROPAGATED_TRACE_ID_KEY,
   SAMPLE_RATE,
   SAMPLING_DECISION,
@@ -142,6 +144,26 @@ describe('module', () => {
       injectCh.publish({ carrier })
 
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+    })
+
+    it('replaces the parent ID without an mlApp configured', () => {
+      llmobsModule.enable({ llmobs: { agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            toSpanId () {
+              return 'new-parent-id'
+            },
+          }
+        },
+      }
+
+      const carrier = {
+        'x-datadog-tags': '_dd.p.llmobs_parent_id=old-parent-id',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=new-parent-id')
     })
 
     it('injects the sampling rate and decision from the parent LLMObs span', () => {
@@ -313,7 +335,12 @@ describe('module', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
       const carrier = {
-        'x-datadog-tags': '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test',
+        'x-datadog-tags': [
+          '_dd.p.tid=69fe014200000000',
+          '_dd.p.dm=-0',
+          '_dd.p.llmobs_ml_app=old-app',
+          '_dd.p.llmobs_ml_app=older-app',
+        ].join(','),
       }
       injectCh.publish({ carrier })
 
@@ -328,9 +355,9 @@ describe('module', () => {
 
       const carrier = {
         'x-datadog-tags': [
+          '_dd.p.llmobs_sid=retained-session',
           '_dd.p.tid=69fe014200000000',
           '_dd.p.dm=-0',
-          '_dd.p.llmobs_sid=retained-session',
         ].join(','),
       }
       injectCh.publish({ carrier })
@@ -338,11 +365,25 @@ describe('module', () => {
       assert.strictEqual(
         carrier['x-datadog-tags'],
         [
+          '_dd.p.llmobs_sid=retained-session',
           '_dd.p.tid=69fe014200000000',
           '_dd.p.dm=-0',
-          '_dd.p.llmobs_sid=retained-session',
           '_dd.p.llmobs_ml_app=test',
         ].join(',')
+      )
+    })
+
+    it('preserves an LLMObs prefix inside another tag value', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {
+        'x-datadog-tags': '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=old-app',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=test'
       )
     })
 
@@ -351,6 +392,7 @@ describe('module', () => {
       store.span = {
         context () {
           return {
+            _trace: { tags: { [PROPAGATED_TRACE_ID_KEY]: '12345678901234567890123456789012' } },
             toSpanId () {
               return 'new-parent-id'
             },
@@ -358,6 +400,8 @@ describe('module', () => {
         },
       }
       LLMObsTagger.tagMap.set(store.span, {
+        [PARENT_AGENT_NAME]: 'new-agent',
+        [PARENT_AGENT_SPAN_ID]: 'new-agent-id',
         [SESSION_ID]: 'new-session',
         [SAMPLE_RATE]: '0.8',
         [SAMPLING_DECISION]: '1',
@@ -365,10 +409,16 @@ describe('module', () => {
 
       const carrier = {
         'x-datadog-tags': [
-          '_dd.p.tid=69fe014200000000',
           '_dd.p.llmobs_parent_id=old-id',
+          '_dd.p.tid=69fe014200000000',
           '_dd.p.llmobs_ml_app=old-app',
           '_dd.p.llmobs_sid=old-session',
+          '_dd.p.llmobs_sr=0.1',
+          '_dd.p.llmobs_sd=0',
+          '_dd.p.llmobs_trace_id=old-trace-id',
+          '_dd.p.llmobs_pagent_span_id=old-agent-id',
+          '_dd.p.llmobs_pagent_name=old-agent',
+          'malformed',
         ].join(','),
       }
       injectCh.publish({ carrier })
@@ -377,11 +427,15 @@ describe('module', () => {
         carrier['x-datadog-tags'],
         [
           '_dd.p.tid=69fe014200000000',
+          'malformed',
           '_dd.p.llmobs_parent_id=new-parent-id',
           '_dd.p.llmobs_ml_app=test',
           '_dd.p.llmobs_sid=new-session',
           '_dd.p.llmobs_sr=0.8',
           '_dd.p.llmobs_sd=1',
+          '_dd.p.llmobs_trace_id=12345678901234567890123456789012',
+          '_dd.p.llmobs_pagent_span_id=new-agent-id',
+          '_dd.p.llmobs_pagent_name=new-agent',
         ].join(',')
       )
     })

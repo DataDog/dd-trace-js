@@ -35,6 +35,8 @@ const { setAgentStrategy } = require('./writers/util')
 const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
 const { llmObsTraceIdToWire } = require('./util')
 
+const PROPAGATED_LLMOBS_PREFIX = '_dd.p.llmobs_'
+
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
@@ -161,19 +163,50 @@ function retireWriters (retiredSpanWriter, retiredEvalWriter) {
   for (const writer of retiredWriters) writer.destroy(onWriterDestroyed)
 }
 
-function isReplacedKey (
-  key, parentId, mlApp, sessionId, sampleRate, samplingDecision, propagatedTraceId, parentAgentSpanId
-) {
-  if (parentId && key === PROPAGATED_PARENT_ID_KEY) return true
-  if (mlApp && key === PROPAGATED_ML_APP_KEY) return true
-  if (sessionId && key === PROPAGATED_SESSION_ID_KEY) return true
-  if (sampleRate != null && key === PROPAGATED_SAMPLE_RATE_KEY) return true
-  if (samplingDecision != null && key === PROPAGATED_SAMPLING_DECISION_KEY) return true
-  if (propagatedTraceId != null && key === PROPAGATED_TRACE_ID_KEY) return true
-  if (parentAgentSpanId && (key === PROPAGATED_PARENT_AGENT_ID_KEY || key === PROPAGATED_PARENT_AGENT_NAME_KEY)) {
-    return true
+/**
+ * @param {Set<string> | undefined} replacementKeys
+ * @param {string} replacementTags
+ * @param {string} key
+ * @param {string} value
+ * @returns {string}
+ */
+function addTagReplacement (replacementKeys, replacementTags, key, value) {
+  const replacement = `${key}=${value}`
+  replacementKeys?.add(key)
+  return `${replacementTags}${replacementTags ? ',' : ''}${replacement}`
+}
+
+/**
+ * @param {string} tags
+ * @param {number} firstKeyIndex
+ * @param {Set<string>} replacementKeys
+ * @param {string} replacementTags
+ * @returns {string}
+ */
+function replacePropagatedTags (tags, firstKeyIndex, replacementKeys, replacementTags) {
+  let entryStart = tags.lastIndexOf(',', firstKeyIndex) + 1
+  let replaced = tags.slice(0, entryStart === 0 ? 0 : entryStart - 1)
+  let hasEntry = entryStart !== 0
+
+  while (entryStart <= tags.length) {
+    let entryEnd = tags.indexOf(',', entryStart)
+    if (entryEnd === -1) entryEnd = tags.length
+
+    const separatorIndex = tags.indexOf('=', entryStart)
+    const key = separatorIndex !== -1 && separatorIndex < entryEnd
+      ? tags.slice(entryStart, separatorIndex)
+      : undefined
+
+    if (!replacementKeys.has(key)) {
+      replaced += `${hasEntry ? ',' : ''}${tags.slice(entryStart, entryEnd)}`
+      hasEntry = true
+    }
+
+    if (entryEnd === tags.length) break
+    entryStart = entryEnd + 1
   }
-  return false
+
+  return `${replaced}${hasEntry ? ',' : ''}${replacementTags}`
 }
 
 // since LLMObs traces can extend between services and be the same trace,
@@ -218,29 +251,38 @@ function handleLLMObsInjection ({ carrier }) {
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
-  const existing = readDatadogTags(carrier)
-  let tags = ''
-
-  if (existing) {
-    const entries = existing.split(',')
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i]
-      const separatorIndex = entry.indexOf('=')
-      const key = separatorIndex === -1 ? entry : entry.slice(0, separatorIndex)
-      if (!isReplacedKey(
-        key, parentId, mlApp, sessionId, sampleRate, samplingDecision, propagatedTraceId, parentAgentSpanId
-      )) {
-        tags += `${tags ? ',' : ''}${entry}`
-      }
-    }
+  const existing = readDatadogTags(carrier) || ''
+  const firstKeyIndex = existing.indexOf(PROPAGATED_LLMOBS_PREFIX)
+  const replacementKeys = firstKeyIndex === -1 ? undefined : new Set()
+  let replacementTags = ''
+  if (parentId) {
+    replacementTags = addTagReplacement(replacementKeys, replacementTags, PROPAGATED_PARENT_ID_KEY, parentId)
   }
-
-  if (parentId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
-  if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
-  if (sessionId) tags += `${tags ? ',' : ''}${PROPAGATED_SESSION_ID_KEY}=${sessionId}`
-  if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
-  if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
-  if (propagatedTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${propagatedTraceId}`
+  if (mlApp) replacementTags = addTagReplacement(replacementKeys, replacementTags, PROPAGATED_ML_APP_KEY, mlApp)
+  if (sessionId) {
+    replacementTags = addTagReplacement(replacementKeys, replacementTags, PROPAGATED_SESSION_ID_KEY, sessionId)
+  }
+  if (sampleRate != null) {
+    replacementTags = addTagReplacement(replacementKeys, replacementTags, PROPAGATED_SAMPLE_RATE_KEY, sampleRate)
+  }
+  if (samplingDecision != null) {
+    replacementTags = addTagReplacement(
+      replacementKeys, replacementTags, PROPAGATED_SAMPLING_DECISION_KEY, samplingDecision
+    )
+  }
+  if (propagatedTraceId != null) {
+    replacementTags = addTagReplacement(
+      replacementKeys, replacementTags, PROPAGATED_TRACE_ID_KEY, propagatedTraceId
+    )
+  }
+  if (parentAgentSpanId && replacementKeys) {
+    // These entries are appended below after their wire and size constraints are applied.
+    replacementKeys.add(PROPAGATED_PARENT_AGENT_ID_KEY)
+    replacementKeys.add(PROPAGATED_PARENT_AGENT_NAME_KEY)
+  }
+  let tags = firstKeyIndex === -1
+    ? `${existing}${existing ? ',' : ''}${replacementTags}`
+    : replacePropagatedTags(existing, firstKeyIndex, replacementKeys, replacementTags)
 
   const maxLength = globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
   const tagsWithId = appendOptionalPropagatedTag(

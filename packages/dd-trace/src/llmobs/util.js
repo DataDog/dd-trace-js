@@ -338,18 +338,6 @@ function resolveAgentAttribution (tags, span) {
 }
 
 /**
- * Removes all `key=value` entries for the given key from a comma-separated tagset string.
- *
- * @param {string} tags - Existing tagset string (may be empty).
- * @param {string} key
- * @returns {string}
- */
-function stripTagsetEntry (tags, key) {
-  if (!tags.includes(key)) return tags
-  return tags.split(',').filter(entry => !entry.startsWith(`${key}=`)).join(',')
-}
-
-/**
  * Appends `key=value` to the tagset string with a comma separator, but only when `value` is
  * truthy, passes the optional `safeguard` predicate, and fits within `maxTagSetLength`. Returns
  * the original `tags` unchanged when the value is absent, unsafe, or would overflow the budget.
@@ -527,7 +515,6 @@ module.exports = {
   normalizeLlmObsTraceId,
   formatAudioPart,
   resolveAgentAttribution,
-  stripTagsetEntry,
   validateCostTags,
   validateKind,
   getFunctionArguments,

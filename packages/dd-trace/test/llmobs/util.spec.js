@@ -16,7 +16,6 @@ const {
   formatAudioPart,
   getFunctionArguments,
   normalizeLlmObsTraceId,
-  stripTagsetEntry,
   validateCostTags,
   safeJsonParse,
   validateKind,
@@ -131,32 +130,6 @@ describe('util', () => {
     it('appends when the entry fits exactly within maxTagSetLength', () => {
       // 'a=1' (3) + ',k=v' (4) = 7. Cap at 7 → fits.
       assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'v', null, 7), 'a=1,k=v')
-    })
-  })
-
-  describe('stripTagsetEntry', () => {
-    it('removes a key=value entry from the middle of the tagset', () => {
-      assert.strictEqual(stripTagsetEntry('a=1,b=2,c=3', 'b'), 'a=1,c=3')
-    })
-
-    it('removes a key=value entry from the start of the tagset', () => {
-      assert.strictEqual(stripTagsetEntry('b=2,c=3', 'b'), 'c=3')
-    })
-
-    it('removes a key=value entry from the end of the tagset', () => {
-      assert.strictEqual(stripTagsetEntry('a=1,b=2', 'b'), 'a=1')
-    })
-
-    it('removes all occurrences of a duplicate key', () => {
-      assert.strictEqual(stripTagsetEntry('k=old,a=1,k=new', 'k'), 'a=1')
-    })
-
-    it('returns the original tagset unchanged when the key is absent', () => {
-      assert.strictEqual(stripTagsetEntry('a=1,c=3', 'b'), 'a=1,c=3')
-    })
-
-    it('returns empty string when stripping the only entry', () => {
-      assert.strictEqual(stripTagsetEntry('k=v', 'k'), '')
     })
   })
 
