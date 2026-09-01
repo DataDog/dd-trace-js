@@ -59,13 +59,18 @@ function awaitContextCallback (state, node, _parent, ancestry) {
   )
   if (!generatedCallback) return
 
-  const { callbackBranch, callbackStatements } = generatedCallback
+  const { callbackStatements, callbackVariable } = generatedCallback
+  const callbackBranch = parse(`
+    if (typeof ${callbackVariable} === 'function') {
+    } else {
+    }
+  `).body[0]
   callbackBranch.consequent.body.push(clone(node))
   callbackBranch.alternate = {
     type: 'BlockStatement',
     body: originalStatements,
   }
-  node.consequent.body = callbackStatements
+  node.consequent.body = [...callbackStatements, callbackBranch]
 }
 
 /**
@@ -103,8 +108,8 @@ function awaitContextCallbackAtTryStart (state, node, _parent, ancestry) {
  * @param {import('estree').Node[]} ancestry
  * @param {string} transformName
  * @returns {{
- *   callbackBranch: import('estree').IfStatement,
- *   callbackStatements: import('estree').Statement[]
+ *   callbackStatements: import('estree').Statement[],
+ *   callbackVariable: string
  * }|undefined}
  */
 function createAwaitedContextCallback (state, insertionTarget, ancestry, transformName) {
@@ -147,18 +152,19 @@ function createAwaitedContextCallback (state, insertionTarget, ancestry, transfo
     : `${callbackVariable}(${callbackArguments})`
   const callbackStatements = parse(`
     async function wrapper () {
-      const ${callbackVariable} = __apm$ctx.${callbackName};
-      if (typeof ${callbackVariable} === 'function') {
-        try {
+      let ${callbackVariable};
+      try {
+        ${callbackVariable} = __apm$ctx.${callbackName};
+        if (typeof ${callbackVariable} === 'function') {
           await ${callbackInvocation};
-        } catch {}
-      }
+        }
+      } catch {}
     }
   `).body[0].body.body
 
   return {
-    callbackBranch: callbackStatements[1],
     callbackStatements,
+    callbackVariable,
   }
 }
 
