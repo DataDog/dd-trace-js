@@ -544,10 +544,10 @@ class LLMObsTagger {
     if (finalTemplate) validatedPrompt.template = finalTemplate
     if (finalChatTemplate?.length) validatedPrompt.chat_template = finalChatTemplate
     if (tags) validatedPrompt.tags = tags
-    if (finalCtxVariablesKeys && (!currentPrompt || contextVariables != null)) {
+    if (finalCtxVariablesKeys && (!currentPrompt || replacesPrompt || contextVariables != null)) {
       validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
     }
-    if (finalQueryVariablesKeys && (!currentPrompt || queryVariables != null)) {
+    if (finalQueryVariablesKeys && (!currentPrompt || replacesPrompt || queryVariables != null)) {
       validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
     }
 

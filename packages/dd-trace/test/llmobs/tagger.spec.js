@@ -1351,13 +1351,15 @@ describe('tagger', () => {
         })
       })
 
-      it('clears managed prompt UUIDs only when replacing the prompt', () => {
+      it('preserves prompt metadata on partial updates and resets it on replacement', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
         tagger.tagPrompt(span, {
           id: 'managed',
           version: '1',
           template: 'Hello {name}',
           variables: { name: 'Ada' },
+          contextVariables: ['history'],
+          queryVariables: ['request'],
           promptUuid: 'prompt-uuid',
           promptVersionUuid: 'version-uuid',
         })
@@ -1368,11 +1370,15 @@ describe('tagger', () => {
         assert.deepEqual(prompt.variables, { name: 'Grace' })
         assert.equal(prompt.prompt_uuid, 'prompt-uuid')
         assert.equal(prompt.prompt_version_uuid, 'version-uuid')
+        assert.deepEqual(prompt._dd_context_variable_keys, ['history'])
+        assert.deepEqual(prompt._dd_query_variable_keys, ['request'])
 
         tagger.tagPrompt(span, { id: 'local', version: '2', template: 'Hi {name}' })
         assert.equal(prompt.id, 'local')
         assert.equal(prompt.prompt_uuid, undefined)
         assert.equal(prompt.prompt_version_uuid, undefined)
+        assert.deepEqual(prompt._dd_context_variable_keys, ['context'])
+        assert.deepEqual(prompt._dd_query_variable_keys, ['question'])
       })
 
       it('tags a span with a string prompt template', () => {
