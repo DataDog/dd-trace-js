@@ -5,34 +5,59 @@ import { generateText, jsonSchema, tool } from 'ai'
 const TOOL_CALL_COUNT = 10_000
 // Make the leaked registry exceed the small test heap without requiring an impractically long load test.
 const TOOL_CALL_ID_PADDING = 'x'.repeat(4_096)
-const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+const specificationVersion = process.env.AI_MODEL_SPECIFICATION_VERSION
+const v2Usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+const v3Usage = {
+  inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+  outputTokens: { total: 1, text: 0, reasoning: 0 },
+}
 
 class RandomToolCallModel {
-  specificationVersion = 'v2'
+  specificationVersion = specificationVersion
   provider = 'test'
   modelId = 'random-tool-call-model'
   supportedUrls = {}
 
   async doGenerate () {
+    const toolCallId = `${randomUUID()}-${TOOL_CALL_ID_PADDING}`
+
+    if (specificationVersion === 'v1') {
+      return {
+        toolCalls: [{
+          toolCallType: 'function',
+          toolCallId,
+          toolName: 'noop',
+          args: '{}',
+        }],
+        finishReason: 'tool-calls',
+        usage: { promptTokens: 1, completionTokens: 1 },
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }
+    }
+
     return {
       content: [{
         type: 'tool-call',
-        toolCallId: `${randomUUID()}-${TOOL_CALL_ID_PADDING}`,
+        toolCallId,
         toolName: 'noop',
         input: '{}',
       }],
-      finishReason: 'tool-calls',
-      usage,
+      finishReason: specificationVersion === 'v3'
+        ? { unified: 'tool-calls', raw: 'tool-calls' }
+        : 'tool-calls',
+      usage: specificationVersion === 'v3' ? v3Usage : v2Usage,
       warnings: [],
     }
   }
 }
 
 const model = new RandomToolCallModel()
+const schema = jsonSchema({ type: 'object', properties: {}, additionalProperties: false })
 const tools = {
   noop: tool({
     description: 'Return without doing any work',
-    inputSchema: jsonSchema({ type: 'object', properties: {}, additionalProperties: false }),
+    ...(specificationVersion === 'v1' ? { parameters: schema } : { inputSchema: schema }),
     execute: () => undefined,
   }),
 }
