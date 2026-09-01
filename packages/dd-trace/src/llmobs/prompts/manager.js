@@ -431,6 +431,12 @@ class PromptManager {
     this.warmCache.evictPrompt(promptId)
   }
 
+  /**
+   * Record a Prompt Management CRUD error.
+   * @param {'GET'|'POST'|'PATCH'|'DELETE'} method
+   * @param {PromptAPIError} error
+   * @returns {PromptAPIError}
+   */
   #recordCrudError (method, error) {
     telemetry.recordPromptCrudError(method, error.name, error.status)
     return error
