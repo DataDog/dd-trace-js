@@ -365,7 +365,7 @@ describe('check-require-cache', () => {
             functionName: 'runAfterSetup',
             kind: 'Async',
           },
-          channelName: 'trace_await_context_callback_at_start',
+          channelName: 'trace_await_context_callback_at_try_start',
         },
         {
           module: {
@@ -374,8 +374,8 @@ describe('check-require-cache', () => {
             filePath: 'trace-await-context-callback.js',
           },
           astQuery: 'FunctionDeclaration[id.name="runAfterSetup"] TryStatement',
-          channelName: 'trace_await_context_callback_at_start',
-          transform: 'awaitContextCallbackAtStart',
+          channelName: 'trace_await_context_callback_at_try_start',
+          transform: 'awaitContextCallbackAtTryStart',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -892,7 +892,7 @@ describe('check-require-cache', () => {
       },
     }
 
-    ch = tracingChannel('orchestrion:test:trace_await_context_callback_at_start')
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_at_try_start')
     ch.subscribe(subs)
 
     const resultPromise = runAfterSetup(() => {
