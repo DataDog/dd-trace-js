@@ -59,8 +59,9 @@
 /packages/dd-trace/test/plugins/util/stacktrace.spec.js @DataDog/dd-trace-js @DataDog/debugger-nodejs
 
 # Serverless
-/.agents/skills/serverless-integrations/ @DataDog/dd-trace-js @DataDog/apm-serverless
-/.claude/skills/serverless-integrations @DataDog/dd-trace-js @DataDog/apm-serverless
+/.agents/skills/serverless-integrations/ @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
+/.claude/skills/serverless-integrations @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
+/.cursor/skills/serverless-integrations @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/src/lambda/ @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/src/azure_metadata.js @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/src/serverless.js @DataDog/dd-trace-js @DataDog/apm-serverless
