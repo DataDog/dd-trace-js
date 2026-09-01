@@ -640,7 +640,9 @@ class Config extends ConfigBase {
     }
 
     if (this.DD_AGENTLESS_ENABLED) {
-      setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
+      if (this.isCiVisibility) {
+        setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
+      }
       setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
       setAndTrack(this, 'llmobs.agentlessEnabled', true)
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')

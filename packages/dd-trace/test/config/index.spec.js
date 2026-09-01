@@ -5127,7 +5127,7 @@ rules:
       const config = getConfig()
 
       assert.strictEqual(config.experimental.exporter, 'agentless')
-      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
       assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED, true)
       assert.strictEqual(config.llmobs.agentlessEnabled, true)
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
@@ -5160,6 +5160,7 @@ rules:
         })
 
         assert.strictEqual(config.experimental.exporter, exporter)
+        assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
       })
     }
 
