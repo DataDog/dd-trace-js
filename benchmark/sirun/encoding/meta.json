@@ -14,11 +14,11 @@
       }
     },
     "0.4-immediate-flush": {
-      "iterations": 5,
+      "iterations": 7,
       "run": "node immediate-flush.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node immediate-flush.js\"",
       "env": {
-        "OPERATIONS": "400000",
+        "OPERATIONS": "300000",
         "TRACE_SPANS": "10"
       }
     },

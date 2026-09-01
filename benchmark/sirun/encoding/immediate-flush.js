@@ -7,7 +7,7 @@ const guard = require('../startup-guard')
 
 const crossPayloadEncoderPath = '../../../packages/dd-trace/src/encode/0.4-cross-payload'
 const commonRequestPath = require.resolve('../../../packages/dd-trace/src/exporters/common/request')
-const OPERATIONS = Number(process.env.OPERATIONS) || 400_000
+const OPERATIONS = Number(process.env.OPERATIONS) || 300_000
 const TRACE_SPANS = Number(process.env.TRACE_SPANS) || 10
 const WARMUP_PAYLOADS = 5_000
 
