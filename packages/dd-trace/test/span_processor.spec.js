@@ -92,6 +92,23 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
   })
 
+  it('should span sample when the trace is not marked for discard', () => {
+    processor.sample(finishedSpan)
+
+    sinon.assert.calledWith(sample, finishedSpan.context())
+  })
+
+  it('should skip span sampling when the priority sampler marks the trace for discard', () => {
+    prioritySampler.sample = sinon.stub().callsFake((context) => {
+      context._sampling.discard = true
+    })
+
+    processor.sample(finishedSpan)
+
+    sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
+    sinon.assert.notCalled(sample)
+  })
+
   it('should erase the trace once finished', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]

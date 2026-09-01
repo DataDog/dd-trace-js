@@ -34,7 +34,9 @@ class SpanProcessor {
   sample (span) {
     const spanContext = span.context()
     this._prioritySampler.sample(spanContext)
-    this._spanSampler.sample(spanContext)
+    if (!spanContext._sampling.discard) {
+      this._spanSampler.sample(spanContext)
+    }
   }
 
   process (span) {
