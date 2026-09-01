@@ -90,7 +90,6 @@ describe('API Security Sampler', () => {
       clock.tick(25000)
 
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), true)
     })
 
     it('should sample after 30 seconds', () => {
@@ -108,11 +107,12 @@ describe('API Security Sampler', () => {
         assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SAMPLE)
       }
 
+      // A non-recording call reports SAMPLE for an evicted endpoint and SKIP for a cached one
       webStub.getContext.returns({ paths: ['/test0'] })
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), false)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SAMPLE)
 
       webStub.getContext.returns({ paths: ['/test4096'] })
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), true)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SKIP)
     })
 
     it('should set enabled to false and clear the cache', () => {
@@ -129,8 +129,8 @@ describe('API Security Sampler', () => {
       assert.strictEqual(apiSecuritySampler.sampleRequest(getReq, res, true), SamplingDecision.SAMPLE)
       assert.strictEqual(apiSecuritySampler.sampleRequest(postReq, res, true), SamplingDecision.SAMPLE)
 
-      assert.strictEqual(apiSecuritySampler.wasSampled(getReq, res), true)
-      assert.strictEqual(apiSecuritySampler.wasSampled(postReq, res), true)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(getReq, res), SamplingDecision.SKIP)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(postReq, res), SamplingDecision.SKIP)
     })
 
     it('should create different keys for different status codes', () => {
@@ -140,8 +140,8 @@ describe('API Security Sampler', () => {
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res200, true), SamplingDecision.SAMPLE)
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res404, true), SamplingDecision.SAMPLE)
 
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res200), true)
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res404), true)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res200), SamplingDecision.SKIP)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res404), SamplingDecision.SKIP)
     })
 
     it('should sample for AUTO_KEEP priority without checking prioritySampler', () => {
@@ -171,7 +171,9 @@ describe('API Security Sampler', () => {
 
     it('should never mark requests as sampled', () => {
       apiSecuritySampler.sampleRequest(req, res, true)
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), false)
+
+      // Nothing was recorded, so a non-recording call still reports SAMPLE
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SAMPLE)
     })
 
     it('should handle multiple different requests', () => {
@@ -183,7 +185,7 @@ describe('API Security Sampler', () => {
 
       requests.forEach(({ req, res }) => {
         assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SAMPLE)
-        assert.strictEqual(apiSecuritySampler.wasSampled(req, res), false)
+        assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SAMPLE)
       })
     })
 
@@ -303,7 +305,6 @@ describe('API Security Sampler', () => {
       webStub.getContext.returns({ paths: [], span: spanWithEndpoint })
 
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SAMPLE)
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), true)
       // Subsequent call hits TTL: confirms the endpoint key was recorded
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
     })
@@ -316,7 +317,10 @@ describe('API Security Sampler', () => {
 
       // Empty route + 404 => SKIP (not MISSING_ROUTE, since 404 is excluded)
       assert.strictEqual(apiSecuritySampler.sampleRequest(req, res404, true), SamplingDecision.SKIP)
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res404), false)
+
+      // Nothing was recorded. A non-recording call skips the missing-route carve-out, so it
+      // probes the TTL cache directly and reports SAMPLE for an absent key.
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res404), SamplingDecision.SAMPLE)
     })
 
     it('prefers http.route over http.endpoint: two requests sharing http.route hit the same TTL slot', () => {
@@ -367,9 +371,256 @@ describe('API Security Sampler', () => {
 
       // Both endpoints still recorded in TTL independently
       webStub.getContext.returns({ paths: [], span: span1 })
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), true)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SKIP)
       webStub.getContext.returns({ paths: [], span: span2 })
-      assert.strictEqual(apiSecuritySampler.wasSampled(req, res), true)
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res), SamplingDecision.SKIP)
+    })
+  })
+
+  describe('sampleRequest fast paths', () => {
+    beforeEach(() => {
+      apiSecuritySampler.configure({ appsec: { DD_API_SECURITY_ENABLED: true, DD_API_SECURITY_SAMPLE_DELAY: 30 } })
+    })
+
+    it('does not resolve the route nor the blocked flag on a rejected trace', () => {
+      span.context.returns({ _sampling: { priority: USER_REJECT } })
+
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
+
+      sinon.assert.notCalled(webStub.getContext)
+      sinon.assert.notCalled(blockingStub.isBlocked)
+    })
+
+    it('does not resolve the blocked flag when the request has a route', () => {
+      webStub.getContext.returns({ paths: ['/users/:id'] })
+
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SAMPLE)
+
+      sinon.assert.notCalled(blockingStub.isBlocked)
+    })
+
+    it('does not resolve the blocked flag when not recording', () => {
+      webStub.getContext.returns({ paths: [], span: { context: () => ({ _tags: {} }) } })
+
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, false), SamplingDecision.SAMPLE)
+
+      sinon.assert.notCalled(blockingStub.isBlocked)
+    })
+
+    it('still resolves the blocked flag when recording a request without a route', () => {
+      webStub.getContext.returns({ paths: [], span: { context: () => ({ _tags: {} }) } })
+      blockingStub.isBlocked.returns(true)
+
+      assert.strictEqual(apiSecuritySampler.sampleRequest(req, res, true), SamplingDecision.SKIP)
+
+      sinon.assert.calledOnceWithExactly(blockingStub.isBlocked, res)
+    })
+  })
+
+  describe('sampleRootSpanRequest', () => {
+    const request = { method: 'GET', statusCode: 200, route: '/users/:id' }
+
+    beforeEach(() => {
+      apiSecuritySampler.configure({ appsec: { DD_API_SECURITY_ENABLED: true, DD_API_SECURITY_SAMPLE_DELAY: 30 } })
+    })
+
+    it('does not touch the Node HTTP transport', () => {
+      assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, request, true), SamplingDecision.SAMPLE)
+
+      sinon.assert.notCalled(webStub.root)
+      sinon.assert.notCalled(webStub.getContext)
+      sinon.assert.notCalled(blockingStub.isBlocked)
+    })
+
+    it('should return SKIP if not enabled', () => {
+      apiSecuritySampler.disable()
+
+      assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, request, true), SamplingDecision.SKIP)
+    })
+
+    it('should return SKIP if no root span', () => {
+      assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(null, request, true), SamplingDecision.SKIP)
+    })
+
+    it('should return SKIP when method or statusCode is not available', () => {
+      assert.strictEqual(
+        apiSecuritySampler.sampleRootSpanRequest(span, { ...request, method: undefined }, true),
+        SamplingDecision.SKIP
+      )
+      assert.strictEqual(
+        apiSecuritySampler.sampleRootSpanRequest(span, { ...request, statusCode: undefined }, true),
+        SamplingDecision.SKIP
+      )
+    })
+
+    // This entry point is exported for callers outside dd-trace (e.g. the Lambda layer), so a
+    // malformed call must degrade to a decision instead of throwing into the user's handler.
+    describe('malformed input', () => {
+      it('returns SKIP when the request argument is missing entirely', () => {
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span), SamplingDecision.SKIP)
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, undefined, true), SamplingDecision.SKIP)
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, null, true), SamplingDecision.SKIP)
+      })
+
+      it('returns SKIP for a null request argument while disabled', () => {
+        apiSecuritySampler.disable()
+
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, null, true), SamplingDecision.SKIP)
+      })
+
+      it('treats a root span without context() as having no sampling decision yet', () => {
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest({}, request, true), SamplingDecision.SAMPLE)
+      })
+
+      it('treats a root span whose context() returns undefined the same way', () => {
+        const spanWithoutContext = { context: sinon.stub().returns(undefined) }
+
+        assert.strictEqual(
+          apiSecuritySampler.sampleRootSpanRequest(spanWithoutContext, request, true),
+          SamplingDecision.SAMPLE
+        )
+      })
+    })
+
+    it('should treat an empty string route as a valid route', () => {
+      assert.strictEqual(
+        apiSecuritySampler.sampleRootSpanRequest(span, { ...request, route: '' }, true),
+        SamplingDecision.SAMPLE
+      )
+    })
+
+    it('should dedupe on method + route + statusCode', () => {
+      assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, request, true), SamplingDecision.SAMPLE)
+      assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, request, true), SamplingDecision.SKIP)
+
+      assert.strictEqual(
+        apiSecuritySampler.sampleRootSpanRequest(span, { ...request, method: 'POST' }, true),
+        SamplingDecision.SAMPLE
+      )
+      assert.strictEqual(
+        apiSecuritySampler.sampleRootSpanRequest(span, { ...request, route: '/other' }, true),
+        SamplingDecision.SAMPLE
+      )
+      assert.strictEqual(
+        apiSecuritySampler.sampleRootSpanRequest(span, { ...request, statusCode: 201 }, true),
+        SamplingDecision.SAMPLE
+      )
+    })
+
+    it('should build the same key for a numeric and a stringified status code', () => {
+      // The Lambda layer publishes the status code as a string
+      assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, request, true), SamplingDecision.SAMPLE)
+      assert.strictEqual(
+        apiSecuritySampler.sampleRootSpanRequest(span, { ...request, statusCode: '200' }, true),
+        SamplingDecision.SKIP
+      )
+    })
+
+    it('should not record anything when record is false', () => {
+      assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, request), SamplingDecision.SAMPLE)
+      assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, request), SamplingDecision.SAMPLE)
+    })
+
+    describe('missing route', () => {
+      const routeless = { ...request, route: null }
+
+      it('returns MISSING_ROUTE when there is no route', () => {
+        assert.strictEqual(
+          apiSecuritySampler.sampleRootSpanRequest(span, routeless, true),
+          SamplingDecision.MISSING_ROUTE
+        )
+      })
+
+      it('returns SKIP on 404, whether the status code is a number or a string', () => {
+        assert.strictEqual(
+          apiSecuritySampler.sampleRootSpanRequest(span, { ...routeless, statusCode: 404 }, true),
+          SamplingDecision.SKIP
+        )
+        assert.strictEqual(
+          apiSecuritySampler.sampleRootSpanRequest(span, { ...routeless, statusCode: '404' }, true),
+          SamplingDecision.SKIP
+        )
+      })
+
+      it('returns SKIP when the response was blocked', () => {
+        assert.strictEqual(
+          apiSecuritySampler.sampleRootSpanRequest(span, { ...routeless, blocked: true }, true),
+          SamplingDecision.SKIP
+        )
+      })
+
+      it('samples a routeless request when record is false', () => {
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, routeless), SamplingDecision.SAMPLE)
+      })
+    })
+
+    describe('priority normalization', () => {
+      // The AWS Lambda layer builds the inbound span context with the sampling priority as a
+      // string (SpanContextWrapper.fromTraceContext), so the guard has to normalize before
+      // comparing against the numeric ext/priority constants.
+      for (const [label, priority] of [
+        ['numeric AUTO_REJECT', AUTO_REJECT],
+        ['numeric USER_REJECT', USER_REJECT],
+        ['stringified AUTO_REJECT', String(AUTO_REJECT)],
+        ['stringified USER_REJECT', String(USER_REJECT)],
+      ]) {
+        it(`returns SKIP for ${label}`, () => {
+          span.context.returns({ _sampling: { priority } })
+
+          assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, request, true), SamplingDecision.SKIP)
+        })
+      }
+
+      for (const [label, priority] of [
+        ['numeric AUTO_KEEP', AUTO_KEEP],
+        ['numeric USER_KEEP', USER_KEEP],
+        ['stringified AUTO_KEEP', String(AUTO_KEEP)],
+        ['stringified USER_KEEP', String(USER_KEEP)],
+      ]) {
+        it(`returns SAMPLE for ${label}`, () => {
+          span.context.returns({ _sampling: { priority } })
+
+          assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, request, true), SamplingDecision.SAMPLE)
+        })
+      }
+
+      it('asks the priority sampler when no priority has been set yet', () => {
+        const prioritySampler = { sample: sinon.stub() }
+        const unsampledSpan = {
+          _prioritySampler: prioritySampler,
+          context: sinon.stub().returns({ _sampling: {} }),
+        }
+
+        apiSecuritySampler.sampleRootSpanRequest(unsampledSpan, request, true)
+
+        sinon.assert.calledOnceWithExactly(prioritySampler.sample, unsampledSpan)
+      })
+    })
+
+    describe('ASM Standalone', () => {
+      let keepTraceStub
+
+      beforeEach(() => {
+        keepTraceStub = sinon.stub()
+        apiSecuritySampler = proxyquire('../../../src/appsec/api_security/sampler', {
+          '../../plugins/util/web': webStub,
+          '../blocking': blockingStub,
+          '../../priority_sampler': { keepTrace: keepTraceStub },
+          '../../standalone/product': { ASM: 'asm' },
+        })
+        SamplingDecision = apiSecuritySampler.SamplingDecision
+        apiSecuritySampler.configure({
+          appsec: { DD_API_SECURITY_ENABLED: true, DD_API_SECURITY_SAMPLE_DELAY: 30 },
+          apmTracingEnabled: false,
+        })
+      })
+
+      it('keeps the trace and ignores a rejected priority', () => {
+        span.context.returns({ _sampling: { priority: USER_REJECT } })
+
+        assert.strictEqual(apiSecuritySampler.sampleRootSpanRequest(span, request, true), SamplingDecision.SAMPLE)
+        assert.strictEqual(keepTraceStub.calledWith(span, 'asm'), true)
+      })
     })
   })
 })
