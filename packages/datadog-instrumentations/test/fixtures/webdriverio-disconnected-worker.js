@@ -18,8 +18,12 @@ const existingMochaHookCount = instrumentations.mocha?.length || 0
 require('../../src/mocha/worker')
 
 const webdriverioMochaHooks = instrumentations.mocha.slice(existingMochaHookCount)
-const mochaHook = webdriverioMochaHooks.find(({ file }) => file === 'lib/mocha.js')
-const runnerHook = webdriverioMochaHooks.find(({ file }) => file === 'lib/runner.js')
+const mochaHook = webdriverioMochaHooks.find(
+  ({ filePattern }) => filePattern === String.raw`lib/mocha\.(?:c?js)$`
+)
+const runnerHook = webdriverioMochaHooks.find(
+  ({ filePattern }) => filePattern === String.raw`lib/runner\.(?:c?js)$`
+)
 
 assert.ok(mochaHook)
 assert.ok(runnerHook)
