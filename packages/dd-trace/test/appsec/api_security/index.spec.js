@@ -54,6 +54,12 @@ describe('API Security domain', () => {
       sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
     })
 
+    it('does not resolve the root span on SKIP decision', () => {
+      apiSecurity.reportRequest(req, SamplingDecision.SKIP, undefined)
+
+      sinon.assert.notCalled(web.root)
+    })
+
     it('emits missing_route with framework tag on MISSING_ROUTE decision', () => {
       apiSecurity.reportRequest(req, SamplingDecision.MISSING_ROUTE, undefined)
 
@@ -103,6 +109,61 @@ describe('API Security domain', () => {
       apiSecurity.reportRequest(req, SamplingDecision.SAMPLE, { attributes: { '_dd.appsec.s.req.body': [] } })
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestSchemaMetric, 'Next JS')
+    })
+
+    describe('reportRootSpanRequest', () => {
+      function makeRootSpan (component) {
+        return { context: () => ({ getTag: (key) => ({ component })[key] }) }
+      }
+
+      it('reads the framework off the span without going through the HTTP transport', () => {
+        apiSecurity.reportRootSpanRequest(makeRootSpan('aws-lambda'), SamplingDecision.SAMPLE, {
+          attributes: { '_dd.appsec.s.req.body': [] },
+        })
+
+        sinon.assert.notCalled(web.root)
+        sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestSchemaMetric, 'aws-lambda')
+      })
+
+      it('emits missing_route on MISSING_ROUTE decision', () => {
+        apiSecurity.reportRootSpanRequest(makeRootSpan('aws-lambda'), SamplingDecision.MISSING_ROUTE, undefined)
+
+        sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecMissingRouteMetric, 'aws-lambda')
+      })
+
+      it('emits nothing on SKIP decision', () => {
+        apiSecurity.reportRootSpanRequest(makeRootSpan('aws-lambda'), SamplingDecision.SKIP, {
+          attributes: { '_dd.appsec.s.req.body': [] },
+        })
+
+        sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
+        sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
+        sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+      })
+
+      it('emits request.no_schema when the WAF returned no schema attributes', () => {
+        apiSecurity.reportRootSpanRequest(makeRootSpan('aws-lambda'), SamplingDecision.SAMPLE, undefined)
+
+        sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, 'aws-lambda')
+      })
+
+      it('tolerates a missing root span', () => {
+        apiSecurity.reportRootSpanRequest(undefined, SamplingDecision.SAMPLE, undefined)
+
+        sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, undefined)
+      })
+
+      it('tolerates a root span without context()', () => {
+        apiSecurity.reportRootSpanRequest({}, SamplingDecision.SAMPLE, undefined)
+
+        sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, undefined)
+      })
+
+      it('tolerates a root span whose context() returns undefined', () => {
+        apiSecurity.reportRootSpanRequest({ context: () => undefined }, SamplingDecision.MISSING_ROUTE, undefined)
+
+        sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecMissingRouteMetric, undefined)
+      })
     })
   })
 })
