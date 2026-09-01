@@ -91,18 +91,7 @@ function rewrite (content, filename, format, target) {
 function getMatcher (moduleType) {
   if (matchers.has(moduleType)) return matchers.get(moduleType)
 
-  let matcher
-
-  try {
-    matcher = createMatcher(moduleType)
-  } catch (e) {
-    // A transformer that fails to load or configure now will fail the same way
-    // for the next target, so cache the failure rather than reloading the
-    // bundle for every rewrite target and rewrite nothing for this module type.
-    log.error(e)
-  }
-
-  matchers.set(moduleType, matcher)
+  matchers.set(moduleType, createMatcher(moduleType))
 
   return matcher
 }
