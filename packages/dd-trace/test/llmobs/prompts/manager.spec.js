@@ -103,6 +103,20 @@ describe('PromptManager', () => {
     sinon.assert.notCalled(provider.resolveObjectEvaluation)
   })
 
+  it('rejects cleartext non-loopback origins and allows loopback development endpoints', () => {
+    process.env._DD_LLMOBS_OVERRIDE_ORIGIN = 'http://api.example.test'
+    assert.throws(() => new PromptManager(makeConfig(), () => provider), {
+      name: 'PromptAuthError',
+      status: 0,
+      detail: 'Prompt origin must use HTTPS unless it targets a loopback host',
+    })
+    sinon.assert.notCalled(fetchStub)
+
+    process.env._DD_LLMOBS_OVERRIDE_ORIGIN = 'http://127.0.0.1:8126'
+    const manager = new PromptManager(makeConfig(), () => provider)
+    assert.strictEqual(manager.origin, 'http://127.0.0.1:8126')
+  })
+
   it('uses the injected provider lazily with targeting-key precedence', async () => {
     provider.resolveObjectEvaluation.resolves({ value: promptResponse({ user_version: 'ff-v1', template: undefined }) })
     const manager = new PromptManager(makeConfig({ env: 'production' }), () => provider)

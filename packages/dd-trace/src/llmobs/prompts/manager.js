@@ -2,6 +2,7 @@
 
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config/helper')
+const { isLoopbackHost } = require('../../exporters/common/url')
 const telemetry = require('../telemetry')
 const { HotCache, WarmCache, cacheKey } = require('./cache')
 const ManagedPrompt = require('./prompt')
@@ -153,7 +154,12 @@ class PromptManager {
     this.getProvider = getProvider
     this.ttlMs = Math.round(config.DD_LLMOBS_PROMPTS_CACHE_TTL * 1000)
     this.timeoutMs = Math.round(config.DD_LLMOBS_PROMPTS_TIMEOUT * 1000)
-    this.origin = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') || `https://api.${config.site}`
+    const origin = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') || `https://api.${config.site}`
+    const { hostname, protocol } = new URL(origin)
+    if (protocol !== 'https:' && !(protocol === 'http:' && isLoopbackHost(hostname))) {
+      throw new PromptAPIError(0, 'Prompt origin must use HTTPS unless it targets a loopback host', 'PromptAuthError')
+    }
+    this.origin = origin
     this.cacheGeneration = 0
     this.fetchTokens = new Map()
     this.hotCache = new HotCache({
