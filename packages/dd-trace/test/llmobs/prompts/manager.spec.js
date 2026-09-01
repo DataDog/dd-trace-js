@@ -104,6 +104,20 @@ describe('PromptManager', () => {
     sinon.assert.notCalled(provider.resolveObjectEvaluation)
   })
 
+  it('encodes exact prompt versions as URL path components', async () => {
+    fetchStub.onFirstCall().resolves(response(200, promptResponse()))
+    fetchStub.onSecondCall().resolves(response(200, {}))
+    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
+
+    await manager.getPrompt('greeting', { version: 'release/1?draft=true' })
+    await manager.updatePromptVersion('greeting', 'release/1?draft=true', { description: 'updated' })
+
+    const encodedVersion = 'release%2F1%3Fdraft%3Dtrue'
+    const versionPath = new RegExp(`/greeting/versions/${encodedVersion}$`)
+    assert.match(fetchStub.firstCall.args[0], versionPath)
+    assert.match(fetchStub.secondCall.args[0], versionPath)
+  })
+
   it('rejects cleartext non-loopback origins and allows loopback development endpoints', () => {
     process.env._DD_LLMOBS_OVERRIDE_ORIGIN = 'http://api.example.test'
     assert.throws(() => new PromptManager(makeConfig(), () => provider), {

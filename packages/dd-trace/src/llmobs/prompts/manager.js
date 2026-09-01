@@ -242,7 +242,7 @@ class PromptManager {
       headers['Content-Type'] = 'application/json'
       headers['DD-APPLICATION-KEY'] = this.config.DD_APP_KEY
     } else if (request.version !== undefined) {
-      path += `/versions/${request.version}`
+      path += `/versions/${encodeURIComponent(request.version)}`
     }
 
     try {
@@ -586,7 +586,7 @@ class PromptManager {
     const body = {}
     if (options.description !== undefined) body.description = options.description
     if (options.envIds !== undefined) body.env_ids = options.envIds
-    const path = `${PROMPTS_PATH}/${encodeURIComponent(promptId)}/versions/${version}`
+    const path = `${PROMPTS_PATH}/${encodeURIComponent(promptId)}/versions/${encodeURIComponent(version)}`
     const response = await this.#request('PATCH', path, body, true)
     this.#evictPrompt(promptId)
     return response
