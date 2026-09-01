@@ -104,42 +104,46 @@ function onLambdaEndInvocation (data) {
     const { req, method, route } = activeInvocations.get(span)
     activeInvocations.delete(span)
 
-    const persistent = {}
+    try {
+      const persistent = {}
 
-    if (statusCode) {
-      persistent[addresses.HTTP_INCOMING_RESPONSE_CODE] = String(statusCode)
+      if (statusCode) {
+        persistent[addresses.HTTP_INCOMING_RESPONSE_CODE] = String(statusCode)
+      }
+
+      if (responseHeaders) {
+        const filteredHeaders = { ...responseHeaders }
+        delete filteredHeaders['set-cookie']
+        persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS] = filteredHeaders
+      }
+
+      const samplingDecision = statusCode
+        ? apiSecurity.sampleRootSpanRequest(span, {
+          method,
+          statusCode,
+          route: route ?? null,
+          // The tracer does not block in Lambda yet, so a response is never a blocked one.
+          blocked: false,
+        }, true)
+        : apiSecurity.SamplingDecision.SKIP
+
+      if (samplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
+        persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+      }
+
+      let wafResult
+      if (!isEmpty(persistent)) {
+        wafResult = waf.run({ persistent }, req, undefined, span)
+      }
+
+      apiSecurity.reportRootSpanRequest(span, samplingDecision, wafResult)
+    } finally {
+      // The execution environment outlives the invocation, so the native WAF context and the
+      // module-level metrics queue must be released even if the work above threw.
+      waf.disposeContext(req)
+
+      Reporter.finishRequest(req, null, {}, undefined, span)
     }
-
-    if (responseHeaders) {
-      const filteredHeaders = { ...responseHeaders }
-      delete filteredHeaders['set-cookie']
-      persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS] = filteredHeaders
-    }
-
-    const samplingDecision = statusCode
-      ? apiSecurity.sampleRootSpanRequest(span, {
-        method,
-        statusCode,
-        route: route ?? null,
-        // The tracer does not block in Lambda yet, so a response is never a blocked one.
-        blocked: false,
-      }, true)
-      : apiSecurity.SamplingDecision.SKIP
-
-    if (samplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
-      persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
-    }
-
-    let wafResult
-    if (!isEmpty(persistent)) {
-      wafResult = waf.run({ persistent }, req, undefined, span)
-    }
-
-    apiSecurity.reportRootSpanRequest(span, samplingDecision, wafResult)
-
-    waf.disposeContext(req)
-
-    Reporter.finishRequest(req, null, {}, undefined, span)
   } catch (err) {
     log.error('[ASM] Error in Lambda end-invocation handler', err)
   }

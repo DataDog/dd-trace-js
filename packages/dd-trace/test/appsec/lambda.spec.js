@@ -285,6 +285,19 @@ describe('AppSec Lambda handler', () => {
       sinon.assert.calledOnce(log.error)
     })
 
+    it('should release the WAF context and finish the report when the work throws', () => {
+      const span = fakeSpan()
+
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/' })
+      waf.run.throws(new Error('boom'))
+
+      lambda.onLambdaEndInvocation({ span, statusCode: '200' })
+
+      sinon.assert.calledOnce(waf.disposeContext)
+      sinon.assert.calledOnce(Reporter.finishRequest)
+      sinon.assert.calledOnce(log.error)
+    })
+
     it('should use the same synthetic req key across WAF run, dispose, and finishRequest', () => {
       const span = fakeSpan()
 
