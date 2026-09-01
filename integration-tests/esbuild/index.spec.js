@@ -121,6 +121,45 @@ esbuildVersions.forEach((version) => {
         })
       })
 
+      it('bundles instrumented Node.js subpaths', async () => {
+        delete require.cache[require.resolve('esbuild')]
+        const esbuild = require('esbuild')
+        const ddPlugin = require('../../esbuild')
+
+        assert.strictEqual(esbuild.version, version)
+
+        const result = await esbuild.build({
+          absWorkingDir: pathModule.dirname(process.cwd()),
+          stdin: {
+            contents: `
+              import dns from 'node:dns/promises'
+              import http from 'node:http'
+              console.log(typeof dns.lookup, typeof http.createServer)
+            `,
+            loader: 'js',
+            resolveDir: process.cwd(),
+            sourcefile: 'builtin-subpath.mjs',
+          },
+          bundle: true,
+          format: 'esm',
+          platform: 'node',
+          plugins: [ddPlugin],
+          write: false,
+        })
+
+        const output = result.outputFiles[0].text
+        assert.match(
+          output,
+          /register.*"node:dns\/promises".*"node:dns\/promises"\);$/m,
+          'Bundle should contain the node:dns/promises instrumentation'
+        )
+        assert.match(
+          output,
+          /register.*"node:http".*"node:http"\);$/m,
+          'Bundle should contain the node:http instrumentation'
+        )
+      })
+
       it('runs minified ESM bundles without ReferenceError on arguments', () => {
         execSync('node ./build-and-test-esm-minify.mjs', {
           timeout,
