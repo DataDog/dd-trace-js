@@ -20,6 +20,58 @@ const tracer = require('dd-trace').init({
 
 The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
 
+Set `DD_API_KEY` and `DD_APP_KEY` before you use the Experiments API. Set `DD_SITE` if your organization does not use
+`datadoghq.com`.
+
+Create a dataset, define the task to run for each record, and add evaluators for the task output:
+
+```javascript
+const tracer = require('dd-trace').init({
+  llmobs: {
+    mlApp: 'capital-answers',
+    projectName: 'experiments-project'
+  }
+})
+
+const { experiments } = tracer.llmobs
+
+const dataset = experiments.createDataset('capital-questions', {
+  records: [
+    {
+      inputData: { country: 'France' },
+      expectedOutput: 'Paris'
+    },
+    {
+      inputData: { country: 'Japan' },
+      expectedOutput: 'Tokyo'
+    }
+  ]
+})
+
+const capitals = {
+  France: 'Paris',
+  Japan: 'Tokyo'
+}
+
+async function runExperiment () {
+  const result = await experiments.experiment({
+    name: 'capital-answer-quality',
+    dataset,
+    task: ({ country }) => capitals[country],
+    evaluators: {
+      exact_match: (_input, output, expectedOutput) => output === expectedOutput
+    }
+  }).run()
+
+  console.log(result.url)
+}
+
+runExperiment().catch(console.error)
+```
+
+The experiment pushes the dataset when necessary. It then sends each task result and evaluator score to LLM Observability.
+`result.url` links to the experiment in Datadog.
+
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
