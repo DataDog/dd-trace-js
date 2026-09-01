@@ -106,6 +106,7 @@ describe('esm', () => {
       it(`records serverless runtime evidence for the ${scenario} path`, async () => {
         const observations = []
         const receivedTraces = []
+        let returnBehaviorPreserved = false
         const collectTraces = ({ payload }) => receivedTraces.push(...payload)
         agent.on('message', collectTraces)
         const rootReceived = agent.assertMessageReceived(({ payload }) => {
@@ -119,6 +120,7 @@ describe('esm', () => {
 
         try {
           await Promise.all([rootReceived, execution])
+          returnBehaviorPreserved = true
         } finally {
           agent.removeListener('message', collectTraces)
         }
@@ -163,12 +165,13 @@ describe('esm', () => {
             error_behavior_verified: scenario !== 'error' || operationSpan.error === 1,
             exactly_once_finish: operationSpans.length === 1,
             no_duplicate_spans: operationSpans.length === 1,
+            return_behavior_preserved: returnBehaviorPreserved,
             fake_agent_delivery: true,
           })
         }
 
         for (const observation of observations) {
-          recordEvidence({ ...observation, return_behavior_preserved: true })
+          recordEvidence(observation)
         }
       }).timeout(20000)
     }

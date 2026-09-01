@@ -3,7 +3,7 @@
     "dependency": "@anthropic-ai/claude-agent-sdk",
     "integration": "claude-agent-sdk",
     "minimum_tracer_supported": "0.2.113",
-    "max_tracer_supported": "0.3.243",
+    "max_tracer_supported": "0.3.250",
     "auto-instrumented": "True"
   },
   {
@@ -346,7 +346,7 @@
     "dependency": "bullmq",
     "integration": "bullmq",
     "minimum_tracer_supported": "5.66.0",
-    "max_tracer_supported": "6.2.1",
+    "max_tracer_supported": "6.3.1",
     "auto-instrumented": "True"
   },
   {
@@ -465,7 +465,7 @@
     "dependency": "hono",
     "integration": "hono",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "4.13.4",
+    "max_tracer_supported": "4.13.5",
     "auto-instrumented": "True"
   },
   {
@@ -619,7 +619,7 @@
     "dependency": "mongodb",
     "integration": "mongodb-core",
     "minimum_tracer_supported": "3.3.0",
-    "max_tracer_supported": "7.5.0",
+    "max_tracer_supported": "7.6.0",
     "auto-instrumented": "True"
   },
   {
@@ -661,7 +661,7 @@
     "dependency": "next",
     "integration": "next",
     "minimum_tracer_supported": "10.2.0",
-    "max_tracer_supported": "16.3.2",
+    "max_tracer_supported": "16.3.3",
     "auto-instrumented": "True"
   },
   {
@@ -717,7 +717,7 @@
     "dependency": "openai",
     "integration": "openai",
     "minimum_tracer_supported": "3.0.0",
-    "max_tracer_supported": "7.4.0",
+    "max_tracer_supported": "7.8.0",
     "auto-instrumented": "True"
   },
   {
@@ -759,7 +759,7 @@
     "dependency": "protobufjs",
     "integration": "protobufjs",
     "minimum_tracer_supported": "6.8.0",
-    "max_tracer_supported": "8.7.2",
+    "max_tracer_supported": "8.8.0",
     "auto-instrumented": "True"
   },
   {
@@ -773,7 +773,7 @@
     "dependency": "restify",
     "integration": "restify",
     "minimum_tracer_supported": "3.0.0",
-    "max_tracer_supported": "11.1.0",
+    "max_tracer_supported": "12.0.0",
     "auto-instrumented": "True"
   },
   {
@@ -794,7 +794,7 @@
     "dependency": "selenium-webdriver",
     "integration": "selenium",
     "minimum_tracer_supported": "4.11.0",
-    "max_tracer_supported": "4.47.0",
+    "max_tracer_supported": "4.48.0",
     "auto-instrumented": "True"
   },
   {

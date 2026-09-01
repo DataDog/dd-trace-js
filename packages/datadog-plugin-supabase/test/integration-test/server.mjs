@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict'
+
 import 'dd-trace/init.js'
 import tracer from 'dd-trace'
 
@@ -59,12 +61,29 @@ async function executeOperations () {
     global: { fetch: supabaseFetch },
     realtime: { timeout: 100 },
   })
-  await supabase.storage.from('files').list()
-  await supabase.auth.getUser('token')
-  await supabase.storage.listBuckets()
-  await supabase.channel('test-room').send({ type: 'broadcast', event: 'test', payload: { ok: !fails } })
-  await supabase.functions.invoke('hello', { body: { name: 'test' } })
-  await supabase.from('items').select('*')
+  const results = [
+    await supabase.storage.from('files').list(),
+    await supabase.auth.getUser('token'),
+    await supabase.storage.listBuckets(),
+    await supabase.channel('test-room').send({ type: 'broadcast', event: 'test', payload: { ok: !fails } }),
+    await supabase.functions.invoke('hello', { body: { name: 'test' } }),
+    await supabase.from('items').select('*'),
+  ]
+
+  assert.strictEqual(results[3], fails ? 'error' : 'ok')
+
+  for (const [index, result] of results.entries()) {
+    if (index === 3) continue
+
+    assert.ok(result && typeof result === 'object')
+    assert.ok(Object.hasOwn(result, 'data'))
+    assert.ok(Object.hasOwn(result, 'error'))
+    if (fails) {
+      assert.ok(result.error)
+    } else {
+      assert.strictEqual(result.error, null)
+    }
+  }
 }
 
 await tracer.trace('serverless.test.invocation', executeOperations)
