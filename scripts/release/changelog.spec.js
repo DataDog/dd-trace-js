@@ -382,6 +382,28 @@ describe('release changelog', () => {
     assert.strictEqual(isInternalOnly(internalToInternalFiles), true)
   })
 
+  it('classifies new tooling paths as internal-only', () => {
+    const internalFiles = []
+
+    appendChangedPaths(internalFiles, [
+      { filename: '.llm-validation/eval.json' },
+      { filename: '.promptfoo/dd-apm-sdk-review/config.yaml' },
+      { filename: '.claude/settings.json' },
+      { filename: 'dd-apm-sdk-review-overrides/reviewers/design.md' },
+      { filename: '.gitignore' },
+    ])
+
+    assert.strictEqual(isInternalOnly(internalFiles), true)
+
+    const mixedFiles = [...internalFiles]
+
+    appendChangedPaths(mixedFiles, [
+      { filename: 'packages/dd-trace/src/index.js' },
+    ])
+
+    assert.strictEqual(isInternalOnly(mixedFiles), false)
+  })
+
   it('classifies public release-note types from changed paths', () => {
     const changelog = createReleaseChangelog([
       {

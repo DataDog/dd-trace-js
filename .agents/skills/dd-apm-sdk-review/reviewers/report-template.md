@@ -46,6 +46,9 @@ Target: <branch>...<base>   Files: <n>   Mode: parallel | sequential | DEGRADED 
 - conventions: reviewers/conventions.md (no override for this repo)
 - cross-sdk: reviewers/cross-sdk.md
 
+## Related skills in this repo
+- <from `dd-apm-sdk-review-overrides/repo-context.md`, Step 0 - the other skills this repo has and how they relate to this review; omit this section if that file has none>
+
 ## Checked and fine
 - [performance] no new allocations on the span-start path
 - ...

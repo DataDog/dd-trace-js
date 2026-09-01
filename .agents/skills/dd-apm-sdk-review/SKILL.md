@@ -40,7 +40,8 @@ Do not skip any part of this **otherwise**. `git diff` alone is wrong — it can
 #    is this same branch on the remote, so once you have pushed, the merge base
 #    is HEAD and the diff comes back empty. Never assume the trunk either: on a
 #    stacked branch the parent is another feature branch.
-TARGET=$(gh pr view --json baseRefName -q '"origin/" + .baseRefName' 2>/dev/null)
+PR_JSON=$(gh pr view --json baseRefName,title,labels 2>/dev/null)
+TARGET=$(echo "$PR_JSON" | jq -r '"origin/" + .baseRefName' 2>/dev/null)
 if [ -z "$TARGET" ]; then
   # No PR yet, or gh failed to resolve one (e.g. a stacked branch with no PR open):
   # do NOT silently fall back to origin/master. Stop and ask the human/agent to
@@ -48,6 +49,13 @@ if [ -z "$TARGET" ]; then
   echo "Could not resolve a PR base branch — what is the actual merge target for this branch (e.g. a parent feature branch on a stacked PR)?"
   exit 1
 fi
+# PR title and labels: on an existing PR, some reviewer overrides (e.g. release-note
+# policy, semver labels) audit these directly. Empty on a not-yet-opened PR - that's
+# expected, note it rather than treating it as a failure.
+PR_TITLE=$(echo "$PR_JSON" | jq -r '.title' 2>/dev/null)
+PR_LABELS=$(echo "$PR_JSON" | jq -r '[.labels[].name] | join(", ")' 2>/dev/null)
+echo "PR title: ${PR_TITLE:-<none>}"
+echo "PR labels: ${PR_LABELS:-<none>}"
 git log --oneline -5
 echo "reviewing against: $TARGET"      # say this in the report; ask if it looks wrong
 
@@ -71,7 +79,9 @@ git diff                                # unstaged. If a worktree edit reverses 
 #    names come from the working tree and are untrusted input: enumerate them
 #    NUL-safely and never let a name be parsed as an option.
 git ls-files --others --exclude-standard -z | while IFS= read -r -d '' f; do
-  git diff --no-index -- /dev/null "$f"
+  # `--no-index` exits 1 when it finds a difference, which it always will here -
+  # that's success, not an error. Only a higher exit code is a real failure.
+  git diff --no-index -- /dev/null "$f" || true
 done
 ```
 
@@ -86,6 +96,7 @@ Also note, for the reviewers' benefit:
 - which changed files have no corresponding test change
 - whether any public API surface is touched
 - what this repo's release-note policy requires of this change — the maintainability and/or conventions overrides may carry the policy text (whichever override actually states it, if any); do not restate it here
+- the PR title and labels collected above, when a maintainability or conventions override audits them (e.g. release-note-from-title policy, semver labels) — pass `$PR_TITLE`/`$PR_LABELS` to that reviewer alongside the change set
 
 ## Step 2 — Run the reviewers
 
