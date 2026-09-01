@@ -13,6 +13,15 @@
         "OPERATIONS": "31000"
       }
     },
+    "0.4-immediate-flush": {
+      "iterations": 5,
+      "run": "node immediate-flush.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node immediate-flush.js\"",
+      "env": {
+        "OPERATIONS": "400000",
+        "TRACE_SPANS": "10"
+      }
+    },
     "0.5": {
       "env": {
         "ENCODER_VERSION": "0.5",
