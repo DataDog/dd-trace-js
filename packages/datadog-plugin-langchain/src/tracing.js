@@ -32,7 +32,8 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
   }
 
   error (ctx) {
-    if (ctx.error?.name === 'GraphInterrupt' && ctx.error?.is_bubble_up) return
+    // NodeInterrupt or GraphInterrupt "errors" for control flow, do not mark as real errors
+    if (ctx.error?.is_bubble_up) return
 
     super.error(ctx)
   }
