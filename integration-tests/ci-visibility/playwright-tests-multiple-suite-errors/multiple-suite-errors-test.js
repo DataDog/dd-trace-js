@@ -7,5 +7,7 @@ test('first failing test', () => {
 })
 
 test('second failing test', () => {
-  throw new Error('second failure')
+  // Playwright serializes non-Error rejections through value instead of message.
+  // eslint-disable-next-line prefer-promise-reject-errors
+  return Promise.reject('second failure')
 })

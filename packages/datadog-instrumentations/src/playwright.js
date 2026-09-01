@@ -618,7 +618,7 @@ function getTestSuiteError (testSuiteAbsolutePath) {
   let isFirstError = true
   for (const error of errors) {
     if (!isFirstError) errorMessages += '\n------\n'
-    errorMessages += error.message
+    errorMessages += error.message || error.value || ''
     isFirstError = false
   }
 

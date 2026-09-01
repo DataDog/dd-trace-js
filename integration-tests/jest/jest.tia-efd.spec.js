@@ -3063,8 +3063,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               testRuns.filter(test => test.meta[TEST_IS_RETRY] === 'true').length,
               NUM_RETRIES_EFD
             )
-            assert.ok(statuses.includes('pass'))
-            assert.ok(statuses.includes('fail'))
+            assert.strictEqual(statuses.filter(status => status === 'pass').length, 2)
+            assert.strictEqual(statuses.filter(status => status === 'fail').length, 2)
           }
         })
 
