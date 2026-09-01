@@ -44,7 +44,7 @@ describe('Plugin', () => {
     const localDataSources = Object.fromEntries(
       fixtures.map((f) => [
         f.name,
-        new LocalGraphQLDataSource(buildSubgraphSchema(f)),
+        new LocalGraphQLDataSource(buildSubgraphSchema([f])),
       ])
     )
 
