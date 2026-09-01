@@ -28,6 +28,7 @@ describe('AgentlessWriter data pipeline', () => {
   let request
 
   before(done => {
+    process.env.DD_API_KEY = 'test-api-key'
     server = http.createServer((incoming, response) => {
       const chunks = []
       incoming.on('data', chunk => chunks.push(chunk))
@@ -48,6 +49,7 @@ describe('AgentlessWriter data pipeline', () => {
   })
 
   after(async () => {
+    delete process.env.DD_API_KEY
     await agent.close()
     await new Promise(resolve => server.close(resolve))
   })
@@ -81,7 +83,7 @@ describe('AgentlessWriter data pipeline', () => {
     const received = await request
 
     assert.strictEqual(received.path, '/api/v2/spans')
-    assert.strictEqual(received.headers['dd-api-key'], process.env.DD_API_KEY)
+    assert.strictEqual(received.headers['dd-api-key'], 'test-api-key')
     assert.strictEqual(received.headers['content-type'], 'application/json')
     assert.strictEqual(received.headers['content-encoding'], 'zstd')
     assert.deepStrictEqual(received.payload.subarray(0, ZSTD_MAGIC.length), ZSTD_MAGIC)
