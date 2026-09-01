@@ -373,8 +373,9 @@ class PromptManager {
       const reason = result.reason ? `: ${result.reason}` : ''
       throw new Error(`Prompt '${request.promptId}' could not be fetched and no fallback was provided${reason}`)
     }
+    const prompt = ManagedPrompt.fromFallback(request.promptId, fallback)
     telemetry.recordPromptSource('fallback')
-    return ManagedPrompt.fromFallback(request.promptId, fallback)
+    return prompt
   }
 
   /**

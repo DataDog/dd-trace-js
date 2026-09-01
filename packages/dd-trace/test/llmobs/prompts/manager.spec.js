@@ -226,6 +226,17 @@ describe('PromptManager', () => {
     })
   })
 
+  it('records fallback source only after constructing the caller fallback', async () => {
+    fetchStub.resolves(response(404, { detail: 'missing' }))
+    const source = sinon.stub(telemetry, 'recordPromptSource')
+    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
+
+    await assert.rejects(manager.getPrompt('greeting', { fallback: { version: 'local' } }), {
+      name: 'TypeError',
+    })
+    sinon.assert.notCalled(source)
+  })
+
   it('coalesces concurrent cold fetches while keeping fallbacks caller-specific', async () => {
     let resolveFetch
     fetchStub.onFirstCall().returns(new Promise(resolve => { resolveFetch = resolve }))
