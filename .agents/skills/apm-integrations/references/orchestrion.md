@@ -22,7 +22,8 @@ published upstream artifact.
 - `Async` covers sync or promise return while preserving Promise-subclass and thenable identity.
 - `Callback` wraps the configured callback argument.
 - `Auto` selects callback or promise behavior at runtime.
-- `returnKind` additionally instruments iterator operations on a second channel.
+- `returnKind` instruments iterator operations on a second channel by replacing the returned iterator's `next`,
+  `throw`, and `return` methods. Use it only when those methods are writable.
 
 Orchestrion publishes `end` when the source call returns and asynchronous completion later. It does not publish
 `finish`. Finish a synchronous span from `end` and an unsettled promise/callback span from `asyncEnd`; keep the
