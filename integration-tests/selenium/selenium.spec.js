@@ -6,7 +6,6 @@ const { exec } = require('child_process')
 const { inspect } = require('node:util')
 
 const proxyquire = require('proxyquire').noPreserveCache()
-const semver = require('semver')
 const sinon = require('sinon')
 
 const {
@@ -28,11 +27,11 @@ const {
 const { NODE_MAJOR } = require('../../version')
 
 const webAppServer = require('../ci-visibility/web-app-server')
+const { getLatestMochaSpecifier } = require('../mocha/versions')
 
 const versionRange = ['4.11.0', 'latest']
 const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
-// Mocha 12 requires Node.js ^20.19.0 or >=22.12.0.
-const mochaDependency = semver.satisfies(process.version, '^20.19.0 || >=22.12.0') ? 'mocha' : 'mocha@11'
+const mochaDependency = `mocha@${getLatestMochaSpecifier()}`
 
 versionRange.forEach(version => {
   describe(`selenium ${version}`, () => {

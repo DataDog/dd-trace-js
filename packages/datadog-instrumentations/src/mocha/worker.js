@@ -448,13 +448,17 @@ addHook({
   filePattern: String.raw`lib/mocha\.(?:c?js)$`,
 }, wrapMochaRun)
 
-// Mocha 12's ESM package root loads lib/mocha.cjs before the CJS hook can observe it.
+// Mocha 12's ESM package root loads lib/mocha.cjs before the CJS hook can observe it. Node.js 20 exposes the root
+// namespace to CJS hooks, while newer runtimes may expose its default constructor directly.
 addHook({
   name: 'mocha',
   versions: ['>=12.0.0'],
   file: 'index.js',
   patchDefault: true,
-}, wrapMochaRun)
+}, (MochaPackage, frameworkVersion) => {
+  wrapMochaRun(MochaPackage.default ?? MochaPackage, frameworkVersion)
+  return MochaPackage
+})
 
 // Runner is also hooked in mocha/main.js, but in here we only generate test events.
 addHook({
