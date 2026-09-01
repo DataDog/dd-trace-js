@@ -662,6 +662,9 @@ class Config extends ConfigBase {
       setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
       setAndTrack(this, 'llmobs.agentlessEnabled', true)
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
+      if (this.DD_API_KEY === undefined) {
+        setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+      }
 
       setAndTrack(this, 'runtimeMetrics.enabled', false)
       setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)

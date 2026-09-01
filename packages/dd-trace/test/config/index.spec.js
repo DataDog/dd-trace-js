@@ -3212,6 +3212,17 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
+  it('should keep remote configuration disabled in AWS Lambda agentless mode', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+    process.env.DD_AGENTLESS_ENABLED = 'true'
+    process.env.DD_API_KEY = 'api-key'
+    process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'true'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
+  })
+
   describe('graphql plugin config env vars', () => {
     it('parses the defaults onto the config object', () => {
       const config = getConfig()
@@ -5116,6 +5127,7 @@ rules:
 
     it('should configure all supported features for agentless mode', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'api-key'
       process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
       process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'true'
       process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
@@ -5159,6 +5171,14 @@ rules:
 
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
       assert.strictEqual(config.logInjection, false)
+    })
+
+    it('should disable Dynamic Instrumentation without an API key', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+      const config = getConfig()
+
+      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
     })
 
     it('should preserve profiling when it does not use the Agent', () => {

@@ -12,10 +12,20 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
 const processTags = require('../process-tags')
 const Scheduler = require('./scheduler')
-const AgentlessRemoteConfigFetcher = require('./fetcher')
+const capabilities = require('./capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
-/** @typedef {import('./fetcher').RemoteConfigChange} RemoteConfigChange */
+/**
+ * @typedef {object} RemoteConfigChange
+ * @property {'add' | 'update' | 'remove'} kind
+ * @property {string} path
+ * @property {string} product
+ * @property {string} configId
+ * @property {number} version
+ * @property {string} [contents]
+ * @property {number} [length]
+ * @property {Record<string, string>} [hashes]
+ */
 
 let clientId = uuid()
 /** @type {{ id: string, client_tracer: { runtime_id: string, tags: string[] } } | undefined} */
@@ -25,6 +35,7 @@ channel('datadog:identity:update').subscribe(refreshIdentity)
 
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 const AGENTLESS_REQUEST_TIMEOUT_MS = 5000
+const capabilityEntries = Object.entries(capabilities)
 
 const kSupportsAckCallback = Symbol('kSupportsAckCallback')
 
@@ -32,7 +43,7 @@ const kSupportsAckCallback = Symbol('kSupportsAckCallback')
 // with their own separated Client.ClientState.
 class RemoteConfig {
   #agentless
-  /** @type {AgentlessRemoteConfigFetcher | undefined} */
+  /** @type {import('@datadog/libdatadog/remote-config').RemoteConfigFetcher | undefined} */
   #fetcher
   #handlers = new Map()
   #products = new Set()
@@ -104,8 +115,13 @@ class RemoteConfig {
     client = this.state.client
 
     if (this.#agentless) {
+      if (config.DD_API_KEY === undefined) {
+        log.error('[RC] DD_API_KEY is required for agentless Remote Config; Remote Config is disabled')
+        return
+      }
+
       try {
-        this.#fetcher = new AgentlessRemoteConfigFetcher({
+        this.#fetcher = createAgentlessFetcher({
           clientId,
           runtimeId: config.tags['runtime-id'],
           service: config.service,
@@ -302,7 +318,7 @@ class RemoteConfig {
       if (this.#subscriptionsChanged) {
         const unknown = fetcher.setProductCapabilities(
           this.state.client.products,
-          this.state.client.capabilities
+          decodeCapabilities(this.state.client.capabilities)
         )
         this.#subscriptionsChanged = false
 
@@ -401,7 +417,19 @@ class RemoteConfig {
       for (const [handler, products] of this.#batchHandlers) {
         const transactionView = filterTransactionByProducts(transaction, products)
         if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
-          handler(transactionView)
+          try {
+            handler(transactionView)
+          } catch (error) {
+            for (const items of [
+              transactionView.toUnapply,
+              transactionView.toApply,
+              transactionView.toModify,
+            ]) {
+              for (const item of items) {
+                if (!transactionOutcomes.has(item.path)) transaction.error(item.path, error)
+              }
+            }
+          }
         }
       }
     }
@@ -529,11 +557,13 @@ class RemoteConfig {
 
   /**
    * @param {RcConfigState} item
+   * @param {'apply' | 'modify' | 'unapply'} action
    * @param {number} applyState
    * @param {string} applyError
    */
-  #setApplyState (item, applyState, applyError) {
-    if (this.appliedConfigs.get(item.path) !== item) return
+  #setApplyState (item, action, applyState, applyError) {
+    const current = this.appliedConfigs.get(item.path)
+    if (current !== item && (action !== 'unapply' || current !== undefined)) return
 
     item.apply_state = applyState
     item.apply_error = applyError
@@ -556,11 +586,11 @@ class RemoteConfig {
       if (supportsAckCallback(handler)) {
         // If the handler accepts an `ack` callback, expect that to be called and set `apply_state` accordingly
         // TODO: do we want to pass old and new config ?
-        handler(action, item.file, item.id, (err) => {
-          if (err) {
-            this.#setApplyState(item, ERROR, err.toString())
+        handler(action, item.file, item.id, (error) => {
+          if (error) {
+            this.#setApplyState(item, action, ERROR, error.toString())
           } else if (item.apply_state !== ERROR) {
-            this.#setApplyState(item, ACKNOWLEDGED, '')
+            this.#setApplyState(item, action, ACKNOWLEDGED, '')
           }
         })
       } else {
@@ -570,15 +600,15 @@ class RemoteConfig {
         const result = handler(action, item.file, item.id)
         if (result instanceof Promise) {
           result.then(
-            () => this.#setApplyState(item, ACKNOWLEDGED, ''),
-            (err) => this.#setApplyState(item, ERROR, err.toString())
+            () => this.#setApplyState(item, action, ACKNOWLEDGED, ''),
+            (error) => this.#setApplyState(item, action, ERROR, error.toString())
           )
         } else {
-          this.#setApplyState(item, ACKNOWLEDGED, '')
+          this.#setApplyState(item, action, ACKNOWLEDGED, '')
         }
       }
-    } catch (err) {
-      this.#setApplyState(item, ERROR, err.toString())
+    } catch (error) {
+      this.#setApplyState(item, action, ERROR, error.toString())
     }
   }
 }
@@ -712,6 +742,40 @@ function supportsAckCallback (handler) {
   handler[kSupportsAckCallback] = result
 
   return result
+}
+
+/**
+ * @param {import('@datadog/libdatadog/remote-config').RemoteConfigFetcherOptions} options
+ * @returns {import('@datadog/libdatadog/remote-config').RemoteConfigFetcher}
+ */
+function createAgentlessFetcher (options) {
+  const { RemoteConfigFetcher, setStorage } = require('@datadog/libdatadog/remote-config')
+  const { storage } = require('../../../datadog-core')
+  const legacyStorage = storage('legacy')
+
+  /** @param {() => void} callback */
+  function runWithoutTracing (callback) {
+    legacyStorage.run({ noop: true }, callback)
+  }
+
+  setStorage(runWithoutTracing)
+  return new RemoteConfigFetcher(options)
+}
+
+/**
+ * @param {string} encodedCapabilities
+ * @returns {string[]}
+ */
+function decodeCapabilities (encodedCapabilities) {
+  const hex = Buffer.from(encodedCapabilities, 'base64').toString('hex')
+  const mask = BigInt(`0x${hex}`)
+  const names = []
+
+  for (const [name, capability] of capabilityEntries) {
+    if ((mask & capability) !== 0n) names.push(name)
+  }
+
+  return names
 }
 
 /**

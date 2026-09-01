@@ -18,7 +18,10 @@ describe('RemoteConfig', () => {
   let uuid
   let scheduler
   let Scheduler
-  let AgentlessRemoteConfigFetcher
+  let RemoteConfigFetcher
+  let setStorage
+  let storage
+  let storageRun
   let fetcher
   let request
   let log
@@ -49,7 +52,10 @@ describe('RemoteConfig', () => {
       setExtraServices: sinon.stub(),
       setProductCapabilities: sinon.stub().returns([]),
     }
-    AgentlessRemoteConfigFetcher = sinon.stub().returns(fetcher)
+    RemoteConfigFetcher = sinon.stub().returns(fetcher)
+    setStorage = sinon.stub()
+    storageRun = sinon.stub().callsFake((_store, callback) => callback())
+    storage = sinon.stub().returns({ run: storageRun })
 
     request = sinon.stub()
 
@@ -67,9 +73,10 @@ describe('RemoteConfig', () => {
     getGitMetadata = sinon.stub().returns({ commitSHA: undefined, repositoryUrl: undefined })
 
     RemoteConfig = proxyquire('../../src/remote_config', {
+      '../../../datadog-core': { storage },
+      '@datadog/libdatadog/remote-config': { RemoteConfigFetcher, setStorage, '@noCallThru': true },
       '../../../../vendor/dist/crypto-randomuuid': uuid,
       './scheduler': Scheduler,
-      './fetcher': AgentlessRemoteConfigFetcher,
       '../../../../package.json': { version: '3.0.0' },
       '../exporters/common/request': request,
       '../log': log,
@@ -153,6 +160,8 @@ describe('RemoteConfig', () => {
     })
 
     assert.ok(rc.appliedConfigs instanceof Map)
+    sinon.assert.notCalled(RemoteConfigFetcher)
+    sinon.assert.notCalled(setStorage)
   })
 
   describe('agentless', () => {
@@ -162,6 +171,10 @@ describe('RemoteConfig', () => {
     })
 
     it('should configure the native client before polling', async () => {
+      RemoteConfigFetcher.resetHistory()
+      setStorage.resetHistory()
+      storage.resetHistory()
+      storageRun.resetHistory()
       config.env = undefined
       config.version = undefined
       rc = new RemoteConfig(config)
@@ -172,7 +185,7 @@ describe('RemoteConfig', () => {
 
       await poll()
 
-      const options = AgentlessRemoteConfigFetcher.lastCall.firstArg
+      const options = RemoteConfigFetcher.lastCall.firstArg
       assert.strictEqual(options.clientId, '1234-5678')
       assert.strictEqual(options.runtimeId, 'runtimeId')
       assert.strictEqual(options.env, '')
@@ -184,7 +197,7 @@ describe('RemoteConfig', () => {
       sinon.assert.calledOnceWithExactly(
         fetcher.setProductCapabilities,
         ['LIVE_DEBUGGING'],
-        rc.state.client.capabilities
+        ['APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION']
       )
       sinon.assert.calledOnceWithExactly(fetcher.setExtraServices, ['extra-service'])
       sinon.assert.calledOnce(fetcher.fetchChanges)
@@ -193,6 +206,13 @@ describe('RemoteConfig', () => {
         '[RC] Unrecognized remote config products or capabilities: %s',
         'UNKNOWN'
       )
+
+      sinon.assert.calledOnceWithExactly(setStorage, sinon.match.func)
+      const runWithoutTracing = setStorage.firstCall.firstArg
+      const callback = sinon.spy()
+      runWithoutTracing(callback)
+      sinon.assert.calledOnceWithExactly(storage, 'legacy')
+      sinon.assert.calledOnceWithExactly(storageRun, { noop: true }, callback)
     })
 
     it('should apply, modify, and remove configs through the registered handler', async () => {
@@ -242,6 +262,49 @@ describe('RemoteConfig', () => {
 
       sinon.assert.calledWithExactly(handler, 'unapply', { id: 'probe', version: 2 }, 'probe', sinon.match.func)
       assert.strictEqual(rc.appliedConfigs.size, 0)
+    })
+
+    it('should report delayed unapply outcomes unless the config was replaced', async () => {
+      const removedPath = 'datadog/42/LIVE_DEBUGGING/removed/config'
+      const replacedPath = 'datadog/42/LIVE_DEBUGGING/replaced/config'
+      const acknowledgements = []
+      rc.setProductHandler('LIVE_DEBUGGING', (action, file, id, acknowledge) => {
+        acknowledgements.push(acknowledge)
+      })
+      for (const [path, id] of [[removedPath, 'removed'], [replacedPath, 'replaced']]) {
+        rc.appliedConfigs.set(path, {
+          path,
+          product: 'LIVE_DEBUGGING',
+          id,
+          version: 1,
+          apply_state: ACKNOWLEDGED,
+          apply_error: '',
+          file: { id, version: 1 },
+        })
+      }
+      fetcher.fetchChanges.resolves([
+        { kind: 'remove', path: removedPath, product: 'LIVE_DEBUGGING', configId: 'removed', version: 1 },
+        { kind: 'remove', path: replacedPath, product: 'LIVE_DEBUGGING', configId: 'replaced', version: 1 },
+      ])
+
+      await poll()
+
+      fetcher.fetchChanges.resolves([{
+        kind: 'add',
+        path: replacedPath,
+        product: 'LIVE_DEBUGGING',
+        configId: 'replaced',
+        version: 2,
+        contents: '{"id":"replaced","version":2}',
+      }])
+      await poll()
+
+      fetcher.setConfigState.resetHistory()
+      acknowledgements[0]()
+      acknowledgements[1]()
+
+      sinon.assert.calledOnceWithExactly(fetcher.setConfigState, removedPath, ACKNOWLEDGED, '')
+      assert.strictEqual(rc.appliedConfigs.get(replacedPath).version, 2)
     })
 
     it('should report invalid config contents without dispatching them', async () => {
@@ -318,8 +381,8 @@ describe('RemoteConfig', () => {
     })
 
     it('should stop when the native client cannot be created', async () => {
-      AgentlessRemoteConfigFetcher.resetHistory()
-      AgentlessRemoteConfigFetcher.throws(new Error('unavailable'))
+      RemoteConfigFetcher.resetHistory()
+      RemoteConfigFetcher.throws(new Error('unavailable'))
       scheduler.start.resetHistory()
 
       rc = new RemoteConfig(config)
@@ -327,6 +390,27 @@ describe('RemoteConfig', () => {
 
       sinon.assert.notCalled(scheduler.start)
       sinon.assert.calledOnce(log.error)
+
+      await poll()
+    })
+
+    it('should stop when the API key is missing', async () => {
+      config.DD_API_KEY = undefined
+      RemoteConfigFetcher.resetHistory()
+      setStorage.resetHistory()
+      scheduler.start.resetHistory()
+      log.error.resetHistory()
+
+      rc = new RemoteConfig(config)
+      rc.setProductHandler('LIVE_DEBUGGING', noop)
+
+      sinon.assert.notCalled(RemoteConfigFetcher)
+      sinon.assert.notCalled(setStorage)
+      sinon.assert.notCalled(scheduler.start)
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        '[RC] DD_API_KEY is required for agentless Remote Config; Remote Config is disabled'
+      )
 
       await poll()
     })
@@ -356,13 +440,83 @@ describe('RemoteConfig', () => {
       )
     })
 
-    it('should contain batch-handler failures', async () => {
+    it('should report unhandled batch-handler items as errors', async () => {
       const error = new Error('apply failed')
-      rc.setBatchHandler(['ASM_FEATURES'], () => { throw error })
+      const removePath = 'datadog/42/ASM_FEATURES/remove/config'
+      const applyPath = 'datadog/42/ASM_FEATURES/apply/config'
+      const modifyPath = 'datadog/42/ASM_FEATURES/modify/config'
+      rc.appliedConfigs.set(removePath, {
+        path: removePath,
+        product: 'ASM_FEATURES',
+        id: 'remove',
+        version: 1,
+        apply_state: ACKNOWLEDGED,
+        apply_error: '',
+        file: { enabled: true },
+      })
+      rc.appliedConfigs.set(modifyPath, {
+        path: modifyPath,
+        product: 'ASM_FEATURES',
+        id: 'modify',
+        version: 1,
+        apply_state: ACKNOWLEDGED,
+        apply_error: '',
+        file: { enabled: true },
+      })
+      const handler = sinon.spy()
+      rc.setProductHandler('ASM_FEATURES', handler)
+      rc.setBatchHandler(['ASM_FEATURES'], (transaction) => {
+        transaction.ack(applyPath)
+        throw error
+      })
       rc.subscribeProducts('ASM_FEATURES')
+      fetcher.fetchChanges.resolves([
+        {
+          kind: 'remove',
+          path: removePath,
+          product: 'ASM_FEATURES',
+          configId: 'remove',
+          version: 1,
+        },
+        {
+          kind: 'add',
+          path: applyPath,
+          product: 'ASM_FEATURES',
+          configId: 'apply',
+          version: 1,
+          contents: '{}',
+        },
+        {
+          kind: 'update',
+          path: modifyPath,
+          product: 'ASM_FEATURES',
+          configId: 'modify',
+          version: 2,
+          contents: '{}',
+        },
+      ])
+
+      await poll()
+
+      sinon.assert.notCalled(handler)
+      sinon.assert.calledThrice(fetcher.setConfigState)
+      sinon.assert.calledWithExactly(fetcher.setConfigState, applyPath, ACKNOWLEDGED, '')
+      sinon.assert.calledWithExactly(fetcher.setConfigState, removePath, ERROR, error.toString())
+      sinon.assert.calledWithExactly(fetcher.setConfigState, modifyPath, ERROR, error.toString())
+      assert.strictEqual(rc.appliedConfigs.has(removePath), false)
+      assert.strictEqual(rc.appliedConfigs.get(applyPath).apply_state, ACKNOWLEDGED)
+      assert.strictEqual(rc.appliedConfigs.get(modifyPath).apply_state, ERROR)
+    })
+
+    it('should contain native apply-state failures', async () => {
+      const error = new Error('state unavailable')
+      const path = 'datadog/42/ASM_FEATURES/config/config'
+      rc.setBatchHandler(['ASM_FEATURES'], transaction => transaction.ack(path))
+      rc.subscribeProducts('ASM_FEATURES')
+      fetcher.setConfigState.throws(error)
       fetcher.fetchChanges.resolves([{
         kind: 'add',
-        path: 'datadog/42/ASM_FEATURES/config/config',
+        path,
         product: 'ASM_FEATURES',
         configId: 'config',
         version: 1,
@@ -371,7 +525,7 @@ describe('RemoteConfig', () => {
 
       await poll()
 
-      sinon.assert.calledWithExactly(log.error, '[RC] Could not apply remote config update', error)
+      sinon.assert.calledOnceWithExactly(log.error, '[RC] Could not apply remote config update', error)
       assert.strictEqual(rc.appliedConfigs.size, 0)
     })
   })
