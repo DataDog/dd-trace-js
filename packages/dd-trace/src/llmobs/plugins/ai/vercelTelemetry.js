@@ -1,5 +1,6 @@
 'use strict'
 
+const { LRUCache } = require('../../../../../../vendor/dist/lru-cache')
 const { parseModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
 const BaseLLMObsPlugin = require('../base')
 const {
@@ -145,8 +146,8 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
   static integration = 'ai'
   static prefix = 'tracing:ai:telemetry'
 
-  /** @type {Map<string, Array<Record<string, unknown>>>} */
-  #lastOutputContentByCallId = new Map()
+  /** @type {LRUCache<string, Array<Record<string, unknown>>>} */
+  #lastOutputContentByCallId = new LRUCache({ max: 1000 })
 
   constructor () {
     super(...arguments)
