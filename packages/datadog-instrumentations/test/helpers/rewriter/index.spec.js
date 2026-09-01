@@ -384,6 +384,31 @@ describe('check-require-cache', () => {
           module: {
             name: 'test',
             versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback-outer-try.js',
+          },
+          functionQuery: {
+            functionName: 'tracedNested',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_outer_try',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback-outer-try.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="tracedNested"] CallExpression[callee.name="task"]',
+          channelName: 'trace_await_context_callback_outer_try',
+          transform: 'awaitContextCallbackAtTryStart',
+          transformOptions: {
+            callbackName: 'beforeStart',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
             filePath: 'trace-await-context-callback.js',
           },
           functionQuery: {
@@ -907,6 +932,15 @@ describe('check-require-cache', () => {
 
     assert.equal(await resultPromise, 'passed')
     assert.deepStrictEqual(steps, ['setup', 'setup done', 'task'])
+  })
+
+  it('should not use a try block outside the traced function', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'trace-await-context-callback-outer-try.js')
+    const source = readFileSync(filename, 'utf8')
+    const { runNestedWithoutTry } = compileFile('trace-await-context-callback-outer-try')
+
+    assert.strictEqual(content, source)
+    assert.equal(await runNestedWithoutTry(() => 'passed'), 'passed')
   })
 
   it('should call a context callback with the instrumented receiver', async () => {
