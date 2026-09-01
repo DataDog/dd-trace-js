@@ -3903,6 +3903,13 @@ describe('Config', () => {
       assert.strictEqual(config.DD_LLMOBS_PROMPTS_CACHE_DIR, '/tmp/prompts')
       assert.strictEqual(config.DD_LLMOBS_PROMPTS_TIMEOUT, 2.5)
     })
+
+    it('uses the default for invalid prompt timeout values', () => {
+      for (const value of ['-1', 'Infinity']) {
+        process.env.DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS = value
+        assert.strictEqual(getConfig().DD_LLMOBS_PROMPTS_TIMEOUT, 5)
+      }
+    })
   })
 
   context('llmobs config', () => {

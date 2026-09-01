@@ -1390,6 +1390,7 @@
         "implementation": "B",
         "type": "decimal",
         "default": "5.0",
+        "allowed": "\\d+(\\.\\d+)?",
         "aliases": [
           "DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS"
         ]
