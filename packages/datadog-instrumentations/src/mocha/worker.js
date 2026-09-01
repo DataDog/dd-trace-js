@@ -7,6 +7,7 @@ const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper'
 const log = require('../../../dd-trace/src/log')
 const { DD_MAJOR } = require('../../../../version')
 
+const { addMochaRunHooks } = require('./common')
 const {
   runnableWrapper,
   getOnTestHandler,
@@ -29,7 +30,6 @@ const {
   WEBDRIVERIO_WORKER_ENV,
   WORKER_READY,
 } = require('./webdriverio-protocol')
-require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
@@ -442,23 +442,7 @@ function wrapMochaRun (Mocha, frameworkVersion) {
   return Mocha
 }
 
-addHook({
-  name: 'mocha',
-  versions: ['>=8.0.0'],
-  filePattern: String.raw`lib/mocha\.(?:c?js)$`,
-}, wrapMochaRun)
-
-// Mocha 12's ESM package root loads lib/mocha.cjs before the CJS hook can observe it. Node.js 20 exposes the root
-// namespace to CJS hooks, while newer runtimes may expose its default constructor directly.
-addHook({
-  name: 'mocha',
-  versions: ['>=12.0.0'],
-  file: 'index.js',
-  patchDefault: true,
-}, (MochaPackage, frameworkVersion) => {
-  wrapMochaRun(MochaPackage.default ?? MochaPackage, frameworkVersion)
-  return MochaPackage
-})
+addMochaRunHooks(['>=8.0.0'], wrapMochaRun)
 
 // Runner is also hooked in mocha/main.js, but in here we only generate test events.
 addHook({

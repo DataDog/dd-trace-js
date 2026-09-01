@@ -1436,6 +1436,29 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   }
 
+  onlyLatestIt('requests library configuration once with the programmatic API', async function () {
+    this.timeout(20_000)
+    childProcess = exec(runTestsCommand, {
+      cwd,
+      env: getCiVisAgentlessConfig(receiver.port),
+    })
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const settingsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/libraries/tests/services/setting'),
+      payloads => assert.strictEqual(payloads.length, 1),
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      settingsPromise,
+    ])
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
   const nonLegacyReportingOptions = ['evp proxy', 'agentless']
 
   nonLegacyReportingOptions.forEach((reportingOption) => {

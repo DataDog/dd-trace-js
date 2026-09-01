@@ -35,6 +35,7 @@ const {
   isMarkedAsUnskippable,
 } = require('../../../dd-trace/src/plugins/util/test')
 
+const { addMochaRunHooks } = require('./common')
 const {
   isNewTest,
   getTestProperties,
@@ -59,8 +60,6 @@ const {
   loggedAttemptToFixTests,
   adjustRunnerFailuresForTestOptimization,
 } = require('./utils')
-
-require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
@@ -1125,23 +1124,7 @@ function wrapMochaRun (Mocha, frameworkVersion) {
   return Mocha
 }
 
-addHook({
-  name: 'mocha',
-  versions: [MINIMUM_MOCHA_VERSION],
-  filePattern: String.raw`lib/mocha\.(?:c?js)$`,
-}, wrapMochaRun)
-
-// Mocha 12's ESM package root loads lib/mocha.cjs before the CJS hook can observe it. Node.js 20 exposes the root
-// namespace to CJS hooks, while newer runtimes may expose its default constructor directly.
-addHook({
-  name: 'mocha',
-  versions: ['>=12.0.0'],
-  file: 'index.js',
-  patchDefault: true,
-}, (MochaPackage, frameworkVersion) => {
-  wrapMochaRun(MochaPackage.default ?? MochaPackage, frameworkVersion)
-  return MochaPackage
-})
+addMochaRunHooks([MINIMUM_MOCHA_VERSION], wrapMochaRun)
 
 addHook({
   name: 'mocha',
