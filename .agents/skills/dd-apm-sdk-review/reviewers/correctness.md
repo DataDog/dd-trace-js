@@ -22,6 +22,11 @@ already commented on the same lines for a different reason.
   the ordering the logic assumes, a value used after being invalidated.
 - **Data mapping and transformation.** Off-by-one in indices, wrong field mapped, unit mismatch (ms vs s, bytes vs
   KB), truncation/rounding that changes the result, an encode/decode pair that no longer round-trips.
+- **Single-source derivation.** A value read from only one of several fields/sources that can equivalently supply
+  it, with no fallback to the others — check whether every path that populates the data actually reaches this
+  field, or whether some paths silently produce nothing. Report this as its own finding (name the field, the
+  paths that get nothing, and the missing fallback as the fix) — never fold it into another finding just because
+  it sits on the same lines as one.
 - **Async and ordering.** A callback, promise, or event assumed to fire in an order the runtime does not guarantee;
   a race between two paths touching the same state.
 - **Tests as evidence, not as the check itself.** If a test covers the changed branch and asserts the specific
