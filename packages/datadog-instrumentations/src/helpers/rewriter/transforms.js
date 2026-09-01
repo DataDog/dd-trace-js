@@ -73,7 +73,7 @@ function awaitContextCallback (state, node, _parent, ancestry) {
  *
  * @param {Parameters<typeof awaitContextCallback>[0]} state
  * @param {import('estree').Node} node
- * @param {import('estree').Node} parent
+ * @param {import('estree').Node} _parent
  * @param {import('estree').Node[]} ancestry
  * @returns {void}
  */
