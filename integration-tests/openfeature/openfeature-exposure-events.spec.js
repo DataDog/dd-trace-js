@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { setTimeout: delay } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
 const { assertObjectContains, sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
@@ -9,6 +10,9 @@ const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/re
 const ufcPayloads = require('./fixtures/ufc-payloads')
 
 const RC_PRODUCT = 'FFE_FLAGS'
+
+// Observe beyond the writer's one-second interval so a duplicate periodic flush remains visible.
+const EXPOSURE_QUIET_PERIOD_MS = 1250
 
 /**
  * @param {FakeAgent} agent
@@ -85,6 +89,7 @@ async function captureExposureRequestsUntilExit (agent, proc, expectedCount, act
   agent.on('exposures', handleExposures)
   try {
     await Promise.all([action(), expectedExposuresReceived])
+    await delay(EXPOSURE_QUIET_PERIOD_MS)
     const latestTimestamp = Date.now()
     await stopProc(proc)
     return { requests, earliestTimestamp, latestTimestamp }
