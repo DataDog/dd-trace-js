@@ -3448,8 +3448,8 @@ declare namespace tracer {
 
   export namespace opentelemetry {
     export interface MeterProvider extends otel.MeterProvider {
-      forceFlush(): Promise<void>;
-      shutdown(): Promise<void>;
+      forceFlush(options?: { timeoutMillis?: number }): Promise<void>;
+      shutdown(options?: { timeoutMillis?: number }): Promise<void>;
     }
 
     /**

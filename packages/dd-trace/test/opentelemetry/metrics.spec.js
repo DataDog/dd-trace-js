@@ -700,6 +700,73 @@ describe('OpenTelemetry Meter Provider', () => {
       await assert.rejects(provider.shutdown(), failure)
     })
 
+    it('times out forceFlush without cancelling or bypassing the serialized exports', async () => {
+      const clock = sinon.useFakeTimers()
+      const exports = []
+      const exporter = {
+        export: (batch, done) => { exports.push(done) },
+        shutdown: done => { done() },
+      }
+      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
+      const provider = new MeterProvider({ reader })
+      const counter = provider.getMeter('test').createCounter('requests')
+
+      try {
+        counter.add(1)
+        const timedOut = provider.forceFlush({ timeoutMillis: 10 })
+        const timeoutRejection = assert.rejects(timedOut, { name: 'TimeoutError' })
+        counter.add(2)
+        const queued = provider.forceFlush()
+
+        await clock.tickAsync(10)
+        await timeoutRejection
+        assert.strictEqual(exports.length, 1)
+
+        exports[0]({ code: 0 })
+        await clock.tickAsync(0)
+        assert.strictEqual(exports.length, 2)
+        exports[1]({ code: 0 })
+        await queued
+        await provider.shutdown()
+      } finally {
+        clock.restore()
+      }
+    })
+
+    it('keeps shutdown terminal when the caller times out before the reader finishes', async () => {
+      const clock = sinon.useFakeTimers()
+      const exports = []
+      const shutdowns = []
+      const exporter = {
+        export: (batch, done) => { exports.push(done) },
+        shutdown: done => { shutdowns.push(done) },
+      }
+      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
+      const provider = new MeterProvider({ reader })
+      const counter = provider.getMeter('test').createCounter('requests')
+
+      try {
+        counter.add(1)
+        const shutdown = provider.shutdown({ timeoutMillis: 10 })
+        const timeoutRejection = assert.rejects(shutdown, { name: 'TimeoutError' })
+
+        await provider.shutdown()
+        await provider.forceFlush()
+        counter.add(2)
+        assert.strictEqual(exports.length, 1)
+
+        await clock.tickAsync(10)
+        await timeoutRejection
+        exports[0]({ code: 0 })
+        assert.strictEqual(shutdowns.length, 1)
+        shutdowns[0]()
+        await provider.forceFlush()
+        assert.strictEqual(exports.length, 1)
+      } finally {
+        clock.restore()
+      }
+    })
+
     it('serializes concurrent forceFlush exports and waits for each HTTP outcome', async () => {
       const exports = []
       const exporter = {

@@ -476,7 +476,7 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 <h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
 
-dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry Metrics SDK. This lightweight implementation is fully compliant with the OpenTelemetry Metrics API and integrates with the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
+dd-trace-js includes experimental support for producing OpenTelemetry metrics through the OpenTelemetry Metrics API and the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
 
 ```javascript
 require('dd-trace').init()
@@ -517,21 +517,22 @@ cpuGauge.addCallback((result) => {
 })
 ```
 
-Short-lived processes can wait for pending metrics to reach the configured OTLP endpoint before exiting:
+Short-lived processes can use Datadog lifecycle extensions modeled after the OpenTelemetry JavaScript SDK's meter provider methods. These methods aren't part of the OpenTelemetry Metrics API's `MeterProvider` interface.
 
-Set `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` to bound each export. The value is in milliseconds.
+Set `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` to bound each OTLP HTTP request. The value is in milliseconds.
+The optional `timeoutMillis` argument bounds how long the caller waits. Timing out doesn't cancel the underlying work.
 
 ```javascript
 const meterProvider = metrics.getMeterProvider()
 
-await meterProvider.forceFlush()
+await meterProvider.forceFlush({ timeoutMillis: 5_000 })
 ```
 
-Call `shutdown()` when the application is finished recording metrics. It performs one final export and then stops the
-provider. Calls to `forceFlush()` after shutdown have no effect.
+Call `shutdown()` when the application is finished recording metrics. It performs one final export and then stops
+metrics export. Calls to `forceFlush()` after shutdown have no effect.
 
 ```javascript
-await meterProvider.shutdown()
+await meterProvider.shutdown({ timeoutMillis: 5_000 })
 ```
 
 For TypeScript, cast the provider to the Datadog implementation type:
