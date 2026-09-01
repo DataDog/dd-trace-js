@@ -48,14 +48,15 @@ function createDirectEVPRoute (config, intake) {
     const proxyUrl = getProxyForUrl(url.href)
     const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined
 
-    return {
+    const route = {
       url,
       basePath: '',
       headers: {
         'DD-API-KEY': apiKey,
       },
-      ...(agent && { agent }),
     }
+    if (agent) route.agent = agent
+    return route
   } catch (error) {
     log.debug('Unable to configure direct EVP intake: %s', error.message)
   }
