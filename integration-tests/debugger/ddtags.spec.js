@@ -1,7 +1,5 @@
 'use strict'
 
-const os = require('os')
-
 const assert = require('assert')
 const { inspect } = require('node:util')
 const { version } = require('../../package.json')
@@ -35,7 +33,6 @@ describe('Dynamic Instrumentation', function () {
             'env',
             'git.commit.sha',
             'git.repository_url',
-            'host_name',
             'version',
           ], Object.keys(ddtags).sort())
 
@@ -43,7 +40,6 @@ describe('Dynamic Instrumentation', function () {
             env: 'test-env',
             version: 'test-version',
             debugger_version: version,
-            host_name: os.hostname(),
             'git.commit.sha': 'test-commit-sha',
             'git.repository_url': 'test-repository-url',
           })
@@ -66,7 +62,7 @@ describe('Dynamic Instrumentation', function () {
 
           const ddtags = extractDDTagsFromQuery(query)
 
-          assert.deepStrictEqual(['debugger_version', 'host_name'], Object.keys(ddtags).sort())
+          assert.deepStrictEqual(['debugger_version'], Object.keys(ddtags).sort())
 
           done()
         })
