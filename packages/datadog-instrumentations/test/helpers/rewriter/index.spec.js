@@ -1,6 +1,7 @@
 'use strict'
 
-const { mkdtempSync, readFileSync, writeFileSync } = require('node:fs')
+const { spawnSync } = require('node:child_process')
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { resolve, join, dirname } = require('node:path')
 const Module = require('node:module')
@@ -1198,5 +1199,63 @@ describe('rewriter source-map trailer', () => {
       sourceMapSupport.resetRetrieveHandlers()
       delete require.cache[require.resolve('source-map-support')]
     }
+  })
+})
+
+describe('rewriter initialization', () => {
+  const repositoryRoot = resolve(__dirname, '../../../../..')
+  const transformerPath = join(repositoryRoot, 'vendor', 'dist', '@apm-js-collab', 'code-transformer')
+  const loaderPath = resolve(__dirname, '../../../src/helpers/rewriter/loader')
+
+  it('loads the code transformer on the first rewrite instead of at startup', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-defer-'))
+    const targetDirectory = join(root, 'node_modules', 'ai')
+    const untargetedDirectory = join(root, 'node_modules', 'untargeted')
+
+    mkdirSync(join(targetDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(targetDirectory, 'package.json'), '{"version":"4.0.0","main":"dist/index.js"}')
+    writeFileSync(join(targetDirectory, 'dist', 'index.js'), `
+      function getTracer () { return 'tracer' }
+      module.exports = { getTracer }
+    `)
+
+    mkdirSync(untargetedDirectory, { recursive: true })
+    writeFileSync(join(untargetedDirectory, 'package.json'), '{"version":"1.0.0"}')
+    writeFileSync(join(untargetedDirectory, 'index.js'), 'module.exports = {}\n')
+
+    writeFileSync(join(root, 'main.js'), `
+      const transformerPath = require.resolve(${JSON.stringify(transformerPath)})
+
+      require(${JSON.stringify(loaderPath)})
+
+      const loadedAfterHook = require.cache[transformerPath] !== undefined
+
+      require('untargeted')
+
+      const loadedAfterUntargetedModule = require.cache[transformerPath] !== undefined
+
+      const { tracingChannel } = require(${JSON.stringify(require.resolve('dc-polyfill'))})
+      let starts = 0
+
+      tracingChannel('orchestrion:ai:getTracer').subscribe({ start () { starts++ } })
+      require('ai').getTracer()
+
+      console.log(JSON.stringify({
+        loadedAfterHook,
+        loadedAfterUntargetedModule,
+        loadedAfterTargetModule: require.cache[transformerPath] !== undefined,
+        starts,
+      }))
+    `)
+
+    const result = spawnSync(process.execPath, [join(root, 'main.js')], { cwd: root, encoding: 'utf8' })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.deepStrictEqual(JSON.parse(result.stdout), {
+      loadedAfterHook: false,
+      loadedAfterUntargetedModule: false,
+      loadedAfterTargetModule: true,
+      starts: 1,
+    })
   })
 })
