@@ -136,19 +136,8 @@ class SpanAggKey {
   }
 
   toString () {
-    return [
-      this.name,
-      this.service,
-      this.resource,
-      this.type,
-      this.statusCode,
-      this.synthetics,
-      this.method,
-      this.endpoint,
-      this.srvSrc,
-      this.spanKind,
-      this.rpcStatusCode,
-    ].join(',')
+    return `${this.name},${this.service},${this.resource},${this.type},${this.statusCode},${this.synthetics},` +
+      `${this.method},${this.endpoint},${this.srvSrc},${this.spanKind},${this.rpcStatusCode}`
   }
 }
 
