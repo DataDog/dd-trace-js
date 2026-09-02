@@ -7,9 +7,9 @@ const log = require('../../../dd-trace/src/log')
 const { BUNDLER_DC_GLOBAL } = require('./bundler-constants')
 const { loadChannel } = require('./register.js')
 const {
+  errorMessage,
   getDisabledInstrumentations,
   matchesInstrumentation,
-  matchVersion,
 } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
@@ -75,17 +75,17 @@ function doHook (name) {
   try {
     hookFn()
   } catch (error) {
-    log.error('esbuild-wrapped %s hook failed: %s', name, String(error?.message ?? error), error)
+    log.error('esbuild-wrapped %s hook failed: %s', name, errorMessage(error), error)
   }
 }
 
 /**
  * @typedef {object} Payload
+ * @property {string} [integration]
  * @property {string} package
  * @property {unknown} module
  * @property {string} version
  * @property {string} path
- * @property {number[]} [instrumentationIndexes]
  * @property {string} [moduleBaseDir]
  * @property {string} [moduleName]
  * @property {(exports: unknown, patchDefault: boolean) => void} [apply]
@@ -96,13 +96,15 @@ const instrumentedNodeModules = new Set()
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
-  if (disabledInstrumentations.has(name)) return
+  const integration = payload.integration ?? name
+  if (disabledInstrumentations.has(integration)) return
 
-  const isPrefixedWithNode = name.startsWith('node:')
-  const isNodeModule = isPrefixedWithNode || !hooks[name]
+  const isPrefixedWithNode = integration.startsWith('node:')
+
+  const isNodeModule = isPrefixedWithNode || !hooks[integration]
 
   if (isNodeModule) {
-    const nodeName = isPrefixedWithNode ? name.slice(5) : name
+    const nodeName = isPrefixedWithNode ? integration.slice(5) : integration
     // Used for node: prefixed modules to prevent double instrumentation.
     if (instrumentedNodeModules.has(nodeName)) {
       return
@@ -110,7 +112,7 @@ dc.subscribe(CHANNEL, (message) => {
     instrumentedNodeModules.add(nodeName)
   }
 
-  doHook(name)
+  doHook(integration)
 
   const instrumentation = instrumentations[name] ?? instrumentations[`node:${name}`]
 
@@ -119,22 +121,13 @@ dc.subscribe(CHANNEL, (message) => {
     return
   }
 
-  const indexes = payload.instrumentationIndexes ?? instrumentation.keys()
-  for (const index of indexes) {
-    const entry = instrumentation[index]
-    if (!entry) {
-      log.error('Bundled %s instrumentation index %s does not exist', name, index)
-      continue
-    }
-    const { patchDefault, versions, hook } = entry
-    if (payload.instrumentationIndexes === undefined) {
-      if (!matchesInstrumentation(name, payload.version, payload.path, entry)) continue
-    } else if (!matchVersion(payload.version, versions)) {
-      continue
-    }
+  for (const entry of instrumentation) {
+    if (!matchesInstrumentation(name, payload.version, payload.path, entry)) continue
+
+    const { patchDefault, hook } = entry
 
     try {
-      loadChannel.publish({ name })
+      loadChannel.publish({ name: integration })
       let exports = payload.module
       const namespace = /** @type {Record<string, unknown>} */ (exports)
       // Only generated ESM proxy payloads need default-export unwrapping.
@@ -149,7 +142,7 @@ dc.subscribe(CHANNEL, (message) => {
       payload.module = exports
       payload.apply?.(exports, patchDefault)
     } catch (error) {
-      log.error('Error executing bundler hook: %s', String(error?.message ?? error), error)
+      log.error('Error executing bundler hook: %s', errorMessage(error), error)
     }
   }
 })

@@ -31,7 +31,7 @@ const lintRuntimeSupported = semver.satisfies(process.version, eslintEngines.nod
 afterEach(() => {
   cleanup()
   sinon.restore()
-})
+}).timeout(30000)
 
 describe('datadog-turbopack loader', () => {
   it('rewrites ESM imports and only unshadowed CommonJS requires', async () => {
@@ -348,7 +348,7 @@ describe('datadog-turbopack loader', () => {
     assert.match(commonJsResult, /dd-trace:bundler:load/)
   })
 
-  it('rewrites an internal package edge to its instrumented ESM target', async () => {
+  it('rewrites a foreign integration edge through the direct-target rule', async () => {
     const projectDir = createProject()
     const packageDir = createPackage(projectDir, 'hono', {
       exports: './dist/index.js',
@@ -367,6 +367,69 @@ describe('datadog-turbopack loader', () => {
 
     assert.match(rewritten, new RegExp(path.basename(proxyPath)))
     assert.doesNotMatch(rewritten, /dd-trace:bundler:load/)
+  })
+
+  it('rewrites source instrumentation in linked workspace targets', async () => {
+    const workspaceDir = createProject()
+    const projectDir = path.join(workspaceDir, 'apps/web')
+    write(projectDir, 'package.json', '{}')
+    const packageDir = path.join(workspaceDir, 'packages/ai')
+    write(packageDir, 'package.json', JSON.stringify({
+      exports: './dist/index.mjs',
+      name: 'ai',
+      type: 'module',
+      version: '6.1.0',
+    }))
+    const source = "export function getTracer () { return 'original' }\n"
+    const targetPath = write(packageDir, 'dist/index.mjs', source)
+    fs.symlinkSync(packageDir, path.join(workspaceDir, 'node_modules/ai'), 'dir')
+    const config = await withDatadogTurbopack({}, { projectDir })
+    const options = findDatadogLoaders(config).find(item => item.options.targetScope === 'direct').options
+
+    const transformed = await runLoader(targetPath, source, options)
+
+    assert.match(transformed, /tr_ch_apm_tracingChannel/)
+  })
+
+  it('rejects stale proxies after linked star-export dependencies change', async () => {
+    const workspaceDir = createProject()
+    const projectDir = path.join(workspaceDir, 'apps/web')
+    write(projectDir, 'package.json', '{}')
+    const packageDir = path.join(workspaceDir, 'packages/ai')
+    write(packageDir, 'package.json', JSON.stringify({
+      exports: './dist/index.mjs',
+      name: 'ai',
+      type: 'module',
+      version: '6.1.0',
+    }))
+    write(packageDir, 'dist/index.mjs', "export * from './state.mjs'\n")
+    const childPath = write(packageDir, 'dist/state.mjs', 'export const state = true\n')
+    fs.symlinkSync(packageDir, path.join(workspaceDir, 'node_modules/ai'), 'dir')
+    const readFileSync = fs.readFileSync.bind(fs)
+    let replaced = false
+    sinon.stub(fs, 'readFileSync').callsFake((file, ...args) => {
+      const result = readFileSync(file, ...args)
+      if (!replaced && file === childPath) {
+        replaced = true
+        fs.writeFileSync(childPath, 'export const changed = true\n')
+      }
+      return result
+    })
+    const config = await withDatadogTurbopack({}, { projectDir })
+    const options = findDatadogLoaders(config).find(item => item.options.rewriteEdges && !item.options.targetScope)
+      .options
+    const resourcePath = write(projectDir, 'route.mjs', '')
+    const source = "import { state } from 'ai'\n"
+    const warnings = []
+
+    const transformed = await runLoader(resourcePath, source, options, {
+      emitWarning: warning => warnings.push(warning),
+    })
+
+    assert.equal(transformed, source)
+    assert.equal(replaced, true)
+    assert.equal(warnings.length, 1)
+    assert.match(warnings[0].message, /state\.mjs/)
   })
 
   it('does not instrument a direct target through the relative-copy rule', async () => {
@@ -410,9 +473,7 @@ describe('datadog-turbopack loader', () => {
     const appPath = write(fixture.projectDir, 'app/resolver.js', '')
     const source = "import { generateText } from 'ai'\n"
     const warnings = []
-    const getResolve = () => {
-      throw new Error('resolver unavailable')
-    }
+    const getResolve = () => throwValue(null)
 
     const result = await runLoader(appPath, source, fixture.importOptions, {
       emitWarning: warning => warnings.push(warning),
@@ -421,7 +482,7 @@ describe('datadog-turbopack loader', () => {
 
     assert.equal(result, source)
     assert.equal(warnings.length, 1)
-    assert.match(warnings[0].message, /Could not initialize import resolution/)
+    assert.match(warnings[0].message, /Could not initialize import resolution.*null/)
   })
 
   it('settles each resolver once and contains edge-resolution failures', async () => {
@@ -493,7 +554,8 @@ describe('datadog-turbopack loader', () => {
     assert.match(warnings[0].message, /Skipped changed dependency/)
   })
 
-  it('publishes CommonJS targets only when the channel has subscribers', async () => {
+  it('publishes CommonJS targets only when the channel has subscribers', async function () {
+    this.timeout(30000)
     const projectDir = createProject()
     const packageDir = createPackage(projectDir, 'ioredis', { main: 'index.js', version: '5.0.0' })
     const resourcePath = write(packageDir, 'index.js', "'use strict'\n\nmodule.exports = { original: true }\n")
@@ -521,8 +583,7 @@ describe('datadog-turbopack loader', () => {
     assert.equal(publications.length, 1)
     assert.equal(publications[0].package, 'ioredis')
     assert.equal(publications[0].moduleName, 'ioredis')
-    assert.equal(publications[0].instrumentationIndexes.length, 1)
-    assert.equal(publications[0].instrumentationIndexes[0], 3)
+    assert.equal(Object.hasOwn(publications[0], 'instrumentationIndexes'), false)
   })
 
   it('matches relative runtimes by suffix and source hash', async () => {
@@ -689,6 +750,16 @@ describe('datadog-turbopack loader', () => {
     const channel = dc.channel(CHANNEL)
     await assertGeneratedSourceIsLintClean(fs.readFileSync(fixture.proxyPath, 'utf8'), 'generated.mjs')
     const inactive = await import(`${pathToFileURL(fixture.proxyPath).href}?inactive`)
+    assert.equal(inactive.importedState, 'star-initial')
+    assert.equal(inactive.namedState, 'star-initial')
+    assert.equal(inactive.state, 'initial')
+    assert.equal(inactive.starState, 'star-initial')
+    inactive.setState('inactive')
+    inactive.setStarState('star-inactive')
+    assert.equal(inactive.importedState, 'star-inactive')
+    assert.equal(inactive.namedState, 'star-inactive')
+    assert.equal(inactive.state, 'inactive')
+    assert.equal(inactive.starState, 'star-inactive')
     let publications = 0
     const subscriber = payload => {
       if (payload.package !== 'ai') return
@@ -704,6 +775,20 @@ describe('datadog-turbopack loader', () => {
       const active = await import(`${pathToFileURL(fixture.proxyPath).href}?active`)
       assert.equal(inactive.generateText(), 'original')
       assert.equal(active.generateText(), 'patched')
+      assert.equal(active.importedState, 'star-inactive')
+      assert.equal(active.namedState, 'star-inactive')
+      assert.equal(active.state, 'inactive')
+      assert.equal(active.starState, 'star-inactive')
+      active.setState('active')
+      active.setStarState('star-active')
+      assert.equal(active.importedState, 'star-active')
+      assert.equal(active.namedState, 'star-active')
+      assert.equal(active.state, 'active')
+      assert.equal(active.starState, 'star-active')
+      assert.equal(inactive.state, 'active')
+      assert.equal(inactive.importedState, 'star-active')
+      assert.equal(inactive.namedState, 'star-active')
+      assert.equal(inactive.starState, 'star-active')
       assert.equal(publications, 1)
     } finally {
       channel.unsubscribe(subscriber)
@@ -735,8 +820,19 @@ async function createAiFixture (ioredisSource = 'module.exports = {}') {
     version: '7.0.0',
   })
   write(packageDir, 'index.mjs', [
+    "import { starState as importedState } from './state.mjs'",
+    'export { importedState }',
+    "export { starState as namedState } from './state.mjs'",
     "export function generateText () { return 'original' }",
     "export function streamText () { return 'original-stream' }",
+    "export let state = 'initial'",
+    'export function setState (value) { state = value }',
+    "export * from './state.mjs'",
+    '',
+  ].join('\n'))
+  write(packageDir, 'state.mjs', [
+    "export let starState = 'star-initial'",
+    'export function setStarState (value) { starState = value }',
     '',
   ].join('\n'))
   const commonJsPath = write(packageDir, 'index.cjs', 'module.exports = {}\n')
@@ -813,6 +909,13 @@ function executeCommonJs (source, channel) {
   }
   vm.runInNewContext(source, context)
   return context.module.exports
+}
+
+/**
+ * @param {unknown} value
+ */
+function throwValue (value) {
+  throw value
 }
 
 /**

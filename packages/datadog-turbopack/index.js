@@ -46,7 +46,10 @@ function withDatadogTurbopack (nextConfig = {}, options = {}) {
  * @returns {Promise<object>}
  */
 async function addDatadogConfig (nextConfig, projectDir, nextInfo) {
-  const plan = await createBuildPlan(projectDir)
+  const plan = await createBuildPlan(projectDir, {
+    compiler: nextInfo.compiler,
+    distDir: nextConfig.distDir,
+  })
   if (!plan.packagePathPattern || !plan.targetPathPattern || !plan.path || !plan.hash) return nextConfig
 
   const turbopack = nextConfig.turbopack ?? {}

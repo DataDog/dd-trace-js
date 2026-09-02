@@ -78,6 +78,7 @@ describe('withDatadogTurbopack', () => {
     assert.deepEqual(config.turbopack.rules['*.cjs'][0], { loaders: ['existing-array-loader'] })
     assert.equal(targetRule.condition.all[0], 'node')
     assert.equal(targetRule.condition.all[1].any.length, 2)
+    assert.equal(targetRule.condition.all.some(condition => condition?.not === 'foreign'), false)
     assert.equal(importRule.condition.all[0], 'node')
     assert.equal(importRule.condition.all.some(condition => condition?.not === 'foreign'), true)
     assert.equal(importRule.loaders[0].options.rewriteEdges, true)
@@ -177,6 +178,7 @@ describe('withDatadogTurbopack', () => {
     const config = { turbopack: { resolveAlias: { value: './value.js' } } }
 
     assert.strictEqual(await withDatadogTurbopack(config, { projectDir }), config)
+    assert.equal(fs.existsSync(path.join(projectDir, '.next/cache/dd-trace/turbopack')), false)
     assert.equal(fs.existsSync(path.join(projectDir, 'node_modules/.cache/dd-trace/turbopack')), false)
   })
 
@@ -200,8 +202,27 @@ describe('withDatadogTurbopack', () => {
       path.basename(planPaths[0], '.json'),
       createHash('sha256').update(fs.readFileSync(planPaths[0])).digest('hex')
     )
+    assert.equal(
+      path.dirname(path.dirname(planPaths[0])),
+      path.join(projectDir, '.next/cache/dd-trace/turbopack')
+    )
+    assert.equal(fs.existsSync(path.join(projectDir, 'node_modules/.cache/dd-trace/turbopack')), false)
     assert.equal(findDatadogLoaders(twice).length, findDatadogLoaders(configs[0]).length)
     assert.equal(fs.readdirSync(path.dirname(path.dirname(planPaths[0]))).length, 1)
+  })
+
+  it('uses the configured Next.js cache directory for build artifacts', async () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, 'ioredis', { main: 'index.js', version: '5.0.0' })
+    write(packageDir, 'index.js', 'module.exports = {}')
+
+    const config = await withDatadogTurbopack({ distDir: 'output' }, { projectDir })
+    const planPath = findDatadogLoaders(config)[0].options.manifestPath
+
+    assert.equal(
+      path.dirname(path.dirname(planPath)),
+      path.join(projectDir, 'output/cache/dd-trace/turbopack')
+    )
   })
 
   it('reports one warning for instrumentation discovery and target compilation failures', async () => {
@@ -213,9 +234,7 @@ describe('withDatadogTurbopack', () => {
     const emitWarning = sinon.stub(process, 'emitWarning')
     const hookName = 'test-turbopack-load-failure'
     const skippedHookName = 'test-turbopack-nonfunction-hook'
-    hooks[hookName] = () => {
-      throw new Error('load failed')
-    }
+    hooks[hookName] = () => throwValue(null)
     hooks[skippedHookName] = {}
 
     try {
@@ -227,7 +246,7 @@ describe('withDatadogTurbopack', () => {
     }
 
     assert.equal(emitWarning.callCount, 2)
-    sinon.assert.calledWithMatch(emitWarning, /Could not load the test-turbopack-load-failure instrumentation/)
+    sinon.assert.calledWithMatch(emitWarning, /Could not load the test-turbopack-load-failure instrumentation: null/)
     sinon.assert.calledWithMatch(emitWarning, new RegExp(`Could not instrument ${aiDirectory}`))
   })
 
@@ -311,7 +330,7 @@ describe('withDatadogTurbopack', () => {
     )
   })
 
-  it('discovers nested copies and records exact instrumentation indexes', async () => {
+  it('discovers nested copies without persisting hook-array positions', async () => {
     const projectDir = createProject()
     const packageDir = createPackage(projectDir, 'parent/node_modules/ioredis', {
       main: 'index.js',
@@ -325,7 +344,7 @@ describe('withDatadogTurbopack', () => {
     const entry = plan.targets[fs.realpathSync(target).replaceAll('\\', '/')]
 
     assert.equal(entry.payloads[0].package, 'ioredis')
-    assert.deepEqual(entry.payloads[0].instrumentationIndexes, [3])
+    assert.equal(Object.hasOwn(entry.payloads[0], 'instrumentationIndexes'), false)
   })
 
   it('discovers dependencies resolved from an ancestor project', async () => {
@@ -477,8 +496,12 @@ describe('withDatadogTurbopack', () => {
       const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
 
       assert.equal(plan.relativeTargets.length, 2)
-      assert.deepEqual(plan.relativeTargets[0].payloads[0].instrumentationIndexes, [0, 1])
-      assert.deepEqual(plan.relativeTargets[1].payloads[0].instrumentationIndexes, [0, 1])
+      assert.equal(plan.relativeTargets[0].payloads[0].integration, '@prisma/client')
+      assert.equal(plan.relativeTargets[0].payloads[0].package, './runtime/library.js')
+      assert.equal(Object.hasOwn(plan.relativeTargets[0].payloads[0], 'instrumentationIndexes'), false)
+      assert.equal(plan.relativeTargets[1].payloads[0].integration, '@prisma/client')
+      assert.equal(plan.relativeTargets[1].payloads[0].package, './runtime/library.js')
+      assert.equal(Object.hasOwn(plan.relativeTargets[1].payloads[0], 'instrumentationIndexes'), false)
     } finally {
       relativeEntries.splice(-2)
     }
@@ -561,3 +584,10 @@ describe('withDatadogTurbopack', () => {
     }, { projectDir }), { message: /already uses the reserved condition/ })
   })
 })
+
+/**
+ * @param {unknown} value
+ */
+function throwValue (value) {
+  throw value
+}

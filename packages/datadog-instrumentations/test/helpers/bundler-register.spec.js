@@ -74,7 +74,6 @@ describe('bundler register', () => {
 
     publish({
       apply,
-      instrumentationIndexes: [0],
       module: { default: Original },
       moduleBaseDir: '/app/node_modules/test-default-export',
       moduleName: 'test-default-export/index.mjs',
@@ -189,15 +188,17 @@ describe('bundler register', () => {
 
   it('matches bundled relative-module hooks', () => {
     const name = './runtime/library.js'
+    const hook = sinon.stub()
     const integrationHook = sinon.stub()
     const { publish } = loadBundlerRegister({
-      hooks: { [name]: sinon.stub() },
+      hooks: { '@prisma/client': hook },
       instrumentations: {
         [name]: [{ file: 'runtime/library.js', hook: integrationHook }],
       },
     })
 
     publish({
+      integration: '@prisma/client',
       module: {},
       package: name,
       path: name,
@@ -208,9 +209,33 @@ describe('bundler register', () => {
       moduleBaseDir: undefined,
       moduleName: './runtime/library.js',
     })
+    sinon.assert.calledOnce(hook)
   })
 
-  it('uses build-plan indexes without running sibling hooks', () => {
+  it('disables relative hooks through their owning integration', () => {
+    const hook = sinon.stub()
+    const integrationHook = sinon.stub()
+    const { publish } = loadBundlerRegister({
+      disabled: new Set(['@prisma/client']),
+      hooks: { '@prisma/client': hook },
+      instrumentations: {
+        './runtime/library.js': [{ file: 'runtime/library.js', hook: integrationHook }],
+      },
+    })
+
+    publish({
+      integration: '@prisma/client',
+      module: {},
+      package: './runtime/library.js',
+      path: './runtime/library.js',
+      version: '6.1.0',
+    })
+
+    sinon.assert.notCalled(hook)
+    sinon.assert.notCalled(integrationHook)
+  })
+
+  it('matches current hook metadata instead of stale build-plan positions', () => {
     const skippedHook = sinon.stub()
     const selectedHook = sinon.stub()
     const { publish } = loadBundlerRegister({
@@ -224,7 +249,7 @@ describe('bundler register', () => {
     })
 
     publish({
-      instrumentationIndexes: [1],
+      instrumentationIndexes: [0],
       module: {},
       package: 'test-indexed-hook',
       path: 'test-indexed-hook/second.js',
@@ -235,9 +260,9 @@ describe('bundler register', () => {
     sinon.assert.calledOnce(selectedHook)
   })
 
-  it('rejects stale build-plan entries and incompatible versions', () => {
+  it('rejects unmatched paths and incompatible versions', () => {
     const integrationHook = sinon.stub()
-    const { log, publish } = loadBundlerRegister({
+    const { publish } = loadBundlerRegister({
       hooks: { 'test-stale-plan': sinon.stub() },
       instrumentations: {
         'test-stale-plan': [{ file: 'index.js', hook: integrationHook, versions: ['>=2'] }],
@@ -245,33 +270,23 @@ describe('bundler register', () => {
     })
 
     publish({
-      instrumentationIndexes: [1],
-      module: {},
-      package: 'test-stale-plan',
-      path: 'test-stale-plan/index.js',
-      version: '2.0.0',
-    })
-    publish({
-      instrumentationIndexes: [0],
-      module: {},
-      package: 'test-stale-plan',
-      path: 'test-stale-plan/index.js',
-      version: '1.0.0',
-    })
-    publish({
       module: {},
       package: 'test-stale-plan',
       path: 'test-stale-plan/other.js',
       version: '2.0.0',
     })
-
+    publish({
+      module: {},
+      package: 'test-stale-plan',
+      path: 'test-stale-plan/index.js',
+      version: '1.0.0',
+    })
     sinon.assert.notCalled(integrationHook)
-    sinon.assert.calledWithMatch(log.error, 'Bundled %s instrumentation index %s does not exist', 'test-stale-plan', 1)
   })
 
-  it('contains loader and instrumentation failures', () => {
-    const loadHook = sinon.stub().throws(new Error('load failed'))
-    const integrationHook = sinon.stub().throws(new Error('patch failed'))
+  it('contains non-Error loader and instrumentation failures', () => {
+    const loadHook = sinon.stub().callsFake(() => throwValue(Object.create(null)))
+    const integrationHook = sinon.stub().callsFake(() => throwValue('patch failed'))
     const { log, publish } = loadBundlerRegister({
       hooks: { 'test-hook-errors': loadHook },
       instrumentations: {
@@ -280,14 +295,13 @@ describe('bundler register', () => {
     })
 
     publish({
-      instrumentationIndexes: [0],
       module: {},
       package: 'test-hook-errors',
       path: 'test-hook-errors',
       version: '1.0.0',
     })
 
-    sinon.assert.calledWithMatch(log.error, 'esbuild-wrapped %s hook failed: %s', 'test-hook-errors', 'load failed')
+    sinon.assert.calledWithMatch(log.error, 'esbuild-wrapped %s hook failed: %s', 'test-hook-errors', 'Unknown error')
     sinon.assert.calledWithMatch(log.error, 'Error executing bundler hook: %s', 'patch failed')
   })
 
@@ -303,7 +317,6 @@ describe('bundler register', () => {
 
     publish({
       apply,
-      instrumentationIndexes: [0],
       module: {},
       package: 'test-missing-export',
       path: 'test-missing-export',

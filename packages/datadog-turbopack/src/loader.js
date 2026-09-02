@@ -6,26 +6,20 @@ const { builtinModules } = require('node:module')
 const path = require('node:path')
 
 const { BUNDLER_DC_GLOBAL } = require('../../datadog-instrumentations/src/helpers/bundler-constants')
+const { errorMessage } = require('../../datadog-instrumentations/src/helpers/instrumentation-utils')
 const { isESMFile } = require('../../datadog-esbuild/src/utils')
 const { rewriteBundledWithSourceMap } = require('../../datadog-instrumentations/src/helpers/rewriter')
+const { getGenerator, parseSource } = require('./compiler')
 
 const BUILTIN_MODULES = new Set(builtinModules)
 const CHANNEL = 'dd-trace:bundler:load'
 const IMPORT_RESOLVE_OPTIONS = { conditionNames: ['node', 'import'] }
-const BASE_PARSER_PLUGINS = [
-  'decorators-legacy',
-  'explicitResourceManagement',
-  'importAttributes',
-  'jsx',
-]
-const JAVASCRIPT_PARSER_PLUGINS = [...BASE_PARSER_PLUGINS, 'flow']
 const MAX_CACHED_FILES = 2048
 const MAX_CACHED_PLANS = 16
 const MAX_WARNINGS = 128
 const MODULE_SYNTAX_PATTERN = /\b(?:export|import|require)\b/
-const PLAN_VERSION = 3
+const PLAN_VERSION = 4
 const REQUIRE_RESOLVE_OPTIONS = { conditionNames: ['node', 'require'] }
-const TYPESCRIPT_PARSER_PLUGINS = [...BASE_PARSER_PLUGINS, 'typescript']
 
 /** @type {Map<string, { ctimeMs: number, hash: string, mtimeMs: number, size: number }>} */
 const fileHashes = new Map()
@@ -37,8 +31,10 @@ const warnedErrors = new Set()
 /**
  * @typedef {object} PlanTarget
  * @property {boolean} esm
+ * @property {Array<{ path: string, sourceHash: string }>} [dependencies]
  * @property {object[]} payloads
  * @property {string} [proxyPath]
+ * @property {{ moduleName: string, filePath: string }} [rewriteTarget]
  * @property {string} sourceHash
  */
 
@@ -170,8 +166,9 @@ function findTarget (resourcePath, plan, targetScope, loaderContext) {
   const direct = plan.targets[resourcePath]
   if (targetScope === 'direct') {
     if (!direct) return
-    if (matchesSource(resourcePath, direct.sourceHash)) return direct
-    warnOnce(loaderContext, `changed:${resourcePath}`, `Skipped changed dependency ${resourcePath}`)
+    const changedPath = findChangedSource(resourcePath, direct)
+    if (!changedPath) return direct
+    warnOnce(loaderContext, `changed:${changedPath}`, `Skipped changed dependency ${changedPath}`)
     return
   }
   if (targetScope !== 'relative' || direct) return
@@ -200,19 +197,16 @@ function rewriteModuleEdges (source, inputSourceMap, resourcePath, targets, comp
   const state = { edges: new Map() }
 
   try {
-    const { parse } = require(compiler.parser)
-    const traverse = require(compiler.traverse).default
-    generate = require(compiler.generator).default
-    const plugins = /\.(?:cts|mts|ts|tsx)$/.test(resourcePath)
-      ? TYPESCRIPT_PARSER_PLUGINS
-      : JAVASCRIPT_PARSER_PLUGINS
-    ast = parse(source, { plugins, sourceType: 'unambiguous' })
+    const parsed = parseSource(source, resourcePath, compiler)
+    ast = parsed.ast
+    generate = getGenerator(compiler)
+    const { traverse } = parsed
     traverse(ast, IMPORT_VISITORS, undefined, state)
   } catch (error) {
     warnOnce(
       loaderContext,
       `imports:${resourcePath}`,
-      `Could not inspect imports in ${resourcePath}: ${error.message}`,
+      `Could not inspect imports in ${resourcePath}: ${errorMessage(error)}`,
       error
     )
     callback(source, inputSourceMap)
@@ -268,7 +262,7 @@ function resolveModuleEdges (
     warnOnce(
       loaderContext,
       `resolver:${resourcePath}`,
-      `Could not initialize import resolution in ${resourcePath}: ${error.message}`,
+      `Could not initialize import resolution in ${resourcePath}: ${errorMessage(error)}`,
       error
     )
     callback(source, inputSourceMap)
@@ -351,7 +345,7 @@ function completeModuleEdge (state) {
     warnOnce(
       state.loaderContext,
       `generate:${state.resourcePath}`,
-      `Could not generate rewritten imports in ${state.resourcePath}: ${error.message}`,
+      `Could not generate rewritten imports in ${state.resourcePath}: ${errorMessage(error)}`,
       error
     )
     state.callback(state.source, state.inputSourceMap)
@@ -473,14 +467,29 @@ function rewriteResolvedEdge (edge, resolved, resourcePath, targets, loaderConte
 
   const target = targets[resolvedPath]
   if (!target?.esm || !target.proxyPath) return false
-  if (!matchesSource(resolvedPath, target.sourceHash)) {
-    warnOnce(loaderContext, `changed:${resolvedPath}`, `Skipped changed dependency ${resolvedPath}`)
+  const changedPath = findChangedSource(resolvedPath, target)
+  if (changedPath) {
+    warnOnce(loaderContext, `changed:${changedPath}`, `Skipped changed dependency ${changedPath}`)
     return false
   }
 
   const replacement = relativeImport(path.dirname(resourcePath), target.proxyPath)
   for (const node of edge.nodes) setModuleSpecifier(node, replacement)
   return true
+}
+
+/**
+ * @param {string} resourcePath
+ * @param {PlanTarget} target
+ * @returns {string|undefined}
+ */
+function findChangedSource (resourcePath, target) {
+  if (!matchesSource(resourcePath, target.sourceHash)) return resourcePath
+  if (target.dependencies) {
+    for (const dependency of target.dependencies) {
+      if (!matchesSource(dependency.path, dependency.sourceHash)) return dependency.path
+    }
+  }
 }
 
 /**
@@ -520,7 +529,7 @@ function finishLoad (source, sourceMap, resourcePath, match, esm, callback) {
     source,
     resourcePath,
     esm ? 'module' : 'commonjs',
-    undefined,
+    match.rewriteTarget,
     sourceMap
   )
   const code = esm ? rewritten.code : appendCommonJsPublications(rewritten.code, resourcePath, match)
@@ -540,7 +549,7 @@ function appendCommonJsPublications (source, resourcePath, match) {
   for (const payload of match.payloads) {
     const payloadName = `payload${publicationIndex++}`
     publications += `    const ${payloadName} = {
-      instrumentationIndexes: ${JSON.stringify(payload.instrumentationIndexes)},
+      integration: ${JSON.stringify(payload.integration)},
       module: module.exports,
       moduleName: ${JSON.stringify(payload.moduleName)},
       package: ${JSON.stringify(payload.package)},
