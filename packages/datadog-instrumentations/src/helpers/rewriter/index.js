@@ -22,15 +22,14 @@ const { getRewriteTarget } = require('./targets')
 const moduleVersions = {}
 const disabled = new Set()
 
-/**
- * Matchers, keyed by the module type they rewrite. Both are built on demand:
- * the vendored transformer is a quarter megabyte of bundle that an application
- * without a rewrite target never needs to parse, and an application that loads
- * targets of only one module type never needs the other matcher.
- *
- * @type {Map<'cjs'|'esm', InstrumentationMatcher|undefined>}
- */
-const matchers = new Map()
+// Matchers are built on the first module that actually needs rewriting. The
+// vendored transformer is a quarter megabyte of bundle that an application
+// without a rewrite target never needs to parse, and an application that loads
+// targets of only one module type never needs the other matcher.
+/** @type {InstrumentationMatcher|undefined} */
+let matcherCjs
+/** @type {InstrumentationMatcher|undefined} */
+let matcherEsm
 
 // Keep the marker split: source-map scanners can read a contiguous token in
 // string literals as this file's own inline map.
@@ -58,11 +57,7 @@ function rewrite (content, filename, format, target) {
 
   if (disabled.has(moduleName)) return content
 
-  const matcher = getMatcher(moduleType)
-
-  if (!matcher) return content
-
-  const transformer = matcher.getTransformer(moduleName, version, filePath)
+  const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
 
   if (!transformer) return content
 
@@ -86,14 +81,18 @@ function rewrite (content, filename, format, target) {
 
 /**
  * @param {'cjs'|'esm'} moduleType
- * @returns {InstrumentationMatcher|undefined} `undefined` when the matcher could not be built
+ * @returns {InstrumentationMatcher}
  */
 function getMatcher (moduleType) {
-  if (matchers.has(moduleType)) return matchers.get(moduleType)
+  if (moduleType === 'esm') {
+    matcherEsm ??= createMatcher(moduleType)
 
-  matchers.set(moduleType, createMatcher(moduleType))
+    return matcherEsm
+  }
 
-  return matcher
+  matcherCjs ??= createMatcher(moduleType)
+
+  return matcherCjs
 }
 
 /**
