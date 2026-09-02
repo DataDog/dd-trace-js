@@ -370,7 +370,9 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
       return {
         contents,
         loader: 'js',
-        resolveDir: path.dirname(args.path),
+        resolveDir: data.internal
+          ? build.initialOptions.absWorkingDir ?? process.cwd()
+          : path.dirname(args.path),
       }
     }
     if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {
