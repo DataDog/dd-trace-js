@@ -422,7 +422,7 @@ describe('webdriverio instrumentation', () => {
         browserVersion: '123',
         isRumActive: false,
       }])
-      assert.strictEqual(browser.execute.callCount, 1)
+      assert.strictEqual(browser.execute.callCount, 0)
       assert.strictEqual(browser.setCookies.callCount, 0)
     } finally {
       correlationCh.unsubscribe(correlate)
@@ -456,6 +456,7 @@ describe('webdriverio instrumentation', () => {
       const workerExitContext = {}
       tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync').asyncEnd.publish(workerExitContext)
 
+      assert.strictEqual(browser.execute.callCount, 0)
       assert.strictEqual(browser.setCookies.callCount, 0)
       assert.strictEqual(workerExitContext.resolveCallback, undefined)
     } finally {
@@ -665,6 +666,78 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(browser.execute.callCount, 1)
       assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
       assert.strictEqual(browser.setCookies.callCount, 0)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('re-correlates an initializing background page when the current page is sampled out', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    let currentWindowHandle = 'window-a'
+    let testExecutionId = 'first-test-id'
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().resolves(),
+      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
+        ? {
+            isRumActive: false,
+            isRumInstrumented: true,
+            rumSamplingRate: currentWindowHandle === 'window-a' ? 50 : null,
+          }
+        : false)),
+      getWindowHandle: sinon.stub().callsFake(() => Promise.resolve(currentWindowHandle)),
+      getWindowHandles: sinon.stub().resolves(['window-a', 'window-b']),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        currentWindowHandle = windowHandle
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => { context.testExecutionId = testExecutionId }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+
+      const firstTestContext = {}
+      executeAsyncCh.start.runStores(firstTestContext, () => {})
+      await firstTestContext.rumCleanupCallback()
+
+      testExecutionId = 'second-test-id'
+      browser.execute.resetHistory()
+      browser.scriptAddPreloadScript.resetHistory()
+      browser.setCookies.resetHistory()
+      browser.switchToWindow.resetHistory()
+
+      const secondTestContext = {}
+      executeAsyncCh.start.runStores(secondTestContext, () => {})
+      await secondTestContext.rumStartCallback()
+
+      assert.strictEqual(browser.execute.callCount, 2)
+      assert.deepStrictEqual(browser.switchToWindow.args.map(([windowHandle]) => windowHandle), [
+        'window-a',
+        'window-b',
+        'window-a',
+        'window-a',
+        'window-b',
+        'window-a',
+      ])
+      assert.deepStrictEqual(browser.setCookies.args, [
+        [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'second-test-id' }],
+        [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'second-test-id' }],
+      ])
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
     } finally {
       correlationCh.unsubscribe(correlate)
       await cleanupRumState()

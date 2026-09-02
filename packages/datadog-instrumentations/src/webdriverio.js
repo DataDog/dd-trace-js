@@ -256,7 +256,18 @@ async function correlateRumWindow (browser, testExecutionId) {
 async function handleRumNavigation (context) {
   const browser = context.self
   try {
-    if (!browser || typeof browser.execute !== 'function') return
+    if (!browser) return
+
+    const canCorrelateRum = canCorrelateRumBrowser(browser)
+    if (!canCorrelateRum) {
+      getRumTestExecutionId(browser, false)
+      return
+    }
+    if (!rumRunnerBrowsers.has(browser)) {
+      getRumTestExecutionId(browser)
+      if (!rumRunnerBrowsers.has(browser)) return
+    }
+    if (typeof browser.execute !== 'function') return
 
     let rumState
     try {
@@ -273,9 +284,8 @@ async function handleRumNavigation (context) {
     if (sampledOut) {
       log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
     }
-    const canCorrelateRum = canCorrelateRumBrowser(browser)
-    const testExecutionId = getRumTestExecutionId(browser, canCorrelateRum ? isRumActive : false)
-    if (!canCorrelateRum || !rumRunnerBrowsers.has(browser) || sampledOut) return
+    const testExecutionId = getRumTestExecutionId(browser, isRumActive)
+    if (sampledOut) return
 
     rumBrowsers.add(browser)
     if (!testExecutionId) {
@@ -492,18 +502,23 @@ async function correlateRumBrowsers (browsers, testExecutionId) {
  */
 async function startRumTest () {
   for (const browser of rumBrowsers) {
-    let rumState
-    try {
-      // WebDriver commands are intentionally sequential for each browser.
-      // eslint-disable-next-line no-await-in-loop
-      rumState = await browser.execute(detectRum)
-    } catch (error) {
-      log.error('WebdriverIO RUM detection error', error)
-      continue
-    }
-    if (!rumState || isRumSampledOut(rumState)) continue
+    let isRumActive = false
+    let shouldCorrelateRum = false
+    // WebDriver commands are intentionally sequential for each browser.
+    // eslint-disable-next-line no-await-in-loop
+    await forEachRumWindow(browser, async (browser) => {
+      try {
+        const rumState = await browser.execute(detectRum)
+        if (!rumState || isRumSampledOut(rumState)) return
+        if (rumState.isRumActive) isRumActive = true
+        shouldCorrelateRum = true
+      } catch (error) {
+        log.error('WebdriverIO RUM detection error', error)
+      }
+    })
+    if (!shouldCorrelateRum) continue
 
-    const testExecutionId = getRumTestExecutionId(browser, rumState.isRumActive || undefined)
+    const testExecutionId = getRumTestExecutionId(browser, isRumActive || undefined)
     if (!testExecutionId || rumBrowserTestExecutionIds.get(browser) === testExecutionId) continue
 
     // eslint-disable-next-line no-await-in-loop
