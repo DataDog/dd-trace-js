@@ -31,6 +31,7 @@ const {
   FINAL_FLUSH_FALLBACK_DELAY,
   FINAL_FLUSH_TIMEOUT,
 } = require('../final-flush')
+const { incrementCountMetric, TELEMETRY_ENDPOINT_PAYLOAD_DROPPED } = require('../telemetry')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 const buildSettingsCacheKey = require('./settings-cache-key')
 
@@ -695,11 +696,17 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     this.#resetFinalFlush()
-    this._export(
+    const appended = this._export(
       this.formatLogMessage(testEnvironmentMetadata, logMessage),
       this._logsWriter,
       '_logsTimer'
     )
+    if (appended === false) {
+      incrementCountMetric(
+        TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
+        { endpoint: 'di_logs', statusCode: undefined, errorType: 'encoder_limit' }
+      )
+    }
   }
 
   flush (done) {
@@ -717,6 +724,7 @@ class CiVisibilityExporter extends BufferingExporter {
       this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
       this.#deferredTestSuiteSpans.size === 0 && this.#deferredTestSessionTraces.length === 0 &&
       this.#pendingMediaUploads.size === 0) {
+      this._initializationRequest?.controller.abort()
       onDone()
       return
     }
@@ -822,9 +830,8 @@ class CiVisibilityExporter extends BufferingExporter {
 
     if (isFinalFlush && this._initializationRequest) {
       const initializationRequest = this._initializationRequest
-      const { controller, options } = initializationRequest
+      const { controller } = initializationRequest
       initializationRequest.finalFlush = finalFlush
-      options.deadline = deadline
       initializationTimeoutId = setTimeout(() => {
         const error = createFinalFlushTimeoutError()
         if (initializationRequest.finalFlush === finalFlush) controller.abort(error)
