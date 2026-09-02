@@ -6,9 +6,12 @@ const URL = require('url').URL
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../../setup/core')
 const TelemetryDeliveryTracker = require('../../../src/serverless/telemetry-delivery-tracker')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 describe('Exporter', () => {
   let url
@@ -30,6 +33,7 @@ describe('Exporter', () => {
       append: sinon.spy(),
       flush: sinon.spy(),
       setUrl: sinon.spy(),
+      resetPendingBatch: sinon.spy(),
     }
     prioritySampler = {}
     Writer = sinon.stub().callsFake(options => {
@@ -211,6 +215,27 @@ describe('Exporter', () => {
       sinon.assert.notCalled(flushed)
       complete()
       sinon.assert.calledOnce(flushed)
+    })
+  })
+
+  describe('identity refresh', () => {
+    it('drops the pending trace batch when the identity-refresh channel fires', () => {
+      exporter = new Exporter({ url }, prioritySampler)
+
+      identityRefreshChannel.publish({ tags: {} })
+
+      sinon.assert.calledOnce(writer.resetPendingBatch)
+    })
+
+    it('stops reacting once a newer exporter takes over', () => {
+      exporter = new Exporter({ url }, prioritySampler)
+      new Exporter({ url }, prioritySampler) // eslint-disable-line no-new
+      writer.resetPendingBatch.resetHistory()
+
+      identityRefreshChannel.publish({ tags: {} })
+
+      // Only one reset, not two - the first exporter's subscription was replaced, not stacked on.
+      sinon.assert.calledOnce(writer.resetPendingBatch)
     })
   })
 
