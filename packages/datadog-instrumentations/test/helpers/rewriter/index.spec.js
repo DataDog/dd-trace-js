@@ -384,6 +384,31 @@ describe('check-require-cache', () => {
           module: {
             name: 'test',
             versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          functionQuery: {
+            functionName: 'runFromStart',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_at_function_start',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runFromStart"] ReturnStatement',
+          channelName: 'trace_await_context_callback_at_function_start',
+          transform: 'awaitContextCallbackAtFunctionStart',
+          transformOptions: {
+            callbackName: 'beforeStart',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
             filePath: 'trace-await-context-callback-outer-try.js',
           },
           functionQuery: {
@@ -932,6 +957,30 @@ describe('check-require-cache', () => {
 
     assert.equal(await resultPromise, 'passed')
     assert.deepStrictEqual(steps, ['setup', 'setup done', 'task'])
+  })
+
+  it('should await a context callback before starting an async function body', async () => {
+    const { runFromStart } = compileFile('trace-await-context-callback')
+    const steps = []
+
+    subs = {
+      start (ctx) {
+        ctx.beforeStart = async function () {
+          steps.push('callback')
+          await new Promise(resolve => setImmediate(resolve))
+          steps.push('callback done')
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_at_function_start')
+    ch.subscribe(subs)
+
+    assert.equal(await runFromStart((value) => {
+      steps.push('task')
+      return value
+    }), 'passed')
+    assert.deepStrictEqual(steps, ['callback', 'callback done', 'task'])
   })
 
   it('should preserve a try block when context callback lookup throws', async () => {

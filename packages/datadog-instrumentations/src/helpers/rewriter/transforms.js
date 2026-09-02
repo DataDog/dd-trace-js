@@ -20,6 +20,7 @@ const identifierPattern = /^[$A-Z_a-z][$\w]*$/
 
 module.exports = {
   awaitContextCallback,
+  awaitContextCallbackAtFunctionStart,
   awaitContextCallbackAtTryStart,
   configureGraphqlJitCompileObject,
   configureGraphqlJitDeferredField,
@@ -27,6 +28,31 @@ module.exports = {
   configureGraphqlJitRuntime,
   configureMercuriusRequest,
   waitForAsyncEnd,
+}
+
+/**
+ * Awaits an optional context callback at the start of the matched node's enclosing async function.
+ *
+ * @param {Parameters<typeof awaitContextCallback>[0]} state
+ * @param {import('estree').Node} _node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ * @returns {void}
+ */
+function awaitContextCallbackAtFunctionStart (state, _node, _parent, ancestry) {
+  const enclosingFunction = ancestry.find(ancestor => functionTypes.has(ancestor.type))
+  assert(enclosingFunction?.async && enclosingFunction.body?.type === 'BlockStatement',
+    'awaitContextCallbackAtFunctionStart: expected an enclosing async function with a block body')
+
+  const generatedCallback = createAwaitedContextCallback(
+    state,
+    enclosingFunction.body,
+    ancestry,
+    'awaitContextCallbackAtFunctionStart'
+  )
+  if (!generatedCallback) return
+
+  enclosingFunction.body.body.unshift(...generatedCallback.callbackStatements)
 }
 
 /**
