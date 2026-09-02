@@ -80,6 +80,7 @@ const SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS = NODE_MAJOR >= 26 ||
 
 const responseContexts = new WeakMap()
 const wrappedStreamPrototypes = new WeakSet()
+let activeBlockedStreamCount = 0
 
 /** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
 
@@ -124,7 +125,15 @@ function wrapResponseEmit (originalEmit, ctx) {
   return function emit (eventName) {
     ctx.req = this.req
     ctx.eventName = eventName
-    return emitCh.runStores(ctx, originalEmit, this, ...arguments)
+    if (eventName !== 'close') {
+      return emitCh.runStores(ctx, originalEmit, this, ...arguments)
+    }
+
+    try {
+      return emitCh.runStores(ctx, originalEmit, this, ...arguments)
+    } finally {
+      closeStreamResponse(ctx)
+    }
   }
 }
 
@@ -134,8 +143,27 @@ function wrapStreamEmit (originalEmit, ctx) {
   // 'close', the same finish signal as the compatibility response.
   return function emit (eventName) {
     ctx.eventName = eventName
-    return emitCh.runStores(ctx, originalEmit, this, ...arguments)
+    if (eventName !== 'close') {
+      return emitCh.runStores(ctx, originalEmit, this, ...arguments)
+    }
+
+    try {
+      return emitCh.runStores(ctx, originalEmit, this, ...arguments)
+    } finally {
+      closeStreamResponse(ctx)
+    }
   }
+}
+
+/**
+ * @param {StreamRequestContext} ctx
+ */
+function closeStreamResponse (ctx) {
+  if (ctx.responseClosed) return
+
+  ctx.responseClosed = true
+  if (!ctx.responseBlocked) return
+  activeBlockedStreamCount--
 }
 
 function wrapEmit (originalEmit, strictSingleValueFields) {
@@ -315,10 +343,15 @@ function instrumentStreamResponse (stream, ctx) {
  */
 function wrapStreamRespond (respond) {
   return function () {
+    const hasSubscribers = startWriteHeadCh.hasSubscribers || finishSetHeaderCh.hasSubscribers
+    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+      return Reflect.apply(respond, this, arguments)
+    }
+
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
     if (ctx.responseBlocked) return this
-    if (this.headersSent || (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
+    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(respond, this, arguments)
     }
 
@@ -330,7 +363,7 @@ function wrapStreamRespond (respond) {
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
     if (!responseAllowed) {
-      ctx.responseBlocked = true
+      markStreamResponseBlocked(ctx)
       return this
     }
 
@@ -345,10 +378,15 @@ function wrapStreamRespond (respond) {
  */
 function wrapStreamRespondWithFD (respond) {
   return function () {
+    const hasSubscribers = startWriteHeadCh.hasSubscribers || finishSetHeaderCh.hasSubscribers
+    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+      return Reflect.apply(respond, this, arguments)
+    }
+
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
     if (ctx.responseBlocked) return this
-    if (this.headersSent || (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
+    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(respond, this, arguments)
     }
 
@@ -379,7 +417,7 @@ function wrapStreamRespondWithFD (respond) {
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
     if (!responseAllowed) {
-      ctx.responseBlocked = true
+      markStreamResponseBlocked(ctx)
       return this
     }
 
@@ -394,10 +432,15 @@ function wrapStreamRespondWithFD (respond) {
  */
 function wrapStreamRespondWithFile (respond) {
   return function () {
+    const hasSubscribers = startWriteHeadCh.hasSubscribers || finishSetHeaderCh.hasSubscribers
+    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+      return Reflect.apply(respond, this, arguments)
+    }
+
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
     if (ctx.responseBlocked) return this
-    if (this.headersSent || (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
+    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(respond, this, arguments)
     }
 
@@ -421,17 +464,22 @@ function wrapStreamRespondWithFile (respond) {
  */
 function wrapStreamAdditionalHeaders (additionalHeaders) {
   return function () {
+    const hasSubscribers = startInformationalResponseCh.hasSubscribers
+    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+      return Reflect.apply(additionalHeaders, this, arguments)
+    }
+
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(additionalHeaders, this, arguments)
     if (ctx.responseBlocked) return
-    if (!startInformationalResponseCh.hasSubscribers) {
+    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(additionalHeaders, this, arguments)
     }
 
     const abortController = new AbortController()
     startInformationalResponseCh.publish({ res: ctx.res, abortController })
     if (abortController.signal.aborted) {
-      ctx.responseBlocked = true
+      markStreamResponseBlocked(ctx)
       return
     }
 
@@ -447,7 +495,7 @@ function wrapStreamAdditionalHeaders (additionalHeaders) {
 function wrapStreamStatCheck (statCheck, ctx, stream) {
   return function () {
     const result = statCheck ? Reflect.apply(statCheck, this, arguments) : true
-    if (result === false || stream.headersSent ||
+    if (result === false || stream.destroyed || stream.closed || stream.headersSent ||
       (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
       return result
     }
@@ -457,7 +505,7 @@ function wrapStreamStatCheck (statCheck, ctx, stream) {
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
     if (!responseAllowed) {
-      ctx.responseBlocked = true
+      markStreamResponseBlocked(ctx)
       return false
     }
 
@@ -471,10 +519,15 @@ function wrapStreamStatCheck (statCheck, ctx, stream) {
  */
 function wrapStreamWrite (write) {
   return function () {
+    const hasSubscribers = startWriteHeadCh.hasSubscribers
+    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+      return Reflect.apply(write, this, arguments)
+    }
+
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(write, this, arguments)
     if (ctx.responseBlocked) return true
-    if (this.headersSent || !startWriteHeadCh.hasSubscribers) {
+    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(write, this, arguments)
     }
     if (publishImplicitStreamResponse(ctx, this)) return true
@@ -487,10 +540,15 @@ function wrapStreamWrite (write) {
  */
 function wrapStreamEnd (end) {
   return function () {
+    const hasSubscribers = startWriteHeadCh.hasSubscribers
+    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+      return Reflect.apply(end, this, arguments)
+    }
+
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(end, this, arguments)
     if (ctx.responseBlocked) return this
-    if (this.headersSent || !startWriteHeadCh.hasSubscribers) {
+    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(end, this, arguments)
     }
     if (publishImplicitStreamResponse(ctx, this)) return this
@@ -792,8 +850,18 @@ function publishImplicitStreamResponse (ctx, stream) {
   })
   if (!abortController.signal.aborted) return false
 
-  ctx.responseBlocked = true
+  markStreamResponseBlocked(ctx)
   return true
+}
+
+/**
+ * @param {StreamRequestContext} ctx
+ */
+function markStreamResponseBlocked (ctx) {
+  if (ctx.responseBlocked) return
+
+  ctx.responseBlocked = true
+  if (!ctx.responseClosed) activeBlockedStreamCount++
 }
 
 /**
@@ -950,6 +1018,7 @@ class Http2StreamResponse {
  * @property {number} res.statusCode read at finish from `stream.sentHeaders`
  * @property {(name: string) => string | number | string[] | undefined} res.getHeader response-header tagging
  * @property {boolean} [responseBlocked] subsequent response operations are suppressed after blocking
+ * @property {boolean} [responseClosed] the terminal close was processed
  * @property {false} [strictSingleValueFields] mirrors relaxed Node response validation
  */
 

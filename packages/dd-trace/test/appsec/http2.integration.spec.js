@@ -29,7 +29,7 @@ const { blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 const PRESERVES_DUPLICATE_HEADERS = NODE_MAJOR >= 22 ||
   (NODE_MAJOR === 21 && NODE_MINOR >= 7) ||
   (NODE_MAJOR === 20 && NODE_MINOR >= 12)
-const REQUIRES_STRING_SENSITIVE_HEADER_NAMES = NODE_MAJOR >= 23 ||
+const VALIDATES_SENSITIVE_HEADER_NAMES_WITH_MAP = NODE_MAJOR >= 23 ||
   (NODE_MAJOR === 22 && NODE_MINOR >= 5) ||
   (NODE_MAJOR === 20 && NODE_MINOR >= 18)
 const SUPPORTS_RAW_RESPONSE_HEADERS = NODE_MAJOR >= 25 ||
@@ -193,6 +193,26 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
     assert.strictEqual(headers[':status'], 403)
     assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('keeps a compatibility response stream blocked after AppSec is disabled', async () => {
+    await listen(() => http2.createServer((req, res) => {
+      res.stream.respond({ ':status': 404, k: '404' })
+      appsec.disable()
+      res.stream.respond({ ':status': 200 })
+      res.stream.write('ignored')
+      res.stream.end('ignored')
+    }))
+
+    try {
+      const { body, headers } = await request()
+
+      assert.strictEqual(headers[':status'], 403)
+      assert.strictEqual(body, blockedTemplateJson)
+    } finally {
+      appsec.enable(config)
+      setTestBlockingTemplates()
+    }
   })
 
   it('preserves HTTP/1 fallback requests on secure compatibility servers', async () => {
@@ -410,6 +430,109 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(body, blockedTemplateJson)
   })
 
+  it('keeps a core response blocked after AppSec is disabled', async () => {
+    await listenCore(stream => {
+      stream.respond({ ':status': 404, k: '404' })
+      appsec.disable()
+      stream.additionalHeaders({ ':status': 103 })
+      stream.respond({ ':status': 200 })
+      stream.write('ignored')
+      stream.end('ignored')
+    })
+
+    try {
+      const { body, headers } = await request()
+
+      assert.strictEqual(headers[':status'], 403)
+      assert.strictEqual(body, blockedTemplateJson)
+    } finally {
+      appsec.enable(config)
+      setTestBlockingTemplates()
+    }
+  })
+
+  it('keeps core response operations suppressed after a blocked stream closes', async () => {
+    let resolveAfterClose
+    let rejectAfterClose
+    const afterClosePromise = new Promise((resolve, reject) => {
+      resolveAfterClose = resolve
+      rejectAfterClose = reject
+    })
+
+    await listenCore(stream => {
+      stream.once('close', () => {
+        queueMicrotask(() => {
+          try {
+            stream.respond({ ':status': 200 })
+            stream.write('ignored')
+            stream.end('ignored')
+            stream.emit('close')
+            resolveAfterClose()
+          } catch (error) {
+            rejectAfterClose(error)
+          }
+        })
+      })
+      stream.respond({ ':status': 404, k: '404' })
+    })
+
+    const [{ body, headers }] = await Promise.all([request(), afterClosePromise])
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('restores the inactive response path after reentrant blocking', async () => {
+    let blockedStreamClosePromise
+    let inactiveHeadersSentReads = 0
+    await listenCore((stream, headers) => {
+      if (headers[':path'] === '/blocked') {
+        blockedStreamClosePromise = once(stream, 'close')
+        const responseHeaders = { ':status': 404, k: '404' }
+        Object.defineProperty(responseHeaders, 'x-reentrant', {
+          enumerable: true,
+          get () {
+            stream.respond({ ':status': 404, k: '404' })
+            return 'value'
+          },
+        })
+        stream.respond(responseHeaders)
+        return
+      }
+
+      let streamPrototype = Object.getPrototypeOf(stream)
+      let headersSentDescriptor
+      while (!headersSentDescriptor) {
+        headersSentDescriptor = Object.getOwnPropertyDescriptor(streamPrototype, 'headersSent')
+        streamPrototype = Object.getPrototypeOf(streamPrototype)
+      }
+      Object.defineProperty(stream, 'headersSent', {
+        get () {
+          inactiveHeadersSentReads++
+          return Reflect.apply(headersSentDescriptor.get, this, [])
+        },
+      })
+      stream.end('body')
+    })
+
+    const blockedResponse = await request('/blocked')
+    await blockedStreamClosePromise
+    appsec.disable()
+
+    try {
+      const inactiveResponse = await request('/inactive')
+
+      assert.strictEqual(blockedResponse.headers[':status'], 403)
+      assert.strictEqual(blockedResponse.body, blockedTemplateJson)
+      assert.strictEqual(inactiveResponse.headers[':status'], 200)
+      assert.strictEqual(inactiveResponse.body, 'body')
+      assert.strictEqual(inactiveHeadersSentReads, 2)
+    } finally {
+      appsec.enable(config)
+      setTestBlockingTemplates()
+    }
+  })
+
   it('allows core informational responses before the final response', async () => {
     await listenCore(stream => {
       stream.additionalHeaders({ ':status': 103, link: '</style.css>; rel=preload; as=style' })
@@ -496,6 +619,76 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
     assert.strictEqual(headers[':status'], 200)
     assert.strictEqual(body, 'body')
+  })
+
+  it('preserves closed-stream errors before reading response values', async () => {
+    let headerReads = 0
+    let optionReads = 0
+    const errors = []
+    let resolveStream
+    const streamPromise = new Promise(resolve => {
+      resolveStream = resolve
+    })
+
+    await listenCore(stream => resolveStream(stream))
+
+    const client = http2.connect(`http://localhost:${port}`)
+    try {
+      const clientStream = client.request()
+      clientStream.resume()
+      const clientStreamClosedPromise = once(clientStream, 'close')
+      clientStream.end()
+      const stream = await streamPromise
+
+      const headers = { ':status': 200 }
+      Object.defineProperty(headers, 'x-test', {
+        enumerable: true,
+        get () {
+          headerReads++
+          return 'value'
+        },
+      })
+      const options = {}
+      Object.defineProperty(options, 'sendDate', {
+        enumerable: true,
+        get () {
+          optionReads++
+          return false
+        },
+      })
+
+      stream.close()
+
+      for (const respond of [
+        () => stream.respond(headers, options),
+        () => stream.respondWithFD(0, headers, options),
+        () => stream.respondWithFile(__filename, headers, options),
+        () => stream.additionalHeaders(headers),
+      ]) {
+        try {
+          respond()
+        } catch (error) {
+          errors.push(error.code)
+        }
+      }
+
+      await clientStreamClosedPromise
+    } finally {
+      if (!client.destroyed) {
+        const clientClosedPromise = once(client, 'close')
+        client.destroy()
+        await clientClosedPromise
+      }
+    }
+
+    assert.deepStrictEqual(errors, [
+      'ERR_HTTP2_INVALID_STREAM',
+      'ERR_HTTP2_INVALID_STREAM',
+      'ERR_HTTP2_INVALID_STREAM',
+      'ERR_HTTP2_INVALID_STREAM',
+    ])
+    assert.strictEqual(headerReads, 0)
+    assert.strictEqual(optionReads, 0)
   })
 
   it('preserves invalid options errors for tracked file response methods', async () => {
@@ -635,7 +828,7 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
       } else if (requestPath === '/sensitive-header-name') {
         const responseHeaders = { ':status': 404, k: '404' }
         responseHeaders[http2.sensitiveHeaders] = [1]
-        if (REQUIRES_STRING_SENSITIVE_HEADER_NAMES) {
+        if (VALIDATES_SENSITIVE_HEADER_NAMES_WITH_MAP) {
           assert.throws(() => stream.respond(responseHeaders), TypeError)
         } else {
           stream.respond(responseHeaders)
@@ -660,10 +853,16 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
           throw new Error('invalid sensitive header map')
         }
         responseHeaders[http2.sensitiveHeaders] = sensitiveHeaders
-        assert.throws(
-          () => stream.respond(responseHeaders),
-          { message: 'invalid sensitive header map' }
-        )
+        if (VALIDATES_SENSITIVE_HEADER_NAMES_WITH_MAP) {
+          assert.throws(
+            () => stream.respond(responseHeaders),
+            { message: 'invalid sensitive header map' }
+          )
+        } else {
+          stream.respond(responseHeaders)
+          stream.end('ignored')
+          return
+        }
       } else if (requestPath === '/header-value') {
         const value = {
           toString () {
@@ -821,10 +1020,10 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     ]
     for (const requestPath of requestPaths) {
       const { body, headers } = await request(requestPath)
-      const preservesNonStringSensitiveHeader = requestPath === '/sensitive-header-name' &&
-        !REQUIRES_STRING_SENSITIVE_HEADER_NAMES
-      assert.strictEqual(headers[':status'], preservesNonStringSensitiveHeader ? 404 : 403)
-      assert.strictEqual(body, preservesNonStringSensitiveHeader ? 'ignored' : blockedTemplateJson)
+      const preservesSensitiveHeaders = !VALIDATES_SENSITIVE_HEADER_NAMES_WITH_MAP &&
+        (requestPath === '/sensitive-header-name' || requestPath === '/sensitive-header-map')
+      assert.strictEqual(headers[':status'], preservesSensitiveHeaders ? 404 : 403)
+      assert.strictEqual(body, preservesSensitiveHeaders ? 'ignored' : blockedTemplateJson)
     }
   })
 
@@ -1263,7 +1462,8 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
       coreServer.on('stream', (stream, headers) => {
         if (headers[':path'] === '/respond') {
           stream.respond({ ':status': 200 })
-          stream.end('body')
+          stream.write('bo')
+          stream.end('dy')
         } else if (headers[':path'] === '/fd') {
           const fileDescriptor = openSync(__filename, 'r')
           stream.once('close', () => closeSync(fileDescriptor))
