@@ -532,7 +532,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('preserves a suite-hook page when RUM becomes active after navigation', async () => {
+  it('preserves a suite-hook page while RUM initialization is pending', async () => {
     require('../src/webdriverio')
 
     const source = fs.readFileSync(utilsFixturePath, 'utf8')
@@ -553,13 +553,13 @@ describe('webdriverio instrumentation', () => {
       execute: sinon.stub()
         .onFirstCall().resolves({
           isRumActive: false,
-          isRumInstrumented: false,
+          isRumInstrumented: true,
           rumSamplingRate: null,
         })
         .onSecondCall().resolves({
-          isRumActive: true,
+          isRumActive: false,
           isRumInstrumented: true,
-          rumSamplingRate: 100,
+          rumSamplingRate: null,
         })
         .onThirdCall().resolves({
           isRumActive: true,
@@ -611,10 +611,54 @@ describe('webdriverio instrumentation', () => {
 
       assert.deepStrictEqual(calls, ['set', 'test', 'delete'])
       assert.strictEqual(browser.execute.callCount, 4)
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
       assert.deepStrictEqual(browser.setCookies.firstCall.args, [{
         name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         value: 'suite-test-id',
       }])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('does not re-correlate a retained page when RUM is sampled out', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().resolves(),
+      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
+        ? { isRumActive: false, isRumInstrumented: true, rumSamplingRate: 50 }
+        : false)),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+
+      const firstTestContext = {}
+      executeAsyncCh.start.runStores(firstTestContext, () => {})
+      await firstTestContext.rumCleanupCallback()
+
+      const secondTestContext = {}
+      executeAsyncCh.start.runStores(secondTestContext, () => {})
+      await secondTestContext.rumStartCallback()
+
+      assert.strictEqual(browser.execute.callCount, 1)
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
+      assert.strictEqual(browser.setCookies.callCount, 0)
     } finally {
       correlationCh.unsubscribe(correlate)
       await cleanupRumState()
@@ -1026,6 +1070,48 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('reinstalls a cached BiDi preload after the browser session changes', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const browser = {
+      capabilities: {},
+      execute: sinon.stub().resolves(false),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().callsFake(() => Promise.resolve({
+        script: `rum-preload-${browser.sessionId}`,
+      })),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      sessionId: 'session-a',
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    const prepareNavigation = async () => {
+      const context = { self: browser }
+      urlCh.start.runStores(context, () => {})
+      await context.rumPreloadCallback.call(browser)
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      await prepareNavigation()
+      await prepareNavigation()
+      browser.sessionId = 'session-b'
+      await prepareNavigation()
+
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 2)
+      assert.strictEqual(browser.scriptRemovePreloadScript.callCount, 0)
+      assert.deepStrictEqual(browser.scriptAddPreloadScript.args.map(([options]) => options.arguments), [
+        [{ type: 'string', value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=test-id; path=/` }],
+        [{ type: 'string', value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=test-id; path=/` }],
+      ])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
   it('preloads RUM correlation in current and future browsing contexts', async () => {
     require('../src/webdriverio')
 
@@ -1353,6 +1439,77 @@ describe('webdriverio instrumentation', () => {
       ])
     } finally {
       correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('stops every RUM window before one browser-wide flush and cookie cleanup', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    let currentWindowHandle = 'window-a'
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub(),
+      execute: sinon.stub().callsFake(() => {
+        calls.push(`stop:${currentWindowHandle}`)
+        return Promise.resolve(true)
+      }),
+      getWindowHandle: sinon.stub().callsFake(() => {
+        calls.push('handle')
+        return Promise.resolve(currentWindowHandle)
+      }),
+      getWindowHandles: sinon.stub().callsFake(() => {
+        calls.push('handles')
+        return Promise.resolve(['window-a', 'window-b'])
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
+        calls.push('add-preload')
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push('remove-preload')
+        return Promise.resolve()
+      }),
+      sessionId: 'session-a',
+      storageDeleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete-all')
+        return Promise.resolve()
+      }),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        currentWindowHandle = windowHandle
+        calls.push(`switch:${windowHandle}`)
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+      await cleanupRumState()
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'remove-preload',
+        'handle',
+        'handles',
+        'switch:window-a',
+        'stop:window-a',
+        'switch:window-b',
+        'stop:window-b',
+        'switch:window-a',
+        'delete-all',
+      ])
+      assert.strictEqual(browser.execute.callCount, 2)
+      assert.strictEqual(browser.deleteCookies.callCount, 0)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
     }
   })
 

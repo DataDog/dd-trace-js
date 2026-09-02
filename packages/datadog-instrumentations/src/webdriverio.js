@@ -115,6 +115,17 @@ function canCorrelateRumBrowser (browser) {
 }
 
 /**
+ * Returns whether RUM is inactive because its configured sampling rate is below 100%.
+ *
+ * @param {{isRumActive: boolean, isRumInstrumented: boolean, rumSamplingRate: number|null}} rumState
+ * @returns {boolean}
+ */
+function isRumSampledOut (rumState) {
+  return rumState.isRumInstrumented && !rumState.isRumActive &&
+    rumState.rumSamplingRate !== null && rumState.rumSamplingRate < 100
+}
+
+/**
  * Installs RUM correlation on every subsequent document in the BiDi session.
  *
  * @param {object} browser
@@ -127,15 +138,20 @@ async function installRumPreloadScript (browser, testExecutionId) {
 
   try {
     const preloadScript = rumBrowserPreloadScripts.get(browser)
-    if (preloadScript?.testExecutionId === testExecutionId) return
-    if (preloadScript) await removeRumPreloadScript(browser)
+    if (preloadScript && preloadScript.sessionId === browser.sessionId &&
+        preloadScript.testExecutionId === testExecutionId) return
+    if (preloadScript && preloadScript.sessionId === browser.sessionId) {
+      await removeRumPreloadScript(browser)
+    } else {
+      rumBrowserPreloadScripts.delete(browser)
+    }
 
     const cookie = `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=${testExecutionId}; path=/`
     const { script } = await browser.scriptAddPreloadScript({
       arguments: [{ type: 'string', value: cookie }],
       functionDeclaration: SET_RUM_COOKIE_SCRIPT,
     })
-    rumBrowserPreloadScripts.set(browser, { script, testExecutionId })
+    rumBrowserPreloadScripts.set(browser, { script, sessionId: browser.sessionId, testExecutionId })
   } catch (error) {
     log.error('WebdriverIO RUM correlation preload error', error)
   }
@@ -150,7 +166,8 @@ async function installRumPreloadScript (browser, testExecutionId) {
 async function removeRumPreloadScript (browser) {
   const preloadScript = rumBrowserPreloadScripts.get(browser)
   rumBrowserPreloadScripts.delete(browser)
-  if (!preloadScript || typeof browser.scriptRemovePreloadScript !== 'function') return
+  if (!preloadScript || preloadScript.sessionId !== browser.sessionId ||
+      typeof browser.scriptRemovePreloadScript !== 'function') return
 
   try {
     await browser.scriptRemovePreloadScript({ script: preloadScript.script })
@@ -251,13 +268,14 @@ async function handleRumNavigation (context) {
 
     if (!rumState) return
 
-    const { isRumInstrumented, isRumActive, rumSamplingRate } = rumState
-    if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
+    const { isRumActive } = rumState
+    const sampledOut = isRumSampledOut(rumState)
+    if (sampledOut) {
       log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
     }
     const canCorrelateRum = canCorrelateRumBrowser(browser)
     const testExecutionId = getRumTestExecutionId(browser, canCorrelateRum ? isRumActive : false)
-    if (!canCorrelateRum || !rumRunnerBrowsers.has(browser) || (isRumInstrumented && !isRumActive)) return
+    if (!canCorrelateRum || !rumRunnerBrowsers.has(browser) || sampledOut) return
 
     rumBrowsers.add(browser)
     if (!testExecutionId) {
@@ -272,12 +290,12 @@ async function handleRumNavigation (context) {
 }
 
 /**
- * Stops RUM in the current window, waits for its events to flush, and removes the correlation cookie.
+ * Stops RUM in the current window.
  *
  * @param {object} browser
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>}
  */
-async function cleanupRumWindow (browser) {
+async function stopRumWindow (browser) {
   let isRumActive
   try {
     isRumActive = await browser.execute(stopRumSession)
@@ -287,9 +305,8 @@ async function cleanupRumWindow (browser) {
 
   if (isRumActive) {
     getRumTestExecutionId(browser, true)
-    await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
   }
-  await deleteRumCookie(browser)
+  return !!isRumActive
 }
 
 /**
@@ -386,7 +403,13 @@ async function forEachRumWindow (browser, operation, value) {
 async function cleanupRumBrowser (browser, stopSession = false) {
   await removeRumPreloadScript(browser)
   if (stopSession) {
-    await forEachRumWindow(browser, cleanupRumWindow)
+    let isRumActive = false
+    await forEachRumWindow(browser, async (browser) => {
+      if (await stopRumWindow(browser)) isRumActive = true
+    })
+    if (isRumActive) {
+      await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+    }
     rumBrowsers.delete(browser)
   } else {
     await forEachRumWindow(browser, deleteRumCookie)
@@ -478,7 +501,7 @@ async function startRumTest () {
       log.error('WebdriverIO RUM detection error', error)
       continue
     }
-    if (!rumState || (rumState.isRumInstrumented && !rumState.isRumActive)) continue
+    if (!rumState || isRumSampledOut(rumState)) continue
 
     const testExecutionId = getRumTestExecutionId(browser, rumState.isRumActive || undefined)
     if (!testExecutionId || rumBrowserTestExecutionIds.get(browser) === testExecutionId) continue
