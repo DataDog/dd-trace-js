@@ -2,9 +2,12 @@
 
 const { defineConfig } = require('cypress')
 
+const getCypressTestEnvironment = require('./cypress-test-environment')
+
 const retries = Number(process.env.CYPRESS_RETRIES || 0)
 
 module.exports = defineConfig({
+  ...getCypressTestEnvironment(),
   defaultCommandTimeout: 1000,
   retries: process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
     ? { runMode: retries, openMode: 0 }

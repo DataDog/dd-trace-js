@@ -206,10 +206,10 @@ moduleTypes.forEach(({
     if (type === 'commonJS' && version === 'latest') {
       // These dependencies are only needed by the component/Vite regression test below.
       sandboxDependencies.push(
-        '@vitejs/plugin-react@4.3.4',
+        '@vitejs/plugin-react@6.1.1',
         'react@18.3.1',
         'react-dom@18.3.1',
-        'vite@6.1.0'
+        'vite@8.2.2'
       )
     }
     useSandbox(sandboxDependencies, true)

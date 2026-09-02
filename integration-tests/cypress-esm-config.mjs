@@ -4,11 +4,14 @@
 // Cypress does not call setupNodeEvents from inline config objects.
 import cypress from 'cypress'
 
+import getCypressTestEnvironment from './cypress-test-environment.js'
+
 const retries = Number(process.env.CYPRESS_RETRIES || 0)
 
 async function runCypress () {
   const results = await cypress.run({
     config: {
+      ...getCypressTestEnvironment(),
       defaultCommandTimeout: 1000,
       retries: process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
         ? { runMode: retries, openMode: 0 }
