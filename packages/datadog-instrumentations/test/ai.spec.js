@@ -1,417 +1,178 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { channel } = require('dc-polyfill')
-const { afterEach, beforeEach, describe, it } = require('mocha')
+const { channel, tracingChannel } = require('dc-polyfill')
+const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { wrapModelWithLifecycle } = require('../src/ai')
+const modelInterceptChannel = channel('dd-trace:vercel-ai:model:intercept')
+const resolveLanguageModelChannel = tracingChannel('orchestrion:ai:resolveLanguageModel')
 
-const doGenerateBeforeChannel = channel('dd-trace:vercel-ai:doGenerate:before')
-const doGenerateAfterChannel = channel('dd-trace:vercel-ai:doGenerate:after')
-const doStreamBeforeChannel = channel('dd-trace:vercel-ai:doStream:before')
-const doStreamAfterChannel = channel('dd-trace:vercel-ai:doStream:after')
+// Same approach as openai.spec.js: stub `addHook` to capture the module callback, then
+// run it so the instrumentation registers its orchestrion subscriptions without loading `ai`.
+function loadAiInstrumentation () {
+  const instrumentPath = require.resolve('../src/helpers/instrument')
+  const realInstrument = require(instrumentPath)
+  const hookCallbacks = []
+  const cache = require.cache[instrumentPath]
+  const previousExports = cache.exports
 
-const prompt = [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }]
-
-function makeStream (chunks) {
-  return new ReadableStream({
-    start (controller) {
-      for (const chunk of chunks) controller.enqueue(chunk)
-      controller.close()
+  cache.exports = {
+    ...realInstrument,
+    addHook (spec, callback) {
+      hookCallbacks.push({ spec, callback })
     },
-  })
-}
-
-function readStream (stream) {
-  const chunks = []
-  const reader = stream.getReader()
-  function readAll () {
-    return reader.read().then(({ done, value }) => {
-      if (done) return chunks
-      chunks.push(value)
-      return readAll()
-    })
   }
-  return readAll()
+
+  try {
+    delete require.cache[require.resolve('../src/ai')]
+    require('../src/ai')
+  } finally {
+    cache.exports = previousExports
+    delete require.cache[require.resolve('../src/ai')]
+  }
+
+  if (hookCallbacks.length === 0) throw new Error('ai instrumentation registered no hooks')
+  hookCallbacks[0].callback({})
 }
 
-function subscribeAutoResolve (channels) {
+/**
+ * Emits the same `resolveLanguageModel` event the AI SDK does, so the tests drive the
+ * instrumentation's real entry point.
+ *
+ * @param {unknown} requested
+ * @param {object} [resolved]
+ */
+function resolveLanguageModel (requested, resolved = requested) {
+  resolveLanguageModelChannel.end.publish({ arguments: [requested], result: resolved })
+}
+
+function subscribeIntercept (onIntercept = () => {}) {
   const calls = []
   const handler = ctx => {
     calls.push(ctx)
-    ctx.pending.push(Promise.resolve())
+    onIntercept(ctx)
   }
-  for (const lifecycleChannel of channels) {
-    lifecycleChannel.subscribe(handler)
-  }
-  return {
-    calls,
-    unsubscribe: () => {
-      for (const lifecycleChannel of channels) {
-        lifecycleChannel.unsubscribe(handler)
-      }
-    },
-  }
+  modelInterceptChannel.subscribe(handler)
+  return { calls, unsubscribe: () => modelInterceptChannel.unsubscribe(handler) }
 }
 
-function subscribeAutoReject (channels) {
-  const err = Object.assign(new Error(), { name: 'AIGuardAbortError', reason: 'blocked' })
-  const handler = ctx => {
-    ctx.abortController.abort(err)
-    ctx.pending.push(Promise.resolve())
-  }
-  for (const lifecycleChannel of channels) {
-    lifecycleChannel.subscribe(handler)
-  }
-  return {
-    err,
-    unsubscribe: () => {
-      for (const lifecycleChannel of channels) {
-        lifecycleChannel.unsubscribe(handler)
-      }
-    },
-  }
-}
-
-function subscribeSyncAbort (channels) {
-  const err = Object.assign(new Error(), { name: 'AIGuardAbortError', reason: 'blocked' })
-  const handler = ctx => ctx.abortController.abort(err)
-  for (const lifecycleChannel of channels) {
-    lifecycleChannel.subscribe(handler)
-  }
-  return {
-    err,
-    unsubscribe: () => {
-      for (const lifecycleChannel of channels) {
-        lifecycleChannel.unsubscribe(handler)
-      }
-    },
-  }
-}
-
-function subscribeAbortOnCall (channels, abortOnCall, err) {
-  let callCount = 0
-  const handler = ctx => {
-    callCount++
-    if (callCount === abortOnCall) ctx.abortController.abort(err)
-    ctx.pending.push(Promise.resolve())
-  }
-  for (const lifecycleChannel of channels) {
-    lifecycleChannel.subscribe(handler)
-  }
-  return () => {
-    for (const lifecycleChannel of channels) {
-      lifecycleChannel.unsubscribe(handler)
-    }
-  }
-}
-
-describe('wrapModelWithLifecycle', () => {
+describe('vercel ai model interception', () => {
   let model
+  let doGenerate
+
+  before(() => {
+    loadAiInstrumentation()
+  })
 
   beforeEach(() => {
-    model = {}
+    doGenerate = sinon.stub().resolves({ content: [] })
+    model = { doGenerate }
   })
 
   afterEach(() => {
     sinon.restore()
   })
 
-  describe('doGenerate', () => {
-    it('calls original directly when no subscribers', () => {
-      const result = { content: [] }
-      const original = sinon.stub().resolves(result)
-      model.doGenerate = original
-      wrapModelWithLifecycle(model)
+  it('calls the original directly when nothing is subscribed', () => {
+    resolveLanguageModel(model)
 
-      return model.doGenerate({ prompt }).then(r => {
-        assert.strictEqual(r, result)
-        sinon.assert.calledOnce(original)
-      })
-    })
-
-    it('calls original directly when prompt is empty', () => {
-      const { unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel])
-      const original = sinon.stub().resolves({ content: [] })
-      model.doGenerate = original
-      wrapModelWithLifecycle(model)
-
-      return model.doGenerate({ prompt: [] })
-        .then(() => sinon.assert.calledOnce(original))
-        .finally(unsubscribe)
-    })
-
-    it('calls original directly when prompt is absent', () => {
-      const { unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel])
-      const original = sinon.stub().resolves({ content: [] })
-      model.doGenerate = original
-      wrapModelWithLifecycle(model)
-
-      return model.doGenerate({})
-        .then(() => sinon.assert.calledOnce(original))
-        .finally(unsubscribe)
-    })
-
-    it('publishes input evaluation in parallel with LLM call', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel])
-      let llmCalledBeforeGuardResolves = false
-      const original = sinon.stub().callsFake(() => {
-        llmCalledBeforeGuardResolves = calls.length === 0 || calls.length === 1
-        return Promise.resolve({ content: [] })
-      })
-      model.doGenerate = original
-      wrapModelWithLifecycle(model)
-
-      return model.doGenerate({ prompt })
-        .then(() => {
-          assert.strictEqual(calls.length, 1)
-          assert.deepStrictEqual(calls[0].prompt, prompt)
-          assert.deepStrictEqual(calls[0].options, { prompt })
-          assert.ok(calls[0].abortController instanceof AbortController)
-          assert.ok(Array.isArray(calls[0].pending))
-          assert.strictEqual(Object.hasOwn(calls[0], 'resolve'), false)
-          assert.strictEqual(Object.hasOwn(calls[0], 'reject'), false)
-          assert.strictEqual(llmCalledBeforeGuardResolves, true)
-          sinon.assert.calledOnce(original)
-        })
-        .finally(unsubscribe)
-    })
-
-    it('rejects with guard error when input is rejected', () => {
-      const { err, unsubscribe } = subscribeAutoReject([doGenerateBeforeChannel])
-      const original = sinon.stub().resolves({ content: [] })
-      model.doGenerate = original
-      wrapModelWithLifecycle(model)
-
-      return assert.rejects(() => model.doGenerate({ prompt }), e => e === err)
-        .finally(unsubscribe)
-    })
-
-    it('rejects when input evaluation aborts synchronously without pending work', () => {
-      const { err, unsubscribe } = subscribeSyncAbort([doGenerateBeforeChannel])
-      const original = sinon.stub().resolves({ content: [] })
-      model.doGenerate = original
-      wrapModelWithLifecycle(model)
-
-      return assert.rejects(() => model.doGenerate({ prompt }), e => e === err)
-        .finally(unsubscribe)
-    })
-
-    it('publishes output evaluation with text content', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel, doGenerateAfterChannel])
-      const content = [{ type: 'text', text: 'Hello!' }]
-      model.doGenerate = sinon.stub().resolves({ content })
-      wrapModelWithLifecycle(model)
-
-      return model.doGenerate({ prompt })
-        .then(() => {
-          assert.strictEqual(calls.length, 2)
-          assert.deepStrictEqual(calls[1].prompt, prompt)
-          assert.deepStrictEqual(calls[1].result, { content })
-          assert.strictEqual(calls[1].abortController.signal.aborted, false)
-        })
-        .finally(unsubscribe)
-    })
-
-    it('publishes output evaluation with tool call content', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel, doGenerateAfterChannel])
-      const content = [{ type: 'tool-call', toolCallId: 'c1', toolName: 'search', args: { q: 'test' } }]
-      model.doGenerate = sinon.stub().resolves({ content })
-      wrapModelWithLifecycle(model)
-
-      return model.doGenerate({ prompt })
-        .then(() => {
-          assert.strictEqual(calls.length, 2)
-          assert.deepStrictEqual(calls[1].result, { content })
-        })
-        .finally(unsubscribe)
-    })
-
-    it('skips output evaluation when content is empty', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel, doGenerateAfterChannel])
-      model.doGenerate = sinon.stub().resolves({ content: [] })
-      wrapModelWithLifecycle(model)
-
-      return model.doGenerate({ prompt })
-        .then(() => assert.strictEqual(calls.length, 1))
-        .finally(unsubscribe)
-    })
-
-    it('skips output evaluation when content is absent', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel, doGenerateAfterChannel])
-      model.doGenerate = sinon.stub().resolves({})
-      wrapModelWithLifecycle(model)
-
-      return model.doGenerate({ prompt })
-        .then(() => assert.strictEqual(calls.length, 1))
-        .finally(unsubscribe)
-    })
-
-    it('returns original result after output evaluation', () => {
-      const { unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel, doGenerateAfterChannel])
-      const content = [{ type: 'text', text: 'reply' }]
-      const expected = { content, usage: { tokens: 10 } }
-      model.doGenerate = sinon.stub().resolves(expected)
-      wrapModelWithLifecycle(model)
-
-      return model.doGenerate({ prompt })
-        .then(result => assert.strictEqual(result, expected))
-        .finally(unsubscribe)
-    })
-
-    it('rejects when output evaluation rejects', () => {
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
-      const unsubscribe = subscribeAbortOnCall([doGenerateBeforeChannel, doGenerateAfterChannel], 2, err)
-      model.doGenerate = sinon.stub().resolves({ content: [{ type: 'text', text: 'bad' }] })
-      wrapModelWithLifecycle(model)
-
-      return assert.rejects(() => model.doGenerate({ prompt }), e => e === err)
-        .finally(unsubscribe)
-    })
-
-    it('does not wrap already wrapped model', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel])
-      model.doGenerate = sinon.stub().resolves({ content: [] })
-      wrapModelWithLifecycle(model)
-      wrapModelWithLifecycle(model)
-
-      return model.doGenerate({ prompt })
-        .then(() => assert.strictEqual(calls.length, 1))
-        .finally(unsubscribe)
-    })
+    return model.doGenerate({ prompt: [] }).then(() => sinon.assert.calledOnce(doGenerate))
   })
 
-  describe('doStream', () => {
-    it('calls original directly when no subscribers', () => {
-      const stream = makeStream([])
-      const original = sinon.stub().resolves({ stream })
-      model.doStream = original
-      wrapModelWithLifecycle(model)
+  it('publishes the native call data per call', () => {
+    const { calls, unsubscribe } = subscribeIntercept()
+    resolveLanguageModel(model)
 
-      return model.doStream({ prompt }).then(result => {
-        assert.ok(result.stream)
-        sinon.assert.calledOnce(original)
+    const options = { prompt: [{ role: 'user' }] }
+    return model.doGenerate(options)
+      .then(() => {
+        assert.strictEqual(calls.length, 1)
+        assert.strictEqual(calls[0].method, 'doGenerate')
+        assert.deepStrictEqual(calls[0].arguments, [options])
       })
+      .finally(unsubscribe)
+  })
+
+  it('wraps the resolved model when the SDK built it from a string id', () => {
+    const { calls, unsubscribe } = subscribeIntercept()
+    resolveLanguageModel('openai/gpt-4o', model)
+
+    return model.doGenerate({ prompt: [] })
+      .then(() => assert.strictEqual(calls.length, 1))
+      .finally(unsubscribe)
+  })
+
+  it('wraps the caller-supplied model when it differs from the resolved one', () => {
+    const { calls, unsubscribe } = subscribeIntercept()
+    const resolved = { doGenerate: sinon.stub().resolves({ content: [] }) }
+    resolveLanguageModel(model, resolved)
+
+    return model.doGenerate({ prompt: [] })
+      .then(() => resolved.doGenerate({ prompt: [] }))
+      .then(() => assert.strictEqual(calls.length, 1))
+      .finally(unsubscribe)
+  })
+
+  it('does not wrap the same model twice', () => {
+    const { calls, unsubscribe } = subscribeIntercept()
+    resolveLanguageModel(model)
+    resolveLanguageModel(model)
+
+    return model.doGenerate({ prompt: [] })
+      .then(() => assert.strictEqual(calls.length, 1))
+      .finally(unsubscribe)
+  })
+
+  it('starts the model call without waiting for beforeResult', () => {
+    let release
+    const { unsubscribe } = subscribeIntercept(ctx => {
+      ctx.beforeResult = () => new Promise(resolve => { release = resolve })
     })
+    resolveLanguageModel(model)
 
-    it('calls original directly when prompt is empty', () => {
-      const { unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel])
-      const original = sinon.stub().resolves({ stream: makeStream([]) })
-      model.doStream = original
-      wrapModelWithLifecycle(model)
+    const pending = model.doGenerate({ prompt: [{ role: 'user' }] })
 
-      return model.doStream({ prompt: [] })
-        .then(() => sinon.assert.calledOnce(original))
-        .finally(unsubscribe)
+    return new Promise(resolve => setImmediate(resolve))
+      .then(() => {
+        sinon.assert.calledOnce(doGenerate)
+        release()
+        return pending
+      })
+      .finally(unsubscribe)
+  })
+
+  it('lets a subscriber replace the delivered result', () => {
+    const replacement = { content: [{ type: 'text', text: 'redacted' }] }
+    const { unsubscribe } = subscribeIntercept(ctx => {
+      ctx.onResult = () => replacement
     })
+    resolveLanguageModel(model)
 
-    it('publishes input evaluation in parallel with LLM call', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel])
-      model.doStream = sinon.stub().resolves({ stream: makeStream([]) })
-      wrapModelWithLifecycle(model)
+    return model.doGenerate({ prompt: [{ role: 'user' }] })
+      .then(result => assert.strictEqual(result, replacement))
+      .finally(unsubscribe)
+  })
 
-      return model.doStream({ prompt })
-        .then(() => {
-          assert.deepStrictEqual(calls[0].prompt, prompt)
-        })
-        .finally(unsubscribe)
+  it('rejects the call when beforeResult rejects', () => {
+    const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+    const { unsubscribe } = subscribeIntercept(ctx => {
+      ctx.beforeResult = () => Promise.reject(err)
     })
+    resolveLanguageModel(model)
 
-    it('rejects with guard error when input is rejected', () => {
-      const { err, unsubscribe } = subscribeAutoReject([doStreamBeforeChannel])
-      const original = sinon.stub().resolves({ stream: makeStream([]) })
-      model.doStream = original
-      wrapModelWithLifecycle(model)
+    return assert.rejects(() => model.doGenerate({ prompt: [{ role: 'user' }] }), e => e === err)
+      .finally(unsubscribe)
+  })
 
-      return assert.rejects(() => model.doStream({ prompt }), e => e === err)
-        .finally(unsubscribe)
-    })
+  it('publishes for doStream as well', () => {
+    const { calls, unsubscribe } = subscribeIntercept()
+    const doStream = sinon.stub().resolves({ stream: {} })
+    const streamModel = { doStream }
+    resolveLanguageModel(streamModel)
 
-    it('replays all collected chunks in the output stream', () => {
-      const { unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel, doStreamAfterChannel])
-      const chunks = [
-        { type: 'text-delta', textDelta: 'Hello' },
-        { type: 'text-delta', textDelta: ' World' },
-        { type: 'finish' },
-      ]
-      model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
-      wrapModelWithLifecycle(model)
-
-      return model.doStream({ prompt })
-        .then(result => readStream(result.stream))
-        .then(received => assert.deepStrictEqual(received, chunks))
-        .finally(unsubscribe)
-    })
-
-    it('publishes output evaluation with accumulated text', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel, doStreamAfterChannel])
-      const chunks = [
-        { type: 'text-delta', textDelta: 'Hello' },
-        { type: 'text-delta', textDelta: ' World' },
-        { type: 'finish' },
-      ]
-      model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
-      wrapModelWithLifecycle(model)
-
-      return model.doStream({ prompt })
-        .then(() => {
-          assert.strictEqual(calls.length, 2)
-          assert.deepStrictEqual(calls[1].prompt, prompt)
-          assert.deepStrictEqual(calls[1].chunks, chunks)
-        })
-        .finally(unsubscribe)
-    })
-
-    it('publishes output evaluation with all collected tool calls', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel, doStreamAfterChannel])
-      const tc1 = { type: 'tool-call', toolCallId: 'c1', toolName: 'search', args: { q: 'a' } }
-      const tc2 = { type: 'tool-call', toolCallId: 'c2', toolName: 'fetch', args: { url: 'x' } }
-      const chunks = [tc1, tc2, { type: 'finish' }]
-      model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
-      wrapModelWithLifecycle(model)
-
-      return model.doStream({ prompt })
-        .then(() => {
-          assert.strictEqual(calls.length, 2)
-          assert.deepStrictEqual(calls[1].chunks, chunks)
-        })
-        .finally(unsubscribe)
-    })
-
-    it('prefers tool calls over text when both present', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel, doStreamAfterChannel])
-      const tc = { type: 'tool-call', toolCallId: 'c1', toolName: 'action', args: {} }
-      const chunks = [{ type: 'text-delta', textDelta: 'some text' }, tc, { type: 'finish' }]
-      model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
-      wrapModelWithLifecycle(model)
-
-      return model.doStream({ prompt })
-        .then(() => {
-          assert.deepStrictEqual(calls[1].chunks, chunks)
-        })
-        .finally(unsubscribe)
-    })
-
-    it('skips output evaluation when stream has no text or tool calls', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel, doStreamAfterChannel])
-      model.doStream = sinon.stub().resolves({ stream: makeStream([{ type: 'finish' }]) })
-      wrapModelWithLifecycle(model)
-
-      return model.doStream({ prompt })
-        .then(() => assert.strictEqual(calls.length, 2))
-        .finally(unsubscribe)
-    })
-
-    it('rejects when output evaluation rejects', () => {
-      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
-      const unsubscribe = subscribeAbortOnCall([doStreamBeforeChannel, doStreamAfterChannel], 2, err)
-      const chunks = [{ type: 'text-delta', textDelta: 'bad response' }, { type: 'finish' }]
-      model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
-      wrapModelWithLifecycle(model)
-
-      return assert.rejects(() => model.doStream({ prompt }), e => e === err)
-        .finally(unsubscribe)
-    })
+    return streamModel.doStream({ prompt: [] })
+      .then(() => assert.strictEqual(calls[0].method, 'doStream'))
+      .finally(unsubscribe)
   })
 })

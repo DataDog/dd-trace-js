@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('../../log')
+
 const FILE_FALLBACK = '[file]'
 const IMAGE_FALLBACK = '[image]'
 
@@ -9,7 +11,13 @@ const IMAGE_FALLBACK = '[image]'
  */
 function stringifyIfNeeded (value) {
   if (value == null) return value
-  return typeof value === 'string' ? value : JSON.stringify(value)
+  if (typeof value === 'string') return value
+
+  try {
+    return JSON.stringify(value)
+  } catch (error) {
+    log.debug('AIGuard: dropping an unserializable message field: %s', error.message)
+  }
 }
 
 /**

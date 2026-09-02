@@ -69,12 +69,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-anthropic-lifecycle:
+  instrumentation-anthropic:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
     env:
-      PLUGINS: anthropic|anthropic-lifecycle
+      PLUGINS: anthropic
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test
@@ -462,12 +462,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-openai-lifecycle:
+  instrumentation-openai:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
     env:
-      PLUGINS: openai-lifecycle
+      PLUGINS: openai
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test

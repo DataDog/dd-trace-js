@@ -5,17 +5,17 @@ const { channel } = require('dc-polyfill')
 const log = require('../../log')
 const { getMessagesInputMessages, getMessagesOutputMessages } = require('../messages/anthropic')
 const { SOURCE_AUTO } = require('../tags')
-const { pushEvaluation } = require('./evaluate')
+const { evaluate } = require('./evaluate')
 
-const messagesBeforeChannel = channel('dd-trace:anthropic:messages:before')
-const messagesAfterChannel = channel('dd-trace:anthropic:messages:after')
+const messagesPrepareChannel = channel('dd-trace:anthropic:messages:prepare')
+const messagesInterceptChannel = channel('dd-trace:anthropic:messages:intercept')
 
 let isEnabled = false
 let aiguard
 let opts
 
 /**
- * Subscribes AI Guard to Anthropic lifecycle channels.
+ * Subscribes AI Guard to the Anthropic interception channels.
  *
  * @param {object} aiguardInstance
  * @param {boolean} block
@@ -26,8 +26,8 @@ function enable (aiguardInstance, block) {
   aiguard = aiguardInstance
   opts = { block, source: SOURCE_AUTO, integration: 'anthropic' }
 
-  messagesBeforeChannel.subscribe(onMessagesBefore)
-  messagesAfterChannel.subscribe(onMessagesAfter)
+  messagesPrepareChannel.subscribe(onMessagesPrepare)
+  messagesInterceptChannel.subscribe(onMessagesIntercept)
 
   isEnabled = true
 }
@@ -35,36 +35,61 @@ function enable (aiguardInstance, block) {
 function disable () {
   if (!isEnabled) return
 
-  messagesBeforeChannel.unsubscribe(onMessagesBefore)
-  messagesAfterChannel.unsubscribe(onMessagesAfter)
+  messagesPrepareChannel.unsubscribe(onMessagesPrepare)
+  messagesInterceptChannel.unsubscribe(onMessagesIntercept)
 
   aiguard = undefined
   opts = undefined
   isEnabled = false
 }
 
-function onMessagesBefore (ctx) {
-  pushEvaluation(ctx, aiguard, getMessagesInputMessages(ctx.args?.[0]), opts)
+/**
+ * Replaces the outgoing options with a JSON snapshot of the evaluated fields, so AI Guard judges
+ * exactly what the SDK serializes and sends, immune to later caller mutation.
+ *
+ * @param {{ arguments: Array<unknown> }} ctx
+ */
+function onMessagesPrepare (ctx) {
+  const options = ctx.arguments[0]
+  if (!options || typeof options !== 'object') return
+
+  const evaluated = { messages: options.messages }
+  if (options.system !== undefined) evaluated.system = options.system
+
+  try {
+    // eslint-disable-next-line unicorn/prefer-structured-clone
+    ctx.arguments[0] = { ...options, ...JSON.parse(JSON.stringify(evaluated)) }
+  } catch {
+    // Unserializable input — judge the caller's options as they are.
+  }
 }
 
-function onMessagesAfter (ctx) {
-  const inputMessages = getMessagesInputMessages(ctx.args?.[0])
+function onMessagesIntercept (ctx) {
+  const inputMessages = getMessagesInputMessages(ctx.arguments?.[0])
   if (!inputMessages?.length) return
 
-  let body = ctx.body
-  if (typeof body === 'string') {
+  // `parse` and `asResponse` are both wrapped, and either may run more than once per call.
+  let inputEvaluation
+  ctx.beforeResult = () => (inputEvaluation ??= evaluate(ctx, aiguard, [inputMessages], opts))
+
+  // One model call has one output however many readers observe it: `parse`, `json()`, `text()`
+  // and every `clone()` of the raw response share this callback.
+  let outputEvaluation
+  ctx.onResult = body => {
+    let outputMessages
     try {
-      body = JSON.parse(body)
-    } catch {
-      log.error('AIGuard: unable to decode Anthropic response body')
-      return
+      outputMessages = getMessagesOutputMessages(body)
+    } catch (error) {
+      // This runs in the caller's promise chain, so an unexpected payload must not fail their call.
+      log.error('AIGuard: unable to decode Anthropic response body: %s', error.message)
+      return body
     }
+
+    if (!outputMessages.length) return body
+
+    outputEvaluation ??= evaluate(ctx, aiguard, [[...inputMessages, ...outputMessages]], opts)
+    return outputEvaluation.then(() => body)
   }
-
-  const outputMessages = getMessagesOutputMessages(body)
-  if (!outputMessages.length) return
-
-  pushEvaluation(ctx, aiguard, [...inputMessages, ...outputMessages], opts)
 }
 
 module.exports = { enable, disable }

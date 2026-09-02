@@ -520,6 +520,7 @@ describe('AIGuard SDK integration tests', () => {
     assert.strictEqual(response.status, 200)
     assert.strictEqual(response.body.streamed, true)
     assert.ok(response.body.chunks > 0, `expected > 0 chunks, got ${response.body.chunks}`)
+    assert.strictEqual(response.body.text, 'Hello world')
 
     await agent.assertMessageReceived(({ payload }) => {
       const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
