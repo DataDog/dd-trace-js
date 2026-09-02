@@ -5,12 +5,13 @@ const { stringify } = require('querystring')
 
 const { version } = require('../../../../../package.json')
 const request = require('../../exporters/common/request')
-const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
 const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('../constants')
 const log = require('./log')
 const JSONBuffer = require('./json-buffer')
 const config = require('./config')
+const getRequestOptions = require('./request-options')
 const { pruneSnapshot } = require('./snapshot-pruner')
+const buildTags = require('./tags')
 
 module.exports = send
 
@@ -22,14 +23,7 @@ const ddsource = 'dd_debugger'
 const hostname = getHostname()
 const service = config.service
 
-const ddtags = buildTags([
-  ['env', config.env],
-  ['version', config.version],
-  ['debugger_version', version],
-  ['host_name', hostname],
-  [GIT_COMMIT_SHA, config.commitSHA],
-  [GIT_REPOSITORY_URL, config.repositoryUrl],
-])
+const ddtags = buildTags(config, hostname, version, log)
 
 let path
 setInputPath(config.inputPath)
@@ -85,7 +79,7 @@ function send (message, logger, dd, snapshot, processTags) {
 function onFlush (payload) {
   log.debug('[debugger:devtools_client] Flushing probe payload buffer')
 
-  request(payload, buildRequestOpts(), (err, res, statusCode) => {
+  request(payload, buildRequestOptions(), (err, res, statusCode) => {
     if (!handleV2FallbackIfNeeded(statusCode, payload) && err) {
       log.error('[debugger:devtools_client] Error sending probe payload', err)
     }
@@ -108,7 +102,7 @@ function handleV2FallbackIfNeeded (statusCode, payload) {
 
   setInputPath(DEBUGGER_DIAGNOSTICS_V1)
 
-  request(payload, buildRequestOpts(), (err) => {
+  request(payload, buildRequestOptions(), (err) => {
     if (err) {
       log.error('[debugger:devtools_client] Error sending probe payload after fallback to %s',
         DEBUGGER_DIAGNOSTICS_V1,
@@ -119,13 +113,8 @@ function handleV2FallbackIfNeeded (statusCode, payload) {
   return true
 }
 
-function buildRequestOpts () {
-  return {
-    method: 'POST',
-    url: config.url,
-    path,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-  }
+function buildRequestOptions () {
+  return getRequestOptions(config, path, { 'Content-Type': 'application/json; charset=utf-8' })
 }
 
 /**
@@ -134,26 +123,4 @@ function buildRequestOpts () {
 function setInputPath (newPath) {
   config.inputPath = newPath
   path = `${newPath}?${stringify({ ddtags })}`
-}
-
-/**
- * @param {Array<[string, unknown]>} tags - The tags to serialize.
- * @returns {string} The serialized tags.
- */
-function buildTags (tags) {
-  let serializedTags = ''
-
-  for (const [key, rawValue] of tags) {
-    if (rawValue === undefined) continue
-
-    if (String(rawValue).includes(',')) {
-      log.warn('[debugger:devtools_client] Skipping invalid tag value for %s', key)
-      continue
-    }
-
-    if (serializedTags) serializedTags += ','
-    serializedTags += `${key}:${rawValue}`
-  }
-
-  return serializedTags
 }
