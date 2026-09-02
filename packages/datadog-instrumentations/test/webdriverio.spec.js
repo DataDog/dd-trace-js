@@ -37,6 +37,8 @@ const {
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
+  requestWebdriverioScreenshotUpload,
+  SCREENSHOT_UPLOAD_RESPONSE,
   SCREENSHOT_UPLOAD_TIMEOUT_MS,
   SUITE_FINISH,
   WEBDRIVERIO_WORKER_ENV,
@@ -524,6 +526,60 @@ describe('webdriverio instrumentation', () => {
 
   it('allows the WebdriverIO screenshot IPC response to outlive the exporter upload deadline', () => {
     assert.strictEqual(SCREENSHOT_UPLOAD_TIMEOUT_MS, FINAL_FLUSH_TIMEOUT + 5000)
+  })
+
+  it('shares one response dispatcher across concurrent screenshot upload requests', () => {
+    const originalConnected = process.connected
+    const originalSend = process.send
+    const initialDisconnectListeners = process.listenerCount('disconnect')
+    const initialMessageListeners = process.listenerCount('message')
+    const sentMessages = []
+    const uploadCallbacks = Array.from({ length: 11 }, () => sinon.spy())
+    process.connected = true
+    process.send = (message, onDone) => {
+      sentMessages.push(message)
+      onDone()
+    }
+
+    try {
+      for (const uploadCallback of uploadCallbacks) {
+        requestWebdriverioScreenshotUpload({ screenshot: PNG_SCREENSHOT }, uploadCallback)
+      }
+
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners + 1)
+      assert.strictEqual(process.listenerCount('disconnect'), initialDisconnectListeners + 1)
+      assert.strictEqual(sentMessages.length, 11)
+
+      for (const message of sentMessages) {
+        process.emit('message', {
+          name: SCREENSHOT_UPLOAD_RESPONSE,
+          content: { requestId: message.args.content.requestId },
+        })
+      }
+
+      for (const uploadCallback of uploadCallbacks) {
+        sinon.assert.calledOnceWithExactly(uploadCallback, undefined)
+      }
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners)
+      assert.strictEqual(process.listenerCount('disconnect'), initialDisconnectListeners)
+    } finally {
+      for (const message of sentMessages) {
+        process.emit('message', {
+          name: SCREENSHOT_UPLOAD_RESPONSE,
+          content: { requestId: message.args.content.requestId },
+        })
+      }
+      if (originalConnected === undefined) {
+        delete process.connected
+      } else {
+        process.connected = originalConnected
+      }
+      if (originalSend === undefined) {
+        delete process.send
+      } else {
+        process.send = originalSend
+      }
+    }
   })
 
   it('rejects malformed coordinator screenshot payloads before upload', () => {

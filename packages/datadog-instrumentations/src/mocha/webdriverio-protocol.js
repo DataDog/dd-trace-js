@@ -36,6 +36,65 @@ function sendWebdriverioWorkerMessage (message, onError, onDone) {
 }
 
 let screenshotUploadRequestId = 0
+const screenshotUploadRequests = new Map()
+
+/**
+ * Removes shared screenshot response listeners when there are no pending requests.
+ *
+ * @returns {void}
+ */
+function removeScreenshotUploadListeners () {
+  if (screenshotUploadRequests.size !== 0) return
+
+  process.off('message', onScreenshotUploadResponse)
+  process.off('disconnect', onScreenshotUploadDisconnect)
+}
+
+/**
+ * Completes one pending screenshot upload request.
+ *
+ * @param {string} requestId
+ * @param {Error} [error]
+ * @returns {void}
+ */
+function finishScreenshotUploadRequest (requestId, error) {
+  const request = screenshotUploadRequests.get(requestId)
+  if (!request) return
+
+  screenshotUploadRequests.delete(requestId)
+  clearTimeout(request.timeout)
+  removeScreenshotUploadListeners()
+  request.onDone(error)
+}
+
+/**
+ * Dispatches one coordinator screenshot response to its pending request.
+ *
+ * @param {object} message
+ * @returns {void}
+ */
+function onScreenshotUploadResponse (message) {
+  if (message?.name !== SCREENSHOT_UPLOAD_RESPONSE) return
+
+  const { error: errorMessage, requestId } = message.content || {}
+  if (!requestId) return
+
+  finishScreenshotUploadRequest(requestId, errorMessage ? new Error(errorMessage) : undefined)
+}
+
+/**
+ * Fails every pending screenshot upload after coordinator disconnect.
+ *
+ * @returns {void}
+ */
+function onScreenshotUploadDisconnect () {
+  for (const requestId of screenshotUploadRequests.keys()) {
+    finishScreenshotUploadRequest(
+      requestId,
+      new Error('WebdriverIO coordinator disconnected during screenshot upload')
+    )
+  }
+}
 
 /**
  * Requests one screenshot upload from the WebdriverIO coordinator.
@@ -46,37 +105,23 @@ let screenshotUploadRequestId = 0
  */
 function requestWebdriverioScreenshotUpload (content, onDone) {
   const requestId = `${process.pid}-${++screenshotUploadRequestId}`
-  let finished = false
-  let timeout
-
-  const finish = (error) => {
-    if (finished) return
-    finished = true
-    clearTimeout(timeout)
-    timeout = undefined
-    process.off('message', onMessage)
-    process.off('disconnect', onDisconnect)
-    onDone(error)
-  }
-  const onDisconnect = () => finish(new Error('WebdriverIO coordinator disconnected during screenshot upload'))
-  const onMessage = (message) => {
-    if (message?.name !== SCREENSHOT_UPLOAD_RESPONSE || message.content?.requestId !== requestId) return
-
-    const errorMessage = message.content.error
-    finish(errorMessage ? new Error(errorMessage) : undefined)
-  }
-
-  process.on('message', onMessage)
-  process.once('disconnect', onDisconnect)
-  timeout = setTimeout(() => {
-    finish(new Error('WebdriverIO screenshot upload timed out'))
+  const timeout = setTimeout(() => {
+    finishScreenshotUploadRequest(requestId, new Error('WebdriverIO screenshot upload timed out'))
   }, SCREENSHOT_UPLOAD_TIMEOUT_MS)
   timeout.unref?.()
+  if (screenshotUploadRequests.size === 0) {
+    process.on('message', onScreenshotUploadResponse)
+    process.once('disconnect', onScreenshotUploadDisconnect)
+  }
+  screenshotUploadRequests.set(requestId, { onDone, timeout })
   sendWebdriverioWorkerMessage({
     origin: 'datadog',
     name: SCREENSHOT_UPLOAD,
     content: { ...content, requestId },
-  }, (error) => finish(error || new Error('WebdriverIO screenshot upload IPC failed')))
+  }, error => finishScreenshotUploadRequest(
+    requestId,
+    error || new Error('WebdriverIO screenshot upload IPC failed')
+  ))
 }
 
 module.exports = {
