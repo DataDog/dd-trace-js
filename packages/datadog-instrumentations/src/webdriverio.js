@@ -112,6 +112,18 @@ function getRumOrigin (url) {
 }
 
 /**
+ * Returns whether this browser can remove correlation cookies without revisiting their origins.
+ *
+ * @param {object} browser
+ * @returns {boolean}
+ */
+function canCorrelateRumBrowser (browser) {
+  return browser?.isBidi
+    ? typeof browser.storageDeleteCookies === 'function'
+    : typeof browser?.sendCommand === 'function'
+}
+
+/**
  * Installs RUM correlation on every subsequent document in the BiDi session.
  *
  * @param {object} browser
@@ -191,7 +203,7 @@ function getRumTestExecutionId (browser, isRumActive) {
 async function preloadRumNavigation () {
   try {
     const browser = this
-    if (!browser?.isBidi ||
+    if (!canCorrelateRumBrowser(browser) || !browser.isBidi ||
         typeof browser.scriptAddPreloadScript !== 'function') return
 
     const testExecutionId = getRumTestExecutionId(browser)
@@ -214,6 +226,8 @@ async function preloadRumNavigation () {
  * @returns {Promise<void>}
  */
 async function correlateRumWindow (browser, testExecutionId) {
+  if (!canCorrelateRumBrowser(browser)) return
+
   let cookieSet = false
   try {
     await browser.setCookies({
@@ -225,8 +239,7 @@ async function correlateRumWindow (browser, testExecutionId) {
     log.error('WebdriverIO RUM correlation cookie error', error)
   }
 
-  if (cookieSet && !browser.isBidi &&
-      typeof browser.getUrl === 'function' && typeof browser.sendCommand === 'function') {
+  if (cookieSet && !browser.isBidi && typeof browser.getUrl === 'function') {
     try {
       const url = await browser.getUrl()
       const origin = getRumOrigin(url)
@@ -270,8 +283,9 @@ async function handleRumNavigation (context) {
     if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
       log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
     }
-    const testExecutionId = getRumTestExecutionId(browser, isRumActive)
-    if (!rumRunnerBrowsers.has(browser) || (isRumInstrumented && !isRumActive)) return
+    const canCorrelateRum = canCorrelateRumBrowser(browser)
+    const testExecutionId = getRumTestExecutionId(browser, canCorrelateRum ? isRumActive : false)
+    if (!canCorrelateRum || !rumRunnerBrowsers.has(browser) || (isRumInstrumented && !isRumActive)) return
 
     rumBrowsers.add(browser)
     if (!testExecutionId) {
@@ -501,6 +515,8 @@ async function cleanupAllRumBrowsers () {
  * @returns {Promise<void>}
  */
 async function correlateRumBrowser (browser, testExecutionId) {
+  if (!canCorrelateRumBrowser(browser)) return
+
   rumBrowsers.add(browser)
   rumCorrelationBrowsers.add(browser)
   rumBrowserTestExecutionIds.set(browser, testExecutionId)
