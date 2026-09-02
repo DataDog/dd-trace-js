@@ -464,21 +464,37 @@ async function startRumTest () {
 }
 
 /**
- * Updates the active test after asynchronous RUM initialization without ending its session.
+ * Detects active RUM browsers and optionally updates the active test without ending their sessions.
  *
- * @returns {Promise<void>}
+ * @param {boolean} [updateTest]
+ * @returns {Promise<boolean>}
  */
-async function detectActiveRumBrowsers () {
+async function detectActiveRumBrowsers (updateTest = true) {
+  let isRumActive = false
   for (const browser of rumCorrelationBrowsers) {
     try {
       // WebDriver commands are intentionally sequential for each browser.
       // eslint-disable-next-line no-await-in-loop
       const rumState = await browser.execute(detectRum)
-      if (rumState?.isRumActive) getRumTestExecutionId(browser, true)
+      if (rumState?.isRumActive) {
+        isRumActive = true
+        if (updateTest) getRumTestExecutionId(browser, true)
+      }
     } catch (error) {
       log.error('WebdriverIO RUM detection error', error)
     }
   }
+  return isRumActive
+}
+
+/**
+ * Detects RUM initialized during afterEach before removing the test correlation.
+ *
+ * @returns {Promise<object[]>}
+ */
+async function detectAndCleanupRumBrowsers () {
+  await detectActiveRumBrowsers()
+  return cleanupRumBrowsers()
 }
 
 /**
@@ -497,13 +513,15 @@ async function retryRumTest () {
 }
 
 /**
- * Reapplies RUM correlation to active browsers for a managed retry.
+ * Reapplies RUM correlation for a native Jasmine retry and reports whether RUM is active.
  *
  * @param {string|undefined} testExecutionId
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>}
  */
 async function retryRumBrowsers (testExecutionId) {
+  const isRumActive = await detectActiveRumBrowsers(false)
   await correlateRumBrowsers([...rumCorrelationBrowsers], testExecutionId)
+  return isRumActive
 }
 
 /**
@@ -560,7 +578,7 @@ function waitForRumCleanup (context) {
     isRumCleanupPending = true
     setRumWaitCallbacks(context, detectActiveRumBrowsers)
   } else if (type === 'Hook' && hookName === 'afterEach') {
-    setRumWaitCallbacks(context, cleanupRumBrowsers)
+    setRumWaitCallbacks(context, detectAndCleanupRumBrowsers)
   }
 }
 
@@ -579,7 +597,7 @@ function waitForFailedRumCleanup (context) {
     isRumCleanupPending = true
     setRumWaitCallbacks(context, detectActiveRumBrowsers, false)
   } else if (type === 'Hook' && hookName === 'afterEach') {
-    setRumWaitCallbacks(context, cleanupRumBrowsers, false)
+    setRumWaitCallbacks(context, detectAndCleanupRumBrowsers, false)
   } else {
     isRumCleanupPending = true
   }

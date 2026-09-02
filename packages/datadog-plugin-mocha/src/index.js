@@ -1157,12 +1157,12 @@ class MochaPlugin extends CiPlugin {
   async #retryWebdriverioJasmineTestWithRumCorrelation (context, test, error) {
     await this.#retryWebdriverioJasmineTest(test, error)
 
+    const testExecutionId = test.span.context().toTraceId()
     const correlationContext = {
-      isRumActive: true,
-      testExecutionId: undefined,
+      isRumActive: await context.rumRetryCallback?.(testExecutionId),
+      testExecutionId,
     }
     setRumTestCorrelation(correlationContext, test.span)
-    await context.rumRetryCallback?.(correlationContext.testExecutionId)
   }
 
   /**

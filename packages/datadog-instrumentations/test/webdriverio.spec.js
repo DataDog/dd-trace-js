@@ -26,6 +26,7 @@ const {
   MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_IS_RUM_ACTIVE,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_NAME,
@@ -308,6 +309,7 @@ describe('webdriverio instrumentation', () => {
       await runCallback(afterEachContext.resolveCallback)
 
       assert.deepStrictEqual(calls.slice(5), [
+        'cleanup',
         'remove-preload',
         'handle',
         'handles',
@@ -487,7 +489,7 @@ describe('webdriverio instrumentation', () => {
         'set',
         `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
       ])
-      assert.strictEqual(browser.execute.callCount, 2)
+      assert.strictEqual(browser.execute.callCount, 3)
     } finally {
       correlationCh.unsubscribe(correlate)
     }
@@ -522,7 +524,12 @@ describe('webdriverio instrumentation', () => {
           isRumInstrumented: true,
           rumSamplingRate: 100,
         })
-        .onThirdCall().callsFake(() => {
+        .onThirdCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onCall(3).callsFake(() => {
           calls.push('stop')
           return Promise.resolve(true)
         }),
@@ -556,7 +563,7 @@ describe('webdriverio instrumentation', () => {
       await runCallback(afterEachContext.resolveCallback)
 
       assert.deepStrictEqual(calls, ['set', 'test', 'delete'])
-      assert.strictEqual(browser.execute.callCount, 2)
+      assert.strictEqual(browser.execute.callCount, 3)
       assert.deepStrictEqual(browser.setCookies.firstCall.args, [{
         name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         value: 'suite-test-id',
@@ -745,13 +752,14 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('keeps same-page afterEach activity correlated before cleanup', async () => {
+  it('detects RUM activated by same-page afterEach activity before cleanup', async () => {
     require('../src/webdriverio')
 
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
     const urlCh = tracingChannel('orchestrion:webdriverio:url')
     const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
     const calls = []
+    const rumStates = []
     const browser = {
       capabilities: {
         browserName: 'chrome',
@@ -763,12 +771,20 @@ describe('webdriverio instrumentation', () => {
       }),
       execute: sinon.stub()
         .onFirstCall().resolves({
+          isRumActive: false,
+          isRumInstrumented: false,
+          rumSamplingRate: null,
+        })
+        .onSecondCall().resolves({
+          isRumActive: false,
+          isRumInstrumented: false,
+          rumSamplingRate: null,
+        })
+        .onThirdCall().resolves({
           isRumActive: true,
           isRumInstrumented: true,
           rumSamplingRate: 100,
-        })
-        .onSecondCall().resolves(false)
-        .onThirdCall().resolves(false),
+        }),
       setCookies: sinon.stub().callsFake((cookie) => {
         calls.push(`set:${cookie.value}`)
         return Promise.resolve()
@@ -777,6 +793,7 @@ describe('webdriverio instrumentation', () => {
     const correlate = context => {
       assert.strictEqual(context.browserName, 'chrome')
       assert.strictEqual(context.browserVersion, '123')
+      rumStates.push(context.isRumActive)
       context.testExecutionId = '1234'
     }
     correlationCh.subscribe(correlate)
@@ -791,6 +808,7 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(calls, [
         'set:1234',
       ])
+      assert.deepStrictEqual(rumStates, [false])
 
       calls.push('user-after-test')
       const testContext = { arguments: [undefined, 'Test'] }
@@ -802,6 +820,7 @@ describe('webdriverio instrumentation', () => {
         'user-after-test',
       ])
       assert.strictEqual(browser.execute.callCount, 2)
+      assert.deepStrictEqual(rumStates, [false])
 
       const beforeEachContext = {
         arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'beforeEach'],
@@ -823,7 +842,8 @@ describe('webdriverio instrumentation', () => {
         'user-after-each',
         `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
       ])
-      assert.strictEqual(browser.execute.callCount, 2)
+      assert.strictEqual(browser.execute.callCount, 3)
+      assert.deepStrictEqual(rumStates, [false, true])
     } finally {
       correlationCh.unsubscribe(correlate)
     }
@@ -993,7 +1013,7 @@ describe('webdriverio instrumentation', () => {
         functionDeclaration: preloadScript,
       }])
       assert.deepStrictEqual(browser.scriptRemovePreloadScript.firstCall.args, [{ script: 'rum-preload' }])
-      assert.strictEqual(browser.execute.callCount, 2)
+      assert.strictEqual(browser.execute.callCount, 3)
     } finally {
       correlationCh.unsubscribe(correlate)
     }
@@ -1026,7 +1046,7 @@ describe('webdriverio instrumentation', () => {
     browser.setCookies.resetHistory()
     browser.switchToWindow.resetHistory()
 
-    await executeAsyncContext.rumRetryCallback('retry-execution-id')
+    const isRumActive = await executeAsyncContext.rumRetryCallback('retry-execution-id')
 
     assert.deepStrictEqual(browser.switchToWindow.args.map(([windowHandle]) => windowHandle), [
       'window-a',
@@ -1038,6 +1058,8 @@ describe('webdriverio instrumentation', () => {
       [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'retry-execution-id' }],
     ])
     assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
+    assert.strictEqual(browser.execute.callCount, 1)
+    assert.strictEqual(isRumActive, false)
 
     await executeAsyncContext.rumCleanupCallback()
   })
@@ -1667,6 +1689,7 @@ describe('webdriverio instrumentation', () => {
       executeAsyncContext.rumRetryCallback = async function (testExecutionId) {
         correlations.push({ spanCount: spans.length, testExecutionId })
         await Promise.resolve()
+        return true
       }
 
       const retryPromise = executeAsyncContext.retryCallback(new Error('native retry failure'))
@@ -1680,6 +1703,7 @@ describe('webdriverio instrumentation', () => {
         spanCount: 2,
         testExecutionId: '2',
       }])
+      assert.strictEqual(spans[1].context().getTag(TEST_IS_RUM_ACTIVE), 'true')
 
       retryCh.unsubscribe(onRetry)
       await executeAsyncContext.retryCallback(new Error('immediate native retry failure'))
@@ -1688,8 +1712,37 @@ describe('webdriverio instrumentation', () => {
         spanCount: 3,
         testExecutionId: '3',
       })
+      assert.strictEqual(spans[2].context().getTag(TEST_IS_RUM_ACTIVE), 'true')
     } finally {
       retryCh.unsubscribe(onRetry)
+      plugin.configure(false)
+    }
+  })
+
+  it('does not mark a native WebdriverIO retry RUM-active without an active RUM browser', async () => {
+    const { plugin, spans } = createJasminePlugin({})
+    const file = path.join(process.cwd(), 'native-retry-without-rum.spec.js')
+    const result = createJasmineResult('native-retry-without-rum', file, 'failed')
+    const retries = { attempts: 0, limit: 1 }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      const wrapperContext = {
+        arguments: [undefined, 'Test', { specFn () {} }, undefined, undefined, undefined, 1],
+      }
+      const executeAsyncContext = { arguments: [undefined, retries] }
+      channel('tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start').runStores(wrapperContext, () => {
+        channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
+      })
+      const retryRumBrowsers = sinon.stub().resolves(false)
+      executeAsyncContext.rumRetryCallback = retryRumBrowsers
+
+      await executeAsyncContext.retryCallback(new Error('native retry without RUM'))
+
+      assert.strictEqual(spans.length, 2)
+      assert.deepStrictEqual(retryRumBrowsers.firstCall.args, ['2'])
+      assert.strictEqual(spans[1].context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    } finally {
       plugin.configure(false)
     }
   })
