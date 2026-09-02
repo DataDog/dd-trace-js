@@ -5108,16 +5108,97 @@ rules:
     })
   })
 
-  context('agentless APM span intake', () => {
+  context('agentless mode', () => {
     it('should not enable agentless exporter by default', () => {
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
     })
 
+    it('should configure all supported features for agentless mode', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'true'
+      process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+      process.env.DD_DATA_STREAMS_ENABLED = 'true'
+      process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+      process.env.DD_CRASHTRACKING_ENABLED = 'true'
+      process.env.DD_PROFILING_ENABLED = 'true'
+      process.env.DD_PROFILING_EXPORTERS = 'agent'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+      process.env.DD_METRICS_OTEL_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+      const config = getConfig()
+
+      assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
+      assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED, true)
+      assert.strictEqual(config.llmobs.agentlessEnabled, true)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
+      assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
+      assert.strictEqual(config.runtimeMetrics.enabled, false)
+      assert.strictEqual(config.dsmEnabled, false)
+      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+      assert.strictEqual(config.logInjection, true)
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, [])
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+    })
+
+    it('should disable log injection when tracing-only agentless mode keeps OTEL logs enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+      assert.strictEqual(config.logInjection, false)
+    })
+
+    it('should preserve profiling when it does not use the Agent', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_PROFILING_ENABLED = 'true'
+      process.env.DD_PROFILING_EXPORTERS = 'file'
+      const config = getConfig()
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, ['file'])
+    })
+
+    it('should retain DD_API_KEY for direct HTTPS products when the Agent uses remote HTTP', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'test-api-key'
+      process.env.DD_TRACE_AGENT_URL = 'http://agent.example:8126'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_API_KEY, 'test-api-key')
+    })
+
+    for (const exporter of ['datadog', 'jest_worker']) {
+      it(`should preserve the Test Optimization ${exporter} exporter`, () => {
+        process.env.DD_AGENTLESS_ENABLED = 'true'
+        const config = getConfig({
+          isCiVisibility: true,
+          experimental: { exporter },
+        })
+
+        assert.strictEqual(config.experimental.exporter, exporter)
+        assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
+      })
+    }
+
     it('should enable agentless exporter when _DD_APM_TRACING_AGENTLESS_ENABLED is true', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
       assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
     })
 
     it('should disable rate limiting when agentless is enabled', () => {
@@ -5138,10 +5219,12 @@ rules:
       assert.strictEqual(config.reportHostname, true)
     })
 
-    it('should clear sampling rules when agentless is enabled', () => {
+    it('should clear client-side sampling when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_TRACE_SAMPLE_RATE = '0.5'
       const config = getConfig()
       assert.deepStrictEqual(config.sampler.rules, [])
+      assert.strictEqual(config.sampler.sampleRate, undefined)
     })
 
     it('should disable 128-bit trace ID generation when agentless is enabled', () => {

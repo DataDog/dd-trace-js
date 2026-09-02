@@ -251,6 +251,44 @@ describe('sendData', () => {
     assert.strictEqual(request.secondCall.args[1].agent, getAgent(fallbackUrl))
   })
 
+  it('uses the direct telemetry intake for APM agentless mode without contacting the Agent', () => {
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        experimental: { exporter: 'agentless' },
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+    assert.strictEqual(options.path, '/api/v2/apmtelemetry')
+    assert.deepStrictEqual(options.url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    assert.strictEqual(options.headers['dd-api-key'], 'secret-key')
+  })
+
+  it('does not fall back to the Agent after an APM agentless telemetry failure', () => {
+    request.yields(new Error('intake unavailable'))
+
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        experimental: { exporter: 'agentless' },
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+  })
+
   it('sends the agentless backend telemetry with a URL object when the agent request fails', () => {
     request.yields(new Error('agent unreachable'))
 
@@ -269,6 +307,30 @@ describe('sendData', () => {
     const backendOptions = request.getCall(1).args[1]
     assert.deepStrictEqual(backendOptions.url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
     assert.strictEqual(backendOptions.headers['DD-API-KEY'], 'secret-key')
+  })
+
+  it('restores Agent telemetry mode after the Agent recovers', () => {
+    const log = {
+      info: sinon.stub(),
+      warn: sinon.stub(),
+    }
+    request.onFirstCall().yields(new Error('agent unreachable'))
+    request.onThirdCall().yields()
+    sendDataModule = proxyquire('../../src/telemetry/send-data', {
+      '../exporters/common/request': request,
+      '../log': log,
+    })
+    const config = {
+      DD_API_KEY: 'secret-key',
+      site: 'datadoghq.eu',
+      tags: { 'runtime-id': '123' },
+    }
+
+    sendDataModule.sendData(config, application, host, 'req-type')
+    sendDataModule.sendData(config, application, host, 'req-type')
+
+    sinon.assert.calledOnceWithExactly(log.warn, 'Agent telemetry failed, started agentless telemetry')
+    sinon.assert.calledOnceWithExactly(log.info, 'Started agent telemetry')
   })
 
   it('skips the agentless backend request when the endpoint URL is invalid', () => {
