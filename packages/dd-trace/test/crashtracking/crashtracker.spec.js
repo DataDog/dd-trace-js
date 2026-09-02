@@ -15,7 +15,7 @@ describeNotWindows('crashtracker', () => {
   let binding
   let config
   let identityRefreshChannel
-  let libdatadog
+  let libdatadogExtras
   let log
 
   before(() => {
@@ -23,9 +23,9 @@ describeNotWindows('crashtracker', () => {
   })
 
   beforeEach(() => {
-    libdatadog = require('@datadog/libdatadog')
+    libdatadogExtras = require('@datadog/libdatadog-extras')
 
-    binding = libdatadog.load('crashtracker')
+    binding = libdatadogExtras.load('crashtracker')
 
     config = {
       url: new URL('http://127.0.0.1:7357'),

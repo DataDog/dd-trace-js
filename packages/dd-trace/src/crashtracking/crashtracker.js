@@ -3,8 +3,8 @@
 const { EOL, platform } = require('node:os')
 
 // Load binding first to not import other modules if it throws
-const libdatadog = require('@datadog/libdatadog')
-const binding = libdatadog.load('crashtracker')
+const libdatadogExtras = require('@datadog/libdatadog-extras')
+const binding = libdatadogExtras.load('crashtracker')
 
 const { channel } = require('dc-polyfill')
 const log = require('../log')
@@ -132,7 +132,7 @@ class Crashtracker {
     return {
       args: [],
       env: [],
-      path_to_receiver_binary: libdatadog.find('crashtracker-receiver', true),
+      path_to_receiver_binary: libdatadogExtras.find('crashtracker-receiver', true),
       stderr_filename: null,
       stdout_filename: null,
     }
