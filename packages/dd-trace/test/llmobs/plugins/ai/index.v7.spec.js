@@ -55,7 +55,7 @@ describe('Plugin', () => {
     it('creates spans for generateText', async () => {
       await ai.generateText({
         model: openai('gpt-4o-mini'),
-        instructions: 'You are a helpful assistant',
+        instructions: { role: 'system', content: 'You are a helpful assistant' },
         prompt: 'Hello, OpenAI!',
         maxOutputTokens: 100,
         temperature: 0.5,
@@ -118,6 +118,76 @@ describe('Plugin', () => {
           cache_write_input_tokens: 0,
           cache_read_input_tokens: 0,
           output_tokens: MOCK_NUMBER,
+          reasoning_output_tokens: 0,
+        },
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
+    it('extracts text from structured instructions and user messages', async () => {
+      const OpenAI = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
+      const mockOpenai = OpenAI.createOpenAI({
+        apiKey: 'test-api-key',
+        fetch: () => new Response(JSON.stringify({
+          id: 'chatcmpl-mock',
+          object: 'chat.completion',
+          created: 1234567890,
+          model: 'gpt-4o-mini',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'Hi!' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        compatibility: 'strict',
+      })
+
+      await ai.generateText({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        instructions: [
+          { role: 'system', content: 'You are a helpful ' },
+          { role: 'system', content: 'assistant' },
+        ],
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Hello, ' },
+            { type: 'file', data: new URL('https://example.com/image.png'), mediaType: 'image/png' },
+            { type: 'text', text: 'OpenAI!' },
+          ],
+        }],
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(3)
+      const generateTextSpan = llmobsSpans.find(span => span.name === 'generateText')
+      const stepSpan = llmobsSpans.find(span => span.name === 'step')
+      const languageModelCallSpan = llmobsSpans.find(span => span.name === 'languageModelCall')
+
+      assertLlmObsSpanEvent(generateTextSpan, {
+        span: apmSpans.find(span => span.name === 'generateText'),
+        name: 'generateText',
+        spanKind: 'workflow',
+        inputValue: 'Hello, OpenAI!',
+        outputValue: MOCK_STRING,
+        metadata: {},
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+
+      assertLlmObsSpanEvent(languageModelCallSpan, {
+        span: apmSpans.find(span => span.name === 'languageModelCall'),
+        parentId: stepSpan.span_id,
+        name: 'languageModelCall',
+        spanKind: 'llm',
+        modelName: 'gpt-4o-mini',
+        modelProvider: 'openai',
+        inputMessages: [
+          { content: 'You are a helpful assistant', role: 'system' },
+          { content: 'Hello, OpenAI!', role: 'user' },
+        ],
+        outputMessages: [{ content: 'Hi!', role: 'assistant' }],
+        metadata: {},
+        metrics: {
+          input_tokens: 10,
+          cache_write_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          output_tokens: 2,
           reasoning_output_tokens: 0,
         },
         tags: { ml_app: 'test', integration: 'ai' },
@@ -1192,10 +1262,11 @@ describe('Plugin', () => {
       packageRange: '^5.0.0',
       buildModel: (BedrockModule, scenario) => {
         const { createAmazonBedrock } = BedrockModule.get()
-        return createAmazonBedrock({
+        const model = createAmazonBedrock({
           region: 'us-east-1',
           fetch: makeMockFetch(`bedrock-${scenario}`),
-        })('anthropic.claude-3-haiku-20240307-v1:0')
+        })
+        return model('anthropic.claude-3-haiku-20240307-v1:0')
       },
       env: {
         AWS_ACCESS_KEY_ID: 'test-access-key',
@@ -1210,10 +1281,11 @@ describe('Plugin', () => {
       packageRange: '^4.0.0',
       buildModel: (AnthropicModule, scenario) => {
         const { createAnthropic } = AnthropicModule.get()
-        return createAnthropic({
+        const model = createAnthropic({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`anthropic-${scenario}`),
-        })('claude-3-5-haiku-20241022')
+        })
+        return model('claude-3-5-haiku-20241022')
       },
     })
 
@@ -1250,10 +1322,11 @@ describe('Plugin', () => {
       packageRange: '^4.0.0',
       buildModel: (OpenAiModule, scenario) => {
         const { createOpenAI } = OpenAiModule.get()
-        return createOpenAI({
+        const model = createOpenAI({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`openai-responses-${scenario}`),
-        })('gpt-4o-mini')
+        })
+        return model('gpt-4o-mini')
       },
       scenarios: ['cache-read'],
       getExpectedMetrics: openaiExpectedMetrics,
@@ -1265,10 +1338,11 @@ describe('Plugin', () => {
       packageRange: '^4.0.0',
       buildModel: (GoogleModule, scenario) => {
         const { createGoogleGenerativeAI } = GoogleModule.get()
-        return createGoogleGenerativeAI({
+        const model = createGoogleGenerativeAI({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`google-${scenario}`),
-        })('gemini-2.5-flash')
+        })
+        return model('gemini-2.5-flash')
       },
       scenarios: ['cache-read'],
       getExpectedMetrics: ({ scenario }) => {

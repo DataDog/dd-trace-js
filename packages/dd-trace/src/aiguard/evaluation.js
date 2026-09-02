@@ -1,7 +1,8 @@
 'use strict'
 
 const { HTTP_CLIENT_IP, HTTP_USERAGENT, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
-const clone = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const createRfdc = require('../../../../vendor/dist/rfdc')
+const clone = createRfdc({ proto: false, circles: false })
 const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
 const { getActiveRequest } = require('../appsec/store')
 const { keepTrace } = require('../priority_sampler')
