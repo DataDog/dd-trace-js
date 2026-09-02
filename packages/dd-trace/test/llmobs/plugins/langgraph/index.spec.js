@@ -15,17 +15,18 @@ describe('integrations', () => {
   let StateGraph
   let Annotation
   let langchainMessages
+  let langgraphModule
 
   describe('langgraph', () => {
     const { getEvents } = useLlmObs({ plugin: ['langgraph', 'langchain'] })
 
     withVersions('langgraph', '@langchain/langgraph', (version) => {
       beforeEach(() => {
-        const langgraph = require(`../../../../../../versions/@langchain/langgraph@${version}`).get()
+        langgraphModule = require(`../../../../../../versions/@langchain/langgraph@${version}`)
+        const langgraph = langgraphModule.get()
         StateGraph = langgraph.StateGraph
         Annotation = langgraph.Annotation
-        langchainMessages = require(`../../../../../../versions/@langchain/langgraph@${version}`)
-          .get('@langchain/core/messages')
+        langchainMessages = langgraphModule.get('@langchain/core/messages')
       })
 
       describe('Pregel.stream', () => {
@@ -252,6 +253,63 @@ describe('integrations', () => {
             },
             tags: { ml_app: 'test', integration: 'langgraph' },
           })
+        })
+
+        it('does not mark graph interrupts as errors', async () => {
+          const { Command, END, interrupt, MemorySaver, START } =
+            langgraphModule.get()
+          const { tool } = langgraphModule.get('@langchain/core/tools')
+          const { z } = langgraphModule.get('zod')
+          const StateAnnotation = Annotation.Root({
+            result: Annotation(),
+          })
+          const askForApproval = tool(
+            ({ action }) => {
+              const approved = interrupt({ question: `Approve this action: ${action}?` })
+              return approved ? 'The action was approved.' : 'The action was rejected.'
+            },
+            {
+              name: 'ask_for_approval',
+              description: 'Ask a human to approve an action',
+              schema: z.object({ action: z.string() }),
+            }
+          )
+          const workflow = new StateGraph(StateAnnotation)
+            .addNode('approval', async () => ({
+              result: await askForApproval.invoke({ action: 'deploy to production' }),
+            }))
+            .addEdge(START, 'approval')
+            .addEdge('approval', END)
+          const app = workflow.compile({ checkpointer: new MemorySaver(), name: 'interruptGraph' })
+          const config = { configurable: { thread_id: 'graph-interrupt-test' } }
+
+          const suspended = await app.invoke({}, config)
+          const { apmSpans, llmobsSpans } = await getEvents(3)
+
+          assert.strictEqual(suspended.__interrupt__.length, 1)
+
+          const apmToolSpan = apmSpans.find(span => span.resource?.endsWith('.ask_for_approval'))
+          const llmobsToolSpan = llmobsSpans.find(span => span.name === 'ask_for_approval')
+          assert.ok(apmToolSpan, 'expected an APM span for ask_for_approval')
+          assert.ok(llmobsToolSpan, 'expected an LLMObs span for ask_for_approval')
+          assert.strictEqual(apmToolSpan.error, 0)
+          assert.strictEqual(Object.hasOwn(apmToolSpan.meta, 'error.type'), false)
+          assert.strictEqual(Object.hasOwn(apmToolSpan.meta, 'error.message'), false)
+          assert.strictEqual(Object.hasOwn(apmToolSpan.meta, 'error.stack'), false)
+          assert.ok(llmobsSpans.every(span => span.status === 'ok'))
+
+          assertLlmObsSpanEvent(llmobsToolSpan, {
+            span: apmToolSpan,
+            parentId: apmToolSpan.parent_id,
+            spanKind: 'tool',
+            name: 'ask_for_approval',
+            inputValue: JSON.stringify({ action: 'deploy to production' }),
+            tags: { ml_app: 'test', integration: 'langchain' },
+          })
+
+          const resumed = await app.invoke(new Command({ resume: true }), config)
+          assert.strictEqual(resumed.result, 'The action was approved.')
+          await getEvents(3)
         })
       })
 
