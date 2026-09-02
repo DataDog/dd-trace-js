@@ -334,6 +334,84 @@ describe('check-require-cache', () => {
             filePath: 'trace-await-context-callback.js',
           },
           functionQuery: {
+            className: 'ContextRunner',
+            methodName: 'run',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_this',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'ClassDeclaration[id.name="ContextRunner"] ' +
+            'MethodDefinition[key.name="run"] IfStatement',
+          channelName: 'trace_await_context_callback_this',
+          transform: 'awaitContextCallback',
+          transformOptions: {
+            callbackName: 'beforeContinue',
+            callbackThis: true,
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          functionQuery: {
+            functionName: 'runAfterSetup',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_at_try_start',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runAfterSetup"] TryStatement',
+          channelName: 'trace_await_context_callback_at_try_start',
+          transform: 'awaitContextCallbackAtTryStart',
+          transformOptions: {
+            callbackName: 'beforeStart',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback-outer-try.js',
+          },
+          functionQuery: {
+            functionName: 'tracedNested',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_outer_try',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback-outer-try.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="tracedNested"] CallExpression[callee.name="task"]',
+          channelName: 'trace_await_context_callback_outer_try',
+          transform: 'awaitContextCallbackAtTryStart',
+          transformOptions: {
+            callbackName: 'beforeStart',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          functionQuery: {
             functionName: 'consumeFirst',
             kind: 'Async',
           },
@@ -816,6 +894,92 @@ describe('check-require-cache', () => {
     assert.equal(attempts, 2)
   })
 
+  it('should await a context callback before entering a try block', async () => {
+    const { runAfterSetup } = compileFile('trace-await-context-callback')
+    const steps = []
+    let finishSetup
+    let startSetup
+    const setupStarted = new Promise(resolve => {
+      startSetup = resolve
+    })
+    const setupFinished = new Promise(resolve => {
+      finishSetup = resolve
+    })
+
+    subs = {
+      start (ctx) {
+        ctx.beforeStart = async function () {
+          steps.push('setup')
+          startSetup()
+          await setupFinished
+          steps.push('setup done')
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_at_try_start')
+    ch.subscribe(subs)
+
+    const resultPromise = runAfterSetup(() => {
+      steps.push('task')
+      return 'passed'
+    })
+
+    await setupStarted
+    assert.deepStrictEqual(steps, ['setup'])
+
+    finishSetup()
+
+    assert.equal(await resultPromise, 'passed')
+    assert.deepStrictEqual(steps, ['setup', 'setup done', 'task'])
+  })
+
+  it('should preserve a try block when context callback lookup throws', async () => {
+    const { runAfterSetup } = compileFile('trace-await-context-callback')
+
+    subs = {
+      start (ctx) {
+        Object.defineProperty(ctx, 'beforeStart', {
+          get () {
+            throw new Error('observability callback lookup failed')
+          },
+        })
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_at_try_start')
+    ch.subscribe(subs)
+
+    assert.equal(await runAfterSetup(() => 'passed'), 'passed')
+  })
+
+  it('should not use a try block outside the traced function', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'trace-await-context-callback-outer-try.js')
+    const source = readFileSync(filename, 'utf8')
+    const { runNestedWithoutTry } = compileFile('trace-await-context-callback-outer-try')
+
+    assert.strictEqual(content, source)
+    assert.equal(await runNestedWithoutTry(() => 'passed'), 'passed')
+  })
+
+  it('should call a context callback with the instrumented receiver', async () => {
+    const { ContextRunner } = compileFile('trace-await-context-callback')
+    const runner = new ContextRunner()
+
+    subs = {
+      start (ctx) {
+        ctx.beforeContinue = async function () {
+          assert.strictEqual(this, runner)
+          await new Promise(resolve => setImmediate(resolve))
+        }
+      },
+    }
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_this')
+    ch.subscribe(subs)
+
+    assert.equal(await runner.run({ shouldContinue: true }), 'continued')
+  })
+
   it('should recheck the condition after the context callback settles', async () => {
     const { runWithRetry } = compileFile('trace-await-context-callback')
     const callbackError = new Error('do not retry')
@@ -849,6 +1013,33 @@ describe('check-require-cache', () => {
     subs = {
       start (ctx) {
         ctx.beforeContinue = () => Promise.reject(new Error('observability callback failed'))
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback')
+    ch.subscribe(subs)
+
+    const result = await runWithRetry(() => {
+      attempts++
+      if (attempts === 1) throw new Error('first attempt failed')
+      return 'passed'
+    }, { remaining: 1 })
+
+    assert.equal(result, 'passed')
+    assert.equal(attempts, 2)
+  })
+
+  it('should preserve the conditional branch when context callback lookup throws', async () => {
+    const { runWithRetry } = compileFile('trace-await-context-callback')
+    let attempts = 0
+
+    subs = {
+      start (ctx) {
+        Object.defineProperty(ctx, 'beforeContinue', {
+          get () {
+            throw new Error('observability callback lookup failed')
+          },
+        })
       },
     }
 
