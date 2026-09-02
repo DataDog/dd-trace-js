@@ -296,6 +296,9 @@
 /packages/dd-trace/test/baggage.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/carrier.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/carrier.spec.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/knuth_hash.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/otel_sampling.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/opentracing/propagation/otel_sampling.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/*sampler.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/*sampler.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/sampling_rule.js @DataDog/apm-sdk-capabilities-js
