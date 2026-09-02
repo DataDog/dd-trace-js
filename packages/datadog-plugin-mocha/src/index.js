@@ -1436,7 +1436,7 @@ class MochaPlugin extends CiPlugin {
       return false
     }
 
-    const browser = globalThis.browser || globalThis._wdioGlobals?.get?.('browser')
+    const browser = globalThis._wdioGlobals?.get?.('browser') || globalThis.browser
     const upload = {
       callbacks: onDone ? [onDone] : [],
       finished: false,

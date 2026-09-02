@@ -740,7 +740,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('captures failure screenshots when WebdriverIO global injection is disabled', async () => {
+  it('prefers the registered WebdriverIO browser when global injection is disabled', async () => {
     const originalBrowser = globalThis.browser
     const originalWdioGlobals = globalThis._wdioGlobals
     const screenshot = PNG_SCREENSHOT
@@ -751,7 +751,9 @@ describe('webdriverio instrumentation', () => {
       canUploadTestScreenshots: () => true,
       uploadTestScreenshot: sinon.spy((_options, callback) => callback()),
     }
-    delete globalThis.browser
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().rejects(new Error('not the WebdriverIO browser')),
+    }
     globalThis._wdioGlobals = new Map([['browser', browser]])
     const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
       exporter,
@@ -777,6 +779,7 @@ describe('webdriverio instrumentation', () => {
       await Promise.resolve()
 
       sinon.assert.calledOnce(browser.takeScreenshot)
+      sinon.assert.notCalled(globalThis.browser.takeScreenshot)
       sinon.assert.calledOnce(exporter.uploadTestScreenshot)
       assert.strictEqual(spans[0].context()._isFinished, true)
       assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
