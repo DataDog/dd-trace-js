@@ -7,6 +7,7 @@ const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
 const {
   awaitContextCallback,
+  awaitContextCallbackAtFunctionStart,
   awaitContextCallbackAtTryStart,
   configureGraphqlJitCompileObject,
   configureGraphqlJitDeferredField,
@@ -47,6 +48,7 @@ const matcherEsm = create(instrumentations, dcPolyfillEsm)
 
 for (const matcher of [matcherCjs, matcherEsm]) {
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
+  matcher.addTransform('awaitContextCallbackAtFunctionStart', awaitContextCallbackAtFunctionStart)
   matcher.addTransform('awaitContextCallbackAtTryStart', awaitContextCallbackAtTryStart)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
   matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
