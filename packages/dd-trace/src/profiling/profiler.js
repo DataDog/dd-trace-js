@@ -282,7 +282,13 @@ class Profiler extends EventEmitter {
         if (this.#pendingStart) {
           const config = this.#pendingStart
           this.#pendingStart = undefined
-          this.start(config)
+          // Unlike the synchronous entry point, nothing awaits this promise, so a throw here would
+          // become an unhandled rejection instead of a caught error.
+          try {
+            this.start(config)
+          } catch (error) {
+            log.error(error)
+          }
         }
       })
     this.#stop()

@@ -29,12 +29,18 @@ describe('profiler', function () {
   let mapperInstance
   let interval
   let flushInterval
+  let buildProfilingRuntimeError
 
   // Stubs the profiling config assembly so the lifecycle tests run against the test's
   // profiler/exporter doubles instead of real native profilers, while still exercising
   // the compression and tag derivation.
   const configStub = {
     buildProfilingRuntime: (config) => {
+      if (buildProfilingRuntimeError) {
+        const error = buildProfilingRuntimeError
+        buildProfilingRuntimeError = undefined
+        throw error
+      }
       const compression = process.env.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'off'
       const [method, level0] = compression.split('-')
       const level = level0 ? Number.parseInt(level0, 10) : undefined
@@ -61,6 +67,7 @@ describe('profiler', function () {
   }
 
   function setUpProfiler () {
+    buildProfilingRuntimeError = undefined
     flushInterval = 65 * 1000
     interval = flushInterval
     clock = sinon.useFakeTimers({
@@ -383,6 +390,33 @@ describe('profiler', function () {
       sinon.assert.notCalled(wallProfiler.start)
       sinon.assert.notCalled(spaceProfiler.start)
       assert.strictEqual(profiler.enabled, false)
+    })
+
+    it('logs and does not crash when a deferred restart fails during setup', async () => {
+      await profiler.start(makeStartOptions())
+
+      let resolveEncode
+      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
+      wallProfiler.encode.returns(wallProfilePromise)
+
+      profiler.stop()
+
+      const restarted = profiler.start(makeStartOptions())
+      assert.strictEqual(restarted, true)
+      await Promise.resolve()
+
+      // The deferred restart calls start() again once the shutdown collection settles; make that
+      // call fail during setup, outside of start()'s own try/catch, the way buildProfilingRuntime()
+      // or the pprof initialization could.
+      const setupError = new Error('boom')
+      buildProfilingRuntimeError = setupError
+
+      resolveEncode(wallProfile)
+      await waitForExport()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      sinon.assert.calledOnce(consoleLogger.error)
+      assert.strictEqual(consoleLogger.error.firstCall.args[0], setupError)
     })
 
     async function shouldExportProfiles (compression, magicBytes) {
