@@ -125,8 +125,11 @@ esbuildVersions.forEach((version) => {
         delete require.cache[require.resolve('esbuild')]
         const esbuild = require('esbuild')
         const ddPlugin = require('../../esbuild')
+        const { version: installedVersion } = JSON.parse(
+          fs.readFileSync(require.resolve('esbuild/package.json'), 'utf8')
+        )
 
-        assert.strictEqual(esbuild.version, version)
+        assert.strictEqual(esbuild.version, installedVersion)
 
         const result = await esbuild.build({
           absWorkingDir: pathModule.dirname(process.cwd()),
