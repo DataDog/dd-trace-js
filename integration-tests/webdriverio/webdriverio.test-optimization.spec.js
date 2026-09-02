@@ -14,6 +14,7 @@ const {
   useSandbox,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../packages/dd-trace/src/ci-visibility/rum')
 const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
@@ -96,6 +97,7 @@ function startWebDriverServer () {
           capabilities: {
             browserName: 'chrome',
             browserVersion: 'test',
+            'goog:chromeOptions': {},
             platformName: process.platform,
           },
         }
@@ -119,10 +121,6 @@ function startWebDriverServer () {
       } else if (request.method === 'POST' && request.url?.endsWith('/execute/sync')) {
         if (body.script.includes('getInternalContext')) {
           value = { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
-        } else if (body.script.includes('window.open')) {
-          const cleanupWindowHandle = `window-${windowHandles.length + 1}`
-          windowHandles.push(cleanupWindowHandle)
-          windowUrls.set(cleanupWindowHandle, body.args[0])
         } else {
           value = true
         }
@@ -467,15 +465,34 @@ for (const version of versions) {
             )
             assert.deepStrictEqual(
               cookieRequests.map(({ method }) => method),
-              ['POST', 'POST', 'POST', 'DELETE', 'DELETE', 'DELETE', 'DELETE']
+              ['POST', 'POST', 'POST', 'DELETE', 'DELETE']
             )
             assert.deepStrictEqual(
               cookieRequests.filter(({ method }) => method === 'DELETE').map(({ pageUrl }) => pageUrl),
               [
                 'http://after-each.example.test/',
-                'http://example.test/',
-                'http://second.example.test/',
                 'http://after-each.example.test/',
+              ]
+            )
+            assert.deepStrictEqual(
+              requests
+                .filter(({ url }) => url?.endsWith('/chromium/send_command'))
+                .map(({ body }) => body),
+              [
+                {
+                  cmd: 'Network.deleteCookies',
+                  params: {
+                    name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+                    url: 'http://example.test/',
+                  },
+                },
+                {
+                  cmd: 'Network.deleteCookies',
+                  params: {
+                    name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+                    url: 'http://second.example.test/',
+                  },
+                },
               ]
             )
           })

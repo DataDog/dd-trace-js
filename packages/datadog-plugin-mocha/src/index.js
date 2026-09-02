@@ -1156,10 +1156,13 @@ class MochaPlugin extends CiPlugin {
 
     const testExecutionId = test.span.context().toTraceId()
     const correlationContext = {
-      isRumActive: await context.rumRetryCallback?.(testExecutionId),
+      ...await context.rumRetryCallback?.(testExecutionId),
       testExecutionId,
     }
-    setRumTestCorrelation(correlationContext, test.span)
+    const testSpan = setRumTestCorrelation(correlationContext, test.span)
+    if (correlationContext.browserName) {
+      testSpan?.setTag(TEST_BROWSER_NAME, correlationContext.browserName)
+    }
   }
 
   /**

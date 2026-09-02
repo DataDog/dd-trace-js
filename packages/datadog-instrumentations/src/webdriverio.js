@@ -225,7 +225,8 @@ async function correlateRumWindow (browser, testExecutionId) {
     log.error('WebdriverIO RUM correlation cookie error', error)
   }
 
-  if (cookieSet && !browser.isBidi && typeof browser.getUrl === 'function') {
+  if (cookieSet && !browser.isBidi &&
+      typeof browser.getUrl === 'function' && typeof browser.sendCommand === 'function') {
     try {
       const url = await browser.getUrl()
       const origin = getRumOrigin(url)
@@ -339,7 +340,7 @@ async function deleteRumCookieAndTrackOrigin (browser, cleanedOrigins) {
 }
 
 /**
- * Removes cookies from classic WebDriver origins that no open window currently uses.
+ * Removes cookies from classic Chromium origins that no open window currently uses.
  *
  * @param {object} browser
  * @param {Set<string>} cleanedOrigins
@@ -348,62 +349,20 @@ async function deleteRumCookieAndTrackOrigin (browser, cleanedOrigins) {
 async function cleanupRumOrigins (browser, cleanedOrigins) {
   const originUrls = rumBrowserOriginUrls.get(browser)
   rumBrowserOriginUrls.delete(browser)
-  if (!originUrls?.size) return
-
-  if (typeof browser.newWindow !== 'function' ||
-      typeof browser.closeWindow !== 'function' ||
-      typeof browser.getWindowHandle !== 'function' ||
-      typeof browser.navigateTo !== 'function' ||
-      typeof browser.switchToWindow !== 'function') {
-    log.error('WebdriverIO RUM origin cleanup commands are not available')
-    return
-  }
-
-  let currentWindowHandle
-  try {
-    currentWindowHandle = await browser.getWindowHandle()
-  } catch (error) {
-    log.error('WebdriverIO RUM window discovery error', error)
-    return
-  }
+  if (!originUrls?.size || typeof browser.sendCommand !== 'function') return
 
   for (const [origin, url] of originUrls) {
     if (cleanedOrigins.has(origin)) continue
 
-    let cleanupWindowOpened = false
     try {
-      // WebDriver window commands must run in order because each one changes the active window.
+      // WebDriver commands must run in order because they share the same browser session.
       // eslint-disable-next-line no-await-in-loop
-      await browser.newWindow('about:blank')
-      cleanupWindowOpened = true
-      // eslint-disable-next-line no-await-in-loop
-      await browser.navigateTo(url)
-      // eslint-disable-next-line no-await-in-loop
-      const cleanupOrigin = getRumOrigin(await browser.getUrl())
-      if (cleanupOrigin === origin) {
-        // eslint-disable-next-line no-await-in-loop
-        await deleteRumCookie(browser)
-      } else {
-        log.error('WebdriverIO RUM origin cleanup redirected from %s to %s', origin, cleanupOrigin)
-      }
+      await browser.sendCommand('Network.deleteCookies', {
+        name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+        url,
+      })
     } catch (error) {
       log.error('WebdriverIO RUM origin cleanup error', error)
-    }
-
-    if (cleanupWindowOpened) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await browser.closeWindow()
-      } catch (error) {
-        log.error('WebdriverIO RUM cleanup window close error', error)
-      }
-    }
-
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      await browser.switchToWindow(currentWindowHandle)
-    } catch (error) {
-      log.error('WebdriverIO RUM window restore error', error)
     }
   }
 }
@@ -645,12 +604,23 @@ async function retryRumTest () {
  * Reapplies RUM correlation for a native Jasmine retry and reports whether RUM is active.
  *
  * @param {string|undefined} testExecutionId
- * @returns {Promise<boolean>}
+ * @returns {Promise<{
+ *   browserName: string|undefined,
+ *   browserVersion: string|undefined,
+ *   isRumActive: boolean
+ * }>}
  */
 async function retryRumBrowsers (testExecutionId) {
+  const browsers = [...rumCorrelationBrowsers]
   const isRumActive = await detectActiveRumBrowsers(false)
-  await correlateRumBrowsers([...rumCorrelationBrowsers], testExecutionId)
-  return isRumActive
+  await correlateRumBrowsers(browsers, testExecutionId)
+
+  const browser = browsers[0]
+  return {
+    browserName: browser?.capabilities?.browserName,
+    browserVersion: browser?.capabilities?.browserVersion,
+    isRumActive,
+  }
 }
 
 /**
