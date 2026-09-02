@@ -333,11 +333,14 @@ async function forEachRumWindow (browser, operation, value) {
 
   for (const windowHandle of windowHandles) {
     try {
+      // WebDriver window commands must run in order because each one changes the active window.
+      // eslint-disable-next-line no-await-in-loop
       await browser.switchToWindow(windowHandle)
     } catch (error) {
       log.error('WebdriverIO RUM window switch error', error)
       continue
     }
+    // eslint-disable-next-line no-await-in-loop
     await operation(browser, value)
   }
 
@@ -381,6 +384,8 @@ async function cleanupRumBrowsers () {
   const browsers = [...rumCorrelationBrowsers]
   rumCorrelationBrowsers.clear()
   for (const browser of browsers) {
+    // Cleanup is intentionally sequential to avoid overlapping WebDriver commands.
+    // eslint-disable-next-line no-await-in-loop
     await cleanupRumBrowser(browser)
   }
   return browsers
@@ -397,6 +402,8 @@ async function cleanupAllRumBrowsers () {
   rumBrowsers.clear()
   rumCorrelationBrowsers.clear()
   for (const browser of browsers) {
+    // Cleanup is intentionally sequential to avoid overlapping WebDriver commands.
+    // eslint-disable-next-line no-await-in-loop
     await cleanupRumBrowser(browser, true)
   }
 }
@@ -426,6 +433,8 @@ async function correlateRumBrowsers (browsers, testExecutionId) {
   if (!browsers || !testExecutionId) return
 
   for (const browser of browsers) {
+    // WebDriver commands are intentionally sequential for each browser.
+    // eslint-disable-next-line no-await-in-loop
     await correlateRumBrowser(browser, testExecutionId)
   }
 }
@@ -439,6 +448,8 @@ async function startRumTest () {
   for (const browser of rumBrowsers) {
     let rumState
     try {
+      // WebDriver commands are intentionally sequential for each browser.
+      // eslint-disable-next-line no-await-in-loop
       rumState = await browser.execute(detectRum)
     } catch (error) {
       log.error('WebdriverIO RUM detection error', error)
@@ -449,6 +460,7 @@ async function startRumTest () {
     const testExecutionId = getRumTestExecutionId(browser, rumState.isRumActive || undefined)
     if (!testExecutionId || rumBrowserTestExecutionIds.get(browser) === testExecutionId) continue
 
+    // eslint-disable-next-line no-await-in-loop
     await correlateRumBrowser(browser, testExecutionId)
   }
 }
@@ -461,6 +473,8 @@ async function startRumTest () {
 async function detectActiveRumBrowsers () {
   for (const browser of rumCorrelationBrowsers) {
     try {
+      // WebDriver commands are intentionally sequential for each browser.
+      // eslint-disable-next-line no-await-in-loop
       const rumState = await browser.execute(detectRum)
       if (rumState?.isRumActive) getRumTestExecutionId(browser, true)
     } catch (error) {
