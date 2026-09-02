@@ -10,6 +10,7 @@ const sinon = require('sinon')
 const { DD_MAJOR } = require('../../../../version')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
 const LLMObsTagger = require('../../src/llmobs/tagger')
+const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 const {
   PARENT_AGENT_NAME,
   PARENT_AGENT_SPAN_ID,
@@ -57,6 +58,24 @@ describe('module', () => {
     )
     proxyquire.preserveCache()
     loadLlmobsModule()
+  }
+
+  /**
+   * @param {Record<string, string>} carrier
+   * @param {string} [propagatedTags]
+   * @param {import('../../src/config/config-base')} [config]
+   */
+  function inject (carrier, propagatedTags, config = getConfigFresh()) {
+    const propagator = new TextMapPropagator(config)
+    const inboundCarrier = {
+      'x-datadog-trace-id': '1234567890',
+      'x-datadog-parent-id': '9876543210',
+    }
+    if (propagatedTags !== undefined) inboundCarrier['x-datadog-tags'] = propagatedTags
+
+    const spanContext = propagator.extract(inboundCarrier)
+    assert.ok(spanContext)
+    propagator.inject(spanContext, carrier)
   }
 
   beforeEach(() => {
@@ -141,7 +160,7 @@ describe('module', () => {
       const carrier = {
         'x-datadog-tags': '',
       }
-      injectCh.publish({ carrier })
+      inject(carrier)
 
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
     })
@@ -161,7 +180,7 @@ describe('module', () => {
       const carrier = {
         'x-datadog-tags': '_dd.p.llmobs_parent_id=old-parent-id',
       }
-      injectCh.publish({ carrier })
+      inject(carrier)
 
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=new-parent-id')
     })
@@ -185,7 +204,7 @@ describe('module', () => {
       const carrier = {
         'x-datadog-tags': '',
       }
-      injectCh.publish({ carrier })
+      inject(carrier)
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
@@ -211,7 +230,7 @@ describe('module', () => {
       const carrier = {
         'x-datadog-tags': '',
       }
-      injectCh.publish({ carrier })
+      inject(carrier)
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
@@ -235,7 +254,7 @@ describe('module', () => {
       const carrier = {
         'x-datadog-tags': '',
       }
-      injectCh.publish({ carrier })
+      inject(carrier)
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
@@ -258,7 +277,7 @@ describe('module', () => {
       })
 
       const carrier = { 'x-datadog-tags': '' }
-      injectCh.publish({ carrier })
+      inject(carrier)
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
@@ -280,7 +299,7 @@ describe('module', () => {
       }
 
       const carrier = { 'x-datadog-tags': '' }
-      injectCh.publish({ carrier })
+      inject(carrier)
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
@@ -294,7 +313,7 @@ describe('module', () => {
       const carrier = {
         'x-datadog-tags': '',
       }
-      injectCh.publish({ carrier })
+      inject(carrier)
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
     })
 
@@ -304,7 +323,7 @@ describe('module', () => {
       const carrier = {
         'x-datadog-tags': '',
       }
-      injectCh.publish({ carrier })
+      inject(carrier)
       assert.strictEqual(carrier['x-datadog-tags'], '')
     })
 
@@ -312,63 +331,59 @@ describe('module', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
       const carrier = {}
-      injectCh.publish({ carrier })
+      inject(carrier)
 
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
     })
 
-    it('appends existing non-empty x-datadog-tags with a single comma separator', () => {
+    it('merges LLMObs tags with propagated trace tags before serialization', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
-      const carrier = {
-        'x-datadog-tags': '_dd.p.tid=69fe014200000000,_dd.p.dm=-0',
-      }
-      injectCh.publish({ carrier })
+      const carrier = {}
+      inject(carrier, '_dd.p.tid=69fe014200000000,_dd.p.dm=-0')
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
-        '_dd.p.llmobs_ml_app=test,_dd.p.tid=69fe014200000000,_dd.p.dm=-0'
+        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
       )
     })
 
     it('does not duplicate _dd.p.llmobs_ml_app when already present in x-datadog-tags', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
-      const carrier = {
-        'x-datadog-tags': [
-          '_dd.p.tid=69fe014200000000',
-          '_dd.p.dm=-0',
-          '_dd.p.llmobs_ml_app=old-app',
-          '_dd.p.llmobs_ml_app=older-app',
-        ].join(','),
-      }
-      injectCh.publish({ carrier })
+      const propagatedTags = [
+        '_dd.p.tid=69fe014200000000',
+        '_dd.p.dm=-0',
+        '_dd.p.llmobs_ml_app=old-app',
+        '_dd.p.llmobs_ml_app=older-app',
+      ].join(',')
+      const carrier = {}
+      inject(carrier, propagatedTags)
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
-        '_dd.p.llmobs_ml_app=test,_dd.p.tid=69fe014200000000,_dd.p.dm=-0'
+        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
       )
     })
 
     it('preserves non-replaced LLMObs keys from upstream carrier', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
-      const carrier = {
-        'x-datadog-tags': [
-          '_dd.p.llmobs_sid=retained-session',
-          '_dd.p.tid=69fe014200000000',
-          '_dd.p.dm=-0',
-        ].join(','),
-      }
-      injectCh.publish({ carrier })
+      const propagatedTags = [
+        '_dd.p.llmobs_sid=retained-session',
+        '_dd.p.tid=69fe014200000000',
+        '_dd.p.dm=-0',
+      ].join(',')
+      const carrier = {}
+      inject(carrier, propagatedTags)
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
         [
-          '_dd.p.llmobs_ml_app=test',
           '_dd.p.llmobs_sid=retained-session',
           '_dd.p.tid=69fe014200000000',
           '_dd.p.dm=-0',
+          '_dd.p.llmobs_ml_app=test',
         ].join(',')
       )
     })
@@ -376,14 +391,13 @@ describe('module', () => {
     it('preserves an LLMObs prefix inside another tag value', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
-      const carrier = {
-        'x-datadog-tags': '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=old-app',
-      }
-      injectCh.publish({ carrier })
+      const propagatedTags = '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=old-app'
+      const carrier = {}
+      inject(carrier, propagatedTags)
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
-        '_dd.p.llmobs_ml_app=test,_dd.p.other=value_dd.p.llmobs_inside'
+        '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=test'
       )
     })
 
@@ -407,33 +421,30 @@ describe('module', () => {
         [SAMPLING_DECISION]: '1',
       })
 
-      const carrier = {
-        'x-datadog-tags': [
-          '_dd.p.llmobs_parent_id=old-id',
-          '_dd.p.tid=69fe014200000000',
-          '_dd.p.llmobs_ml_app=old-app',
-          '_dd.p.llmobs_sid=old-session',
-          '_dd.p.llmobs_sr=0.1',
-          '_dd.p.llmobs_sd=0',
-          '_dd.p.llmobs_trace_id=old-trace-id',
-          '_dd.p.llmobs_pagent_span_id=old-agent-id',
-          '_dd.p.llmobs_pagent_name=old-agent',
-          'malformed',
-        ].join(','),
-      }
-      injectCh.publish({ carrier })
+      const propagatedTags = [
+        '_dd.p.llmobs_parent_id=old-id',
+        '_dd.p.tid=69fe014200000000',
+        '_dd.p.llmobs_ml_app=old-app',
+        '_dd.p.llmobs_sid=old-session',
+        '_dd.p.llmobs_sr=0.1',
+        '_dd.p.llmobs_sd=0',
+        '_dd.p.llmobs_trace_id=old-trace-id',
+        '_dd.p.llmobs_pagent_span_id=old-agent-id',
+        '_dd.p.llmobs_pagent_name=old-agent',
+      ].join(',')
+      const carrier = {}
+      inject(carrier, propagatedTags)
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
         [
+          '_dd.p.tid=69fe014200000000',
           '_dd.p.llmobs_parent_id=new-parent-id',
           '_dd.p.llmobs_ml_app=test',
           '_dd.p.llmobs_sid=new-session',
           '_dd.p.llmobs_sr=0.8',
           '_dd.p.llmobs_sd=1',
           '_dd.p.llmobs_trace_id=12345678901234567890123456789012',
-          '_dd.p.tid=69fe014200000000',
-          'malformed',
           '_dd.p.llmobs_pagent_span_id=new-agent-id',
           '_dd.p.llmobs_pagent_name=new-agent',
         ].join(',')
@@ -494,7 +505,7 @@ describe('module', () => {
         llmobsModule.enable(config)
 
         const carrier = {}
-        injectCh.publish({ carrier })
+        inject(carrier, undefined, config)
 
         assert.ok(!('x-datadog-tags' in carrier))
       })

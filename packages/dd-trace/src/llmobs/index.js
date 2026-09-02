@@ -2,7 +2,6 @@
 
 const { channel } = require('dc-polyfill')
 
-const { readDatadogTags, writeDatadogTags } = require('../carrier')
 const { registerTelemetryFlusher } = require('../flush')
 const log = require('../log')
 const { createServerlessDeliveryTracker } = require('../serverless')
@@ -25,7 +24,7 @@ const {
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { agentNameWireSafe, appendOptionalPropagatedTag, resolveAgentAttribution } = require('./util')
+const { agentNameWireSafe, resolveAgentAttribution } = require('./util')
 const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
@@ -34,8 +33,6 @@ const LLMObsSpanWriter = require('./writers/spans')
 const { setAgentStrategy } = require('./writers/util')
 const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
 const { llmObsTraceIdToWire } = require('./util')
-
-const PROPAGATED_LLMOBS_PREFIX = '_dd.p.llmobs_'
 
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -65,6 +62,13 @@ let unregisterTelemetryFlusher
 
 /** @type {import('../config/config-base')} */
 let globalTracerConfig
+
+/**
+ * @typedef {object} TraceTagInjection
+ * @property {import('../opentracing/span_context')} spanContext
+ * @property {Record<string, string | undefined>} [traceTagReplacements]
+ * @property {number} [optionalTraceTagCount]
+ */
 
 /**
  * @param {@type import('../config/config-base')} config
@@ -163,53 +167,10 @@ function retireWriters (retiredSpanWriter, retiredEvalWriter) {
   for (const writer of retiredWriters) writer.destroy(onWriterDestroyed)
 }
 
-/**
- * @param {Set<string> | undefined} replacementKeys
- * @param {string} key
- * @param {string} value
- * @returns {string}
- */
-function addTagReplacement (replacementKeys, key, value) {
-  replacementKeys?.add(key)
-  return `${key}=${value},`
-}
-
-/**
- * @param {string} tags
- * @param {number} firstKeyIndex
- * @param {Set<string>} replacementKeys
- * @param {string} replacementTags
- * @returns {string}
- */
-function replacePropagatedTags (tags, firstKeyIndex, replacementKeys, replacementTags) {
-  let entryStart = tags.lastIndexOf(',', firstKeyIndex) + 1
-  let replaced = tags.slice(0, entryStart === 0 ? 0 : entryStart - 1)
-  let hasEntry = entryStart !== 0
-
-  while (entryStart <= tags.length) {
-    let entryEnd = tags.indexOf(',', entryStart)
-    if (entryEnd === -1) entryEnd = tags.length
-
-    const separatorIndex = tags.indexOf('=', entryStart)
-    const key = separatorIndex !== -1 && separatorIndex < entryEnd
-      ? tags.slice(entryStart, separatorIndex)
-      : undefined
-
-    if (!replacementKeys.has(key)) {
-      replaced += `${hasEntry ? ',' : ''}${tags.slice(entryStart, entryEnd)}`
-      hasEntry = true
-    }
-
-    if (entryEnd === tags.length) break
-    entryStart = entryEnd + 1
-  }
-
-  return hasEntry ? `${replacementTags}${replaced}` : replacementTags.slice(0, -1)
-}
-
 // since LLMObs traces can extend between services and be the same trace,
 // we need to propagate the parent id, mlApp, session id, and sampling rate/decision.
-function handleLLMObsInjection ({ carrier }) {
+/** @param {TraceTagInjection} injection */
+function handleLLMObsInjection (injection) {
   // Respect the standard propagator's gate: when trace tag propagation is
   // disabled, don't write `x-datadog-tags` for LLMObs either.
   if (globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) return
@@ -247,53 +208,30 @@ function handleLLMObsInjection ({ carrier }) {
     mlObsSpanTags, parent
   )
 
-  // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
-  // tags, so it may be undefined here — coalesce before appending.
-  const existing = readDatadogTags(carrier) || ''
-  const firstKeyIndex = existing.indexOf(PROPAGATED_LLMOBS_PREFIX)
-  const replacementKeys = firstKeyIndex === -1 ? undefined : new Set()
-  let replacementTags = ''
-  if (parentId) {
-    replacementTags += addTagReplacement(replacementKeys, PROPAGATED_PARENT_ID_KEY, parentId)
-  }
-  if (mlApp) replacementTags += addTagReplacement(replacementKeys, PROPAGATED_ML_APP_KEY, mlApp)
-  if (sessionId) {
-    replacementTags += addTagReplacement(replacementKeys, PROPAGATED_SESSION_ID_KEY, sessionId)
-  }
-  if (sampleRate != null) {
-    replacementTags += addTagReplacement(replacementKeys, PROPAGATED_SAMPLE_RATE_KEY, sampleRate)
-  }
+  const traceTagReplacements = {}
+  if (parentId) traceTagReplacements[PROPAGATED_PARENT_ID_KEY] = parentId
+  if (mlApp) traceTagReplacements[PROPAGATED_ML_APP_KEY] = mlApp
+  if (sessionId) traceTagReplacements[PROPAGATED_SESSION_ID_KEY] = sessionId
+  if (sampleRate != null) traceTagReplacements[PROPAGATED_SAMPLE_RATE_KEY] = sampleRate.toString()
   if (samplingDecision != null) {
-    replacementTags += addTagReplacement(replacementKeys, PROPAGATED_SAMPLING_DECISION_KEY, samplingDecision)
+    traceTagReplacements[PROPAGATED_SAMPLING_DECISION_KEY] = samplingDecision.toString()
   }
-  if (propagatedTraceId != null) {
-    replacementTags += addTagReplacement(replacementKeys, PROPAGATED_TRACE_ID_KEY, propagatedTraceId)
-  }
-  if (parentAgentSpanId && replacementKeys) {
-    // These entries are appended below after their wire and size constraints are applied.
-    replacementKeys.add(PROPAGATED_PARENT_AGENT_ID_KEY)
-    replacementKeys.add(PROPAGATED_PARENT_AGENT_NAME_KEY)
-  }
-  let tags
-  if (firstKeyIndex === -1) {
-    tags = existing ? `${replacementTags}${existing}` : replacementTags.slice(0, -1)
-  } else {
-    tags = replacePropagatedTags(existing, firstKeyIndex, replacementKeys, replacementTags)
+  if (propagatedTraceId != null) traceTagReplacements[PROPAGATED_TRACE_ID_KEY] = propagatedTraceId
+
+  let optionalTraceTagCount = 0
+  if (parentAgentSpanId) {
+    traceTagReplacements[PROPAGATED_PARENT_AGENT_ID_KEY] = parentAgentSpanId
+    optionalTraceTagCount++
+    if (parentAgentName && agentNameWireSafe(parentAgentName)) {
+      traceTagReplacements[PROPAGATED_PARENT_AGENT_NAME_KEY] = parentAgentName
+    } else {
+      traceTagReplacements[PROPAGATED_PARENT_AGENT_NAME_KEY] = undefined
+    }
+    optionalTraceTagCount++
   }
 
-  const maxLength = globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
-  const tagsWithId = appendOptionalPropagatedTag(
-    tags, PROPAGATED_PARENT_AGENT_ID_KEY, parentAgentSpanId, null, maxLength
-  )
-  // Only append the name when the id fit: a name without an id is unresolvable by the backend.
-  if (tagsWithId === tags) {
-    tags = tagsWithId
-  } else {
-    tags = appendOptionalPropagatedTag(
-      tagsWithId, PROPAGATED_PARENT_AGENT_NAME_KEY, parentAgentName, agentNameWireSafe, maxLength
-    )
-  }
-  if (tags !== existing) writeDatadogTags(carrier, tags)
+  injection.traceTagReplacements = traceTagReplacements
+  injection.optionalTraceTagCount = optionalTraceTagCount
 }
 
 /**

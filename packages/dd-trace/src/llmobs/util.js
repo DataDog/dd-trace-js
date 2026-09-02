@@ -337,25 +337,6 @@ function resolveAgentAttribution (tags, span) {
   return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID] }
 }
 
-/**
- * Appends `key=value` to the tagset string with a comma separator, but only when `value` is
- * truthy, passes the optional `safeguard` predicate, and fits within `maxTagSetLength`. Returns
- * the original `tags` unchanged when the value is absent, unsafe, or would overflow the budget.
- *
- * @param {string} tags - Existing tagset string (may be empty).
- * @param {string} key
- * @param {string | undefined} value
- * @param {((v: string) => boolean) | null} [safeguard]
- * @param {number} [maxTagSetLength]
- * @returns {string}
- */
-function appendOptionalPropagatedTag (tags, key, value, safeguard, maxTagSetLength) {
-  if (!value || (safeguard && !safeguard(value))) return tags
-  const entry = `${tags ? ',' : ''}${key}=${value}`
-  if (maxTagSetLength != null && tags.length + entry.length > maxTagSetLength) return tags
-  return `${tags}${entry}`
-}
-
 function spanHasError (span) {
   const spanContext = span.context()
   return !!(spanContext.getTag('error') || spanContext.getTag('error.type'))
@@ -506,7 +487,6 @@ function formatAudioPart (data, mimeType) {
 
 module.exports = {
   agentNameWireSafe,
-  appendOptionalPropagatedTag,
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
