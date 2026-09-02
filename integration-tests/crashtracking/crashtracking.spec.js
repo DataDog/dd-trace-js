@@ -2,10 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { fork } = require('node:child_process')
-const fs = require('node:fs')
 const http = require('node:http')
-const https = require('node:https')
-const net = require('node:net')
 const os = require('node:os')
 const path = require('node:path')
 const { inspect } = require('node:util')
@@ -46,7 +43,7 @@ function spawnCrashFixture (fixture, agentPort, environment = {}, onStderr) {
 /**
  * Collect the native receiver's agentless requests until both direct intakes receive crash data.
  *
- * @param {https.Server} server
+ * @param {http.Server} server
  * @param {string} expectedApiKey
  * @param {number} [timeout]
  * @returns {Promise<object[]>}
@@ -103,33 +100,6 @@ function collectAgentlessCrashRequests (server, expectedApiKey, timeout = 10_000
     }
 
     server.on('request', onRequest)
-  })
-}
-
-/**
- * @param {number} targetPort
- * @returns {Promise<http.Server>}
- */
-function startHttpsProxy (targetPort) {
-  const proxy = http.createServer()
-
-  proxy.on('connect', (_request, clientSocket, head) => {
-    const targetSocket = net.connect(targetPort, '127.0.0.1', () => {
-      clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
-      if (head.length > 0) targetSocket.write(head)
-      targetSocket.pipe(clientSocket)
-      clientSocket.pipe(targetSocket)
-    })
-    clientSocket.once('error', () => targetSocket.destroy())
-    targetSocket.once('error', () => clientSocket.destroy())
-  })
-
-  return new Promise((resolve, reject) => {
-    proxy.once('error', reject)
-    proxy.listen(0, '127.0.0.1', () => {
-      proxy.removeListener('error', reject)
-      resolve(proxy)
-    })
   })
 }
 
@@ -234,28 +204,19 @@ describeNotWindows('crashtracking integration', () => {
     it('sends native crash data directly to both agentless intakes', async function () {
       if (os.platform() !== 'linux') this.skip()
 
-      const certificate = path.join(__dirname, 'fixtures', 'agentless-test.crt')
-      const certificateAuthority = path.join(__dirname, 'fixtures', 'agentless-test-ca.crt')
-      const server = https.createServer({
-        cert: fs.readFileSync(certificate),
-        key: fs.readFileSync(path.join(__dirname, 'fixtures', 'agentless-test.key')),
-      })
+      const server = http.createServer()
       await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
-      const proxy = await startHttpsProxy(server.address().port)
 
       try {
         let stderr = ''
-        const { port } = proxy.address()
+        const { port } = server.address()
+        const intakeUrl = `http://127.0.0.1:${port}`
         const requestsPromise = collectAgentlessCrashRequests(server, 'test-api-key')
         const exitPromise = spawnCrashFixture('signal-crash.js', agent.port, {
           DD_AGENTLESS_ENABLED: 'true',
+          DD_APM_TELEMETRY_DD_URL: intakeUrl,
           DD_API_KEY: 'test-api-key',
-          DD_SITE: '127.0.0.1.nip.io',
-          HTTPS_PROXY: `http://127.0.0.1:${port}`,
-          https_proxy: `http://127.0.0.1:${port}`,
-          NO_PROXY: '',
-          no_proxy: '',
-          SSL_CERT_FILE: certificateAuthority,
+          DD_ERRORS_INTAKE_DD_URL: intakeUrl,
         }, chunk => { stderr += chunk })
 
         let requests
@@ -267,10 +228,7 @@ describeNotWindows('crashtracking integration', () => {
         }
         assert.ok(requests.every(payload => payload.request_type === 'logs'))
       } finally {
-        await Promise.all([
-          new Promise(resolve => proxy.close(resolve)),
-          new Promise(resolve => server.close(resolve)),
-        ])
+        await new Promise(resolve => server.close(resolve))
       }
     })
   })

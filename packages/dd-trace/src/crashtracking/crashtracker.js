@@ -38,17 +38,21 @@ function getAgentlessReceiverEnvironment (config) {
   }
 
   const site = config.site.toLowerCase()
-  const telemetryUrl = getAgentlessTelemetryUrl(site)
+  const defaultTelemetryUrl = getAgentlessTelemetryUrl(site).origin
+  const telemetryUrl = config.DD_APM_TELEMETRY_DD_URL || defaultTelemetryUrl
 
-  const environment = [
+  const environment = /** @type {Array<[string, string]>} */ ([
     ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
     ['DD_API_KEY', config.DD_API_KEY],
     ['DD_SITE', site],
-    ['DD_APM_TELEMETRY_DD_URL', telemetryUrl.origin],
+    ['DD_APM_TELEMETRY_DD_URL', telemetryUrl],
     // libdatadog v43 parses the dedicated URL above but does not use it when constructing the
     // endpoint. Keep this compatibility fallback until its telemetry config honors that setting.
-    ['DD_TRACE_AGENT_URL', telemetryUrl.origin],
-  ]
+    ['DD_TRACE_AGENT_URL', telemetryUrl],
+  ])
+  if (config.DD_ERRORS_INTAKE_DD_URL) {
+    environment.push(['DD_ERRORS_INTAKE_DD_URL', config.DD_ERRORS_INTAKE_DD_URL])
+  }
 
   // The receiver environment does not inherit from this process.
   for (const name of INHERITED_RECEIVER_ENVIRONMENT_VARIABLES) {

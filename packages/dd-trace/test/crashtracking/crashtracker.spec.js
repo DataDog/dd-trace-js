@@ -151,9 +151,11 @@ describeNotWindows('crashtracker', () => {
       sinon.assert.notCalled(log.error)
     })
 
-    it('should preserve proxy and TLS settings in the receiver environment', () => {
+    it('should preserve direct intake, proxy, and TLS settings in the receiver environment', () => {
       config.DD_AGENTLESS_ENABLED = true
       config.DD_API_KEY = 'test-api-key'
+      config.DD_APM_TELEMETRY_DD_URL = 'http://127.0.0.1:1234'
+      config.DD_ERRORS_INTAKE_DD_URL = 'http://127.0.0.1:5678'
       config.site = 'datadoghq.com'
       const environment = {
         HTTP_PROXY: 'http://uppercase-http-proxy',
@@ -183,7 +185,13 @@ describeNotWindows('crashtracker', () => {
         }
       }
 
-      assert.deepStrictEqual(binding.init.firstCall.args[1].env.slice(-8), [
+      assert.deepStrictEqual(binding.init.firstCall.args[1].env, [
+        ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
+        ['DD_API_KEY', 'test-api-key'],
+        ['DD_SITE', 'datadoghq.com'],
+        ['DD_APM_TELEMETRY_DD_URL', 'http://127.0.0.1:1234'],
+        ['DD_TRACE_AGENT_URL', 'http://127.0.0.1:1234'],
+        ['DD_ERRORS_INTAKE_DD_URL', 'http://127.0.0.1:5678'],
         ['HTTP_PROXY', 'http://uppercase-http-proxy'],
         ['HTTPS_PROXY', 'http://uppercase-https-proxy'],
         ['NO_PROXY', 'uppercase-no-proxy'],
@@ -211,6 +219,7 @@ describeNotWindows('crashtracker', () => {
     it('should reject an agentless site that could redirect the API key', () => {
       config.DD_AGENTLESS_ENABLED = true
       config.DD_API_KEY = 'test-api-key'
+      config.DD_APM_TELEMETRY_DD_URL = 'http://127.0.0.1:1234'
       config.site = 'datadoghq.com@evil.example'
 
       crashtracker.start(config)
