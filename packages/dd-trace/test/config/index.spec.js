@@ -3691,6 +3691,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+      delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
       delete process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
@@ -3818,6 +3819,20 @@ describe('Config', () => {
         process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
+      })
+      it('should disable test failure videos by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED, undefined)
+      })
+      it('should enable test failure videos if DD_TEST_FAILURE_VIDEOS_ENABLED is true', () => {
+        process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED, true)
+      })
+      it('should disable test failure videos if DD_TEST_FAILURE_VIDEOS_ENABLED is false', () => {
+        process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED, false)
       })
       it('should leave the Test Management report setting unset by default', () => {
         const config = getConfig(options)
