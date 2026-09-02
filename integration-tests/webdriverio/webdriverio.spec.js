@@ -23,6 +23,8 @@ const {
   MOCHA_IS_PARALLEL,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_ADAPTER,
   TEST_FRAMEWORK_VERSION,
@@ -72,6 +74,7 @@ const advancedRequestPaths = [
  */
 function startWebDriverServer () {
   let sessionCount = 0
+  let screenshotCount = 0
   const server = http.createServer((request, response) => {
     request.resume()
     request.once('end', () => {
@@ -90,6 +93,9 @@ function startWebDriverServer () {
         }
       } else if (request.method === 'GET' && request.url === '/status') {
         value = { ready: true, message: '' }
+      } else if (request.method === 'GET' && /^\/session\/[^/]+\/screenshot$/.test(request.url)) {
+        screenshotCount++
+        value = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64')
       }
 
       response.writeHead(200, { 'content-type': 'application/json' })
@@ -112,6 +118,7 @@ function startWebDriverServer () {
         port: address.port,
         server,
         getSessionCount: () => sessionCount,
+        getScreenshotCount: () => screenshotCount,
       })
     })
   })
@@ -168,6 +175,22 @@ function assertOneTestPerSuiteExecution (suites, tests) {
     tests.map(test => test.test_suite_id.toString(10)).sort(),
     suites.map(suite => suite.test_suite_id.toString(10)).sort()
   )
+}
+
+/**
+ * Asserts one failed test's screenshot media and success tags.
+ *
+ * @param {object} failedTest
+ * @param {object[]} media
+ * @returns {void}
+ */
+function assertFailureScreenshotUploaded (failedTest, media) {
+  assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+  assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+  assert.strictEqual(media.length, 1)
+  assert.strictEqual(media[0].media.traceId, failedTest.trace_id.toString())
+  assert.strictEqual(media[0].media.contentType, 'image/png')
+  assert.deepStrictEqual([...media[0].media.content], [137, 80, 78, 71, 13, 10, 26, 10])
 }
 
 /**
@@ -234,6 +257,7 @@ function getReportingEvents (payloads, requestedVersion, frameworkAdapter) {
   assertEventHierarchy(sessions[0], modules[0], suites, tests)
 
   return {
+    media: payloads.filter(({ media }) => media),
     session: sessions[0],
     module: modules[0],
     suites,
@@ -286,12 +310,15 @@ for (const version of versions) {
      * @param {(events: ReturnType<typeof getReportingEvents>) => void} assertEvents
      * @param {number} [expectedExitCode]
      * @param {object} [options]
+     * @param {object} [options.env]
+     * @param {number} [options.expectedScreenshots]
      * @param {string} [options.framework]
      * @returns {Promise<void>}
      */
     async function runScenario (scenario, expectedWebDriverSessions, assertEvents, expectedExitCode = 0, options = {}) {
-      const { framework = 'mocha' } = options
+      const { env, expectedScreenshots, framework = 'mocha' } = options
       const initialWebDriverSessionCount = webDriver.getSessionCount()
+      const initialScreenshotCount = webDriver.getScreenshotCount()
       childProcess = exec('./node_modules/.bin/wdio run ./wdio.conf.js', {
         cwd,
         env: {
@@ -301,6 +328,7 @@ for (const version of versions) {
           WEBDRIVERIO_FRAMEWORK: framework,
           WEBDRIVERIO_SCENARIO: scenario,
           WEBDRIVER_PORT: String(webDriver.port),
+          ...env,
         },
       })
       childProcess.stdout?.on('data', chunk => {
@@ -335,6 +363,9 @@ for (const version of versions) {
         webDriver.getSessionCount() - initialWebDriverSessionCount,
         expectedWebDriverSessions
       )
+      if (expectedScreenshots !== undefined) {
+        assert.strictEqual(webDriver.getScreenshotCount() - initialScreenshotCount, expectedScreenshots)
+      }
     }
 
     it('reports parallel workers as one session', async () => {
@@ -373,8 +404,8 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
-    it('reports Jasmine pass, fail, and skip statuses', async () => {
-      await runScenario('jasmineStatuses', 1, ({ session, suites, tests }) => {
+    it('reports Jasmine statuses and a failure screenshot without global injection', async () => {
+      await runScenario('jasmineStatuses', 1, ({ media, session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'fail')
         assert.strictEqual(suites.length, 1)
         assert.strictEqual(suites[0].meta[TEST_STATUS], 'fail')
@@ -385,8 +416,14 @@ for (const version of versions) {
           tests.find(test => test.meta[TEST_STATUS] === 'pass').meta['test.webdriverio.worker'],
           'jasmine'
         )
-        assert.match(tests.find(test => test.meta[TEST_STATUS] === 'fail').meta['error.message'], /expected WebdriverIO/)
-      }, 1, { framework: 'jasmine' })
+        const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+        assert.match(failedTest.meta['error.message'], /expected WebdriverIO/)
+        assertFailureScreenshotUploaded(failedTest, media)
+      }, 1, {
+        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true' },
+        expectedScreenshots: 1,
+        framework: 'jasmine',
+      })
     })
 
     it('reports failures before Jasmine loads', async () => {
@@ -641,14 +678,18 @@ for (const version of versions) {
       })
     })
 
-    it('reports native Mocha retries', async () => {
-      await runScenario('retries', 1, ({ session, suites, tests }) => {
+    it('reports native Mocha retries and captures only the failed attempt', async () => {
+      await runScenario('retries', 1, ({ media, session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
         assert.strictEqual(suites.length, 1)
         assert.strictEqual(suites[0].meta[TEST_STATUS], 'pass')
         assert.strictEqual(tests.length, 2)
         assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'pass'])
         assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 1)
+        assertFailureScreenshotUploaded(tests.find(test => test.meta[TEST_STATUS] === 'fail'), media)
+      }, 0, {
+        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true' },
+        expectedScreenshots: 1,
       })
     })
 
