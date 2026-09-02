@@ -805,6 +805,39 @@ describe('Plugin', () => {
         assert.deepStrictEqual(rejections.map(reason => reason?.message), [])
       })
 
+      it('runs the execute hook before collapsed JIT resolver spans finish', async () => {
+        const tracer = require('../../dd-trace')
+        let resolveSpan
+        let resolveFinishedAtExecute
+
+        /**
+         * @param {import('../../dd-trace/src/opentracing/span')} span
+         * @param {{ fieldName: string }} field
+         */
+        function resolveHook (span, field) {
+          if (field.fieldName === 'hello') resolveSpan = span
+        }
+
+        function executeHook () {
+          resolveFinishedAtExecute = resolveSpan?._duration !== undefined
+        }
+
+        try {
+          tracer.use('graphql', {
+            variables: ['id', 'name'],
+            hooks: { execute: executeHook, resolve: resolveHook },
+          })
+          const { query } = compileQuery(schema, graphql.parse('query HookOrder { hello }'))
+          const result = await executeWithTrace(() => query({}, {}, {}), /HookOrder/)
+
+          assert.strictEqual(resolveFinishedAtExecute, false)
+          assert.ok(resolveSpan, 'expected the resolve hook to receive the resolver span')
+          assert.deepStrictEqual(result.data, { hello: 'world' })
+        } finally {
+          tracer.use('graphql', { variables: ['id', 'name'] })
+        }
+      })
+
       it('preserves nested promise-valued default fields', async () => {
         const User = new graphql.GraphQLObjectType({
           name: 'NestedPromiseUser',
