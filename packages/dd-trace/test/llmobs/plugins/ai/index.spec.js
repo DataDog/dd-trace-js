@@ -225,6 +225,66 @@ describe('Plugin', () => {
     iastFilter.isDdTrace = isDdTrace
   })
 
+  withVersions('ai', 'ai', '>=4.0.0 <5.0.0', (version) => {
+    let ai
+
+    beforeEach(() => {
+      ai = require(`../../../../../../versions/ai@${version}`).get()
+    })
+
+    it('distinguishes tools whose fields have the same concatenated value', async () => {
+      const schema = ai.jsonSchema({
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      })
+      const model = {
+        specificationVersion: 'v1',
+        provider: 'test',
+        modelId: 'tool-hash-collision-model',
+        supportedUrls: {},
+        async doGenerate (options) {
+          return {
+            toolCalls: [{
+              toolCallType: 'function',
+              toolCallId: 'tool-call-id',
+              toolName: options.mode.tools[0].name,
+              args: '{}',
+            }],
+            finishReason: 'tool-calls',
+            usage: { promptTokens: 1, completionTokens: 1 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }
+        },
+      }
+
+      await ai.generateText({
+        model,
+        prompt: 'Call the first tool.',
+        tools: [
+          ai.tool({
+            description: 'ab',
+            id: 'c',
+            parameters: schema,
+            execute: () => undefined,
+          }),
+          ai.tool({
+            description: 'a',
+            id: 'bc',
+            parameters: schema,
+            execute: () => undefined,
+          }),
+        ],
+      })
+
+      const { llmobsSpans } = await getEvents(3)
+      const toolSpan = llmobsSpans.find(span => span.meta['span.kind'] === 'tool')
+
+      assert.equal(toolSpan?.name, 'c')
+    })
+  })
+
   withAiSdkOpenAiVersions(range, (version, realVersion, openaiVersionKey) => {
     let ai
     let openai

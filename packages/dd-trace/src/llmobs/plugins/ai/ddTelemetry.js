@@ -87,13 +87,7 @@ function createToolHash (tool) {
     parameters,
   } = tool
 
-  let toolStr = description
-  if (id) toolStr += id
-
-  const jsonSchema = parameters?.jsonSchema
-  if (jsonSchema) {
-    toolStr += JSON.stringify(jsonSchema)
-  }
+  const toolStr = JSON.stringify([description ?? null, id ?? null, parameters?.jsonSchema ?? null])
 
   return crypto.createHash('sha256').update(toolStr).digest().toString('hex', 0, 16).toLowerCase()
 }
