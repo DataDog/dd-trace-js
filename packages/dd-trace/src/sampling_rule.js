@@ -254,15 +254,26 @@ class SamplingRule {
    * @returns {boolean} `true` if the span should be sampled, otherwise `false`.
    */
   sample (span) {
-    if (!this._sampler.isSampled(span)) {
-      return false
-    }
+    return this.isSampled(span) && this.isAllowed()
+  }
 
-    if (this._limiter) {
-      return this._limiter.isAllowed()
-    }
+  /**
+   * Applies only the deterministic probability decision for this rule.
+   *
+   * @param {DatadogSpan|DatadogSpanContext} span
+   * @returns {boolean}
+   */
+  isSampled (span) {
+    return this._sampler.isSampled(span)
+  }
 
-    return true
+  /**
+   * Applies this rule's optional rate limiter after a probability keep.
+   *
+   * @returns {boolean}
+   */
+  isAllowed () {
+    return this._limiter ? this._limiter.isAllowed() : true
   }
 }
 

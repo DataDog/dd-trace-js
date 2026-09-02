@@ -37,6 +37,7 @@ const {
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
+const { buildOtelMember } = require('../../otel_sampling')
 const tags = require('../../../../../ext/tags')
 const { getConfiguredEnvName } = require('../../config/helper')
 const { setAllBaggageItems, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
@@ -393,6 +394,18 @@ class TextMapPropagator {
     } = spanContext
 
     writeTraceparent(carrier, spanContext.toTraceparent())
+
+    const otelMember = ts.get('ot')
+    if (otelMember !== undefined ||
+      spanContext._sampling.probabilityRate !== undefined ||
+      spanContext._sampling.isProbabilityDecision === false) {
+      const rebuiltOtelMember = buildOtelMember(spanContext, otelMember)
+      if (rebuiltOtelMember === undefined) {
+        ts.delete('ot')
+      } else {
+        ts.set('ot', rebuiltOtelMember)
+      }
+    }
 
     ts.forVendor('dd', state => {
       if (!spanContext._isRemote) {

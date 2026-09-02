@@ -97,6 +97,30 @@ describe('TraceState', () => {
     assert.strictEqual(ts.size, 32)
   })
 
+  it('should keep the 32 leftmost list-members after updates', () => {
+    const header = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`).join(',')
+    const ts = TraceState.fromString(header)
+    ts.set('ot', 'rv:f0948a54d43b8e;th:8')
+    ts.set('dd', 's:1')
+
+    const members = ts.toString().split(',')
+    assert.strictEqual(members.length, 32)
+    assert.deepStrictEqual(members.slice(0, 3), ['dd=s:1', 'ot=rv:f0948a54d43b8e;th:8', 'k0=v0'])
+    assert.strictEqual(members[31], 'k29=v29')
+  })
+
+  it('should keep a tracestate at the 512-byte cap', () => {
+    const ts = TraceState.fromString(`a=${'x'.repeat(510)}`)
+
+    assert.strictEqual(Buffer.byteLength(ts.toString()), 512)
+  })
+
+  it('should drop the first member beyond the 512-byte cap', () => {
+    const ts = TraceState.fromString(`a=${'x'.repeat(511)}`)
+
+    assert.strictEqual(ts.toString(), '')
+  })
+
   it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {
     const ts = TraceState.fromString('a=hello world,b=bye\tworld,c=ok')
     assert.strictEqual(ts.toString(), 'a=hello world,c=ok')

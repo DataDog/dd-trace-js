@@ -113,6 +113,14 @@ describe('PrioritySampler', () => {
       assert.strictEqual(prioritySampler.isSampled(span), true)
     })
 
+    it('should not set the priority while evaluating', () => {
+      context._sampling.priority = USER_REJECT
+
+      assert.strictEqual(prioritySampler.isSampled(span), true)
+      assert.strictEqual(context._sampling.priority, USER_REJECT)
+      assert.strictEqual(context._sampling.isProbabilityDecision, true)
+    })
+
     it('should accept a span context', () => {
       assert.strictEqual(prioritySampler.isSampled(context), true)
     })
@@ -524,6 +532,38 @@ describe('PrioritySampler', () => {
       context._tags = Object.create(null)
 
       prioritySampler.sample(span)
+    })
+  })
+
+  describe('setPriorityFromTag', () => {
+    it('should let a manual sampling tag override an automatic decision', () => {
+      prioritySampler.sample(span)
+
+      prioritySampler.setPriorityFromTag(span, SAMPLING_PRIORITY, `${USER_KEEP}`)
+
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_MANUAL)
+      assert.strictEqual(context._sampling.isProbabilityDecision, false)
+    })
+
+    it('should ignore a disabled manual sampling tag', () => {
+      prioritySampler.setPriorityFromTag(span, MANUAL_KEEP, false)
+
+      assert.strictEqual(context._sampling.priority, undefined)
+    })
+  })
+
+  describe('setPriorityFromTags', () => {
+    it('should apply precedence within the supplied sampling tags', () => {
+      prioritySampler.setPriorityFromTags(span, {
+        [MANUAL_KEEP]: false,
+        [MANUAL_DROP]: true,
+        [SAMPLING_PRIORITY]: USER_KEEP,
+      })
+
+      assert.strictEqual(context._sampling.priority, USER_REJECT)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_MANUAL)
+      assert.strictEqual(context._sampling.isProbabilityDecision, false)
     })
   })
 

@@ -21,9 +21,9 @@ class TraceSourcePrioritySampler extends PrioritySampler {
    * @override
    * @returns {import('../priority_sampler').SamplingPriority|undefined}
    */
-  _getPriorityFromTags (tags, context) {
-    if (Object.hasOwn(tags, MANUAL_KEEP) &&
-      tags[MANUAL_KEEP] !== false &&
+  _getPriorityFromTag (key, value, context) {
+    if (key === MANUAL_KEEP &&
+      value !== false &&
       hasTraceSourcePropagationTag(context._trace.tags)
     ) {
       return USER_KEEP
@@ -32,11 +32,14 @@ class TraceSourcePrioritySampler extends PrioritySampler {
 
   /**
    * @override
+   * @param {import('../opentracing/span')} span
+   * @returns {import('../priority_sampler').SamplingPriority}
    */
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
 
     context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+    this._recordDecisionMetadata(context)
 
     if (hasTraceSourcePropagationTag(context._trace.tags)) {
       return USER_KEEP

@@ -3,6 +3,7 @@
 // W3C Trace Context §3.3.1.2: max 32 list-members.
 // https://www.w3.org/TR/trace-context/#tracestate-header-field-values
 const MAX_LIST_MEMBERS = 32
+const MAX_TRACESTATE_BYTES = 512
 const WHITESPACE = /[ \t]/
 
 /**
@@ -54,6 +55,32 @@ function toString (map, pairSeparator, fieldSeparator) {
     result = `${key}${pairSeparator}${value}${result}`
   }
   return result
+}
+
+/**
+ * Keeps complete leftmost members within the W3C count and byte limits.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function limitTraceState (value) {
+  let byteLength = 0
+  let end = 0
+  let members = 0
+  let start = 0
+
+  while (start < value.length && members < MAX_LIST_MEMBERS) {
+    let next = value.indexOf(',', start)
+    if (next === -1) next = value.length
+    const memberLength = Buffer.byteLength(value.slice(start, next)) + (members === 0 ? 0 : 1)
+    if (byteLength + memberLength > MAX_TRACESTATE_BYTES) break
+    byteLength += memberLength
+    end = next
+    members++
+    start = next + 1
+  }
+
+  return value.slice(0, end)
 }
 
 class TraceStateData {
@@ -162,7 +189,12 @@ class TraceState {
   }
 
   toString () {
-    return toString(this, '=', ',')
+    const value = toString(this, '=', ',')
+    if (this.size <= MAX_LIST_MEMBERS &&
+      (value.length <= MAX_TRACESTATE_BYTES / 4 || Buffer.byteLength(value) <= MAX_TRACESTATE_BYTES)) {
+      return value
+    }
+    return limitTraceState(value)
   }
 }
 
