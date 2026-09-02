@@ -581,6 +581,7 @@ export interface GeneratedConfig {
     DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
     DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
     DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
+    DD_TEST_FAILURE_VIDEOS_ENABLED: boolean | undefined;
     DD_TEST_FLEET_CONFIG_PATH: string | undefined;
     DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
     DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
@@ -827,6 +828,7 @@ export interface GeneratedEnvVarConfig {
   DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
   DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
+  DD_TEST_FAILURE_VIDEOS_ENABLED: boolean | undefined;
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;

@@ -6,6 +6,19 @@ module.exports = [
   {
     module: {
       name: 'playwright',
+      versionRange: '>=1.38.0',
+      filePath: 'lib/index.js',
+    },
+    astQuery: 'CallExpression[callee.object.name="videos"][callee.property.name="map"] > ' +
+      'ArrowFunctionExpression[async]',
+    functionQuery: {
+      kind: 'Async',
+    },
+    channelName: 'saveAutomaticVideo',
+  },
+  {
+    module: {
+      name: 'playwright',
       versionRange: '>=1.38.0 <1.51.0',
       filePath: 'lib/index.js',
     },
