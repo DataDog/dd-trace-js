@@ -19,11 +19,13 @@ class AgentWriter extends BaseWriter {
   #requestTracker
 
   constructor (...args) {
+    const { isTestOptimization } = args[0]
     super({
       ...args[0],
       beforeFirstFlush: () => firstFlushChannel.publish(),
+      retainOnBackpressure: isTestOptimization,
     })
-    const { prioritySampler, lookup, protocolVersion, headers, isTestOptimization } = args[0]
+    const { prioritySampler, lookup, protocolVersion, headers } = args[0]
     const AgentEncoder = getEncoder(protocolVersion)
 
     this._prioritySampler = prioritySampler
