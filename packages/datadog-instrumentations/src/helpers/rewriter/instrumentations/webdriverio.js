@@ -331,7 +331,7 @@ module.exports = [
     },
     astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression TryStatement',
     channelName: 'testFrameworkFnWrapper',
-    transform: 'awaitContextCallbackAtTryStart',
+    transform: 'awaitContextCallbackAtFunctionStart',
     transformOptions: {
       callbackName: 'rumCleanupCallback',
     },

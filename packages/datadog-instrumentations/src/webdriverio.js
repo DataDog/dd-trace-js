@@ -365,7 +365,7 @@ async function stopRumWindow (browser) {
  */
 async function deleteRumCookie (browser) {
   try {
-    await browser.deleteCookies(RUM_TEST_EXECUTION_ID_COOKIE_NAME)
+    await browser.deleteCookies([RUM_TEST_EXECUTION_ID_COOKIE_NAME])
   } catch (error) {
     log.error('WebdriverIO RUM correlation cookie cleanup error', error)
   }
@@ -441,27 +441,29 @@ async function forEachRumWindow (browser, operation, value) {
 }
 
 /**
- * Removes the current test's RUM correlation while keeping reusable sessions active.
- * The session is stopped only when WebdriverIO is about to close the browser.
+ * Stops RUM in every window before a browser session is closed.
  *
  * @param {object} browser
- * @param {boolean} [stopSession]
+ * @returns {Promise<boolean>}
+ */
+async function stopRumBrowser (browser) {
+  await removeRumPreloadScript(browser)
+  let isRumActive = false
+  await forEachRumWindow(browser, async (browser) => {
+    if (await stopRumWindow(browser)) isRumActive = true
+  })
+  return isRumActive
+}
+
+/**
+ * Removes the current test's RUM correlation while keeping reusable sessions active.
+ *
+ * @param {object} browser
  * @returns {Promise<void>}
  */
-async function cleanupRumBrowser (browser, stopSession = false) {
+async function cleanupRumBrowser (browser) {
   await removeRumPreloadScript(browser)
-  if (stopSession) {
-    let isRumActive = false
-    await forEachRumWindow(browser, async (browser) => {
-      if (await stopRumWindow(browser)) isRumActive = true
-    })
-    if (isRumActive) {
-      await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
-    }
-    releaseRumBrowser(browser)
-  } else {
-    await forEachRumWindow(browser, deleteRumCookie)
-  }
+  await forEachRumWindow(browser, deleteRumCookie)
   await cleanupRumCookies(browser)
   rumBrowserTestExecutionIds.delete(browser)
 }
@@ -493,10 +495,20 @@ async function cleanupAllRumBrowsers () {
   const browsers = [...rumBrowsers]
   rumBrowsers.clear()
   rumCorrelationBrowsers.clear()
+  let isRumActive = false
   for (const browser of browsers) {
-    // Cleanup is intentionally sequential to avoid overlapping WebDriver commands.
+    // WebDriver commands are intentionally sequential for each browser.
     // eslint-disable-next-line no-await-in-loop
-    await cleanupRumBrowser(browser, true)
+    if (await stopRumBrowser(browser)) isRumActive = true
+  }
+  if (isRumActive) {
+    await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+  }
+  for (const browser of browsers) {
+    // WebDriver commands are intentionally sequential for each browser.
+    // eslint-disable-next-line no-await-in-loop
+    await cleanupRumCookies(browser)
+    releaseRumBrowser(browser)
   }
 }
 

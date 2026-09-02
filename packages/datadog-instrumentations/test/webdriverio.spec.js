@@ -1134,6 +1134,10 @@ describe('webdriverio instrumentation', () => {
             calls.push('second-test')
           }, { attempts: 0, limit: 0 })
         },
+      }, {
+        beforeFn () {
+          calls.push('before-test')
+        },
       })
 
       assert.deepStrictEqual(calls, [
@@ -1142,6 +1146,7 @@ describe('webdriverio instrumentation', () => {
         'first-test',
         'detect',
         'delete',
+        'before-test',
         'detect',
         'set:second-test-id',
         'second-test',
@@ -1601,6 +1606,7 @@ describe('webdriverio instrumentation', () => {
         'delete',
         'switch:window-a',
       ])
+      assert.deepStrictEqual(browser.deleteCookies.firstCall.args, [[RUM_TEST_EXECUTION_ID_COOKIE_NAME]])
     } finally {
       correlationCh.unsubscribe(correlate)
     }
@@ -1671,6 +1677,56 @@ describe('webdriverio instrumentation', () => {
       ])
       assert.strictEqual(browser.execute.callCount, 2)
       assert.strictEqual(browser.deleteCookies.callCount, 0)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('stops every retained browser before the shared RUM flush and cookie cleanup', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    const createBrowser = (name) => ({
+      capabilities: {},
+      execute: sinon.stub().callsFake(() => {
+        calls.push(`stop:${name}`)
+        return Promise.resolve(true)
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: `rum-preload-${name}` }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push(`remove:${name}`)
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().callsFake(() => {
+        calls.push(`delete:${name}`)
+        return Promise.resolve()
+      }),
+    })
+    const browsers = [createBrowser('a'), createBrowser('b')]
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      for (const browser of browsers) {
+        const navigationContext = { self: browser }
+        urlCh.start.runStores(navigationContext, () => {})
+        await navigationContext.rumPreloadCallback.call(browser)
+      }
+
+      await cleanupRumState()
+
+      assert.deepStrictEqual(calls, [
+        'remove:a',
+        'stop:a',
+        'remove:b',
+        'stop:b',
+        'delete:a',
+        'delete:b',
+      ])
     } finally {
       correlationCh.unsubscribe(correlate)
       await cleanupRumState()
