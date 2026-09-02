@@ -104,11 +104,8 @@ describe('AgentlessExporter', () => {
       }
 
       Exporter = proxyquire('../../../src/exporters/agentless', {
+        '../common/docker': { containerId: 'container-id' },
         './writer': Writer,
-        '../common/docker': {
-          containerId: 'container-id',
-          entityId: 'ci-container-id',
-        },
       })
 
       exporter = new Exporter({
@@ -119,10 +116,9 @@ describe('AgentlessExporter', () => {
 
       assert.ok(writerOptions.metadata)
       assertObjectContains(writerOptions.metadata, {
+        containerId: 'container-id',
         env: 'production',
         runtimeID: 'test-uuid',
-        languageName: 'nodejs',
-        containerID: 'container-id',
       })
     })
 

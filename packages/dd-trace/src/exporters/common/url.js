@@ -17,6 +17,16 @@ function isLoopbackHost (hostname) {
 }
 
 /**
+ * @param {string|undefined} protocol
+ * @param {string|undefined} hostname
+ * @returns {boolean}
+ */
+function canSendApiKey (protocol, hostname) {
+  return protocol === 'https:' || protocol === 'unix:' ||
+    typeof hostname === 'string' && isLoopbackHost(hostname)
+}
+
+/**
  * Convert an agent/intake URL into Node http(s) request options.
  *
  * A Windows named pipe (`unix://./pipe/<name>`) parses the `.` as the URL
@@ -43,4 +53,4 @@ function parseUrl (urlObjOrString) {
   return url
 }
 
-module.exports = { isLoopbackHost, parseUrl }
+module.exports = { canSendApiKey, isLoopbackHost, parseUrl }
