@@ -2066,6 +2066,17 @@ describe('CI Visibility Exporter', () => {
       sinon.assert.calledOnceWithExactly(flushCallback, undefined)
     })
 
+    it('forwards in-memory screenshot content', () => {
+      uploadTestScreenshotRequest = sinon.stub()
+      const exporter = createScreenshotExporter()
+      const content = Buffer.from('webdriverio screenshot')
+
+      exporter.uploadTestScreenshot({ ...screenshotOptions, filePath: undefined, content }, sinon.spy())
+
+      assert.strictEqual(uploadTestScreenshotRequest.firstCall.args[0].content, content)
+      assert.strictEqual(uploadTestScreenshotRequest.firstCall.args[0].filePath, undefined)
+    })
+
     it('forwards caller cancellation and completes once', () => {
       uploadTestScreenshotRequest = sinon.stub()
       const exporter = createScreenshotExporter()
