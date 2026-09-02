@@ -14,7 +14,6 @@ const {
   useSandbox,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../packages/dd-trace/src/ci-visibility/rum')
 const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
@@ -449,74 +448,27 @@ for (const version of versions) {
           })
         }
 
-        it('correlates tests with RUM sessions', async () => {
+        it('does not correlate classic WebDriver tests with RUM sessions', async () => {
           await runScenario('rum', 1, (payloads, requests) => {
             const test = getEvents(payloads).find(event => event.type === 'test').content
-            assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
+            assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], undefined)
             assert.strictEqual(test.meta[TEST_BROWSER_NAME], 'chrome')
             assert.strictEqual(test.meta[TEST_BROWSER_VERSION], 'test')
             assert.ok(requests.some(({ url }) => url?.endsWith('/refresh')))
-
-            const cookieRequests = requests.filter(({ url }) => url?.includes('/cookie'))
-            const setCookieRequests = cookieRequests.filter(({ method }) => method === 'POST')
-            assert.deepStrictEqual(
-              setCookieRequests.map(({ body }) => body.cookie.value),
-              [test.trace_id.toString(10), test.trace_id.toString(10), test.trace_id.toString(10)]
-            )
-            assert.deepStrictEqual(
-              cookieRequests.map(({ method }) => method),
-              ['POST', 'POST', 'POST', 'DELETE', 'DELETE']
-            )
-            assert.deepStrictEqual(
-              cookieRequests.filter(({ method }) => method === 'DELETE').map(({ pageUrl }) => pageUrl),
-              [
-                'http://after-each.example.test/',
-                'http://after-each.example.test/',
-              ]
-            )
-            assert.deepStrictEqual(
-              requests
-                .filter(({ url }) => url?.endsWith('/chromium/send_command'))
-                .map(({ body }) => body),
-              [
-                {
-                  cmd: 'Network.deleteCookies',
-                  params: {
-                    name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
-                    url: 'http://example.test/',
-                  },
-                },
-                {
-                  cmd: 'Network.deleteCookies',
-                  params: {
-                    name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
-                    url: 'http://second.example.test/',
-                  },
-                },
-              ]
-            )
+            assert.strictEqual(requests.some(({ url }) => url?.includes('/cookie')), false)
+            assert.strictEqual(requests.some(({ url }) => url?.endsWith('/chromium/send_command')), false)
           })
         })
 
-        it('re-correlates a reused RUM page between tests without afterEach hooks', async () => {
+        it('does not retain classic RUM state between tests without afterEach hooks', async () => {
           await runScenario('rumNoAfterEach', 1, (payloads, requests) => {
             const tests = getEvents(payloads)
               .filter(event => event.type === 'test')
               .map(event => event.content)
-            const cookieRequests = requests.filter(({ url }) => url?.includes('/cookie'))
 
-            assert.deepStrictEqual(
-              cookieRequests.map(({ method }) => method),
-              ['POST', 'DELETE', 'POST', 'DELETE']
-            )
-            assert.deepStrictEqual(
-              cookieRequests.filter(({ method }) => method === 'POST').map(({ body }) => body.cookie.value),
-              tests.map(test => test.trace_id.toString(10))
-            )
-            assert.deepStrictEqual(
-              cookieRequests.filter(({ method }) => method === 'DELETE').map(({ pageUrl }) => pageUrl),
-              ['http://first.example.test/', 'http://first.example.test/']
-            )
+            assert.ok(tests.length > 0)
+            assert.ok(tests.every(test => test.meta[TEST_IS_RUM_ACTIVE] === undefined))
+            assert.strictEqual(requests.some(({ url }) => url?.includes('/cookie')), false)
           })
         })
 

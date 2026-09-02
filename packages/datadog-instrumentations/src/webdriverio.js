@@ -87,7 +87,6 @@ const localRunnerVersions = new WeakMap()
 const rumBrowsers = new Set()
 const rumCorrelationBrowsers = new Set()
 const rumRunnerBrowsers = new WeakSet()
-const rumBrowserOriginUrls = new WeakMap()
 const rumBrowserPreloadScripts = new WeakMap()
 const rumBrowserTestExecutionIds = new WeakMap()
 let isRumCleanupPending = false
@@ -103,28 +102,16 @@ addHook({
 })
 
 /**
- * Returns the cookie origin for a browser URL.
- *
- * @param {string} url
- * @returns {string|undefined}
- */
-function getRumOrigin (url) {
-  try {
-    const origin = new URL(url).origin
-    if (origin !== 'null') return origin
-  } catch {}
-}
-
-/**
- * Returns whether this browser can remove correlation cookies without revisiting their origins.
+ * Returns whether this browser can preload and clean correlation across every browsing context.
  *
  * @param {object} browser
  * @returns {boolean}
  */
 function canCorrelateRumBrowser (browser) {
-  return browser?.isBidi
-    ? typeof browser.storageDeleteCookies === 'function'
-    : typeof browser?.sendCommand === 'function'
+  return browser?.isBidi &&
+    typeof browser.scriptAddPreloadScript === 'function' &&
+    typeof browser.scriptRemovePreloadScript === 'function' &&
+    typeof browser.storageDeleteCookies === 'function'
 }
 
 /**
@@ -232,32 +219,13 @@ async function preloadRumNavigation () {
 async function correlateRumWindow (browser, testExecutionId) {
   if (!canCorrelateRumBrowser(browser)) return
 
-  let cookieSet = false
   try {
     await browser.setCookies({
       name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
       value: testExecutionId,
     })
-    cookieSet = true
   } catch (error) {
     log.error('WebdriverIO RUM correlation cookie error', error)
-  }
-
-  if (cookieSet && !browser.isBidi && typeof browser.getUrl === 'function') {
-    try {
-      const url = await browser.getUrl()
-      const origin = getRumOrigin(url)
-      if (origin) {
-        let originUrls = rumBrowserOriginUrls.get(browser)
-        if (!originUrls) {
-          originUrls = new Map()
-          rumBrowserOriginUrls.set(browser, originUrls)
-        }
-        originUrls.set(origin, url)
-      }
-    } catch (error) {
-      log.error('WebdriverIO RUM origin tracking error', error)
-    }
   }
   await installRumPreloadScript(browser, testExecutionId)
 }
@@ -335,53 +303,6 @@ async function deleteRumCookie (browser) {
     await browser.deleteCookies(RUM_TEST_EXECUTION_ID_COOKIE_NAME)
   } catch (error) {
     log.error('WebdriverIO RUM correlation cookie cleanup error', error)
-  }
-}
-
-/**
- * Removes the cookie from the current window and records its origin as cleaned.
- *
- * @param {object} browser
- * @param {Set<string>} cleanedOrigins
- * @returns {Promise<void>}
- */
-async function deleteRumCookieAndTrackOrigin (browser, cleanedOrigins) {
-  if (typeof browser.getUrl === 'function') {
-    try {
-      const origin = getRumOrigin(await browser.getUrl())
-      if (origin) cleanedOrigins.add(origin)
-    } catch (error) {
-      log.error('WebdriverIO RUM window origin error', error)
-    }
-  }
-  await deleteRumCookie(browser)
-}
-
-/**
- * Removes cookies from classic Chromium origins that no open window currently uses.
- *
- * @param {object} browser
- * @param {Set<string>} cleanedOrigins
- * @returns {Promise<void>}
- */
-async function cleanupRumOrigins (browser, cleanedOrigins) {
-  const originUrls = rumBrowserOriginUrls.get(browser)
-  rumBrowserOriginUrls.delete(browser)
-  if (!originUrls?.size || typeof browser.sendCommand !== 'function') return
-
-  for (const [origin, url] of originUrls) {
-    if (cleanedOrigins.has(origin)) continue
-
-    try {
-      // WebDriver commands must run in order because they share the same browser session.
-      // eslint-disable-next-line no-await-in-loop
-      await browser.sendCommand('Network.deleteCookies', {
-        name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
-        url,
-      })
-    } catch (error) {
-      log.error('WebdriverIO RUM origin cleanup error', error)
-    }
   }
 }
 
@@ -466,12 +387,9 @@ async function cleanupRumBrowser (browser, stopSession = false) {
   await removeRumPreloadScript(browser)
   if (stopSession) {
     await forEachRumWindow(browser, cleanupRumWindow)
-    rumBrowserOriginUrls.delete(browser)
     rumBrowsers.delete(browser)
   } else {
-    const cleanedOrigins = new Set()
-    await forEachRumWindow(browser, deleteRumCookieAndTrackOrigin, cleanedOrigins)
-    await cleanupRumOrigins(browser, cleanedOrigins)
+    await forEachRumWindow(browser, deleteRumCookie)
   }
   await cleanupRumCookies(browser)
   rumBrowserTestExecutionIds.delete(browser)
