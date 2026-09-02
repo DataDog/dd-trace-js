@@ -554,8 +554,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [oldest, latest]
-    name: integration-vitest-browser (node-${{ matrix.version }})
+        include:
+          - version: oldest
+            browser-provider: playwright
+          - version: latest
+            browser-provider: playwright
+          - version: latest
+            browser-provider: webdriverio
+    name: integration-vitest-browser (${{ matrix.browser-provider }}, node-${{ matrix.version }})
     container:
       image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.version].latest }}
       credentials:
@@ -588,6 +594,7 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
           SPEC: vitest.browser
+          VITEST_BROWSER_PROVIDER: ${{ matrix.browser-provider }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-browser-${{ matrix.version }}
