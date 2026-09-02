@@ -27,11 +27,11 @@ class CrossPayloadAgentEncoder extends AgentEncoder {
    * @returns {Buffer}
    */
   _cacheString (value, stable = false) {
-    if (!stable) return AgentEncoder.prototype._cacheString.call(this, value)
+    if (!stable) return super._cacheString(value)
 
     const crossPayloadState = this.#crossPayloadState
     if (crossPayloadState === undefined || value.length === 0 || value.length > CROSS_PAYLOAD_STRING_LIMIT) {
-      return AgentEncoder.prototype._cacheString.call(this, value)
+      return super._cacheString(value)
     }
 
     const learning = crossPayloadState.learningPayloadCount < CROSS_PAYLOAD_LEARNING_PAYLOAD_LIMIT
@@ -51,10 +51,10 @@ class CrossPayloadAgentEncoder extends AgentEncoder {
       crossPayloadState.missCount++
     }
     if (!learning || crossPayloadState.payloadStableStrings?.[value] !== true) {
-      return AgentEncoder.prototype._cacheString.call(this, value)
+      return super._cacheString(value)
     }
 
-    let entry = AgentEncoder.prototype._cacheString.call(this, value)
+    let entry = super._cacheString(value)
     if (entry.length > CROSS_PAYLOAD_STRING_LIMIT) return entry
 
     const previousPayloadStrings = crossPayloadState.previousPayloadStrings
@@ -136,11 +136,6 @@ function prepareCrossPayloadReset (crossPayloadState) {
   const lowUse = !learning && crossPayloadState.hitCount < crossPayloadState.missCount
   if (lowUse) {
     crossPayloadState.lowUseCount++
-  } else if (!learning && crossPayloadState.hitCount > 0) {
-    crossPayloadState.lowUseCount = 0
-  }
-
-  if (lowUse) {
     if (crossPayloadState.lowUseCount >= 2) return false
     crossPayloadState.learningPayloadCount = 0
     crossPayloadState.stringCount = 0
@@ -151,6 +146,9 @@ function prepareCrossPayloadReset (crossPayloadState) {
     crossPayloadState.hitCount = 0
     crossPayloadState.missCount = 0
     return true
+  }
+  if (!learning && crossPayloadState.hitCount > 0) {
+    crossPayloadState.lowUseCount = 0
   }
 
   if (learning) {
