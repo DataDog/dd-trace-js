@@ -25,6 +25,7 @@ describe('Plugin', () => {
     after(() => agent.close())
 
     withVersions('rhea', 'rhea', version => {
+      const versionedRhea = require(`../../../versions/rhea@${version}`)
       describe('with broker', () => {
         let container
         let context
@@ -452,7 +453,7 @@ describe('Plugin', () => {
 
             describe('exception in message handler', () => {
               it('should produce an error in span metadata', (done) => {
-                const Session = require(`../../../versions/rhea@${version}/node_modules/rhea/lib/session.js`)
+                const Session = versionedRhea.get('rhea/lib/session.js')
                 const onTransfer = Session.prototype.on_transfer
                 const error = new Error('this is an error')
                 Session.prototype.on_transfer = function onTransferWrapped (...args) {

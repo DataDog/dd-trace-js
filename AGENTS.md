@@ -8,9 +8,9 @@ do not modify unrelated behavior.
 
 ## Setup and Commands
 
-- Prerequisites: a Node.js version satisfying `package.json#engines` (`>=22` on `master`), yarn 1.x, and Docker
+- Prerequisites: a Node.js version satisfying `package.json#engines` (`>=22` on `master`), Bun 1.4.0, and Docker
   with Docker Compose for service-backed tests.
-- Use yarn only to install dependencies (`yarn add`, `yarn install`) and run `yarn services`.
+- Use Bun only to install dependencies (`bun add`, `bun install`). Use `npm run services` for plugin sandboxes.
 - Use npm for scripts, tests, linting, builds, and all other commands: `npm run <script>`.
 - The root `npm test` is intentionally disabled. Run a specific `*.spec.js` file or targeted `test:<area>` script.
 
@@ -174,5 +174,5 @@ New instrumentations belong in `packages/datadog-instrumentations/` and communic
 channels. Validate new plugin structure with
 `./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js`.
 
-For vendored rspack dependencies, run yarn from `vendor/`; generated bundles are written under
-`packages/node_modules/`.
+For vendored rspack dependencies, use `bun install --frozen-lockfile` in `vendor/`; generated bundles are written
+under `packages/node_modules/`.

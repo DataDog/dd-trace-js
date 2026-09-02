@@ -130,6 +130,14 @@ module.exports = {
       versions: ['^4.0.0'],
     },
   ],
+  '@anthropic-ai/claude-agent-sdk': [
+    {
+      name: 'zod',
+      version: '^4.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
   'cookie-parser': [
     {
       name: 'express',
@@ -260,6 +268,16 @@ module.exports = {
       versions: ['>=3'],
     },
   ],
+  // pubsub@1.2.0 loads @grpc/grpc-js without declaring it. Keep that lookup on
+  // the same 1.3.x instance used by its nested google-gax@1.15.4.
+  '@google-cloud/pubsub': [
+    {
+      name: '@grpc/grpc-js',
+      version: '~1.3.6',
+      dep: true,
+      forced: true,
+    },
+  ],
   'google-cloud-pubsub': [
     {
       name: 'google-gax',
@@ -357,8 +375,8 @@ module.exports = {
   ],
   '@apollo/server': [
     {
-      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which yarn may
-      // hoist over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
+      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which may be
+      // hoisted over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
       // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
       name: 'graphql',
       dep: true,
@@ -389,9 +407,7 @@ module.exports = {
     },
     {
       // knex 1.x is the only major whose sqlite3 dialect requires the @vscode/sqlite3 fork instead of `sqlite3`
-      // (reverted in 2.x). The instrumentation spec loads knex from `versions/knex@<ver>` and opens a sqlite3
-      // client, so the fork must be installed there. Pin an exact prerelease build so prebuilt binaries exist for
-      // the whole Node CI matrix.
+      // (reverted in 2.x). Pin the fork so the instrumentation spec can open a sqlite3 client.
       name: '@vscode/sqlite3',
       versions: ['5.1.12-vscode'],
     },
@@ -441,6 +457,13 @@ module.exports = {
       name: '@langchain/core',
       versions: ['>=0.1'],
       dep: true,
+    },
+    {
+      // The recorded cassettes match the OpenAI/JS 4.x request shape.
+      name: '@langchain/openai',
+      version: '0.0.34',
+      dep: true,
+      forced: true,
     },
   ],
   langgraph: [
@@ -628,6 +651,7 @@ module.exports = {
     {
       name: 'pg-native',
       versions: ['3.0.0'],
+      trustedDependencies: ['libpq'],
     },
     {
       name: 'express',
@@ -695,6 +719,10 @@ module.exports = {
     {
       name: 'collections',
       versions: ['5'],
+      // q@2 requires collections/shim, which is absent from its declared collections@^2.
+      overrides: {
+        collections: '^5.0.0',
+      },
     },
     {
       name: 'q',

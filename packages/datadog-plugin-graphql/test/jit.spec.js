@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 const { createRequire } = require('node:module')
-const { join } = require('node:path')
+const { dirname, join } = require('node:path')
 const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 
 const dc = require('dc-polyfill')
@@ -268,14 +268,14 @@ describe('Plugin', () => {
     }
 
     withVersions('graphql', 'graphql-jit', '>=0.7.0', version => {
-      const packageRoot = join(__dirname, '../../../versions', `graphql-jit@${version}`, 'node_modules/graphql-jit')
+      const graphqlJit = require(`../../../versions/graphql-jit@${version}`)
+      const packageRoot = dirname(graphqlJit.pkgJsonPath())
 
       before(() => {
         return agent.load('graphql', { variables: ['id', 'name'] })
       })
 
       before(() => {
-        const graphqlJit = require(`../../../versions/graphql-jit@${version}`)
         graphql = graphqlJit.get('graphql')
         compileQuery = graphqlJit.get().compileQuery
         schema = buildSchema()

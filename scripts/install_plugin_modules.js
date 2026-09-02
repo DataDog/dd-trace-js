@@ -1,10 +1,11 @@
 'use strict'
 
 const { createHash } = require('crypto')
+const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require('fs')
 const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
-const { join } = require('path')
+const { join, posix } = require('path')
 
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
@@ -16,19 +17,31 @@ const { dependencies: latests, resolutions } = require('../packages/dd-trace/tes
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const mapWithConcurrency = require('./helpers/concurrency')
-const retry = require('./helpers/retry')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 const requirePackageJson = require(requirePackageJsonPath)
 
 // Generating the whole versions/ tree is thousands of mkdir/writeFile calls; bound them so we never exhaust file
-// descriptors (EMFILE). yarn install itself dominates the wall-clock, so a moderate cap costs nothing.
+// descriptors (EMFILE). Dependency installation dominates the wall-clock, so a moderate cap costs nothing.
 const FS_CONCURRENCY = 50
+
+// A bare package name, optionally scoped, and nothing else: the only override key Bun applies.
+const BARE_PACKAGE_NAME = /^(?:@[^@/]+\/)?[^@/]+$/
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase < 3.2.2
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
+const workspaceOverrides = {}
+// Names of every package the synthesized workspaces install, both directly (via
+// `assertPackage`) and through peer-dep injection (via `assertPeerDependencies`).
+// Bun runs lifecycle scripts only for packages listed in the workspace root's
+// `trustedDependencies`; native plugins (`aerospike`, `@confluentinc/kafka-javascript`,
+// `pg-native`, ...) need their `install`/`postinstall` to compile, otherwise
+// `node-gyp`'s `bindings` package fails to find the `.node` file at test time.
+// Bun's `trustedDependencies` does not transitively allow nested packages; externals.js
+// declares any transitive native builders a sandbox needs.
+const trustedDependencies = new Set()
 
 for (const external of Object.keys(externals)) {
   for (const thing of externals[external]) {
@@ -46,12 +59,47 @@ for (const external of Object.keys(externals)) {
 run()
 
 async function run () {
-  await assertPrerequisites()
+  invalidateCacheOnNodeAbiChange()
+  const deferredPackageStages = await assertPrerequisites()
   install()
+  await installPackageStages(deferredPackageStages)
   const changed = await assertPeerDependencies(join(__dirname, '..', 'versions'))
-  // The second install only does something when peer-dependency patching actually changed a manifest. Targeted
+  // The peer-dependency install only does something when patching actually changed a manifest. Targeted
   // installs for plugins without external peer dependencies (the common CI matrix case) skip it entirely.
   if (changed) install()
+}
+
+/**
+ * @param {Array<Array<{ name: string, version: string|null, range: string }>>} packageStages
+ * @param {number} [index]
+ * @returns {Promise<void>}
+ */
+async function installPackageStages (packageStages, index = 0) {
+  if (index >= packageStages.length) return
+
+  await mapWithConcurrency(packageStages[index], FS_CONCURRENCY, assertPackage)
+  await assertWorkspaces()
+  install()
+  return installPackageStages(packageStages, index + 1)
+}
+
+/**
+ * A native binding compiled during the first `npm run services` can be reused
+ * verbatim on the next invocation under a different Node major and fail at
+ * load time. Wipe the shared install when the Node ABI changes so the next
+ * `bun install --trust` reruns lifecycle scripts against the live runtime.
+ */
+function invalidateCacheOnNodeAbiChange () {
+  const versionsDir = join(__dirname, '..', 'versions')
+  const nodeAbiFile = join(versionsDir, '.node-abi')
+  const currentAbi = process.versions.modules
+  const recordedAbi = existsSync(nodeAbiFile) ? readFileSync(nodeAbiFile, 'utf8').trim() : ''
+  if (recordedAbi && recordedAbi !== currentAbi && existsSync(join(versionsDir, 'node_modules'))) {
+    rmSync(join(versionsDir, 'node_modules'), { recursive: true, force: true })
+    rmSync(join(versionsDir, 'bun.lock'), { force: true })
+  }
+  mkdirSync(versionsDir, { recursive: true })
+  writeFileSync(nodeAbiFile, currentAbi)
 }
 
 async function assertPrerequisites () {
@@ -64,10 +112,119 @@ async function assertPrerequisites () {
 
   const packages = collectPackages(moduleNames)
 
-  await mapWithConcurrency(packages, FS_CONCURRENCY, ({ name, version, range, external }) =>
-    assertPackage(name, version, range, external))
+  applyExternalConfiguration(moduleNames, packages)
+  const [initialPackages = [], ...deferredPackageStages] = buildInstallStages(packages)
+  await mapWithConcurrency(initialPackages, FS_CONCURRENCY, assertPackage)
 
   await assertWorkspaces()
+  return deferredPackageStages
+}
+
+/**
+ * @param {Array<{ name: string, version: string|null, range: string }>} packages
+ * @returns {Array<Array<{ name: string, version: string|null, range: string }>>}
+ */
+function buildInstallStages (packages) {
+  const packageStages = []
+  const rangeStages = []
+  const orderedPackages = packages.map(entry => {
+    const range = getCappedRange(entry.name, entry.range)
+    return { entry, range, maximum: getRangeMaximum(range) }
+  })
+  orderedPackages.sort((left, right) => semver.rcompare(left.maximum, right.maximum))
+
+  // Bun collapses overlapping workspace ranges to one version. Lock higher ranges before adding intersecting floors.
+  for (const { entry, range } of orderedPackages) {
+    let stageIndex = 0
+
+    for (let index = 0; index < rangeStages.length; index++) {
+      const stagedRanges = rangeStages[index].get(entry.name)
+      if (!stagedRanges) continue
+      for (const stagedRange of stagedRanges) {
+        if (semver.intersects(range, stagedRange)) {
+          stageIndex = index + 1
+          break
+        }
+      }
+    }
+
+    if (stageIndex === packageStages.length) {
+      packageStages.push([])
+      rangeStages.push(new Map())
+    }
+    packageStages[stageIndex].push(entry)
+    const stagedRanges = rangeStages[stageIndex].get(entry.name)
+    if (stagedRanges) {
+      stagedRanges.push(range)
+    } else {
+      rangeStages[stageIndex].set(entry.name, [range])
+    }
+  }
+
+  return packageStages
+}
+
+/**
+ * @param {string} range
+ * @returns {import('semver').SemVer}
+ */
+function getRangeMaximum (range) {
+  let rangeMaximum
+  for (const comparatorSet of new semver.Range(range).set) {
+    let setMaximum
+    for (const comparator of comparatorSet) {
+      if (
+        comparator.value &&
+        (comparator.operator === '' || comparator.operator === '<' || comparator.operator === '<=') &&
+        (!setMaximum || semver.lt(comparator.semver, setMaximum))
+      ) {
+        setMaximum = comparator.semver
+      }
+    }
+    if (!rangeMaximum || semver.gt(setMaximum, rangeMaximum)) rangeMaximum = setMaximum
+  }
+  return rangeMaximum
+}
+
+/**
+ * @param {string[]} moduleNames
+ * @param {Array<{ name: string }>} packages
+ */
+function applyExternalConfiguration (moduleNames, packages) {
+  const activeNames = new Set(moduleNames)
+  for (const { name } of packages) activeNames.add(name)
+
+  for (const name of activeNames) {
+    const configurations = externals[name]
+    if (!configurations) continue
+
+    for (const external of configurations) {
+      if (external.dep) trustedDependencies.add(external.name)
+      if (external.trustedDependencies) {
+        for (const trustedDependency of external.trustedDependencies) {
+          trustedDependencies.add(trustedDependency)
+        }
+      }
+      if (!external.overrides) continue
+
+      for (const [dependency, version] of Object.entries(external.overrides)) {
+        // Bun only honours a bare package name. A Yarn-style selective path (`parent@1.0.0/child`) or an
+        // npm-style nested object is accepted into the manifest and then silently ignored, so the range
+        // reads as enforced while resolution stays untouched.
+        if (!BARE_PACKAGE_NAME.test(dependency) || typeof version !== 'string') {
+          throw new Error(
+            `Override '${dependency}' cannot be expressed as a Bun override. Bun only supports a bare package ` +
+            'name mapped to a version range, and applies it to every workspace.'
+          )
+        }
+        const configuredVersion = workspaceOverrides[dependency]
+        if (configuredVersion !== undefined && configuredVersion !== version) {
+          throw new Error(`Conflicting overrides for '${dependency}': '${configuredVersion}' and '${version}'`)
+        }
+        workspaceOverrides[dependency] = version
+      }
+    }
+  }
 }
 
 /**
@@ -76,20 +233,25 @@ async function assertPrerequisites () {
  * the nohoisted (isolated) variant wins for any shared folder.
  *
  * @param {string[]} moduleNames
- * @returns {Array<{ name: string, version: string|null, range: string, external: boolean }>}
+ * @returns {Array<{ name: string, version: string|null, range: string }>}
  */
 function collectPackages (moduleNames) {
   const seen = new Set()
-  /** @type {Array<{ name: string, version: string|null, range: string, external: boolean }>} */
+  /** @type {Array<{ name: string, version: string|null, range: string }>} */
   const packages = []
 
-  const addFolder = (name, version, range, external) => {
+  /**
+   * @param {string} name
+   * @param {string|null} version
+   * @param {string} range
+   */
+  const addFolder = (name, version, range) => {
     // File-path requires are resolved from disk; their non-path counterparts already cover them.
     if (isRelativeRequire(name)) return
     const key = basename(name, version)
     if (seen.has(key)) return
     seen.add(key)
-    packages.push({ name, version, range, external })
+    packages.push({ name, version, range })
   }
 
   /**
@@ -120,10 +282,10 @@ function collectPackages (moduleNames) {
 
       // The unversioned `versions/<name>` folder is the default `require('versions/<name>')` target used by service
       // setup and several plugin specs.
-      if (unversioned) addFolder(name, null, unversioned, external)
+      if (unversioned) addFolder(name, null, unversioned)
 
       for (const { versionKey } of versionList) {
-        addFolder(name, versionKey, versionKey, external)
+        addFolder(name, versionKey, versionKey)
       }
     }
   }
@@ -149,12 +311,10 @@ async function assertFolder (name, version) {
 }
 
 /**
- * @param {string} name
- * @param {string|null} version
- * @param {string} dependencyVersionRange
- * @param {boolean} external
+ * @param {{ name: string, version: string|null, range: string }} entry
  */
-async function assertPackage (name, version, dependencyVersionRange, external) {
+async function assertPackage ({ name, version, range: dependencyVersionRange }) {
+  trustedDependencies.add(name)
   const dependencies = {
     [name]: getCappedRange(name, dependencyVersionRange),
   }
@@ -164,16 +324,6 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     license: 'BSD-3-Clause',
     private: true,
     dependencies,
-  }
-
-  if (name === 'aerospike') {
-    pkg.installConfig = {
-      hoistingLimits: 'workspaces',
-    }
-  } else if (!external) {
-    pkg.workspaces = {
-      nohoist: ['**/**'],
-    }
   }
 
   addFolderToWorkspaces(name, version)
@@ -218,11 +368,11 @@ async function collectPeerDependencyFolders (rootFolder, parent = '') {
     if (!isGeneratedWorkspace(entry, parent)) continue
     if (entry.startsWith('@')) {
       // eslint-disable-next-line no-await-in-loop
-      folders.push(...await collectPeerDependencyFolders(current, parent ? join(parent, entry) : entry))
+      folders.push(...await collectPeerDependencyFolders(current, posix.join(parent, entry)))
       continue
     }
 
-    const externalName = join(parent, entry.split('@', 1)[0])
+    const externalName = posix.join(parent, entry.split('@', 1)[0])
     if (externalDeps.has(externalName)) folders.push({ folder: current, externalName })
   }
 
@@ -240,7 +390,7 @@ async function patchPeerDependencies ({ folder, externalName }) {
 
   let pkgJson
 
-  for (const { dep, name, node, forced } of externalDeps.get(externalName)) {
+  for (const { dep, name, node, forced, version } of externalDeps.get(externalName)) {
     if (node && !semver.satisfies(process.versions.node, node)) {
       continue
     }
@@ -254,9 +404,11 @@ async function patchPeerDependencies ({ folder, externalName }) {
       if (pkgJson[section]?.[name]) {
         if (dep === externalName) {
           versionPkgJson.dependencies[name] = pkgJson.version
+        } else if (version) {
+          versionPkgJson.dependencies[name] = capKnownRange(name, version)
         } else {
           const declared = pkgJson[section][name]
-          versionPkgJson.dependencies[name] = declared.startsWith('workspace:')
+          const range = declared.startsWith('workspace:')
             // A `workspace:` protocol leaked into the published manifest (some monorepo packages publish it raw); it
             // cannot resolve outside the source repo, so fall back to the pinned compatible version.
             ? (latests[name] ?? '*')
@@ -265,13 +417,21 @@ async function patchPeerDependencies ({ folder, externalName }) {
               ? declared.split('||', 1)[0].trim()
               // Only one version available so use that.
               : declared
+          versionPkgJson.dependencies[name] = capKnownRange(name, range)
         }
         break
       }
     }
 
     if (!versionPkgJson.dependencies[name] && forced) {
-      versionPkgJson.dependencies[name] = latests[name]
+      // An explicit `version` in externals.js wins, then the range the installed package declares for itself, and
+      // only then the newest published version. The declared range matters because a forced transitive has to stay
+      // in the same generation as the sandbox consuming it: resolving `*` against the registry grafts the newest
+      // major onto an old client (a `@smithy/*` v4 handler onto the v2-era `@aws-sdk/client-bedrock-runtime@3.422.0`),
+      // and that handler's own transitives then resolve independently of the rest of the sandbox. Which majors
+      // collide changes every time the dependency publishes, so the sandbox breaks on an unrelated day.
+      const range = version ?? pkgJson.dependencies?.[name] ?? latests[name]
+      versionPkgJson.dependencies[name] = capKnownRange(name, range)
     }
   }
 
@@ -291,7 +451,7 @@ async function patchPeerDependencies ({ folder, externalName }) {
  * @returns {boolean}
  */
 function isGeneratedWorkspace (entry, parent = '') {
-  const workspaceName = parent ? join(parent, entry) : entry
+  const workspaceName = parent ? posix.join(parent, entry) : entry
 
   if (entry.startsWith('@')) {
     for (const workspace of workspaces) {
@@ -310,9 +470,28 @@ function isGeneratedWorkspace (entry, parent = '') {
  * @param {string|null} version
  */
 async function assertIndex (name, version) {
+  // `require.resolve('<name>/package.json')` works for the common case but
+  // throws `ERR_PACKAGE_PATH_NOT_EXPORTED` for packages that ship an `exports`
+  // map without a `./package.json` entry (moleculer, react, ...). Walking
+  // `module.paths` mirrors `requirePackageJson` and stays exports-blind.
   const index = `'use strict'
 
+const path = require('path')
+const fs = require('fs')
+
 const requirePackageJson = require('${requirePackageJsonPath}')
+
+/**
+ * @param {string} id
+ * @returns {string}
+ */
+function findPkgJsonPath (id) {
+  for (const modulePath of module.paths) {
+    const candidate = path.join(modulePath, id, 'package.json')
+    if (fs.existsSync(candidate)) return candidate
+  }
+  throw new Error('could not find ' + id + '/package.json')
+}
 
 module.exports = {
   /**
@@ -335,7 +514,7 @@ module.exports = {
    * @param {string} [id] The module id to resolve.
    * @returns {string | never} The resolved package.json path.
    */
-  pkgJsonPath (id) { return require.resolve((id || '${name}') + '/package.json') },
+  pkgJsonPath (id) { return findPkgJsonPath(id || '${name}') },
   /**
    * Resolve the package's version for a module id.
    *
@@ -358,28 +537,19 @@ async function assertWorkspaces () {
     workspaces: {
       packages: [...workspaces].sort(),
     },
+    overrides: workspaceOverrides,
+    trustedDependencies: [...trustedDependencies].sort(),
   }, null, 2) + '\n')
 }
 
-/**
- * Install the generated versions/ workspaces.
- *
- * Some workspaces download large prebuilt binaries at postinstall time (e.g. Electron pulls one archive per major
- * from GitHub's release CDN), which intermittently fail with 5xx gateway errors. Retry with backoff so a brief CDN
- * outage doesn't fail the whole job.
- */
 function install () {
   try {
-    retry(() => exec('yarn --ignore-engines', { cwd: folder() }), {
-      onRetry: (error, attempt, delayMs) => process.stderr.write(
-        `yarn install attempt ${attempt} failed, retrying in ${delayMs / 1000}s: ${error.message}\n`
-      ),
-    })
+    exec('bun install --trust', { cwd: folder() })
   } catch (error) {
-    // A failure that outlasts the retries is most often an unresolvable version: a declared range spans a major
-    // version that was never published. Point at the fix instead of leaving a bare yarn error.
+    // A failure is most often an unresolvable version: a declared range spans a major version that was never
+    // published. Point at the fix instead of leaving a bare bun error.
     throw new Error(
-      'yarn failed to install the generated versions/ workspaces. If a plugin declares a version range that spans a ' +
+      'bun failed to install the generated versions/ workspaces. If a plugin declares a version range that spans a ' +
       'major version that was never published (non-consecutive majors), add that package to ' +
       '`nonConsecutiveMajorPackages` in packages/dd-trace/test/plugins/versions/index.js (or split the range) so its ' +
       'in-between majors are not installed.\n' +
@@ -387,6 +557,15 @@ function install () {
       { cause: error }
     )
   }
+}
+
+/**
+ * @param {string} name
+ * @param {string} range
+ * @returns {string}
+ */
+function capKnownRange (name, range) {
+  return latests[name] === undefined ? range : getCappedRange(name, range)
 }
 
 /**
