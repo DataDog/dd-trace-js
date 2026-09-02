@@ -348,6 +348,9 @@ describe('webdriverio instrumentation', () => {
       await runCallback(testContext.resolveCallback)
 
       assert.deepStrictEqual(calls.slice(4), [
+        'handle',
+        'handles',
+        'switch:window-a',
         'detect-at-test-end',
       ])
       assert.deepStrictEqual(rumStates, [undefined, false, true])
@@ -359,7 +362,10 @@ describe('webdriverio instrumentation', () => {
       await runCallback(afterEachContext.resolveCallback)
       await cleanupPendingRumTest()
 
-      assert.deepStrictEqual(calls.slice(5), [
+      assert.deepStrictEqual(calls.slice(8), [
+        'handle',
+        'handles',
+        'switch:window-a',
         'detect-after-each',
         'remove-preload',
         'handle',
@@ -1184,6 +1190,8 @@ describe('webdriverio instrumentation', () => {
         'switch:window-a',
         'set-current',
         'add-preload',
+        'switch:window-a',
+        'switch:window-a',
         'remove-preload',
         'switch:window-a',
         'delete-current',
@@ -1206,7 +1214,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('re-correlates every browser window with a retry execution ID', async () => {
+  it('detects active RUM in a background window before re-correlating every window', async () => {
     require('../src/webdriverio')
 
     const executeAsyncContext = {}
@@ -1217,7 +1225,13 @@ describe('webdriverio instrumentation', () => {
         browserVersion: '123',
       },
       deleteCookies: sinon.stub().resolves(),
-      execute: sinon.stub().resolves(false),
+      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
+        ? {
+            isRumActive: currentWindowHandle === 'window-b',
+            isRumInstrumented: currentWindowHandle === 'window-b',
+            rumSamplingRate: currentWindowHandle === 'window-b' ? 100 : null,
+          }
+        : false)),
       getWindowHandle: sinon.stub().callsFake(() => Promise.resolve(currentWindowHandle)),
       getWindowHandles: sinon.stub().resolves(['window-a', 'window-b']),
       isBidi: true,
@@ -1242,6 +1256,9 @@ describe('webdriverio instrumentation', () => {
       'window-a',
       'window-b',
       'window-a',
+      'window-a',
+      'window-b',
+      'window-a',
     ])
     assert.deepStrictEqual(browser.setCookies.args, [
       [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'retry-execution-id' }],
@@ -1256,11 +1273,11 @@ describe('webdriverio instrumentation', () => {
       functionDeclaration: 'cookie => { globalThis.document.cookie = cookie }',
     }])
     assert.deepStrictEqual(browser.scriptRemovePreloadScript.firstCall.args, [{ script: 'rum-preload' }])
-    assert.strictEqual(browser.execute.callCount, 1)
+    assert.strictEqual(browser.execute.callCount, 2)
     assert.deepStrictEqual(rumCorrelation, {
       browserName: 'chrome',
       browserVersion: '123',
-      isRumActive: false,
+      isRumActive: true,
     })
 
     await executeAsyncContext.rumCleanupCallback()
@@ -1428,6 +1445,12 @@ describe('webdriverio instrumentation', () => {
       await cleanupPendingRumTest()
 
       assert.deepStrictEqual(calls, [
+        'switch:window-a',
+        'switch:window-b',
+        'switch:window-a',
+        'switch:window-a',
+        'switch:window-b',
+        'switch:window-a',
         'switch:window-a',
         'switch:window-b',
         'switch:window-a',

@@ -520,16 +520,20 @@ async function startRumTest () {
 async function detectActiveRumBrowsers (updateTest = true) {
   let isRumActive = false
   for (const browser of rumCorrelationBrowsers) {
-    try {
-      // WebDriver commands are intentionally sequential for each browser.
-      // eslint-disable-next-line no-await-in-loop
-      const rumState = await browser.execute(detectRum)
-      if (rumState?.isRumActive) {
-        isRumActive = true
-        if (updateTest) getRumTestExecutionId(browser, true)
+    let isBrowserRumActive = false
+    // WebDriver commands are intentionally sequential for each browser.
+    // eslint-disable-next-line no-await-in-loop
+    await forEachRumWindow(browser, async (browser) => {
+      try {
+        const rumState = await browser.execute(detectRum)
+        if (rumState?.isRumActive) isBrowserRumActive = true
+      } catch (error) {
+        log.error('WebdriverIO RUM detection error', error)
       }
-    } catch (error) {
-      log.error('WebdriverIO RUM detection error', error)
+    })
+    if (isBrowserRumActive) {
+      isRumActive = true
+      if (updateTest) getRumTestExecutionId(browser, true)
     }
   }
   return isRumActive
