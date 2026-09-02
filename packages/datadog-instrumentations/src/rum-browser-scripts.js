@@ -8,9 +8,10 @@ function detectRum () {
   const isRumActive = window.DD_RUM && window.DD_RUM.getInternalContext
     ? !!window.DD_RUM.getInternalContext()
     : false
-  const rumSamplingRate = window.DD_RUM && window.DD_RUM.getInitConfiguration
-    ? window.DD_RUM.getInitConfiguration().sessionSampleRate
-    : null
+  const rumInitConfiguration = window.DD_RUM && window.DD_RUM.getInitConfiguration
+    ? window.DD_RUM.getInitConfiguration()
+    : undefined
+  const rumSamplingRate = rumInitConfiguration ? rumInitConfiguration.sessionSampleRate : null
 
   return { isRumInstrumented, isRumActive, rumSamplingRate }
 }

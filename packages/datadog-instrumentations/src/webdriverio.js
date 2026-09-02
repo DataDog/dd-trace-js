@@ -83,6 +83,7 @@ const localRunnerVersions = new WeakMap()
 const rumBrowsers = new Set()
 const rumCorrelationBrowsers = new Set()
 const rumRunnerBrowsers = new WeakSet()
+const rumBrowserOriginUrls = new WeakMap()
 const rumBrowserPreloadScripts = new WeakMap()
 const rumBrowserTestExecutionIds = new WeakMap()
 let isRumCleanupPending = false
@@ -98,6 +99,19 @@ addHook({
 })
 
 /**
+ * Returns the cookie origin for a browser URL.
+ *
+ * @param {string} url
+ * @returns {string|undefined}
+ */
+function getRumOrigin (url) {
+  try {
+    const origin = new URL(url).origin
+    if (origin !== 'null') return origin
+  } catch {}
+}
+
+/**
  * Installs RUM correlation on every subsequent document in the BiDi session.
  *
  * @param {object} browser
@@ -109,14 +123,16 @@ async function installRumPreloadScript (browser, testExecutionId) {
       typeof browser.scriptAddPreloadScript !== 'function') return
 
   try {
-    if (rumBrowserPreloadScripts.has(browser)) return
+    const preloadScript = rumBrowserPreloadScripts.get(browser)
+    if (preloadScript?.testExecutionId === testExecutionId) return
+    if (preloadScript) await removeRumPreloadScript(browser)
 
     const cookie = `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=${testExecutionId}; path=/`
     const { script } = await browser.scriptAddPreloadScript({
       arguments: [{ type: 'string', value: cookie }],
       functionDeclaration: SET_RUM_COOKIE_SCRIPT,
     })
-    rumBrowserPreloadScripts.set(browser, script)
+    rumBrowserPreloadScripts.set(browser, { script, testExecutionId })
   } catch (error) {
     log.error('WebdriverIO RUM correlation preload error', error)
   }
@@ -129,12 +145,12 @@ async function installRumPreloadScript (browser, testExecutionId) {
  * @returns {Promise<void>}
  */
 async function removeRumPreloadScript (browser) {
-  const script = rumBrowserPreloadScripts.get(browser)
+  const preloadScript = rumBrowserPreloadScripts.get(browser)
   rumBrowserPreloadScripts.delete(browser)
-  if (!script || typeof browser.scriptRemovePreloadScript !== 'function') return
+  if (!preloadScript || typeof browser.scriptRemovePreloadScript !== 'function') return
 
   try {
-    await browser.scriptRemovePreloadScript({ script })
+    await browser.scriptRemovePreloadScript({ script: preloadScript.script })
   } catch (error) {
     log.error('WebdriverIO RUM correlation preload cleanup error', error)
   }
@@ -198,13 +214,32 @@ async function preloadRumNavigation () {
  * @returns {Promise<void>}
  */
 async function correlateRumWindow (browser, testExecutionId) {
+  let cookieSet = false
   try {
     await browser.setCookies({
       name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
       value: testExecutionId,
     })
+    cookieSet = true
   } catch (error) {
     log.error('WebdriverIO RUM correlation cookie error', error)
+  }
+
+  if (cookieSet && !browser.isBidi && typeof browser.getUrl === 'function') {
+    try {
+      const url = await browser.getUrl()
+      const origin = getRumOrigin(url)
+      if (origin) {
+        let originUrls = rumBrowserOriginUrls.get(browser)
+        if (!originUrls) {
+          originUrls = new Map()
+          rumBrowserOriginUrls.set(browser, originUrls)
+        }
+        originUrls.set(origin, url)
+      }
+    } catch (error) {
+      log.error('WebdriverIO RUM origin tracking error', error)
+    }
   }
   await installRumPreloadScript(browser, testExecutionId)
 }
@@ -285,6 +320,95 @@ async function deleteRumCookie (browser) {
 }
 
 /**
+ * Removes the cookie from the current window and records its origin as cleaned.
+ *
+ * @param {object} browser
+ * @param {Set<string>} cleanedOrigins
+ * @returns {Promise<void>}
+ */
+async function deleteRumCookieAndTrackOrigin (browser, cleanedOrigins) {
+  if (typeof browser.getUrl === 'function') {
+    try {
+      const origin = getRumOrigin(await browser.getUrl())
+      if (origin) cleanedOrigins.add(origin)
+    } catch (error) {
+      log.error('WebdriverIO RUM window origin error', error)
+    }
+  }
+  await deleteRumCookie(browser)
+}
+
+/**
+ * Removes cookies from classic WebDriver origins that no open window currently uses.
+ *
+ * @param {object} browser
+ * @param {Set<string>} cleanedOrigins
+ * @returns {Promise<void>}
+ */
+async function cleanupRumOrigins (browser, cleanedOrigins) {
+  const originUrls = rumBrowserOriginUrls.get(browser)
+  rumBrowserOriginUrls.delete(browser)
+  if (!originUrls?.size) return
+
+  if (typeof browser.newWindow !== 'function' ||
+      typeof browser.closeWindow !== 'function' ||
+      typeof browser.getWindowHandle !== 'function' ||
+      typeof browser.navigateTo !== 'function' ||
+      typeof browser.switchToWindow !== 'function') {
+    log.error('WebdriverIO RUM origin cleanup commands are not available')
+    return
+  }
+
+  let currentWindowHandle
+  try {
+    currentWindowHandle = await browser.getWindowHandle()
+  } catch (error) {
+    log.error('WebdriverIO RUM window discovery error', error)
+    return
+  }
+
+  for (const [origin, url] of originUrls) {
+    if (cleanedOrigins.has(origin)) continue
+
+    let cleanupWindowOpened = false
+    try {
+      // WebDriver window commands must run in order because each one changes the active window.
+      // eslint-disable-next-line no-await-in-loop
+      await browser.newWindow('about:blank')
+      cleanupWindowOpened = true
+      // eslint-disable-next-line no-await-in-loop
+      await browser.navigateTo(url)
+      // eslint-disable-next-line no-await-in-loop
+      const cleanupOrigin = getRumOrigin(await browser.getUrl())
+      if (cleanupOrigin === origin) {
+        // eslint-disable-next-line no-await-in-loop
+        await deleteRumCookie(browser)
+      } else {
+        log.error('WebdriverIO RUM origin cleanup redirected from %s to %s', origin, cleanupOrigin)
+      }
+    } catch (error) {
+      log.error('WebdriverIO RUM origin cleanup error', error)
+    }
+
+    if (cleanupWindowOpened) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await browser.closeWindow()
+      } catch (error) {
+        log.error('WebdriverIO RUM cleanup window close error', error)
+      }
+    }
+
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await browser.switchToWindow(currentWindowHandle)
+    } catch (error) {
+      log.error('WebdriverIO RUM window restore error', error)
+    }
+  }
+}
+
+/**
  * Removes every RUM correlation cookie without loading its application origin.
  *
  * @param {object} browser
@@ -306,8 +430,9 @@ async function cleanupRumCookies (browser) {
  * Runs one RUM operation in every open browser window and restores the original window.
  *
  * @param {object} browser
- * @param {(browser: object, value?: string) => Promise<void>} operation
- * @param {string} [value]
+ * @template T
+ * @param {(browser: object, value?: T) => Promise<void>} operation
+ * @param {T} [value]
  * @returns {Promise<void>}
  */
 async function forEachRumWindow (browser, operation, value) {
@@ -364,9 +489,12 @@ async function cleanupRumBrowser (browser, stopSession = false) {
   await removeRumPreloadScript(browser)
   if (stopSession) {
     await forEachRumWindow(browser, cleanupRumWindow)
+    rumBrowserOriginUrls.delete(browser)
     rumBrowsers.delete(browser)
   } else {
-    await forEachRumWindow(browser, deleteRumCookie)
+    const cleanedOrigins = new Set()
+    await forEachRumWindow(browser, deleteRumCookieAndTrackOrigin, cleanedOrigins)
+    await cleanupRumOrigins(browser, cleanedOrigins)
   }
   await cleanupRumCookies(browser)
   rumBrowserTestExecutionIds.delete(browser)
@@ -506,7 +634,8 @@ async function retryRumTest () {
   const browsers = [...rumCorrelationBrowsers]
   if (browsers.length === 0) return
 
-  const testExecutionId = getRumTestExecutionId(browsers[0], true)
+  const isRumActive = await detectActiveRumBrowsers(false)
+  const testExecutionId = getRumTestExecutionId(browsers[0], isRumActive)
   if (!testExecutionId) return
 
   await correlateRumBrowsers(browsers, testExecutionId)

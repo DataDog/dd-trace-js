@@ -467,11 +467,16 @@ for (const version of versions) {
             )
             assert.deepStrictEqual(
               cookieRequests.map(({ method }) => method),
-              ['POST', 'POST', 'POST', 'DELETE', 'DELETE']
+              ['POST', 'POST', 'POST', 'DELETE', 'DELETE', 'DELETE', 'DELETE']
             )
             assert.deepStrictEqual(
               cookieRequests.filter(({ method }) => method === 'DELETE').map(({ pageUrl }) => pageUrl),
-              ['http://after-each.example.test/', 'http://after-each.example.test/']
+              [
+                'http://after-each.example.test/',
+                'http://example.test/',
+                'http://second.example.test/',
+                'http://after-each.example.test/',
+              ]
             )
           })
         })

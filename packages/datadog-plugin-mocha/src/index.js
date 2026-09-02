@@ -208,10 +208,7 @@ class MochaPlugin extends CiPlugin {
 
       const activeSpan = storage('legacy').getStore()?.span
       const testSpan = setRumTestCorrelation(ctx, activeSpan)
-      if (!testSpan) {
-        log.error('ci:webdriverio:rum:page-navigate: test span not found')
-        return
-      }
+      if (!testSpan) return
       if (ctx.browserName) {
         testSpan.setTag(TEST_BROWSER_NAME, ctx.browserName)
       }
