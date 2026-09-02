@@ -3,24 +3,25 @@
 const { addHook, getHooks } = require('./helpers/instrument')
 
 // Orchestrion rewriter handles wrapping of:
-// - graphql: execute, parse, validate (CJS + ESM)
-// - @graphql-tools/executor: execute, normalizedExecutor (CJS + ESM)
+// - graphql: execute, locatedError, parse, validate (CJS + ESM)
+// - @graphql-tools/executor: execute, handleFieldError, normalizedExecutor (CJS + ESM)
 // See helpers/rewriter/instrumentations/graphql.js for the full config.
-for (const hook of getHooks('graphql')) {
-  addHook(hook, exports => exports)
+
+/**
+ * @param {string} name
+ */
+function addRewriterHooks (name) {
+  const files = new Set()
+  for (const hook of getHooks(name)) {
+    if (files.has(hook.file)) continue
+    files.add(hook.file)
+    addHook(hook, exports => exports)
+  }
 }
 
-for (const hook of getHooks('@graphql-tools/executor')) {
-  addHook(hook, exports => exports)
-}
-
-// Multiple graphql-jit rewrites share each build file; register one hook per file.
-const graphqlJitFiles = new Set()
-for (const hook of getHooks('graphql-jit')) {
-  if (graphqlJitFiles.has(hook.file)) continue
-  graphqlJitFiles.add(hook.file)
-  addHook(hook, exports => exports)
-}
+addRewriterHooks('graphql')
+addRewriterHooks('@graphql-tools/executor')
+addRewriterHooks('graphql-jit')
 
 // Module-load hooks: capture references on ddGlobal for cross-plugin access
 // (read lazily inside each callback so agent.load() between mocha suites can
