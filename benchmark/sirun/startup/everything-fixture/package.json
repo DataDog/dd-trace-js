@@ -11,7 +11,7 @@
     "bunyan": "1.8.15",
     "cassandra-driver": "4.8.0",
     "express": "5.2.1",
-    "fastify": "5.8.5",
+    "fastify": "5.12.1",
     "graphql": "16.14.0",
     "ioredis": "5.10.1",
     "kafkajs": "2.2.4",
