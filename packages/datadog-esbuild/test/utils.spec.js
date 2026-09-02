@@ -28,14 +28,21 @@ describe('esbuild utils', () => {
     })
 
     it('should set the nested exports', async () => {
+      const modulePath = path.join(__dirname, 'resources', 'export-method-and-nested-method.mjs')
+      const nestedPath = path.join(__dirname, 'resources', 'export-method.mjs')
+      const moduleSources = new Map()
       const setters = await processModule({
-        path: path.join(__dirname, 'resources', 'export-method-and-nested-method.mjs'),
+        path: modulePath,
         context: { format: 'module' },
+        moduleSources,
       })
 
       assert.strictEqual(setters.size, 2)
       assert.strictEqual(setters.has('exportMethod'), true)
       assert.strictEqual(setters.has('exportedMethod2'), true)
+      assert.strictEqual(moduleSources.size, 2)
+      assert.strictEqual(moduleSources.get(modulePath), fs.readFileSync(modulePath, 'utf8'))
+      assert.strictEqual(moduleSources.get(nestedPath), fs.readFileSync(nestedPath, 'utf8'))
     })
 
     it('should set the native module exports', async () => {

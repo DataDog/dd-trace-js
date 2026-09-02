@@ -78,9 +78,22 @@ function resolve (specifier, context) {
   }
 }
 
-function getSource (url, { format }) {
+/**
+ * @param {URL} url
+ * @param {{ format: string }} context
+ * @param {Map<string, string>} moduleSources
+ * @returns {{ source: string, format: string }}
+ */
+function getSource (url, { format }, moduleSources) {
+  const modulePath = fileURLToPath(url)
+  let source = moduleSources.get(modulePath)
+  if (source === undefined) {
+    source = fs.readFileSync(modulePath, 'utf8')
+    moduleSources.set(modulePath, source)
+  }
+
   return {
-    source: fs.readFileSync(fileURLToPath(url), 'utf8'),
+    source,
     format,
   }
 }
@@ -144,16 +157,19 @@ function driveGetExportsGenerator (exportsGenerator, getSource) {
  * @param {boolean} [moduleData.internal]
  * @param {object} moduleData.context
  * @param {boolean} [moduleData.excludeDefault]
+ * @param {Map<string, string>} [moduleData.moduleSources]
  * @returns {Promise<Map>}
  */
-async function processModule ({ path, internal = false, context, excludeDefault = false }) {
+async function processModule ({ path, internal = false, context, excludeDefault = false, moduleSources = new Map() }) {
   let exportNames, srcUrl
   if (internal) {
     // we can not read and parse of internal modules
     exportNames = await getExportsImporting(path)
   } else {
     srcUrl = pathToFileURL(path)
-    exportNames = await getExports(srcUrl, context, getSource)
+    const loadSource = (url, context) => getSource(url, context, moduleSources)
+    loadSource(srcUrl, context)
+    exportNames = await getExports(srcUrl, context, loadSource)
   }
 
   const starExports = new Set()
@@ -207,6 +223,7 @@ async function processModule ({ path, internal = false, context, excludeDefault 
         path: fileURLToPath(result.url),
         context: { ...context, format: result.format },
         excludeDefault: true,
+        moduleSources,
       })
 
       for (const [name, setter] of subSetters.entries()) {

@@ -4,6 +4,7 @@ const { createHash, randomUUID } = require('node:crypto')
 const fsSync = require('node:fs')
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const { fileURLToPath, pathToFileURL } = require('node:url')
 
 const enhancedResolve = require('enhanced-resolve')
 
@@ -11,15 +12,17 @@ const { BUNDLER_DC_GLOBAL } = require('../../datadog-instrumentations/src/helper
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
 const hooks = require('../../datadog-instrumentations/src/helpers/hooks')
 const {
+  errorMessage,
   filename,
   matchVersion,
 } = require('../../datadog-instrumentations/src/helpers/instrumentation-utils')
 const { isESMFile, processModule } = require('../../datadog-esbuild/src/utils')
+const { parseSource } = require('./compiler')
 
-const CACHE_DIRECTORY = path.join('node_modules', '.cache', 'dd-trace', 'turbopack')
+const CACHE_DIRECTORY = path.join('cache', 'dd-trace', 'turbopack')
 const CHANNEL = 'dd-trace:bundler:load'
 const MAX_WARNINGS = 128
-const PLAN_VERSION = 3
+const PLAN_VERSION = 4
 const TRAILING_WHITESPACE = /[ \t]+$/gm
 const resolveImport = enhancedResolve.create.sync({ conditionNames: ['node', 'import'] })
 const resolveRequire = enhancedResolve.create.sync({ conditionNames: ['node', 'require'] })
@@ -29,7 +32,7 @@ const emittedWarnings = new Set()
 
 /**
  * @typedef {object} InstrumentationPayload
- * @property {number[]} instrumentationIndexes
+ * @property {string} [integration]
  * @property {string} moduleName
  * @property {string} package
  * @property {string} path
@@ -38,19 +41,23 @@ const emittedWarnings = new Set()
 
 /**
  * @typedef {object} Target
+ * @property {Array<{ path: string, sourceHash: string }>} [dependencies]
  * @property {boolean} esm
  * @property {Array<{ hook: Function, payload: InstrumentationPayload, version: string }>} matches
  * @property {InstrumentationPayload[]} payloads
  * @property {string} path
+ * @property {{ moduleName: string, filePath: string }} rewriteTarget
  * @property {Set<string>} rulePaths
  * @property {string} sourceHash
  * @property {string[]} [setters]
+ * @property {string[]} [liveExports]
  */
 
 /**
  * Compiles installed integration targets into immutable build artifacts.
  *
  * @param {string} projectDir
+ * @param {{ compiler: { parser: string, traverse: string }, distDir?: string }} settings
  * @returns {Promise<{
  *   hash?: string,
  *   moduleSyntaxPattern?: RegExp,
@@ -60,7 +67,7 @@ const emittedWarnings = new Set()
  *   targetPathPattern?: RegExp
  * }>}
  */
-async function createBuildPlan (projectDir) {
+async function createBuildPlan (projectDir, settings) {
   projectDir = path.resolve(projectDir)
   loadInstrumentations()
 
@@ -70,17 +77,26 @@ async function createBuildPlan (projectDir) {
 
   for (const target of targets) {
     try {
-      target.sourceHash = hash(fsSync.readFileSync(target.path))
+      const source = fsSync.readFileSync(target.path)
+      target.sourceHash = hash(source)
       if (target.esm) {
         // Export discovery is asynchronous in import-in-the-middle and belongs at build time.
+        const moduleSources = new Map([[fileURLToPath(pathToFileURL(target.path)), source.toString()]])
         // eslint-disable-next-line no-await-in-loop
-        const setters = await processModule({ path: target.path, context: { format: 'module' } })
+        const setters = await processModule({
+          path: target.path,
+          context: { format: 'module' },
+          moduleSources,
+        })
+        target.dependencies = createDependencies(moduleSources, target.path)
+        target.liveExports = findLiveExports(source.toString(), target.path, settings.compiler, setters.keys())
+        for (const name of target.liveExports) setters.delete(name)
         target.setters = [...setters.values()].map(setter => setter.replaceAll(TRAILING_WHITESPACE, ''))
         includesEsmTarget = true
       }
       compiledTargets.push(target)
     } catch (error) {
-      warnOnce(`target:${target.path}`, `Could not instrument ${target.path}: ${error.message}`)
+      warnOnce(`target:${target.path}`, `Could not instrument ${target.path}: ${errorMessage(error)}`)
     }
   }
 
@@ -91,11 +107,11 @@ async function createBuildPlan (projectDir) {
   relativeTargets.sort(compareRelativeTargets)
   const identity = createPlanIdentity(compiledTargets, relativeTargets)
   const planId = hash(identity)
-  const artifactDirectory = path.join(projectDir, CACHE_DIRECTORY, planId)
+  const artifactDirectory = path.resolve(projectDir, settings.distDir ?? '.next', CACHE_DIRECTORY, planId)
   try {
     await fs.mkdir(artifactDirectory, { recursive: true })
   } catch (error) {
-    throw new Error(`Could not create the Datadog Turbopack cache at ${artifactDirectory}: ${error.message}`, {
+    throw new Error(`Could not create the Datadog Turbopack cache at ${artifactDirectory}: ${errorMessage(error)}`, {
       cause: error,
     })
   }
@@ -105,8 +121,10 @@ async function createBuildPlan (projectDir) {
 
   for (const target of compiledTargets) {
     const entry = {
+      dependencies: target.dependencies,
       esm: target.esm,
       payloads: target.payloads,
+      rewriteTarget: target.rewriteTarget,
       sourceHash: target.sourceHash,
     }
 
@@ -144,6 +162,31 @@ async function createBuildPlan (projectDir) {
   }
 }
 
+/**
+ * @param {Map<string, string>} moduleSources
+ * @param {string} targetPath
+ * @returns {Array<{ path: string, sourceHash: string }>}
+ */
+function createDependencies (moduleSources, targetPath) {
+  const dependencies = []
+  for (const [modulePath, source] of moduleSources) {
+    const dependencyPath = normalizePath(modulePath)
+    if (dependencyPath === targetPath) continue
+    dependencies.push({ path: dependencyPath, sourceHash: hash(source) })
+  }
+  dependencies.sort(compareDependencies)
+  return dependencies
+}
+
+/**
+ * @param {{ path: string }} left
+ * @param {{ path: string }} right
+ * @returns {number}
+ */
+function compareDependencies (left, right) {
+  return left.path.localeCompare(right.path)
+}
+
 /** Loads each instrumentation declaration before target discovery. */
 function loadInstrumentations () {
   for (const [name, hook] of Object.entries(hooks)) {
@@ -153,7 +196,7 @@ function loadInstrumentations () {
     try {
       load()
     } catch (error) {
-      warnOnce(`hook:${name}`, `Could not load the ${name} instrumentation: ${error.message}`)
+      warnOnce(`hook:${name}`, `Could not load the ${name} instrumentation: ${errorMessage(error)}`)
     }
   }
 }
@@ -197,8 +240,7 @@ function getRelativeTargets (targets) {
   for (const [name, entries] of Object.entries(instrumentations)) {
     if (!name.startsWith('.')) continue
 
-    for (let index = 0; index < entries.length; index++) {
-      const entry = entries[index]
+    for (const entry of entries) {
       if (!entry.file) continue
 
       for (const target of targets) {
@@ -215,17 +257,12 @@ function getRelativeTargets (targets) {
             continue
           }
 
-          if (existing) {
-            if (!existing.payloads[0].instrumentationIndexes.includes(index)) {
-              existing.payloads[0].instrumentationIndexes.push(index)
-            }
-            continue
-          }
+          if (existing) continue
 
           relativeTargets.set(key, {
             file: entry.file.replaceAll('\\', '/'),
             payloads: [{
-              instrumentationIndexes: [index],
+              integration: match.payload.package,
               moduleName: name,
               package: name,
               path: name,
@@ -256,8 +293,7 @@ function addTargets (targets, packageRoot, name, entries) {
   }
 
   let entrypoints
-  for (let index = 0; index < entries.length; index++) {
-    const entry = entries[index]
+  for (const entry of entries) {
     if (!matchVersion(packageJson.version, entry.versions)) continue
 
     let files
@@ -288,6 +324,7 @@ function addTargets (targets, packageRoot, name, entries) {
           matches: [],
           path: targetPath,
           payloads: [],
+          rewriteTarget: { filePath: relativePath, moduleName: name },
           rulePaths: new Set(),
           sourceHash: '',
         }
@@ -299,7 +336,6 @@ function addTargets (targets, packageRoot, name, entries) {
       let payload = findPayload(target.payloads, name, moduleName, packageJson.version)
       if (!payload) {
         payload = {
-          instrumentationIndexes: [],
           moduleName,
           package: name,
           path: moduleName,
@@ -307,7 +343,6 @@ function addTargets (targets, packageRoot, name, entries) {
         }
         target.payloads.push(payload)
       }
-      payload.instrumentationIndexes.push(index)
       target.matches.push({ hook: entry.hook, payload, version: packageJson.version })
     }
   }
@@ -522,6 +557,74 @@ function findMatchingFiles (directory, pattern) {
 }
 
 /**
+ * @param {string} source
+ * @param {string} resourcePath
+ * @param {{ parser: string, traverse: string }} compiler
+ * @param {Iterable<string>} exportNames
+ * @returns {string[]}
+ */
+function findLiveExports (source, resourcePath, compiler, exportNames) {
+  const { ast, traverse } = parseSource(source, resourcePath, compiler)
+  const explicitExports = new Set()
+  const liveExports = new Set()
+  let hasExportAll = false
+
+  traverse(ast, {
+    /** @param {object} programPath */
+    Program (programPath) {
+      for (const statementPath of programPath.get('body')) {
+        const { node } = statementPath
+        if (statementPath.isExportAllDeclaration()) {
+          if (node.exportKind !== 'type') hasExportAll = true
+          continue
+        }
+        if (!statementPath.isExportNamedDeclaration()) continue
+
+        const declarationPath = statementPath.get('declaration')
+        if (declarationPath.node) {
+          for (const name of Object.keys(declarationPath.getBindingIdentifiers())) {
+            explicitExports.add(name)
+            if (programPath.scope.getBinding(name)?.constant === false) liveExports.add(name)
+          }
+        }
+
+        for (const specifier of node.specifiers) {
+          if (specifier.exportKind === 'type') continue
+          const exported = getExportName(specifier.exported)
+          if (exported === undefined) continue
+
+          explicitExports.add(exported)
+          if (node.source) {
+            liveExports.add(exported)
+            continue
+          }
+
+          const local = getExportName(specifier.local)
+          const binding = local === undefined ? undefined : programPath.scope.getBinding(local)
+          if (!binding || binding.kind === 'module' || binding.constant === false) liveExports.add(exported)
+        }
+      }
+    },
+  })
+
+  if (hasExportAll) {
+    for (const name of exportNames) {
+      if (!explicitExports.has(name)) liveExports.add(name)
+    }
+  }
+
+  return [...liveExports].sort()
+}
+
+/**
+ * @param {{ name?: string, value?: string }|undefined} exported
+ * @returns {string|undefined}
+ */
+function getExportName (exported) {
+  return exported?.name ?? exported?.value
+}
+
+/**
  * @param {Target[]} targets
  * @param {Array<{ file: string, payloads: InstrumentationPayload[], sourceHash: string }>} relativeTargets
  * @returns {string}
@@ -530,9 +633,12 @@ function createPlanIdentity (targets, relativeTargets) {
   const identityTargets = []
   for (const target of targets) {
     identityTargets.push({
+      dependencies: target.dependencies,
       esm: target.esm,
+      liveExports: target.liveExports,
       path: target.path,
       payloads: target.payloads,
+      rewriteTarget: target.rewriteTarget,
       setters: target.setters,
       sourceHash: target.sourceHash,
     })
@@ -546,13 +652,24 @@ function createPlanIdentity (targets, relativeTargets) {
  * @returns {string}
  */
 function createEsmProxy (target, proxyPath) {
+  const targetImport = JSON.stringify(relativeImport(path.dirname(proxyPath), target.path))
+  let liveReexports = ''
+  let liveSnapshots = ''
   let publications = ''
   let publicationIndex = 0
+
+  if (target.liveExports) {
+    for (const name of target.liveExports) {
+      const exported = JSON.stringify(name)
+      liveReexports += `export { ${exported} } from ${targetImport}\n`
+      liveSnapshots += `_[${exported}] = namespace[${exported}]\n`
+    }
+  }
 
   for (const payload of target.payloads) {
     const payloadName = `payload${publicationIndex++}`
     publications += `  const ${payloadName} = {
-      instrumentationIndexes: ${JSON.stringify(payload.instrumentationIndexes)},
+      integration: ${JSON.stringify(payload.integration)},
       module: _,
       moduleName: ${JSON.stringify(payload.moduleName)},
       package: ${JSON.stringify(payload.package)},
@@ -568,16 +685,16 @@ function createEsmProxy (target, proxyPath) {
   }
 
   return `/* eslint-disable @stylistic/quotes, @stylistic/semi */
-/* eslint-disable @stylistic/comma-spacing, dot-notation, import/no-mutable-exports */
+/* eslint-disable dot-notation, import/no-mutable-exports */
 /* eslint-disable indent */
 import nativeDc from 'node:diagnostics_channel'
 import * as namespace from
-  ${JSON.stringify(relativeImport(path.dirname(proxyPath), target.path))}
-const dc = globalThis[Symbol.for(${JSON.stringify(BUNDLER_DC_GLOBAL)})] ?? nativeDc
+  ${targetImport}
+${liveReexports}const dc = globalThis[Symbol.for(${JSON.stringify(BUNDLER_DC_GLOBAL)})] ?? nativeDc
 const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } })
 const set = {}
 const get = {}
-${target.setters.join(';\n')}
+${liveSnapshots}${target.setters.join(';\n')}
 const channel = dc.channel('${CHANNEL}')
 if (channel.hasSubscribers) {
 ${publications}}
@@ -593,7 +710,7 @@ function createPackagePathPattern (targets) {
   for (const target of targets) {
     for (const payload of target.payloads) packageNames.add(payload.package)
   }
-  return new RegExp(`(?:^|/)node_modules/(?:${[...packageNames].sort().map(escapeRegExp).join('|')})(?:/|$)`)
+  return new RegExp(`(?:^|/)node_modules/(?:${createAlternation(packageNames)})(?:/|$)`)
 }
 
 /**
@@ -604,7 +721,7 @@ function createRelativePathPattern (relativeTargets) {
   if (relativeTargets.length === 0) return
   const files = new Set()
   for (const target of relativeTargets) files.add(target.file)
-  return new RegExp(`(?:^|/)(?:${[...files].sort().map(escapeRegExp).join('|')})$`)
+  return new RegExp(`(?:^|/)(?:${createAlternation(files)})$`)
 }
 
 /**
@@ -617,7 +734,20 @@ function createTargetPathPattern (targets) {
     paths.add(target.path)
     for (const rulePath of target.rulePaths) paths.add(rulePath)
   }
-  return new RegExp(`(?:^|/)(?:${[...paths].sort().map(escapeRegExp).join('|')})$`)
+  return new RegExp(`(?:^|/)(?:${createAlternation(paths)})$`)
+}
+
+/**
+ * @param {Set<string>} values
+ * @returns {string}
+ */
+function createAlternation (values) {
+  let result = ''
+  for (const value of [...values].sort()) {
+    if (result) result += '|'
+    result += escapeRegExp(value)
+  }
+  return result
 }
 
 /**
@@ -650,7 +780,7 @@ async function writeArtifact (file, content) {
     } catch (error) {
       warnOnce(
         `cleanup:${temporaryFile}`,
-        `Could not remove temporary Turbopack artifact ${temporaryFile}: ${error.message}`
+        `Could not remove temporary Turbopack artifact ${temporaryFile}: ${errorMessage(error)}`
       )
     }
   }
