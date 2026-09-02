@@ -662,13 +662,13 @@ class Config extends ConfigBase {
       setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
       setAndTrack(this, 'llmobs.agentlessEnabled', true)
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
-
-      setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
+      if (this.DD_API_KEY === undefined) {
+        setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+      }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
       setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
       setAndTrack(this, 'dsmEnabled', false)
-      setAndTrack(this, 'dynamicInstrumentation.enabled', false)
       setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
 
       const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
