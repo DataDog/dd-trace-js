@@ -1,6 +1,16 @@
 'use strict'
 
+const { AsyncResource } = require('node:async_hooks')
+
 const _tracer = require('../../../../dd-trace')
+const { buildLogHolder } = require('../../../src/plugins/log_injection')
+
+const requestContextResource = new AsyncResource('RequestContextResource')
+const runWithRequestContext = requestContextResource.bind(async () => {
+  await Promise.resolve()
+
+  return buildLogHolder(_tracer)?.dd ?? {}
+}, null)
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -17,6 +27,36 @@ const sampleResponse = {
 
 const handler = async (_event, _context) => {
   return sampleResponse
+}
+
+const asyncResourceHandler = async () => {
+  return runWithRequestContext()
+}
+
+const capturedAsyncResourceHandler = async () => {
+  const invocationSpan = _tracer.scope().active()
+  const invocationResource = new AsyncResource('InvocationResource')
+  function getActiveSpan () {
+    return _tracer.scope().active()
+  }
+  getActiveSpan.apply = null
+
+  return _tracer.trace('child', () => {
+    const childSpan = _tracer.scope().active()
+    const capturedSpan = invocationResource.runInAsyncScope(getActiveSpan)
+
+    return {
+      capturedSpanId: capturedSpan.context().toSpanId(),
+      childSpanId: childSpan.context().toSpanId(),
+      invocationSpanId: invocationSpan.context().toSpanId(),
+    }
+  })
+}
+
+const clearedAsyncResourceHandler = async () => {
+  return _tracer.scope().activate(null, () => {
+    return requestContextResource.runInAsyncScope(() => _tracer.scope().active())
+  })
 }
 
 const callbackHandler = (_event, _context, callback) => {
@@ -108,6 +148,9 @@ const authorizerErrorHandler = async (event) => {
 }
 
 module.exports = {
+  asyncResourceHandler,
+  capturedAsyncResourceHandler,
+  clearedAsyncResourceHandler,
   finishSpansEarlyTimeoutHandler,
   handler,
   swappedArgsHandler,

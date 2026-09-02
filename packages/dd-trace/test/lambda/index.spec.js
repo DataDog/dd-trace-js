@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { AsyncResource } = require('node:async_hooks')
 const path = require('node:path')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -9,6 +10,7 @@ const agent = require('../plugins/agent')
 const Hook = require('../../src/ritm')
 
 const oldEnv = process.env
+const originalRunInAsyncScope = AsyncResource.prototype.runInAsyncScope
 
 function setupEnv () {
   process.env = {
@@ -32,7 +34,9 @@ async function closeAgent () {
   // Safe in `test:lambda` because no test in this process loads other
   // integrations.
   Hook.reset()
+  AsyncResource.prototype.runInAsyncScope = originalRunInAsyncScope
   delete require.cache[require.resolve('../../src/lambda')]
+  delete require.cache[require.resolve('../../src/lambda/runtime/async-resource')]
   delete require.cache[require.resolve('../../src/lambda/runtime/patch.js')]
   delete require.cache[require.resolve('./fixtures/handler')]
   delete require.cache[require.resolve('./fixtures/datadog-lambda')]
@@ -43,6 +47,19 @@ describe('lambda', () => {
   let datadog
 
   describe('patch', () => {
+    /** @param {string} handlerName */
+    async function loadHandler (handlerName) {
+      process.env.DD_LAMBDA_HANDLER = `handler.${handlerName}`
+      await loadAgent()
+
+      const context = { getRemainingTimeInMillis: () => 150 }
+      const handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const app = require(handlerPath)
+      datadog = require('./fixtures/datadog-lambda')
+
+      return { context, wrappedHandler: datadog(app[handlerName]) }
+    }
+
     beforeEach(setupEnv)
 
     afterEach(() => {
@@ -71,6 +88,34 @@ describe('lambda', () => {
           assert.strictEqual(trace.error, 0)
         }
       })
+    })
+
+    it('preserves the invocation span in an AsyncResource created before the invocation', async () => {
+      const { context, wrappedHandler } = await loadHandler('asyncResourceHandler')
+      const firstContext = await wrappedHandler({}, context)
+      const secondContext = await wrappedHandler({}, context)
+
+      assert.match(firstContext.trace_id, /^[\da-f]+$/)
+      assert.match(firstContext.span_id, /^[\da-f]+$/)
+      assert.match(secondContext.trace_id, /^[\da-f]+$/)
+      assert.match(secondContext.span_id, /^[\da-f]+$/)
+      assert.notStrictEqual(firstContext.trace_id, secondContext.trace_id)
+      assert.notStrictEqual(firstContext.span_id, secondContext.span_id)
+    })
+
+    it('preserves context captured by an AsyncResource during the invocation', async () => {
+      const { context, wrappedHandler } = await loadHandler('capturedAsyncResourceHandler')
+      const result = await wrappedHandler({}, context)
+
+      assert.strictEqual(result.capturedSpanId, result.invocationSpanId)
+      assert.notStrictEqual(result.capturedSpanId, result.childSpanId)
+    })
+
+    it('preserves an explicitly cleared scope', async () => {
+      const { context, wrappedHandler } = await loadHandler('clearedAsyncResourceHandler')
+      const result = await wrappedHandler({}, context)
+
+      assert.strictEqual(result, null)
     })
 
     it('patches lambda function with callback correctly', async () => {
@@ -154,6 +199,7 @@ describe('lambda', () => {
 
       const handlerAfter = require(_handlerPath).handler
       assert.strictEqual(handlerBefore, handlerAfter)
+      assert.strictEqual(AsyncResource.prototype.runInAsyncScope, originalRunInAsyncScope)
     })
   })
 

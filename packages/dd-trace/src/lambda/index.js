@@ -17,6 +17,8 @@ const {
 } = require('./handler-paths')
 
 if (!getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').includes('lambda')) {
+  require('./runtime/async-resource')
+
   const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
   const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 
