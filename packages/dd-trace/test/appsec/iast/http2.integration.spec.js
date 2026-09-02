@@ -298,6 +298,15 @@ describeSupported('IAST HTTP/2 server', () => {
         handler = (req, stream) => stream.respond([':status', 200, 'set-cookie', 'session=abc'])
         await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
       })
+
+      it('reports a response-side vulnerability from immutable complete headers', async () => {
+        handler = (req, stream) => stream.respond(Object.freeze([
+          ':status', 200,
+          'date', 'Thu, 01 Jan 1970 00:00:00 GMT',
+          'set-cookie', 'session=abc',
+        ]))
+        await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+      })
     })
 
     it('reports no response-side vulnerability when respond carries no headers', async () => {
