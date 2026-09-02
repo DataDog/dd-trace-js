@@ -1601,6 +1601,22 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(body, blockedTemplateJson)
   })
 
+  it('blocks FileHandle respondWithFD headers without statCheck', async () => {
+    const fileHandle = await open(__filename, 'r')
+    try {
+      await listenCore(stream => {
+        stream.respondWithFD(fileHandle, { ':status': 404, k: '404' })
+      })
+
+      const { body, headers } = await request()
+
+      assert.strictEqual(headers[':status'], 403)
+      assert.strictEqual(body, blockedTemplateJson)
+    } finally {
+      await fileHandle.close()
+    }
+  })
+
   it('preserves synchronous FileHandle response state without statCheck', async () => {
     const fileHandle = await open(__filename, 'r')
     let headersSent

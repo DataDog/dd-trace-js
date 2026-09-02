@@ -1,7 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { closeSync, openSync } = require('node:fs')
+const { closeSync, openSync, readFileSync } = require('node:fs')
+const { open } = require('node:fs/promises')
+const path = require('node:path')
 const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -31,6 +33,8 @@ const supportsRawResponseHeaders = NODE_MAJOR >= 25 ||
   (NODE_MAJOR === 24 && NODE_MINOR >= 7) ||
   (NODE_MAJOR === 22 && NODE_MINOR >= 20)
 const describeRawResponseHeaders = supportsRawResponseHeaders ? describe : describe.skip
+const serverKey = readFileSync(path.join(__dirname, '../../../../datadog-plugin-http2/test/ssl/test.key'))
+const serverCert = readFileSync(path.join(__dirname, '../../../../datadog-plugin-http2/test/ssl/test.crt'))
 
 function sourceTypeOf (value) {
   const iastContext = getIastContext(storage('legacy').getStore())
@@ -87,9 +91,17 @@ describeSupported('IAST HTTP/2 server', () => {
     return agent.close({ ritmReset: false })
   })
 
-  function request (path, headers = {}) {
+  /**
+   * @param {string} path
+   * @param {import('node:http2').OutgoingHttpHeaders} [headers]
+   * @param {boolean} [secure]
+   * @returns {Promise<void>}
+   */
+  function request (path, headers = {}, secure = false) {
     return new Promise((resolve, reject) => {
-      const client = http2.connect(`http://localhost:${port}`).on('error', reject)
+      const protocol = secure ? 'https' : 'http'
+      const options = secure ? { rejectUnauthorized: false } : undefined
+      const client = http2.connect(`${protocol}://localhost:${port}`, options).on('error', reject)
       const req = client.request({ ':path': path, ':method': 'GET', ...headers })
       req.on('error', reject)
       req.on('end', () => {
@@ -362,6 +374,19 @@ describeSupported('IAST HTTP/2 server', () => {
       await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
     })
 
+    it('reports a response-side vulnerability from FileHandle respondWithFD headers', async () => {
+      const fileHandle = await open(__filename, 'r')
+      try {
+        handler = (req, stream) => {
+          stream.respondWithFD(fileHandle, { ':status': 200, 'set-cookie': 'session=abc' })
+          return true
+        }
+        await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+      } finally {
+        await fileHandle.close()
+      }
+    })
+
     it('inspects respondWithFD headers after statCheck mutates them', async () => {
       handler = (req, stream) => {
         const fileDescriptor = openSync(__filename, 'r')
@@ -375,6 +400,24 @@ describeSupported('IAST HTTP/2 server', () => {
         return true
       }
       await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+    })
+  })
+
+  describe('secure core API (secureServer.on(\'stream\'))', () => {
+    beforeEach(() => listen(() => {
+      const secureServer = http2.createSecureServer({ cert: serverCert, key: serverKey })
+      secureServer.on('stream', stream => {
+        stream.respond({ ':status': 200, 'content-type': 'text/html' })
+        stream.end()
+      })
+      return secureServer
+    }))
+
+    it('reports a missing HSTS header', async () => {
+      await Promise.all([
+        agent.assertSomeTraces(traces => assertVulnerability(traces, 'HSTS_HEADER_MISSING')),
+        request('/', {}, true),
+      ])
     })
   })
 })
