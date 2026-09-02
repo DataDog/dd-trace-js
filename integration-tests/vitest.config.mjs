@@ -91,9 +91,22 @@ const browserName = browserProvider === 'webdriverio' ? 'chrome' : 'chromium'
 async function getBrowserProvider () {
   if (!process.env.VITEST_BROWSER_PROVIDER_FACTORY) return browserProvider
 
-  return browserProvider === 'webdriverio'
-    ? (await import('@vitest/browser-webdriverio')).webdriverio()
-    : (await import('@vitest/browser-playwright')).playwright()
+  if (browserProvider === 'webdriverio') {
+    const { webdriverio } = await import('@vitest/browser-webdriverio')
+    const executablePath = process.env.VITEST_WEBDRIVERIO_EXECUTABLE_PATH
+    return webdriverio(executablePath
+      ? {
+          capabilities: {
+            'goog:chromeOptions': {
+              args: ['no-sandbox'],
+              binary: executablePath,
+            },
+          },
+        }
+      : undefined)
+  }
+
+  return (await import('@vitest/browser-playwright')).playwright()
 }
 
 if (process.env.VITEST_BROWSER_MODE) {

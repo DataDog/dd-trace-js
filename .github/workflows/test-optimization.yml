@@ -582,6 +582,13 @@ jobs:
       - uses: ./.github/actions/install
       - name: Configure Git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Configure Chromium for WebdriverIO
+        if: matrix.browser-provider == 'webdriverio'
+        run: |
+          webdriverio_executable_path=$(find "$PLAYWRIGHT_BROWSERS_PATH" \
+            -type f -path '*/chrome-linux*/chrome' -print -quit)
+          test -n "$webdriverio_executable_path"
+          echo "VITEST_WEBDRIVERIO_EXECUTABLE_PATH=$webdriverio_executable_path" >> "$GITHUB_ENV"
       - run: npm run test:instrumentations
         env:
           PLUGINS: vitest-main
