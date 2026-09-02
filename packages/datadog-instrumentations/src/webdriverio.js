@@ -25,6 +25,8 @@ const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
+  SCREENSHOT_UPLOAD,
+  SCREENSHOT_UPLOAD_RESPONSE,
   sendWebdriverioWorkerMessage,
   SUITE_FINISH,
   WEBDRIVERIO_WORKER_ENV,
@@ -47,6 +49,8 @@ const knownTestsCh = channel('ci:mocha:known-tests')
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const modifiedFilesCh = channel('ci:mocha:modified-files')
+const screenshotCapabilitiesCh = channel('ci:webdriverio:screenshot:capabilities')
+const screenshotUploadCh = channel('ci:webdriverio:screenshot:upload')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
@@ -814,6 +818,7 @@ function createWorkerConfiguration () {
     isImpactedTestsEnabled: false,
     isItrEnabled: false,
     isKnownTestsEnabled: false,
+    isTestFailureScreenshotsEnabled: false,
     isSuitesSkippingEnabled: false,
     isTestDynamicInstrumentationEnabled: false,
     isTestManagementTestsEnabled: false,
@@ -1131,6 +1136,10 @@ function configureCoordinator (state, response) {
     libraryConfig,
     repositoryRoot,
   } = response || {}
+
+  const screenshotCapabilities = {}
+  screenshotCapabilitiesCh.publish(screenshotCapabilities)
+  configuration.isTestFailureScreenshotsEnabled = screenshotCapabilities.enabled === true
 
   configuration.repositoryRoot = repositoryRoot
   if (err || !libraryConfig) {
@@ -1495,6 +1504,28 @@ function handleWorkerMessage (state, workerRecord, message) {
   }
   if (message.name === CONFIGURATION_REQUEST) {
     handleConfigurationRequest(state, workerRecord, message)
+    return
+  }
+  if (message.name === SCREENSHOT_UPLOAD) {
+    const { requestId, ...content } = message.content || {}
+    const respond = (error) => sendWorkerMessage(workerRecord, {
+      origin: 'datadog',
+      name: SCREENSHOT_UPLOAD_RESPONSE,
+      content: {
+        error: error?.message,
+        requestId,
+      },
+    })
+    if (!requestId || !screenshotUploadCh.hasSubscribers) {
+      respond(new Error('WebdriverIO screenshot upload is not available'))
+    } else {
+      try {
+        screenshotUploadCh.publish({ ...content, onDone: respond })
+      } catch (error) {
+        log.error('WebdriverIO screenshot upload error: %s', error?.message || String(error))
+        respond(error)
+      }
+    }
     return
   }
   if (message.name === SUITE_FINISH) {
