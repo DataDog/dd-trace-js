@@ -67,6 +67,6 @@ module.exports = defineConfig({
   },
   // Off by default so most specs do not capture screenshots; the failure-screenshot
   // upload tests set CYPRESS_ENABLE_FAILURE_SCREENSHOTS=true for their runs.
-  video: false,
+  video: process.env.CYPRESS_ENABLE_FAILURE_VIDEOS === 'true',
   screenshotOnRunFailure: process.env.CYPRESS_ENABLE_FAILURE_SCREENSHOTS === 'true',
 })

@@ -78,7 +78,7 @@ function bufferReadable (data, signal, callback) {
  * Sends Test Optimization exporter data through the common single-attempt transport while
  * keeping retry and finalization policy scoped to Test Optimization.
  *
- * @param {Buffer|string|Readable|Array<Buffer|string>} data
+ * @param {Buffer|string|Readable|Array<Buffer|string>|(() => Readable)} data
  * @param {object} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
  *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
@@ -102,7 +102,7 @@ function request (data, options, callback) {
 /**
  * Applies the Test Optimization retry policy to replayable request data.
  *
- * @param {Buffer|string|Array<Buffer|string>} data
+ * @param {Buffer|string|Array<Buffer|string>|(() => Readable)} data
  * @param {object} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
  *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
@@ -110,6 +110,7 @@ function request (data, options, callback) {
  */
 function requestBuffered (data, options, callback) {
   const { signal } = options
+  const transport = options.transport || commonRequest
   const timeout = options.timeout || 2000
   let retryTimer
   let settled = false
@@ -140,7 +141,7 @@ function requestBuffered (data, options, callback) {
       return
     }
 
-    if (deadline !== undefined && !commonRequest.writable) {
+    if (!transport.writable) {
       retryTimer = setTimeout(attempt, Math.min(50, remaining), attemptIndex)
       retryTimer.unref?.()
       return
@@ -151,9 +152,18 @@ function requestBuffered (data, options, callback) {
       headers: options.headers ? { ...options.headers } : undefined,
       retry: false,
     }
+    delete attemptOptions.transport
     if (deadline !== undefined) attemptOptions.timeout = Math.max(1, Math.min(timeout, remaining))
 
-    commonRequest(data, attemptOptions, (error, result, statusCode, headers) => {
+    let attemptData
+    try {
+      attemptData = typeof data === 'function' ? data() : data
+    } catch (error) {
+      complete(error)
+      return
+    }
+
+    transport(attemptData, attemptOptions, (error, result, statusCode, headers) => {
       if (settled) return
       if (!error) {
         complete(null, result, statusCode, headers)
@@ -161,7 +171,8 @@ function requestBuffered (data, options, callback) {
       }
 
       const responseStatus = statusCode ?? error.status
-      const isRetriableError = isRetriableNetworkError(error) || isRetriableHttpStatusCode(responseStatus)
+      const isRetriableError = error.retryable !== false &&
+        (isRetriableNetworkError(error) || isRetriableHttpStatusCode(responseStatus))
       const retryUntilDeadline = options.deadline !== undefined && options.retryUntilDeadline !== false
       const reachedAttemptLimit = !retryUntilDeadline && attemptIndex >= getMaxAttempts(attemptOptions)
       if (options.retry === false || !isRetriableError || reachedAttemptLimit) {
