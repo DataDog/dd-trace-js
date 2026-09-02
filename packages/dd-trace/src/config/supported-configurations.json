@@ -1929,6 +1929,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_TEST_FAILURE_VIDEOS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_TEST_FLEET_CONFIG_PATH": [
       {
         "implementation": "A",
