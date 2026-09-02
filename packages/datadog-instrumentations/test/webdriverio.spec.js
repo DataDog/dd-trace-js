@@ -24,6 +24,8 @@ const {
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   TEST_HAS_DYNAMIC_NAME,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_QUARANTINED,
@@ -35,10 +37,14 @@ const {
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
+  requestWebdriverioScreenshotUpload,
+  SCREENSHOT_UPLOAD_RESPONSE,
+  SCREENSHOT_UPLOAD_TIMEOUT_MS,
   SUITE_FINISH,
   WEBDRIVERIO_WORKER_ENV,
   WORKER_READY,
 } = require('../src/mocha/webdriverio-protocol')
+const { FINAL_FLUSH_TIMEOUT } = require('../../dd-trace/src/ci-visibility/final-flush')
 
 const fixturePath = path.join(__dirname, 'fixtures', 'webdriverio-local-runner.mjs')
 const delayedWorkerFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-delayed-worker.js')
@@ -104,6 +110,7 @@ const utilsFixtureModulePath = path.join(
   'index.js'
 )
 const execFileAsync = promisify(execFile)
+const PNG_SCREENSHOT = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64')
 
 describe('webdriverio instrumentation', () => {
   it('rewrites the ESM launcher scheduler', () => {
@@ -517,6 +524,429 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('allows the WebdriverIO screenshot IPC response to outlive the exporter upload deadline', () => {
+    assert.strictEqual(SCREENSHOT_UPLOAD_TIMEOUT_MS, FINAL_FLUSH_TIMEOUT + 5000)
+  })
+
+  it('shares one response dispatcher across concurrent screenshot upload requests', () => {
+    const originalConnected = process.connected
+    const originalSend = process.send
+    const initialDisconnectListeners = process.listenerCount('disconnect')
+    const initialMessageListeners = process.listenerCount('message')
+    const sentMessages = []
+    const uploadCallbacks = Array.from({ length: 11 }, () => sinon.spy())
+    process.connected = true
+    process.send = (message, onDone) => {
+      sentMessages.push(message)
+      onDone()
+    }
+
+    try {
+      for (const uploadCallback of uploadCallbacks) {
+        requestWebdriverioScreenshotUpload({ screenshot: PNG_SCREENSHOT }, uploadCallback)
+      }
+
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners + 1)
+      assert.strictEqual(process.listenerCount('disconnect'), initialDisconnectListeners + 1)
+      assert.strictEqual(sentMessages.length, 11)
+
+      for (const message of sentMessages) {
+        process.emit('message', {
+          name: SCREENSHOT_UPLOAD_RESPONSE,
+          content: { requestId: message.args.content.requestId },
+        })
+      }
+
+      for (const uploadCallback of uploadCallbacks) {
+        sinon.assert.calledOnceWithExactly(uploadCallback, undefined)
+      }
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners)
+      assert.strictEqual(process.listenerCount('disconnect'), initialDisconnectListeners)
+    } finally {
+      for (const message of sentMessages) {
+        process.emit('message', {
+          name: SCREENSHOT_UPLOAD_RESPONSE,
+          content: { requestId: message.args.content.requestId },
+        })
+      }
+      if (originalConnected === undefined) {
+        delete process.connected
+      } else {
+        process.connected = originalConnected
+      }
+      if (originalSend === undefined) {
+        delete process.send
+      } else {
+        process.send = originalSend
+      }
+    }
+  })
+
+  it('rejects malformed coordinator screenshot payloads before upload', () => {
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: sinon.spy(),
+    }
+    const plugin = new MochaPlugin({ _exporter: exporter }, { testOptimization: {} })
+    const errors = []
+    plugin.configure({ enabled: true })
+
+    try {
+      for (const screenshot of [
+        `${PNG_SCREENSHOT}!!!`,
+        Buffer.from('not a PNG').toString('base64'),
+      ]) {
+        channel('ci:webdriverio:screenshot:upload').publish({
+          capturedAtMs: Date.now(),
+          idempotencyKey: '123:webdriverio-failure-0.png',
+          onDone: error => errors.push(error),
+          screenshot,
+          traceId: '123',
+        })
+      }
+
+      sinon.assert.notCalled(exporter.uploadTestScreenshot)
+      assert.strictEqual(errors.length, 2)
+      assert.match(errors[0].message, /invalid Base64 screenshot data/)
+      assert.match(errors[1].message, /invalid PNG screenshot data/)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('releases failed tests and worker shutdown when screenshot capture times out', () => {
+    const originalBrowser = globalThis.browser
+    const clock = sinon.useFakeTimers()
+    const workerFinished = sinon.spy()
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      flush: sinon.spy(callback => callback()),
+      uploadTestScreenshot: sinon.spy(),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().returns({ then () {} }),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-timeout.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot timeout', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+      channel('ci:mocha:worker:finish').publish({ onDone: workerFinished })
+
+      clock.tick(29_999)
+      assert.strictEqual(spans[0].context()._isFinished, false)
+      sinon.assert.notCalled(exporter.flush)
+      sinon.assert.notCalled(workerFinished)
+
+      clock.tick(1)
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+      sinon.assert.notCalled(exporter.uploadTestScreenshot)
+      sinon.assert.calledOnce(exporter.flush)
+      sinon.assert.calledOnce(workerFinished)
+    } finally {
+      plugin.configure(false)
+      clock.restore()
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('waits for every WebdriverIO screenshot upload before finishing a failed Jasmine test', async () => {
+    const originalBrowser = globalThis.browser
+    const screenshot = PNG_SCREENSHOT
+    const uploadCallbacks = []
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      flush: sinon.spy(callback => callback()),
+      uploadTestScreenshot: sinon.spy((options, callback) => uploadCallbacks.push(callback)),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves([screenshot, screenshot]),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      const finishContext = {
+        arguments: [result],
+        self: { _specs: [file] },
+      }
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish(finishContext)
+      await Promise.resolve()
+      await Promise.resolve()
+
+      assert.strictEqual(finishContext.result, undefined)
+      sinon.assert.calledOnce(globalThis.browser.takeScreenshot)
+      sinon.assert.calledTwice(exporter.uploadTestScreenshot)
+      assert.strictEqual(spans[0].context()._isFinished, false)
+      for (const call of exporter.uploadTestScreenshot.getCalls()) {
+        assert.deepStrictEqual(call.args[0].content, Buffer.from(PNG_SCREENSHOT, 'base64'))
+        assert.strictEqual(call.args[0].traceId, '123')
+      }
+
+      const workerFinished = sinon.spy()
+      channel('ci:mocha:worker:finish').publish({ onDone: workerFinished })
+      sinon.assert.notCalled(exporter.flush)
+      sinon.assert.notCalled(workerFinished)
+
+      uploadCallbacks[0](null)
+      assert.strictEqual(spans[0].context()._isFinished, false)
+      uploadCallbacks[1](null)
+
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+      sinon.assert.calledOnce(exporter.flush)
+      sinon.assert.calledOnce(workerFinished)
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('prefers the registered WebdriverIO browser when global injection is disabled', async () => {
+    const originalBrowser = globalThis.browser
+    const originalWdioGlobals = globalThis._wdioGlobals
+    const screenshot = PNG_SCREENSHOT
+    const browser = {
+      takeScreenshot: sinon.stub().resolves(screenshot),
+    }
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: sinon.spy((_options, callback) => callback()),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().rejects(new Error('not the WebdriverIO browser')),
+    }
+    globalThis._wdioGlobals = new Map([['browser', browser]])
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-no-globals.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot without globals', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      sinon.assert.calledOnce(browser.takeScreenshot)
+      sinon.assert.notCalled(globalThis.browser.takeScreenshot)
+      sinon.assert.calledOnce(exporter.uploadTestScreenshot)
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+    } finally {
+      plugin.configure(false)
+      globalThis._wdioGlobals = originalWdioGlobals
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('cleans up Failed Test Replay before a screenshot upload can overlap the next test', async () => {
+    const originalBrowser = globalThis.browser
+    const uploadCallbacks = []
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
+    }
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: (_options, callback) => uploadCallbacks.push(callback),
+    }
+    const { plugin } = createJasminePlugin({
+      isDiEnabled: true,
+      isTestFailureScreenshotsEnabled: true,
+    }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-replay-cleanup.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot replay cleanup', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+    const firstProbe = { file, line: 1 }
+    const secondProbe = { file, line: 2 }
+    plugin.di = {}
+    plugin.runningTestProbe = firstProbe
+    const cancelDiBreakpointHitWait = sinon.stub(plugin, 'cancelDiBreakpointHitWait')
+    const removeDiProbe = sinon.stub(plugin, 'removeDiProbe')
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+
+      sinon.assert.calledOnce(cancelDiBreakpointHitWait)
+      sinon.assert.calledOnceWithExactly(removeDiProbe, firstProbe)
+      assert.strictEqual(plugin.runningTestProbe, null)
+
+      plugin.runningTestProbe = secondProbe
+      await Promise.resolve()
+      uploadCallbacks[0]()
+
+      sinon.assert.calledOnce(cancelDiBreakpointHitWait)
+      sinon.assert.calledOnce(removeDiProbe)
+      assert.strictEqual(plugin.runningTestProbe, secondProbe)
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('tags a failed Jasmine test when its WebdriverIO screenshot upload fails', async () => {
+    const originalBrowser = globalThis.browser
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: sinon.spy((_options, callback) => callback(new Error('upload failed'))),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-error.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot error', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      const finishContext = {
+        arguments: [result],
+        self: { _specs: [file] },
+      }
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish(finishContext)
+      await finishContext.result
+
+      sinon.assert.calledOnce(exporter.uploadTestScreenshot)
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('tags malformed WebdriverIO screenshot data as an upload error', async () => {
+    const originalBrowser = globalThis.browser
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: sinon.spy(),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves(`${PNG_SCREENSHOT}!!!`),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-invalid-data.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot invalid data', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      sinon.assert.notCalled(exporter.uploadTestScreenshot)
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
   it('falls back to ATR when the Jasmine EFD retry policy has no retries', () => {
     const { plugin } = createJasminePlugin({
       earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy(),
@@ -621,6 +1051,74 @@ describe('webdriverio instrumentation', () => {
     } finally {
       retryCh.unsubscribe(onRetry)
       plugin.configure(false)
+    }
+  })
+
+  it('starts managed Jasmine retries while screenshot uploads are pending', async () => {
+    const originalBrowser = globalThis.browser
+    const uploadCallbacks = []
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
+    }
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: (_options, callback) => uploadCallbacks.push(callback),
+    }
+    const { plugin, spans } = createJasminePlugin({
+      flakyTestRetriesCount: 1,
+      isFlakyTestRetriesEnabled: true,
+      isTestFailureScreenshotsEnabled: true,
+    }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'retry-with-screenshot-upload.spec.js')
+    const result = createJasmineResult('retry with screenshot upload', file, 'failed')
+    const onComplete = sinon.spy()
+    const spec = {
+      execute: sinon.spy(),
+      id: result.id,
+      queueableFn: { fn () {} },
+      reset: sinon.spy(),
+    }
+    const executeContext = {
+      arguments: [() => {}, onComplete, true, {}],
+      self: spec,
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_execute:start').runStores(executeContext, () => {})
+
+      const attemptContext = { result: 'failed', self: spec }
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish(attemptContext)
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [{
+          ...result,
+          failedExpectations: [{ message: 'managed retry failure' }],
+        }],
+        self: { _specs: [file] },
+      })
+      await Promise.resolve()
+      executeContext.arguments[1]()
+
+      assert.strictEqual(uploadCallbacks.length, 1)
+      assert.strictEqual(spans.length, 2)
+      assert.strictEqual(spec.execute.callCount, 1)
+      assert.strictEqual(spans[0].context()._isFinished, false)
+
+      uploadCallbacks[0]()
+
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(plugin.activeTestSpan, spans[1])
+      sinon.assert.notCalled(onComplete)
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
     }
   })
 
@@ -1374,6 +1872,7 @@ describe('webdriverio instrumentation', () => {
         isKnownTestsEnabled: true,
         isSuitesSkippingEnabled: false,
         isTestDynamicInstrumentationEnabled: true,
+        isTestFailureScreenshotsEnabled: false,
         isTestManagementTestsEnabled: true,
         knownTests: {
           mocha: {
@@ -2053,10 +2552,14 @@ function createWorker () {
  * Creates a configured Jasmine worker plugin with observable test spans.
  *
  * @param {object} libraryConfig
+ * @param {object} [options]
+ * @param {object} [options.exporter]
+ * @param {object} [options.testOptimization]
  * @returns {{plugin: MochaPlugin, spans: object[]}}
  */
-function createJasminePlugin (libraryConfig) {
-  const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
+function createJasminePlugin (libraryConfig, options = {}) {
+  const { exporter = {}, testOptimization = {} } = options
+  const plugin = new MochaPlugin({ _exporter: exporter }, { testOptimization })
   const spans = []
   sinon.stub(plugin, 'startTestSpan').callsFake(() => {
     const tags = {}
@@ -2064,9 +2567,11 @@ function createJasminePlugin (libraryConfig) {
       _isFinished: false,
       _trace: { started: [] },
       getTags: () => tags,
+      toTraceId: () => '123',
     }
     const span = {
       context: () => context,
+      _getTime: () => Date.now(),
       finish: () => {
         context._isFinished = true
       },

@@ -115,6 +115,24 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       sinon.assert.notCalled(videoRequestStub)
     })
 
+    it('uploads an in-memory PNG without reading a file', () => {
+      const content = Buffer.from('in-memory-screenshot')
+
+      uploadTestScreenshot({
+        content,
+        traceId,
+        idempotencyKey: `${traceId}:webdriverio-failure-0.png`,
+        capturedAtMs: 1_700_000_000_000,
+        url: new URL('http://localhost:8126'),
+      }, () => {})
+
+      sinon.assert.calledOnce(requestStub)
+      const [payload, requestOptions] = requestStub.firstCall.args
+      assert.strictEqual(payload, content)
+      assert.strictEqual(requestOptions.headers['Content-Length'], content.length)
+      assert.strictEqual(requestOptions.headers['Content-Type'], 'image/png')
+    })
+
     it('reports an error when the request helper drops the upload', () => {
       const basename = 'screenshot.png'
       const filePath = join(tmpDir, basename)

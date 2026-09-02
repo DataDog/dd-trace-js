@@ -19,7 +19,7 @@ const MAX_VIDEO_SIZE_BYTES = 200 * 1024 * 1024
 const UINT64_MAX = 18_446_744_073_709_551_615n
 
 function getContentType (filePath, kind) {
-  const extension = extname(filePath).toLowerCase()
+  const extension = filePath ? extname(filePath).toLowerCase() : ''
   if (kind === 'video') {
     return extension === '.mp4' ? 'video/mp4' : 'video/webm'
   }
@@ -62,7 +62,8 @@ function toIdempotencyQueryValue (idempotencyKey) {
  * Uploads one screenshot or video to the Test Optimization media intake.
  *
  * @param {object} options - Upload options
- * @param {string} options.filePath - Path to the media file
+ * @param {string} [options.filePath] - Path to the media file
+ * @param {Buffer} [options.content] - In-memory screenshot content
  * @param {'screenshot'|'video'} options.kind - Media kind
  * @param {string} [options.traceId] - Test trace id for test-scoped media
  * @param {string} [options.testSessionId] - Test session id for suite-scoped media
@@ -80,6 +81,7 @@ function toIdempotencyQueryValue (idempotencyKey) {
 function uploadTestMedia (options, callback) {
   const {
     filePath,
+    content,
     kind,
     traceId,
     testSessionId,
@@ -127,9 +129,15 @@ function uploadTestMedia (options, callback) {
   try {
     if (kind === 'video') {
       fileSize = statSync(filePath).size
-    } else {
+    } else if (content === undefined) {
       screenshotContent = readFileSync(filePath)
       fileSize = screenshotContent.length
+    } else {
+      if (!Buffer.isBuffer(content)) {
+        return callback(new Error('In-memory screenshot content must be a Buffer'))
+      }
+      screenshotContent = content
+      fileSize = content.length
     }
   } catch (error) {
     const action = kind === 'video' ? 'inspect video' : 'read screenshot'
@@ -174,7 +182,12 @@ function uploadTestMedia (options, callback) {
     requestOptions.headers['DD-API-KEY'] = DD_API_KEY
   }
 
-  log.debug('Uploading test %s %s to %s', kind, filePath, new URL(requestOptions.path, url).href)
+  log.debug(
+    'Uploading test %s %s to %s',
+    kind,
+    filePath || 'from memory',
+    new URL(requestOptions.path, url).href
+  )
 
   const onResponse = (error, response, statusCode) => {
     if (error) {
