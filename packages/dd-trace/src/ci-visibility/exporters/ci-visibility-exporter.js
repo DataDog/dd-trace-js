@@ -945,20 +945,22 @@ class CiVisibilityExporter extends BufferingExporter {
    * Uploads a single test screenshot to the Test Optimization media intake.
    *
    * @param {object} options - Upload options
-   * @param {string} options.filePath - Path to the screenshot file
+   * @param {string} [options.filePath] - Path to the screenshot file
+   * @param {Buffer} [options.content] - In-memory screenshot content
    * @param {string} options.traceId - Test trace id used as the screenshot key
    * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
    * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
    * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
    */
-  uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs, signal }, callback) {
+  uploadTestScreenshot ({ filePath, content, traceId, idempotencyKey, capturedAtMs, signal }, callback) {
     if (!this._testScreenshotUploadUrl) {
       return callback(new Error('Test screenshot upload URL not configured'))
     }
 
     this.#uploadTestMedia(uploadTestScreenshotRequest, {
       filePath,
+      content,
       traceId,
       idempotencyKey,
       capturedAtMs,
