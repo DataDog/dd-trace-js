@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec } = require('node:child_process')
+const { exec, execFileSync } = require('node:child_process')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
@@ -95,10 +95,30 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
   useSandbox(sandboxDependencies, true)
 
   before(function () {
-    this.timeout(120_000)
+    this.timeout(300_000)
     cwd = sandboxCwd()
     if (browserProvider === 'playwright') {
       installPlaywrightChromium(cwd)
+    } else {
+      // Browser downloads can exceed the per-test intake timeout, so finish setup before the tests start.
+      const { NODE_OPTIONS, ...env } = process.env
+      execFileSync(process.execPath, [
+        '--input-type=module',
+        '--eval',
+        `
+          import { remote } from 'webdriverio'
+          const browser = await remote({
+            logLevel: 'silent',
+            capabilities: {
+              browserName: 'chrome',
+              'goog:chromeOptions': {
+                args: ['headless', 'disable-gpu', 'no-sandbox'],
+              },
+            },
+          })
+          await browser.deleteSession()
+        `,
+      ], { cwd, env, stdio: 'inherit' })
     }
   })
 
