@@ -93,17 +93,13 @@ async function getBrowserProvider () {
 
   if (browserProvider === 'webdriverio') {
     const { webdriverio } = await import('@vitest/browser-webdriverio')
-    const executablePath = process.env.VITEST_WEBDRIVERIO_EXECUTABLE_PATH
-    return webdriverio(executablePath
-      ? {
-          capabilities: {
-            'goog:chromeOptions': {
-              args: ['no-sandbox'],
-              binary: executablePath,
-            },
-          },
-        }
-      : undefined)
+    return webdriverio({
+      capabilities: {
+        'goog:chromeOptions': {
+          args: ['no-sandbox'],
+        },
+      },
+    })
   }
 
   return (await import('@vitest/browser-playwright')).playwright()
