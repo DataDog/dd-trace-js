@@ -3212,8 +3212,8 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
-  it('should keep remote configuration disabled in AWS Lambda agentless mode', () => {
-    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+  it('should keep remote configuration disabled in AWS Lambda MicroVM agentless mode', () => {
+    process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123456789012:function:test'
     process.env.DD_AGENTLESS_ENABLED = 'true'
     process.env.DD_API_KEY = 'api-key'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'true'

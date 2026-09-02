@@ -303,19 +303,10 @@ describe('RemoteConfig', () => {
       await poll()
 
       fetcher.setConfigState.resetHistory()
-      log.error.resetHistory()
-      const error = new Error('state unavailable')
-      fetcher.setConfigState.throws(error)
       acknowledgements[0]()
       acknowledgements[1]()
 
       sinon.assert.calledOnceWithExactly(fetcher.setConfigState, removedPath, ACKNOWLEDGED, '')
-      sinon.assert.calledOnceWithExactly(
-        log.error,
-        '[RC] Could not report remote config apply state for path %s',
-        removedPath,
-        error
-      )
       assert.strictEqual(rc.appliedConfigs.get(replacedPath).version, 2)
     })
 
@@ -392,21 +383,7 @@ describe('RemoteConfig', () => {
       assert.strictEqual(rc.appliedConfigs.get(path).apply_state, ACKNOWLEDGED)
     })
 
-    it('should stop when the native client cannot be created', async () => {
-      RemoteConfigFetcher.resetHistory()
-      RemoteConfigFetcher.throws(new Error('unavailable'))
-      scheduler.start.resetHistory()
-
-      rc = new RemoteConfig(config)
-      rc.setProductHandler('LIVE_DEBUGGING', noop)
-
-      sinon.assert.notCalled(scheduler.start)
-      sinon.assert.calledOnce(log.error)
-
-      await poll()
-    })
-
-    it('should stop when the API key is missing', async () => {
+    it('should stop when the API key is missing', () => {
       config.DD_API_KEY = undefined
       RemoteConfigFetcher.resetHistory()
       setStorage.resetHistory()
@@ -423,11 +400,9 @@ describe('RemoteConfig', () => {
         log.error,
         '[RC] DD_API_KEY is required for agentless Remote Config; Remote Config is disabled'
       )
-
-      await poll()
     })
 
-    it('should stop when the site is invalid', async () => {
+    it('should stop when the site is invalid', () => {
       config.site = 'datadoghq.com@evil.example'
       RemoteConfigFetcher.resetHistory()
       setStorage.resetHistory()
@@ -445,8 +420,6 @@ describe('RemoteConfig', () => {
         '[RC] Invalid DD_SITE for agentless Remote Config: %s; Remote Config is disabled',
         config.site
       )
-
-      await poll()
     })
 
     it('should continue polling after native client failures', async () => {
@@ -457,146 +430,6 @@ describe('RemoteConfig', () => {
       await poll()
 
       sinon.assert.calledOnceWithExactly(log.errorWithoutTelemetry, '[RC] Error in request', error)
-    })
-
-    it('should continue polling after invalid native changes', async () => {
-      rc.setProductHandler('LIVE_DEBUGGING', noop)
-      fetcher.fetchChanges.resolves([undefined])
-
-      await poll()
-
-      sinon.assert.calledOnceWithExactly(
-        log.error,
-        '[RC] Could not apply remote config update',
-        sinon.match.instanceOf(TypeError)
-      )
-    })
-
-    it('should continue when the native client rejects subscription updates', async () => {
-      const error = new Error('subscription failed')
-      rc.setProductHandler('LIVE_DEBUGGING', noop)
-      fetcher.setProductCapabilities.throws(error)
-
-      await poll()
-
-      sinon.assert.notCalled(fetcher.fetchChanges)
-      sinon.assert.calledOnceWithExactly(
-        log.error,
-        '[RC] Could not update the agentless remote config client',
-        error
-      )
-    })
-
-    it('should report unhandled batch-handler items as errors', async () => {
-      const error = new Error('apply failed')
-      const removePath = 'datadog/42/ASM_FEATURES/remove/config'
-      const applyPath = 'datadog/42/ASM_FEATURES/apply/config'
-      const modifyPath = 'datadog/42/ASM_FEATURES/modify/config'
-      rc.appliedConfigs.set(removePath, {
-        path: removePath,
-        product: 'ASM_FEATURES',
-        id: 'remove',
-        version: 1,
-        apply_state: ACKNOWLEDGED,
-        apply_error: '',
-        file: { enabled: true },
-      })
-      rc.appliedConfigs.set(modifyPath, {
-        path: modifyPath,
-        product: 'ASM_FEATURES',
-        id: 'modify',
-        version: 1,
-        apply_state: ACKNOWLEDGED,
-        apply_error: '',
-        file: { enabled: true },
-      })
-      const handler = sinon.spy()
-      rc.setProductHandler('ASM_FEATURES', handler)
-      rc.setBatchHandler(['ASM_FEATURES'], (transaction) => {
-        transaction.ack(applyPath)
-        throw error
-      })
-      rc.subscribeProducts('ASM_FEATURES')
-      fetcher.fetchChanges.resolves([
-        {
-          kind: 'remove',
-          path: removePath,
-          product: 'ASM_FEATURES',
-          configId: 'remove',
-          version: 1,
-        },
-        {
-          kind: 'add',
-          path: applyPath,
-          product: 'ASM_FEATURES',
-          configId: 'apply',
-          version: 1,
-          contents: '{}',
-        },
-        {
-          kind: 'update',
-          path: modifyPath,
-          product: 'ASM_FEATURES',
-          configId: 'modify',
-          version: 2,
-          contents: '{}',
-        },
-      ])
-
-      await poll()
-
-      sinon.assert.notCalled(handler)
-      sinon.assert.calledThrice(fetcher.setConfigState)
-      sinon.assert.calledWithExactly(fetcher.setConfigState, applyPath, ACKNOWLEDGED, '')
-      sinon.assert.calledWithExactly(fetcher.setConfigState, removePath, ERROR, error.toString())
-      sinon.assert.calledWithExactly(fetcher.setConfigState, modifyPath, ERROR, error.toString())
-      assert.strictEqual(rc.appliedConfigs.has(removePath), false)
-      assert.strictEqual(rc.appliedConfigs.get(applyPath).apply_state, ACKNOWLEDGED)
-      assert.strictEqual(rc.appliedConfigs.get(modifyPath).apply_state, ERROR)
-    })
-
-    it('should contain native apply-state failures and continue reconciliation', async () => {
-      const error = new Error('state unavailable')
-      const firstPath = 'datadog/42/ASM_FEATURES/first/config'
-      const secondPath = 'datadog/42/ASM_FEATURES/second/config'
-      rc.setBatchHandler(['ASM_FEATURES'], transaction => {
-        transaction.ack(firstPath)
-        transaction.ack(secondPath)
-      })
-      rc.subscribeProducts('ASM_FEATURES')
-      fetcher.setConfigState.onFirstCall().throws(error)
-      fetcher.fetchChanges.resolves([
-        {
-          kind: 'add',
-          path: firstPath,
-          product: 'ASM_FEATURES',
-          configId: 'first',
-          version: 1,
-          contents: '{}',
-        },
-        {
-          kind: 'add',
-          path: secondPath,
-          product: 'ASM_FEATURES',
-          configId: 'second',
-          version: 1,
-          contents: '{}',
-        },
-      ])
-
-      await poll()
-
-      sinon.assert.calledTwice(fetcher.setConfigState)
-      sinon.assert.calledWithExactly(fetcher.setConfigState, firstPath, ACKNOWLEDGED, '')
-      sinon.assert.calledWithExactly(fetcher.setConfigState, secondPath, ACKNOWLEDGED, '')
-      sinon.assert.calledOnceWithExactly(
-        log.error,
-        '[RC] Could not report remote config apply state for path %s',
-        firstPath,
-        error
-      )
-      assert.strictEqual(rc.appliedConfigs.get(firstPath).apply_state, ACKNOWLEDGED)
-      assert.strictEqual(rc.appliedConfigs.get(secondPath).apply_state, ACKNOWLEDGED)
     })
   })
 

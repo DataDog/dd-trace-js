@@ -128,26 +128,22 @@ class RemoteConfig {
         return
       }
 
-      try {
-        this.#fetcher = createAgentlessFetcher({
-          clientId,
-          runtimeId: config.tags['runtime-id'],
-          service: config.service,
-          env: config.env ?? '',
-          appVersion: config.version ?? '',
-          tags: tracerTags,
-          processTags: processTags.tagsArray,
-          language: 'node',
-          tracerVersion,
-          url: siteUrl.origin,
-          timeoutMs: AGENTLESS_REQUEST_TIMEOUT_MS,
-          apiKey: config.DD_API_KEY,
-          hostname: getHostname(),
-        })
-        this.#subscriptionsChanged = true
-      } catch (error) {
-        log.error('[RC] Could not start the agentless remote config client', error)
-      }
+      this.#fetcher = createAgentlessFetcher({
+        clientId,
+        runtimeId: config.tags['runtime-id'],
+        service: config.service,
+        env: config.env ?? '',
+        appVersion: config.version ?? '',
+        tags: tracerTags,
+        processTags: processTags.tagsArray,
+        language: 'node',
+        tracerVersion,
+        url: siteUrl.origin,
+        timeoutMs: AGENTLESS_REQUEST_TIMEOUT_MS,
+        apiKey: config.DD_API_KEY,
+        hostname: getHostname(),
+      })
+      this.#subscriptionsChanged = true
     }
   }
 
@@ -316,40 +312,24 @@ class RemoteConfig {
    * @param {() => void} cb
    */
   #pollAgentless (cb) {
-    const fetcher = this.#fetcher
-    if (fetcher === undefined) {
-      cb()
-      return
-    }
+    const fetcher = /** @type {import('@datadog/libdatadog/remote-config').RemoteConfigFetcher} */ (this.#fetcher)
 
-    try {
-      if (this.#subscriptionsChanged) {
-        const unknown = fetcher.setProductCapabilities(
-          this.state.client.products,
-          decodeCapabilities(this.state.client.capabilities)
-        )
-        this.#subscriptionsChanged = false
+    if (this.#subscriptionsChanged) {
+      const unrecognizedNames = fetcher.setProductCapabilities(
+        this.state.client.products,
+        decodeCapabilities(this.state.client.capabilities)
+      )
+      this.#subscriptionsChanged = false
 
-        if (unknown.length !== 0) {
-          log.error('[RC] Unrecognized remote config products or capabilities: %s', unknown.join(', '))
-        }
+      if (unrecognizedNames.length !== 0) {
+        log.error('[RC] Unrecognized remote config products or capabilities: %s', unrecognizedNames.join(', '))
       }
-      fetcher.setExtraServices(getExtraServices())
-    } catch (error) {
-      log.error('[RC] Could not update the agentless remote config client', error)
-      cb()
-      return
     }
+    fetcher.setExtraServices(getExtraServices())
 
     fetcher.fetchChanges().then(
       (changes) => {
-        if (changes.length !== 0) {
-          try {
-            this.#applyChanges(changes)
-          } catch (error) {
-            log.error('[RC] Could not apply remote config update', error)
-          }
-        }
+        if (changes.length !== 0) this.#applyChanges(changes)
         cb()
       },
       (error) => {
@@ -388,7 +368,7 @@ class RemoteConfig {
         if (this.#fetcher === undefined) throw error
 
         log.error('[RC] Could not parse the config file at path %s', path, error)
-        this.#reportConfigState(path, ERROR, error.toString())
+        this.#fetcher.setConfigState(path, ERROR, error.toString())
         continue
       }
 
@@ -425,19 +405,7 @@ class RemoteConfig {
       for (const [handler, products] of this.#batchHandlers) {
         const transactionView = filterTransactionByProducts(transaction, products)
         if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
-          try {
-            handler(transactionView)
-          } catch (error) {
-            for (const items of [
-              transactionView.toUnapply,
-              transactionView.toApply,
-              transactionView.toModify,
-            ]) {
-              for (const item of items) {
-                if (!transactionOutcomes.has(item.path)) transaction.error(item.path, error)
-              }
-            }
-          }
+          handler(transactionView)
         }
       }
     }
@@ -447,7 +415,7 @@ class RemoteConfig {
       if (item !== undefined) {
         item.apply_state = outcome.state
         item.apply_error = outcome.error
-        this.#reportConfigState(path, outcome.state, outcome.error)
+        this.#fetcher?.setConfigState(path, outcome.state, outcome.error)
       }
     }
 
@@ -558,21 +526,8 @@ class RemoteConfig {
       if (action === 'unapply') {
         this.appliedConfigs.delete(item.path)
       } else if (item.apply_state === UNACKNOWLEDGED) {
-        this.#reportConfigState(item.path, UNACKNOWLEDGED, '')
+        this.#fetcher?.setConfigState(item.path, UNACKNOWLEDGED, '')
       }
-    }
-  }
-
-  /**
-   * @param {string} path
-   * @param {number} applyState
-   * @param {string} applyError
-   */
-  #reportConfigState (path, applyState, applyError) {
-    try {
-      this.#fetcher?.setConfigState(path, applyState, applyError)
-    } catch (error) {
-      log.error('[RC] Could not report remote config apply state for path %s', path, error)
     }
   }
 
@@ -588,7 +543,7 @@ class RemoteConfig {
 
     item.apply_state = applyState
     item.apply_error = applyError
-    this.#reportConfigState(item.path, applyState, applyError)
+    this.#fetcher?.setConfigState(item.path, applyState, applyError)
   }
 
   /**

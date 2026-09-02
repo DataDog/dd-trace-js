@@ -665,7 +665,6 @@ class Config extends ConfigBase {
       if (this.DD_API_KEY === undefined) {
         setAndTrack(this, 'dynamicInstrumentation.enabled', false)
       }
-
       setAndTrack(this, 'runtimeMetrics.enabled', false)
       setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)

@@ -9,29 +9,33 @@ const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags'
  * @param {typeof import('./log')} log - Debugger logger
  */
 module.exports = function buildTags (config, hostname, debuggerVersion, log) {
-  const tags = [
-    ['env', config.env],
-    ['version', config.version],
-    ['debugger_version', debuggerVersion],
-    ['runtime_id', config.agentless ? config.runtimeId : undefined],
-    ['host_name', hostname],
-    [GIT_COMMIT_SHA, config.commitSHA],
-    [GIT_REPOSITORY_URL, config.repositoryUrl],
-  ]
-  let serializedTags = ''
+  let tags = ''
 
-  for (const [key, rawValue] of tags) {
-    if (rawValue === undefined) continue
-
-    const value = String(rawValue)
-    if (value.includes(',')) {
-      log.warn('[debugger:devtools_client] Skipping invalid tag value for %s', key)
-      continue
-    }
-
-    if (serializedTags) serializedTags += ','
-    serializedTags += `${key}:${value}`
+  if (isValidTag('env', config.env, log)) tags += `,env:${config.env}`
+  if (isValidTag('version', config.version, log)) tags += `,version:${config.version}`
+  if (isValidTag('debugger_version', debuggerVersion, log)) tags += `,debugger_version:${debuggerVersion}`
+  if (config.agentless && isValidTag('runtime_id', config.runtimeId, log)) tags += `,runtime_id:${config.runtimeId}`
+  if (isValidTag('host_name', hostname, log)) tags += `,host_name:${hostname}`
+  if (isValidTag(GIT_COMMIT_SHA, config.commitSHA, log)) tags += `,${GIT_COMMIT_SHA}:${config.commitSHA}`
+  if (isValidTag(GIT_REPOSITORY_URL, config.repositoryUrl, log)) {
+    tags += `,${GIT_REPOSITORY_URL}:${config.repositoryUrl}`
   }
 
-  return serializedTags
+  return tags.slice(1)
+}
+
+/**
+ * @param {string} key
+ * @param {string | number | undefined} value
+ * @param {typeof import('./log')} log
+ */
+function isValidTag (key, value, log) {
+  if (value === undefined) return false
+
+  if (String(value).includes(',')) {
+    log.warn('[debugger:devtools_client] Skipping invalid tag value for %s', key)
+    return false
+  }
+
+  return true
 }
