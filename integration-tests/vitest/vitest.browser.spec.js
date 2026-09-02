@@ -127,8 +127,6 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
         ...extraEnv,
       },
     })
-    childProcess.stdout.pipe(process.stdout)
-    childProcess.stderr.pipe(process.stderr)
     childProcess.stdout.on('data', data => { testOutput += data })
     childProcess.stderr.on('data', data => { testOutput += data })
 
