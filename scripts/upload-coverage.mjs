@@ -123,6 +123,21 @@ export async function uploadAllCoverageToDatadog () {
 }
 
 /**
+ * @param {object} options
+ * @param {boolean} options.isGitHubActions
+ * @param {number} options.failedRunCount
+ * @param {boolean} options.uploadFailed
+ * @param {boolean} options.processingFailed
+ * @param {boolean} options.hasCommit
+ * @returns {boolean}
+ */
+export function shouldNotifyCodecov ({
+  isGitHubActions, failedRunCount, uploadFailed, processingFailed, hasCommit,
+}) {
+  return isGitHubActions && failedRunCount === 0 && !uploadFailed && !processingFailed && hasCommit
+}
+
+/**
  * Trigger Codecov to compute and post its coverage status for a commit. `.codecov.yml` sets
  * `codecov.notify.manual_trigger`, since coverage lands one sibling workflow at a time rather than
  * all at once — without it, Codecov would post its status after the first upload it sees, before

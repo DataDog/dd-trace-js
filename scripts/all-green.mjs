@@ -6,7 +6,7 @@ import { downloadArtifacts } from './download-artifacts.mjs'
 import { logUploads, hasUploadFailed } from './run-upload.mjs'
 import { uploadAllJunit } from './upload-junit.mjs'
 import {
-  uploadAllCoverageToDatadog, uploadCoverage, sendCodecovNotifications, hasCodecovCommit,
+  hasCodecovCommit, sendCodecovNotifications, shouldNotifyCodecov, uploadAllCoverageToDatadog, uploadCoverage,
 } from './upload-coverage.mjs'
 
 /* eslint-disable no-console */
@@ -112,7 +112,7 @@ const processingPromises = []
 // Set when any run's artifact download exhausts its retries, or `processRun` throws outright (e.g.
 // the artifact listing or the lcov merge itself fails). Either way that run's report never fully
 // reached Codecov/Datadog, so this has to gate the Codecov notification the same way
-// `hasUploadFailed()` does — otherwise a transient GitHub outage or a processing error on an
+// `hasUploadFailed('codecovcli')` does — otherwise a transient GitHub outage or a processing error on an
 // otherwise-green run still reports a complete coverage status.
 let hasProcessingFailure = false
 
@@ -298,13 +298,16 @@ async function checkAllGreen () {
   // low, and posting it would report a misleadingly low status against an otherwise healthy commit.
   // Also skip when no run ever registered a commit/report (e.g. Dependabot PRs, whose coverage
   // artifacts are skipped) — notifying then would target a report that was never created. And skip
-  // when any report-upload call failed, or any run's processing did (both tracked separately from
+  // when any Codecov upload failed, or any run's processing did (both tracked separately from
   // `failedRuns`, which only reflects GitHub's own workflow-run conclusions) — notifying then would
   // post a status computed from a report Codecov never fully received.
-  if (
-    process.env.GITHUB_ACTIONS && failedRuns.length === 0 &&
-    !hasUploadFailed() && !hasProcessingFailure && hasCodecovCommit()
-  ) {
+  if (shouldNotifyCodecov({
+    isGitHubActions: Boolean(process.env.GITHUB_ACTIONS),
+    failedRunCount: failedRuns.length,
+    uploadFailed: hasUploadFailed('codecovcli'),
+    processingFailed: hasProcessingFailure,
+    hasCommit: hasCodecovCommit(),
+  })) {
     logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
   }
 

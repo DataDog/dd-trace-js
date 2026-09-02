@@ -29,6 +29,30 @@ function getTestsuiteAttr (openTag, name) {
 }
 
 /**
+ * @param {string|number|undefined} value
+ * @returns {string}
+ */
+function escapeXmlAttribute (value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+}
+
+/**
+ * @param {Record<string, string|number|undefined>} properties
+ * @returns {string}
+ */
+function formatXunitProperties (properties) {
+  let xml = '<properties>'
+  for (const [name, value] of Object.entries(properties)) {
+    xml += `\n  <property name="${escapeXmlAttribute(name)}" value="${escapeXmlAttribute(value)}"/>`
+  }
+  return `${xml}\n</properties>`
+}
+
+/**
  * @param {string} line
  */
 function isFailureStartLine (line) {
@@ -202,6 +226,7 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
   let totalSkipped = 0
   let totalTime = 0
   const testcases = []
+  const properties = formatXunitProperties(multiMochaRc.scriptsJunitReporterJsReporterOptions.properties)
 
   for (const file of inputFiles) {
     let xml
@@ -236,6 +261,7 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
   const merged = [
     `<testsuite name="Mocha Tests" tests="${totalTests}" failures="${totalFailures}" ` +
     `errors="${totalErrors}" skipped="${totalSkipped}" timestamp="${timestamp}" time="${totalTime}">`,
+    properties,
     testcases.filter(Boolean).join('\n'),
     '</testsuite>\n',
   ].join('\n')

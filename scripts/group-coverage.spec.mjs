@@ -5,68 +5,9 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, it } from 'mocha'
 
-import { mergeLcov, mergeRunCoverage, planCoverageGroups } from './group-coverage.mjs'
-
-/**
- * One cell's discovered report set: one `lcov` entry per Node.js version the cell ran.
- *
- * @param {string} name
- * @param {object} [options]
- * @param {string} [options.runId]
- * @param {number} [options.versions]  Number of Node.js versions the cell ran (one report each).
- * @returns {Array<{ runId: string, name: string, format: string, reportPath: string }>}
- */
-function files (name, { runId = '1', versions = 1 } = {}) {
-  const out = []
-  for (let version = 0; version < versions; version++) {
-    const dir = `coverage-results/${runId}/${name}/node-2${version}-x`
-    out.push({ runId, name, format: 'lcov', reportPath: `${dir}/lcov.info` })
-  }
-  return out
-}
+import { mergeLcov, mergeRunCoverage } from './group-coverage.mjs'
 
 describe('group-coverage', () => {
-  describe('planCoverageGroups', () => {
-    it('keeps only the newest run when a rerun reuploads the same artifact name', () => {
-      const { reportsByArtifact } = planCoverageGroups([
-        ...files('coverage-apm-integrations-axios__a-0', { runId: '100' }),
-        ...files('coverage-apm-integrations-axios__a-0', { runId: '205' }),
-      ])
-      const reports = reportsByArtifact.get('coverage-apm-integrations-axios__a-0')
-      assert.ok(reports.every(report => report.reportPath.includes('/205/')), 'only the newest run survives')
-    })
-
-    it('compares run ids numerically across a digit-length boundary', () => {
-      // A lexicographic compare keeps the older run when the rerun crosses a power-of-ten boundary
-      // (`'9' > '10'` is true as strings), silently uploading the stale failed run's coverage.
-      const { reportsByArtifact } = planCoverageGroups([
-        ...files('coverage-apm-integrations-axios__a-0', { runId: '9' }),
-        ...files('coverage-apm-integrations-axios__a-0', { runId: '10' }),
-      ])
-      const reports = reportsByArtifact.get('coverage-apm-integrations-axios__a-0')
-      assert.ok(reports.every(report => report.reportPath.includes('/10/')), 'the newer run wins numerically')
-    })
-
-    it('keeps a report per Node.js version a single artifact carries', () => {
-      const { reportsByArtifact } = planCoverageGroups(files('coverage-apm-integrations-axios__a-0', { versions: 2 }))
-      const reports = reportsByArtifact.get('coverage-apm-integrations-axios__a-0')
-      assert.equal(reports.filter(report => report.format === 'lcov').length, 2)
-    })
-
-    it('folds every cell into the same single group regardless of flag', () => {
-      const { artifacts } = planCoverageGroups([
-        ...files('coverage-apm-integrations-next-11.1.4__integration-next-0'),
-        ...files('coverage-appsec-express__job-0'),
-        ...files('coverage-mystery-flag__job-0'),
-      ])
-      assert.deepEqual(artifacts, [
-        'coverage-apm-integrations-next-11.1.4__integration-next-0',
-        'coverage-appsec-express__job-0',
-        'coverage-mystery-flag__job-0',
-      ])
-    })
-  })
-
   describe('mergeLcov', () => {
     let dir
 
@@ -175,16 +116,26 @@ describe('group-coverage', () => {
     it('merges the given run\'s lcov cells into <output>/<runId>/lcov/lcov.info', () => {
       const input = join(dir, 'coverage-results')
       const output = join(dir, 'coverage-upload')
-      const cellDir = join(input, '42', 'coverage-apm-integrations-axios__a-0', 'node-20-x')
-      mkdirSync(cellDir, { recursive: true })
-      writeFileSync(join(cellDir, 'lcov.info'), 'SF:a.js\nDA:1,1\nend_of_record\n')
+      const firstCellDir = join(input, '42', 'coverage-apm-integrations-axios__a-0', 'node-20-x')
+      const secondVersionDir = join(input, '42', 'coverage-apm-integrations-axios__a-0', 'node-22-x')
+      const secondCellDir = join(input, '42', 'coverage-appsec-express__job-0', 'node-22-x')
+      const unrelatedDir = join(input, '42', 'download-metadata', 'node-22-x')
+      mkdirSync(firstCellDir, { recursive: true })
+      mkdirSync(secondVersionDir, { recursive: true })
+      mkdirSync(secondCellDir, { recursive: true })
+      mkdirSync(unrelatedDir, { recursive: true })
+      writeFileSync(join(firstCellDir, 'lcov.info'), 'SF:a.js\nDA:1,1\nend_of_record\n')
+      writeFileSync(join(secondVersionDir, 'lcov.info'), 'SF:a.js\nDA:1,2\nend_of_record\n')
+      writeFileSync(join(secondCellDir, 'lcov.info'), 'SF:b.js\nDA:1,1\nend_of_record\n')
+      writeFileSync(join(unrelatedDir, 'lcov.info'), 'SF:ignored.js\nDA:1,1\nend_of_record\n')
 
       const { lcovDir } = mergeRunCoverage('42', input, output)
 
       assert.equal(lcovDir, join(output, '42', 'lcov'))
       assert.equal(
         readFileSync(join(lcovDir, 'lcov.info'), 'utf8'),
-        'SF:a.js\nDA:1,1\nLF:1\nLH:1\nend_of_record\n'
+        'SF:a.js\nDA:1,3\nLF:1\nLH:1\nend_of_record\n' +
+        'SF:b.js\nDA:1,1\nLF:1\nLH:1\nend_of_record\n'
       )
     })
 

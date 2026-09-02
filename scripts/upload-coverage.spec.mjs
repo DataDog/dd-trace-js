@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, it } from 'mocha'
 
-import { codecovUploadArgs, flagOf } from './upload-coverage.mjs'
+import { codecovUploadArgs, flagOf, shouldNotifyCodecov } from './upload-coverage.mjs'
 
 describe('upload-coverage', () => {
   describe('flagOf', () => {
@@ -69,6 +69,40 @@ describe('upload-coverage', () => {
       })
       const flags = args.filter((arg, i) => args[i - 1] === '-F')
       assert.deepEqual(flags, ['appsec'])
+    })
+  })
+
+  describe('shouldNotifyCodecov', () => {
+    const ready = {
+      isGitHubActions: true,
+      failedRunCount: 0,
+      uploadFailed: false,
+      processingFailed: false,
+      hasCommit: true,
+    }
+
+    it('notifies when every workflow and upload completed successfully', () => {
+      assert.equal(shouldNotifyCodecov(ready), true)
+    })
+
+    it('does not notify outside GitHub Actions', () => {
+      assert.equal(shouldNotifyCodecov({ ...ready, isGitHubActions: false }), false)
+    })
+
+    it('does not notify when a workflow failed', () => {
+      assert.equal(shouldNotifyCodecov({ ...ready, failedRunCount: 1 }), false)
+    })
+
+    it('does not notify when an upload failed', () => {
+      assert.equal(shouldNotifyCodecov({ ...ready, uploadFailed: true }), false)
+    })
+
+    it('does not notify when run processing failed', () => {
+      assert.equal(shouldNotifyCodecov({ ...ready, processingFailed: true }), false)
+    })
+
+    it('does not notify before a Codecov report exists', () => {
+      assert.equal(shouldNotifyCodecov({ ...ready, hasCommit: false }), false)
     })
   })
 })

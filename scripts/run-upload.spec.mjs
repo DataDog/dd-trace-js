@@ -5,29 +5,34 @@ import { describe, it } from 'mocha'
 import { hasUploadFailed, runUpload, runUploadWithRetry } from './run-upload.mjs'
 
 describe('run-upload', () => {
-  // `anyUploadFailed` is process-lifetime state (mirrors real usage: it should never reset mid-run),
-  // so this must run before any test below flips it, and every later assertion builds on that order.
+  const uploadCommand = process.execPath
+  const siblingCommand = 'codecovcli'
+  const missingCommand = 'dd-trace-missing-upload-command'
+
   it('starts false before any upload has run', () => {
-    assert.equal(hasUploadFailed(), false)
+    assert.equal(hasUploadFailed(uploadCommand), false)
+    assert.equal(hasUploadFailed(siblingCommand), false)
   })
 
   it('stays false after an upload that exits zero', async () => {
-    await runUpload(process.execPath, ['-e', 'process.exit(0)'])
-    assert.equal(hasUploadFailed(), false)
+    await runUpload(uploadCommand, ['-e', 'process.exit(0)'])
+    assert.equal(hasUploadFailed(uploadCommand), false)
   })
 
-  it('flips true after runUpload sees a non-zero exit', async () => {
-    await runUpload(process.execPath, ['-e', 'process.exit(1)'])
-    assert.equal(hasUploadFailed(), true)
+  it('marks only the failed runUpload command', async () => {
+    await runUpload(uploadCommand, ['-e', 'process.exit(1)'])
+    assert.equal(hasUploadFailed(uploadCommand), true)
+    assert.equal(hasUploadFailed(siblingCommand), false)
   })
 
   it('stays true once set, even if a later upload succeeds', async () => {
-    await runUpload(process.execPath, ['-e', 'process.exit(0)'])
-    assert.equal(hasUploadFailed(), true)
+    await runUpload(uploadCommand, ['-e', 'process.exit(0)'])
+    assert.equal(hasUploadFailed(uploadCommand), true)
   })
 
-  it('flips true after runUploadWithRetry exhausts its retries', async () => {
-    await runUploadWithRetry(process.execPath, ['-e', 'process.exit(1)'], 0, 0)
-    assert.equal(hasUploadFailed(), true)
+  it('marks the command after runUploadWithRetry exhausts its retries', async () => {
+    await runUploadWithRetry(missingCommand, [], 0, 0)
+    assert.equal(hasUploadFailed(missingCommand), true)
+    assert.equal(hasUploadFailed(siblingCommand), false)
   })
 })

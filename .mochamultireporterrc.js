@@ -1,7 +1,7 @@
 'use strict'
 
-// eslint-disable-next-line eslint-rules/eslint-process-env
-const isCI = Boolean(process.env.CI)
+const env = process.env // eslint-disable-line eslint-rules/eslint-process-env
+const isCI = Boolean(env.CI)
 
 const reporterEnabled = ['spec']
 if (isCI) reporterEnabled.push('./scripts/junit-reporter.js')
@@ -11,10 +11,9 @@ if (isCI) reporterEnabled.push('./scripts/junit-reporter.js')
 // results in a single call. Stamping them here instead, while this job's own GITHUB_* values are
 // still correct, lets `--xpath-tag` (see scripts/upload-junit.mjs) remap them onto the real
 // ci.pipeline.*/ci.job.* tags per test instead.
-const GITHUB_ENV = process.env // eslint-disable-line eslint-rules/eslint-process-env
 const {
   GITHUB_JOB, GITHUB_RUN_ID, GITHUB_WORKFLOW, GITHUB_RUN_NUMBER, GITHUB_SERVER_URL, GITHUB_REPOSITORY,
-} = GITHUB_ENV
+} = env
 
 module.exports = {
   reporterEnabled,

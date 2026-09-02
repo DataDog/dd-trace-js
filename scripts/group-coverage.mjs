@@ -31,23 +31,16 @@ const INPUT_DIR = 'coverage-results'
 const OUTPUT_DIR = 'coverage-upload'
 const ARTIFACT_PREFIX = 'coverage-'
 
-const REPORTS = new Map([
-  ['lcov.info', 'lcov'],
-])
-
 /**
- * Recursively collect coverage report files beneath a directory, paired with the artifact instance
- * (run-id + name) they came from and their format. `download-artifacts.mjs` lays files out as
- * `coverage-results/<run-id>/<artifact-name>/...`; a single artifact can hold more than one report
- * per format (a cell that ran coverage across several Node.js versions writes one set per version),
- * so the run-id distinguishes a rerun's reupload from those siblings.
+ * Recursively collect lcov reports beneath one run directory. Only `coverage-*` artifact directories
+ * are valid producers; nested directories retain the artifact name while locating version reports.
  *
  * @param {string} dir
- * @param {Array<{ runId: string, name: string, format: string, reportPath: string }>} out
- * @param {{ runId?: string, name?: string }} context
- * @returns {Array<{ runId: string, name: string, format: string, reportPath: string }>}
+ * @param {string[]} out
+ * @param {string} [artifactName]
+ * @returns {string[]}
  */
-function collectCoverageFiles (dir, out = [], context = {}) {
+function collectCoverageFiles (dir, out = [], artifactName) {
   let entries
   try {
     entries = readdirSync(dir, { withFileTypes: true })
@@ -57,48 +50,12 @@ function collectCoverageFiles (dir, out = [], context = {}) {
   for (const entry of entries) {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
-      const runId = context.runId ?? entry.name
-      const name = context.runId === undefined ? undefined : (context.name ?? entry.name)
-      collectCoverageFiles(full, out, { runId, name })
-    } else if (REPORTS.has(entry.name) && context.name?.startsWith(ARTIFACT_PREFIX)) {
-      out.push({ runId: context.runId, name: context.name, format: REPORTS.get(entry.name), reportPath: full })
+      collectCoverageFiles(full, out, artifactName ?? entry.name)
+    } else if (entry.name === 'lcov.info' && artifactName?.startsWith(ARTIFACT_PREFIX)) {
+      out.push(full)
     }
   }
   return out
-}
-
-/**
- * Reduce discovered report files to one cell per artifact name. All Green reruns failed workflows,
- * so the same artifact name can arrive from more than one run; the newest run reflects the cell's
- * final state, so older reuploads are dropped.
- *
- * @param {Array<{ runId: string, name: string, format: string, reportPath: string }>} files
- * @returns {{ reportsByArtifact: Map<string, Array<{ format: string, reportPath: string }>>,
- *   artifacts: string[] }}
- */
-function planCoverageGroups (files) {
-  const newestRunByArtifact = new Map()
-  for (const { runId, name } of files) {
-    const previous = newestRunByArtifact.get(name)
-    if (previous === undefined || Number(runId) > Number(previous)) {
-      newestRunByArtifact.set(name, runId)
-    }
-  }
-
-  const reportsByArtifact = new Map()
-  const artifacts = []
-  for (const { runId, name, format, reportPath } of files) {
-    if (runId !== newestRunByArtifact.get(name)) continue
-    const existing = reportsByArtifact.get(name)
-    if (existing) {
-      existing.push({ format, reportPath })
-      continue
-    }
-    reportsByArtifact.set(name, [{ format, reportPath }])
-    artifacts.push(name)
-  }
-
-  return { reportsByArtifact, artifacts }
 }
 
 /**
@@ -249,21 +206,14 @@ function mergeLcov (reportPaths) {
  *   produced no coverage report.
  */
 function mergeRunCoverage (runId, inputDir = INPUT_DIR, outputDir = OUTPUT_DIR) {
-  const files = collectCoverageFiles(join(inputDir, String(runId)), [], { runId: String(runId) })
-  if (files.length === 0) return { lcovDir: null }
+  const lcovReportPaths = collectCoverageFiles(join(inputDir, String(runId)))
+  if (lcovReportPaths.length === 0) return { lcovDir: null }
 
-  const { reportsByArtifact, artifacts } = planCoverageGroups(files)
-  const reports = artifacts.flatMap(artifact => reportsByArtifact.get(artifact))
-  const lcovReportPaths = reports.filter(r => r.format === 'lcov').map(r => r.reportPath)
-
-  let lcovDir = null
-  if (lcovReportPaths.length > 0) {
-    lcovDir = join(outputDir, String(runId), 'lcov')
-    mkdirSync(lcovDir, { recursive: true })
-    writeFileSync(join(lcovDir, 'lcov.info'), mergeLcov(lcovReportPaths))
-  }
+  const lcovDir = join(outputDir, String(runId), 'lcov')
+  mkdirSync(lcovDir, { recursive: true })
+  writeFileSync(join(lcovDir, 'lcov.info'), mergeLcov(lcovReportPaths))
 
   return { lcovDir }
 }
 
-export { OUTPUT_DIR, mergeLcov, mergeRunCoverage, planCoverageGroups }
+export { OUTPUT_DIR, mergeLcov, mergeRunCoverage }
