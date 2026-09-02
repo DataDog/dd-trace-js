@@ -1,5 +1,7 @@
 'use strict'
 
+const { isProxy } = require('node:util/types')
+
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
 const shimmer = require('../../../datadog-shimmer')
 const { FOREIGN_HTTP2_SERVER } = require('../../../dd-trace/src/constants')
@@ -69,19 +71,17 @@ const SINGLE_VALUE_HEADERS = new Set([
   'user-agent',
   'x-content-type-options',
 ])
-// Node.js started preserving duplicate response header pairs in 20.12.0 and 21.7.0.
-const PRESERVES_DUPLICATE_HEADERS = NODE_MAJOR >= 22 ||
-  (NODE_MAJOR === 21 && NODE_MINOR >= 7) ||
-  (NODE_MAJOR === 20 && NODE_MINOR >= 12)
 const SUPPORTS_RAW_RESPONSE_HEADERS = NODE_MAJOR >= 25 ||
   (NODE_MAJOR === 24 && NODE_MINOR >= 7) ||
   (NODE_MAJOR === 22 && NODE_MINOR >= 20)
+const SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS = NODE_MAJOR >= 26 ||
+  (NODE_MAJOR === 25 && NODE_MINOR >= 7) ||
+  (NODE_MAJOR === 24 && NODE_MINOR >= 15)
 
-// The compatibility layer emits 'request' from the same stream, so remember
-// streams already traced by the mixed-server branch.
-const tracedStreams = new WeakSet()
 const responseContexts = new WeakMap()
 const wrappedStreamPrototypes = new WeakSet()
+
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
 
 /** @type {symbol | undefined} */
 let sensitiveHeadersSymbol
@@ -99,8 +99,6 @@ addHook({ name: 'http2' }, http2 => {
     shimmer.wrap(responseProto, 'setHeader', wrapSetHeader)
     if (responseProto.appendHeader) shimmer.wrap(responseProto, 'appendHeader', wrapSetHeader)
     shimmer.wrap(responseProto, 'write', wrapWrite)
-    if (responseProto.writeContinue) shimmer.wrap(responseProto, 'writeContinue', wrapInformationalResponse)
-    if (responseProto.writeEarlyHints) shimmer.wrap(responseProto, 'writeEarlyHints', wrapInformationalResponse)
     shimmer.wrap(responseProto, 'writeHead', wrapWriteHead)
   }
 
@@ -109,8 +107,13 @@ addHook({ name: 'http2' }, http2 => {
 
 function wrapCreateServer (createServer) {
   return function (...args) {
+    let strictSingleValueFields = true
+    if (SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS && args[0] !== null && typeof args[0] === 'object') {
+      args[0] = { ...args[0] }
+      strictSingleValueFields = args[0].strictSingleValueFields !== false
+    }
     const server = createServer.apply(this, args)
-    shimmer.wrap(server, 'emit', wrapEmit)
+    shimmer.wrap(server, 'emit', emit => wrapEmit(emit, strictSingleValueFields))
     return server
   }
 }
@@ -135,78 +138,72 @@ function wrapStreamEmit (originalEmit, ctx) {
   }
 }
 
-function wrapEmit (originalEmit) {
+function wrapEmit (originalEmit, strictSingleValueFields) {
   // Named `emit` mirrors the server method so the one-time wrap skips its name
-  // rewrite; rest params keep the per-event forwarding allocation-free.
-  return function emit (...args) {
+  // rewrite.
+  return function emit () {
     // A server owned by another instrumentation (e.g. @grpc/grpc-js) drives its
     // own span lifecycle over the raw 'stream' API, so tracing it here would add
     // a spurious web.request span on top of that integration's span and steal
     // the top frame. Skip it entirely; the mark is set at server creation, so
     // this is one property read on servers we do trace.
     if (!startServerCh.hasSubscribers || this[FOREIGN_HTTP2_SERVER]) {
-      return Reflect.apply(originalEmit, this, args)
+      return Reflect.apply(originalEmit, this, arguments)
     }
 
-    const eventName = args[0]
+    const eventName = arguments[0]
     if (eventName === 'stream') {
-      // The compatibility layer synthesizes 'request' from an internal 'stream'
-      // listener it registers exactly once when a 'request' listener is added,
-      // so `listenerCount('stream')` exceeds one only when the application also
-      // registered a raw-stream listener. Owning the span here for that case
-      // keeps it active while the application's stream listener runs; the
-      // synthesized 'request' that fires nested below then reuses it. A
-      // request-only server (no raw-stream listener) is left to the 'request'
-      // branch so the compatibility response keeps its richer req/res.
+      // Own mixed raw/compatibility requests and compatibility responses that
+      // can start before 'request' at the stream boundary. Their nested
+      // compatibility event adopts the real request and response.
       const requestListenerCount = this.listenerCount('request')
-      if (requestListenerCount === 0 || this.listenerCount('stream') > 1) {
-        const stream = args[1]
-        const headers = args[2]
-        const ctx = createStreamAdapter(stream, headers)
-        // Only a mixed server (a 'request' listener is present) synthesizes a
-        // real request off this stream and adopts the span later, so only then
-        // does the context need keying on the stream. A raw-stream-only server
-        // never adopts; leaving the flag unset keeps the stream->context write
-        // off its hot path.
-        ctx.adoptable = requestListenerCount !== 0
-        tracedStreams.add(stream)
+      const headers = arguments[2]
+      const requiresStreamContext = headers[HTTP2_HEADER_METHOD] === 'CONNECT' || headers.expect !== undefined
+      if (requestListenerCount === 0 || this.listenerCount('stream') > 1 || requiresStreamContext) {
+        const stream = arguments[1]
+        const ctx = createStreamAdapter(stream, headers, strictSingleValueFields)
+        ctx.adoptable = requestListenerCount !== 0 || requiresStreamContext
 
         shimmer.wrap(stream, 'emit', emit => wrapStreamEmit(emit, ctx))
         return traceServerRequest(ctx, () => {
-          if (finishSetHeaderCh.hasSubscribers ||
-            startInformationalResponseCh.hasSubscribers ||
-            startWriteHeadCh.hasSubscribers) {
-            instrumentStreamResponse(stream, ctx)
-          }
-          return Reflect.apply(originalEmit, this, args)
+          // Response subscribers can be added after this event, so keep the context for the stream lifetime.
+          instrumentStreamResponse(stream, ctx)
+          return Reflect.apply(originalEmit, this, arguments)
         })
       }
-    } else if (eventName === 'request') {
-      const req = args[1]
-      const res = args[2]
+    } else if (eventName === 'request' || eventName === 'connect' ||
+      eventName === 'checkContinue' || eventName === 'checkExpectation') {
+      const req = arguments[1]
+      const stream = req?.stream
+      if (!stream && eventName !== 'request') return Reflect.apply(originalEmit, this, arguments)
+
+      const res = arguments[2]
       res.req = req
 
-      // A mixed server (raw-stream + 'request' listeners) already created the
-      // span from the 'stream' event above; the stream's single 'close' is the
-      // sole finish source, so skip creating a second span. The synthesized
-      // request/response are the real objects a user's 'request' handler and
-      // the finish `hooks.request` expect, so hand them to the existing
-      // stream-backed context rather than leaving it on the throwaway adapter.
-      if (tracedStreams.has(req.stream)) {
-        const ctx = responseContexts.get(req.stream)
-        if (ctx) {
-          ctx.res = res
-          responseContexts.set(res, ctx)
-        }
+      if (!stream) {
+        const ctx = { req, res }
+        shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
+        return traceServerRequest(ctx, () => Reflect.apply(originalEmit, this, arguments))
+      }
+
+      // A stream-backed request already owns the span and its single finish
+      // source. Adopt the compatibility objects instead of creating another.
+      const streamContext = responseContexts.get(stream)
+      if (streamContext) {
+        streamContext.res = res
         adoptServerCh.publish({ req, res })
       } else {
         const ctx = { req, res }
+        if (!strictSingleValueFields) ctx.strictSingleValueFields = false
         shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
-        return traceServerRequest(ctx, () => Reflect.apply(originalEmit, this, args))
+        return traceServerRequest(ctx, () => {
+          instrumentStreamResponse(stream, ctx)
+          return Reflect.apply(originalEmit, this, arguments)
+        })
       }
     }
 
-    return Reflect.apply(originalEmit, this, args)
+    return Reflect.apply(originalEmit, this, arguments)
   }
 }
 
@@ -214,9 +211,9 @@ function wrapEmit (originalEmit) {
  * @param {Function} setHeader
  */
 function wrapSetHeader (setHeader) {
-  return function (...args) {
+  return function () {
     if (!startSetHeaderCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers) {
-      return Reflect.apply(setHeader, this, args)
+      return Reflect.apply(setHeader, this, arguments)
     }
 
     if (startSetHeaderCh.hasSubscribers) {
@@ -225,10 +222,10 @@ function wrapSetHeader (setHeader) {
       if (abortController.signal.aborted) return
     }
 
-    const result = Reflect.apply(setHeader, this, args)
+    const result = Reflect.apply(setHeader, this, arguments)
 
     if (finishSetHeaderCh.hasSubscribers) {
-      finishSetHeaderCh.publish({ name: args[0], value: args[1], res: this })
+      finishSetHeaderCh.publish({ name: arguments[0], value: arguments[1], res: this })
     }
 
     return result
@@ -239,33 +236,16 @@ function wrapSetHeader (setHeader) {
  * @param {Function} responseOperation
  */
 function wrapResponseOperation (responseOperation) {
-  return function (...args) {
+  return function () {
     if (!startSetHeaderCh.hasSubscribers) {
-      return Reflect.apply(responseOperation, this, args)
+      return Reflect.apply(responseOperation, this, arguments)
     }
 
     const abortController = new AbortController()
     startSetHeaderCh.publish({ res: this, abortController })
     if (abortController.signal.aborted) return
 
-    return Reflect.apply(responseOperation, this, args)
-  }
-}
-
-/**
- * @param {Function} informationalResponse
- */
-function wrapInformationalResponse (informationalResponse) {
-  return function (...args) {
-    if (!startInformationalResponseCh.hasSubscribers) {
-      return Reflect.apply(informationalResponse, this, args)
-    }
-
-    const abortController = new AbortController()
-    startInformationalResponseCh.publish({ res: this, abortController })
-    if (abortController.signal.aborted) return
-
-    return Reflect.apply(informationalResponse, this, args)
+    return Reflect.apply(responseOperation, this, arguments)
   }
 }
 
@@ -273,32 +253,10 @@ function wrapInformationalResponse (informationalResponse) {
  * @param {Function} writeHead
  */
 function wrapWriteHead (writeHead) {
-  return function (...args) {
-    if (!startWriteHeadCh.hasSubscribers) {
-      return Reflect.apply(writeHead, this, args)
-    }
-
-    const abortController = new AbortController()
-    const headers = typeof args[1] === 'string' ? args[2] : args[1]
-    const responseHeaders = addResponseHeaders(this.getHeaders(), headers)
-    startWriteHeadCh.publish({
-      req: getResponseRequest(this),
-      res: this,
-      abortController,
-      statusCode: args[0],
-      responseHeaders,
-    })
-    if (abortController.signal.aborted) return this
-
-    const result = Reflect.apply(writeHead, this, args)
-
-    if (finishSetHeaderCh.hasSubscribers) {
-      for (const name of Object.keys(responseHeaders)) {
-        finishSetHeaderCh.publish({ name, value: responseHeaders[name], res: this })
-      }
-    }
-
-    return result
+  return function () {
+    if (!startSetHeaderCh.hasSubscribers) return Reflect.apply(writeHead, this, arguments)
+    if (responseOperationIsBlocked(this)) return this
+    return Reflect.apply(writeHead, this, arguments)
   }
 }
 
@@ -306,22 +264,10 @@ function wrapWriteHead (writeHead) {
  * @param {Function} write
  */
 function wrapWrite (write) {
-  return function (...args) {
-    if (!startWriteHeadCh.hasSubscribers) {
-      return Reflect.apply(write, this, args)
-    }
-
-    const abortController = new AbortController()
-    startWriteHeadCh.publish({
-      req: getResponseRequest(this),
-      res: this,
-      abortController,
-      statusCode: this.statusCode,
-      responseHeaders: this.getHeaders(),
-    })
-    if (abortController.signal.aborted) return true
-
-    return Reflect.apply(write, this, args)
+  return function () {
+    if (!startSetHeaderCh.hasSubscribers) return Reflect.apply(write, this, arguments)
+    if (responseOperationIsBlocked(this)) return true
+    return Reflect.apply(write, this, arguments)
   }
 }
 
@@ -329,23 +275,21 @@ function wrapWrite (write) {
  * @param {Function} end
  */
 function wrapEnd (end) {
-  return function (...args) {
-    if (!startWriteHeadCh.hasSubscribers) {
-      return Reflect.apply(end, this, args)
-    }
-
-    const abortController = new AbortController()
-    startWriteHeadCh.publish({
-      req: getResponseRequest(this),
-      res: this,
-      abortController,
-      statusCode: this.statusCode,
-      responseHeaders: this.getHeaders(),
-    })
-    if (abortController.signal.aborted) return this
-
-    return Reflect.apply(end, this, args)
+  return function () {
+    if (!startSetHeaderCh.hasSubscribers) return Reflect.apply(end, this, arguments)
+    if (responseOperationIsBlocked(this)) return this
+    return Reflect.apply(end, this, arguments)
   }
+}
+
+/**
+ * @param {import('node:http2').Http2ServerResponse} res
+ * @returns {boolean}
+ */
+function responseOperationIsBlocked (res) {
+  const abortController = new AbortController()
+  startSetHeaderCh.publish({ res, abortController })
+  return abortController.signal.aborted
 }
 
 /**
@@ -370,18 +314,19 @@ function instrumentStreamResponse (stream, ctx) {
  * @param {Function} respond
  */
 function wrapStreamRespond (respond) {
-  return function (...args) {
+  return function () {
     const ctx = responseContexts.get(this)
-    if (!ctx) return Reflect.apply(respond, this, args)
+    if (!ctx) return Reflect.apply(respond, this, arguments)
     if (ctx.responseBlocked) return this
     if (this.headersSent || (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
-      return Reflect.apply(respond, this, args)
+      return Reflect.apply(respond, this, arguments)
     }
 
-    if (!hasValidResponseOptions(args[1])) return Reflect.apply(respond, this, args)
+    const options = copyResponseOptions(arguments, 1)
+    if (!hasValidResponseOptions(options)) return Reflect.apply(respond, this, arguments)
 
-    const responseHeaders = getValidatedResponseHeaders(args[0])
-    if (!responseHeaders) return Reflect.apply(respond, this, args)
+    const responseHeaders = getValidatedResponseHeaders(arguments[0], arguments, 0, ctx.strictSingleValueFields)
+    if (!responseHeaders) return Reflect.apply(respond, this, arguments)
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
     if (!responseAllowed) {
@@ -389,7 +334,7 @@ function wrapStreamRespond (respond) {
       return this
     }
 
-    const result = Reflect.apply(respond, this, args)
+    const result = Reflect.apply(respond, this, arguments)
     publishStreamResponseFinish(ctx, responseHeaders)
     return result
   }
@@ -399,36 +344,37 @@ function wrapStreamRespond (respond) {
  * @param {Function} respond
  */
 function wrapStreamRespondWithFD (respond) {
-  return function (...args) {
+  return function () {
     const ctx = responseContexts.get(this)
-    if (!ctx) return Reflect.apply(respond, this, args)
+    if (!ctx) return Reflect.apply(respond, this, arguments)
     if (ctx.responseBlocked) return this
     if (this.headersSent || (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
-      return Reflect.apply(respond, this, args)
+      return Reflect.apply(respond, this, arguments)
     }
 
-    const options = args[2]
+    const options = copyResponseOptions(arguments, 2)
     if (!hasValidResponseOptions(options, true)) {
-      return Reflect.apply(respond, this, args)
+      return Reflect.apply(respond, this, arguments)
     }
 
     const statCheck = getEnumerableDataProperty(options, 'statCheck')
     if (typeof statCheck === 'function') {
+      const args = [...arguments]
       args[2] = {
         ...options,
         statCheck: wrapStreamStatCheck(statCheck, ctx, this),
       }
       return Reflect.apply(respond, this, args)
     }
+    // Adding statCheck would make Node's synchronous FileHandle response asynchronous.
+    if (typeof arguments[0] !== 'number') return Reflect.apply(respond, this, arguments)
 
-    if (typeof args[0] !== 'number') return Reflect.apply(respond, this, args)
-
-    const responseHeaders = getValidatedResponseHeaders(args[1])
-    if (!responseHeaders) return Reflect.apply(respond, this, args)
+    const responseHeaders = getValidatedResponseHeaders(arguments[1], arguments, 1, ctx.strictSingleValueFields)
+    if (!responseHeaders) return Reflect.apply(respond, this, arguments)
 
     const statusCode = getResponseStatusCode(responseHeaders)
     if (statusCode === 204 || statusCode === 205 || statusCode === 304 || ctx.req.method === 'HEAD') {
-      return Reflect.apply(respond, this, args)
+      return Reflect.apply(respond, this, arguments)
     }
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
@@ -437,7 +383,7 @@ function wrapStreamRespondWithFD (respond) {
       return this
     }
 
-    const result = Reflect.apply(respond, this, args)
+    const result = Reflect.apply(respond, this, arguments)
     publishStreamResponseFinish(ctx, responseHeaders)
     return result
   }
@@ -447,20 +393,21 @@ function wrapStreamRespondWithFD (respond) {
  * @param {Function} respond
  */
 function wrapStreamRespondWithFile (respond) {
-  return function (...args) {
+  return function () {
     const ctx = responseContexts.get(this)
-    if (!ctx) return Reflect.apply(respond, this, args)
+    if (!ctx) return Reflect.apply(respond, this, arguments)
     if (ctx.responseBlocked) return this
     if (this.headersSent || (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
-      return Reflect.apply(respond, this, args)
+      return Reflect.apply(respond, this, arguments)
     }
 
-    const options = args[2]
+    const options = copyResponseOptions(arguments, 2)
     if (!hasValidResponseOptions(options, true)) {
-      return Reflect.apply(respond, this, args)
+      return Reflect.apply(respond, this, arguments)
     }
 
     const statCheck = getEnumerableDataProperty(options, 'statCheck')
+    const args = [...arguments]
     args[2] = {
       ...options,
       statCheck: wrapStreamStatCheck(statCheck, ctx, this),
@@ -473,12 +420,12 @@ function wrapStreamRespondWithFile (respond) {
  * @param {Function} additionalHeaders
  */
 function wrapStreamAdditionalHeaders (additionalHeaders) {
-  return function (...args) {
+  return function () {
     const ctx = responseContexts.get(this)
-    if (!ctx) return Reflect.apply(additionalHeaders, this, args)
+    if (!ctx) return Reflect.apply(additionalHeaders, this, arguments)
     if (ctx.responseBlocked) return
     if (!startInformationalResponseCh.hasSubscribers) {
-      return Reflect.apply(additionalHeaders, this, args)
+      return Reflect.apply(additionalHeaders, this, arguments)
     }
 
     const abortController = new AbortController()
@@ -488,7 +435,7 @@ function wrapStreamAdditionalHeaders (additionalHeaders) {
       return
     }
 
-    return Reflect.apply(additionalHeaders, this, args)
+    return Reflect.apply(additionalHeaders, this, arguments)
   }
 }
 
@@ -498,14 +445,14 @@ function wrapStreamAdditionalHeaders (additionalHeaders) {
  * @param {import('node:http2').ServerHttp2Stream} stream
  */
 function wrapStreamStatCheck (statCheck, ctx, stream) {
-  return function (...args) {
-    const result = statCheck ? Reflect.apply(statCheck, this, args) : true
+  return function () {
+    const result = statCheck ? Reflect.apply(statCheck, this, arguments) : true
     if (result === false || stream.headersSent ||
       (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
       return result
     }
 
-    const responseHeaders = getValidatedResponseHeaders(args[1])
+    const responseHeaders = getValidatedResponseHeaders(arguments[1], undefined, 0, ctx.strictSingleValueFields)
     if (!responseHeaders) return result
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
@@ -523,15 +470,15 @@ function wrapStreamStatCheck (statCheck, ctx, stream) {
  * @param {Function} write
  */
 function wrapStreamWrite (write) {
-  return function (...args) {
+  return function () {
     const ctx = responseContexts.get(this)
-    if (!ctx) return Reflect.apply(write, this, args)
+    if (!ctx) return Reflect.apply(write, this, arguments)
     if (ctx.responseBlocked) return true
     if (this.headersSent || !startWriteHeadCh.hasSubscribers) {
-      return Reflect.apply(write, this, args)
+      return Reflect.apply(write, this, arguments)
     }
     if (publishImplicitStreamResponse(ctx, this)) return true
-    return Reflect.apply(write, this, args)
+    return Reflect.apply(write, this, arguments)
   }
 }
 
@@ -539,26 +486,41 @@ function wrapStreamWrite (write) {
  * @param {Function} end
  */
 function wrapStreamEnd (end) {
-  return function (...args) {
+  return function () {
     const ctx = responseContexts.get(this)
-    if (!ctx) return Reflect.apply(end, this, args)
+    if (!ctx) return Reflect.apply(end, this, arguments)
     if (ctx.responseBlocked) return this
     if (this.headersSent || !startWriteHeadCh.hasSubscribers) {
-      return Reflect.apply(end, this, args)
+      return Reflect.apply(end, this, arguments)
     }
     if (publishImplicitStreamResponse(ctx, this)) return this
-    return Reflect.apply(end, this, args)
+    return Reflect.apply(end, this, arguments)
   }
 }
 
 /**
- * @param {object | undefined} options
+ * @param {ArgumentsLike} args
+ * @param {number} index
+ * @returns {unknown}
+ */
+function copyResponseOptions (args, index) {
+  const options = args[index]
+  if (options !== null && typeof options === 'object' && !Array.isArray(options)) {
+    const copy = { ...options }
+    args[index] = copy
+    return copy
+  }
+  return options
+}
+
+/**
+ * @param {unknown} options
  * @param {boolean} [fileResponse]
  * @returns {boolean}
  */
 function hasValidResponseOptions (options, fileResponse = false) {
   if (options === undefined) return true
-  if (!hasOnlyDataProperties(options)) return false
+  if (options === null || typeof options !== 'object' || Array.isArray(options)) return false
   if (!fileResponse) return true
 
   const offset = getEnumerableDataProperty(options, 'offset')
@@ -585,28 +547,16 @@ function getEnumerableDataProperty (value, name) {
  * @param {unknown} value
  * @returns {boolean}
  */
-function hasOnlyDataProperties (value) {
-  if (value === null || typeof value !== 'object') return false
-
-  for (const name of Object.keys(value)) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, name)
-    if (!descriptor || !Object.hasOwn(descriptor, 'value')) return false
-  }
-
-  return true
-}
-
-/**
- * @param {unknown} value
- * @returns {boolean}
- */
 function isStableHeaderValue (value) {
   if (!Array.isArray(value)) {
     return value === null || value === undefined ||
       typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
   }
 
-  for (const item of value) {
+  for (let i = 0; i < value.length; i++) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(i))
+    if (!descriptor || !Object.hasOwn(descriptor, 'value')) return false
+    const item = descriptor.value
     if (item !== null && item !== undefined &&
       typeof item !== 'string' && typeof item !== 'number' && typeof item !== 'boolean') {
       return false
@@ -632,12 +582,16 @@ function getResponseStatusCode (responseHeaders) {
 
 /**
  * @param {unknown} headers
+ * @param {ArgumentsLike} [argumentsObject]
+ * @param {number} [headerIndex]
+ * @param {boolean} [strictSingleValueFields]
  * @returns {Record<string, unknown> | undefined}
  */
-function getValidatedResponseHeaders (headers) {
+function getValidatedResponseHeaders (headers, argumentsObject, headerIndex = 0, strictSingleValueFields = true) {
   if (headers === undefined) return {}
 
   let responseHeaders
+  let forwardedHeaders
   let responseHeaderNames
   let canReturnFast = true
   let isValid = true
@@ -648,6 +602,7 @@ function getValidatedResponseHeaders (headers) {
   const headersAreRaw = Array.isArray(headers)
   if (headersAreRaw) {
     if (!SUPPORTS_RAW_RESPONSE_HEADERS ||
+      isProxy(headers) ||
       headers.length % 2 !== 0 ||
       headers.unshift !== Array.prototype.unshift ||
       headers.push !== Array.prototype.push ||
@@ -655,14 +610,24 @@ function getValidatedResponseHeaders (headers) {
       !Object.getOwnPropertyDescriptor(headers, 'length')?.writable) {
       return
     }
-    for (let i = 0; i < headers.length; i += 2) {
-      if (typeof headers[i] !== 'string') return
+    for (let i = 0; i < headers.length; i++) {
+      const descriptor = Object.getOwnPropertyDescriptor(headers, String(i))
+      if (!descriptor || !Object.hasOwn(descriptor, 'value')) return
+      if (i % 2 === 0 && typeof descriptor.value !== 'string') return
     }
   } else {
     responseHeaders = {}
+    forwardedHeaders = responseHeaders
     responseHeaderNames = Object.keys(headers)
     for (const rawName of responseHeaderNames) {
-      const value = headers[rawName]
+      let value
+      if (argumentsObject) {
+        value = headers[rawName]
+      } else {
+        const descriptor = Object.getOwnPropertyDescriptor(headers, rawName)
+        if (!descriptor || !Object.hasOwn(descriptor, 'value')) return
+        value = descriptor.value
+      }
       if (rawName === '__proto__') {
         Object.defineProperty(responseHeaders, rawName, {
           configurable: true,
@@ -677,7 +642,12 @@ function getValidatedResponseHeaders (headers) {
         canReturnFast = false
         if (rawName !== rawName.toLowerCase()) requiresNormalization = true
       } else {
-        const headerIsValid = isValidResponseHeader(rawName, value, LOWERCASE_HTTP_HEADER_NAME_PATTERN)
+        const headerIsValid = isValidResponseHeader(
+          rawName,
+          value,
+          LOWERCASE_HTTP_HEADER_NAME_PATTERN,
+          strictSingleValueFields
+        )
         if (!headerIsValid) {
           if (rawName === rawName.toLowerCase()) {
             isValid = false
@@ -689,36 +659,58 @@ function getValidatedResponseHeaders (headers) {
     }
   }
 
-  const sensitiveHeaders = sensitiveHeadersSymbol && headers[sensitiveHeadersSymbol]
+  let sensitiveHeaders
+  if (sensitiveHeadersSymbol) {
+    const descriptor = Object.getOwnPropertyDescriptor(headers, sensitiveHeadersSymbol)
+    if (headersAreRaw) {
+      if (descriptor && !Object.hasOwn(descriptor, 'value')) return
+      sensitiveHeaders = descriptor?.value
+    } else {
+      sensitiveHeaders = headers[sensitiveHeadersSymbol]
+    }
+  }
+  if (forwardedHeaders) {
+    if (sensitiveHeaders !== undefined) forwardedHeaders[sensitiveHeadersSymbol] = sensitiveHeaders
+    if (argumentsObject) argumentsObject[headerIndex] = forwardedHeaders
+  }
   if (sensitiveHeaders !== undefined) {
-    if (!Array.isArray(sensitiveHeaders)) return
-    for (const name of sensitiveHeaders) {
+    if (!Array.isArray(sensitiveHeaders) || sensitiveHeaders.map !== Array.prototype.map) return
+    for (let i = 0; i < sensitiveHeaders.length; i++) {
+      const name = sensitiveHeaders[i]
       if (typeof name !== 'string') return
     }
   }
 
+  let validatedResponseHeaders
   if (requiresNormalization) {
-    responseHeaders = addResponseHeaders({ __proto__: null }, responseHeaders, true)
+    responseHeaders = addResponseHeaders({ __proto__: null }, responseHeaders)
     responseHeaderNames = Object.keys(responseHeaders)
   } else if (responseHeaders && canReturnFast) {
     if (!isValid || getResponseStatusCode(responseHeaders) === undefined) return
-    return responseHeaders
+    validatedResponseHeaders = responseHeaders
   }
 
-  if (!responseHeaders) {
-    responseHeaders = addResponseHeaders({ __proto__: null }, headers, true)
-    responseHeaderNames = Object.keys(responseHeaders)
+  if (!validatedResponseHeaders) {
+    if (!responseHeaders) {
+      responseHeaders = addResponseHeaders({ __proto__: null }, headers)
+      responseHeaderNames = Object.keys(responseHeaders)
+    }
+    validatedResponseHeaders = validateResponseHeaders(responseHeaders, responseHeaderNames, strictSingleValueFields)
   }
 
-  return validateResponseHeaders(responseHeaders, responseHeaderNames)
+  if (validatedResponseHeaders && validatedResponseHeaders !== forwardedHeaders && sensitiveHeaders !== undefined) {
+    validatedResponseHeaders[sensitiveHeadersSymbol] = sensitiveHeaders
+  }
+  return validatedResponseHeaders
 }
 
 /**
  * @param {Record<string, unknown>} responseHeaders
  * @param {string[]} responseHeaderNames
+ * @param {boolean} strictSingleValueFields
  * @returns {Record<string, unknown> | undefined}
  */
-function validateResponseHeaders (responseHeaders, responseHeaderNames) {
+function validateResponseHeaders (responseHeaders, responseHeaderNames, strictSingleValueFields) {
   if (getResponseStatusCode(responseHeaders) === undefined) return
 
   for (const name of responseHeaderNames) {
@@ -727,7 +719,7 @@ function validateResponseHeaders (responseHeaders, responseHeaderNames) {
       delete responseHeaders[name]
       continue
     }
-    if (!isValidResponseHeader(name, value, HTTP_HEADER_NAME_PATTERN)) return
+    if (!isValidResponseHeader(name, value, HTTP_HEADER_NAME_PATTERN, strictSingleValueFields)) return
   }
 
   return responseHeaders
@@ -737,16 +729,19 @@ function validateResponseHeaders (responseHeaders, responseHeaderNames) {
  * @param {string} name
  * @param {unknown} value
  * @param {RegExp} namePattern
+ * @param {boolean} strictSingleValueFields
  * @returns {boolean}
  */
-function isValidResponseHeader (name, value, namePattern) {
+function isValidResponseHeader (name, value, namePattern, strictSingleValueFields) {
   if (!isStableHeaderValue(value)) return false
   if (name[0] === ':') return name === HTTP2_HEADER_STATUS
   if (!namePattern.test(name) || ILLEGAL_CONNECTION_HEADERS.has(name)) return false
-  if (Array.isArray(value) && value.length > 1 && SINGLE_VALUE_HEADERS.has(name)) return false
+  if (strictSingleValueFields && Array.isArray(value) &&
+    value.length > 1 && SINGLE_VALUE_HEADERS.has(name)) return false
+  if (name !== 'te') return true
 
-  const normalizedValue = Array.isArray(value) ? value[0] : value
-  return name !== 'te' || normalizedValue === 'trailers'
+  if (!Array.isArray(value)) return value === 'trailers'
+  return value.length === 1 && Object.getOwnPropertyDescriptor(value, '0')?.value === 'trailers'
 }
 
 /**
@@ -762,7 +757,7 @@ function publishStreamResponseStart (ctx, responseHeaders) {
     req: ctx.req,
     res: ctx.res,
     abortController,
-    statusCode: responseHeaders[HTTP2_HEADER_STATUS] ?? 200,
+    statusCode: getResponseStatusCode(responseHeaders),
     responseHeaders,
   })
   return !abortController.signal.aborted
@@ -786,7 +781,7 @@ function publishStreamResponseFinish (ctx, responseHeaders) {
  * @returns {boolean}
  */
 function publishImplicitStreamResponse (ctx, stream) {
-  const responseHeaders = addResponseHeaders({}, stream.sentHeaders, true)
+  const responseHeaders = addResponseHeaders({}, stream.sentHeaders)
   const abortController = new AbortController()
   startWriteHeadCh.publish({
     req: ctx.req,
@@ -802,33 +797,19 @@ function publishImplicitStreamResponse (ctx, stream) {
 }
 
 /**
- * @param {import('node:http2').Http2ServerResponse} res
- */
-function getResponseRequest (res) {
-  return responseContexts.get(res)?.req ?? res.req
-}
-
-/**
  * @param {Record<string, unknown>} responseHeaders
  * @param {object | unknown[]} [headers]
- * @param {boolean} [preserveDuplicates]
  */
-function addResponseHeaders (responseHeaders, headers, preserveDuplicates = false) {
+function addResponseHeaders (responseHeaders, headers) {
   if (Array.isArray(headers)) {
-    const entriesArePairs = Array.isArray(headers[0])
-    let addedNames
-    if (preserveDuplicates || PRESERVES_DUPLICATE_HEADERS) addedNames = new Set()
-    const increment = entriesArePairs ? 1 : 2
-    for (let i = 0; i < headers.length; i += increment) {
-      const entry = headers[i]
-      const rawName = entriesArePairs ? entry[0] : entry
+    const addedNames = new Set()
+    for (let i = 0; i < headers.length; i += 2) {
+      const rawName = headers[i]
       const name = rawName.toLowerCase()
-      const value = entriesArePairs ? entry[1] : headers[i + 1]
-      addResponseHeader(responseHeaders, name, value, addedNames)
+      addResponseHeader(responseHeaders, name, headers[i + 1], addedNames)
     }
   } else if (headers) {
-    let addedNames
-    if (preserveDuplicates) addedNames = new Set()
+    const addedNames = new Set()
     for (const rawName of Object.keys(headers)) {
       const name = rawName.toLowerCase()
       const value = headers[rawName]
@@ -853,9 +834,18 @@ function addResponseHeader (responseHeaders, name, value, addedNames) {
   }
 
   const previous = responseHeaders[name]
-  const values = Array.isArray(previous) ? [...previous] : [previous]
+  const values = []
+  if (Array.isArray(previous)) {
+    for (let i = 0; i < previous.length; i++) {
+      values.push(previous[i])
+    }
+  } else {
+    values.push(previous)
+  }
   if (Array.isArray(value)) {
-    values.push(...value)
+    for (let i = 0; i < value.length; i++) {
+      values.push(value[i])
+    }
   } else {
     values.push(value)
   }
@@ -960,6 +950,7 @@ class Http2StreamResponse {
  * @property {number} res.statusCode read at finish from `stream.sentHeaders`
  * @property {(name: string) => string | number | string[] | undefined} res.getHeader response-header tagging
  * @property {boolean} [responseBlocked] subsequent response operations are suppressed after blocking
+ * @property {false} [strictSingleValueFields] mirrors relaxed Node response validation
  */
 
 // Present the core-API stream + pseudo-header map as the minimal req/res pair
@@ -969,9 +960,10 @@ class Http2StreamResponse {
 /**
  * @param {import('node:http2').ServerHttp2Stream} stream
  * @param {import('node:http2').IncomingHttpHeaders} headers
+ * @param {boolean} strictSingleValueFields
  * @returns {StreamRequestContext}
  */
-function createStreamAdapter (stream, headers) {
+function createStreamAdapter (stream, headers, strictSingleValueFields) {
   const req = {
     stream,
     headers,
@@ -980,6 +972,8 @@ function createStreamAdapter (stream, headers) {
     socket: stream.session?.socket,
   }
   const res = new Http2StreamResponse(stream, req)
+  const ctx = { req, res, isStream: true }
+  if (!strictSingleValueFields) ctx.strictSingleValueFields = false
 
-  return { req, res, isStream: true }
+  return ctx
 }

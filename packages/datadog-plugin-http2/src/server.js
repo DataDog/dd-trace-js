@@ -3,7 +3,7 @@
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
-const { withRequest } = require('../../dd-trace/src/appsec/store')
+const { adoptRequest, withRequest } = require('../../dd-trace/src/appsec/store')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 
@@ -51,9 +51,8 @@ class Http2ServerPlugin extends ServerPlugin {
 
     const context = web.getContext(req)
 
-    // A mixed server adopts the real request off this stream later; key the
-    // context on the stream now so that lookup resolves. Skipped for the common
-    // single-listener request, which never adopts.
+    // Some compatibility requests adopt their real request from this stream.
+    // Skip the map write for the common request-only path, which never adopts.
     if (ctx.adoptable) web.linkContextToStream(req.stream, context)
 
     if (!ctx.isStream) instrumentWriteHead(context)
@@ -72,14 +71,11 @@ class Http2ServerPlugin extends ServerPlugin {
     return ctx.currentStore
   }
 
-  // A mixed server (raw-stream + 'request' listeners) creates the span from the
-  // 'stream' event with a throwaway adapter. When the compatibility layer then
-  // synthesizes the real request/response off the same stream, point the shared
-  // context at them so `web.setFramework`/`web.setRoute` from the user's
-  // 'request' handler resolve to this span and the finish `hooks.request`
-  // receives the real objects instead of the adapter.
+  // A stream-backed request starts with an adapter. Point its shared context at
+  // the compatibility objects before the user's event handler runs.
   adopt (ctx) {
     const context = web.patch(ctx.req)
+    adoptRequest({ req: ctx.req, canonicalRequest: context.req })
     context.req = ctx.req
     context.res = ctx.res
     instrumentWriteHead(context)
@@ -130,7 +126,7 @@ function copyRequestData (target, source) {
 
 // The core stream API has no `res.writeHead`; CORS preflight tagging only
 // applies to the compatibility response that exposes it. Runs once per context:
-// the mixed path calls it again from `adopt` once the real response is in place.
+// a stream-backed path calls it again from `adopt` once the real response is in place.
 /**
  * @param {{ res: { writeHead?: Function }, instrumented?: boolean }} context
  */

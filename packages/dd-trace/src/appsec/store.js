@@ -45,10 +45,9 @@ function getActiveRequest () {
 }
 
 /**
- * @param {{ req: object }} data
+ * @param {{ req: object, canonicalRequest?: object }} data
  */
-function adoptRequest ({ req }) {
-  const canonicalRequest = getActiveRequest()
+function adoptRequest ({ req, canonicalRequest = getActiveRequest() }) {
   if (canonicalRequest && canonicalRequest !== req) {
     canonicalRequests.set(req, canonicalRequest)
   }

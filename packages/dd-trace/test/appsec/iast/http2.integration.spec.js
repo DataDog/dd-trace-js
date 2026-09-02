@@ -180,6 +180,14 @@ describeSupported('IAST HTTP/2 server', () => {
       await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
     })
 
+    it('continues cookie analysis after a numeric value', async () => {
+      handler = (req, res) => {
+        res.setHeader('set-cookie', 42)
+        res.setHeader('set-cookie', 'session=abc')
+      }
+      await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+    })
+
     it('reports a response-side vulnerability from writeHead headers', async () => {
       handler = (req, res) => res.writeHead(200, 'OK', { 'set-cookie': 'session=abc' })
       await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
@@ -222,6 +230,22 @@ describeSupported('IAST HTTP/2 server', () => {
       enableIast(100, 0)
 
       await assertSource('/an-unacquired-path', req => req.url, undefined, {}, 0)
+    })
+  })
+
+  describe('mixed compatibility and core APIs with a core listener first', () => {
+    beforeEach(() => listen(() => {
+      const mixedServer = http2.createServer()
+      mixedServer.prependListener('stream', stream => {
+        stream.respond({ ':status': 200, 'content-type': 'text/html' })
+        stream.end()
+      })
+      mixedServer.on('request', () => {})
+      return mixedServer
+    }))
+
+    it('reports a missing response header from the core response', async () => {
+      await requestAndAssertTraces(traces => assertVulnerability(traces, 'XCONTENTTYPE_HEADER_MISSING'))
     })
   })
 
