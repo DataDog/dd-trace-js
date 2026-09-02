@@ -25,8 +25,19 @@ const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
 
-function getCompiledRuntimeHook (runtime) {
-  return instrumentations.next.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
+/**
+ * @param {'app-page'|'app-route'|'pages-api'} runtime
+ * @param {object} runtimeExports
+ */
+function applyCompiledRuntimeHook (runtime, runtimeExports) {
+  const hook = instrumentations.next.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
+  hook(runtimeExports)
+}
+
+/** @param {{ NoFallbackError: typeof Error }} runtimeExports */
+function applyNoFallbackErrorHook (runtimeExports) {
+  const hook = instrumentations.next.find(hook => hook.file === 'dist/shared/lib/no-fallback-error.external.js').hook
+  hook(runtimeExports)
 }
 
 function getDisabledRuntimeHooks () {
@@ -788,6 +799,27 @@ describe('Plugin', function () {
               ])
             })
 
+            it('should trace a cached app page through the compiled runtime', async () => {
+              const tracePromise = agent.assertSomeTraces(traces => {
+                const spans = traces[0]
+                const nextRequestSpans = spans.filter(span => span.name === 'next.request')
+
+                assert.strictEqual(nextRequestSpans.length, 1)
+                assertObjectContains(nextRequestSpans[0], {
+                  resource: 'GET /cached',
+                  meta: {
+                    'http.status_code': '200',
+                  },
+                })
+              })
+
+              const [response] = await Promise.all([
+                axios.get(`http://127.0.0.1:${port}/cached`),
+                tracePromise,
+              ])
+              assert.strictEqual(response.headers['x-nextjs-cache'], 'HIT')
+            })
+
             it('should attach a thrown app page error to the request span', done => {
               agent
                 .assertSomeTraces(traces => {
@@ -877,12 +909,7 @@ describe('Plugin', function () {
             .catch(done)
         })
 
-        // From next 15.4.1 the app-route handler builds its NextRequest from a copy of
-        // `NextRequestAdapter.fromNodeNextRequest` that next bundles into the app build
-        // (dist/build/templates/app-route.js), so the file hook that maps the node request to
-        // the NextRequest never fires and a user-set `req.error` cannot reach the span. Capturing
-        // it again needs the runtime `onRequestError` hook rather than file instrumentation.
-        if (satisfies(pkg.version, '>=13.3.0 <15.4.1')) {
+        if (satisfies(pkg.version, '>=13.3.0')) {
           it('should attach the error to the span from a NextRequest', done => {
             agent
               .assertSomeTraces(traces => {
@@ -908,7 +935,9 @@ describe('Plugin', function () {
                 if (err.response.status !== 500) done(err)
               })
           })
-        } else if (satisfies(pkg.version, '>=15.4.1')) {
+        }
+
+        if (satisfies(pkg.version, '>=15.4.1')) {
           it('should attach a thrown app-route error to the span via onRequestError', done => {
             agent
               .assertSomeTraces(traces => {
@@ -1042,12 +1071,28 @@ describe('compiled Next runtimes', () => {
     ]
 
     for (const [runtime, exportName, method, args] of cases) {
-      const returned = {}
+      const returned = {
+        handleResponse: {},
+        prepare: {},
+        route: {},
+      }
       class RouteModule {
+        prepare (...received) {
+          assert.strictEqual(this, routeModule)
+          assert.deepStrictEqual(received, args)
+          return returned.prepare
+        }
+
+        handleResponse (...received) {
+          assert.strictEqual(this, routeModule)
+          assert.deepStrictEqual(received, args)
+          return returned.handleResponse
+        }
+
         [method] (...received) {
           assert.strictEqual(this, routeModule)
           assert.deepStrictEqual(received, args)
-          return returned
+          return returned.route
         }
       }
       const routeModule = new RouteModule()
@@ -1055,27 +1100,82 @@ describe('compiled Next runtimes', () => {
       const hook = getHook(runtime)
       hook({ [exportName]: RouteModule })
 
-      assert.strictEqual(routeModule[method](...args), returned)
+      if (runtime !== 'pages-api') {
+        assert.strictEqual(routeModule.prepare(...args), returned.prepare)
+        assert.strictEqual(routeModule.handleResponse(...args), returned.handleResponse)
+      }
+      assert.strictEqual(routeModule[method](...args), returned.route)
     }
   })
 
-  describe('as the first tracing entrypoint', () => {
+  it('bypasses the shared lifecycle when the last subscriber is removed after prepare', async () => {
+    class RouteModule {
+      prepare () {
+        return Promise.resolve({})
+      }
+
+      /** @param {{responseGenerator: () => Promise<unknown>}} options */
+      handleResponse ({ responseGenerator }) {
+        return responseGenerator()
+      }
+    }
+
+    class AppPageRouteModule extends RouteModule {}
+    applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+    const startChannel = dc.channel('apm:next:request:start')
+    const onStart = () => {}
+    startChannel.subscribe(onStart)
+    const routeModule = new AppPageRouteModule()
+    const request = { headers: {}, method: 'GET', url: '/disabled-after-prepare' }
+    await routeModule.prepare(request, new http.ServerResponse(request), {})
+    startChannel.unsubscribe(onStart)
+
+    const result = await routeModule.handleResponse({
+      req: request,
+      responseGenerator: () => Promise.resolve('response'),
+    })
+    assert.strictEqual(result, 'response')
+  })
+
+  describe('with tracing enabled', () => {
+    let tracer
+    let requestHookCalls = 0
+
+    function countRequestHook () {
+      requestHookCalls++
+    }
+
+    class RouteModule {
+      prepare () {
+        return Promise.resolve({})
+      }
+
+      /** @param {{responseGenerator: () => Promise<unknown>}} options */
+      handleResponse ({ responseGenerator }) {
+        return responseGenerator()
+      }
+    }
+
     before(async () => {
-      await agent.load('next')
+      tracer = await agent.load('next', {
+        hooks: {
+          request: countRequestHook,
+        },
+      })
       dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
     })
     after(() => agent.close())
 
     it('traces an App Route lifecycle with status and incoming context', async () => {
-      class AppRouteRouteModule {
+      class AppRouteRouteModule extends RouteModule {
         definition = { pathname: '/api/first-entry' }
 
         handle () {
           return Promise.resolve({ status: 201 })
         }
       }
-      const runtimeHook = getCompiledRuntimeHook('app-route')
-      runtimeHook({ AppRouteRouteModule })
+      applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
 
       const request = {
         headers: {
@@ -1108,13 +1208,614 @@ describe('compiled Next runtimes', () => {
       })
 
       assert.strictEqual(storage('legacy').getStore(), undefined)
-      const response = await new AppRouteRouteModule().handle(request, {})
-      assert.strictEqual(response.status, 201)
+      const nodeResponse = new http.ServerResponse(request)
+      const routeModule = new AppRouteRouteModule()
+      const nextRequest = { headers: {}, method: 'GET', url: '/api/first-entry' }
+      await routeModule.prepare(request, nodeResponse, {})
+      const response = await routeModule.handleResponse({
+        req: request,
+        responseGenerator: async () => {
+          const response = await routeModule.handle(nextRequest, {})
+          return { value: { status: response.status } }
+        },
+      })
+      assert.strictEqual(response.value.status, 201)
+      nodeResponse.emit('finish')
       await trace
       assert.deepStrictEqual(lifecycle, ['start', 'page', 'finish'])
       dc.channel('apm:next:request:start').unsubscribe(onStart)
       dc.channel('apm:next:page:load').unsubscribe(onPage)
       dc.channel('apm:next:request:finish').unsubscribe(onFinish)
+    })
+
+    for (const responseBeforeHandler of [false, true]) {
+      const completionOrder = responseBeforeHandler ? 'response-first' : 'handler-first'
+
+      it(`does not finish a reused App Page lifecycle for ${completionOrder} completion`, async () => {
+        const pathname = `/reused-app-page-${completionOrder}`
+
+        class AppPageRouteModule extends RouteModule {
+          definition = { pathname }
+
+          handleResponse () {
+            if (responseBeforeHandler) response.emit('finish')
+            return Promise.resolve({ value: { status: 200 } })
+          }
+        }
+
+        applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+        const request = { headers: {}, method: 'GET', url: pathname }
+        const response = new http.ServerResponse(request)
+        const routeModule = new AppPageRouteModule()
+        const parentResource = `reused-app-page-${completionOrder}`
+        /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
+        function assertParentTrace (traces) {
+          const [span] = traces[0]
+          assert.strictEqual(requestHookCalls, 0)
+          assert.strictEqual(span.name, parentResource)
+          assert.strictEqual(span.resource, `GET ${pathname}`)
+        }
+        const tracePromise = agent.assertSomeTraces(assertParentTrace, { spanResourceMatch: new RegExp(pathname) })
+        requestHookCalls = 0
+
+        await Promise.all([
+          tracer.trace(parentResource, { integrationName: 'next' }, async () => {
+            await routeModule.prepare(request, response, {})
+            const result = await routeModule.handleResponse({
+              req: request,
+              responseGenerator: () => Promise.resolve(),
+            })
+            if (!responseBeforeHandler) response.emit('finish')
+            return result
+          }),
+          tracePromise,
+        ])
+      })
+    }
+
+    it('clears the App Route request association after a synchronous generator error', async () => {
+      const nextRequest = {
+        error: new Error('unrelated Next request error'),
+        headers: {},
+        method: 'GET',
+        url: '/api/generator-error',
+      }
+
+      class AppRouteRouteModule extends RouteModule {
+        definition = { pathname: '/api/generator-error' }
+
+        handle () {
+          return Promise.resolve({ status: 200 })
+        }
+
+        /** @param {{responseGenerator: () => Promise<unknown>}} options */
+        async handleResponse ({ responseGenerator }) {
+          assert.throws(responseGenerator, /synchronous generator error/)
+          const response = await this.handle(nextRequest, {})
+          return { value: { status: response.status } }
+        }
+      }
+      applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
+
+      const request = { headers: {}, method: 'GET', url: '/api/generator-error' }
+      const response = new http.ServerResponse(request)
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assert.strictEqual(span.error, 0)
+      })
+      const routeModule = new AppRouteRouteModule()
+      await routeModule.prepare(request, response, {})
+      await routeModule.handleResponse({
+        req: request,
+        responseGenerator: () => { throw new Error('synchronous generator error') },
+      })
+      response.emit('finish')
+      await trace
+    })
+
+    it('bypasses the shared lifecycle when prepare was not called', async () => {
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/without-prepare' }
+      }
+
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+      let starts = 0
+      const onStart = () => starts++
+      dc.channel('apm:next:request:start').subscribe(onStart)
+      const result = await new AppPageRouteModule().handleResponse({
+        req: { headers: {}, method: 'GET', url: '/without-prepare' },
+        responseGenerator: () => Promise.resolve('response'),
+      })
+      dc.channel('apm:next:request:start').unsubscribe(onStart)
+
+      assert.strictEqual(result, 'response')
+      assert.strictEqual(starts, 0)
+    })
+
+    const cachedRuntimeCases = [
+      {
+        exportName: 'AppRouteRouteModule',
+        label: 'App Route',
+        method: 'handle',
+        pathname: '/api/cached',
+        runtime: 'app-route',
+      },
+      {
+        exportName: 'AppPageRouteModule',
+        label: 'App Page',
+        method: 'render',
+        pathname: '/cached',
+        runtime: 'app-page',
+      },
+    ]
+
+    for (const { exportName, label, method, pathname, runtime } of cachedRuntimeCases) {
+      it(`traces a cached ${label} response`, async () => {
+        class CompiledRouteModule extends RouteModule {
+          handleResponse () {
+            return Promise.resolve({
+              isMiss: false,
+              isStale: false,
+              value: { status: 202 },
+            })
+          }
+
+          [method] () {
+            assert.fail('a cache hit should not invoke the response generator')
+          }
+
+          definition = { pathname }
+        }
+
+        applyCompiledRuntimeHook(runtime, { [exportName]: CompiledRouteModule })
+
+        const request = { headers: {}, method: 'GET', url: pathname }
+        const response = new http.ServerResponse(request)
+        const routeModule = new CompiledRouteModule()
+        const parentResource = `cache-hit-${runtime}`
+        /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
+        function assertNextRequestTrace (traces) {
+          let httpParentSpan
+          let nextRequestSpan
+          let nextRequestSpanCount = 0
+
+          for (const span of traces[0]) {
+            if (span.name === parentResource) httpParentSpan = span
+            if (span.name === 'next.request') {
+              nextRequestSpan = span
+              nextRequestSpanCount++
+            }
+          }
+
+          assert.strictEqual(httpParentSpan.resource, `GET ${pathname}`)
+          assert.strictEqual(httpParentSpan.meta['http.route'], pathname)
+          assert.strictEqual(nextRequestSpanCount, 1)
+          assert.strictEqual(nextRequestSpan.resource, `GET ${pathname}`)
+          assert.strictEqual(nextRequestSpan.meta['http.status_code'], '202')
+        }
+        const tracePromise = agent.assertSomeTraces(assertNextRequestTrace, {
+          rejectFirst: true,
+          spanResourceMatch: new RegExp(pathname),
+        })
+
+        await Promise.all([
+          tracer.trace(parentResource, { integrationName: 'http' }, async () => {
+            await routeModule.prepare(request, response, {})
+            const result = await routeModule.handleResponse({
+              req: request,
+              responseGenerator: () => assert.fail('a cache hit should not invoke the response generator'),
+            })
+            response.emit('finish')
+            return result
+          }),
+          tracePromise,
+        ])
+      })
+
+      it(`does not create a request span for stale ${label} background revalidation`, async () => {
+        let responseGenerator
+        const backgroundResource = `background-work-${runtime}`
+
+        class CompiledRouteModule extends RouteModule {
+          /** @param {{responseGenerator: () => Promise<unknown>}} options */
+          handleResponse (options) {
+            responseGenerator = options.responseGenerator
+            return Promise.resolve({ isMiss: false, isStale: true })
+          }
+
+          [method] () {
+            tracer.trace(backgroundResource, () => {})
+            return Promise.reject(new Error(`stale ${label} revalidation error`))
+          }
+
+          onRequestError () {
+            return Promise.resolve()
+          }
+
+          definition = { pathname }
+        }
+
+        applyCompiledRuntimeHook(runtime, { [exportName]: CompiledRouteModule })
+
+        const nodeRequest = { headers: {}, method: 'GET', url: pathname }
+        const request = runtime === 'app-page' ? { ...nodeRequest, originalRequest: nodeRequest } : nodeRequest
+        const response = new http.ServerResponse(nodeRequest)
+        const routeModule = new CompiledRouteModule()
+        const foregroundTrace = runtime === 'app-page'
+          ? agent.assertSomeTraces(traces => {
+            const [span] = traces[0]
+            assert.strictEqual(span.error, 0)
+            assert.strictEqual(span.meta['error.message'], undefined)
+          }, { spanResourceMatch: new RegExp(pathname) })
+          : undefined
+        await routeModule.prepare(request, response, {})
+        await routeModule.handleResponse({
+          req: request,
+          responseGenerator: async () => {
+            try {
+              return runtime === 'app-route'
+                ? await routeModule[method]({ headers: {}, method: 'GET' }, {})
+                : await routeModule[method](request, response, { page: pathname })
+            } catch (error) {
+              await routeModule.onRequestError(request, error)
+              throw error
+            }
+          },
+        })
+        assert.strictEqual(typeof responseGenerator, 'function')
+
+        /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
+        function assertNoNextRequestTrace (traces) {
+          let nextRequestSpanCount = 0
+          for (const span of traces[0]) {
+            if (span.name === 'next.request') nextRequestSpanCount++
+          }
+          assert.strictEqual(nextRequestSpanCount, 0)
+        }
+
+        /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
+        function assertBackgroundTrace (traces) {
+          const span = traces[0].find(span => span.resource === backgroundResource)
+          assert.ok(span)
+          assert.strictEqual(span.parent_id, 0n)
+        }
+
+        const parentResource = `stale-revalidation-${runtime}`
+        const tracePromise = agent.assertSomeTraces(assertNoNextRequestTrace, {
+          rejectFirst: true,
+          spanResourceMatch: new RegExp(parentResource),
+        })
+        const backgroundTrace = agent.assertSomeTraces(assertBackgroundTrace, {
+          spanResourceMatch: new RegExp(backgroundResource),
+        })
+        const revalidate = () => assert.rejects(
+          () => responseGenerator({ hasResolved: true }),
+          new RegExp(`stale ${label} revalidation error`)
+        )
+
+        await Promise.all([
+          tracer.trace(parentResource, revalidate),
+          tracePromise,
+          backgroundTrace,
+        ])
+        response.emit('finish')
+        if (runtime === 'app-page') {
+          await foregroundTrace
+        }
+      })
+    }
+
+    for (const { foregroundAfterRevalidation, label, reuseError } of [
+      { foregroundAfterRevalidation: false, label: 'while stale revalidation is pending', reuseError: false },
+      { foregroundAfterRevalidation: true, label: 'after stale revalidation reports the same error', reuseError: true },
+    ]) {
+      it(`records a foreground App Page error ${label}`, async () => {
+        let responseGenerator
+        let continueRevalidation
+        let reportForegroundError
+        let foregroundErrorReported
+        const foregroundError = new Error('foreground postponed render error')
+        const backgroundError = reuseError ? foregroundError : new Error('stale revalidation error')
+        const foregroundErrorTrigger = new Promise(resolve => { reportForegroundError = resolve })
+        const revalidationContinuation = new Promise(resolve => { continueRevalidation = resolve })
+
+        class AppPageRouteModule extends RouteModule {
+          definition = { pathname: '/interleaved-error' }
+
+          /** @param {{responseGenerator: () => Promise<unknown>}} options */
+          handleResponse (options) {
+            responseGenerator = options.responseGenerator
+            foregroundErrorReported = (async () => {
+              await foregroundErrorTrigger
+              await this.onRequestError(options.req, foregroundError)
+            })()
+            return Promise.resolve({ isMiss: false, isStale: true })
+          }
+
+          onRequestError () {
+            return Promise.resolve()
+          }
+        }
+        applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+        const nodeRequest = { headers: {}, method: 'GET', url: '/interleaved-error' }
+        const request = { ...nodeRequest, originalRequest: nodeRequest }
+        const response = new http.ServerResponse(nodeRequest)
+        const routeModule = new AppPageRouteModule()
+        const trace = agent.assertSomeTraces(traces => {
+          const [span] = traces[0]
+          assert.strictEqual(span.error, 1)
+          assert.strictEqual(span.meta['error.message'], foregroundError.message)
+        })
+
+        await routeModule.prepare(request, response, {})
+        await routeModule.handleResponse({
+          req: request,
+          responseGenerator: async () => {
+            await revalidationContinuation
+            await routeModule.onRequestError(request, backgroundError)
+            throw backgroundError
+          },
+        })
+
+        const revalidation = responseGenerator({ hasResolved: true })
+        if (!foregroundAfterRevalidation) {
+          reportForegroundError()
+          await foregroundErrorReported
+        }
+        continueRevalidation()
+        await assert.rejects(revalidation, backgroundError)
+        if (foregroundAfterRevalidation) {
+          reportForegroundError()
+          await foregroundErrorReported
+        }
+        response.emit('finish')
+        await trace
+      })
+    }
+
+    it('does not attach nested fallback revalidation errors to the foreground App Page span', async () => {
+      let backgroundRevalidation
+      let continueRevalidation
+      const backgroundError = new Error('nested fallback revalidation error')
+      const revalidationContinuation = new Promise(resolve => { continueRevalidation = resolve })
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/nested-fallback' }
+
+        /**
+         * @param {object} options
+         * @param {boolean} [options.isFallback]
+         * @param {(context?: {hasResolved?: boolean}) => Promise<unknown>} options.responseGenerator
+         */
+        handleResponse (options) {
+          if (options.isFallback) {
+            backgroundRevalidation = options.responseGenerator({ hasResolved: true })
+            return Promise.resolve({ isMiss: false, isStale: true })
+          }
+
+          return options.responseGenerator()
+        }
+
+        onRequestError () {
+          return Promise.resolve()
+        }
+      }
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+      const request = { headers: {}, method: 'GET', url: '/nested-fallback' }
+      const response = new http.ServerResponse(request)
+      const routeModule = new AppPageRouteModule()
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assert.strictEqual(span.error, 0)
+        assert.strictEqual(span.meta['error.message'], undefined)
+      }, { spanResourceMatch: /nested-fallback/ })
+
+      await routeModule.prepare(request, response, {})
+      await routeModule.handleResponse({
+        req: request,
+        responseGenerator: async () => {
+          await routeModule.handleResponse({
+            isFallback: true,
+            req: request,
+            responseGenerator: async () => {
+              await revalidationContinuation
+              await routeModule.onRequestError(request, backgroundError)
+              throw backgroundError
+            },
+          })
+          return { value: { status: 200 } }
+        },
+      })
+
+      const revalidation = assert.rejects(backgroundRevalidation, backgroundError)
+      continueRevalidation()
+      await revalidation
+      response.emit('finish')
+      await trace
+    })
+
+    it('retains deferred App Page handler error details after onRequestError reports the same error', async () => {
+      const handlerError = new Error('deferred App Page handler error')
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/deferred-handler-error' }
+
+        handleResponse () {
+          return Promise.reject(handlerError)
+        }
+
+        onRequestError () {
+          return Promise.resolve()
+        }
+      }
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+      const request = { headers: {}, method: 'GET', url: '/deferred-handler-error' }
+      const response = new http.ServerResponse(request)
+      const routeModule = new AppPageRouteModule()
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          error: 1,
+          meta: {
+            'error.message': handlerError.message,
+            'error.type': 'Error',
+          },
+        })
+      }, { spanResourceMatch: /deferred-handler-error/ })
+
+      await routeModule.prepare(request, response, {})
+      await assert.rejects(routeModule.handleResponse({
+        req: request,
+        responseGenerator: () => assert.fail('a handler error should not invoke the response generator'),
+      }), handlerError)
+      await routeModule.onRequestError(request, handlerError)
+      response.emit('finish')
+      await trace
+    })
+
+    it('does not record NoFallbackError when the App Page router handles it as a 404', async () => {
+      class NoFallbackError extends Error {}
+      applyNoFallbackErrorHook({ NoFallbackError })
+      const noFallbackError = new NoFallbackError()
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/without-fallback' }
+      }
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+      const request = { headers: {}, method: 'GET', url: '/without-fallback' }
+      const response = new http.ServerResponse(request)
+      const routeModule = new AppPageRouteModule()
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          error: 0,
+          meta: {
+            'http.status_code': '404',
+          },
+        })
+        assert.strictEqual(span.meta['error.message'], undefined)
+      }, { spanResourceMatch: /without-fallback/ })
+
+      await routeModule.prepare(request, response, {})
+      await assert.rejects(routeModule.handleResponse({
+        req: request,
+        responseGenerator: () => Promise.reject(noFallbackError),
+      }), noFallbackError)
+      response.statusCode = 404
+      response.emit('finish')
+      await trace
+    })
+
+    for (const { cacheStatus, label, responseStatus } of [
+      { cacheStatus: 307, label: 'RSC redirect', responseStatus: 200 },
+      { cacheStatus: 200, label: 'segment-prefetch miss', responseStatus: 204 },
+    ]) {
+      it(`records the final App Page status for a cached ${label}`, async () => {
+        class AppPageRouteModule extends RouteModule {
+          definition = { pathname: '/cached-status' }
+
+          handleResponse () {
+            return Promise.resolve({ value: { status: cacheStatus } })
+          }
+        }
+        applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+        const request = { headers: {}, method: 'GET', url: '/cached-status' }
+        const response = new http.ServerResponse(request)
+        const routeModule = new AppPageRouteModule()
+        const trace = agent.assertSomeTraces(traces => {
+          const [span] = traces[0]
+          assert.strictEqual(span.meta['http.status_code'], String(responseStatus))
+        })
+
+        await routeModule.prepare(request, response, {})
+        await routeModule.handleResponse({
+          req: request,
+          responseGenerator: () => assert.fail('a cache hit should not invoke the response generator'),
+        })
+        response.statusCode = responseStatus
+        response.emit('finish')
+        await trace
+      })
+    }
+
+    it('waits for App Page response handling after the response closes', async () => {
+      let finishHandleResponse
+      const handleResponseResult = new Promise(resolve => { finishHandleResponse = resolve })
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/closed-response' }
+
+        handleResponse () {
+          return handleResponseResult
+        }
+      }
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+      const request = { headers: {}, method: 'GET', url: '/closed-response' }
+      const response = new http.ServerResponse(request)
+      const routeModule = new AppPageRouteModule()
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assert.strictEqual(span.meta['http.status_code'], '503')
+      })
+
+      await routeModule.prepare(request, response, {})
+      const result = routeModule.handleResponse({
+        req: request,
+        responseGenerator: () => assert.fail('a cache hit should not invoke the response generator'),
+      })
+      response.emit('close')
+      finishHandleResponse({ value: { status: 503 } })
+      await result
+      await trace
+    })
+
+    it('records App Page handler errors after the response closes', async () => {
+      let finishHandleResponse
+      const handlerError = new Error('closed response handler error')
+      const handleResponseResult = new Promise(resolve => { finishHandleResponse = resolve })
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/closed-response-error' }
+
+        async handleResponse () {
+          await handleResponseResult
+          throw handlerError
+        }
+      }
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+      const request = { headers: {}, method: 'GET', url: '/closed-response-error' }
+      const response = new http.ServerResponse(request)
+      const routeModule = new AppPageRouteModule()
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          error: 1,
+          meta: {
+            'error.message': handlerError.message,
+            'error.type': 'Error',
+          },
+        })
+        assert.ok(span.meta['error.stack'])
+      }, { spanResourceMatch: /closed-response-error/ })
+
+      await routeModule.prepare(request, response, {})
+      const result = assert.rejects(routeModule.handleResponse({
+        req: request,
+        responseGenerator: () => assert.fail('a cache hit should not invoke the response generator'),
+      }), handlerError)
+      response.emit('close')
+      finishHandleResponse()
+      await result
+      await trace
     })
 
     it('records Pages API errors and status without an existing request store', async () => {
@@ -1127,8 +1828,7 @@ describe('compiled Next runtimes', () => {
           return Promise.resolve()
         }
       }
-      const runtimeHook = getCompiledRuntimeHook('pages-api')
-      runtimeHook({ PagesAPIRouteModule })
+      applyCompiledRuntimeHook('pages-api', { PagesAPIRouteModule })
 
       const response = { statusCode: 200 }
       const trace = agent.assertSomeTraces(traces => {
@@ -1152,18 +1852,22 @@ describe('compiled Next runtimes', () => {
       await trace
     })
 
-    it('records App Page errors and status without an existing request store', async () => {
-      class AppPageRouteModule {
+    it('records App Page streaming errors after cache handling completes', async () => {
+      class AppPageRouteModule extends RouteModule {
         definition = { pathname: '/first-entry' }
 
         render () {
-          return Promise.reject(new Error('App Page first-entry error'))
+          return Promise.resolve({ value: { status: 200 } })
+        }
+
+        onRequestError () {
+          return Promise.resolve()
         }
       }
-      const runtimeHook = getCompiledRuntimeHook('app-page')
-      runtimeHook({ AppPageRouteModule })
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
 
-      const response = { statusCode: 200 }
+      const request = { headers: {}, method: 'GET', url: '/first-entry' }
+      const response = new http.ServerResponse(request)
       const trace = agent.assertSomeTraces(traces => {
         const [span] = traces[0]
         assertObjectContains(span, {
@@ -1179,14 +1883,121 @@ describe('compiled Next runtimes', () => {
       })
 
       assert.strictEqual(storage('legacy').getStore(), undefined)
-      await assert.rejects(
-        new AppPageRouteModule().render({ headers: {}, method: 'GET', url: '/first-entry' }, response, {
-          page: '/first-entry',
-        }),
-        /App Page first-entry error/
-      )
-      assert.strictEqual(response.statusCode, 500)
+      const routeModule = new AppPageRouteModule()
+      await routeModule.prepare(request, response, {})
+      let reportStreamingError
+      const streamingErrorTrigger = new Promise(resolve => { reportStreamingError = resolve })
+      let streamingError
+      await routeModule.handleResponse({
+        req: request,
+        responseGenerator: () => {
+          streamingError = streamingErrorTrigger.then(() => {
+            return routeModule.onRequestError(request, new Error('App Page first-entry error'))
+          })
+          return routeModule.render(request, response, { page: '/first-entry' })
+        },
+      })
+      reportStreamingError()
+      await streamingError
+      response.statusCode = 500
+      response.emit('finish')
       await trace
+    })
+
+    it('passes final Node responses to hooks without propagating deferred hook errors', async () => {
+      const hookResponses = []
+      const hookCacheStatuses = []
+      /**
+       * @param {import('../../dd-trace/src/opentracing/span')} _span
+       * @param {import('node:http').IncomingMessage} request
+       * @param {import('node:http').ServerResponse} response
+       */
+      const requestHook = (_span, request, response) => {
+        hookResponses.push(response)
+        hookCacheStatuses.push(response.getHeader('x-nextjs-cache'))
+        response.getHeader('content-type')
+        if (request.url === '/app-page-hook-error') throw new Error('request hook error')
+      }
+      agent.reload('next', { hooks: { request: requestHook } })
+
+      class AppRouteRouteModule extends RouteModule {
+        definition = { pathname: '/api/response-hook' }
+
+        handle () {
+          return Promise.resolve({ status: 200 })
+        }
+      }
+
+      class PagesAPIRouteModule {
+        definition = { page: '/api/response-hook-sentinel' }
+
+        render () {
+          return Promise.resolve()
+        }
+      }
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/app-page-hook-error' }
+
+        handleResponse () {
+          return Promise.reject(new Error('App Page handler error'))
+        }
+      }
+
+      applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
+      applyCompiledRuntimeHook('pages-api', { PagesAPIRouteModule })
+      applyCompiledRuntimeHook('app-page', { AppPageRouteModule })
+
+      const routeRequest = { headers: {}, method: 'GET', url: '/api/response-hook' }
+      const routeResponse = new http.ServerResponse(routeRequest)
+      const routeModule = new AppRouteRouteModule()
+      await routeModule.prepare(routeRequest, routeResponse, {})
+      await routeModule.handleResponse({
+        req: routeRequest,
+        responseGenerator: () => routeModule.handle({ headers: {}, method: 'GET' }, {}),
+      })
+      routeResponse.setHeader('x-nextjs-cache', 'HIT')
+      routeResponse.emit('finish')
+
+      const sentinelRequest = { headers: {}, method: 'GET', url: '/api/response-hook-sentinel' }
+      const sentinelResponse = new http.ServerResponse(sentinelRequest)
+      /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
+      function assertNextRequestTrace (traces) {
+        let nextRequestSpan
+        for (const span of traces[0]) {
+          if (span.name === 'next.request') {
+            nextRequestSpan = span
+            break
+          }
+        }
+
+        assert.ok(nextRequestSpan, 'next.request span should exist after the App Route hook')
+      }
+      const tracePromise = agent.assertSomeTraces(assertNextRequestTrace, {
+        rejectFirst: true,
+        spanResourceMatch: /response-hook-sentinel/,
+      })
+
+      await Promise.all([
+        tracer.trace('response-hook-sentinel', () => {
+          return new PagesAPIRouteModule().render(sentinelRequest, sentinelResponse, {
+            page: '/api/response-hook-sentinel',
+          })
+        }),
+        tracePromise,
+      ])
+      assert.deepStrictEqual(hookResponses, [routeResponse, sentinelResponse])
+      assert.deepStrictEqual(hookCacheStatuses, ['HIT', undefined])
+
+      const pageRequest = { headers: {}, method: 'GET', url: '/app-page-hook-error' }
+      const pageResponse = new http.ServerResponse(pageRequest)
+      const pageRouteModule = new AppPageRouteModule()
+      await pageRouteModule.prepare(pageRequest, pageResponse, {})
+      await assert.rejects(pageRouteModule.handleResponse({
+        req: pageRequest,
+        responseGenerator: () => assert.fail('a cache hit should not invoke the response generator'),
+      }), /App Page handler error/)
+      pageResponse.emit('finish')
     })
   })
 })
