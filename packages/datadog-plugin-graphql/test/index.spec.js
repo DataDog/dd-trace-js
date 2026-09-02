@@ -517,6 +517,45 @@ describe('Plugin', () => {
           }
         })
 
+        it('should release collapsed resolver fields retained through copied stores', async function () {
+          if (typeof global.gc !== 'function') this.skip()
+
+          let fieldNodeReference
+          let result
+          let timer
+
+          try {
+            await (async () => {
+              const localSchema = new graphql.GraphQLSchema({
+                query: new graphql.GraphQLObjectType({
+                  name: 'CopiedStoreRetentionQuery',
+                  fields: {
+                    retained: {
+                      type: graphql.GraphQLString,
+                      resolve: () => {
+                        tracer.trace('retention.child', () => {
+                          timer = setTimeout(noop, 60_000)
+                          timer.unref()
+                        })
+                        return 'ok'
+                      },
+                    },
+                  },
+                }),
+              })
+              const document = graphql.parse('query CopiedStoreRetention { retained }')
+              const fieldNode = document.definitions[0].selectionSet.selections[0]
+              fieldNodeReference = new WeakRef(fieldNode)
+              result = await graphql.execute({ schema: localSchema, document })
+            })()
+
+            assert.strictEqual(await waitForCollection(fieldNodeReference), true)
+            assert.strictEqual(result.data.retained, 'ok')
+          } finally {
+            clearTimeout(timer)
+          }
+        })
+
         it('should not overwrite the caller-supplied fieldResolver on the execute args object', async () => {
           const document = graphql.parse('query MyQuery { hello(name: "world") }')
           const callerFieldResolver = (source, args, contextValue, info) => 'caller-resolved'
@@ -2471,6 +2510,56 @@ describe('Plugin', () => {
           return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
+        it('should not record a depth-gated child error on its collapsed parent span', async () => {
+          const Nested = new graphql.GraphQLObjectType({
+            name: 'DepthGatedResolverErrorNested',
+            fields: {
+              failure: {
+                type: graphql.GraphQLString,
+                /** @param {{ error?: Error }} source */
+                resolve (source) {
+                  return Promise.reject(source.error)
+                },
+              },
+            },
+          })
+          const Item = new graphql.GraphQLObjectType({
+            name: 'DepthGatedResolverErrorItem',
+            fields: {
+              nested: {
+                type: Nested,
+                resolve: () => ({}),
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'DepthGatedResolverErrorQuery',
+              fields: {
+                items: {
+                  type: new graphql.GraphQLList(Item),
+                  resolve: () => [{}],
+                },
+              },
+            }),
+          })
+          const operationName = 'DepthGatedResolverError'
+          const localSource = `query ${operationName} { items { nested { failure } } }`
+
+          const [result] = await Promise.all([
+            graphql.graphql({ schema: localSchema, source: localSource }),
+            agent.assertSomeTraces(traces => {
+              const span = sort(traces[0]).find(span => span.meta?.['graphql.field.path'] === 'items.*.nested')
+
+              assert.ok(span)
+              assert.strictEqual(span.error, 0)
+              assert.strictEqual(span.meta[ERROR_MESSAGE], undefined)
+            }, { spanResourceMatch: new RegExp(operationName) }),
+          ])
+
+          assert.strictEqual(result.errors.length, 1)
+        })
+
         it('should honor resolver abort for fields gated by depth', async () => {
           let streetResolverRan = false
           const startCh = dc.channel('datadog:graphql:resolver:start')
@@ -3194,6 +3283,141 @@ describe('Plugin', () => {
             assertion,
             graphql.graphql({ schema, source: resolveSource }),
           ])
+        })
+
+        for (const testCase of [
+          {
+            name: 'synchronous error',
+            item: { error: new Error('sync failure'), throws: true },
+            expectedError: 'sync failure',
+          },
+          {
+            name: 'asynchronous error',
+            item: { error: new Error('async failure'), rejects: true },
+            expectedError: 'async failure',
+          },
+          {
+            name: 'falsy asynchronous error',
+            item: { rejects: true },
+            expectedError: 'GraphQL resolver rejected without an error',
+          },
+        ]) {
+          it(`should record a reused resolver ${testCase.name} on its collapsed span and hook`, async () => {
+            const Item = new graphql.GraphQLObjectType({
+              name: 'ResolverErrorItem',
+              fields: {
+                value: {
+                  type: graphql.GraphQLString,
+                  /**
+                   * @param {{ error?: Error, rejects?: boolean, throws?: boolean, value?: string }} source
+                   * @returns {Promise<never> | string | undefined}
+                   */
+                  resolve (source) {
+                    if (source.rejects) return Promise.reject(source.error)
+                    if (source.throws) throw source.error
+                    return source.value
+                  },
+                },
+              },
+            })
+            const localSchema = new graphql.GraphQLSchema({
+              query: new graphql.GraphQLObjectType({
+                name: 'ResolverErrorQuery',
+                fields: {
+                  items: {
+                    type: new graphql.GraphQLList(Item),
+                    resolve: () => [
+                      { value: 'first' },
+                      testCase.item,
+                      {
+                        error: new Error('later failure'),
+                        rejects: testCase.item.rejects,
+                        throws: testCase.item.throws,
+                      },
+                      { value: 'last' },
+                    ],
+                  },
+                },
+              }),
+            })
+
+            /** @param {Array<Array<object>>} traces */
+            const assertTrace = traces => {
+              const spans = sort(traces[0])
+              let span
+              for (const candidate of spans) {
+                if (candidate.meta?.['graphql.field.path'] === 'items.*.value') {
+                  span = candidate
+                  break
+                }
+              }
+
+              assert.ok(span, 'expected one collapsed items.*.value span')
+              assert.strictEqual(span.error, 1)
+              assert.strictEqual(span.meta[ERROR_MESSAGE], testCase.expectedError)
+            }
+
+            const [result] = await Promise.all([
+              graphql.graphql({ schema: localSchema, source: '{ items { value } }' }),
+              agent.assertSomeTraces(assertTrace, { spanResourceMatch: /items:\[ResolverErrorItem\]/ }),
+            ])
+
+            assert.strictEqual(result.data.items[0].value, 'first')
+            assert.strictEqual(result.data.items[1].value, null)
+            assert.strictEqual(result.data.items[2].value, null)
+            assert.strictEqual(result.data.items[3].value, 'last')
+            assert.strictEqual(result.errors.length, 2)
+
+            const valueHookCalls = []
+            for (const call of config.hooks.resolve.getCalls()) {
+              if (call.args[1].path === 'items.*.value') valueHookCalls.push(call)
+            }
+            assert.strictEqual(valueHookCalls.length, 1)
+            assert.strictEqual(valueHookCalls[0].args[1].error.message, testCase.expectedError)
+            assert.strictEqual(valueHookCalls[0].args[1].result, undefined)
+            assert.strictEqual(valueHookCalls[0].calledBefore(config.hooks.execute.firstCall), true)
+          })
+        }
+
+        it('should not record a pre-located foreign error on a reused resolver span', async () => {
+          const error = Object.assign(new Error('foreign failure'), { path: ['foreign'] })
+          const Item = new graphql.GraphQLObjectType({
+            name: 'PreLocatedResolverErrorItem',
+            fields: {
+              value: {
+                type: graphql.GraphQLString,
+                /** @param {{ error?: Error, value?: string }} source */
+                resolve (source) {
+                  if (source.error) throw source.error
+                  return source.value
+                },
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'PreLocatedResolverErrorQuery',
+              fields: {
+                items: {
+                  type: new graphql.GraphQLList(Item),
+                  resolve: () => [{ value: 'first' }, { error }],
+                },
+              },
+            }),
+          })
+
+          const [result] = await Promise.all([
+            graphql.graphql({ schema: localSchema, source: '{ items { value } }' }),
+            agent.assertSomeTraces(traces => {
+              const span = sort(traces[0]).find(span => span.meta?.['graphql.field.path'] === 'items.*.value')
+
+              assert.ok(span)
+              assert.strictEqual(span.error, 0)
+              assert.strictEqual(span.meta[ERROR_MESSAGE], undefined)
+            }, { spanResourceMatch: /items:\[PreLocatedResolverErrorItem\]/ }),
+          ])
+
+          assert.deepStrictEqual(result.errors[0].path, ['foreign'])
         })
 
         it('should finish spans when hooks throw', async () => {
