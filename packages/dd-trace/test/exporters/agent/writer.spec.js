@@ -265,6 +265,28 @@ function describeWriter (protocolVersion) {
 }
 
 describe('Writer', () => {
+  it('enables backpressure retention only for Test Optimization', () => {
+    const writerOptions = []
+    class BaseWriter {
+      constructor (options) {
+        writerOptions.push(options)
+      }
+    }
+    class AgentEncoder {}
+    const Writer = proxyquire('../../../src/exporters/agent/writer', {
+      '../common/writer': BaseWriter,
+      '../../encode/0.4': { AgentEncoder },
+    })
+
+    const regularWriter = new Writer({ protocolVersion: '0.4' })
+    const testOptimizationWriter = new Writer({ protocolVersion: '0.4', isTestOptimization: true })
+
+    assert.ok(regularWriter instanceof Writer)
+    assert.ok(testOptimizationWriter instanceof Writer)
+    assert.strictEqual(writerOptions[0].retainOnBackpressure, undefined)
+    assert.strictEqual(writerOptions[1].retainOnBackpressure, true)
+  })
+
   describe('0.4', () => describeWriter(0.4))
 
   describe('0.5', () => describeWriter(0.5))

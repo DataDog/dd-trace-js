@@ -24,6 +24,7 @@ const {
 const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
+const { incrementCountMetric: actualIncrementCountMetric } = require('../../../src/ci-visibility/telemetry')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
   require('../../../src/ci-visibility/requests/upload-coverage-report')
 const {
@@ -38,7 +39,13 @@ let uploadCoverageReportRequest = actualUploadCoverageReportRequest
 let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
 let uploadTestSuiteVideoRequest = actualUploadTestSuiteVideoRequest
 let uploadTestVideoRequest = actualUploadTestVideoRequest
+let incrementCountMetric = actualIncrementCountMetric
 const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
+  '../telemetry': {
+    incrementCountMetric (...args) {
+      return incrementCountMetric(...args)
+    },
+  },
   '../requests/upload-coverage-report': {
     uploadCoverageReport (...args) {
       return uploadCoverageReportRequest(...args)
@@ -87,6 +94,7 @@ describe('CI Visibility Exporter', () => {
     uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
     uploadTestSuiteVideoRequest = actualUploadTestSuiteVideoRequest
     uploadTestVideoRequest = actualUploadTestVideoRequest
+    incrementCountMetric = actualIncrementCountMetric
   })
 
   afterEach(() => {
@@ -1753,6 +1761,29 @@ describe('CI Visibility Exporter', () => {
         assert.strictEqual(
           writer.append.secondCall.args[0].ddtags,
           `debugger_version:${tracerVersion},host_name:${getHostname()}`
+        )
+      })
+
+      it('reports logs rejected by the encoder limit as dropped', () => {
+        incrementCountMetric = sinon.spy()
+        const writer = {
+          append: sinon.stub().returns(false),
+          flush: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          flushInterval: 0,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
+        })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._logsWriter = writer
+        ciVisibilityExporter._canForwardLogs = true
+
+        ciVisibilityExporter.exportDiLogs({}, { message: 'rejected log' })
+
+        sinon.assert.calledOnceWithExactly(
+          incrementCountMetric,
+          'endpoint_payload.dropped',
+          { endpoint: 'di_logs', statusCode: undefined, errorType: 'encoder_limit' }
         )
       })
     })
