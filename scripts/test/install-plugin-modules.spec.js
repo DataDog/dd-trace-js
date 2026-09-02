@@ -188,13 +188,20 @@ externals.express.push({ name: 'axios', overrides: ${override} })
     const directGrpcPath = fs.realpathSync(pubsub.getPath('@grpc/grpc-js'))
     const pubsubGrpcPath = fs.realpathSync(createRequire(pubsub.getPath()).resolve('@grpc/grpc-js'))
     assert.strictEqual(pubsubGrpcPath, directGrpcPath)
+    assert.strictEqual(readVersionsManifest().overrides['@grpc/grpc-js'], '~1.3.6')
   })
 
-  it('pins the Claude Agent SDK to its compatible zod major', () => {
+  it('pins the Claude Agent SDK dependencies to compatible versions', () => {
     runInstall('claude-agent-sdk')
 
     const manifest = require(path.join(versionsDir, '@anthropic-ai', 'claude-agent-sdk', 'package.json'))
     assert.strictEqual(semver.subset(manifest.dependencies.zod, '^4.0.0'), true)
+
+    const exactSdk = require(path.join(versionsDir, '@anthropic-ai', 'claude-agent-sdk@0.2.113'))
+    const platformPackage = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`
+    const sdkVersion = exactSdk.version()
+    const platformVersion = JSON.parse(fs.readFileSync(exactSdk.pkgJsonPath(platformPackage), 'utf8')).version
+    assert.strictEqual(platformVersion, sdkVersion)
   })
 
   it('keeps scoped package identities portable across path separators', () => {

@@ -8,7 +8,12 @@ const nextConfig = {
     appDir: true,
   },
   output: 'standalone',
-  outputFileTracingRoot: __dirname,
+}
+
+if (major < 15) {
+  nextConfig.experimental.outputFileTracingRoot = __dirname
+} else {
+  nextConfig.outputFileTracingRoot = __dirname
 }
 
 if (major < 16) {

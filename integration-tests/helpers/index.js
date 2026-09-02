@@ -568,11 +568,11 @@ async function createSandbox (
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
-    // yarn-linked into dd-trace and want to run the integration tests against them.
+    // bun-linked into dd-trace and want to run the integration tests against them.
 
     // Link dd-trace to itself, then...
-    execHelper('yarn link')
-    execHelper('yarn link dd-trace')
+    execHelper(`${BUN} link`)
+    execHelper(`${BUN} link dd-trace`)
     // ... run the tests in the current directory.
     return {
       coverageRoot: resolveCoverageRoot({ cwd: process.cwd() }),

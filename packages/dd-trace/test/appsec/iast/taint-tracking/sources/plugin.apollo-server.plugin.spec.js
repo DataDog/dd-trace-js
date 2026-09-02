@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const { createRequire } = require('node:module')
 const agent = require('../../../../plugins/agent')
 const { withVersions } = require('../../../../setup/mocha')
 const {
@@ -11,7 +11,7 @@ const {
 
 withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
   const config = {}
-  let ApolloServer, startStandaloneServer
+  let ApolloServer, executableSchema, startStandaloneServer
   let server
 
   before(() => {
@@ -19,16 +19,19 @@ withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
   })
 
   before(() => {
-    const apolloServerPath = require(`../../../../../../../versions/@apollo/server@${apolloServerVersion}`).getPath()
+    const versionModule = require(`../../../../../../../versions/@apollo/server@${apolloServerVersion}`)
+    const apolloServerPath = versionModule.getPath()
+    const graphql = require(createRequire(apolloServerPath).resolve('graphql'))
 
     ApolloServer = require(apolloServerPath).ApolloServer
-    startStandaloneServer = require(path.join(apolloServerPath, '..', 'standalone')).startStandaloneServer
+    startStandaloneServer = versionModule.get('@apollo/server/standalone').startStandaloneServer
+    executableSchema = graphql.buildSchema(schema)
+    executableSchema.getQueryType().getFields().books.resolve = resolvers.Query.books
   })
 
   before(async () => {
     server = new ApolloServer({
-      typeDefs: schema,
-      resolvers,
+      schema: executableSchema,
     })
 
     const { url } = await startStandaloneServer(server, { listen: { port: config.port } })

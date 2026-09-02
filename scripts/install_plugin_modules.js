@@ -230,7 +230,7 @@ function applyExternalConfiguration (moduleNames, packages) {
 /**
  * Build the ordered, de-duplicated set of workspace folders to generate. A version that is referenced under several
  * notations (or by both an internal and an external entry) is generated once; internal entries are processed first so
- * the nohoisted (isolated) variant wins for any shared folder.
+ * their declaration wins for any shared folder.
  *
  * @param {string[]} moduleNames
  * @returns {Array<{ name: string, version: string|null, range: string }>}
@@ -400,7 +400,7 @@ async function patchPeerDependencies ({ folder, externalName }) {
       pkgJson = requirePackageJson(externalName, { paths: nodeModulesPaths })
     }
 
-    for (const section of ['devDependencies', 'peerDependencies']) {
+    for (const section of ['devDependencies', 'peerDependencies', 'optionalDependencies']) {
       if (pkgJson[section]?.[name]) {
         if (dep === externalName) {
           versionPkgJson.dependencies[name] = pkgJson.version

@@ -2,6 +2,9 @@
 
 const { DD_MAJOR } = require('../../../../version')
 
+const claudeAgentSdkPlatform =
+  `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`
+
 module.exports = {
   '@aws/durable-execution-sdk-js': [
     {
@@ -136,6 +139,12 @@ module.exports = {
       version: '^4.0.0',
       dep: true,
       forced: true,
+    },
+    {
+      // Bun hoists optional platform packages across SDK versions. Make the
+      // matching binary a direct dependency so each SDK keeps its own copy.
+      name: claudeAgentSdkPlatform,
+      dep: true,
     },
   ],
   'cookie-parser': [
@@ -276,6 +285,9 @@ module.exports = {
       version: '~1.3.6',
       dep: true,
       forced: true,
+      overrides: {
+        '@grpc/grpc-js': '~1.3.6',
+      },
     },
   ],
   'google-cloud-pubsub': [

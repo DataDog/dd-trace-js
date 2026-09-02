@@ -14,6 +14,14 @@ const config = {
   experimental: {},
 }
 
+// Bun lockfiles were not recognized by older Next.js releases when inferring
+// the tracing root, so keep standalone output rooted in this fixture.
+if (nextMajor < 15) {
+  config.experimental.outputFileTracingRoot = __dirname
+} else {
+  config.outputFileTracingRoot = __dirname
+}
+
 // The `eslint` config key was removed in Next.js 16; it triggers an "Unrecognized
 // key" error there. Keep it only for the versions that still understand it.
 if (nextMajor < 16) {

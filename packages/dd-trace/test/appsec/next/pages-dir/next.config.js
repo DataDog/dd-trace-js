@@ -7,6 +7,14 @@ const nextConfig = {
   output: 'standalone',
 }
 
+if (major < 15) {
+  nextConfig.experimental = {
+    outputFileTracingRoot: __dirname,
+  }
+} else {
+  nextConfig.outputFileTracingRoot = __dirname
+}
+
 if (major < 16) {
   nextConfig.eslint = {
     ignoreDuringBuilds: true,

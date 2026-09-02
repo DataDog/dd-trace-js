@@ -55,7 +55,9 @@ function capSubrange (name, subrange) {
     )
   }
 
-  if (!subrange || subrange === 'latest') return latests[name]
+  // Keep the pinned release as a ceiling instead of an exact requirement so
+  // Bun's minimum-release-age filter can select the newest eligible version.
+  if (!subrange || subrange === 'latest') return `<=${latests[name]}`
   if (subset(subrange, `<=${latests[name]}`)) return subrange
   if (subrange.includes(' - ')) {
     const minRange = subrange.split(' - ')[0].trim()
