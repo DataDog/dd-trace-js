@@ -7,10 +7,10 @@ const CROSS_PAYLOAD_CANDIDATE_LIMIT = 512
 const CROSS_PAYLOAD_LEARNING_PAYLOAD_LIMIT = 8
 const CROSS_PAYLOAD_MISS_LIMIT = 32
 const CROSS_PAYLOAD_STRING_LIMIT = 256
-const crossPayloadStates = new WeakMap()
 
 class CrossPayloadAgentEncoder extends AgentEncoder {
   #disableCrossPayloadCache
+  #crossPayloadState = createCrossPayloadState()
 
   /**
    * @param {{ flush: () => void }} writer
@@ -19,7 +19,6 @@ class CrossPayloadAgentEncoder extends AgentEncoder {
   constructor (writer, disableCrossPayloadCache) {
     super(writer)
     this.#disableCrossPayloadCache = disableCrossPayloadCache
-    crossPayloadStates.set(this, createCrossPayloadState())
   }
 
   /**
@@ -28,13 +27,15 @@ class CrossPayloadAgentEncoder extends AgentEncoder {
    * @returns {Buffer}
    */
   _cacheString (value, stable = false) {
-    const crossPayloadState = crossPayloadStates.get(this)
+    if (!stable) return AgentEncoder.prototype._cacheString.call(this, value)
+
+    const crossPayloadState = this.#crossPayloadState
     if (crossPayloadState === undefined || value.length === 0 || value.length > CROSS_PAYLOAD_STRING_LIMIT) {
       return AgentEncoder.prototype._cacheString.call(this, value)
     }
 
     const learning = crossPayloadState.learningPayloadCount < CROSS_PAYLOAD_LEARNING_PAYLOAD_LIMIT
-    if (learning && stable) markPayloadString(crossPayloadState, value)
+    if (learning) markPayloadString(crossPayloadState, value)
     const retainedEntry = crossPayloadState.stringMap?.[value]
     if (retainedEntry !== undefined) {
       if (!learning && crossPayloadState.hitCount < CROSS_PAYLOAD_MISS_LIMIT) {
@@ -81,9 +82,9 @@ class CrossPayloadAgentEncoder extends AgentEncoder {
 
   /** @returns {void} */
   #prepareReset () {
-    const crossPayloadState = crossPayloadStates.get(this)
+    const crossPayloadState = this.#crossPayloadState
     if (crossPayloadState !== undefined && !prepareCrossPayloadReset(crossPayloadState)) {
-      crossPayloadStates.delete(this)
+      this.#crossPayloadState = undefined
       this.#disableCrossPayloadCache()
     }
   }

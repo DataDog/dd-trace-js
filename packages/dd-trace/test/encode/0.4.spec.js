@@ -238,6 +238,21 @@ describe('encode', () => {
       assert.strictEqual(cacheString.withArgs(identity).callCount, 3)
     })
 
+    it('should not probe retained strings for dynamic values', () => {
+      const identity = 'stable-resource-used-as-dynamic-value'
+      const write = sinon.spy(encoder._stringBytes, 'write')
+      data[0].resource = identity
+
+      encodePayload()
+      encodePayload()
+      encodePayload()
+      data[0].resource = 'different-resource'
+      data[0].meta = { dynamic: identity }
+      encodePayload()
+
+      assert.strictEqual(write.withArgs(identity).callCount, 3)
+    })
+
     it('should not retain encoded strings across buffered payloads', () => {
       const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false })
       const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
