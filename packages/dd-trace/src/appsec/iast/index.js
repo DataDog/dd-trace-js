@@ -100,12 +100,13 @@ function onIncomingHttpRequestEnd (data) {
     const topContext = web.getContext(data.req)
     const iastContext = iastContextFunctions.getIastContext(store, topContext)
     if (iastContext?.rootSpan) {
-      const storedHeaders = collectedResponseHeaders.get(data.res) || {}
+      const responseKey = data.req
+      const storedHeaders = collectedResponseHeaders.get(responseKey) || {}
 
       iastResponseEnd.publish({ ...data, storedHeaders })
 
       if (!isEmpty(storedHeaders)) {
-        collectedResponseHeaders.delete(data.res)
+        collectedResponseHeaders.delete(responseKey)
       }
 
       const vulnerabilities = iastContext.vulnerabilities
@@ -132,12 +133,14 @@ function onHttp2ServerRequestAdopt ({ req }) {
   if (iastContext) taintTrackingPlugin.taintUrl(req, iastContext)
 }
 
-// Response headers are collected here because they are not available in the onIncomingHttpRequestEnd when using Fastify
-function onResponseWriteHeadCollect ({ res, responseHeaders = {} }) {
-  if (!res) return
-
+/**
+ * Response headers are not available from the response at request end when using Fastify.
+ *
+ * @param {{ req: object, responseHeaders?: object }} data
+ */
+function onResponseWriteHeadCollect ({ req, responseHeaders = {} }) {
   if (!isEmpty(responseHeaders)) {
-    collectedResponseHeaders.set(res, responseHeaders)
+    collectedResponseHeaders.set(req, responseHeaders)
   }
 }
 

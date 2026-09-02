@@ -82,6 +82,26 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     }, 'datadog:iast:set-cookie')
   })
 
+  it('should normalize numeric cookie values without disabling later analysis', () => {
+    const res = {}
+    setHeaderChannel.publish({
+      name: 'set-cookie',
+      value: 42,
+      res,
+    })
+    setHeaderChannel.publish({
+      name: 'set-cookie',
+      value: [43, 'key=value'],
+      res,
+    })
+
+    assert.deepStrictEqual(setCookieCallback.args.map(([event]) => event.cookieString), [
+      '42',
+      '43',
+      'key=value',
+    ])
+  })
+
   it('should reuse the location filled in setCookie callback', () => {
     let i = 0
     const location = { path: 'test.js', line: 12 }

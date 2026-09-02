@@ -10,7 +10,6 @@ const {
   multerParser,
   fastifyBodyParser,
   fastifyCookieParser,
-  http2ServerRequestAdopt,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   lambdaStartInvocation,
@@ -42,7 +41,6 @@ const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
 const lambda = require('./lambda')
 const rasp = require('./rasp')
-const { adoptRequest } = require('./store')
 const httpRequest = require('./handlers/http-request')
 const httpResponse = require('./handlers/http-response')
 const auth = require('./handlers/auth')
@@ -56,7 +54,6 @@ const channelHandlers = [
   [bodyParser, httpRequest.onRequestBodyParsed],
   [multerParser, httpRequest.onRequestBodyParsed],
   [cookieParser, httpRequest.onRequestCookieParser],
-  [http2ServerRequestAdopt, adoptRequest],
   [incomingHttpRequestStart, httpRequest.incomingHttpStartTranslator],
   [incomingHttpRequestEnd, httpRequest.incomingHttpEndTranslator],
   [passportVerify, auth.onPassportVerify],

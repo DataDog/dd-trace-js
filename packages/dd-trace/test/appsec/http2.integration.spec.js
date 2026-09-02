@@ -1,7 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { closeSync, openSync } = require('node:fs')
+const { once } = require('node:events')
+const { closeSync, openSync, readFileSync } = require('node:fs')
+const { open } = require('node:fs/promises')
+const https = require('node:https')
 const path = require('node:path')
 
 const { after, afterEach, before, describe, it } = require('mocha')
@@ -32,11 +35,17 @@ const REQUIRES_STRING_SENSITIVE_HEADER_NAMES = NODE_MAJOR >= 23 ||
 const SUPPORTS_RAW_RESPONSE_HEADERS = NODE_MAJOR >= 25 ||
   (NODE_MAJOR === 24 && NODE_MINOR >= 7) ||
   (NODE_MAJOR === 22 && NODE_MINOR >= 20)
+const SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS = NODE_MAJOR >= 26 ||
+  (NODE_MAJOR === 25 && NODE_MINOR >= 7) ||
+  (NODE_MAJOR === 24 && NODE_MINOR >= 15)
+const serverKey = readFileSync(path.join(__dirname, '../../../datadog-plugin-http2/test/ssl/test.key'))
+const serverCert = readFileSync(path.join(__dirname, '../../../datadog-plugin-http2/test/ssl/test.crt'))
 const runtimeSupported = Boolean(process.env.DD_INJECT_FORCE) ||
   semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
 const describeSupported = runtimeSupported ? describe : describe.skip
 
 describeSupported('AppSec HTTP/2 response blocking', () => {
+  let config
   let http2
   let server
   let port
@@ -44,7 +53,7 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
   before(async () => {
     await agent.load(['http2', 'http'], { client: false })
     http2 = require('node:http2')
-    appsec.enable(getConfigFresh({
+    config = getConfigFresh({
       appsec: {
         enabled: true,
         rules: path.join(__dirname, 'response_blocking_rules.json'),
@@ -55,7 +64,8 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
           enabled: true,
         },
       },
-    }))
+    })
+    appsec.enable(config)
     setTestBlockingTemplates()
   })
 
@@ -99,16 +109,19 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
   /**
    * @param {string} [requestPath]
+   * @param {import('node:http2').OutgoingHttpHeaders} [additionalHeaders]
    * @returns {Promise<{
    *   body: string,
    *   headers: import('node:http2').IncomingHttpHeaders,
    *   informationalHeaders: import('node:http2').IncomingHttpHeaders[]
    * }>}
    */
-  function request (requestPath = '/') {
+  function request (requestPath = '/', additionalHeaders) {
     return new Promise((resolve, reject) => {
       const client = http2.connect(`http://localhost:${port}`).once('error', reject)
-      const stream = client.request({ ':path': requestPath })
+      const requestHeaders = { ':path': requestPath, ...additionalHeaders }
+      if (requestHeaders[':method'] === 'CONNECT') delete requestHeaders[':path']
+      const stream = client.request(requestHeaders)
       const chunks = []
       const informationalHeaders = []
       let responseHeaders
@@ -153,6 +166,7 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
   it('blocks compatibility responses and suppresses subsequent writes', async () => {
     await listen(() => http2.createServer((req, res) => {
       res.writeHead(404, { k: '404' })
+      res.writeHead(200, { 'after-block-write-head': 'ignored' })
       res.removeHeader('k')
       res.setHeader('after-block', 'ignored')
       res.writeContinue()
@@ -165,7 +179,99 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
     assert.strictEqual(headers[':status'], 403)
     assert.strictEqual(headers['after-block'], undefined)
+    assert.strictEqual(headers['after-block-write-head'], undefined)
     assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('blocks responses sent through the compatibility response stream', async () => {
+    await listen(() => http2.createServer((req, res) => {
+      res.stream.respond({ ':status': 404, k: '404' })
+      res.stream.end('ignored')
+    }))
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('preserves HTTP/1 fallback requests on secure compatibility servers', async () => {
+    let requestVersion
+    await listen(() => http2.createSecureServer({
+      allowHTTP1: true,
+      cert: serverCert,
+      key: serverKey,
+    }, (req, res) => {
+      requestVersion = req.httpVersion
+      res.end('body')
+    }))
+
+    const traceAsserted = agent.assertFirstTraceSpan({
+      name: 'web.request',
+      meta: {
+        component: 'http2',
+        'http.status_code': '200',
+      },
+      metrics: {
+        '_dd.appsec.enabled': 1,
+      },
+    })
+    const responseBodyPromise = new Promise((resolve, reject) => {
+      const chunks = []
+      const clientRequest = https.get({
+        ALPNProtocols: ['http/1.1'],
+        hostname: 'localhost',
+        port,
+        rejectUnauthorized: false,
+      }, response => {
+        response.on('data', chunk => chunks.push(chunk))
+        response.once('end', () => resolve(Buffer.concat(chunks).toString()))
+      })
+      clientRequest.once('error', reject)
+    })
+    const [, responseBody] = await Promise.all([traceAsserted, responseBodyPromise])
+
+    assert.strictEqual(requestVersion, '1.1')
+    assert.strictEqual(responseBody, 'body')
+  })
+
+  it('preserves HTTP/1 CONNECT events on secure compatibility servers', async () => {
+    agent.reload('http2', { client: false, headers: ['x-response'] })
+
+    try {
+      await listen(() => {
+        const compatibilityServer = http2.createSecureServer({
+          allowHTTP1: true,
+          cert: serverCert,
+          key: serverKey,
+        })
+        compatibilityServer.on('connect', (req, socket) => {
+          socket.end('HTTP/1.1 200 Connection Established\r\nX-Response: value\r\n\r\n')
+        })
+        return compatibilityServer
+      })
+
+      const statusCode = await new Promise((resolve, reject) => {
+        const clientRequest = https.request({
+          ALPNProtocols: ['http/1.1'],
+          hostname: 'localhost',
+          method: 'CONNECT',
+          path: 'localhost:443',
+          port,
+          rejectUnauthorized: false,
+        })
+        clientRequest.once('connect', (response, socket) => {
+          socket.end()
+          resolve(response.statusCode)
+        })
+        clientRequest.once('error', reject)
+        clientRequest.end()
+      })
+
+      assert.strictEqual(statusCode, 200)
+    } finally {
+      agent.reload('http2', { client: false })
+    }
   })
 
   it('allows compatibility response operations before the final response', async () => {
@@ -184,6 +290,30 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(body, 'body')
     assert.deepStrictEqual(informationalHeaders.map(headers => headers[':status']), [100, 103])
   })
+
+  for (const [eventName, requestHeaders] of [
+    ['connect', { ':authority': 'localhost', ':method': 'CONNECT' }],
+    ['checkContinue', { expect: '100-continue' }],
+    ['checkExpectation', { expect: 'unsupported' }],
+  ]) {
+    it(`blocks compatibility ${eventName} responses`, async () => {
+      await listen(() => {
+        const compatibilityServer = http2.createServer((req, res) => {
+          res.end('request')
+        })
+        compatibilityServer.on(eventName, (req, res) => {
+          res.writeHead(404, { k: '404' })
+          res.end('ignored')
+        })
+        return compatibilityServer
+      })
+
+      const { body, headers } = await request('/', requestHeaders)
+
+      assert.strictEqual(headers[':status'], 403)
+      assert.strictEqual(body, blockedTemplateJson)
+    })
+  }
 
   it('keeps request-start data available when a mixed compatibility request ends', async () => {
     await listen(() => {
@@ -232,6 +362,33 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
     assert.strictEqual(headers[':status'], 403)
     assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('uses one WAF context when AppSec restarts between mixed request events', async () => {
+    await listen(() => {
+      const mixedServer = http2.createServer((req, res) => {
+        appsec.enable(config)
+        setTestBlockingTemplates()
+
+        const abortController = new AbortController()
+        expressSession.publish({ req, res, sessionId: 'mixed-http2-session', abortController })
+        if (abortController.signal.aborted) return
+
+        res.end('unblocked')
+      })
+      mixedServer.prependListener('stream', () => appsec.disable())
+      return mixedServer
+    })
+
+    try {
+      const { body, headers } = await request('/mixed-session')
+
+      assert.strictEqual(headers[':status'], 403)
+      assert.strictEqual(body, blockedTemplateJson)
+    } finally {
+      appsec.enable(config)
+      setTestBlockingTemplates()
+    }
   })
 
   it('blocks core stream responses and suppresses subsequent writes', async () => {
@@ -289,6 +446,32 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(body, 'body')
   })
 
+  it('blocks a core response after AppSec is enabled during the request', async () => {
+    let resolveStream
+    const streamPromise = new Promise(resolve => {
+      resolveStream = resolve
+    })
+    await listenCore(stream => resolveStream(stream))
+    appsec.disable()
+
+    try {
+      const responsePromise = request()
+      const stream = await streamPromise
+
+      appsec.enable(config)
+      setTestBlockingTemplates()
+      stream.respond({ ':status': 404, k: '404' })
+      stream.end('ignored')
+
+      const { body, headers } = await responsePromise
+      assert.strictEqual(headers[':status'], 403)
+      assert.strictEqual(body, blockedTemplateJson)
+    } finally {
+      appsec.enable(config)
+      setTestBlockingTemplates()
+    }
+  })
+
   it('preserves headers-sent errors for tracked core response methods', async () => {
     await listenCore(stream => {
       const fileDescriptor = openSync(__filename, 'r')
@@ -329,6 +512,8 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
         () => stream.respondWithFile(__filename, {}, { statCheck: true }),
         { code: 'ERR_INVALID_ARG_VALUE' }
       )
+      assert.throws(() => stream.respondWithFD(fileDescriptor, {}, []), TypeError)
+      assert.throws(() => stream.respondWithFile(__filename, {}, []), TypeError)
 
       closeSync(fileDescriptor)
       stream.respond({ ':status': 200 })
@@ -341,6 +526,22 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(body, 'body')
   })
 
+  it('preserves invalid compatibility response errors before analyzing them', async () => {
+    await listen(() => http2.createServer((req, res) => {
+      assert.throws(
+        () => res.writeHead(404, ['k', '404', 'odd']),
+        { code: 'ERR_INVALID_ARG_VALUE' }
+      )
+      res.writeHead(404, { k: '404' })
+      res.end('ignored')
+    }))
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
   it('validates rejected core responses before analyzing their headers', async () => {
     await listenCore((stream, headers) => {
       const requestPath = headers[':path']
@@ -349,6 +550,11 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
         assert.throws(
           () => stream.respond({ ':status': 199, k: '404' }),
           { code: 'ERR_HTTP2_STATUS_INVALID' }
+        )
+      } else if (requestPath === '/status-normalized') {
+        assert.throws(
+          () => stream.respond({ ':STATUS': {}, k: '404' }),
+          { code: 'ERR_HTTP2_HEADER_SINGLE_VALUE' }
         )
       } else if (requestPath === '/header') {
         assert.throws(
@@ -409,6 +615,16 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
           () => stream.respond({ ':status': 404, k: '404', TE: 'gzip' }),
           { code: 'ERR_HTTP2_INVALID_CONNECTION_HEADERS' }
         )
+      } else if (requestPath === '/te-multiple-blocking') {
+        assert.throws(
+          () => stream.respond({ ':status': 404, k: '404', te: ['trailers', 'bad'] }),
+          { code: 'ERR_HTTP2_INVALID_CONNECTION_HEADERS' }
+        )
+      } else if (requestPath === '/te-multiple-fallback') {
+        assert.throws(
+          () => stream.respond({ te: ['trailers', 'bad'] }),
+          { code: 'ERR_HTTP2_INVALID_CONNECTION_HEADERS' }
+        )
       } else if (requestPath === '/sensitive-headers') {
         const responseHeaders = { ':status': 404, k: '404' }
         responseHeaders[http2.sensitiveHeaders] = true
@@ -436,6 +652,17 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
         assert.throws(
           () => stream.respond(responseHeaders),
           { message: 'invalid sensitive header getter' }
+        )
+      } else if (requestPath === '/sensitive-header-map') {
+        const responseHeaders = { ':status': 404, k: '404' }
+        const sensitiveHeaders = ['k']
+        sensitiveHeaders.map = () => {
+          throw new Error('invalid sensitive header map')
+        }
+        responseHeaders[http2.sensitiveHeaders] = sensitiveHeaders
+        assert.throws(
+          () => stream.respond(responseHeaders),
+          { message: 'invalid sensitive header map' }
         )
       } else if (requestPath === '/header-value') {
         const value = {
@@ -559,6 +786,7 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
     const requestPaths = [
       '/status',
+      '/status-normalized',
       '/header',
       '/header-type',
       '/header-null',
@@ -568,9 +796,12 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
       '/pseudo-header',
       '/header-name',
       '/te',
+      '/te-multiple-blocking',
+      '/te-multiple-fallback',
       '/sensitive-headers',
       '/sensitive-header-name',
       '/sensitive-header-accessor',
+      '/sensitive-header-map',
       '/header-value',
       '/raw-headers',
       '/flat-raw-headers',
@@ -595,6 +826,182 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
       assert.strictEqual(headers[':status'], preservesNonStringSensitiveHeader ? 404 : 403)
       assert.strictEqual(body, preservesNonStringSensitiveHeader ? 'ignored' : blockedTemplateJson)
     }
+  })
+
+  it('allows a single-value te header array', async () => {
+    await listenCore(stream => {
+      stream.respond({ te: ['trailers'] })
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers.te, 'trailers')
+    assert.strictEqual(body, 'body')
+  })
+
+  for (const [method, respond] of [
+    ['respond', (stream, options) => {
+      stream.respond({ ':status': 200 }, options)
+      stream.end('body')
+    }],
+    ['respondWithFD', (stream, options) => {
+      const fileDescriptor = openSync(__filename, 'r')
+      stream.once('close', () => closeSync(fileDescriptor))
+      stream.respondWithFD(fileDescriptor, { ':status': 200 }, options)
+    }],
+    ['respondWithFile', (stream, options) => {
+      stream.respondWithFile(__filename, { ':status': 200 }, options)
+    }],
+  ]) {
+    it(`reads ${method} options once`, async () => {
+      let ownKeysCalls = 0
+      const options = new Proxy({}, {
+        ownKeys () {
+          ownKeysCalls++
+          return []
+        },
+      })
+      await listenCore(stream => respond(stream, options))
+
+      const { headers } = await request()
+
+      assert.strictEqual(headers[':status'], 200)
+      assert.strictEqual(ownKeysCalls, 1)
+    })
+  }
+
+  it('reads raw sensitive header metadata once', async function () {
+    if (!SUPPORTS_RAW_RESPONSE_HEADERS) this.skip()
+
+    let nativeReads
+    let instrumentedReads
+    await listenCore((stream, requestHeaders) => {
+      const instrumentationEnabled = requestHeaders[':path'] === '/instrumented'
+      if (instrumentationEnabled) {
+        appsec.enable(config)
+        setTestBlockingTemplates()
+      } else {
+        appsec.disable()
+      }
+
+      let sensitiveHeaderReads = 0
+      const responseHeaders = [':status', 200, 'k', 'value']
+      Object.defineProperty(responseHeaders, http2.sensitiveHeaders, {
+        get () {
+          sensitiveHeaderReads++
+          return ['k']
+        },
+      })
+      stream.respond(responseHeaders)
+      stream.end('body')
+      if (instrumentationEnabled) {
+        instrumentedReads = sensitiveHeaderReads
+      } else {
+        nativeReads = sensitiveHeaderReads
+      }
+    })
+
+    try {
+      await request('/native')
+      const { body, headers } = await request('/instrumented')
+
+      assert.strictEqual(headers[':status'], 200)
+      assert.strictEqual(body, 'body')
+      assert.strictEqual(instrumentedReads, nativeReads)
+    } finally {
+      appsec.enable(config)
+      setTestBlockingTemplates()
+    }
+  })
+
+  it('preserves raw sensitive header metadata', async function () {
+    if (!SUPPORTS_RAW_RESPONSE_HEADERS) this.skip()
+
+    await listenCore(stream => {
+      const responseHeaders = [':status', 200, 'k', 'value']
+      responseHeaders[http2.sensitiveHeaders] = ['k']
+      stream.respond(responseHeaders)
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 200)
+    assert.strictEqual(body, 'body')
+    assert.deepStrictEqual(headers[http2.sensitiveHeaders], ['k'])
+  })
+
+  it('preserves invalid te errors when single-value fields are relaxed', async function () {
+    if (!SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS) this.skip()
+
+    await listen(() => http2.createServer({ strictSingleValueFields: false }, (req, res) => {
+      assert.throws(
+        () => res.stream.respond({ ':status': 404, k: '404', te: ['trailers', 'bad'] }),
+        { code: 'ERR_HTTP2_INVALID_CONNECTION_HEADERS' }
+      )
+      res.stream.respond({ ':status': 404, k: '404' })
+      res.stream.end('ignored')
+    }))
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('blocks duplicate single-value response fields when Node allows them', async function () {
+    if (!SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS) this.skip()
+
+    let optionReads = 0
+    const options = {}
+    Object.defineProperty(options, 'strictSingleValueFields', {
+      enumerable: true,
+      get () {
+        optionReads++
+        return false
+      },
+    })
+    await listen(() => {
+      const coreServer = http2.createServer(options)
+      coreServer.on('stream', stream => {
+        stream.respond({ ':status': 404, k: '404', 'content-type': ['first', 'second'] })
+        stream.end('ignored')
+      })
+      return coreServer
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(optionReads, 1)
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('blocks duplicate single-value fields sent through a compatibility response stream', async function () {
+    if (!SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS) this.skip()
+
+    await listen(() => http2.createServer({ strictSingleValueFields: false }, (req, res) => {
+      res.stream.respond({ ':status': 404, k: '404', 'content-type': ['first', 'second'] })
+      res.stream.end('ignored')
+    }))
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('blocks responses using Node-normalized status codes', async () => {
+    await listenCore(stream => {
+      stream.respond({ ':status': '404.9', k: '404' })
+      stream.end('ignored')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
   })
 
   it('leaves exotic valid response values to Node without analyzing them', async () => {
@@ -686,6 +1093,95 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(body, blockedTemplateJson)
   })
 
+  it('reads response header accessors once', async () => {
+    let reads = 0
+    let responseStream
+    await listenCore(stream => {
+      responseStream = stream
+      const responseHeaders = { ':status': 200 }
+      Object.defineProperty(responseHeaders, 'X-Value', {
+        enumerable: true,
+        get () {
+          reads++
+          return reads === 1 ? 'first' : 'second'
+        },
+      })
+      responseHeaders[http2.sensitiveHeaders] = ['X-Value']
+      stream.respond(responseHeaders)
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers['x-value'], 'first')
+    assert.deepStrictEqual(headers[http2.sensitiveHeaders], ['x-value'])
+    assert.strictEqual(responseStream.sentHeaders['X-Value'], 'first')
+    assert.strictEqual(responseStream.sentHeaders['x-value'], undefined)
+    assert.strictEqual(reads, 1)
+    assert.strictEqual(body, 'body')
+  })
+
+  it('does not invoke iterators on response header arrays', async () => {
+    await listenCore(stream => {
+      const values = ['first', 'second']
+      const sensitiveHeaders = ['X-Value']
+      values[Symbol.iterator] = sensitiveHeaders[Symbol.iterator] = () => {
+        throw new Error('response header iterator called')
+      }
+
+      const responseHeaders = { ':status': 200, 'X-Value': values }
+      responseHeaders[http2.sensitiveHeaders] = sensitiveHeaders
+      stream.respond(responseHeaders)
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers['x-value'], 'first, second')
+    assert.deepStrictEqual(headers[http2.sensitiveHeaders], ['x-value', 'x-value'])
+    assert.strictEqual(body, 'body')
+  })
+
+  it('reads response header array accessors once', async () => {
+    let reads = 0
+    await listenCore(stream => {
+      const values = []
+      Object.defineProperty(values, '0', {
+        enumerable: true,
+        get () {
+          reads++
+          return reads === 1 ? 'first' : 'second'
+        },
+      })
+      stream.respond({ ':status': 200, 'X-Value': values })
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers['x-value'], 'first')
+    assert.strictEqual(reads, 1)
+    assert.strictEqual(body, 'body')
+  })
+
+  it('does not invoke iterators while merging duplicate response header arrays', async () => {
+    await listenCore(stream => {
+      const firstValues = ['first']
+      const laterValues = ['second', 'third']
+      firstValues[Symbol.iterator] = laterValues[Symbol.iterator] = () => {
+        throw new Error('response header iterator called')
+      }
+
+      stream.respond({ ':status': 200, 'X-Value': firstValues, 'x-value': laterValues })
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers['x-value'], 'first, second, third')
+    assert.strictEqual(body, 'body')
+  })
+
   it('blocks statCheck headers after their prototype changes', async () => {
     await listenCore(stream => {
       stream.respondWithFile(__filename, { ':status': 404, k: '404' }, {
@@ -700,6 +1196,64 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
     assert.strictEqual(headers[':status'], 403)
     assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('reads statCheck response header accessors once', async () => {
+    let reads = 0
+    await listenCore(stream => {
+      stream.respondWithFile(__filename, { ':status': 200 }, {
+        statCheck (stat, headers) {
+          Object.defineProperty(headers, 'X-Value', {
+            enumerable: true,
+            get () {
+              reads++
+              return reads === 1 ? 'first' : 'second'
+            },
+          })
+          return true
+        },
+      })
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers['x-value'], 'first')
+    assert.strictEqual(reads, 1)
+    assert.strictEqual(body.length > 0, true)
+  })
+
+  it('preserves invalid statCheck header errors before analyzing them', async () => {
+    let resolveStream
+    const streamPromise = new Promise(resolve => {
+      resolveStream = resolve
+    })
+    await listenCore(stream => resolveStream(stream))
+
+    const client = http2.connect(`http://localhost:${port}`)
+    try {
+      const clientStream = client.request()
+      clientStream.resume()
+      const clientStreamErrorPromise = once(clientStream, 'error')
+      clientStream.end()
+      const stream = await streamPromise
+      const streamErrorPromise = once(stream, 'error')
+      stream.respondWithFile(__filename, { ':status': 404, k: '404' }, {
+        statCheck (stat, headers) {
+          headers.connection = 'close'
+          return true
+        },
+      })
+
+      const [[streamError], [clientStreamError]] = await Promise.all([streamErrorPromise, clientStreamErrorPromise])
+      assert.strictEqual(streamError.code, 'ERR_HTTP2_INVALID_CONNECTION_HEADERS')
+      assert.strictEqual(clientStreamError.code, 'ERR_HTTP2_STREAM_ERROR')
+    } finally {
+      if (!client.destroyed) {
+        const clientClosedPromise = once(client, 'close')
+        client.destroy()
+        await clientClosedPromise
+      }
+    }
   })
 
   it('does not affect untracked core stream response methods after wrapping their prototype', async () => {
@@ -847,6 +1401,31 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(body, blockedTemplateJson)
   })
 
+  it('preserves synchronous FileHandle response state without statCheck', async () => {
+    const fileHandle = await open(__filename, 'r')
+    let headersSent
+    try {
+      await listenCore(stream => {
+        stream.respondWithFD(fileHandle, { ':status': 200 })
+        headersSent = stream.headersSent
+        if (headersSent) {
+          assert.throws(
+            () => stream.respond({ ':status': 201 }),
+            { code: 'ERR_HTTP2_HEADERS_SENT' }
+          )
+        }
+      })
+
+      const { body, headers } = await request()
+
+      assert.strictEqual(headersSent, true)
+      assert.strictEqual(headers[':status'], 200)
+      assert.strictEqual(body.length > 0, true)
+    } finally {
+      await fileHandle.close()
+    }
+  })
+
   it('inspects respondWithFD headers after statCheck mutates them', async () => {
     await listenCore(stream => {
       const fileDescriptor = openSync(__filename, 'r')
@@ -880,7 +1459,7 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
   it('preserves core stream duplicate header values across casing', async () => {
     await listenCore(stream => {
-      stream.respond({ ':status': 200, K: 'bad1', k: ['bad2', 'bad3'] })
+      stream.respond({ ':status': 200, Key: 'bad1', kEy: ['bad2'], key: 'bad3' })
       stream.end()
     })
 
