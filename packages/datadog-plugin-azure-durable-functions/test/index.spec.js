@@ -121,11 +121,11 @@ describe('azure-durable-functions plugin', () => {
       startSpan,
       'azure.functions.invoke',
       sinon.match({
-        kind: 'server',
         tags: sinon.match({
           'aas.function.name': 'PizzaOrderOrchestration',
           'aas.function.trigger': 'Orchestration',
           'resource.name': 'Orchestration PizzaOrderOrchestration',
+          'span.kind': 'server',
         }),
       })
     )
@@ -138,7 +138,9 @@ describe('azure-durable-functions plugin', () => {
       sinon.assert.calledWith(
         startSpan,
         'azure.functions.invoke',
-        sinon.match({ kind: 'internal' })
+        sinon.match({
+          tags: sinon.match({ 'span.kind': 'internal' }),
+        })
       )
     })
   }
