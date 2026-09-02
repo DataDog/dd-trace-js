@@ -92,11 +92,14 @@ const testFinishCh = channel('ci:mocha:test:finish')
 const testRetryCh = channel('ci:mocha:test:retry')
 const WEBDRIVERIO_FRAMEWORK = 'webdriverio'
 const WEBDRIVERIO_JASMINE_ADAPTER = 'jasmine'
+const WEBDRIVERIO_SCREENSHOT_CAPTURE_TIMEOUT_MS = 30_000
 const workerFinishCh = channel('ci:mocha:worker:finish')
 const WEBDRIVERIO_JASMINE_FAILED_EXPECTATION_COUNT = Symbol('webdriverioJasmineFailedExpectationCount')
 const WEBDRIVERIO_JASMINE_FUNCTION_TYPE = Symbol('webdriverioJasmineFunctionType')
 const WEBDRIVERIO_JASMINE_TEST = Symbol('webdriverioJasmineTest')
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+const BASE64_RE = /^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$/
 
 /**
  * @typedef {object} WebdriverioJasmineResult
@@ -161,6 +164,28 @@ function handleWebdriverioScreenshotError (error) {
 }
 
 /**
+ * Decodes and validates PNG screenshot data returned by WebdriverIO.
+ *
+ * @param {unknown} screenshot - Base64-encoded PNG data
+ * @returns {Buffer} Decoded PNG data
+ */
+function decodeWebdriverioScreenshot (screenshot) {
+  if (typeof screenshot !== 'string' || !BASE64_RE.test(screenshot)) {
+    throw new TypeError('WebdriverIO returned invalid Base64 screenshot data')
+  }
+
+  const content = Buffer.from(screenshot, 'base64')
+  if (
+    content.toString('base64') !== screenshot ||
+    content.length < PNG_SIGNATURE.length ||
+    !content.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)
+  ) {
+    throw new TypeError('WebdriverIO returned invalid PNG screenshot data')
+  }
+  return content
+}
+
+/**
  * Resolves the spec file responsible for a run-level Jasmine failure.
  *
  * @param {WebdriverioJasmineResult|undefined} result
@@ -219,16 +244,9 @@ class MochaPlugin extends CiPlugin {
       }
       let content
       try {
-        if (typeof screenshot !== 'string' || !screenshot) {
-          throw new TypeError('WebdriverIO returned invalid screenshot data')
-        }
-        content = Buffer.from(screenshot, 'base64')
+        content = decodeWebdriverioScreenshot(screenshot)
       } catch (error) {
         onDone(error)
-        return
-      }
-      if (content.length === 0) {
-        onDone(new Error('WebdriverIO returned an empty screenshot'))
         return
       }
       exporter.uploadTestScreenshot({ content, traceId, idempotencyKey, capturedAtMs }, onDone)
@@ -1426,13 +1444,29 @@ class MochaPlugin extends CiPlugin {
     this._webdriverioScreenshotUploads.set(span, upload)
     this._pendingWebdriverioScreenshotUploads++
     const finishUpload = (result) => this.#finishWebdriverioScreenshotUpload(span, upload, result)
+    let captureTimeout
+    const failCapture = (error) => {
+      if (upload.finished) return
+      clearTimeout(captureTimeout)
+      captureTimeout = undefined
+      finishUpload(handleWebdriverioScreenshotError(error))
+    }
     const uploadScreenshots = (content) => {
+      if (upload.finished) return
+      clearTimeout(captureTimeout)
+      captureTimeout = undefined
       try {
         this.#uploadWebdriverioScreenshots(span, content, finishUpload)
       } catch (error) {
-        finishUpload(handleWebdriverioScreenshotError(error))
+        failCapture(error)
       }
     }
+    captureTimeout = setTimeout(() => {
+      failCapture(new Error(
+        `WebdriverIO screenshot capture timed out after ${WEBDRIVERIO_SCREENSHOT_CAPTURE_TIMEOUT_MS}ms`
+      ))
+    }, WEBDRIVERIO_SCREENSHOT_CAPTURE_TIMEOUT_MS)
+    captureTimeout.unref?.()
     try {
       if (typeof browser?.takeScreenshot !== 'function') {
         throw new TypeError('browser.takeScreenshot is not available')
@@ -1441,13 +1475,13 @@ class MochaPlugin extends CiPlugin {
       if (typeof screenshot?.then === 'function') {
         screenshot.then(
           uploadScreenshots,
-          error => finishUpload(handleWebdriverioScreenshotError(error))
+          failCapture
         )
       } else {
         uploadScreenshots(screenshot)
       }
     } catch (error) {
-      finishUpload(handleWebdriverioScreenshotError(error))
+      failCapture(error)
     }
     return true
   }
@@ -1532,13 +1566,9 @@ class MochaPlugin extends CiPlugin {
       } else {
         let content
         try {
-          content = Buffer.from(screenshot, 'base64')
+          content = decodeWebdriverioScreenshot(screenshot)
         } catch (error) {
           finishOne(error)
-          continue
-        }
-        if (content.length === 0) {
-          finishOne(new Error('WebdriverIO returned an empty screenshot'))
           continue
         }
         try {
