@@ -51,7 +51,6 @@ class RemoteConfig {
   #handlers = new Map()
   #products = new Set()
   #batchHandlers = new Map()
-  #subscriptionsChanged = false
 
   /**
    * @param {import('../config/config-base')} config - Tracer configuration
@@ -143,7 +142,6 @@ class RemoteConfig {
         apiKey: config.DD_API_KEY,
         hostname: getHostname(),
       })
-      this.#subscriptionsChanged = true
     }
   }
 
@@ -161,7 +159,7 @@ class RemoteConfig {
     if (str.length % 2) str = `0${str}`
 
     this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
-    if (this.#agentless) this.#subscriptionsChanged = true
+    this.#updateProductCapabilities()
   }
 
   /**
@@ -230,7 +228,25 @@ class RemoteConfig {
 
   updateProducts () {
     this.state.client.products = [...this.#products]
-    if (this.#agentless) this.#subscriptionsChanged = true
+    this.#updateProductCapabilities()
+  }
+
+  /**
+   * Updates the native client with the current products and capabilities.
+   *
+   * @returns {void}
+   */
+  #updateProductCapabilities () {
+    const fetcher = this.#fetcher
+    if (fetcher === undefined) return
+
+    const unrecognizedNames = fetcher.setProductCapabilities(
+      this.state.client.products,
+      decodeCapabilities(this.state.client.capabilities)
+    )
+    if (unrecognizedNames.length !== 0) {
+      log.error('[RC] Unrecognized remote config products or capabilities: %s', unrecognizedNames.join(', '))
+    }
   }
 
   /**
@@ -314,17 +330,6 @@ class RemoteConfig {
   #pollAgentless (cb) {
     const fetcher = /** @type {import('@datadog/libdatadog/remote-config').RemoteConfigFetcher} */ (this.#fetcher)
 
-    if (this.#subscriptionsChanged) {
-      const unrecognizedNames = fetcher.setProductCapabilities(
-        this.state.client.products,
-        decodeCapabilities(this.state.client.capabilities)
-      )
-      this.#subscriptionsChanged = false
-
-      if (unrecognizedNames.length !== 0) {
-        log.error('[RC] Unrecognized remote config products or capabilities: %s', unrecognizedNames.join(', '))
-      }
-    }
     fetcher.setExtraServices(getExtraServices())
 
     fetcher.fetchChanges().then(

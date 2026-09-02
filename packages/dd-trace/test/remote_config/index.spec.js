@@ -182,9 +182,20 @@ describe('RemoteConfig', () => {
       config.version = undefined
       rc = new RemoteConfig(config)
       rc.updateCapabilities(Capabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
+      sinon.assert.calledOnceWithExactly(
+        fetcher.setProductCapabilities,
+        [],
+        ['APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION']
+      )
+      fetcher.setProductCapabilities.returns(['UNKNOWN'])
       rc.setProductHandler('LIVE_DEBUGGING', noop)
       extraServices.push('extra-service')
-      fetcher.setProductCapabilities.returns(['UNKNOWN'])
+
+      sinon.assert.calledTwice(fetcher.setProductCapabilities)
+      assert.deepStrictEqual(fetcher.setProductCapabilities.secondCall.args, [
+        ['LIVE_DEBUGGING'],
+        ['APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION'],
+      ])
 
       await poll()
 
@@ -197,11 +208,7 @@ describe('RemoteConfig', () => {
       assert.strictEqual(options.timeoutMs, 5000)
       assert.strictEqual(options.apiKey, 'api-key')
       assert.strictEqual(options.hostname, 'application-host')
-      sinon.assert.calledOnceWithExactly(
-        fetcher.setProductCapabilities,
-        ['LIVE_DEBUGGING'],
-        ['APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION']
-      )
+      sinon.assert.calledTwice(fetcher.setProductCapabilities)
       sinon.assert.calledOnceWithExactly(fetcher.setExtraServices, ['extra-service'])
       sinon.assert.calledOnce(fetcher.fetchChanges)
       sinon.assert.calledOnceWithExactly(

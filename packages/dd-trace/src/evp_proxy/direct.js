@@ -5,6 +5,9 @@ const { getProxyForUrl } = require('../../../../vendor/dist/proxy-from-env')
 const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 
+/** @type {Map<string, import('node:https').Agent>} */
+const proxyAgents = new Map()
+
 /**
  * @typedef {object} DirectEVPRoute
  * @property {URL} url - Direct intake URL
@@ -30,8 +33,7 @@ function createDirectEVPRoute (config, intake) {
     const url = createSiteUrl(config.site, intake)
     if (url === undefined) throw new Error('Invalid direct EVP intake URL')
 
-    const proxyUrl = getProxyForUrl(url.href)
-    const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined
+    const agent = getHttpsProxyAgent(url.href)
 
     const route = {
       url,
@@ -47,4 +49,20 @@ function createDirectEVPRoute (config, intake) {
   }
 }
 
-module.exports = { createDirectEVPRoute }
+/**
+ * @param {string} url
+ * @returns {import('node:https').Agent|undefined}
+ */
+function getHttpsProxyAgent (url) {
+  const proxyUrl = getProxyForUrl(url)
+  if (!proxyUrl) return
+
+  let agent = proxyAgents.get(proxyUrl)
+  if (agent === undefined) {
+    agent = new HttpsProxyAgent(proxyUrl)
+    proxyAgents.set(proxyUrl, agent)
+  }
+  return agent
+}
+
+module.exports = { createDirectEVPRoute, getHttpsProxyAgent }
