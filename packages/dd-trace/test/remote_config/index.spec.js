@@ -31,6 +31,7 @@ describe('RemoteConfig', () => {
   let rc
   let tagger
   let getGitMetadata
+  let getHostname
 
   before(() => {
     require('../../src/process-tags').initialize()
@@ -71,8 +72,10 @@ describe('RemoteConfig', () => {
     extraServices = []
 
     getGitMetadata = sinon.stub().returns({ commitSHA: undefined, repositoryUrl: undefined })
+    getHostname = sinon.stub().returns('application-host')
 
     RemoteConfig = proxyquire('../../src/remote_config', {
+      'node:os': { hostname: getHostname },
       '../../../datadog-core': { storage },
       '@datadog/libdatadog/remote-config': { RemoteConfigFetcher, setStorage, '@noCallThru': true },
       '../../../../vendor/dist/crypto-randomuuid': uuid,
@@ -193,7 +196,7 @@ describe('RemoteConfig', () => {
       assert.strictEqual(options.url, 'https://datadoghq.com')
       assert.strictEqual(options.timeoutMs, 5000)
       assert.strictEqual(options.apiKey, 'api-key')
-      assert.strictEqual(options.hostname, 'host')
+      assert.strictEqual(options.hostname, 'application-host')
       sinon.assert.calledOnceWithExactly(
         fetcher.setProductCapabilities,
         ['LIVE_DEBUGGING'],

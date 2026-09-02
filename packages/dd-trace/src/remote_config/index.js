@@ -1,5 +1,7 @@
 'use strict'
 
+const { hostname: getHostname } = require('node:os')
+
 const { channel } = require('dc-polyfill')
 
 const uuid = require('../../../../vendor/dist/crypto-randomuuid')
@@ -140,7 +142,7 @@ class RemoteConfig {
           url: siteUrl.origin,
           timeoutMs: AGENTLESS_REQUEST_TIMEOUT_MS,
           apiKey: config.DD_API_KEY,
-          hostname: config.hostname,
+          hostname: getHostname(),
         })
         this.#subscriptionsChanged = true
       } catch (error) {
