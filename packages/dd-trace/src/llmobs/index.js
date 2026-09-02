@@ -66,7 +66,7 @@ let globalTracerConfig
 /**
  * @typedef {object} TraceTagInjection
  * @property {import('../opentracing/span_context')} spanContext
- * @property {Record<string, string | undefined>} [traceTagReplacements]
+ * @property {Array<string | undefined>} [traceTagReplacements]
  * @property {number} [optionalTraceTagCount]
  */
 
@@ -208,24 +208,24 @@ function handleLLMObsInjection (injection) {
     mlObsSpanTags, parent
   )
 
-  const traceTagReplacements = {}
-  if (parentId) traceTagReplacements[PROPAGATED_PARENT_ID_KEY] = parentId
-  if (mlApp) traceTagReplacements[PROPAGATED_ML_APP_KEY] = mlApp
-  if (sessionId) traceTagReplacements[PROPAGATED_SESSION_ID_KEY] = sessionId
-  if (sampleRate != null) traceTagReplacements[PROPAGATED_SAMPLE_RATE_KEY] = sampleRate.toString()
+  const traceTagReplacements = []
+  if (parentId) traceTagReplacements.push(PROPAGATED_PARENT_ID_KEY, parentId)
+  if (mlApp) traceTagReplacements.push(PROPAGATED_ML_APP_KEY, mlApp)
+  if (sessionId) traceTagReplacements.push(PROPAGATED_SESSION_ID_KEY, sessionId)
+  if (sampleRate != null) traceTagReplacements.push(PROPAGATED_SAMPLE_RATE_KEY, sampleRate.toString())
   if (samplingDecision != null) {
-    traceTagReplacements[PROPAGATED_SAMPLING_DECISION_KEY] = samplingDecision.toString()
+    traceTagReplacements.push(PROPAGATED_SAMPLING_DECISION_KEY, samplingDecision.toString())
   }
-  if (propagatedTraceId != null) traceTagReplacements[PROPAGATED_TRACE_ID_KEY] = propagatedTraceId
+  if (propagatedTraceId != null) traceTagReplacements.push(PROPAGATED_TRACE_ID_KEY, propagatedTraceId)
 
   let optionalTraceTagCount = 0
   if (parentAgentSpanId) {
-    traceTagReplacements[PROPAGATED_PARENT_AGENT_ID_KEY] = parentAgentSpanId
+    traceTagReplacements.push(PROPAGATED_PARENT_AGENT_ID_KEY, parentAgentSpanId)
     optionalTraceTagCount++
     if (parentAgentName && agentNameWireSafe(parentAgentName)) {
-      traceTagReplacements[PROPAGATED_PARENT_AGENT_NAME_KEY] = parentAgentName
+      traceTagReplacements.push(PROPAGATED_PARENT_AGENT_NAME_KEY, parentAgentName)
     } else {
-      traceTagReplacements[PROPAGATED_PARENT_AGENT_NAME_KEY] = undefined
+      traceTagReplacements.push(PROPAGATED_PARENT_AGENT_NAME_KEY, undefined)
     }
     optionalTraceTagCount++
   }

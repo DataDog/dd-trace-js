@@ -28,7 +28,7 @@ const extractCh = channel('dd-trace:span:extract')
 /**
  * @typedef {object} TraceTagInjection
  * @property {SpanContext} spanContext
- * @property {Record<string, string | undefined>} [traceTagReplacements]
+ * @property {Array<string | undefined>} [traceTagReplacements]
  * @property {number} [optionalTraceTagCount]
  */
 
@@ -634,7 +634,7 @@ describe('TextMapPropagator', () => {
       /** @param {TraceTagInjection} injection */
       function onSpanInject (injection) {
         assert.strictEqual(injection.spanContext, spanContext)
-        injection.traceTagReplacements = { '_dd.p.test': 'value' }
+        injection.traceTagReplacements = ['_dd.p.test', 'value']
       }
       injectCh.subscribe(onSpanInject)
 
@@ -648,6 +648,31 @@ describe('TextMapPropagator', () => {
       }
     })
 
+    it('should match replacement keys only at key positions', () => {
+      config.tracePropagationStyle.inject = ['datadog', 'tracecontext']
+      const carrier = {}
+      const spanContext = createContext({
+        isRemote: false,
+        trace: { tags: { '_dd.p.test': 'original' } },
+      })
+
+      /** @param {TraceTagInjection} injection */
+      function onSpanInject (injection) {
+        injection.traceTagReplacements = ['_dd.p.other', '_dd.p.test']
+      }
+      injectCh.subscribe(onSpanInject)
+
+      try {
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.test=original,_dd.p.other=_dd.p.test')
+        assert.ok(carrier.tracestate.includes('t.test:original'))
+        assert.ok(carrier.tracestate.includes('t.other:_dd.p.test'))
+      } finally {
+        injectCh.unsubscribe(onSpanInject)
+      }
+    })
+
     it('should serialize injection-local trace tags to tracestate', () => {
       config.tracePropagationStyle.inject = ['tracecontext']
       const carrier = {}
@@ -655,7 +680,7 @@ describe('TextMapPropagator', () => {
 
       /** @param {TraceTagInjection} injection */
       function onSpanInject (injection) {
-        injection.traceTagReplacements = { '_dd.p.test': 'value' }
+        injection.traceTagReplacements = ['_dd.p.test', 'value']
       }
       injectCh.subscribe(onSpanInject)
 
@@ -680,10 +705,10 @@ describe('TextMapPropagator', () => {
 
       /** @param {TraceTagInjection} injection */
       function onSpanInject (injection) {
-        injection.traceTagReplacements = {
-          '_dd.p.remove': undefined,
-          'not.propagated': 'value',
-        }
+        injection.traceTagReplacements = [
+          '_dd.p.remove', undefined,
+          'not.propagated', 'value',
+        ]
       }
       injectCh.subscribe(onSpanInject)
 
@@ -704,7 +729,7 @@ describe('TextMapPropagator', () => {
 
       /** @param {TraceTagInjection} injection */
       function onSpanInject (injection) {
-        injection.traceTagReplacements = { '_dd.p.test': 'hélicoptère' }
+        injection.traceTagReplacements = ['_dd.p.test', 'hélicoptère']
       }
       injectCh.subscribe(onSpanInject)
 
@@ -723,11 +748,11 @@ describe('TextMapPropagator', () => {
 
       /** @param {TraceTagInjection} injection */
       function onSpanInject (injection) {
-        injection.traceTagReplacements = {
-          '_dd.p.required': 'replacement',
-          '_dd.p.first': '1',
-          '_dd.p.second': '2',
-        }
+        injection.traceTagReplacements = [
+          '_dd.p.required', 'replacement',
+          '_dd.p.first', '1',
+          '_dd.p.second', '2',
+        ]
         injection.optionalTraceTagCount = 2
       }
       injectCh.subscribe(onSpanInject)
