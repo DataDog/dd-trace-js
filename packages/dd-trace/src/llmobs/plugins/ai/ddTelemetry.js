@@ -1,11 +1,9 @@
 'use strict'
 
-const crypto = require('node:crypto')
 const { channel } = require('dc-polyfill')
 const BaseLLMObsPlugin = require('../base')
 const { getModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
 
-const toolCreationCh = channel('tracing:orchestrion:ai:tool:start')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')
 
 const { MODEL_NAME, MODEL_PROVIDER, NAME } = require('../../constants/tags')
@@ -23,14 +21,8 @@ const {
 } = require('./util')
 
 /**
- * @typedef {Record<string, unknown> & { description?: string, id?: string }} AvailableToolArgs
- */
-
-/**
  * @typedef {string | number | boolean | null | undefined | string[] | number[] | boolean[]} TagValue
  * @typedef {Record<string, TagValue>} SpanTags
- *
- * @typedef {{ name?: string, description?: string }} ToolForModel
  *
  * @typedef {{ type: 'text' | 'reasoning' | 'redacted-reasoning', text?: string, data?: string }} TextPart
  * @typedef {{ type: 'tool-call', toolName: string, toolCallId: string, args?: unknown, input?: unknown }} ToolCallPart
@@ -72,82 +64,17 @@ const SPAN_NAME_TO_KIND_MAPPING = {
   toolCall: 'tool',
 }
 
-/**
- * Computes a hash for a given tool from its description, id, and schema.
- *
- * Only exercised on the v4 `ai` SDKs where the channel subscriber that invokes this
- * is present.
- * @param {AvailableToolArgs} tool
- * @returns {string}
- */
-function createToolHash (tool) {
-  const {
-    description,
-    id,
-    parameters,
-  } = tool
-
-  const toolStr = JSON.stringify([description ?? null, id ?? null, parameters?.jsonSchema ?? null])
-
-  return crypto.createHash('sha256').update(toolStr).digest().toString('hex', 0, 16).toLowerCase()
-}
-
 class DdTelemetryPlugin extends BaseLLMObsPlugin {
   static id = 'ai_llmobs_dd_telemetry'
   static integration = 'ai'
   static prefix = 'tracing:dd-trace:vercel-ai'
 
-  /**
-   * The available tools within the runtime scope of this integration.
-   * This essentially acts as a global registry for all tools made through the Vercel AI SDK.
-   * @type {Map<string, AvailableToolArgs>}
-   */
-  #availableTools = new Map()
-
-  /**
-   * A mapping of tool call IDs to tool names.
-   * This is used to map the tool call ID to the tool name for the output message.
-   * @type {Map<string, string>}
-   */
-  #toolCallIdsToName = new Map()
-
   constructor (...args) {
     super(...args)
-
-    toolCreationCh.subscribe(ctx => {
-      // this path is only exercised on v4
-      const toolArgs = ctx.arguments
-      const tool = toolArgs[0] ?? {}
-      const toolHash = createToolHash(tool)
-
-      this.#availableTools.set(toolHash, tool)
-    })
 
     setAttributesCh.subscribe(({ ctx, attributes }) => {
       Object.assign(ctx.attributes, attributes)
     })
-  }
-
-  /**
-   * Does a best-effort attempt to find the right tool name for the given tool description.
-   * This is because the Vercel AI SDK does not tag tools by name properly, but
-   * rather by the index they were passed in. Tool names appear nowhere in the span tags.
-   *
-   * We use the tool description as the next best identifier for a tool.
-   *
-   * @param {string} toolName
-   * @param {string | undefined} toolDescription
-   * @returns {string | undefined}
-   */
-  findToolName (toolName, toolDescription) {
-    if (Number.isNaN(Number.parseInt(toolName, 10))) return toolName
-
-    for (const availableTool of this.#availableTools.values()) {
-      const description = availableTool.description
-      if (description === toolDescription && availableTool.id) {
-        return availableTool.id
-      }
-    }
   }
 
   /**
@@ -297,16 +224,14 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
    * @param {SpanTags} tags
    */
   setLLMOperationTags (span, tags) {
-    const toolsForModel = tags['ai.prompt.tools']?.map(getJsonStringValue)
-
     const inputMessages = getJsonStringValue(tags['ai.prompt.messages'], [])
     const parsedInputMessages = []
     for (const message of inputMessages) {
-      const formattedMessages = this.formatMessage(message, toolsForModel)
+      const formattedMessages = this.formatMessage(message)
       parsedInputMessages.push(...formattedMessages)
     }
 
-    const outputMessage = this.formatOutputMessage(tags, toolsForModel)
+    const outputMessage = this.formatOutputMessage(tags)
 
     this._tagger.tagLLMIO(span, parsedInputMessages, outputMessage)
 
@@ -318,10 +243,7 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
   }
 
   setToolTags (span, tags) {
-    const toolCallId = tags['ai.toolCall.id']
-
-    const name = getToolNameFromTags(tags) ?? this.#toolCallIdsToName.get(toolCallId)
-    this.#toolCallIdsToName.delete(toolCallId)
+    const name = getToolNameFromTags(tags)
 
     if (name) this._tagger._setTag(span, NAME, name)
 
@@ -331,7 +253,7 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
     this._tagger.tagTextIO(span, input, output)
   }
 
-  formatOutputMessage (tags, toolsForModel) {
+  formatOutputMessage (tags) {
     const outputMessageText = tags['ai.response.text'] ?? tags['ai.response.object']
     const outputMessageToolCalls = getJsonStringValue(tags['ai.response.toolCalls'], [])
 
@@ -339,13 +261,9 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
     for (const toolCall of outputMessageToolCalls) {
       const toolArgs = toolCall.args ?? toolCall.input
       const toolCallArgs = typeof toolArgs === 'string' ? getJsonStringValue(toolArgs, {}) : toolArgs
-      const toolDescription = toolsForModel?.find(tool => toolCall.toolName === tool.name)?.description
-      const name = this.findToolName(toolCall.toolName, toolDescription)
-      this.#toolCallIdsToName.set(toolCall.toolCallId, name)
-
       formattedToolCalls.push({
         arguments: toolCallArgs,
-        name,
+        name: toolCall.toolName,
         toolId: toolCall.toolCallId,
         type: toolCall.toolCallType ?? 'function',
       })
@@ -365,11 +283,10 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
    * need to split into multiple messages.
    *
    * @param {AiSdkMessage} message
-   * @param {ToolForModel[] | null | undefined} toolsForModel
    * @returns {Array<{role: string, content: string, toolId?: string,
    *   toolCalls?: Array<{arguments: string, name: string, toolId: string, type: string}>}>}
    */
-  formatMessage (message, toolsForModel) {
+  formatMessage (message) {
     const { role, content } = message
 
     if (role === 'system') {
@@ -394,12 +311,9 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
         if (['text', 'reasoning', 'redacted-reasoning'].includes(type)) {
           finalContent += part.text ?? part.data
         } else if (type === 'tool-call') {
-          const toolDescription = toolsForModel?.find(tool => part.toolName === tool.name)?.description
-          const name = this.findToolName(part.toolName, toolDescription)
-
           toolCalls.push({
             arguments: part.args ?? part.input,
-            name,
+            name: part.toolName,
             toolId: part.toolCallId,
             type: 'function',
           })
