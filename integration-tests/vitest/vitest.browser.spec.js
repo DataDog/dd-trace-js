@@ -107,18 +107,24 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
         '--eval',
         `
           import { remote } from 'webdriverio'
-          const browser = await remote({
-            logLevel: 'silent',
-            capabilities: {
-              browserName: 'chrome',
-              'goog:chromeOptions': {
-                args: ['headless', 'disable-gpu', 'no-sandbox'],
+          // Node.js 26 exits if remote() is the only unsettled top-level await.
+          const keepAlive = setInterval(() => undefined, 1_000)
+          try {
+            const browser = await remote({
+              logLevel: 'silent',
+              capabilities: {
+                browserName: 'chrome',
+                'goog:chromeOptions': {
+                  args: ['headless', 'disable-gpu', 'no-sandbox'],
+                },
               },
-            },
-          })
-          await browser.deleteSession()
+            })
+            await browser.deleteSession()
+          } finally {
+            clearInterval(keepAlive)
+          }
         `,
-      ], { cwd, env, stdio: 'inherit' })
+      ], { cwd, env, stdio: 'inherit', timeout: 240_000 })
     }
   })
 
