@@ -18,15 +18,16 @@ class RandomToolCallModel {
   modelId = 'random-tool-call-model'
   supportedUrls = {}
 
-  async doGenerate () {
+  async doGenerate (options) {
     const toolCallId = `${randomUUID()}-${TOOL_CALL_ID_PADDING}`
+    const toolName = specificationVersion === 'v1' ? options.mode.tools[0].name : options.tools[0].name
 
     if (specificationVersion === 'v1') {
       return {
         toolCalls: [{
           toolCallType: 'function',
           toolCallId,
-          toolName: 'noop',
+          toolName,
           args: '{}',
         }],
         finishReason: 'tool-calls',
@@ -40,7 +41,7 @@ class RandomToolCallModel {
       content: [{
         type: 'tool-call',
         toolCallId,
-        toolName: 'noop',
+        toolName,
         input: '{}',
       }],
       finishReason: specificationVersion === 'v3'
@@ -54,13 +55,18 @@ class RandomToolCallModel {
 
 const model = new RandomToolCallModel()
 const schema = jsonSchema({ type: 'object', properties: {}, additionalProperties: false })
-const tools = {
-  noop: tool({
-    description: 'Return without doing any work',
-    ...(specificationVersion === 'v1' ? { parameters: schema } : { inputSchema: schema }),
-    execute: () => undefined,
-  }),
-}
+const noop = tool({
+  description: 'Return without doing any work',
+  ...(specificationVersion === 'v1'
+    ? { id: 'noop', parameters: schema }
+    : { inputSchema: schema }),
+  execute: () => undefined,
+})
+const tools = specificationVersion === 'v1'
+  ? [noop]
+  : {
+      noop,
+    }
 
 for (let i = 0; i < TOOL_CALL_COUNT; i++) {
   await generateText({ model, prompt: 'Call the noop tool.', tools })
