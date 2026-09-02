@@ -93,12 +93,21 @@ async function getBrowserProvider () {
 
   if (browserProvider === 'webdriverio') {
     const { webdriverio } = await import('@vitest/browser-webdriverio')
-    return webdriverio({
-      capabilities: {
-        'goog:chromeOptions': {
-          args: ['no-sandbox'],
-        },
+    const capabilities = {
+      'goog:chromeOptions': {
+        args: ['disable-dev-shm-usage', 'no-sandbox'],
       },
+    }
+    if (process.env.VITEST_BROWSER_BINARY) {
+      capabilities['goog:chromeOptions'].binary = process.env.VITEST_BROWSER_BINARY
+    }
+    if (process.env.VITEST_BROWSER_DRIVER_BINARY) {
+      capabilities['wdio:chromedriverOptions'] = {
+        binary: process.env.VITEST_BROWSER_DRIVER_BINARY,
+      }
+    }
+    return webdriverio({
+      capabilities,
     })
   }
 
