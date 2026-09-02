@@ -5394,16 +5394,6 @@ rules:
       assert.strictEqual(config.DD_API_KEY, 'test-api-key')
     })
 
-    it('should retain the native crash receiver intake overrides', () => {
-      process.env.DD_APM_TELEMETRY_DD_URL = 'http://127.0.0.1:1234'
-      process.env.DD_ERRORS_INTAKE_DD_URL = 'http://127.0.0.1:5678'
-
-      const config = getConfig()
-
-      assert.strictEqual(config.DD_APM_TELEMETRY_DD_URL, 'http://127.0.0.1:1234')
-      assert.strictEqual(config.DD_ERRORS_INTAKE_DD_URL, 'http://127.0.0.1:5678')
-    })
-
     for (const exporter of ['datadog', 'jest_worker']) {
       it(`should preserve the Test Optimization ${exporter} exporter and the OTLP traces exporter`, () => {
         process.env.DD_AGENTLESS_ENABLED = 'true'

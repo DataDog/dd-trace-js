@@ -213,13 +213,6 @@
         "allowed": "\\d+"
       }
     ],
-    "DD_APM_TELEMETRY_DD_URL": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "default": null
-      }
-    ],
     "DD_APM_TRACING_ENABLED": [
       {
         "implementation": "A",
@@ -828,13 +821,6 @@
         "configurationNames": [
           "env"
         ],
-        "default": null
-      }
-    ],
-    "DD_ERRORS_INTAKE_DD_URL": [
-      {
-        "implementation": "A",
-        "type": "string",
         "default": null
       }
     ],

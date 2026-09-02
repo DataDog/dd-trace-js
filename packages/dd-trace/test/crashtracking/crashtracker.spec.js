@@ -17,12 +17,20 @@ describeNotWindows('crashtracker', () => {
   let identityRefreshChannel
   let libdatadogExtras
   let log
+  let originalIntakeEnvironment
 
   before(() => {
     require('../../src/process-tags').initialize()
   })
 
   beforeEach(() => {
+    originalIntakeEnvironment = {
+      DD_APM_TELEMETRY_DD_URL: process.env.DD_APM_TELEMETRY_DD_URL,
+      DD_ERRORS_INTAKE_DD_URL: process.env.DD_ERRORS_INTAKE_DD_URL,
+    }
+    delete process.env.DD_APM_TELEMETRY_DD_URL
+    delete process.env.DD_ERRORS_INTAKE_DD_URL
+
     libdatadogExtras = require('@datadog/libdatadog-extras')
 
     binding = libdatadogExtras.load('crashtracker')
@@ -54,6 +62,13 @@ describeNotWindows('crashtracker', () => {
   })
 
   afterEach(() => {
+    for (const [name, value] of Object.entries(originalIntakeEnvironment)) {
+      if (value === undefined) {
+        delete process.env[name]
+      } else {
+        process.env[name] = value
+      }
+    }
     process.removeAllListeners('uncaughtExceptionMonitor')
     binding.init.restore()
     binding.updateConfig.restore()
@@ -154,10 +169,10 @@ describeNotWindows('crashtracker', () => {
     it('should preserve direct intake, proxy, and TLS settings in the receiver environment', () => {
       config.DD_AGENTLESS_ENABLED = true
       config.DD_API_KEY = 'test-api-key'
-      config.DD_APM_TELEMETRY_DD_URL = 'http://127.0.0.1:1234'
-      config.DD_ERRORS_INTAKE_DD_URL = 'http://127.0.0.1:5678'
       config.site = 'datadoghq.com'
       const environment = {
+        DD_APM_TELEMETRY_DD_URL: 'http://127.0.0.1:1234',
+        DD_ERRORS_INTAKE_DD_URL: 'http://127.0.0.1:5678',
         HTTP_PROXY: 'http://uppercase-http-proxy',
         HTTPS_PROXY: 'http://uppercase-https-proxy',
         NO_PROXY: 'uppercase-no-proxy',
@@ -219,7 +234,7 @@ describeNotWindows('crashtracker', () => {
     it('should reject an agentless site that could redirect the API key', () => {
       config.DD_AGENTLESS_ENABLED = true
       config.DD_API_KEY = 'test-api-key'
-      config.DD_APM_TELEMETRY_DD_URL = 'http://127.0.0.1:1234'
+      process.env.DD_APM_TELEMETRY_DD_URL = 'http://127.0.0.1:1234'
       config.site = 'datadoghq.com@evil.example'
 
       crashtracker.start(config)

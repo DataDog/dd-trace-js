@@ -70,7 +70,6 @@ export interface GeneratedConfig {
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_API_KEY: string | undefined;
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
-  DD_APM_TELEMETRY_DD_URL: string | undefined;
   DD_APP_KEY: string | undefined;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
   DD_CRASHTRACKING_ENABLED: boolean;
@@ -79,7 +78,6 @@ export interface GeneratedConfig {
   DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED: boolean;
   DD_ENABLE_LAGE_PACKAGE_NAME: boolean;
   DD_ENABLE_NX_SERVICE_NAME: boolean;
-  DD_ERRORS_INTAKE_DD_URL: string | undefined;
   DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: boolean;
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR: string | undefined;
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED: boolean;
@@ -633,7 +631,6 @@ export interface GeneratedEnvVarConfig {
   DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
   DD_API_SECURITY_SAMPLE_DELAY: number;
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
-  DD_APM_TELEMETRY_DD_URL: string | undefined;
   DD_APM_TRACING_ENABLED: boolean;
   DD_APP_KEY: string | undefined;
   DD_APPSEC_AGENTIC_ONBOARDING: string;
@@ -701,7 +698,6 @@ export interface GeneratedEnvVarConfig {
   DD_ENABLE_LAGE_PACKAGE_NAME: boolean;
   DD_ENABLE_NX_SERVICE_NAME: boolean;
   DD_ENV: string | undefined;
-  DD_ERRORS_INTAKE_DD_URL: string | undefined;
   DD_EXPERIMENTAL_API_SECURITY_ENABLED: boolean;
   DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: boolean;
   DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: boolean;
