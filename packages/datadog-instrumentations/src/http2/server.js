@@ -82,6 +82,11 @@ const responseContexts = new WeakMap()
 const wrappedStreamPrototypes = new WeakSet()
 let activeBlockedStreamCount = 0
 
+const FILE_HANDLE_VALIDATION_ERROR = {}
+const FILE_HANDLE_VALIDATION_HEADERS = {
+  get validation () { throw FILE_HANDLE_VALIDATION_ERROR },
+}
+
 /** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
 
 /** @type {symbol | undefined} */
@@ -404,8 +409,7 @@ function wrapStreamRespondWithFD (respond) {
       }
       return Reflect.apply(respond, this, args)
     }
-    // Adding statCheck would make Node's synchronous FileHandle response asynchronous.
-    if (typeof arguments[0] !== 'number') return Reflect.apply(respond, this, arguments)
+    if (typeof arguments[0] !== 'number') assertFileHandle(respond, this, arguments[0])
 
     const responseHeaders = getValidatedResponseHeaders(arguments[1], arguments, 1, ctx.strictSingleValueFields)
     if (!responseHeaders) return Reflect.apply(respond, this, arguments)
@@ -424,6 +428,22 @@ function wrapStreamRespondWithFD (respond) {
     const result = Reflect.apply(respond, this, arguments)
     publishStreamResponseFinish(ctx, responseHeaders)
     return result
+  }
+}
+
+/**
+ * @param {Function} respond
+ * @param {import('node:http2').ServerHttp2Stream} stream
+ * @param {unknown} fileHandle
+ */
+function assertFileHandle (respond, stream, fileHandle) {
+  // Node checks the FileHandle brand before it reads response headers. Re-enter
+  // with a throwing header to reuse that exact check without sending a response.
+  try {
+    Reflect.apply(respond, stream, [fileHandle, FILE_HANDLE_VALIDATION_HEADERS])
+  } catch (error) {
+    if (error === FILE_HANDLE_VALIDATION_ERROR) return
+    throw error
   }
 }
 
