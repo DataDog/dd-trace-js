@@ -50,13 +50,19 @@ function wrapGeneric (method) {
   }
 }
 
-// Span the registered handler (not the generator body), and skip replays.
 function traceOrchestrationHandler (handler, functionName) {
   return function (...args) {
     if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, args)
 
     const orchestrationBinding = args[0]
     const traceContext = args[1]?.traceContext
+    const channelCtx = {
+      trigger: 'Orchestration',
+      functionName,
+      instanceId: orchestrationBinding.instanceId,
+      traceparent: traceContext?.traceParent,
+      tracestate: traceContext?.traceState,
+    }
 
     // we do not want to trace if the orchestrator has already completed and is being reactivated
     const history = orchestrationBinding?.history
@@ -64,18 +70,26 @@ function traceOrchestrationHandler (handler, functionName) {
       event => event.EventType === ORCHESTRATOR_COMPLETED_EVENT_TYPE
     )
 
-    if (hasPreviousActivation) { return handler.apply(this, args) }
+    if (hasPreviousActivation) {
+      return traceResumedOrchestrationErrors(handler, channelCtx, this, args)
+    }
 
     return azureDurableFunctionsChannel.tracePromise(
       handler,
-      {
-        trigger: 'Orchestration',
-        functionName,
-        instanceId: orchestrationBinding.instanceId,
-        traceparent: traceContext?.traceParent,
-        tracestate: traceContext?.traceState,
-      },
+      channelCtx,
       this, ...args)
+  }
+}
+
+async function traceResumedOrchestrationErrors (handler, channelCtx, thisArg, args) {
+  const startTime = Date.now()
+
+  try {
+    return await handler.apply(thisArg, args)
+  } catch (error) {
+    return azureDurableFunctionsChannel.traceSync(() => {
+      throw error
+    }, { ...channelCtx, startTime })
   }
 }
 

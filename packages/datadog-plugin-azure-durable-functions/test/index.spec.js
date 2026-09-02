@@ -121,12 +121,35 @@ describe('azure-durable-functions plugin', () => {
       startSpan,
       'azure.functions.invoke',
       sinon.match({
+        kind: 'server',
         tags: sinon.match({
           'aas.function.name': 'PizzaOrderOrchestration',
           'aas.function.trigger': 'Orchestration',
           'resource.name': 'Orchestration PizzaOrderOrchestration',
         }),
       })
+    )
+  })
+
+  for (const trigger of ['Activity', 'Entity']) {
+    it(`uses internal span kind for ${trigger} invocations`, () => {
+      bindStart({ trigger })
+
+      sinon.assert.calledWith(
+        startSpan,
+        'azure.functions.invoke',
+        sinon.match({ kind: 'internal' })
+      )
+    })
+  }
+
+  it('uses the provided invocation start time', () => {
+    bindStart({ startTime: 123 })
+
+    sinon.assert.calledWith(
+      startSpan,
+      'azure.functions.invoke',
+      sinon.match({ startTime: 123 })
     )
   })
 

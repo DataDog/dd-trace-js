@@ -32,8 +32,9 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
     }
 
     const span = this.startSpan(this.operationName(), {
+      startTime: ctx.startTime,
       childOf,
-      kind: 'internal',
+      kind: ctx.trigger === 'Orchestration' ? 'server' : 'internal',
       type: 'serverless',
 
       meta: {
