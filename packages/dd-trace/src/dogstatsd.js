@@ -144,32 +144,43 @@ class DogStatsDClient {
    * Recomputes the cached tags and tag-prefix (mirrors the constructor) after a `config.tags`
    * change, e.g. a MicroVM clone resume.
    *
-   * Buffered lines have the old prefix baked in, and on a clone resume they were produced during
-   * the image build, so every clone holds the same bytes — flushing them would submit one identical
-   * copy per clone. Dropping is right here for that reason only: for a tag change on a live process
-   * the buffer holds unique data whose old tags are still correct, so that case wants a flush
-   * before the swap.
+   * This is only ever called on identity refresh, so buffered lines and pending client telemetry
+   * always describe pre-snapshot activity and must always be dropped - not just when the
+   * serialized tag prefix happens to change. A clone resume with runtime-id tagging disabled and
+   * Remote Config absent produces an identical prefix across clones, which would otherwise skip
+   * the reset entirely.
    *
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
-   * @returns {boolean} True if the tag prefix actually changed (and buffered lines were dropped)
+   * @returns {void}
    */
   updateTags (tags) {
     const tagsPrefix = tags.length ? `|#${tags.join(',')}` : ''
-    if (tagsPrefix === this.#tagsPrefix) return false
+    if (tagsPrefix !== this.#tagsPrefix) {
+      this.#updateTagPrefixes(tagsPrefix)
+    }
 
-    this.#updateTagPrefixes(tagsPrefix)
     this.#metrics.queue = []
     this.#metrics.message = ''
     this.#metrics.offset = 0
 
-    const payload = this.telemetry?.payload
-    if (payload) {
-      payload.queue = []
-      payload.message = ''
-      payload.offset = 0
+    // Telemetry describes the client's own transport activity (bytes/packets sent or dropped,
+    // metrics counted so far), which is just as pre-snapshot as the buffered lines above - so it
+    // gets the same treatment: dropped and zeroed rather than reported for the refreshed identity.
+    const telemetry = this.telemetry
+    if (telemetry) {
+      telemetry.payload.queue = []
+      telemetry.payload.message = ''
+      telemetry.payload.offset = 0
+      telemetry.bytesSent = 0
+      telemetry.bytesDropped = 0
+      telemetry.packetsSent = 0
+      telemetry.packetsDropped = 0
+      telemetry.nextFlush = performance.now() + TELEMETRY_INTERVAL
+      for (let index = 0; index < TYPE_LABELS.length; index++) {
+        telemetry.aggregatedContextsByType[index] = 0
+        telemetry.metricsByType[index] = 0
+      }
     }
-
-    return true
   }
 
   /**
@@ -599,15 +610,13 @@ class MetricsAggregationClient {
 
   /**
    * Recomputes the wrapped client's cached tags (e.g. after a MicroVM clone resume). Pending
-   * counters/gauges/histograms were aggregated under the old identity, so they're reset along
-   * with the client's buffered lines — but only if the tags actually changed, so a no-op resume
-   * doesn't discard in-flight aggregation for nothing.
+   * counters/gauges/histograms were aggregated under the old identity, so they're always reset
+   * along with the client's buffered lines, regardless of whether the serialized tags changed.
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
    */
   updateTags (tags) {
-    if (this._client.updateTags(tags)) {
-      this.reset()
-    }
+    this._client.updateTags(tags)
+    this.reset()
   }
 
   /**

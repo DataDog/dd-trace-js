@@ -1,9 +1,16 @@
 'use strict'
 
 const { URL } = require('url')
+const { channel } = require('dc-polyfill')
 const log = require('../../log')
 const { createServerlessDeliveryTracker } = require('../../serverless')
 const Writer = require('./writer')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Only one AgentExporter is ever live in a real process, so replacing the subscription on
+// construction is safe - it just keeps tests (which build several) from piling up listeners.
+let unsubscribeBatchReset = null
 
 class AgentExporter {
   #timer
@@ -28,6 +35,12 @@ class AgentExporter {
       headers,
       deliveryTracker: this.#serverlessDeliveryTracker,
     })
+
+    // A clone resume shouldn't flush spans buffered before the snapshot under its own identity.
+    unsubscribeBatchReset?.()
+    const onIdentityRefresh = () => this._writer.resetPendingBatch()
+    identityRefreshChannel.subscribe(onIdentityRefresh)
+    unsubscribeBatchReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
   }

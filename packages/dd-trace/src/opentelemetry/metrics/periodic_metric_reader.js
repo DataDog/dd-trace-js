@@ -244,6 +244,7 @@ class PeriodicMetricReader {
       this.#lastExportedState.delete(key)
     }
     this.#cumulativeState.clear()
+    this.#aggregator.resetStartTime()
   }
 
   /**
@@ -358,6 +359,16 @@ class MetricAggregator {
   constructor (temporalityPreference, maxBatchedQueueSize) {
     this.#temporalityPreference = temporalityPreference
     this.#maxBatchedQueueSize = maxBatchedQueueSize
+  }
+
+  /**
+   * Rebases the cumulative start time to now, e.g. after a MicroVM clone resume discards
+   * accumulated state. Without this, the first post-resume CUMULATIVE export would report a
+   * start time from before the snapshot, spanning the pause.
+   * @returns {void}
+   */
+  resetStartTime () {
+    this.#startTime = nowUnixNano()
   }
 
   /**

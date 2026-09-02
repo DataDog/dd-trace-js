@@ -395,6 +395,63 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           localRuntimeMetrics.stop()
         })
 
+        it('should drain native metrics accumulators on identity refresh', function () {
+          if (!nativeMetrics) this.skip()
+
+          const nativeMetricsStats = sinon.stub().returns({
+            cpu: { user: 0, system: 0 }, heap: { spaces: [] }, eventLoop: {}, gc: {},
+          })
+          const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+            '@datadog/native-metrics': {
+              start () {},
+              stop () {},
+              stats: nativeMetricsStats,
+            },
+            './client': proxyquire('../src/runtime_metrics/client', {
+              '../dogstatsd': { DogStatsDClient: Client },
+            }),
+          })
+
+          localRuntimeMetrics.start(config)
+          identityRefreshChannel.publish(config)
+
+          sinon.assert.calledOnce(nativeMetricsStats)
+
+          localRuntimeMetrics.stop()
+        })
+
+        it('should discard queued GC observer entries on identity refresh', () => {
+          const takeRecords = sinon.stub().returns([])
+          class FakePerformanceObserver {
+            constructor (callback) {
+              this.callback = callback
+              this.takeRecords = takeRecords
+            }
+
+            observe () {}
+            disconnect () {}
+          }
+
+          const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+            perf_hooks: { ...require('perf_hooks'), PerformanceObserver: FakePerformanceObserver },
+            '@datadog/native-metrics': {
+              start () {
+                throw new Error('Native metrics are not supported in this environment')
+              },
+            },
+            './client': proxyquire('../src/runtime_metrics/client', {
+              '../dogstatsd': { DogStatsDClient: Client },
+            }),
+          })
+
+          localRuntimeMetrics.start(config)
+          identityRefreshChannel.publish(config)
+
+          sinon.assert.calledOnce(takeRecords)
+
+          localRuntimeMetrics.stop()
+        })
+
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
@@ -1120,6 +1177,7 @@ describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIterati
 class FakePerformanceObserverForOtlp {
   constructor (callback) {
     this.callback = callback
+    this.takeRecords = sinon.stub().returns([])
     FakePerformanceObserverForOtlp.instances.push(this)
   }
 
@@ -1611,6 +1669,21 @@ describe('otlp_runtime_metrics', () => {
     ctx.identityRefreshCalls[0].onRefresh()
 
     assert.strictEqual(fakeH.getResetCallCount(), 1)
+
+    ctx.otlpMetrics.stop()
+  })
+
+  it('discards queued GC observer entries on identity refresh', () => {
+    const ctx = loadOtlpRuntimeMetricsTestModule()
+    ctx.otlpMetrics.start({ runtimeMetrics: { gc: true } })
+
+    assert.strictEqual(ctx.identityRefreshCalls.length, 1)
+    assert.strictEqual(FakePerformanceObserverForOtlp.instances.length, 1, 'GC observer should be installed')
+    const observer = FakePerformanceObserverForOtlp.instances[0]
+
+    ctx.identityRefreshCalls[0].onRefresh()
+
+    sinon.assert.calledOnce(observer.takeRecords)
 
     ctx.otlpMetrics.stop()
   })

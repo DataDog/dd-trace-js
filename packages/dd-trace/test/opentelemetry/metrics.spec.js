@@ -1325,6 +1325,33 @@ describe('OpenTelemetry Meter Provider', () => {
       ])
     })
 
+    it('rebases the CUMULATIVE start time on identity refresh so it does not span the pause', () => {
+      const clock = sinon.useFakeTimers()
+      const startTimes = []
+      mockOtlpExport((decoded) => {
+        const dataPoint = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0]
+        startTimes.push(dataPoint.startTimeUnixNano)
+      })
+
+      const { config } = setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
+      const meter = metrics.getMeter('app')
+      const counter = meter.createUpDownCounter('tasks')
+      counter.add(3)
+      clock.tick(100)
+
+      // Simulates the MicroVM snapshot pause between the two exports.
+      clock.tick(60 * 60 * 1000)
+      identityRefreshChannel.publish(config)
+
+      counter.add(2)
+      clock.tick(100)
+
+      assert.strictEqual(startTimes.length, 2)
+      assert.ok(startTimes[1] > startTimes[0],
+        `expected the post-refresh start time (${startTimes[1]}) to be rebased past ` +
+        `the pre-refresh one (${startTimes[0]})`)
+    })
+
     it('drops sync Counter measurements recorded before an identity refresh', () => {
       const clock = sinon.useFakeTimers()
       const exportedValues = []

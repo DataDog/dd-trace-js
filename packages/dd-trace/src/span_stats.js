@@ -241,7 +241,7 @@ class SpanStatsProcessor {
     // A clone resume shouldn't export buckets accumulated before the snapshot under its own identity.
     unsubscribeBucketReset?.()
     const onIdentityRefresh = () => {
-      this.buckets = new TimeBuckets()
+      this.buckets = new TimeBuckets(Boolean(this.otlpExporter))
     }
     identityRefreshChannel.subscribe(onIdentityRefresh)
     unsubscribeBucketReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)

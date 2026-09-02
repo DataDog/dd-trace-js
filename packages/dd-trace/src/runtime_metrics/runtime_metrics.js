@@ -194,6 +194,15 @@ function resetSamplerBaselines () {
     eventLoopDelayObserver.reset()
     eventLoopDelayObserver.enable()
   }
+
+  // Drains the addon's own CPU/event-loop/GC accumulators, which stats() otherwise reports as a
+  // delta since the last call - without this, the first post-resume capture would include
+  // pre-snapshot activity.
+  nativeMetrics?.stats()
+
+  // Discards any GC entries recorded but not yet delivered to the observer's callback, so a GC
+  // pause from just before the snapshot isn't attributed to the clone's first post-resume sample.
+  gcObserver?.takeRecords()
 }
 
 function captureCpuUsage () {
