@@ -148,6 +148,20 @@ async function cleanupRumState () {
   if (context.resolveCallback) await runCallback(context.resolveCallback)
 }
 
+/**
+ * Advances the test-function lifecycle to the next non-afterEach hook.
+ *
+ * @returns {Promise<void>}
+ */
+async function cleanupPendingRumTest () {
+  const context = {
+    arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterAll'],
+  }
+  tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper').start.publish(context)
+  assert.strictEqual(typeof context.rumCleanupCallback, 'function')
+  await context.rumCleanupCallback()
+}
+
 describe('webdriverio instrumentation', () => {
   it('detects RUM before its initialization configuration is available', () => {
     const previousWindow = global.window
@@ -289,7 +303,7 @@ describe('webdriverio instrumentation', () => {
           })
         })
         .onThirdCall().callsFake(() => {
-          calls.push('cleanup')
+          calls.push('detect-after-each')
           return Promise.resolve(false)
         }),
       getWindowHandle: sinon.stub().callsFake(() => {
@@ -343,9 +357,10 @@ describe('webdriverio instrumentation', () => {
       }
       testFunctionCh.asyncEnd.publish(afterEachContext)
       await runCallback(afterEachContext.resolveCallback)
+      await cleanupPendingRumTest()
 
       assert.deepStrictEqual(calls.slice(5), [
-        'cleanup',
+        'detect-after-each',
         'remove-preload',
         'handle',
         'handles',
@@ -504,6 +519,7 @@ describe('webdriverio instrumentation', () => {
       }
       testFunctionCh.asyncEnd.publish(afterEachContext)
       await runCallback(afterEachContext.resolveCallback)
+      await cleanupPendingRumTest()
 
       assert.deepStrictEqual(calls, [
         'navigate',
@@ -550,9 +566,10 @@ describe('webdriverio instrumentation', () => {
           isRumInstrumented: true,
           rumSamplingRate: 100,
         })
-        .onCall(3).callsFake(() => {
-          calls.push('stop')
-          return Promise.resolve(true)
+        .onCall(3).resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
         }),
       isBidi: true,
       scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
@@ -581,14 +598,19 @@ describe('webdriverio instrumentation', () => {
         calls.push('test')
       }, { attempts: 0, limit: 0 })
 
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runCallback(testContext.resolveCallback)
+
       const afterEachContext = {
         arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
       }
       testFunctionCh.asyncEnd.publish(afterEachContext)
       await runCallback(afterEachContext.resolveCallback)
+      await cleanupPendingRumTest()
 
       assert.deepStrictEqual(calls, ['set', 'test', 'delete'])
-      assert.strictEqual(browser.execute.callCount, 3)
+      assert.strictEqual(browser.execute.callCount, 4)
       assert.deepStrictEqual(browser.setCookies.firstCall.args, [{
         name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         value: 'suite-test-id',
@@ -781,7 +803,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('detects RUM activated by same-page afterEach activity before cleanup', async () => {
+  it('keeps RUM correlated through every afterEach hook', async () => {
     require('../src/webdriverio')
 
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
@@ -818,6 +840,11 @@ describe('webdriverio instrumentation', () => {
           rumSamplingRate: null,
         })
         .onThirdCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onCall(3).resolves({
           isRumActive: true,
           isRumInstrumented: true,
           rumSamplingRate: 100,
@@ -863,31 +890,58 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(browser.execute.callCount, 2)
       assert.deepStrictEqual(rumStates, [undefined, false])
 
-      const beforeEachContext = {
-        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'beforeEach'],
-      }
-      testFunctionCh.asyncEnd.publish(beforeEachContext)
-      assert.strictEqual(beforeEachContext.resolveCallback, undefined)
+      calls.push('user-after-each:1')
 
-      calls.push('user-after-each')
-
-      const afterEachContext = {
+      const firstAfterEachContext = {
         arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
       }
-      testFunctionCh.asyncEnd.publish(afterEachContext)
-      await runCallback(afterEachContext.resolveCallback)
+      testFunctionCh.asyncEnd.publish(firstAfterEachContext)
+      await runCallback(firstAfterEachContext.resolveCallback)
 
       assert.deepStrictEqual(calls, [
         'add-preload',
         'user-after-test',
-        'user-after-each',
-        'remove-preload',
-        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
+        'user-after-each:1',
       ])
       assert.strictEqual(browser.execute.callCount, 3)
       assert.deepStrictEqual(rumStates, [undefined, false, true])
+
+      const secondAfterEachStartContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.start.publish(secondAfterEachStartContext)
+      assert.strictEqual(secondAfterEachStartContext.rumCleanupCallback, undefined)
+
+      calls.push('user-after-each:2')
+      const secondAfterEachErrorContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.error.publish(secondAfterEachErrorContext)
+      await runCallback(secondAfterEachErrorContext.rejectCallback)
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'user-after-test',
+        'user-after-each:1',
+        'user-after-each:2',
+      ])
+      assert.strictEqual(browser.execute.callCount, 4)
+      assert.deepStrictEqual(rumStates, [undefined, false, true, true])
+
+      await cleanupPendingRumTest()
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'user-after-test',
+        'user-after-each:1',
+        'user-after-each:2',
+        'remove-preload',
+        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
+      ])
+      assert.strictEqual(browser.execute.callCount, 4)
     } finally {
       correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
     }
   })
 
@@ -1038,6 +1092,7 @@ describe('webdriverio instrumentation', () => {
       }
       testFunctionCh.asyncEnd.publish(afterEachContext)
       await runCallback(afterEachContext.resolveCallback)
+      await cleanupPendingRumTest()
 
       assert.deepStrictEqual(calls, [
         'switch:window-a',
@@ -1284,6 +1339,7 @@ describe('webdriverio instrumentation', () => {
       }
       testFunctionCh.asyncEnd.publish(afterEachContext)
       await runCallback(afterEachContext.resolveCallback)
+      await cleanupPendingRumTest()
 
       assert.deepStrictEqual(calls, [
         'switch:window-a',

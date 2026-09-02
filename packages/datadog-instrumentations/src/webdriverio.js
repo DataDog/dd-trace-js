@@ -513,16 +513,6 @@ async function detectActiveRumBrowsers (updateTest = true) {
 }
 
 /**
- * Detects RUM initialized during afterEach before removing the test correlation.
- *
- * @returns {Promise<object[]>}
- */
-async function detectAndCleanupRumBrowsers () {
-  await detectActiveRumBrowsers()
-  return cleanupRumBrowsers()
-}
-
-/**
  * Preserves the active test's RUM correlation across a native WebdriverIO retry.
  *
  * @returns {Promise<void>}
@@ -601,7 +591,8 @@ function waitForRumNavigation (context) {
 }
 
 /**
- * Detects delayed RUM at test end and cleans it up after the user's afterEach hook.
+ * Detects delayed RUM at test and afterEach completion.
+ * Correlation remains active until every afterEach hook has run.
  *
  * @param {{arguments?: unknown[]}} context
  * @returns {void}
@@ -615,12 +606,13 @@ function waitForRumCleanup (context) {
     isRumCleanupPending = true
     setRumWaitCallbacks(context, detectActiveRumBrowsers)
   } else if (type === 'Hook' && hookName === 'afterEach') {
-    setRumWaitCallbacks(context, detectAndCleanupRumBrowsers)
+    setRumWaitCallbacks(context, detectActiveRumBrowsers)
   }
 }
 
 /**
- * Detects delayed RUM on test failures and cleans it up after a failed afterEach hook.
+ * Detects delayed RUM after test or afterEach failures.
+ * Correlation remains active until every afterEach hook has run.
  *
  * @param {{arguments?: unknown[]}} context
  * @returns {void}
@@ -634,14 +626,14 @@ function waitForFailedRumCleanup (context) {
     isRumCleanupPending = true
     setRumWaitCallbacks(context, detectActiveRumBrowsers, false)
   } else if (type === 'Hook' && hookName === 'afterEach') {
-    setRumWaitCallbacks(context, detectAndCleanupRumBrowsers, false)
+    setRumWaitCallbacks(context, detectActiveRumBrowsers, false)
   } else {
     isRumCleanupPending = true
   }
 }
 
 /**
- * Cleans a completed test's RUM state before the next wrapper when no afterEach ran.
+ * Cleans a completed test's RUM state before the next non-afterEach wrapper.
  *
  * @param {{arguments?: unknown[], rumCleanupCallback?: () => Promise<object[]>}} context
  * @returns {void}
