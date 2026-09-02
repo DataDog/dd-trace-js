@@ -21,6 +21,7 @@ const startSetHeaderCh = channel('datadog:http:server:response:set-header:start'
 const startInformationalResponseCh = channel('datadog:http:server:informational-response:start')
 const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 
+const HTTP2_HEADER_DATE = 'date'
 const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
@@ -81,6 +82,11 @@ const SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS = NODE_MAJOR >= 26 ||
 const responseContexts = new WeakMap()
 const wrappedStreamPrototypes = new WeakSet()
 let activeBlockedStreamCount = 0
+// Retained streams can still receive delayed application calls after close.
+// Keep the inactive-path gate armed until each blocked stream is unreachable.
+const blockedStreamFinalizer = new FinalizationRegistry(() => {
+  activeBlockedStreamCount--
+})
 
 const FILE_HANDLE_VALIDATION_ERROR = {}
 const FILE_HANDLE_VALIDATION_HEADERS = {
@@ -130,15 +136,7 @@ function wrapResponseEmit (originalEmit, ctx) {
   return function emit (eventName) {
     ctx.req = this.req
     ctx.eventName = eventName
-    if (eventName !== 'close') {
-      return emitCh.runStores(ctx, originalEmit, this, ...arguments)
-    }
-
-    try {
-      return emitCh.runStores(ctx, originalEmit, this, ...arguments)
-    } finally {
-      closeStreamResponse(ctx)
-    }
+    return emitCh.runStores(ctx, originalEmit, this, ...arguments)
   }
 }
 
@@ -148,27 +146,8 @@ function wrapStreamEmit (originalEmit, ctx) {
   // 'close', the same finish signal as the compatibility response.
   return function emit (eventName) {
     ctx.eventName = eventName
-    if (eventName !== 'close') {
-      return emitCh.runStores(ctx, originalEmit, this, ...arguments)
-    }
-
-    try {
-      return emitCh.runStores(ctx, originalEmit, this, ...arguments)
-    } finally {
-      closeStreamResponse(ctx)
-    }
+    return emitCh.runStores(ctx, originalEmit, this, ...arguments)
   }
-}
-
-/**
- * @param {StreamRequestContext} ctx
- */
-function closeStreamResponse (ctx) {
-  if (ctx.responseClosed) return
-
-  ctx.responseClosed = true
-  if (!ctx.responseBlocked) return
-  activeBlockedStreamCount--
 }
 
 function wrapEmit (originalEmit, strictSingleValueFields) {
@@ -363,7 +342,8 @@ function wrapStreamRespond (respond) {
     const options = copyResponseOptions(arguments, 1)
     if (!hasValidResponseOptions(options)) return Reflect.apply(respond, this, arguments)
 
-    const responseHeaders = getValidatedResponseHeaders(arguments[0], arguments, 0, ctx.strictSingleValueFields)
+    const responseHeaders = getValidatedResponseHeaders(
+      arguments[0], arguments, 0, ctx.strictSingleValueFields, options?.sendDate)
     if (!responseHeaders) return Reflect.apply(respond, this, arguments)
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
@@ -405,13 +385,14 @@ function wrapStreamRespondWithFD (respond) {
       const args = [...arguments]
       args[2] = {
         ...options,
-        statCheck: wrapStreamStatCheck(statCheck, ctx, this),
+        statCheck: wrapStreamStatCheck(statCheck, ctx, this, options?.sendDate),
       }
       return Reflect.apply(respond, this, args)
     }
     if (typeof arguments[0] !== 'number') assertFileHandle(respond, this, arguments[0])
 
-    const responseHeaders = getValidatedResponseHeaders(arguments[1], arguments, 1, ctx.strictSingleValueFields)
+    const responseHeaders = getValidatedResponseHeaders(
+      arguments[1], arguments, 1, ctx.strictSingleValueFields, options?.sendDate)
     if (!responseHeaders) return Reflect.apply(respond, this, arguments)
 
     const statusCode = getResponseStatusCode(responseHeaders)
@@ -473,7 +454,7 @@ function wrapStreamRespondWithFile (respond) {
     const args = [...arguments]
     args[2] = {
       ...options,
-      statCheck: wrapStreamStatCheck(statCheck, ctx, this),
+      statCheck: wrapStreamStatCheck(statCheck, ctx, this, options?.sendDate),
     }
     return Reflect.apply(respond, this, args)
   }
@@ -511,8 +492,9 @@ function wrapStreamAdditionalHeaders (additionalHeaders) {
  * @param {Function | undefined} statCheck
  * @param {StreamRequestContext} ctx
  * @param {import('node:http2').ServerHttp2Stream} stream
+ * @param {unknown} sendDate
  */
-function wrapStreamStatCheck (statCheck, ctx, stream) {
+function wrapStreamStatCheck (statCheck, ctx, stream, sendDate) {
   return function () {
     const result = statCheck ? Reflect.apply(statCheck, this, arguments) : true
     if (result === false || stream.destroyed || stream.closed || stream.headersSent ||
@@ -520,7 +502,8 @@ function wrapStreamStatCheck (statCheck, ctx, stream) {
       return result
     }
 
-    const responseHeaders = getValidatedResponseHeaders(arguments[1], undefined, 0, ctx.strictSingleValueFields)
+    const responseHeaders = getValidatedResponseHeaders(
+      arguments[1], undefined, 0, ctx.strictSingleValueFields, sendDate)
     if (!responseHeaders) return result
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
@@ -663,9 +646,12 @@ function getResponseStatusCode (responseHeaders) {
  * @param {ArgumentsLike} [argumentsObject]
  * @param {number} [headerIndex]
  * @param {boolean} [strictSingleValueFields]
+ * @param {unknown} [sendDate]
  * @returns {Record<string, unknown> | undefined}
  */
-function getValidatedResponseHeaders (headers, argumentsObject, headerIndex = 0, strictSingleValueFields = true) {
+function getValidatedResponseHeaders (
+  headers, argumentsObject, headerIndex = 0, strictSingleValueFields = true, sendDate = true
+) {
   if (headers === undefined) return {}
 
   let responseHeaders
@@ -681,17 +667,37 @@ function getValidatedResponseHeaders (headers, argumentsObject, headerIndex = 0,
   if (headersAreRaw) {
     if (!SUPPORTS_RAW_RESPONSE_HEADERS ||
       isProxy(headers) ||
-      headers.length % 2 !== 0 ||
-      headers.unshift !== Array.prototype.unshift ||
-      headers.push !== Array.prototype.push ||
-      !Object.isExtensible(headers) ||
-      !Object.getOwnPropertyDescriptor(headers, 'length')?.writable) {
+      headers.length % 2 !== 0) {
       return
     }
+    let rawHeaderName
+    let rawStatusCode
+    let hasRawDate = false
     for (let i = 0; i < headers.length; i++) {
       const descriptor = Object.getOwnPropertyDescriptor(headers, String(i))
       if (!descriptor || !Object.hasOwn(descriptor, 'value')) return
-      if (i % 2 === 0 && typeof descriptor.value !== 'string') return
+      if (i % 2 === 0) {
+        if (typeof descriptor.value !== 'string') return
+        rawHeaderName = descriptor.value.toLowerCase()
+      } else if (rawHeaderName === HTTP2_HEADER_STATUS) {
+        const value = descriptor.value
+        if (value !== null && value !== undefined &&
+          typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+          return
+        }
+        rawStatusCode = value | 0
+      } else if (rawHeaderName === HTTP2_HEADER_DATE) {
+        hasRawDate = true
+      }
+    }
+
+    const needsStatus = !rawStatusCode
+    const needsDate = !hasRawDate && (sendDate == null || sendDate)
+    if ((needsStatus && headers.unshift !== Array.prototype.unshift) ||
+      (needsDate && headers.push !== Array.prototype.push) ||
+      ((needsStatus || needsDate) &&
+        (!Object.isExtensible(headers) || !Object.getOwnPropertyDescriptor(headers, 'length')?.writable))) {
+      return
     }
   } else {
     responseHeaders = {}
@@ -716,9 +722,10 @@ function getValidatedResponseHeaders (headers, argumentsObject, headerIndex = 0,
       } else {
         responseHeaders[rawName] = value
       }
+      let normalizedName
       if (value === undefined || rawName === '' || (Array.isArray(value) && value.length === 0)) {
         canReturnFast = false
-        if (rawName !== rawName.toLowerCase()) requiresNormalization = true
+        normalizedName = rawName.toLowerCase()
       } else {
         const headerIsValid = isValidResponseHeader(
           rawName,
@@ -727,12 +734,17 @@ function getValidatedResponseHeaders (headers, argumentsObject, headerIndex = 0,
           strictSingleValueFields
         )
         if (!headerIsValid) {
-          if (rawName === rawName.toLowerCase()) {
+          normalizedName = rawName.toLowerCase()
+          if (rawName === normalizedName) {
             isValid = false
-          } else {
-            requiresNormalization = true
           }
         }
+      }
+      if (normalizedName !== undefined && rawName !== normalizedName) {
+        const collidesWithDefault = normalizedName === HTTP2_HEADER_STATUS ||
+          (normalizedName === HTTP2_HEADER_DATE && (sendDate == null || sendDate))
+        if (strictSingleValueFields && collidesWithDefault) return
+        requiresNormalization = true
       }
     }
   }
@@ -881,7 +893,8 @@ function markStreamResponseBlocked (ctx) {
   if (ctx.responseBlocked) return
 
   ctx.responseBlocked = true
-  if (!ctx.responseClosed) activeBlockedStreamCount++
+  activeBlockedStreamCount++
+  blockedStreamFinalizer.register(ctx.req.stream)
 }
 
 /**
@@ -1038,7 +1051,6 @@ class Http2StreamResponse {
  * @property {number} res.statusCode read at finish from `stream.sentHeaders`
  * @property {(name: string) => string | number | string[] | undefined} res.getHeader response-header tagging
  * @property {boolean} [responseBlocked] subsequent response operations are suppressed after blocking
- * @property {boolean} [responseClosed] the terminal close was processed
  * @property {false} [strictSingleValueFields] mirrors relaxed Node response validation
  */
 

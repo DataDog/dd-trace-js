@@ -451,7 +451,7 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     }
   })
 
-  it('keeps core response operations suppressed after a blocked stream closes', async () => {
+  it('keeps core response operations suppressed after a blocked stream closes and AppSec is disabled', async () => {
     let resolveAfterClose
     let rejectAfterClose
     const afterClosePromise = new Promise((resolve, reject) => {
@@ -461,72 +461,33 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
     await listenCore(stream => {
       stream.once('close', () => {
+        appsec.disable()
         queueMicrotask(() => {
+          const fileDescriptor = openSync(__filename, 'r')
           try {
+            stream.additionalHeaders({ ':status': 103 })
             stream.respond({ ':status': 200 })
+            stream.respondWithFD(fileDescriptor, { ':status': 200 })
+            stream.respondWithFile(__filename, { ':status': 200 })
             stream.write('ignored')
             stream.end('ignored')
             stream.emit('close')
             resolveAfterClose()
           } catch (error) {
             rejectAfterClose(error)
+          } finally {
+            closeSync(fileDescriptor)
           }
         })
       })
       stream.respond({ ':status': 404, k: '404' })
     })
 
-    const [{ body, headers }] = await Promise.all([request(), afterClosePromise])
-
-    assert.strictEqual(headers[':status'], 403)
-    assert.strictEqual(body, blockedTemplateJson)
-  })
-
-  it('restores the inactive response path after reentrant blocking', async () => {
-    let blockedStreamClosePromise
-    let inactiveHeadersSentReads = 0
-    await listenCore((stream, headers) => {
-      if (headers[':path'] === '/blocked') {
-        blockedStreamClosePromise = once(stream, 'close')
-        const responseHeaders = { ':status': 404, k: '404' }
-        Object.defineProperty(responseHeaders, 'x-reentrant', {
-          enumerable: true,
-          get () {
-            stream.respond({ ':status': 404, k: '404' })
-            return 'value'
-          },
-        })
-        stream.respond(responseHeaders)
-        return
-      }
-
-      let streamPrototype = Object.getPrototypeOf(stream)
-      let headersSentDescriptor
-      while (!headersSentDescriptor) {
-        headersSentDescriptor = Object.getOwnPropertyDescriptor(streamPrototype, 'headersSent')
-        streamPrototype = Object.getPrototypeOf(streamPrototype)
-      }
-      Object.defineProperty(stream, 'headersSent', {
-        get () {
-          inactiveHeadersSentReads++
-          return Reflect.apply(headersSentDescriptor.get, this, [])
-        },
-      })
-      stream.end('body')
-    })
-
-    const blockedResponse = await request('/blocked')
-    await blockedStreamClosePromise
-    appsec.disable()
-
     try {
-      const inactiveResponse = await request('/inactive')
+      const [{ body, headers }] = await Promise.all([request(), afterClosePromise])
 
-      assert.strictEqual(blockedResponse.headers[':status'], 403)
-      assert.strictEqual(blockedResponse.body, blockedTemplateJson)
-      assert.strictEqual(inactiveResponse.headers[':status'], 200)
-      assert.strictEqual(inactiveResponse.body, 'body')
-      assert.strictEqual(inactiveHeadersSentReads, 2)
+      assert.strictEqual(headers[':status'], 403)
+      assert.strictEqual(body, blockedTemplateJson)
     } finally {
       appsec.enable(config)
       setTestBlockingTemplates()
@@ -749,6 +710,16 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
           () => stream.respond({ ':STATUS': {}, k: '404' }),
           { code: 'ERR_HTTP2_HEADER_SINGLE_VALUE' }
         )
+      } else if (requestPath === '/status-case') {
+        assert.throws(
+          () => stream.respond({ ':STATUS': 404, k: '404' }),
+          { code: 'ERR_HTTP2_HEADER_SINGLE_VALUE' }
+        )
+      } else if (requestPath === '/date-case') {
+        assert.throws(
+          () => stream.respond({ ':status': 404, Date: 'Thu, 01 Jan 1970 00:00:00 GMT', k: '404' }),
+          { code: 'ERR_HTTP2_HEADER_SINGLE_VALUE' }
+        )
       } else if (requestPath === '/header') {
         assert.throws(
           () => stream.respond({ ':status': 404, connection: 'close', k: '404' }),
@@ -891,6 +862,11 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
           () => stream.respond([1, 'value', ':status', 404, 'k', '404']),
           TypeError
         )
+      } else if (requestPath === '/raw-status-value') {
+        assert.throws(
+          () => stream.respond([':status', {}, 'k', '404']),
+          SUPPORTS_RAW_RESPONSE_HEADERS ? { code: 'ERR_HTTP2_HEADER_SINGLE_VALUE' } : TypeError
+        )
       } else if (requestPath === '/raw-header-accessor') {
         const responseHeaders = [':status', 404, 'x-test', 'value', 'k', '404']
         Object.defineProperty(responseHeaders, 2, {
@@ -915,6 +891,12 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
         )
       } else if (requestPath === '/frozen-raw-headers') {
         const responseHeaders = Object.freeze([':status', 404, 'k', '404'])
+        assert.throws(() => stream.respond(responseHeaders), TypeError)
+      } else if (requestPath === '/frozen-raw-headers-status') {
+        const responseHeaders = Object.freeze([
+          'date', 'Thu, 01 Jan 1970 00:00:00 GMT',
+          'k', '404',
+        ])
         assert.throws(() => stream.respond(responseHeaders), TypeError)
       } else if (requestPath === '/single-value-header') {
         assert.throws(
@@ -986,6 +968,8 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     const requestPaths = [
       '/status',
       '/status-normalized',
+      '/status-case',
+      '/date-case',
       '/header',
       '/header-type',
       '/header-null',
@@ -1005,9 +989,11 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
       '/raw-headers',
       '/flat-raw-headers',
       '/raw-header-name',
+      '/raw-status-value',
       '/raw-header-accessor',
       '/raw-sensitive-header-accessor',
       '/frozen-raw-headers',
+      '/frozen-raw-headers-status',
       '/single-value-header',
       '/sensitive-empty',
       '/ignored-headers',
@@ -1036,6 +1022,21 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     const { body, headers } = await request()
 
     assert.strictEqual(headers.te, 'trailers')
+    assert.strictEqual(body, 'body')
+  })
+
+  it('leaves incomplete raw response header pairs to Node', async function () {
+    if (!SUPPORTS_RAW_RESPONSE_HEADERS) this.skip()
+
+    await listenCore(stream => {
+      stream.respond([':status', 200, 'x-test'], { sendDate: false })
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 200)
+    assert.strictEqual(headers['x-test'], undefined)
     assert.strictEqual(body, 'body')
   })
 
@@ -1129,6 +1130,56 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(headers[':status'], 200)
     assert.strictEqual(body, 'body')
     assert.deepStrictEqual(headers[http2.sensitiveHeaders], ['k'])
+  })
+
+  it('blocks immutable complete raw response headers', async function () {
+    if (!SUPPORTS_RAW_RESPONSE_HEADERS) this.skip()
+
+    await listenCore(stream => {
+      const responseHeaders = Object.freeze([
+        ':status', 404,
+        'date', 'Thu, 01 Jan 1970 00:00:00 GMT',
+        'k', '404',
+      ])
+      stream.respond(responseHeaders)
+      stream.end('ignored')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('blocks immutable raw response headers when automatic dates are disabled', async function () {
+    if (!SUPPORTS_RAW_RESPONSE_HEADERS) this.skip()
+
+    await listenCore(stream => {
+      const responseHeaders = Object.freeze([':status', 404, 'k', '404'])
+      stream.respond(responseHeaders, { sendDate: false })
+      stream.end('ignored')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('blocks uppercase date headers when automatic dates are disabled', async () => {
+    await listenCore(stream => {
+      stream.respond({
+        ':status': 404,
+        Date: 'Thu, 01 Jan 1970 00:00:00 GMT',
+        k: '404',
+      }, { sendDate: false })
+      stream.end('ignored')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
   })
 
   it('preserves invalid te errors when single-value fields are relaxed', async function () {
