@@ -1,5 +1,7 @@
 'use strict'
 
+const { isNativeError } = require('node:util').types
+
 const shimmer = require('../../datadog-shimmer')
 const nomenclature = require('../../dd-trace/src/service-naming')
 const spanEndingHook = require('../../dd-trace/src/opentelemetry/span-ending-hook')
@@ -12,11 +14,44 @@ const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
 const bodyParsedChannel = channel('apm:next:body-parsed')
 const queryParsedChannel = channel('apm:next:query-parsed')
+const backgroundRevalidationChannel = channel('apm:next:request:background-revalidation')
+
+/**
+ * @typedef {import('node:http').IncomingMessage & {
+ *   error?: unknown,
+ *   originalRequest?: import('node:http').IncomingMessage
+ * }} NextNodeRequest
+ *
+ * @typedef {import('node:http').ServerResponse & {
+ *   originalResponse?: import('node:http').ServerResponse
+ * }} NextNodeResponse
+ *
+ * @typedef {object} NextRequest
+ * @property {unknown} [error]
+ *
+ * @typedef {object} NextRequestContext
+ * @property {NextNodeRequest} req
+ * @property {NextNodeResponse} res
+ * @property {boolean} [finishOnResponse]
+ * @property {boolean} [handlerFinished]
+ * @property {boolean} [responseFinished]
+ * @property {unknown} [error]
+ * @property {NextRequest} [nextRequest]
+ *
+ * @typedef {object} ResponseGeneratorContext
+ * @property {boolean} [hasResolved]
+ *
+ * @typedef {object} HandleResponseOptions
+ * @property {NextNodeRequest} req
+ * @property {(context?: ResponseGeneratorContext) => Promise<unknown>} responseGenerator
+ *
+ * @typedef {object} ResponseCacheEntry
+ * @property {{ status?: number }} [value]
+ */
 
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
-const requestErrors = new WeakMap()
-
+const noFallbackErrorPrototypes = new WeakSet()
 // Next.js <= 14.2.6
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
 
@@ -149,7 +184,16 @@ function getRequestMeta (req, key) {
   return typeof key === 'string' ? meta[key] : meta
 }
 
-function instrument (req, res, handler, error) {
+/**
+ * @template T
+ * @param {NextNodeRequest} req
+ * @param {NextNodeResponse} res
+ * @param {(ctx: NextRequestContext) => Promise<T>} handler
+ * @param {unknown} [error]
+ * @param {boolean} [finishOnResponse]
+ * @returns {Promise<T>}
+ */
+function instrument (req, res, handler, error, finishOnResponse = false) {
   req = req.originalRequest || req
   res = res.originalResponse || res
 
@@ -165,7 +209,17 @@ function instrument (req, res, handler, error) {
 
   requests.add(req)
 
-  const ctx = { req, res }
+  const ctx = finishOnResponse ? { req, res, finishOnResponse } : { req, res }
+  if (finishOnResponse) {
+    const onResponseFinish = () => {
+      res.removeListener('finish', onResponseFinish)
+      res.removeListener('close', onResponseFinish)
+      ctx.responseFinished = true
+      if (ctx.handlerFinished) publishFinish(ctx, ctx.error)
+    }
+    res.once('finish', onResponseFinish)
+    res.once('close', onResponseFinish)
+  }
   if (queryParsedChannel.hasSubscribers && req.url) {
     const queryIndex = req.url.indexOf('?')
     if (queryIndex !== -1) {
@@ -213,9 +267,8 @@ function wrapServeStatic (serveStatic) {
   }
 }
 
-function finish (ctx, result, err) {
-  publishError(ctx.req, ctx, err)
-  requestErrors.delete(ctx.req)
+function publishFinish (ctx, error) {
+  publishError(ctx.req, ctx, error)
 
   const maybeNextRequest = nodeNextRequestsToNextRequests.get(ctx.req)
   if (maybeNextRequest) {
@@ -225,24 +278,35 @@ function finish (ctx, result, err) {
   finishChannel.publish(ctx)
 }
 
-function publishError (req, ctx, error) {
-  if (!error) return
-
-  req = req.originalRequest || req
-  let errors = requestErrors.get(req)
-  if (errors?.has(error)) return
-
-  if (!errors) {
-    errors = new Set()
-    requestErrors.set(req, errors)
+function finish (ctx, result, error) {
+  if (ctx.finishOnResponse) {
+    ctx.handlerFinished = true
+    if (error && !isNoFallbackError(error)) ctx.error = error
+    if (!ctx.responseFinished) return
   }
-  errors.add(error)
+
+  publishFinish(ctx, error)
+}
+
+/** @param {unknown} error */
+function isNoFallbackError (error) {
+  return isNativeError(error) && noFallbackErrorPrototypes.has(Object.getPrototypeOf(error))
+}
+
+/**
+ * @param {NextNodeRequest} req
+ * @param {NextRequestContext | undefined} ctx
+ * @param {unknown} error
+ */
+function publishError (req, ctx, error) {
+  if (!error || isNoFallbackError(error)) return
 
   if (ctx) {
     ctx.error = error
     errorChannel.publish(ctx)
   } else {
-    errorChannel.publish({ error })
+    req = req.originalRequest || req
+    errorChannel.publish({ req, error })
   }
 }
 
@@ -267,13 +331,29 @@ addHook({
 // From Next 15.4.1, route modules execute through precompiled runtime bundles that bypass the
 // classic server hooks above. Match bundler and experimental filename variants without enumerating
 // them so App Routes, Pages APIs, and App Pages reuse the existing Next request lifecycle.
+// The route module classes and inherited methods are selected inside those bundles, so there is no
+// stable source function for Orchestrion to rewrite.
 const patchedRouteModules = new WeakSet()
+const routeResponses = new WeakMap()
+const activeRouteRequests = new WeakMap()
 const COMPILED_RUNTIME_PATH = 'dist/compiled/next-server/'
+
+/** @param {{ NoFallbackError: typeof Error }} noFallbackError */
+function captureNoFallbackError (noFallbackError) {
+  noFallbackErrorPrototypes.add(noFallbackError.NoFallbackError.prototype)
+  return noFallbackError
+}
+
+// The sentinel identity only exists at runtime, so there is no source function for Orchestrion to rewrite.
+addHook({
+  name: 'next',
+  versions: ['>=15.4.1'],
+  file: 'dist/shared/lib/no-fallback-error.external.js',
+}, captureNoFallbackError)
+
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
-    if (error) {
-      errorChannel.publish({ error })
-    }
+    if (error) publishError(req, undefined, error)
     return onRequestError.apply(this, arguments)
   }
 }
@@ -296,37 +376,127 @@ function publishRoutePage (ctx, routeModule, fallbackPage, isAppPath) {
 
   const pageData = getRoutePage(routeModule, fallbackPage)
   if (pageData.page) {
-    pageLoadChannel.publish(isAppPath ? { ...pageData, isAppPath: true } : pageData)
+    if (isAppPath) pageData.isAppPath = true
+    pageLoadChannel.publish(pageData)
   }
 }
 
 function wrapAppRouteHandle (handle) {
   return function (req, context) {
-    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
-      return handle.apply(this, arguments)
+    if (finishChannel.hasSubscribers) {
+      const nodeRequest = activeRouteRequests.get(this)
+      if (nodeRequest) {
+        nodeNextRequestsToNextRequests.set(nodeRequest, req)
+      }
     }
 
-    const res = { statusCode: 500 }
-    nodeNextRequestsToNextRequests.set(req, req)
+    return handle.apply(this, arguments)
+  }
+}
+
+function wrapPrepare (prepare) {
+  return function (req, res) {
+    if (startChannel.hasSubscribers || queryParsedChannel.hasSubscribers) {
+      routeResponses.set(req, res)
+    }
+
+    return prepare.apply(this, arguments)
+  }
+}
+
+/**
+ * @param {(context?: ResponseGeneratorContext) => unknown} responseGenerator
+ * @param {object | undefined} routeModule
+ * @param {NextNodeRequest} req
+ * @returns {(context?: ResponseGeneratorContext) => unknown}
+ */
+function wrapResponseGenerator (responseGenerator, routeModule, req) {
+  return function (context) {
+    if (context?.hasResolved) {
+      const nodeRequest = req.originalRequest || req
+      return backgroundRevalidationChannel.runStores(nodeRequest, () => responseGenerator.apply(this, arguments))
+    }
+    if (!routeModule) {
+      return responseGenerator.apply(this, arguments)
+    }
+
+    // Next calls the route module before the generator's first await. Limit the association to that
+    // synchronous call so concurrent requests can share the route module instance safely.
+    activeRouteRequests.set(routeModule, req)
+    try {
+      return responseGenerator.apply(this, arguments)
+    } finally {
+      activeRouteRequests.delete(routeModule)
+    }
+  }
+}
+
+/**
+ * @param {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>} handleResponse
+ * @param {boolean} associateNextRequest
+ * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
+ */
+function wrapHandleResponse (handleResponse, associateNextRequest) {
+  return function (options) {
+    const req = options.req
+    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
+      return handleResponse.apply(this, arguments)
+    }
+
+    const res = routeResponses.get(req)
+    routeResponses.delete(req)
+
+    const routeModule = res && associateNextRequest ? this : undefined
+    options.responseGenerator = wrapResponseGenerator(options.responseGenerator, routeModule, req)
+
+    if (!res) return handleResponse.apply(this, arguments)
 
     return instrument(req, res, ctx => {
       publishRoutePage(ctx, this, undefined, true)
 
-      return handle.apply(this, arguments).then(response => {
-        if (ctx) ctx.res.statusCode = response?.status || 200
-        return response
+      return handleResponse.apply(this, arguments).then(result => {
+        const statusCode = result?.value?.status
+        if (ctx && typeof statusCode === 'number') {
+          ctx.res.statusCode = statusCode
+        }
+
+        return result
+      }, error => {
+        if (ctx && (typeof ctx.res.statusCode !== 'number' || ctx.res.statusCode < 400)) {
+          ctx.res.statusCode = 500
+        }
+
+        throw error
       })
-    })
+    }, undefined, finishChannel.hasSubscribers)
   }
 }
 
-function instrumentRouteModule (RouteModule, method, wrapper, handleErrors) {
+/**
+ * @param {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>} handleResponse
+ * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
+ */
+function wrapAppRouteHandleResponse (handleResponse) {
+  return wrapHandleResponse(handleResponse, true)
+}
+
+/**
+ * @param {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>} handleResponse
+ * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
+ */
+function wrapAppPageHandleResponse (handleResponse) {
+  return wrapHandleResponse(handleResponse, false)
+}
+
+function instrumentRouteModule (RouteModule, wrappers, handleErrors) {
   const proto = RouteModule?.prototype
   if (!proto || patchedRouteModules.has(RouteModule)) return
 
   patchedRouteModules.add(RouteModule)
-  if (typeof proto[method] === 'function') {
-    shimmer.wrap(proto, method, wrapper)
+  for (const [method, wrapper] of wrappers) {
+    if (typeof proto[method] === 'function') {
+      shimmer.wrap(proto, method, wrapper)
+    }
   }
   if (handleErrors && typeof proto.onRequestError === 'function') {
     shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
@@ -334,7 +504,11 @@ function instrumentRouteModule (RouteModule, method, wrapper, handleErrors) {
 }
 
 function instrumentAppRouteRuntime (runtime) {
-  instrumentRouteModule(runtime.AppRouteRouteModule, 'handle', wrapAppRouteHandle, true)
+  instrumentRouteModule(runtime.AppRouteRouteModule, [
+    ['prepare', wrapPrepare],
+    ['handleResponse', wrapAppRouteHandleResponse],
+    ['handle', wrapAppRouteHandle],
+  ], true)
   return runtime
 }
 
@@ -361,40 +535,16 @@ function wrapPagesApiRender (render) {
 
 function instrumentPagesApiRuntime (runtime) {
   const PagesAPIRouteModule = runtime.PagesAPIRouteModule || runtime.default
-  instrumentRouteModule(PagesAPIRouteModule, 'render', wrapPagesApiRender, false)
+  instrumentRouteModule(PagesAPIRouteModule, [['render', wrapPagesApiRender]], false)
   return runtime
-}
-
-function wrapAppPageRender (render) {
-  return function (req, res, context = {}) {
-    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
-      return render.apply(this, arguments)
-    }
-
-    return instrument(req, res, ctx => {
-      publishRoutePage(ctx, this, context.page, true)
-
-      return render.apply(this, arguments).then(result => {
-        const statusCode = result?.metadata?.statusCode
-        if (ctx && typeof statusCode === 'number') {
-          ctx.res.statusCode = statusCode
-        }
-
-        return result
-      }, error => {
-        if (ctx && (typeof ctx.res.statusCode !== 'number' || ctx.res.statusCode < 400)) {
-          ctx.res.statusCode = 500
-        }
-
-        throw error
-      })
-    })
-  }
 }
 
 function instrumentAppPageRuntime (runtime) {
   const AppPageRouteModule = runtime.AppPageRouteModule || runtime.default
-  instrumentRouteModule(AppPageRouteModule, 'render', wrapAppPageRender, true)
+  instrumentRouteModule(AppPageRouteModule, [
+    ['prepare', wrapPrepare],
+    ['handleResponse', wrapAppPageHandleResponse],
+  ], true)
   return runtime
 }
 

@@ -77,6 +77,41 @@ describe('group-coverage', () => {
       assert.deepEqual([...groups], [['apm-integrations-next', ['apm-integrations-next']]])
     })
 
+    it('shortens the duplicated instrumentations prefix', () => {
+      const integration = 'instrumentations-instrumentation-confluentinc-kafka-javascript'
+      const groups = planGroups(new Map([[integration, ['a', 'b']]]))
+      assert.deepEqual([...groups], [['instr-confluentinc-kafka-javascript', [integration]]])
+    })
+
+    it('distinguishes overlong integration flags that share the accepted prefix', () => {
+      const accepted = `area-${'a'.repeat(40)}`
+      const longPrefix = `area-${'a'.repeat(40)}`
+      const groups = planGroups(new Map([
+        [accepted, ['a', 'b']],
+        [`${longPrefix}b`, ['c', 'd']],
+        [`${longPrefix}c`, ['e', 'f']],
+      ]))
+      const flags = [...groups.keys()]
+      assert.equal(flags[0], accepted)
+      assert.equal(flags[1].length, 45)
+      assert.equal(flags[2].length, 45)
+      assert.notEqual(flags[1], flags[2])
+      for (const flag of flags) {
+        assert.match(flag, /^[\w.-]{1,45}$/)
+      }
+    })
+
+    it('distinguishes sanitized flags from existing valid names', () => {
+      const groups = planGroups(new Map([
+        ['area-library+variant', ['a', 'b']],
+        ['area-library_variant', ['c', 'd']],
+      ]))
+      const flags = [...groups.keys()]
+      assert.match(flags[0], /^[\w.-]{1,45}$/)
+      assert.equal(flags[1], 'area-library_variant')
+      assert.notEqual(flags[0], flags[1])
+    })
+
     it('leaves a small singleton tail (<=2) standalone', () => {
       const groups = planGroups(new Map([
         ['serverless-lambda', ['a']],

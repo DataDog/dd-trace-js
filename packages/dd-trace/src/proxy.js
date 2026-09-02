@@ -190,7 +190,7 @@ class Tracer extends NoopProxy {
 
       telemetry.start(config, this._pluginManager)
 
-      if (config.dogstatsd && !isOfflineTestOptimizationValidation()) {
+      if (config.dogstatsd && !config.DD_AGENTLESS_ENABLED && !isOfflineTestOptimizationValidation()) {
         // Custom Metrics
         lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }

@@ -47,6 +47,8 @@
   "graphql-jit/dist/esm/execution.js": "graphql-jit",
   "graphql-jit/dist/execution.js": "graphql-jit",
   "graphql-jit/dist/execution.mjs": "graphql-jit",
+  "graphql/error/locatedError.js": "graphql",
+  "graphql/error/locatedError.mjs": "graphql",
   "graphql/execution/execute.js": "graphql",
   "graphql/execution/execute.mjs": "graphql",
   "graphql/language/parser.js": "graphql",
