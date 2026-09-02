@@ -2,58 +2,59 @@
 
 const assert = require('node:assert/strict')
 const { URL } = require('node:url')
-const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const proxyquire = require('proxyquire').noCallThru()
 
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
 
+const { storage } = require('../../../../datadog-core')
+
 describe('AgentlessWriter', () => {
-  let Writer
-  let writer
-  let request
+  let AgentlessWriter
+  let apiKey
+  let createAgentlessExporter
   let encoder
   let encoderArgs
-  let url
+  let exporter
   let log
-  let apiKey
+  let writer
 
   beforeEach(() => {
-    request = sinon.stub().yieldsAsync(null, '{}', 200)
-    request.writable = true
-
+    apiKey = 'test-api-key'
     encoder = {
+      count: sinon.stub().returns(1),
       encode: sinon.stub(),
-      count: sinon.stub().returns(0),
-      makePayload: sinon.stub().returns(Buffer.from('{"traces":[]}')),
+      makePayload: sinon.stub().returns(Buffer.from('v0.4 payload')),
       reset: sinon.stub(),
     }
-
-    url = new URL('https://public-trace-http-intake.logs.datadoghq.com')
-
-    log = {
-      debug: sinon.spy(),
-      error: sinon.spy(),
+    exporter = {
+      close: sinon.stub(),
+      sendV04: sinon.stub().callsArg(1),
     }
-
-    const AgentlessJSONEncoder = function (...args) {
+    createAgentlessExporter = sinon.stub().returns(exporter)
+    log = {
+      debug: sinon.stub(),
+      error: sinon.stub(),
+      warn: sinon.stub(),
+    }
+    const AgentEncoder = function (...args) {
       encoderArgs = args
       return encoder
     }
 
-    const requestModule = Object.assign(request, { '@global': true })
-
-    apiKey = 'test-api-key'
-
-    Writer = proxyquire('../../../src/exporters/agentless/writer', {
-      '../common/request': requestModule,
-      '../../encode/agentless-json': { AgentlessJSONEncoder },
-      '../../../../../package.json': { version: 'tracerVersion' },
+    AgentlessWriter = proxyquire('../../../src/exporters/agentless/writer', {
+      '@datadog/libdatadog': { createAgentlessExporter },
+      '../../../../../package.json': { version: 'tracer-version' },
+      '../../config': () => ({
+        DD_API_KEY: apiKey,
+        env: 'test-env',
+        service: 'test-service',
+        version: 'test-version',
+      }),
+      '../../encode/0.4': { AgentEncoder },
       '../../log': log,
-      '../../config': () => ({ DD_API_KEY: apiKey }),
     })
   })
 
@@ -61,343 +62,188 @@ describe('AgentlessWriter', () => {
     sinon.restore()
   })
 
-  describe('constructor', () => {
-    it('should construct intake URL from site', () => {
-      writer = new Writer({ site: 'datadoghq.eu' })
+  it('uses the v0.4 encoder so dd-trace preprocessing is preserved', () => {
+    writer = new AgentlessWriter({ metadata: { hostname: 'test-host' } })
 
-      assert.ok(writer._url)
-      assert.strictEqual(writer._url.hostname, 'public-trace-http-intake.logs.datadoghq.eu')
-    })
+    assert.strictEqual(encoderArgs[0], writer)
+  })
 
-    it('should use provided URL', () => {
-      const customUrl = new URL('https://custom-intake.example.com')
-      writer = new Writer({ url: customUrl, site: 'datadoghq.com' })
-
-      assert.strictEqual(writer._url, customUrl)
-    })
-
-    it('should default to datadoghq.com site', () => {
-      writer = new Writer({})
-
-      assert.strictEqual(writer._url.hostname, 'public-trace-http-intake.logs.datadoghq.com')
-    })
-
-    it('should map a regional site to its data-center intake host', () => {
-      writer = new Writer({ site: 'ap1.datadoghq.com' })
-
-      assert.strictEqual(writer._url.hostname, 'browser-intake-ap1-datadoghq.com')
-    })
-
-    it('should pass writer reference and metadata to encoder', () => {
-      const metadata = {
-        hostname: 'test-host',
+  it('sends the v0.4 payload through the data pipeline', async () => {
+    writer = new AgentlessWriter({
+      url: new URL('https://intake.example/custom-path'),
+      metadata: {
         env: 'test-env',
+        hostname: 'test-host',
+        runtimeID: 'runtime-id',
+        containerId: 'container-id',
+      },
+    })
+
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.calledOnceWithExactly(exporter.sendV04, Buffer.from('v0.4 payload'), sinon.match.func, log)
+    sinon.assert.calledOnceWithExactly(createAgentlessExporter, {
+      endpoint: 'https://intake.example/api/v2/spans',
+      apiKey: 'test-api-key',
+      hostname: 'test-host',
+      env: 'test-env',
+      service: 'test-service',
+      version: 'test-version',
+      runtimeId: 'runtime-id',
+      containerId: 'container-id',
+      tracerVersion: 'tracer-version',
+      languageVersion: process.version,
+      languageInterpreter: 'v8',
+    })
+  })
+
+  it('suppresses instrumentation of the data-pipeline intake request', async () => {
+    /**
+     * @param {Buffer} data
+     * @param {() => void} done
+     */
+    exporter.sendV04.callsFake((data, done) => {
+      assert.strictEqual(storage('legacy').getHandle()?.noop, true)
+      done()
+    })
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+  })
+
+  it('waits for the data-pipeline completion callback', async () => {
+    exporter.sendV04.resetBehavior()
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+    let flushed = false
+    const flush = new Promise(resolve => writer.flush(() => {
+      flushed = true
+      resolve()
+    }))
+
+    assert.strictEqual(flushed, false)
+    const done = exporter.sendV04.firstCall.args[1]
+    done()
+    await flush
+    assert.strictEqual(flushed, true)
+  })
+
+  it('contains synchronous data-pipeline construction failures', async () => {
+    const error = { toString: () => 'exporter unavailable' }
+    createAgentlessExporter.callsFake(() => { throw error })
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.calledWithExactly(
+      log.error,
+      'Failed to send %d trace(s) to the agentless intake: %s',
+      1,
+      'exporter unavailable'
+    )
+  })
+
+  it('contains synchronous data-pipeline send failures', async () => {
+    exporter.sendV04.throws(new Error('send failed'))
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.calledWithExactly(
+      log.error,
+      'Failed to send %d trace(s) to the agentless intake: %s',
+      1,
+      'send failed'
+    )
+  })
+
+  it('does not give the API key to a non-loopback HTTP receiver', async () => {
+    writer = new AgentlessWriter({ url: new URL('http://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.notCalled(createAgentlessExporter)
+    sinon.assert.notCalled(exporter.sendV04)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'DD_API_KEY will not be sent because the configured receiver is neither HTTPS nor loopback.'
+    )
+  })
+
+  it('reuses the pipeline exporter while its endpoint and API key are unchanged', async () => {
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.calledOnce(createAgentlessExporter)
+    sinon.assert.calledTwice(exporter.sendV04)
+  })
+
+  it('recreates the pipeline exporter when the intake URL changes', async () => {
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+    writer.setUrl(new URL('https://other-intake.example'))
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.calledTwice(createAgentlessExporter)
+    sinon.assert.calledOnce(exporter.close)
+    assert.strictEqual(createAgentlessExporter.secondCall.args[0].endpoint,
+      'https://other-intake.example/api/v2/spans')
+  })
+
+  it('recreates the pipeline exporter when the API key changes', async () => {
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+    apiKey = 'other-api-key'
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.calledTwice(createAgentlessExporter)
+    sinon.assert.calledOnce(exporter.close)
+    assert.strictEqual(createAgentlessExporter.secondCall.args[0].apiKey, 'other-api-key')
+  })
+
+  for (const [metadataName, optionName] of [
+    ['env', 'env'],
+    ['runtimeID', 'runtimeId'],
+  ]) {
+    it(`recreates the pipeline exporter when ${metadataName} changes`, async () => {
+      const metadata = {
+        env: 'old-value',
+        runtimeID: 'old-value',
       }
-      writer = new Writer({ url, metadata })
+      writer = new AgentlessWriter({
+        url: new URL('https://intake.example'),
+        metadata,
+      })
 
-      assert.strictEqual(encoderArgs[0], writer)
-      assertObjectContains(encoderArgs[1], metadata)
+      await new Promise(resolve => writer.flush(resolve))
+      metadata[metadataName] = 'new-value'
+      await new Promise(resolve => writer.flush(resolve))
+
+      sinon.assert.calledTwice(createAgentlessExporter)
+      sinon.assert.calledOnce(exporter.close)
+      assert.strictEqual(createAgentlessExporter.secondCall.args[0][optionName], 'new-value')
     })
+  }
+
+  it('drops traces without constructing a pipeline exporter when the API key is unavailable', async () => {
+    apiKey = undefined
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.notCalled(createAgentlessExporter)
+    sinon.assert.notCalled(exporter.sendV04)
   })
 
-  describe('append', () => {
-    beforeEach(() => {
-      writer = new Writer({ url })
-    })
+  it('drops traces without constructing a pipeline exporter when the intake URL is unavailable', async () => {
+    writer = new AgentlessWriter({ site: 'invalid site' })
 
-    it('should append a trace', () => {
-      const span = { name: 'test' }
-      writer.append([span])
+    await new Promise(resolve => writer.flush(resolve))
 
-      sinon.assert.calledWith(encoder.encode, [span])
-    })
-  })
-
-  describe('flush', () => {
-    beforeEach(() => {
-      writer = new Writer({ url })
-    })
-
-    it('should skip flushing if empty', () => {
-      writer.flush()
-
-      sinon.assert.notCalled(encoder.makePayload)
-    })
-
-    it('should call callback when empty', (done) => {
-      writer.flush(done)
-    })
-
-    it('should flush traces to the intake with correct headers', (done) => {
-      const expectedData = Buffer.from('{"traces":[]}')
-
-      encoder.count.returns(1)
-      encoder.makePayload.returns(expectedData)
-
-      writer.flush(() => {
-        assert.deepStrictEqual(request.getCall(0).args[0], expectedData)
-        assertObjectContains(request.getCall(0).args[1], {
-          url,
-          path: '/api/v2/spans',
-          method: 'POST',
-          timeout: 15_000,
-          headers: {
-            'Content-Type': 'application/json',
-            'dd-api-key': 'test-api-key',
-            'X-Datadog-Trace-Count': '1',
-            'Datadog-Meta-Lang': 'nodejs',
-            'Datadog-Meta-Lang-Version': process.version,
-            'Datadog-Meta-Lang-Interpreter': 'v8',
-            'Datadog-Meta-Tracer-Version': 'tracerVersion',
-          },
-        })
-        done()
-      })
-    })
-
-    it('should log error at startup when API key is missing', () => {
-      apiKey = undefined
-
-      // Error should be logged at constructor time
-      writer = new Writer({ url })
-
-      sinon.assert.calledOnce(log.error)
-      const call = log.error.getCall(0)
-      assert.ok(call.args[0].includes('DD_API_KEY is required'), `Got: ${inspect(call.args[0])}`)
-      assert.ok(call.args[0].includes('Set DD_API_KEY'), `Got: ${inspect(call.args[0])}`)
-    })
-
-    it('should skip sending when API key is missing', (done) => {
-      apiKey = undefined
-      writer = new Writer({ url })
-
-      encoder.count.returns(1)
-
-      // Clear error log from constructor
-      log.error.resetHistory()
-
-      writer.flush(() => {
-        // Should not call request when API key is missing
-        sinon.assert.notCalled(request)
-        // Should only log debug, not error (error was at startup)
-        sinon.assert.notCalled(log.error)
-        done()
-      })
-    })
-
-    it('should log error and drop traces when URL is null', (done) => {
-      writer = new Writer({ url: null, site: '|||invalid|||' })
-
-      // Clear constructor logs
-      log.error.resetHistory()
-
-      encoder.count.returns(2)
-
-      writer.flush(() => {
-        sinon.assert.notCalled(request)
-        sinon.assert.calledOnce(log.error)
-        const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('No valid URL configured'), `Got: ${inspect(call.args[0])}`)
-        done()
-      })
-    })
-
-    it('should skip sending empty payload', (done) => {
-      encoder.count.returns(1)
-      encoder.makePayload.returns(Buffer.alloc(0))
-
-      writer.flush(() => {
-        sinon.assert.notCalled(request)
-        sinon.assert.calledWithMatch(log.debug, 'Skipping send of empty payload')
-        done()
-      })
-    })
-
-    it('should log authentication errors with guidance for 401', (done) => {
-      const error = new Error('unauthorized')
-
-      request.yields(error, null, 401)
-
-      encoder.count.returns(1)
-
-      writer.flush(() => {
-        sinon.assert.calledOnce(log.error)
-        const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Authentication failed'), `Got: ${inspect(call.args[0])}`)
-        assert.ok(call.args[0].includes('Verify DD_API_KEY'), `Got: ${inspect(call.args[0])}`)
-        done()
-      })
-    })
-
-    it('should log authentication errors with guidance for 403', (done) => {
-      const error = new Error('forbidden')
-
-      request.yields(error, null, 403)
-
-      encoder.count.returns(1)
-
-      writer.flush(() => {
-        sinon.assert.calledOnce(log.error)
-        const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Authentication failed'), `Got: ${inspect(call.args[0])}`)
-        assert.ok(call.args[0].includes('Verify DD_API_KEY'), `Got: ${inspect(call.args[0])}`)
-        done()
-      })
-    })
-
-    it('should log 404 errors with site guidance', (done) => {
-      const error = new Error('not found')
-
-      request.yields(error, null, 404)
-
-      encoder.count.returns(1)
-
-      writer.flush(() => {
-        sinon.assert.calledOnce(log.error)
-        const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('endpoint not found'), `Got: ${inspect(call.args[0])}`)
-        assert.ok(call.args[0].includes('DD_SITE'), `Got: ${inspect(call.args[0])}`)
-        done()
-      })
-    })
-
-    it('should log rate limit errors', (done) => {
-      const error = new Error('too many requests')
-
-      request.yields(error, null, 429)
-
-      encoder.count.returns(1)
-
-      writer.flush(() => {
-        sinon.assert.calledOnce(log.error)
-        const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Rate limited'), `Got: ${inspect(call.args[0])}`)
-        done()
-      })
-    })
-
-    it('should log server errors as transient', (done) => {
-      const error = new Error('internal server error')
-
-      request.yields(error, null, 500)
-
-      encoder.count.returns(1)
-
-      writer.flush(() => {
-        sinon.assert.calledOnce(log.error)
-        const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('server error'), `Got: ${inspect(call.args[0])}`)
-        assert.ok(call.args[0].includes('transient'), `Got: ${inspect(call.args[0])}`)
-        done()
-      })
-    })
-
-    it('should log network errors with hostname', (done) => {
-      const error = new Error('ECONNREFUSED')
-
-      request.yields(error, null, undefined)
-
-      encoder.count.returns(1)
-
-      writer.flush(() => {
-        sinon.assert.calledOnce(log.error)
-        const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Network error'), `Got: ${inspect(call.args[0])}`)
-        done()
-      })
-    })
-
-    it('should log generic errors for other status codes', (done) => {
-      const error = new Error('bad request')
-
-      request.yields(error, null, 400)
-
-      encoder.count.returns(1)
-
-      writer.flush(() => {
-        sinon.assert.calledOnce(log.error)
-        const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Error sending agentless payload'), `Got: ${inspect(call.args[0])}`)
-        // Status code is passed as second argument (printf-style)
-        assert.strictEqual(call.args[1], 400)
-        done()
-      })
-    })
-
-    it('should reset encoder and log error when not writable with pending traces', (done) => {
-      request.writable = false
-
-      encoder.count.returns(3)
-
-      writer.flush(() => {
-        sinon.assert.notCalled(request)
-        sinon.assert.calledOnce(encoder.reset)
-        sinon.assert.calledOnce(log.error)
-        const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Maximum number of active requests'), `Got: ${inspect(call.args[0])}`)
-        assert.strictEqual(call.args[1], 3)
-        done()
-      })
-    })
-
-    it('should reset encoder without logging when not writable and empty', (done) => {
-      request.writable = false
-
-      encoder.count.returns(0)
-
-      writer.flush(() => {
-        sinon.assert.notCalled(request)
-        sinon.assert.calledOnce(encoder.reset)
-        sinon.assert.notCalled(log.error)
-        done()
-      })
-    })
-  })
-
-  describe('setUrl', () => {
-    beforeEach(() => {
-      writer = new Writer({ url })
-    })
-
-    it('should update the URL', () => {
-      const newUrl = new URL('https://new-intake.example.com')
-      writer.setUrl(newUrl)
-
-      encoder.count.returns(1)
-      writer.flush()
-
-      assertObjectContains(request.getCall(0).args[1], { url: newUrl })
-    })
-  })
-
-  describe('Bun runtime', () => {
-    let originalBun
-
-    beforeEach(() => {
-      originalBun = process.versions.bun
-      process.versions.bun = '1.0.0'
-      writer = new Writer({ url })
-    })
-
-    afterEach(() => {
-      if (originalBun === undefined) {
-        delete process.versions.bun
-      } else {
-        process.versions.bun = originalBun
-      }
-    })
-
-    it('should use JavaScriptCore interpreter header for Bun', (done) => {
-      encoder.count.returns(1)
-
-      writer.flush(() => {
-        assertObjectContains(request.getCall(0).args[1], {
-          headers: {
-            'Datadog-Meta-Lang-Interpreter': 'JavaScriptCore',
-          },
-        })
-        done()
-      })
-    })
+    sinon.assert.notCalled(createAgentlessExporter)
+    sinon.assert.notCalled(exporter.sendV04)
   })
 })

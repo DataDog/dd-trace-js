@@ -1,6 +1,7 @@
 {
   "optionalDependencies": [
     "@datadog/libdatadog",
+    "@datadog/libdatadog-extras",
     "@datadog/native-appsec",
     "@datadog/native-iast-taint-tracking",
     "@datadog/native-metrics",
