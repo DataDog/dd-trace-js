@@ -1,5 +1,6 @@
 'use strict'
 
+const crypto = require('node:crypto')
 const { channel } = require('dc-polyfill')
 const BaseLLMObsPlugin = require('../base')
 const { getModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
@@ -71,6 +72,32 @@ const SPAN_NAME_TO_KIND_MAPPING = {
   toolCall: 'tool',
 }
 
+/**
+ * Computes a hash for a given tool from its description, id, and schema.
+ *
+ * Only exercised on the v4 `ai` SDKs where the channel subscriber that invokes this
+ * is present.
+ * @param {AvailableToolArgs} tool
+ * @returns {string}
+ */
+function createToolHash (tool) {
+  const {
+    description,
+    id,
+    parameters,
+  } = tool
+
+  let toolStr = description
+  if (id) toolStr += id
+
+  const jsonSchema = parameters?.jsonSchema
+  if (jsonSchema) {
+    toolStr += JSON.stringify(jsonSchema)
+  }
+
+  return crypto.createHash('sha256').update(toolStr).digest().toString('hex', 0, 16).toLowerCase()
+}
+
 class DdTelemetryPlugin extends BaseLLMObsPlugin {
   static id = 'ai_llmobs_dd_telemetry'
   static integration = 'ai'
@@ -79,9 +106,9 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
   /**
    * The available tools within the runtime scope of this integration.
    * This essentially acts as a global registry for all tools made through the Vercel AI SDK.
-   * @type {Set<AvailableToolArgs>}
+   * @type {Map<string, AvailableToolArgs>}
    */
-  #availableTools = new Set()
+  #availableTools = new Map()
 
   /**
    * A mapping of tool call IDs to tool names.
@@ -94,9 +121,12 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
     super(...args)
 
     toolCreationCh.subscribe(ctx => {
+      // this path is only exercised on v4
       const toolArgs = ctx.arguments
       const tool = toolArgs[0] ?? {}
-      this.#availableTools.add(tool)
+      const toolHash = createToolHash(tool)
+
+      this.#availableTools.set(toolHash, tool)
     })
 
     setAttributesCh.subscribe(({ ctx, attributes }) => {
@@ -118,7 +148,7 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
   findToolName (toolName, toolDescription) {
     if (Number.isNaN(Number.parseInt(toolName, 10))) return toolName
 
-    for (const availableTool of this.#availableTools) {
+    for (const availableTool of this.#availableTools.values()) {
       const description = availableTool.description
       if (description === toolDescription && availableTool.id) {
         return availableTool.id

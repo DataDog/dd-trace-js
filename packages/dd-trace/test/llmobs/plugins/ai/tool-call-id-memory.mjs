@@ -55,19 +55,29 @@ class RandomToolCallModel {
 
 const model = new RandomToolCallModel()
 const schema = jsonSchema({ type: 'object', properties: {}, additionalProperties: false })
-const noop = tool({
-  description: 'Return without doing any work',
-  ...(specificationVersion === 'v1'
-    ? { id: 'noop', parameters: schema }
-    : { inputSchema: schema }),
-  execute: () => undefined,
-})
-const tools = specificationVersion === 'v1'
-  ? [noop]
-  : {
-      noop,
-    }
 
 for (let i = 0; i < TOOL_CALL_COUNT; i++) {
-  await generateText({ model, prompt: 'Call the noop tool.', tools })
+  await generateText({
+    model,
+    prompt: 'Call the noop tool.',
+    tools: specificationVersion === 'v1'
+      ? [
+          tool({
+            description: 'Return without doing any work',
+            ...(specificationVersion === 'v1'
+              ? { id: 'noop', parameters: schema }
+              : { inputSchema: schema }),
+            execute: () => undefined,
+          }),
+        ]
+      : {
+          noop: tool({
+            description: 'Return without doing any work',
+            ...(specificationVersion === 'v1'
+              ? { id: 'noop', parameters: schema }
+              : { inputSchema: schema }),
+            execute: () => undefined,
+          }),
+        },
+  })
 }
