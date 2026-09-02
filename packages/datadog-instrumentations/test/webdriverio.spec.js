@@ -24,6 +24,8 @@ const {
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   TEST_HAS_DYNAMIC_NAME,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_QUARANTINED,
@@ -514,6 +516,114 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(plugin.testFrameworkAdapter, 'mocha')
     } finally {
       plugin.configure(false)
+    }
+  })
+
+  it('waits for every WebdriverIO screenshot upload before finishing a failed Jasmine test', async () => {
+    const originalBrowser = globalThis.browser
+    const screenshot = Buffer.from('webdriverio screenshot').toString('base64')
+    const uploadCallbacks = []
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: sinon.spy((options, callback) => uploadCallbacks.push(callback)),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves([screenshot, screenshot]),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      const finishContext = {
+        arguments: [result],
+        self: { _specs: [file] },
+      }
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish(finishContext)
+      await Promise.resolve()
+      await Promise.resolve()
+
+      sinon.assert.calledOnce(globalThis.browser.takeScreenshot)
+      sinon.assert.calledTwice(exporter.uploadTestScreenshot)
+      assert.strictEqual(spans[0].context()._isFinished, false)
+      for (const call of exporter.uploadTestScreenshot.getCalls()) {
+        assert.deepStrictEqual(call.args[0].content, Buffer.from('webdriverio screenshot'))
+        assert.strictEqual(call.args[0].traceId, '123')
+      }
+
+      uploadCallbacks[0](null)
+      await Promise.resolve()
+      assert.strictEqual(spans[0].context()._isFinished, false)
+      uploadCallbacks[1](null)
+      await finishContext.result
+
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('tags a failed Jasmine test when its WebdriverIO screenshot upload fails', async () => {
+    const originalBrowser = globalThis.browser
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: sinon.spy((_options, callback) => callback(new Error('upload failed'))),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves(Buffer.from('webdriverio screenshot').toString('base64')),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-error.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot error', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      const finishContext = {
+        arguments: [result],
+        self: { _specs: [file] },
+      }
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish(finishContext)
+      await finishContext.result
+
+      sinon.assert.calledOnce(exporter.uploadTestScreenshot)
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
     }
   })
 
@@ -1374,6 +1484,7 @@ describe('webdriverio instrumentation', () => {
         isKnownTestsEnabled: true,
         isSuitesSkippingEnabled: false,
         isTestDynamicInstrumentationEnabled: true,
+        isTestFailureScreenshotsEnabled: false,
         isTestManagementTestsEnabled: true,
         knownTests: {
           mocha: {
@@ -2053,10 +2164,14 @@ function createWorker () {
  * Creates a configured Jasmine worker plugin with observable test spans.
  *
  * @param {object} libraryConfig
+ * @param {object} [options]
+ * @param {object} [options.exporter]
+ * @param {object} [options.testOptimization]
  * @returns {{plugin: MochaPlugin, spans: object[]}}
  */
-function createJasminePlugin (libraryConfig) {
-  const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
+function createJasminePlugin (libraryConfig, options = {}) {
+  const { exporter = {}, testOptimization = {} } = options
+  const plugin = new MochaPlugin({ _exporter: exporter }, { testOptimization })
   const spans = []
   sinon.stub(plugin, 'startTestSpan').callsFake(() => {
     const tags = {}
@@ -2064,9 +2179,11 @@ function createJasminePlugin (libraryConfig) {
       _isFinished: false,
       _trace: { started: [] },
       getTags: () => tags,
+      toTraceId: () => '123',
     }
     const span = {
       context: () => context,
+      _getTime: () => Date.now(),
       finish: () => {
         context._isFinished = true
       },
