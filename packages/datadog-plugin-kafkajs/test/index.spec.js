@@ -30,6 +30,7 @@ describe('Plugin', () => {
       return agent.close()
     })
     withVersions('kafkajs', 'kafkajs', (version) => {
+      const versionedKafkajs = require(`../../../versions/kafkajs@${version}`)
       let kafka
       let admin
       let tracer
@@ -42,9 +43,9 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           tracer = await agent.load('kafkajs')
-          const lib = require(`../../../versions/kafkajs@${version}`).get()
+          const lib = versionedKafkajs.get()
           Kafka = lib.Kafka
-          Broker = require(`../../../versions/kafkajs@${version}/node_modules/kafkajs/src/broker`)
+          Broker = versionedKafkajs.get('kafkajs/src/broker')
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
             brokers: ['127.0.0.1:9092'],

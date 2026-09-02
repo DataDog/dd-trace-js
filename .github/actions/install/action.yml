@@ -5,7 +5,11 @@ runs:
   steps:
     - uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
       with:
-        max_attempts: 3
+        max_attempts: 2
         timeout_minutes: 5
         retry_wait_seconds: 30
-        command: bun install --linker=hoisted --trust --network-concurrency 8
+        shell: bash
+        # A retry against Bun's partial install state can skip lifecycle scripts. Start every attempt clean.
+        command: >-
+          rm -rf node_modules &&
+          bun install --frozen-lockfile --linker=hoisted

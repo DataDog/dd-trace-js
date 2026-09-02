@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
-const proxyquire = require('proxyquire').noPreserveCache()
 
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -19,6 +18,8 @@ describe('Plugin', () => {
 
   describe('memcached', () => {
     withVersions('memcached', 'memcached', version => {
+      const versionModule = require(`../../../versions/memcached@${version}`)
+
       afterEach(() => {
         memcached?.end()
         return agent.close()
@@ -28,7 +29,7 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load('memcached')
           tracer = require('../../dd-trace')
-          Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+          Memcached = versionModule.get()
         })
 
         withPeerService(
@@ -178,7 +179,7 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         beforeEach(async () => {
           await agent.load('memcached', { service: 'custom' })
-          Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+          Memcached = versionModule.get()
           memcached = new Memcached('localhost:11211', { retries: 0 })
         })
 
@@ -199,7 +200,7 @@ describe('Plugin', () => {
           beforeEach(async () => {
             process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
             await agent.load('memcached', { service: 'custom' })
-            Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+            Memcached = versionModule.get()
             memcached = new Memcached('localhost:11211', { retries: 0 })
           })
 
@@ -225,7 +226,7 @@ describe('Plugin', () => {
           beforeEach(async () => {
             process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'false'
             await agent.load('memcached', { service: 'custom' })
-            Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+            Memcached = versionModule.get()
             memcached = new Memcached('localhost:11211', { retries: 0 })
           })
 

@@ -379,6 +379,7 @@ function withVersions (plugin, modules, range, cb) {
 
       const absBasePath = path.resolve(__dirname, getModulePath(moduleName, testCase.versionKey))
       const absNodeModulesPath = `${absBasePath}/node_modules`
+      const workspaceNodeModulesPath = path.resolve(__dirname, '../../../../versions/node_modules')
 
       describe(`with ${moduleName} ${testCase.versionRange} (${testCase.resolvedVersion})`, () => {
         let nodePath
@@ -395,7 +396,9 @@ function withVersions (plugin, modules, range, cb) {
           }
 
           nodePath = process.env.NODE_PATH
-          process.env.NODE_PATH += `${NODE_PATH_SEP}${absNodeModulesPath}`
+          process.env.NODE_PATH = [nodePath, absNodeModulesPath, workspaceNodeModulesPath]
+            .filter(Boolean)
+            .join(NODE_PATH_SEP)
 
           // @ts-expect-error - Module._initPaths is not typed due to being an internal API.
           require('module').Module._initPaths()

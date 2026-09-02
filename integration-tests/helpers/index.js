@@ -22,7 +22,7 @@ const {
 } = require('../coverage/runtime')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const FakeAgent = require('./fake-agent')
-const { BUN, withBun } = require('./bun')
+const { BUN, BUN_CONFIG, withBun } = require('./bun')
 
 const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -568,11 +568,11 @@ async function createSandbox (
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
-    // yarn-linked into dd-trace and want to run the integration tests against them.
+    // bun-linked into dd-trace and want to run the integration tests against them.
 
     // Link dd-trace to itself, then...
-    execHelper('yarn link')
-    execHelper('yarn link dd-trace')
+    execHelper(`${BUN} link`)
+    execHelper(`${BUN} link dd-trace`)
     // ... run the tests in the current directory.
     return {
       coverageRoot: resolveCoverageRoot({ cwd: process.cwd() }),
@@ -588,7 +588,7 @@ async function createSandbox (
 
   await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv, timeout: 60_000 }
-  const addFlags = ['--linker=hoisted', '--trust']
+  const addFlags = [`--config=${JSON.stringify(BUN_CONFIG)}`, '--linker=hoisted', '--trust']
 
   // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
   // sandbox folder) and neither writes anything `bun add` will read, so run them concurrently.

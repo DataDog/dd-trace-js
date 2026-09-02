@@ -24,14 +24,21 @@ const {
   TEST_DATABASE_URL,
 } = require('./prisma-fixtures')
 
-function execPrismaGenerate (config, cwd) {
+function getBinPath (range, packageName, binName) {
+  const versionModule = require(`../../../versions/@prisma/client@${range}`)
+  const packageDir = path.dirname(versionModule.pkgJsonPath(packageName))
+  return path.join(packageDir, '..', '.bin', binName)
+}
+
+function execPrismaGenerate (config, cwd, range) {
+  const prisma = JSON.stringify(getBinPath(range, 'prisma', 'prisma'))
   if (config.ts) {
-    const outDir = config.v7 ? '../v7/dist' : '../dist'
+    const tsc = JSON.stringify(getBinPath(range, 'typescript', 'tsc'))
     execSync([
-      './node_modules/.bin/prisma generate',
+      `${prisma} generate`,
       [
-        './node_modules/.bin/tsc ../generated/**/*.ts',
-        `--outDir ${outDir}`,
+        `${tsc} generated/**/*.ts`,
+        '--outDir dist',
         '--target esnext',
         '--module commonjs',
         '--allowJs true',
@@ -43,7 +50,7 @@ function execPrismaGenerate (config, cwd) {
       stdio: 'inherit',
     })
   } else {
-    execSync('./node_modules/.bin/prisma generate', {
+    execSync(`${prisma} generate`, {
       cwd,
       stdio: 'inherit',
     })
@@ -51,11 +58,11 @@ function execPrismaGenerate (config, cwd) {
 }
 
 function loadPrismaModule (config, range) {
+  const file = config.file.replace('range', range)
   if (config.file.includes('generated')) {
-    return require(config.file)
+    return require(file)
   }
 
-  const file = config.file.replace('range', range)
   const prismaModule = require(file)
   return config.ts ? prismaModule : prismaModule.get()
 }
@@ -314,7 +321,7 @@ describe('Plugin', () => {
   describe('prisma', () => {
     const prismaClients = [{
       schema: `./${SCHEMA_FIXTURES.clientOutputJs}`,
-      file: '../../../versions/@prisma/generated/prisma',
+      file: '../../../versions/@prisma/client@range/generated/prisma',
       usesGeneratedClientOutput: true,
     },
     {
@@ -323,13 +330,13 @@ describe('Plugin', () => {
     },
     {
       schema: `./${SCHEMA_FIXTURES.tsCjsV6}`,
-      file: '../../../versions/@prisma/dist/client.js',
+      file: '../../../versions/@prisma/client@range/dist/client.js',
       usesGeneratedClientOutput: true,
       ts: true,
     },
     {
       schema: `./${SCHEMA_FIXTURES.tsCjsV7}`,
-      file: '../../../versions/@prisma/v7/dist/client.js',
+      file: '../../../versions/@prisma/client@range/dist/client.js',
       usesGeneratedClientOutput: true,
       ts: true,
       v7: true,
@@ -352,7 +359,7 @@ describe('Plugin', () => {
           clearPrismaEnv()
           setPrismaEnv(config)
           const cwd = await copySchemaToVersionDir(config.schema, range)
-          execPrismaGenerate(config, cwd)
+          execPrismaGenerate(config, cwd, range)
         })
 
         describe(`without configuration ${config.schema}`, () => {
