@@ -415,7 +415,6 @@ describe('webdriverio instrumentation', () => {
       const executeAsyncContext = {}
       channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
       await executeAsyncContext.rumStartCallback()
-      await executeAsyncContext.rumCorrelationCallback([browser], 'retry-execution-id')
 
       assert.deepStrictEqual(correlationContexts, [{
         browserName: 'chrome',
@@ -634,6 +633,7 @@ describe('webdriverio instrumentation', () => {
 
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
     const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
     const urlCh = tracingChannel('orchestrion:webdriverio:url')
     const browser = {
       capabilities: {},
@@ -655,9 +655,11 @@ describe('webdriverio instrumentation', () => {
       urlCh.start.runStores(navigationContext, () => {})
       await navigationContext.rumPreloadCallback.call(browser)
 
-      const firstTestContext = {}
-      executeAsyncCh.start.runStores(firstTestContext, () => {})
-      await firstTestContext.rumCleanupCallback()
+      const firstTestContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(firstTestContext)
+      await runCallback(firstTestContext.resolveCallback)
+      await cleanupPendingRumTest()
+      browser.execute.resetHistory()
 
       const secondTestContext = {}
       executeAsyncCh.start.runStores(secondTestContext, () => {})
@@ -677,6 +679,7 @@ describe('webdriverio instrumentation', () => {
 
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
     const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
     const urlCh = tracingChannel('orchestrion:webdriverio:url')
     let currentWindowHandle = 'window-a'
     let testExecutionId = 'first-test-id'
@@ -710,9 +713,10 @@ describe('webdriverio instrumentation', () => {
       urlCh.start.runStores(navigationContext, () => {})
       await navigationContext.rumPreloadCallback.call(browser)
 
-      const firstTestContext = {}
-      executeAsyncCh.start.runStores(firstTestContext, () => {})
-      await firstTestContext.rumCleanupCallback()
+      const firstTestContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(firstTestContext)
+      await runCallback(firstTestContext.resolveCallback)
+      await cleanupPendingRumTest()
 
       testExecutionId = 'second-test-id'
       browser.execute.resetHistory()
@@ -1191,6 +1195,54 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('forgets a retained RUM browser when its WebDriver session is deleted', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const browser = Object.assign(new EventEmitter(), {
+      capabilities: {},
+      execute: sinon.stub().resolves({
+        isRumActive: true,
+        isRumInstrumented: true,
+        rumSamplingRate: 100,
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+    })
+    browser.deleteSession = sinon.stub().callsFake(() => {
+      browser.emit('result', { command: 'deleteSession' })
+      return Promise.resolve()
+    })
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+
+      await browser.deleteSession()
+      browser.execute.resetHistory()
+
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { executeAsync } = await import(pathToFileURL(outputPath))
+      await executeAsync(() => {}, { attempts: 0, limit: 0 })
+
+      assert.strictEqual(browser.execute.callCount, 0)
+      assert.strictEqual(browser.listenerCount('result'), 0)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
   it('preloads RUM correlation in current and future browsing contexts', async () => {
     require('../src/webdriverio')
 
@@ -1290,7 +1342,8 @@ describe('webdriverio instrumentation', () => {
   it('detects active RUM in a background window before re-correlating every window', async () => {
     require('../src/webdriverio')
 
-    const executeAsyncContext = {}
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
     let currentWindowHandle = 'window-a'
     const browser = {
       capabilities: {
@@ -1317,50 +1370,60 @@ describe('webdriverio instrumentation', () => {
         return Promise.resolve()
       }),
     }
+    const correlate = context => { context.testExecutionId = 'initial-execution-id' }
+    correlationCh.subscribe(correlate)
 
-    channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
-    await executeAsyncContext.rumCorrelationCallback([browser], 'initial-execution-id')
-    browser.setCookies.resetHistory()
-    browser.switchToWindow.resetHistory()
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
 
-    const rumCorrelation = await executeAsyncContext.rumRetryCallback('retry-execution-id')
+      const executeAsyncContext = {}
+      channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
+      browser.setCookies.resetHistory()
+      browser.switchToWindow.resetHistory()
 
-    assert.deepStrictEqual(browser.switchToWindow.args.map(([windowHandle]) => windowHandle), [
-      'window-a',
-      'window-b',
-      'window-a',
-      'window-a',
-      'window-b',
-      'window-a',
-    ])
-    assert.deepStrictEqual(browser.setCookies.args, [
-      [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'retry-execution-id' }],
-      [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'retry-execution-id' }],
-    ])
-    assert.strictEqual(browser.scriptAddPreloadScript.callCount, 2)
-    assert.deepStrictEqual(browser.scriptAddPreloadScript.secondCall.args, [{
-      arguments: [{
-        type: 'string',
-        value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=retry-execution-id; path=/`,
-      }],
-      functionDeclaration: 'cookie => { globalThis.document.cookie = cookie }',
-    }])
-    assert.deepStrictEqual(browser.scriptRemovePreloadScript.firstCall.args, [{ script: 'rum-preload' }])
-    assert.strictEqual(browser.execute.callCount, 2)
-    assert.deepStrictEqual(rumCorrelation, {
-      browserName: 'chrome',
-      browserVersion: '123',
-      isRumActive: true,
-    })
+      const rumCorrelation = await executeAsyncContext.rumRetryCallback()
+      await executeAsyncContext.rumRetryCallback('retry-execution-id')
 
-    await executeAsyncContext.rumCleanupCallback()
+      assert.deepStrictEqual(browser.switchToWindow.args.map(([windowHandle]) => windowHandle), [
+        'window-a',
+        'window-b',
+        'window-a',
+        'window-a',
+        'window-b',
+        'window-a',
+      ])
+      assert.deepStrictEqual(browser.setCookies.args, [
+        [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'retry-execution-id' }],
+        [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'retry-execution-id' }],
+      ])
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 2)
+      assert.deepStrictEqual(browser.scriptAddPreloadScript.secondCall.args, [{
+        arguments: [{
+          type: 'string',
+          value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=retry-execution-id; path=/`,
+        }],
+        functionDeclaration: 'cookie => { globalThis.document.cookie = cookie }',
+      }])
+      assert.deepStrictEqual(browser.scriptRemovePreloadScript.firstCall.args, [{ script: 'rum-preload' }])
+      assert.strictEqual(browser.execute.callCount, 2)
+      assert.deepStrictEqual(rumCorrelation, {
+        browserName: 'chrome',
+        browserVersion: '123',
+        isRumActive: true,
+      })
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
   })
 
   it('checks RUM before marking a Mocha retry as RUM-active', async () => {
     require('../src/webdriverio')
 
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
-    const executeAsyncContext = {}
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
     const rumStates = []
     const browser = {
       capabilities: {},
@@ -1383,15 +1446,20 @@ describe('webdriverio instrumentation', () => {
     correlationCh.subscribe(correlate)
 
     try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+      rumStates.length = 0
+
+      const executeAsyncContext = {}
       channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
-      await executeAsyncContext.rumCorrelationCallback([browser], 'initial-execution-id')
       await executeAsyncContext.retryCallback()
 
       assert.deepStrictEqual(rumStates, [false])
       assert.strictEqual(browser.execute.callCount, 1)
     } finally {
       correlationCh.unsubscribe(correlate)
-      await executeAsyncContext.rumCleanupCallback()
+      await cleanupRumState()
     }
   })
 
@@ -2575,11 +2643,13 @@ describe('webdriverio instrumentation', () => {
     const result = createJasmineResult('native-retry', file, 'failed')
     const retries = { attempts: 0, limit: 1 }
     const correlations = []
+    const rumTagsAtRetry = []
     let finishRetrySetup
     const retrySetup = new Promise(resolve => {
       finishRetrySetup = resolve
     })
-    const onRetry = ({ promises }) => {
+    const onRetry = ({ promises, test }) => {
+      rumTagsAtRetry.push(test.span.context().getTag(TEST_IS_RUM_ACTIVE))
       promises.setProbePromise = retrySetup
     }
 
@@ -2593,10 +2663,6 @@ describe('webdriverio instrumentation', () => {
       channel('tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start').runStores(wrapperContext, () => {
         channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
       })
-      executeAsyncContext.rumCleanupCallback = async function () {
-        await Promise.resolve()
-        assert.fail('active RUM session was stopped before a native retry')
-      }
       executeAsyncContext.rumRetryCallback = async function (testExecutionId) {
         correlations.push({ spanCount: spans.length, testExecutionId })
         await Promise.resolve()
@@ -2614,10 +2680,12 @@ describe('webdriverio instrumentation', () => {
       await retryPromise
 
       assert.strictEqual(spans.length, 2)
-      assert.deepStrictEqual(correlations, [{
-        spanCount: 2,
-        testExecutionId: '2',
-      }])
+      assert.deepStrictEqual(correlations, [
+        { spanCount: 1, testExecutionId: undefined },
+        { spanCount: 2, testExecutionId: '2' },
+      ])
+      assert.deepStrictEqual(rumTagsAtRetry, ['true'])
+      assert.strictEqual(spans[0].context().getTag(TEST_IS_RUM_ACTIVE), 'true')
       assert.strictEqual(spans[1].context().getTag(TEST_IS_RUM_ACTIVE), 'true')
       assert.strictEqual(spans[1].context().getTag(TEST_BROWSER_NAME), 'chrome')
       assert.strictEqual(spans[1].context().getTag(TEST_BROWSER_VERSION), '123')
@@ -2625,10 +2693,10 @@ describe('webdriverio instrumentation', () => {
       retryCh.unsubscribe(onRetry)
       await executeAsyncContext.retryCallback(new Error('immediate native retry failure'))
       assert.strictEqual(spans.length, 3)
-      assert.deepStrictEqual(correlations[1], {
-        spanCount: 3,
-        testExecutionId: '3',
-      })
+      assert.deepStrictEqual(correlations.slice(2), [
+        { spanCount: 2, testExecutionId: undefined },
+        { spanCount: 3, testExecutionId: '3' },
+      ])
       assert.strictEqual(spans[2].context().getTag(TEST_IS_RUM_ACTIVE), 'true')
       assert.strictEqual(spans[2].context().getTag(TEST_BROWSER_NAME), 'chrome')
       assert.strictEqual(spans[2].context().getTag(TEST_BROWSER_VERSION), '123')
@@ -2659,7 +2727,7 @@ describe('webdriverio instrumentation', () => {
       await executeAsyncContext.retryCallback(new Error('native retry without RUM'))
 
       assert.strictEqual(spans.length, 2)
-      assert.deepStrictEqual(retryRumBrowsers.firstCall.args, ['2'])
+      assert.deepStrictEqual(retryRumBrowsers.args, [[], ['2']])
       assert.strictEqual(spans[1].context().getTag(TEST_IS_RUM_ACTIVE), undefined)
     } finally {
       plugin.configure(false)

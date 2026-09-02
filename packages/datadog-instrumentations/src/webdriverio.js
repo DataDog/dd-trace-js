@@ -88,6 +88,7 @@ const rumBrowsers = new Set()
 const rumCorrelationBrowsers = new Set()
 const rumRunnerBrowsers = new WeakSet()
 const rumBrowserPreloadScripts = new WeakMap()
+const rumBrowserSessionEndHandlers = new WeakMap()
 const rumBrowserTestExecutionIds = new WeakMap()
 let isRumCleanupPending = false
 
@@ -112,6 +113,43 @@ function canCorrelateRumBrowser (browser) {
     typeof browser.scriptAddPreloadScript === 'function' &&
     typeof browser.scriptRemovePreloadScript === 'function' &&
     typeof browser.storageDeleteCookies === 'function'
+}
+
+/**
+ * Releases retained state when a WebDriver session ends.
+ *
+ * @param {object} browser
+ * @returns {void}
+ */
+function releaseRumBrowser (browser) {
+  rumBrowsers.delete(browser)
+  rumCorrelationBrowsers.delete(browser)
+  rumRunnerBrowsers.delete(browser)
+  rumBrowserPreloadScripts.delete(browser)
+  rumBrowserTestExecutionIds.delete(browser)
+
+  const sessionEndHandler = rumBrowserSessionEndHandlers.get(browser)
+  rumBrowserSessionEndHandlers.delete(browser)
+  if (sessionEndHandler && typeof browser.removeListener === 'function') {
+    browser.removeListener('result', sessionEndHandler)
+  }
+}
+
+/**
+ * Retains a browser and watches for WebDriver's deleteSession result event.
+ *
+ * @param {object} browser
+ * @returns {void}
+ */
+function retainRumBrowser (browser) {
+  rumBrowsers.add(browser)
+  if (rumBrowserSessionEndHandlers.has(browser) || typeof browser.on !== 'function') return
+
+  const sessionEndHandler = ({ command }) => {
+    if (command === 'deleteSession') releaseRumBrowser(browser)
+  }
+  rumBrowserSessionEndHandlers.set(browser, sessionEndHandler)
+  browser.on('result', sessionEndHandler)
 }
 
 /**
@@ -217,7 +255,7 @@ async function preloadRumNavigation () {
     const testExecutionId = getRumTestExecutionId(browser)
     if (!testExecutionId) return
 
-    rumBrowsers.add(browser)
+    retainRumBrowser(browser)
     rumCorrelationBrowsers.add(browser)
     rumBrowserTestExecutionIds.set(browser, testExecutionId)
     await installRumPreloadScript(browser, testExecutionId)
@@ -287,7 +325,7 @@ async function handleRumNavigation (context) {
     const testExecutionId = getRumTestExecutionId(browser, isRumActive)
     if (sampledOut) return
 
-    rumBrowsers.add(browser)
+    retainRumBrowser(browser)
     if (!testExecutionId) {
       return
     }
@@ -420,7 +458,7 @@ async function cleanupRumBrowser (browser, stopSession = false) {
     if (isRumActive) {
       await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
     }
-    rumBrowsers.delete(browser)
+    releaseRumBrowser(browser)
   } else {
     await forEachRumWindow(browser, deleteRumCookie)
   }
@@ -472,7 +510,7 @@ async function cleanupAllRumBrowsers () {
 async function correlateRumBrowser (browser, testExecutionId) {
   if (!canCorrelateRumBrowser(browser)) return
 
-  rumBrowsers.add(browser)
+  retainRumBrowser(browser)
   rumCorrelationBrowsers.add(browser)
   rumBrowserTestExecutionIds.set(browser, testExecutionId)
   await forEachRumWindow(browser, correlateRumWindow, testExecutionId)
@@ -582,8 +620,12 @@ async function retryRumTest () {
  */
 async function retryRumBrowsers (testExecutionId) {
   const browsers = [...rumCorrelationBrowsers]
-  const isRumActive = await detectActiveRumBrowsers(false)
-  await correlateRumBrowsers(browsers, testExecutionId)
+  let isRumActive = false
+  if (testExecutionId) {
+    await correlateRumBrowsers(browsers, testExecutionId)
+  } else {
+    isRumActive = await detectActiveRumBrowsers(false)
+  }
 
   const browser = browsers[0]
   return {
@@ -1710,8 +1752,6 @@ testFrameworkFnWrapperCh.error.subscribe(
 executeAsyncCh.subscribe({
   start (context) {
     context.rumStartCallback = startRumTest
-    context.rumCleanupCallback = cleanupRumBrowsers
-    context.rumCorrelationCallback = correlateRumBrowsers
     context.rumRetryCallback = retryRumBrowsers
     context.retryCallback ??= retryRumTest
   },
