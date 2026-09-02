@@ -14,6 +14,7 @@ describe('debugger/index', () => {
   let Worker
   let config
   let rc
+  let fetchAgentInfo
   let readFileStub
   let messageChannels
 
@@ -26,6 +27,9 @@ describe('debugger/index', () => {
     Worker.prototype.removeAllListeners = sinon.stub()
 
     readFileStub = sinon.stub()
+    fetchAgentInfo = sinon.stub().callsFake((url, callback) => {
+      callback(null, { endpoints: ['/debugger/v2/input'] })
+    })
     messageChannels = []
 
     DynamicInstrumentation = proxyquire('../../src/debugger/index', {
@@ -33,9 +37,7 @@ describe('debugger/index', () => {
         readFile: readFileStub,
       },
       '../agent/info': {
-        fetchAgentInfo: sinon.stub().callsFake((url, callback) => {
-          callback(null, { endpoints: ['/debugger/v2/input'] })
-        }),
+        fetchAgentInfo,
       },
       './config': proxyquire('../../src/debugger/config', {
         '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
@@ -61,6 +63,8 @@ describe('debugger/index', () => {
     })
 
     config = {
+      DD_AGENTLESS_ENABLED: false,
+      DD_API_KEY: undefined,
       debug: false,
       dynamicInstrumentation: {
         enabled: true,
@@ -69,6 +73,7 @@ describe('debugger/index', () => {
       logLevel: 'info',
       port: 8126,
       service: 'test-service',
+      site: 'datadoghq.com',
       tags: {
         'runtime-id': 'test-runtime-id',
       },
@@ -121,6 +126,33 @@ describe('debugger/index', () => {
     it('should set product handler for LIVE_DEBUGGING', () => {
       DynamicInstrumentation.start(config, rc)
       sinon.assert.calledOnceWithExactly(rc.setProductHandler, 'LIVE_DEBUGGING', sinon.match.func)
+    })
+
+    it('should use the direct debugger intake in agentless mode', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'us3.datadoghq.com'
+
+      DynamicInstrumentation.start(config, rc)
+
+      sinon.assert.notCalled(fetchAgentInfo)
+      const workerConfig = Worker.firstCall.args[1].workerData.config
+      assert.strictEqual(workerConfig.agentless, true)
+      assert.strictEqual(workerConfig.apiKey, 'test-api-key')
+      assert.strictEqual(workerConfig.inputPath, '/api/v2/debugger')
+      assert.strictEqual(workerConfig.url, 'https://debugger-intake.us3.datadoghq.com')
+    })
+
+    it('should not start agentless Dynamic Instrumentation for an invalid site', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'datadoghq.com@evil.example'
+
+      DynamicInstrumentation.start(config, rc)
+
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+      sinon.assert.notCalled(Worker)
+      sinon.assert.notCalled(rc.setProductHandler)
     })
 
     it('should unref all handles to prevent keeping process alive', () => {
@@ -224,6 +256,8 @@ describe('debugger/index', () => {
 
       const postedConfig = configPort.postMessage.firstCall.args[0]
       assert.deepStrictEqual(postedConfig, {
+        agentless: false,
+        apiKey: undefined,
         commitSHA: 'test-sha',
         debug: false,
         dynamicInstrumentation: {
@@ -241,6 +275,19 @@ describe('debugger/index', () => {
         url: 'http://localhost:8126/',
         version: '1.2.3',
       })
+    })
+
+    it('should ignore an invalid agentless site', () => {
+      DynamicInstrumentation.start(config, rc)
+      const configPort = messageChannels[2].port2
+      configPort.postMessage.resetHistory()
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'datadoghq.com@evil.example'
+
+      DynamicInstrumentation.configure(config)
+
+      sinon.assert.notCalled(configPort.postMessage)
     })
   })
 
