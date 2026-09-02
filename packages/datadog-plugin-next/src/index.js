@@ -11,20 +11,53 @@ const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-fou
 const reusedNextRequestStores = new WeakSet()
 const nextParentRoutes = new WeakMap()
 
+/**
+ * @typedef {Record<string, unknown> & {
+ *   span: import('../../dd-trace/src/opentracing/span'),
+ *   req: import('node:http').IncomingMessage,
+ *   backgroundRevalidationRequest?: import('node:http').IncomingMessage
+ * }} NextRequestStore
+ *
+ * @typedef {object} NextRequest
+ * @property {unknown} [error]
+ *
+ * @typedef {object} NextRequestContext
+ * @property {import('node:http').IncomingMessage} req
+ * @property {import('node:http').ServerResponse} res
+ * @property {NextRequest} [nextRequest]
+ * @property {boolean} [finishOnResponse]
+ * @property {NextRequestStore} [currentStore]
+ * @property {unknown} [error]
+ *
+ * @typedef {object} NextErrorContext
+ * @property {import('../../dd-trace/src/opentracing/span')} [span]
+ * @property {NextRequestStore} [currentStore]
+ * @property {import('node:http').IncomingMessage} [req]
+ * @property {unknown} error
+ */
+
 class NextPlugin extends ServerPlugin {
   static id = 'next'
 
   constructor (...args) {
     super(...args)
+    this.addBind('apm:next:request:background-revalidation', req => ({
+      ...storage('legacy').getStore(),
+      span: undefined,
+      backgroundRevalidationRequest: req,
+    }))
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
-  bindStart ({ req, res }) {
+  /** @param {NextRequestContext} ctx */
+  bindStart (ctx) {
+    const { req } = ctx
     const store = storage('legacy').getStore()
     const parentSpan = store?.span
     if (parentSpan?._integrationName === this.constructor.id) {
       const reusedStore = { ...store, span: parentSpan, req }
       reusedNextRequestStores.add(reusedStore)
+      if (ctx.finishOnResponse) ctx.currentStore = reusedStore
       return reusedStore
     }
 
@@ -54,31 +87,31 @@ class NextPlugin extends ServerPlugin {
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    const isHttpParent = parentSpan?._integrationName === 'http'
-    const httpParentSpan = isHttpParent ? parentSpan : undefined
-    const httpParentReq = isHttpParent ? web.getRequest(parentSpan) : undefined
-    return { ...store, span, req, httpParentSpan, httpParentReq }
+    const httpParentSpan = parentSpan?._integrationName === 'http' ? parentSpan : undefined
+    const currentStore = { ...store, span, req, httpParentSpan }
+    if (ctx.finishOnResponse) ctx.currentStore = currentStore
+    return currentStore
   }
 
-  error ({ span, error }) {
-    if (!span) {
-      const store = storage('legacy').getStore()
-      if (!store) return
+  /** @param {NextErrorContext} ctx */
+  error ({ currentStore, span, req, error }) {
+    const store = currentStore ?? storage('legacy').getStore()
+    if (req && store?.backgroundRevalidationRequest === req) return
 
-      span = store.span
-    }
-
-    this.addError(error, span)
+    span ||= store?.span
+    if (span) this.addError(error, span)
   }
 
-  finish ({ req, res, nextRequest = {} }) {
-    const store = storage('legacy').getStore()
+  /** @param {NextRequestContext} ctx */
+  finish (ctx) {
+    const { req, res, nextRequest = {} } = ctx
+    const store = ctx.currentStore ?? storage('legacy').getStore()
 
     if (!store) return
     if (reusedNextRequestStores.has(store)) return
 
     const span = store.span
-    const error = span.context().getTag('error')
+    const error = ctx.error ?? span.context().getTag('error')
     const requestError = req.error || nextRequest.error
 
     if (requestError) {
@@ -109,7 +142,7 @@ class NextPlugin extends ServerPlugin {
 
     if (!store) return
 
-    const { span, req, httpParentReq, httpParentSpan } = store
+    const { span, req, httpParentSpan } = store
 
     // safeguard against missing req in complicated timeout scenarios
     if (!req) return
@@ -140,10 +173,9 @@ class NextPlugin extends ServerPlugin {
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page,
     })
-    const routeRequest = httpParentReq || req
-    web.setRouteOrEndpointTag(routeRequest)
+    web.setRouteOrEndpointTag(req)
     setHttpParentRoute(httpParentSpan, req.method, page, isStatic)
-    web.setRoute(routeRequest, page)
+    web.setRoute(req, page)
   }
 
   configure (config) {
