@@ -549,6 +549,46 @@ describe('check-require-cache', () => {
         },
         {
           module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-alias.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-async-handler.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-generator-handler.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
+            name: 'test-esm',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-alias.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
             name: 'test-esm',
             versionRange: '>=0.1',
             filePath: 'pregel-class.js',
@@ -1309,6 +1349,77 @@ describe('check-require-cache', () => {
     await iter.next()
 
     assert.ok(subs.start.calledOnce, 'instrumented start channel should fire once')
+  })
+
+  it('should use an aliased Postgres Query require binding', () => {
+    ch = tracingChannel('orchestrion:test:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const Postgres = compileFile('postgres-query-alias')
+    const queries = Postgres()
+
+    assert.strictEqual(queries.length, 2)
+    assert.strictEqual(subs.start.callCount, 2)
+  })
+
+  it('should use an aliased Postgres Query import binding', async () => {
+    const fixtureDirectory = resolve(__dirname, 'node_modules', 'test-esm')
+    const filename = join(fixtureDirectory, 'postgres-query-alias.js')
+    const source = readFileSync(filename, 'utf8')
+    const rewritten = rewriter.rewrite(source, filename, 'module', {
+      moduleName: 'test-esm',
+      filePath: 'postgres-query-alias.js',
+    })
+    const directory = mkdtempSync(join(tmpdir(), 'dd-rewriter-postgres-esm-'))
+    const outputFile = join(directory, 'postgres-query-alias.js')
+
+    writeFileSync(join(directory, 'package.json'), '{"type":"module"}')
+    writeFileSync(join(directory, 'query.js'), readFileSync(join(fixtureDirectory, 'query.js')))
+    writeFileSync(outputFile, rewritten)
+
+    ch = tracingChannel('orchestrion:test-esm:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const { default: Postgres } = await import(pathToFileURL(outputFile).href)
+    const queries = Postgres()
+
+    assert.strictEqual(queries.length, 2)
+    assert.strictEqual(subs.start.callCount, 2)
+  })
+
+  it('should leave async Postgres handlers untouched', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'postgres-query-async-handler.js')
+    const source = readFileSync(filename, 'utf8')
+
+    ch = tracingChannel('orchestrion:test:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const Postgres = compileFile('postgres-query-async-handler')
+    const queries = await Promise.all(Postgres())
+
+    assert.strictEqual(content, source)
+    assert.strictEqual(queries.length, 2)
+    assert.strictEqual(subs.start.callCount, 0)
+  })
+
+  it('should leave generator Postgres handlers untouched', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'postgres-query-generator-handler.js')
+    const source = readFileSync(filename, 'utf8')
+
+    ch = tracingChannel('orchestrion:test:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const Postgres = compileFile('postgres-query-generator-handler')
+    const queries = Postgres()
+
+    assert.strictEqual(content, source)
+    assert.strictEqual(queries[0].next().value.constructor.name, 'Query')
+    assert.strictEqual(queries[1].next().value.constructor.name, 'Query')
+    assert.strictEqual(subs.start.callCount, 0)
   })
 })
 

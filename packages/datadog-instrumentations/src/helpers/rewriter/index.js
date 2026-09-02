@@ -111,6 +111,8 @@ function createMatcher (moduleType) {
     configureGraphqlJitExecute,
     configureGraphqlJitRuntime,
     configureMercuriusRequest,
+    postgresQueryHandlers,
+    postgresQueryLifecycle,
     waitForAsyncEnd,
   } = require('./transforms')
 
@@ -126,6 +128,8 @@ function createMatcher (moduleType) {
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
+  matcher.addTransform('postgresQueryHandlers', postgresQueryHandlers)
+  matcher.addTransform('postgresQueryLifecycle', postgresQueryLifecycle)
 
   return matcher
 }

@@ -1169,6 +1169,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/test
 
+  postgres-js:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    services:
+      postgres:
+        image: postgres@sha256:75ebf479151a8fd77bf2fed46ef76ce8d518c23264734c48f2d1de42b4eb40ae # 9.5
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+    env:
+      PLUGINS: postgres
+      SERVICES: postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/plugins/test
+
   prisma:
     strategy:
       fail-fast: false
