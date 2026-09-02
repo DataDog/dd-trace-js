@@ -1628,7 +1628,7 @@ describe('webdriverio instrumentation', () => {
       const correlationContext = {}
       channel('ci:webdriverio:rum:page-navigate').publish(correlationContext)
       assert.strictEqual(correlationContext.isTestOptimizationRunner, true)
-      assert.strictEqual(logError.callCount, 0)
+      assert.strictEqual(logError.calledWith('ci:webdriverio:rum:page-navigate: test span not found'), false)
     } finally {
       plugin.configure(false)
       logError.restore()
