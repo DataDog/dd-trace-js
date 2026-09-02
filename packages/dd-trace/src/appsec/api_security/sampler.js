@@ -138,7 +138,8 @@ function isNotFound (statusCode) {
 
 /**
  * @param {string} method
- * @param {string|null} route A route string, an empty string (still a valid route), or `null`
+ * @param {string|undefined} route A route string, an empty string (still a valid route), or
+ *   `undefined`
  * @param {number|string} statusCode
  * @returns {string}
  */
