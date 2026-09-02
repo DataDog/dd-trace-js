@@ -185,6 +185,7 @@ function request (data, options, callback) {
     legacyStorage.run({ noop: true }, () => {
       let finished = false
       let settled = false
+      let timeoutImmediate
       const finalize = () => {
         if (finished) return
         finished = true
@@ -200,6 +201,7 @@ function request (data, options, callback) {
       const complete = (error, result, statusCode, headers) => {
         if (settled) return
         settled = true
+        clearImmediate(timeoutImmediate)
         finalize()
         callback(error, result, statusCode, headers)
       }
@@ -209,6 +211,7 @@ function request (data, options, callback) {
        */
       const handleError = (error) => {
         if (settled) return
+        clearImmediate(timeoutImmediate)
 
         if (options.retry !== false &&
             attemptIndex < getMaxAttempts(options) &&
@@ -227,10 +230,11 @@ function request (data, options, callback) {
       const req = client.request(connectionOptions, (res) => onResponse(res, complete, handleError))
 
       req.once('close', finalize)
-      req.once('timeout', finalize)
+      if (!options.deferTimeoutAbort) req.once('timeout', finalize)
       req.once('error', handleError)
 
-      req.setTimeout(timeout, () => {
+      const abortRequest = () => {
+        if (settled) return
         try {
           if (typeof req.abort === 'function') {
             req.abort()
@@ -240,6 +244,19 @@ function request (data, options, callback) {
         } catch {
           // ignore
         }
+      }
+
+      req.setTimeout(timeout, () => {
+        if (!options.deferTimeoutAbort) {
+          abortRequest()
+          return
+        }
+
+        timeoutImmediate = setImmediate(() => {
+          abortRequest()
+          finalize()
+        })
+        if (!options.keepProcessAlive) timeoutImmediate.unref?.()
       })
 
       for (const buffer of dataArray) req.write(buffer)
