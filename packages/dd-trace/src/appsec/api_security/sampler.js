@@ -50,9 +50,9 @@ function disable () {
  * @param {object} request
  * @param {string} request.method
  * @param {number|string} request.statusCode
- * @param {string|null} request.route Tri-state: a route string, an empty string (still a valid
- *   route — dd-trace-js represents the express root path '/' as an empty path segment), or
- *   `null` meaning no route information at all.
+ * @param {string|undefined} request.route Tri-state: a route string, an empty string (still a
+ *   valid route — dd-trace-js represents the express root path '/' as an empty path segment), or
+ *   `undefined` meaning no route information at all.
  * @param {boolean} [request.blocked] Whether the response was blocked by ASM
  * @param {boolean} record When true and the decision is SAMPLE, records the endpoint in the TTL cache
  * @returns {'sample' | 'missing_route' | 'skip'}
@@ -62,14 +62,14 @@ function sampleRootSpanRequest (rootSpan, request, record = false) {
 
   if (!rootSpan) return SamplingDecision.SKIP
 
-  if (isRejected(rootSpan)) return SamplingDecision.SKIP
-
   const { method, statusCode, route, blocked = false } = request ?? {}
 
   if (!method || !statusCode) {
     log.warn('[ASM] Unsupported groupkey for API security')
     return SamplingDecision.SKIP
   }
+
+  if (isRejected(rootSpan)) return SamplingDecision.SKIP
 
   if (isRoutelessRecord(route, record)) {
     if (isNotFound(statusCode) || blocked) return SamplingDecision.SKIP
@@ -120,12 +120,12 @@ function sampleRequest (req, res, record = false) {
 /**
  * Whether this is a request with no route information
  *
- * @param {string|null} route
+ * @param {string|undefined} route
  * @param {boolean} record
  * @returns {boolean}
  */
 function isRoutelessRecord (route, record) {
-  return record && route === null
+  return record && route === undefined
 }
 
 /**
@@ -138,7 +138,8 @@ function isNotFound (statusCode) {
 
 /**
  * @param {string} method
- * @param {string|null} route A route string, an empty string (still a valid route), or `null`
+ * @param {string|undefined} route A route string, an empty string (still a valid route), or
+ *   `undefined`
  * @param {number|string} statusCode
  * @returns {string}
  */
@@ -149,8 +150,8 @@ function buildSamplingKey (method, route, statusCode) {
 /**
  * @param {{ paths?: string[], span?: object }} [context] Web context of the request
  * @param {number|string} statusCode
- * @returns {string|null} A route string, an empty string (still a valid route), or `null` when no
- *   route information is available.
+ * @returns {string|undefined} A route string, an empty string (still a valid route), or
+ *   `undefined` when no route information is available.
  */
 function getRouteOrEndpoint (context, statusCode) {
   // The router plugin populates `context.paths` whenever the framework matched something.
@@ -162,12 +163,10 @@ function getRouteOrEndpoint (context, statusCode) {
     return paths.join('')
   }
 
-  if (isNotFound(statusCode)) return null
+  if (isNotFound(statusCode)) return
 
   const endpoint = context?.span?.context()?.getTag?.('http.endpoint')
   if (endpoint) return endpoint
-
-  return null
 }
 
 /**
