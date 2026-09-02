@@ -83,7 +83,6 @@ const localRunnerVersions = new WeakMap()
 const rumBrowsers = new Set()
 const rumCorrelationBrowsers = new Set()
 const rumRunnerBrowsers = new WeakSet()
-const sharedRumBrowsers = new WeakSet()
 const rumBrowserPreloadScripts = new WeakMap()
 const rumBrowserTestExecutionIds = new WeakMap()
 let isRumCleanupPending = false
@@ -240,7 +239,6 @@ async function handleRumNavigation (context) {
 
     rumBrowsers.add(browser)
     if (!testExecutionId) {
-      if (isRumActive) sharedRumBrowsers.add(browser)
       return
     }
     if (!isRumActive && browser.isBidi) return
@@ -355,27 +353,27 @@ async function forEachRumWindow (browser, operation, value) {
 }
 
 /**
- * Cleans up every open window for one browser and restores the original window.
+ * Removes the current test's RUM correlation while keeping reusable sessions active.
+ * The session is stopped only when WebdriverIO is about to close the browser.
  *
  * @param {object} browser
- * @param {boolean} [stopShared]
+ * @param {boolean} [stopSession]
  * @returns {Promise<void>}
  */
-async function cleanupRumBrowser (browser, stopShared = false) {
+async function cleanupRumBrowser (browser, stopSession = false) {
   await removeRumPreloadScript(browser)
-  if (sharedRumBrowsers.has(browser) && !stopShared) {
-    await forEachRumWindow(browser, deleteRumCookie)
-  } else {
+  if (stopSession) {
     await forEachRumWindow(browser, cleanupRumWindow)
     rumBrowsers.delete(browser)
-    sharedRumBrowsers.delete(browser)
+  } else {
+    await forEachRumWindow(browser, deleteRumCookie)
   }
   await cleanupRumCookies(browser)
   rumBrowserTestExecutionIds.delete(browser)
 }
 
 /**
- * Cleans up every browser prepared for RUM correlation by the current test.
+ * Removes the current test's RUM correlation from every prepared browser.
  *
  * @returns {Promise<object[]>}
  */

@@ -476,7 +476,7 @@ for (const version of versions) {
           })
         })
 
-        it('cleans RUM between tests without afterEach hooks', async () => {
+        it('re-correlates a reused RUM page between tests without afterEach hooks', async () => {
           await runScenario('rumNoAfterEach', 1, (payloads, requests) => {
             const tests = getEvents(payloads)
               .filter(event => event.type === 'test')
@@ -493,7 +493,7 @@ for (const version of versions) {
             )
             assert.deepStrictEqual(
               cookieRequests.filter(({ method }) => method === 'DELETE').map(({ pageUrl }) => pageUrl),
-              ['http://first.example.test/', 'http://second.example.test/']
+              ['http://first.example.test/', 'http://first.example.test/']
             )
           })
         })

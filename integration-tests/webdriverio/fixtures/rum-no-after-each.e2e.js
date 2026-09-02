@@ -7,7 +7,5 @@ describe('WebdriverIO RUM correlation without afterEach', () => {
     await browser.url('http://first.example.test')
   })
 
-  it('cleans the first session before correlating the second', async () => {
-    await browser.url('http://second.example.test')
-  })
+  it('reuses the first RUM session for the second test', () => {})
 })
