@@ -15,7 +15,6 @@ const {
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
-  getScreenshotUploadResult,
   setScreenshotUploadTags,
 } = require('../../dd-trace/src/ci-visibility/test-screenshot')
 const log = require('../../dd-trace/src/log')
@@ -196,7 +195,8 @@ class MochaPlugin extends CiPlugin {
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
     this._webdriverioScreenshotUploads = new WeakMap()
-    this._pendingWebdriverioScreenshotUploads = new Set()
+    this._pendingWebdriverioScreenshotUploads = 0
+    this._webdriverioScreenshotUploadCallbacks = []
 
     this.addSub('ci:webdriverio:screenshot:capabilities', (ctx) => {
       ctx.enabled = Boolean(
@@ -595,12 +595,11 @@ class MochaPlugin extends CiPlugin {
 
     this.addSub('ci:mocha:worker:finish', ({ onDone } = {}) => {
       const flush = () => this.tracer._exporter.flush(onDone)
-      if (this._pendingWebdriverioScreenshotUploads.size === 0) {
+      if (this._pendingWebdriverioScreenshotUploads === 0) {
         flush()
         return
       }
-      const uploads = [...this._pendingWebdriverioScreenshotUploads]
-      Promise.all(uploads.map(upload => upload.then(() => {}, () => {}))).then(flush)
+      this._webdriverioScreenshotUploadCallbacks.push(flush)
     })
 
     this.addSub('ci:mocha:test:finish', ({
@@ -615,7 +614,6 @@ class MochaPlugin extends CiPlugin {
       isAtrRetry,
       finalStatus,
       earlyFlakeAbortReason,
-      promises,
     }) => {
       if (span) {
         const finishTime = span._getTime()
@@ -647,6 +645,12 @@ class MochaPlugin extends CiPlugin {
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
         }
 
+        this.cancelDiBreakpointHitWait()
+        if (this.di && this.libraryConfig?.isDiEnabled && this.runningTestProbe && isLastRetry) {
+          this.removeDiProbe(this.runningTestProbe)
+          this.runningTestProbe = null
+        }
+
         const finishSpan = () => {
           this.telemetry.ciVisEvent(
             TELEMETRY_EVENT_FINISHED,
@@ -658,19 +662,8 @@ class MochaPlugin extends CiPlugin {
           if (this.activeTestSpan === span) {
             this.activeTestSpan = null
           }
-          this.cancelDiBreakpointHitWait()
-          if (this.di && this.libraryConfig?.isDiEnabled && this.runningTestProbe && isLastRetry) {
-            this.removeDiProbe(this.runningTestProbe)
-            this.runningTestProbe = null
-          }
         }
-        const screenshotUpload = status === 'fail' && this.#startWebdriverioScreenshotUpload(span)
-        if (screenshotUpload) {
-          const finishTestPromise = screenshotUpload.then(finishSpan, finishSpan)
-          if (promises) {
-            promises.finishTestPromise = finishTestPromise
-          }
-        } else {
+        if (status !== 'fail' || !this.#startWebdriverioScreenshotUpload(span, finishSpan)) {
           finishSpan()
         }
       }
@@ -780,21 +773,34 @@ class MochaPlugin extends CiPlugin {
           this.runningTestProbe) {
           finishWait = this.waitForInFlightDiBreakpointHits()
         }
-        const screenshotUpload = this.#startWebdriverioScreenshotUpload(span)
-        if (finishWait && screenshotUpload) {
-          finishWait = Promise.all([finishWait, screenshotUpload])
-        } else {
-          finishWait ||= screenshotUpload
+        let screenshotFinished = false
+        let canFinishScreenshot = false
+        let replayFinished = !finishWait
+        let spanFinished = false
+        const finishWhenReady = () => {
+          if (!spanFinished && replayFinished && (screenshotStarted === false || screenshotFinished)) {
+            spanFinished = true
+            finishSpan()
+          }
         }
+        const screenshotStarted = this.#startWebdriverioScreenshotUpload(span, () => {
+          screenshotFinished = true
+          if (canFinishScreenshot) {
+            finishWhenReady()
+          }
+        })
+        canFinishScreenshot = true
         if (finishWait) {
-          const finishTestPromise = finishWait.then(finishSpan, finishSpan)
+          const finishReplay = () => {
+            replayFinished = true
+            finishWhenReady()
+          }
+          const finishTestPromise = finishWait.then(finishReplay, finishReplay)
           if (promises) {
             promises.finishTestPromise = finishTestPromise
           }
-          return
         }
-
-        finishSpan()
+        finishWhenReady()
       }
     })
 
@@ -1325,7 +1331,7 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} test
    * @param {WebdriverioJasmineResult} result
-   * @returns {Promise<void>|undefined}
+   * @returns {void}
    */
   #completeWebdriverioJasmineTest (test, result) {
     const state = this._webdriverioJasmineState
@@ -1353,7 +1359,6 @@ class MochaPlugin extends CiPlugin {
     } else if (test.isEarlyFlakeDetection && status !== 'skip' && !test.hasFinalHookFailure) {
       finalStatus = test.statuses.includes('pass') ? 'pass' : 'fail'
     }
-    const promises = {}
     testFinishCh.publish({
       attemptToFixFailed,
       attemptToFixPassed,
@@ -1364,7 +1369,6 @@ class MochaPlugin extends CiPlugin {
       isAttemptToFixRetry: test.isAttemptToFix && test.attempt > 0,
       isAtrRetry: test.isAtr && test.attempt > 0,
       isLastRetry: true,
-      promises,
       status,
       ...test.currentStore,
     })
@@ -1376,27 +1380,34 @@ class MochaPlugin extends CiPlugin {
     if (suiteStatus === 'fail' || !previousStatus || previousStatus === 'skip') {
       state.suiteStatuses.set(test.testSuiteAbsolutePath, suiteStatus)
     }
-    return promises.finishTestPromise
   }
 
   /**
    * Captures and uploads the current WebdriverIO browser state once for a failed test attempt.
    *
    * @param {object} span - Failed test span
-   * @returns {Promise<string>|undefined} Screenshot upload result
+   * @param {() => void} [onDone] - Called after the screenshot upload finishes
+   * @returns {boolean} Whether a screenshot upload exists for the span
    */
-  #startWebdriverioScreenshotUpload (span) {
+  #startWebdriverioScreenshotUpload (span, onDone) {
     if (
       !span ||
       this.testFramework !== WEBDRIVERIO_FRAMEWORK ||
       !this._tracerConfig.testOptimization?.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
     ) {
-      return
+      return false
     }
 
     const previousUpload = this._webdriverioScreenshotUploads.get(span)
     if (previousUpload) {
-      return previousUpload
+      if (onDone) {
+        if (previousUpload.finished) {
+          onDone()
+        } else {
+          previousUpload.callbacks.push(onDone)
+        }
+      }
+      return true
     }
 
     const exporter = this.tracer?._exporter
@@ -1404,34 +1415,71 @@ class MochaPlugin extends CiPlugin {
       ? this.libraryConfig?.isTestFailureScreenshotsEnabled
       : exporter?.canUploadTestScreenshots?.() && exporter.uploadTestScreenshot
     if (!canUpload) {
-      return
+      return false
     }
 
-    const browser = globalThis.browser
-    let upload
+    const browser = globalThis.browser || globalThis._wdioGlobals?.get?.('browser')
+    const upload = {
+      callbacks: onDone ? [onDone] : [],
+      finished: false,
+    }
+    this._webdriverioScreenshotUploads.set(span, upload)
+    this._pendingWebdriverioScreenshotUploads++
+    const finishUpload = (result) => this.#finishWebdriverioScreenshotUpload(span, upload, result)
+    const uploadScreenshots = (content) => {
+      try {
+        this.#uploadWebdriverioScreenshots(span, content, finishUpload)
+      } catch (error) {
+        finishUpload(handleWebdriverioScreenshotError(error))
+      }
+    }
     try {
       if (typeof browser?.takeScreenshot !== 'function') {
         throw new TypeError('browser.takeScreenshot is not available')
       }
-      upload = Promise.resolve(browser.takeScreenshot()).then(
-        content => this.#uploadWebdriverioScreenshots(span, content),
-        handleWebdriverioScreenshotError
-      )
+      const screenshot = browser.takeScreenshot()
+      if (typeof screenshot?.then === 'function') {
+        screenshot.then(
+          uploadScreenshots,
+          error => finishUpload(handleWebdriverioScreenshotError(error))
+        )
+      } else {
+        uploadScreenshots(screenshot)
+      }
     } catch (error) {
-      handleWebdriverioScreenshotError(error)
-      upload = Promise.resolve(SCREENSHOT_UPLOAD_RESULT_ERROR)
+      finishUpload(handleWebdriverioScreenshotError(error))
     }
+    return true
+  }
 
-    const uploadPromise = upload.then(result => result, handleWebdriverioScreenshotError).then((result) => {
-      setScreenshotUploadTags(span, result)
-      return result
-    })
+  /**
+   * Completes one WebdriverIO screenshot upload and its waiters.
+   *
+   * @param {object} span - Failed test span
+   * @param {{callbacks: Array<() => void>, finished: boolean}} upload - Upload state
+   * @param {string} result - Aggregate screenshot upload result
+   * @returns {void}
+   */
+  #finishWebdriverioScreenshotUpload (span, upload, result) {
+    if (upload.finished) return
 
-    this._webdriverioScreenshotUploads.set(span, uploadPromise)
-    this._pendingWebdriverioScreenshotUploads.add(uploadPromise)
-    const clearPendingUpload = () => this._pendingWebdriverioScreenshotUploads.delete(uploadPromise)
-    uploadPromise.then(clearPendingUpload, clearPendingUpload)
-    return uploadPromise
+    upload.finished = true
+    setScreenshotUploadTags(span, result)
+    const uploadCallbacks = upload.callbacks
+    upload.callbacks = []
+
+    this._pendingWebdriverioScreenshotUploads--
+    let workerCallbacks = []
+    if (this._pendingWebdriverioScreenshotUploads === 0) {
+      workerCallbacks = this._webdriverioScreenshotUploadCallbacks
+      this._webdriverioScreenshotUploadCallbacks = []
+    }
+    for (const callback of uploadCallbacks) {
+      callback()
+    }
+    for (const callback of workerCallbacks) {
+      callback()
+    }
   }
 
   /**
@@ -1439,22 +1487,35 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} span - Failed test span
    * @param {string|string[]} screenshots - Base64-encoded PNG data
-   * @returns {Promise<string>} Aggregate screenshot upload result
+   * @param {(result: string) => void} onDone - Aggregate upload completion callback
+   * @returns {void}
    */
-  #uploadWebdriverioScreenshots (span, screenshots) {
+  #uploadWebdriverioScreenshots (span, screenshots, onDone) {
     const screenshotList = Array.isArray(screenshots) ? screenshots : [screenshots]
     if (screenshotList.length === 0) {
       log.error('Error capturing WebdriverIO failure screenshot: WebdriverIO returned no screenshot data')
-      return Promise.resolve(SCREENSHOT_UPLOAD_RESULT_ERROR)
+      onDone(SCREENSHOT_UPLOAD_RESULT_ERROR)
+      return
     }
     const exporter = this.tracer?._exporter
     const traceId = span.context().toTraceId()
     const capturedAtMs = Date.now()
-    const uploads = screenshotList.map((screenshot, index) => new Promise((resolve) => {
+    let pendingUploads = screenshotList.length
+    let hasUploadError = false
+    const finishOne = (error) => {
+      if (error) {
+        hasUploadError = true
+        log.error('Error uploading WebdriverIO failure screenshot: %s', error?.message || String(error))
+      }
+      if (--pendingUploads === 0) {
+        onDone(hasUploadError ? SCREENSHOT_UPLOAD_RESULT_ERROR : SCREENSHOT_UPLOAD_RESULT_UPLOADED)
+      }
+    }
+    for (let index = 0; index < screenshotList.length; index++) {
+      const screenshot = screenshotList[index]
       if (typeof screenshot !== 'string' || !screenshot) {
-        log.error('Error capturing WebdriverIO failure screenshot: WebdriverIO returned invalid screenshot data')
-        resolve(SCREENSHOT_UPLOAD_RESULT_ERROR)
-        return
+        finishOne(new TypeError('WebdriverIO returned invalid screenshot data'))
+        continue
       }
       const options = {
         screenshot,
@@ -1462,36 +1523,36 @@ class MochaPlugin extends CiPlugin {
         idempotencyKey: `${traceId}:webdriverio-failure-${index}.png`,
         capturedAtMs,
       }
-      const onDone = (error) => {
-        if (error) {
-          log.error('Error uploading WebdriverIO failure screenshot: %s', error?.message || String(error))
-        }
-        resolve(error ? SCREENSHOT_UPLOAD_RESULT_ERROR : SCREENSHOT_UPLOAD_RESULT_UPLOADED)
-      }
       if (isWebdriverioWorker) {
-        requestWebdriverioScreenshotUpload(options, onDone)
+        try {
+          requestWebdriverioScreenshotUpload(options, finishOne)
+        } catch (error) {
+          finishOne(error)
+        }
       } else {
         let content
         try {
           content = Buffer.from(screenshot, 'base64')
         } catch (error) {
-          onDone(error)
-          return
+          finishOne(error)
+          continue
         }
         if (content.length === 0) {
-          onDone(new Error('WebdriverIO returned an empty screenshot'))
-          return
+          finishOne(new Error('WebdriverIO returned an empty screenshot'))
+          continue
         }
-        exporter.uploadTestScreenshot({
-          content,
-          traceId,
-          idempotencyKey: options.idempotencyKey,
-          capturedAtMs,
-        }, onDone)
+        try {
+          exporter.uploadTestScreenshot({
+            content,
+            traceId,
+            idempotencyKey: options.idempotencyKey,
+            capturedAtMs,
+          }, finishOne)
+        } catch (error) {
+          finishOne(error)
+        }
       }
-    }))
-
-    return Promise.all(uploads).then(getScreenshotUploadResult)
+    }
   }
 
   /**

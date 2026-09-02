@@ -404,7 +404,7 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
-    it('reports Jasmine pass, fail, and skip statuses with a failure screenshot', async () => {
+    it('reports Jasmine statuses and a failure screenshot without global injection', async () => {
       await runScenario('jasmineStatuses', 1, ({ media, session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'fail')
         assert.strictEqual(suites.length, 1)

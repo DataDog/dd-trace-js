@@ -6,10 +6,11 @@ const {
   WEBDRIVERIO_WORKER_EVENT,
   WEBDRIVERIO_WORKER_ORIGIN,
 } = require('../../../dd-trace/src/ci-visibility/exporters/test-worker/webdriverio')
+const { FINAL_FLUSH_TIMEOUT } = require('../../../dd-trace/src/ci-visibility/final-flush')
 
 const SCREENSHOT_UPLOAD = 'dd:test-optimization:webdriverio:screenshot:upload'
 const SCREENSHOT_UPLOAD_RESPONSE = 'dd:test-optimization:webdriverio:screenshot:upload:response'
-const SCREENSHOT_UPLOAD_TIMEOUT_MS = 30_000
+const SCREENSHOT_UPLOAD_TIMEOUT_MS = FINAL_FLUSH_TIMEOUT + 5000
 
 /**
  * Sends a message over WebdriverIO's worker IPC envelope.
@@ -85,6 +86,7 @@ module.exports = {
   requestWebdriverioScreenshotUpload,
   SCREENSHOT_UPLOAD,
   SCREENSHOT_UPLOAD_RESPONSE,
+  SCREENSHOT_UPLOAD_TIMEOUT_MS,
   sendWebdriverioWorkerMessage,
   SUITE_FINISH: 'dd:test-optimization:webdriverio:test-suite:finish',
   WORKER_READY: 'dd:test-optimization:webdriverio:worker:ready',
