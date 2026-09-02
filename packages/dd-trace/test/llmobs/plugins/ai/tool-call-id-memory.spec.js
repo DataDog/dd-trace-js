@@ -13,7 +13,7 @@ const { withVersions } = require('../../../setup/mocha')
 const MAX_OLD_SPACE_SIZE_MB = 64
 
 describe('tool call ID memory regression', () => {
-  withVersions('ai', 'ai', '>=5.0.0 <7.0.0', (version, _, realVersion) => {
+  withVersions('ai', 'ai', '>=4.0.0 <7.0.0', (version, _, realVersion) => {
     let agent
 
     useSandbox([`ai@${version}`, 'zod@^3.25.76'], false, [

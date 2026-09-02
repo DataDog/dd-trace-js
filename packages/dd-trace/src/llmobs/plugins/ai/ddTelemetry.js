@@ -296,12 +296,8 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
   setToolTags (span, tags) {
     const toolCallId = tags['ai.toolCall.id']
 
-    let name = getToolNameFromTags(tags)
-    if (name == null) {
-      name = this.#toolCallIdsToName.get(toolCallId)
-    } else {
-      this.#toolCallIdsToName.delete(toolCallId)
-    }
+    const name = getToolNameFromTags(tags) ?? this.#toolCallIdsToName.get(toolCallId)
+    this.#toolCallIdsToName.delete(toolCallId)
 
     if (name) this._tagger._setTag(span, NAME, name)
 
