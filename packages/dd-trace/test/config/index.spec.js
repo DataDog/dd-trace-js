@@ -437,6 +437,16 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
+  it('should keep the real proxy when OTel semantics overrides OTEL_TRACES_EXPORTER=none', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const proxy = require('../../src/proxy')
+    assert.strictEqual(indexFile, proxy)
+  })
+
   it('should keep the real proxy when dynamic instrumentation is enabled with DD_APM_TRACING_ENABLED=false', () => {
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
@@ -696,6 +706,20 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://127.0.0.1:4318/v1/logs')
   })
 
+  it('should treat an empty generic OTLP endpoint as unset', () => {
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = ''
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+    delete process.env.DD_AGENT_HOST
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://127.0.0.1:4318/v1/metrics')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://127.0.0.1:4318/v1/logs')
+  })
+
   it('should default OTLP endpoints to the agent host when DD_AGENT_HOST is set', () => {
     delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
@@ -802,6 +826,16 @@ describe('Config', () => {
   it('should default OTEL_TRACES_EXPORTER to undefined when not set (opt-in)', () => {
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
+  })
+
+  it('should force OTLP traces export over explicit exporter and agent protocol settings with OTel semantics', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
   })
 
   it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
@@ -926,6 +960,15 @@ describe('Config', () => {
       assertConfigUpdateContains(updateConfig.firstCall.args[0], [
         { name: 'DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', value: '500-599', origin: 'env_var' },
       ])
+    })
+
+    it('should retain the env_var origin when explicitly configured to the default value', () => {
+      process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '400-499'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '400-499')
+      assert.strictEqual(config.getOrigin('DD_TRACE_HTTP_CLIENT_ERROR_STATUSES'), 'env_var')
     })
   })
 
@@ -2444,6 +2487,24 @@ describe('Config', () => {
       delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
       config = getConfig()
       assert.strictEqual(config.spanComputePeerService, true)
+    })
+
+    it('should disable peer service when OTel HTTP semantics are enabled', () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.spanAttributeSchema, 'v0')
+      assert.strictEqual(config.spanComputePeerService, false)
+      assert(log.warn.calledWith(
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED overrides DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0'
+      ))
+      assert(log.warn.calledWith(
+        'DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED is set to true, but %s is enabled. Using false instead.',
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED'
+      ))
     })
   })
 

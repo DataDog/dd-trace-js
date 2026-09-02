@@ -66,12 +66,11 @@ class SpanProcessor {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
           }
           isFirstSpanInChunk = false
-          // Span stats read Datadog HTTP tag names from the formatted span, so
-          // record them before the OTel rename — an export-only transform.
-          this._stats?.onSpanFinished(formattedSpan)
           if (this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
             applyHttpOtelSemantics(formattedSpan)
           }
+          // Trace metrics must aggregate the same names and attributes the OTLP exporter emits.
+          this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
         }
       }

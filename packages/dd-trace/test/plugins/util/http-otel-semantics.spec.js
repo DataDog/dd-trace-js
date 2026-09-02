@@ -2,14 +2,19 @@
 
 const assert = require('node:assert/strict')
 
-const { applyHttpOtelSemantics, decomposeServerUrl } = require('../../../src/plugins/util/http-otel-semantics')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  applyHttpOtelSemantics,
+  decomposeServerUrl,
+} = require('../../../src/plugins/util/http-otel-semantics')
 
 describe('http-otel-semantics', () => {
   describe('decomposeServerUrl', () => {
     it('splits scheme, address, port, path, and query', () => {
       assert.deepStrictEqual(
         decomposeServerUrl('http://localhost:8200/a/b?demo=1', 'http://localhost:8200/a/b?demo=1'),
-        { scheme: 'http', address: 'localhost', port: 8200, path: '/a/b', query: 'demo=1' }
+        { scheme: 'http', address: 'localhost', port: '8200', path: '/a/b', query: 'demo=1' }
       )
     })
 
@@ -23,7 +28,7 @@ describe('http-otel-semantics', () => {
     it('keeps an explicit non-default port and omits an absent query', () => {
       const parts = decomposeServerUrl('http://h:8080/', 'http://h:8080/')
       assert.strictEqual(parts.path, '/')
-      assert.strictEqual(parts.port, 8080)
+      assert.strictEqual(parts.port, '8080')
       assert.strictEqual(parts.query, undefined)
     })
 
@@ -35,7 +40,7 @@ describe('http-otel-semantics', () => {
     it('strips brackets from an IPv6 server.address', () => {
       const parts = decomposeServerUrl('http://[::1]:8080/p', 'http://[::1]:8080/p')
       assert.strictEqual(parts.address, '::1')
-      assert.strictEqual(parts.port, 8080)
+      assert.strictEqual(parts.port, '8080')
     })
 
     it('omits server.address when the Host header is absent', () => {
@@ -75,8 +80,12 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(meta['http.request.method'], 'GET')
       assert.strictEqual(meta['url.full'], 'http://localhost:8080/u?x=1')
       assert.strictEqual(meta['server.address'], 'localhost')
-      assert.strictEqual(metrics['http.response.status_code'], 200)
-      assert.strictEqual(metrics['server.port'], 8080)
+      // Every attribute goes out as a `meta` string on the agent protocol; the OTLP
+      // transformer is what restores the int typing.
+      assert.strictEqual(meta['http.response.status_code'], '200')
+      assert.strictEqual(meta['server.port'], '8080')
+      assert.ok(!('http.response.status_code' in metrics))
+      assert.ok(!('server.port' in metrics))
       assert.ok(!('http.method' in meta))
       assert.ok(!('http.url' in meta))
       assert.ok(!('out.host' in meta))
@@ -85,7 +94,7 @@ describe('http-otel-semantics', () => {
     })
 
     it('decomposes the URL and renames attributes for a server span', () => {
-      const { meta, metrics } = run(
+      const { meta } = run(
         {
           'span.kind': 'server',
           'http.method': 'GET',
@@ -94,6 +103,7 @@ describe('http-otel-semantics', () => {
           'http.useragent': 'ua',
           'http.client_ip': '1.2.3.4',
           'http.endpoint': '/u',
+          [HTTP_STATUS_ERROR]: '500',
         },
         {},
         1
@@ -104,15 +114,27 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(meta['url.scheme'], 'http')
       assert.strictEqual(meta['url.query'], 'x=1')
       assert.strictEqual(meta['server.address'], 'localhost')
-      assert.strictEqual(metrics['server.port'], 8080)
+      assert.strictEqual(meta['server.port'], '8080')
       assert.strictEqual(meta['user_agent.original'], 'ua')
       assert.strictEqual(meta['client.address'], '1.2.3.4')
-      assert.strictEqual(metrics['http.response.status_code'], 500)
+      assert.strictEqual(meta['http.response.status_code'], '500')
       assert.strictEqual(meta['error.type'], '500')
       assert.ok(!('http.url' in meta))
-      assert.ok(!('http.endpoint' in meta))
       assert.ok(!('http.useragent' in meta))
       assert.ok(!('http.client_ip' in meta))
+    })
+
+    it('retains http.endpoint, which is Datadog-only with no OTel equivalent', () => {
+      // ASM and endpoint aggregation read this key, so it survives the rename on
+      // both the agent and the OTLP payload.
+      const { meta } = run({
+        'span.kind': 'server',
+        'http.method': 'GET',
+        'http.url': 'http://h/users/1',
+        'http.endpoint': '/users/{id}',
+      })
+
+      assert.strictEqual(meta['http.endpoint'], '/users/{id}')
     })
 
     it('remaps ws/wss schemes to http/https', () => {
@@ -155,6 +177,22 @@ describe('http-otel-semantics', () => {
       assert.deepStrictEqual(meta, { 'span.kind': 'client', 'db.system': 'redis' })
     })
 
+    it('removes internal provenance when a hook cleared the HTTP attributes', () => {
+      const { meta } = run({
+        'span.kind': 'server',
+        [INSTRUMENTATION_HTTP_RESOURCE]: 'GET',
+        [HTTP_STATUS_ERROR]: 'true',
+      })
+
+      assert.deepStrictEqual(meta, { 'span.kind': 'server' })
+    })
+
+    it('removes status provenance when a hook cleared every HTTP attribute', () => {
+      const { meta } = run({ 'span.kind': 'server', [HTTP_STATUS_ERROR]: 'true' })
+
+      assert.deepStrictEqual(meta, { 'span.kind': 'server' })
+    })
+
     it('normalizes an unknown HTTP method to _OTHER and preserves the original', () => {
       const { meta } = run({ 'span.kind': 'server', 'http.method': 'PROPFIND', 'http.url': 'http://h/p' })
 
@@ -190,12 +228,14 @@ describe('http-otel-semantics', () => {
     })
 
     it('falls back to the scheme default port for a client without an explicit port', () => {
-      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'https://h/p' }).metrics['server.port'], 443)
-      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'http://h/p' }).metrics['server.port'], 80)
+      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'https://h/p' }).meta['server.port'], '443')
+      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'http://h/p' }).meta['server.port'], '80')
+      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'wss://h/p' }).meta['server.port'], '443')
+      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'ws://h/p' }).meta['server.port'], '80')
       assert.strictEqual(
         run({ 'span.kind': 'client', 'http.url': 'http://h:8080/p' }, { 'network.destination.port': 8080 })
-          .metrics['server.port'],
-        8080
+          .meta['server.port'],
+        '8080'
       )
     })
 
@@ -215,8 +255,9 @@ describe('http-otel-semantics', () => {
         error: 0,
         resource: 'PROPFIND /p',
       }
+      serverSpan.meta[INSTRUMENTATION_HTTP_RESOURCE] = serverSpan.resource
       applyHttpOtelSemantics(serverSpan)
-      assert.strictEqual(serverSpan.resource, 'HTTP /p')
+      assert.strictEqual(serverSpan.resource, 'HTTP')
 
       const clientSpan = {
         meta: { 'span.kind': 'client', 'http.method': 'PROPFIND', 'http.url': 'http://h/p' },
@@ -224,53 +265,261 @@ describe('http-otel-semantics', () => {
         error: 0,
         resource: 'PROPFIND',
       }
+      clientSpan.meta[INSTRUMENTATION_HTTP_RESOURCE] = clientSpan.resource
       applyHttpOtelSemantics(clientSpan)
       assert.strictEqual(clientSpan.resource, 'HTTP')
     })
 
-    it('leaves a known-method span name unchanged', () => {
+    it('does not use the URL path when a server route is absent', () => {
       const span = {
-        meta: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': 'http://h/users/1' },
+        meta: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': 'http://h/not/a/route' },
         metrics: {},
         error: 0,
-        resource: 'GET /users/{id}',
+        resource: 'GET /not/a/route',
       }
+      span.meta[INSTRUMENTATION_HTTP_RESOURCE] = span.resource
+      applyHttpOtelSemantics(span)
+      assert.strictEqual(span.resource, 'GET')
+    })
+
+    it('uses the route in a known-method server span name', () => {
+      const span = {
+        meta: {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.route': '/users/{id}',
+          'http.url': 'http://h/users/1',
+        },
+        metrics: {},
+        error: 0,
+        resource: 'GET',
+      }
+      span.meta[INSTRUMENTATION_HTTP_RESOURCE] = span.resource
       applyHttpOtelSemantics(span)
       assert.strictEqual(span.resource, 'GET /users/{id}')
     })
 
-    it('marks a server 5xx as an error with error.type, but never a server 4xx', () => {
-      const e503 = run({ 'span.kind': 'server', 'http.method': 'GET', 'http.status_code': '503', 'http.url': 'http://h/p' })
-      assert.strictEqual(e503.meta['error.type'], '503')
-      assert.strictEqual(e503.error, 1)
+    it('preserves a user-defined HTTP resource name', () => {
+      const span = {
+        meta: {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.route': '/users/{id}',
+          'http.url': 'http://h/users/1',
+        },
+        metrics: {},
+        error: 0,
+        resource: 'checkout-custom',
+      }
 
-      const e404 = run({ 'span.kind': 'server', 'http.method': 'GET', 'http.status_code': '404', 'http.url': 'http://h/p' })
-      assert.ok(!('error.type' in e404.meta))
+      applyHttpOtelSemantics(span)
+
+      assert.strictEqual(span.resource, 'checkout-custom')
     })
 
-    it('sets error.type for client 4xx and 5xx', () => {
-      assert.strictEqual(
-        run({ 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '404', 'http.url': 'http://h/p' })
-          .meta['error.type'],
-        '404'
+    for (const resource of ['GET /custom', 'GET checkout']) {
+      it(`preserves a manually assigned method-prefixed resource: ${resource}`, () => {
+        const span = {
+          meta: {
+            'span.kind': 'server',
+            'http.method': 'GET',
+            'http.route': '/users/{id}',
+            'http.url': 'http://h/users/1',
+            [INSTRUMENTATION_HTTP_RESOURCE]: 'GET',
+          },
+          metrics: {},
+          error: 0,
+          resource,
+        }
+
+        applyHttpOtelSemantics(span)
+
+        assert.strictEqual(span.resource, resource)
+      })
+    }
+
+    // Whether an HTTP status makes the span an error is decided at capture time,
+    // from the configured error-status ranges (see status-validator.js). Trace
+    // stats run after this transform and consume that same decision. The transform only derives
+    // `error.type` from the decision the span already carries, and never changes
+    // `error` itself.
+    it('derives error.type from the error the span already carries', () => {
+      const errored = run(
+        {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.status_code': '503',
+          'http.url': 'http://h/p',
+          [HTTP_STATUS_ERROR]: '503',
+        },
+        {},
+        1
       )
-      assert.strictEqual(
-        run({ 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '503', 'http.url': 'http://h/p' })
-          .meta['error.type'],
-        '503'
-      )
+      assert.strictEqual(errored.meta['error.type'], '503')
+      assert.strictEqual(errored.error, 1)
     })
 
-    it('skips the status-code metric and error.type when the status is non-numeric', () => {
-      const { meta, metrics } = run({
+    it('never turns a non-error span into an error, whatever the status', () => {
+      for (const status of ['404', '500', '503']) {
+        const span = run(
+          { 'span.kind': 'server', 'http.method': 'GET', 'http.status_code': status, 'http.url': 'http://h/p' },
+          {},
+          0
+        )
+        assert.strictEqual(span.error, 0, `status ${status} must not flip error`)
+        assert.ok(!('error.type' in span.meta), `status ${status} must not set error.type`)
+      }
+    })
+
+    it('sets error.type on an errored client span', () => {
+      for (const status of ['404', '503']) {
+        const span = run(
+          {
+            'span.kind': 'client',
+            'http.method': 'GET',
+            'http.status_code': status,
+            'http.url': 'http://h/p',
+            [HTTP_STATUS_ERROR]: status,
+          },
+          {},
+          1
+        )
+        assert.strictEqual(span.meta['error.type'], status)
+      }
+    })
+
+    it('still renames what a hook left behind after stripping the method and URL', () => {
+      // The marker proves instrumentation touched this span, so the status and user agent
+      // captured at finish must not keep their Datadog names.
+      const span = run(
+        {
+          'span.kind': 'server',
+          'http.status_code': '503',
+          'http.useragent': 'ua',
+          [INSTRUMENTATION_HTTP_RESOURCE]: 'GET',
+        },
+        {},
+        1
+      )
+
+      assert.strictEqual(span.meta['http.response.status_code'], '503')
+      assert.strictEqual(span.meta['user_agent.original'], 'ua')
+      assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+      assert.ok(!Object.hasOwn(span.meta, 'http.useragent'))
+      assert.ok(!Object.hasOwn(span.meta, INSTRUMENTATION_HTTP_RESOURCE))
+    })
+
+    it('leaves a span the semantics layer never touched alone', () => {
+      const span = run({ 'span.kind': 'client', 'db.name': 'orders' }, {}, 0)
+
+      assert.deepStrictEqual(span.meta, { 'span.kind': 'client', 'db.name': 'orders' })
+    })
+
+    it('keeps a canonical numeric attribute when no derived replacement exists', () => {
+      // A hook can drop the legacy tag and supply the OTel one directly. Nothing is derived then,
+      // so dropping the metric would lose the attribute altogether.
+      const span = run({ 'span.kind': 'server', 'http.method': 'GET' }, { 'http.response.status_code': 204 })
+
+      assert.strictEqual(span.metrics['http.response.status_code'], 204)
+      assert.ok(!Object.hasOwn(span.meta, 'http.response.status_code'))
+    })
+
+    it('drops a numeric copy of a derived attribute so OTLP cannot carry it twice', () => {
+      // A hook setting a numeric value lands in `metrics`, while the attribute is derived into
+      // `meta` from the legacy key. Exporting both would emit the attribute twice.
+      const span = run(
+        {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.url': 'http://h:8080/p',
+          'http.status_code': '500',
+        },
+        { 'http.response.status_code': 200, 'server.port': 9999 }
+      )
+
+      assert.strictEqual(span.meta['http.response.status_code'], '500')
+      assert.strictEqual(span.meta['server.port'], '8080')
+      assert.ok(!Object.hasOwn(span.metrics, 'http.response.status_code'))
+      assert.ok(!Object.hasOwn(span.metrics, 'server.port'))
+    })
+
+    it('does not blame a status a hook replaced after validation', () => {
+      // Capture time rejected 500 and recorded it; the hook then answered 200. The marker no
+      // longer matches the reported status, so 200 is not the cause.
+      const span = run(
+        {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.url': 'http://h/p',
+          'http.status_code': '200',
+          [HTTP_STATUS_ERROR]: '500',
+        },
+        {},
+        1
+      )
+
+      assert.strictEqual(span.error, 1)
+      assert.ok(!Object.hasOwn(span.meta, 'error.type'))
+    })
+
+    it('does not blame the status for an error the application recorded itself', () => {
+      // A request hook can mark a span as an error while the response status stays inside the
+      // validator's accepted range. Capture time leaves the status-error marker off in that
+      // case, so the status must not be reported as the cause.
+      for (const kind of ['server', 'client']) {
+        for (const status of ['404', '500']) {
+          const span = run(
+            { 'span.kind': kind, 'http.method': 'GET', 'http.status_code': status, 'http.url': 'http://h/p' },
+            {},
+            1
+          )
+          assert.strictEqual(span.error, 1)
+          assert.ok(
+            !Object.hasOwn(span.meta, 'error.type'),
+            `${kind} span with an accepted status ${status} must not set error.type`
+          )
+        }
+      }
+    })
+
+    it('sets error.type for a successful status when a validator caused the error', () => {
+      const span = run(
+        {
+          'span.kind': 'client',
+          'http.method': 'GET',
+          'http.status_code': '200',
+          'http.url': 'http://h/p',
+          [HTTP_STATUS_ERROR]: '200',
+        },
+        {},
+        1
+      )
+
+      assert.strictEqual(span.meta['error.type'], '200')
+      assert.ok(!Object.hasOwn(span.meta, HTTP_STATUS_ERROR))
+    })
+
+    it('does not describe a manual error on a successful response as a status error', () => {
+      const span = run(
+        { 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '200', 'http.url': 'http://h/p' },
+        {},
+        1
+      )
+
+      assert.ok(!Object.hasOwn(span.meta, 'error.type'))
+    })
+
+    it('emits the status code verbatim, without reparsing it', () => {
+      // `span_format` already stringified the status, so whatever it holds is passed
+      // straight through rather than being parsed into a number.
+      const { meta } = run({
         'span.kind': 'client',
         'http.method': 'GET',
-        'http.status_code': 'bogus',
+        'http.status_code': '404',
         'http.url': 'http://h/p',
       })
 
-      assert.ok(!('http.response.status_code' in metrics))
-      assert.ok(!('error.type' in meta))
+      assert.strictEqual(meta['http.response.status_code'], '404')
     })
   })
 })

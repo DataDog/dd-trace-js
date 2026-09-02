@@ -309,6 +309,33 @@ function unformatSpanEvents (span) {
 }
 
 /**
+ * The flag switches the tracer onto the OTLP exporter, so nothing reaches this mock agent and
+ * every flag-on span assertion times out. Put the Datadog exporter back for tests. `SpanProcessor`
+ * applies the OTel semantics before any exporter sees the span, so the converted tags are still
+ * what gets asserted. Must run before `setUrl`.
+ *
+ * @param {import('../../src/index')} initializedTracer
+ */
+function useAgentExporterForOtelSemantics (initializedTracer) {
+  const datadogTracer = initializedTracer._tracer
+  const { _config: config, _processor: processor } = datadogTracer
+
+  // Mirrors `opentracing/tracer.js`; any other exporter already posts to the mock agent.
+  const usesOtlpExporter = config.OTEL_TRACES_EXPORTER === 'otlp' &&
+    !config.isCiVisibility &&
+    config.experimental.exporter !== 'electron'
+
+  if (!usesOtlpExporter) return
+
+  const getExporter = require('../../src/exporter')
+  const Exporter = getExporter(config.experimental.exporter)
+  const exporter = new Exporter(config, datadogTracer._prioritySampler)
+
+  datadogTracer._exporter = exporter
+  processor._exporter = exporter
+}
+
+/**
  * @param {express.Request} req
  * @param {express.Response} res
  */
@@ -715,6 +742,8 @@ module.exports = {
           plugins: false,
           ...tracerConfig,
         })
+
+        useAgentExporterForOtelSemantics(tracer)
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 

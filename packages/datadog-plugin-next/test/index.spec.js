@@ -3,10 +3,11 @@
 const assert = require('node:assert/strict')
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
-const path = require('node:path')
-const http = require('node:http')
 const { execSync, spawn } = require('node:child_process')
+const { once } = require('node:events')
 const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
+const http = require('node:http')
+const path = require('node:path')
 const axios = require('axios')
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
@@ -21,6 +22,7 @@ require('../../datadog-instrumentations/src/next')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
+const addOtelRequestTags = require('../src/request-tags')
 const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
@@ -61,6 +63,69 @@ function getDisabledRuntimeHooks () {
 }
 
 describe('Plugin', function () {
+  it('captures the URL and socket peer needed by OTel server attributes', () => {
+    const tags = {}
+    const span = { setTag: (key, value) => { tags[key] = value } }
+    const req = {
+      headers: { host: 'example.com:8080', 'user-agent': 'test-agent/1.0' },
+      method: 'GET',
+      socket: { encrypted: false, remoteAddress: '192.0.2.1' },
+      url: '/products/42?token=secret',
+    }
+
+    addOtelRequestTags(
+      span,
+      { DD_TRACE_OTEL_SEMANTICS_ENABLED: true, queryStringObfuscation: false },
+      req
+    )
+
+    assert.strictEqual(tags['http.url'], 'http://example.com:8080/products/42?token=secret')
+    assert.strictEqual(tags['network.peer.address'], '192.0.2.1')
+    // The shared `web.addRequestTags` path records this, so the Next path has to as well or the
+    // conversion emits no `user_agent.original`.
+    assert.strictEqual(tags['http.useragent'], 'test-agent/1.0')
+  })
+
+  it('captures an absolute URL and Headers values from a Web Request', () => {
+    const tags = {}
+    const span = { setTag: (key, value) => { tags[key] = value } }
+    const req = new Request('https://example.com/products/42?token=secret', {
+      headers: { 'user-agent': 'test-agent/1.0' },
+    })
+
+    addOtelRequestTags(
+      span,
+      { DD_TRACE_OTEL_SEMANTICS_ENABLED: true, queryStringObfuscation: false },
+      req
+    )
+
+    assert.strictEqual(tags['http.url'], 'https://example.com/products/42?token=secret')
+    assert.strictEqual(tags['http.useragent'], 'test-agent/1.0')
+    assert.strictEqual(tags['network.peer.address'], undefined)
+  })
+
+  it('does not read request attributes when OTel semantics are disabled', () => {
+    const tags = {}
+    const span = { setTag: (key, value) => { tags[key] = value } }
+
+    addOtelRequestTags(span, { DD_TRACE_OTEL_SEMANTICS_ENABLED: false }, {
+      headers: { host: 'example.com' },
+      method: 'GET',
+      url: '/',
+    })
+
+    assert.deepStrictEqual(tags, {})
+  })
+
+  it('does not read request attributes without headers', () => {
+    const tags = {}
+    const span = { setTag: (key, value) => { tags[key] = value } }
+
+    addOtelRequestTags(span, { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }, { method: 'GET', url: '/' })
+
+    assert.deepStrictEqual(tags, {})
+  })
+
   let server
   let port
   let downstreamServer
@@ -1061,7 +1126,7 @@ describe('compiled Next runtimes', () => {
 
   describe('as the first tracing entrypoint', () => {
     before(async () => {
-      await agent.load('next')
+      await agent.load('next', { service: 'next-service' })
       dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
     })
     after(() => agent.close())
@@ -1097,8 +1162,10 @@ describe('compiled Next runtimes', () => {
         const [span] = traces[0]
         assertObjectContains(span, {
           name: 'next.request',
+          service: 'next-service',
           resource: 'GET /api/first-entry',
           meta: {
+            '_dd.svc_src': 'opt.plugin',
             'http.status_code': '201',
             'next.page': '/api/first-entry',
           },
@@ -1187,6 +1254,104 @@ describe('compiled Next runtimes', () => {
       )
       assert.strictEqual(response.statusCode, 500)
       await trace
+    })
+  })
+
+  describe('with OTel semantics', () => {
+    before(async () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      await agent.load(['http', 'next'], [{ client: false }, undefined])
+      dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
+    })
+
+    after(() => {
+      delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      return agent.close()
+    })
+
+    it('captures Web NextRequest attributes through the App Route lifecycle', async () => {
+      class AppRouteRouteModule {
+        definition = { pathname: '/api/web-request' }
+
+        handle (_request, _context) {
+          return Promise.resolve({ status: 503 })
+        }
+      }
+      const applyCompiledRuntimeHook = getCompiledRuntimeHook('app-route')
+      applyCompiledRuntimeHook({ AppRouteRouteModule })
+
+      const request = new Request('https://example.com/api/web-request?token=secret', {
+        headers: { 'user-agent': 'test-agent/1.0' },
+        method: 'PROPFIND',
+      })
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          name: 'next.request',
+          resource: 'HTTP /api/web-request',
+          error: 1,
+          meta: {
+            'error.type': '503',
+            'http.request.method': '_OTHER',
+            'http.request.method_original': 'PROPFIND',
+            'http.response.status_code': '503',
+            'url.path': '/api/web-request',
+            'url.scheme': 'https',
+            'server.address': 'example.com',
+            'user_agent.original': 'test-agent/1.0',
+          },
+        })
+      })
+
+      const response = await new AppRouteRouteModule().handle(request, {})
+      assert.strictEqual(response.status, 503)
+      await trace
+    })
+
+    it('updates the HTTP parent resource through the App Route lifecycle', async () => {
+      class AppRouteRouteModule {
+        definition = { pathname: '/api/web-request' }
+
+        handle () {
+          return Promise.resolve({ status: 201 })
+        }
+      }
+      const instrumentAppRouteRuntime = getCompiledRuntimeHook('app-route')
+      instrumentAppRouteRuntime({ AppRouteRouteModule })
+      const routeModule = new AppRouteRouteModule()
+      const server = http.createServer(async (req, res) => {
+        try {
+          const request = new Request(`http://${req.headers.host}${req.url}`, { method: req.method })
+          const response = await routeModule.handle(request, {})
+          res.statusCode = response.status
+          res.end()
+        } catch (error) {
+          res.destroy(error)
+        }
+      })
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+      const port = server.address().port
+      const trace = agent.assertSomeTraces(traces => {
+        const spans = traces.find(trace => trace.some(span => span.name === 'next.request'))
+        assert.ok(spans)
+        const nextSpan = spans.find(span => span.name === 'next.request')
+        assert.ok(nextSpan)
+        const parentSpan = spans.find(span => span.span_id.toString() === nextSpan.parent_id.toString())
+        assert.ok(parentSpan)
+        assert.strictEqual(parentSpan.resource, 'HTTP /api/web-request')
+        assert.strictEqual(nextSpan.resource, 'HTTP /api/web-request')
+      })
+
+      try {
+        const [response] = await Promise.all([
+          axios({ method: 'PROPFIND', url: `http://127.0.0.1:${port}/api/web-request` }),
+          trace,
+        ])
+        assert.strictEqual(response.status, 201)
+      } finally {
+        await new Promise(resolve => server.close(resolve))
+      }
     })
   })
 })

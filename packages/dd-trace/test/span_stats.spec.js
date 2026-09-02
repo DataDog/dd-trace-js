@@ -145,6 +145,78 @@ describe('SpanAggKey', () => {
       key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,')
   })
 
+  it('should retrieve HTTP method and status from OTel attributes', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        'http.request.method': 'PATCH',
+        [HTTP_ROUTE]: '/users/:id',
+      },
+      metrics: {
+        'http.response.status_code': 204,
+      },
+    }
+    const key = new SpanAggKey(span)
+
+    assert.strictEqual(key.method, 'PATCH')
+    assert.strictEqual(key.statusCode, 204)
+    assert.strictEqual(key.endpoint, '/users/:id')
+  })
+
+  it('should skip a malformed legacy HTTP status and use the OTel attribute', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_STATUS_CODE]: '',
+        'http.response.status_code': '500',
+      },
+      metrics: {},
+    }
+
+    const key = new SpanAggKey(span)
+
+    assert.strictEqual(key.statusCode, '500')
+  })
+
+  it('should skip statuses only a coercion would accept, as the OTLP exporter does', () => {
+    // Trace metrics and the exported span have to agree on what a status is.
+    for (const status of ['1e2', '0x10', ' 200 ', '1.5', '-1']) {
+      const key = new SpanAggKey({ ...basicSpan, meta: { [HTTP_STATUS_CODE]: status }, metrics: {} })
+
+      assert.strictEqual(key.statusCode, 0, `status ${JSON.stringify(status)} must not be aggregated`)
+    }
+  })
+
+  it('should preserve legacy-first HTTP status precedence', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_STATUS_CODE]: '201',
+        'http.response.status_code': '202',
+      },
+      metrics: {
+        'http.response.status_code': 203,
+      },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, '201')
+  })
+
+  it('should prefer OTel meta status over the metric fallback', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_STATUS_CODE]: 'invalid',
+        'http.response.status_code': '202',
+      },
+      metrics: {
+        'http.response.status_code': 203,
+      },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, '202')
+  })
+
   it('should include HTTP method and endpoint in aggregation key', () => {
     const span = {
       ...basicSpan,

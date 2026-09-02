@@ -31,12 +31,21 @@ module.exports = function getExporter (name) {
       return require('./ci-visibility/exporters/test-worker')
   }
 
-  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-  const usingAgent = inAWSLambda && (
-    fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) ||
-    fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
-  )
-  return inAWSLambda && !usingAgent ? require('./exporters/log') : require('./exporters/agent')
+  return usesLambdaLogExporter() ? require('./exporters/log') : require('./exporters/agent')
+}
+
+/**
+ * Whether spans have to be written to the Lambda log for the Forwarder to pick up, which is the
+ * case in a Lambda with neither the Datadog extension nor the mini agent. Nothing else can reach
+ * the backend from there, so this transport must not be replaced.
+ *
+ * @returns {boolean}
+ */
+function usesLambdaLogExporter () {
+  if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') === undefined) return false
+
+  return !fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) &&
+    !fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
 }
 
 function hasCiValidationEnvironment () {
@@ -44,3 +53,22 @@ function hasCiValidationEnvironment () {
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE') &&
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR')
 }
+
+/**
+ * Whether the OTLP export that OTel semantics mode forces has to yield to the Lambda log
+ * transport: true in a Lambda that can only reach the backend through its log, and only while the
+ * caller has not pointed OTLP at a collector of their own.
+ *
+ * @returns {boolean}
+ */
+function requiresLambdaLogExporter () {
+  if (!usesLambdaLogExporter()) return false
+
+  // `createOtlpTraceExporter` reads the trace-specific endpoint and `Config` fills in a default
+  // for it, so only the environment shows whether the caller chose one.
+  return !getEnvironmentVariable('OTEL_EXPORTER_OTLP_ENDPOINT') &&
+    !getEnvironmentVariable('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT')
+}
+
+module.exports.usesLambdaLogExporter = usesLambdaLogExporter
+module.exports.requiresLambdaLogExporter = requiresLambdaLogExporter

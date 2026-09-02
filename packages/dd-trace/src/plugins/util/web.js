@@ -15,7 +15,14 @@ const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { getServerStatusValidator } = require('./status-validator')
 const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
-const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  isInstrumentationOwnedResource,
+  NETWORK_PEER_ADDRESS,
+  otelHttpResourceName,
+  setInstrumentationHttpResource,
+} = require('./http-otel-semantics')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -146,9 +153,26 @@ const web = {
   setRoute (req, path) {
     const context = contexts.get(req)
 
-    if (!context) return
+    if (!context?.span) return
 
+    if (!path || !context.config?.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      context.paths = [path]
+      return
+    }
+
+    const spanContext = context.span.context()
+    const currentRoute = spanContext.getTag(HTTP_ROUTE)
+    const publishedRoute = context.paths.length > 1 ? context.paths.join('') : context.paths[0]
     context.paths = [path]
+    // Flag-only: this mutates the live span, which the default path must not do. A downstream
+    // request can sample from inside the route handler, so the route and resource have to be
+    // readable before finish. Overwrite only what this context published, so an upstream route still wins.
+    if (currentRoute === undefined || currentRoute === publishedRoute) {
+      context.span.setTag(HTTP_ROUTE, path)
+      if (ownsResource(spanContext)) {
+        setInstrumentationHttpResource(context.span, otelHttpResourceName(req.method, path))
+      }
+    }
   },
 
   // Remove the current route segment.
@@ -254,10 +278,16 @@ const web = {
 
     if (!spanHasExistingError && !isValidStatusCode) {
       span.setTag(ERROR, error || true)
+      if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        span.setTag(HTTP_STATUS_ERROR, String(statusCode))
+      }
     }
 
     if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
       inferredProxySpan.setTag(ERROR, error || true)
+      if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        inferredProxySpan.setTag(HTTP_STATUS_ERROR, String(statusCode))
+      }
     }
   },
 
@@ -288,8 +318,7 @@ const web = {
     if (context.finished && !req.stream) return
 
     // `addRequestTags` is idempotent: in the normal HTTP path it ran during
-    // `web.startSpan`. Serverless callers (e.g. Azure Functions) skip
-    // `web.startSpan` and rely on this call to do the request-side work.
+    // `web.startSpan`, and this call applies any framework config installed afterwards.
     addRequestTags(context, spanType)
     // Configured-header tagging runs at finish time. Framework plugins
     // (connect, express, ...) install their own config via `setFramework`
@@ -433,6 +462,10 @@ function addRequestTags (context, spanType) {
   // other HTTP attributes, which are renamed centrally in span_format) it is set
   // here directly when OTel semantics are enabled.
   if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    // Establish ownership before propagation can sample.
+    if (ownsResource(spanContext)) {
+      setInstrumentationHttpResource(span, otelHttpResourceName(req.method))
+    }
     const peerAddress = req.socket?.remoteAddress
     if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
   }
@@ -505,18 +538,40 @@ function applyRouteOrEndpointTag (context) {
   span.setTag(HTTP_ENDPOINT, endpoint)
 }
 
+/**
+ * @param {import('../../opentracing/span_context')} spanContext
+ * @returns {boolean}
+ */
+function ownsResource (spanContext) {
+  return isInstrumentationOwnedResource(
+    spanContext.getTag(RESOURCE_NAME),
+    spanContext.getTag(INSTRUMENTATION_HTTP_RESOURCE)
+  )
+}
+
 function addResourceTag (context) {
-  const { req, span } = context
+  const { req, span, config } = context
   const spanContext = span.context()
+  const currentResource = spanContext.getTag(RESOURCE_NAME)
 
-  if (spanContext.getTag(RESOURCE_NAME)) return
+  if (!config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    if (currentResource) return
 
-  let resource = req.method
-  const route = spanContext.getTag(HTTP_ROUTE)
+    let resource = req.method
+    const route = spanContext.getTag(HTTP_ROUTE)
 
-  if (route) resource += ` ${route}`
+    if (route) resource += ` ${route}`
+    span.setTag(RESOURCE_NAME, resource)
+    return
+  }
 
-  span.setTag(RESOURCE_NAME, resource)
+  const instrumentationResource = spanContext.getTag(INSTRUMENTATION_HTTP_RESOURCE)
+  if (currentResource && !isInstrumentationOwnedResource(currentResource, instrumentationResource)) return
+
+  const resource = otelHttpResourceName(req.method, spanContext.getTag(HTTP_ROUTE))
+  if (currentResource === resource && instrumentationResource === resource) return
+
+  setInstrumentationHttpResource(span, resource)
 }
 
 function addRequestHeaders (context) {

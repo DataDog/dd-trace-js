@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const fs = require('node:fs')
 const http = require('node:http')
 const https = require('node:https')
 
@@ -227,6 +228,27 @@ describe('OpenTelemetry Traces', () => {
       assert.match(otlpSpan.spanId, /^[0-9a-f]+$/, 'spanId must be lowercase hex')
       assert.strictEqual(typeof otlpSpan.parentSpanId, 'string', 'parentSpanId must be a string')
       assert.strictEqual(otlpSpan.parentSpanId.length, 16, 'parentSpanId must be 16 hex chars (8 bytes)')
+    })
+
+    it('applies the trace sampling priority to every span', () => {
+      const transformer = new OtlpTraceTransformer({})
+      for (const [priority, flags] of [[0, 0], [2, 1]]) {
+        const root = createMockSpan({
+          parent_id: id('0'),
+          metrics: { _sampling_priority_v1: priority },
+        })
+        const child = createMockSpan({
+          span_id: id('abcdef1234567891'),
+          parent_id: root.span_id,
+          metrics: { _sampling_priority_v1: priority },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([root, child]))
+        const spans = decoded.resourceSpans[0].scopeSpans[0].spans
+
+        assert.strictEqual(spans[0].flags, flags)
+        assert.strictEqual(spans[1].flags, flags)
+      }
     })
 
     it('maps span kind correctly', () => {
@@ -615,6 +637,87 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(attrs['http.status_code'], 200)
       })
 
+      // Typed as ints by the semantic conventions, but carried in `meta` as strings.
+      it('promotes int-typed OTel HTTP attributes from meta strings to intValue', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({
+          meta: {
+            'http.request.method': 'GET',
+            'http.response.status_code': '503',
+            'server.port': '8080',
+            'server.address': 'localhost',
+          },
+          metrics: {},
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+        const byKey = Object.fromEntries(attributes.map(({ key, value }) => [key, value]))
+
+        assert.deepStrictEqual(byKey['http.response.status_code'], { intValue: 503 })
+        assert.deepStrictEqual(byKey['server.port'], { intValue: 8080 })
+        // Everything else stays a string.
+        assert.deepStrictEqual(byKey['http.request.method'], { stringValue: 'GET' })
+        assert.deepStrictEqual(byKey['server.address'], { stringValue: 'localhost' })
+      })
+
+      it('omits a malformed int-typed OTel attribute', () => {
+        // `Number` turns each of these into an integer, '' and ' ' into a plausible 0.
+        // 9007199254740991 is Number.MAX_SAFE_INTEGER; one past it rounds, and a longer digit
+        // string becomes Infinity, which JSON.stringify writes as `intValue: null`.
+        for (const status of ['bogus', '', ' ', '0x10', '1e2', '1.5', '-1', '9007199254740992', '9'.repeat(400)]) {
+          const transformer = new OtlpTraceTransformer({}, true)
+          const span = createMockSpan({ meta: { 'http.response.status_code': status }, metrics: {} })
+
+          const decoded = decodePayload(transformer.transformSpans([span]))
+          const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+          assert.strictEqual(
+            attributes.find(({ key }) => key === 'http.response.status_code'),
+            undefined,
+            `status ${JSON.stringify(status)} must be omitted`
+          )
+        }
+      })
+
+      it('promotes the largest safe integer, the last accepted value', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({ meta: { 'server.port': '9007199254740991' }, metrics: {} })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+        const port = attributes.find(({ key }) => key === 'server.port')
+
+        assert.deepStrictEqual(port, { key: 'server.port', value: { intValue: 9007199254740991 } })
+      })
+
+      it('omits a numeric int-typed attribute that is not an unsigned integer', () => {
+        // `Number.isInteger(-1)` is true, but a negative port or status is malformed, and `meta`
+        // and trace metrics both reject it.
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({ meta: {}, metrics: { 'server.port': -1, 'http.response.status_code': -1 } })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+        for (const key of ['server.port', 'http.response.status_code']) {
+          assert.strictEqual(attributes.find((attribute) => attribute.key === key), undefined, `${key} must be omitted`)
+        }
+      })
+
+      it('does not promote the int-typed keys when OTel semantics are disabled', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({ meta: { 'server.port': '8080' }, metrics: {} })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+        assert.deepStrictEqual(
+          attributes.find(({ key }) => key === 'server.port').value,
+          { stringValue: '8080' }
+        )
+      })
+
       it('excludes error.message from attributes but still populates OTLP status', () => {
         const transformer = new OtlpTraceTransformer({}, true)
         const span = createMockSpan({
@@ -784,6 +887,23 @@ describe('OpenTelemetry Traces', () => {
       const tracer = new DatadogTracer(config)
       assert(tracer._exporter instanceof ElectronExporter,
         'Exporter should be the Electron exporter even when OTEL_TRACES_EXPORTER=otlp')
+    })
+
+    it('DatadogTracer keeps the Lambda log exporter when an OTLP endpoint is empty', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+      const LogExporter = require('../../src/exporters/log')
+      sinon.stub(fs, 'existsSync').returns(false)
+
+      for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+        process.env[key] = ''
+        const tracer = new DatadogTracer(getConfigFresh())
+
+        assert(tracer._exporter instanceof LogExporter, key)
+        delete process.env[key]
+      }
     })
   })
 

@@ -41,22 +41,20 @@ class AzureFunctionsPlugin extends TracingPlugin {
       }
       // Patch the request to create web context
       const webContext = web.patch(req)
-      webContext.config = this.config
-      webContext.tracer = this.tracer
-      webContext.paths = [path]
       // Creates a standard span and an inferred proxy span if headers are present
-      span = web.startServerlessSpanWithInferredProxy(
+      span = web.startSpan(
         this.tracer,
         this.config,
-        this.operationName(),
         req,
+        undefined,
+        this.operationName(),
         ctx
       )
+      web.setRoute(req, path)
 
       span._integrationName = 'azure-functions'
       span.context().setTag('component', 'azure-functions')
       span.addTags(meta)
-      webContext.span = span
       webContext.azureFunctionCtx = ctx
       ctx.webContext = webContext
     } else {
