@@ -317,7 +317,7 @@ describe('module', () => {
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
     })
 
-    it('appends to an existing non-empty x-datadog-tags with a single comma separator', () => {
+    it('appends existing non-empty x-datadog-tags with a single comma separator', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
       const carrier = {
@@ -327,7 +327,7 @@ describe('module', () => {
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
-        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
+        '_dd.p.llmobs_ml_app=test,_dd.p.tid=69fe014200000000,_dd.p.dm=-0'
       )
     })
 
@@ -346,7 +346,7 @@ describe('module', () => {
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
-        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
+        '_dd.p.llmobs_ml_app=test,_dd.p.tid=69fe014200000000,_dd.p.dm=-0'
       )
     })
 
@@ -365,10 +365,10 @@ describe('module', () => {
       assert.strictEqual(
         carrier['x-datadog-tags'],
         [
+          '_dd.p.llmobs_ml_app=test',
           '_dd.p.llmobs_sid=retained-session',
           '_dd.p.tid=69fe014200000000',
           '_dd.p.dm=-0',
-          '_dd.p.llmobs_ml_app=test',
         ].join(',')
       )
     })
@@ -383,7 +383,7 @@ describe('module', () => {
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
-        '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=test'
+        '_dd.p.llmobs_ml_app=test,_dd.p.other=value_dd.p.llmobs_inside'
       )
     })
 
@@ -426,14 +426,14 @@ describe('module', () => {
       assert.strictEqual(
         carrier['x-datadog-tags'],
         [
-          '_dd.p.tid=69fe014200000000',
-          'malformed',
           '_dd.p.llmobs_parent_id=new-parent-id',
           '_dd.p.llmobs_ml_app=test',
           '_dd.p.llmobs_sid=new-session',
           '_dd.p.llmobs_sr=0.8',
           '_dd.p.llmobs_sd=1',
           '_dd.p.llmobs_trace_id=12345678901234567890123456789012',
+          '_dd.p.tid=69fe014200000000',
+          'malformed',
           '_dd.p.llmobs_pagent_span_id=new-agent-id',
           '_dd.p.llmobs_pagent_name=new-agent',
         ].join(',')
