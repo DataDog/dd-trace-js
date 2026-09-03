@@ -651,7 +651,6 @@ class Config extends ConfigBase {
         setAndTrack(this, 'dynamicInstrumentation.enabled', false)
       }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
-      setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
       setAndTrack(this, 'dsmEnabled', false)
       setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
 
