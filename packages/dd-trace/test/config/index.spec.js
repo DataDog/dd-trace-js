@@ -5266,7 +5266,7 @@ rules:
       assert.strictEqual(config.dynamicInstrumentation.enabled, true)
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
-      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
       assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
       assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
       assert.strictEqual(config.logInjection, false)
