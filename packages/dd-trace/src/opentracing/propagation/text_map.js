@@ -444,12 +444,6 @@ class TextMapPropagator {
     return this._config.tracePropagationStyle[mode].includes(name)
   }
 
-  _hasTraceIdConflict (w3cSpanContext, firstSpanContext) {
-    return w3cSpanContext !== undefined &&
-          firstSpanContext.toTraceId(true) === w3cSpanContext.toTraceId(true) &&
-          firstSpanContext.toSpanId() !== w3cSpanContext.toSpanId()
-  }
-
   _hasParentIdInTags (spanContext) {
     return tags.DD_PARENT_ID in spanContext._trace.tags
   }
@@ -462,9 +456,14 @@ class TextMapPropagator {
   }
 
   _resolveTraceContextConflicts (w3cSpanContext, firstSpanContext, carrier) {
-    if (!this._hasTraceIdConflict(w3cSpanContext, firstSpanContext)) {
+    if (w3cSpanContext === undefined ||
+      firstSpanContext.toTraceId(true) !== w3cSpanContext.toTraceId(true)) {
       return firstSpanContext
     }
+
+    firstSpanContext._tracestate = w3cSpanContext._tracestate
+    if (firstSpanContext.toSpanId() === w3cSpanContext.toSpanId()) return firstSpanContext
+
     if (this._hasParentIdInTags(w3cSpanContext)) {
       // tracecontext headers contain a p value, ensure this value is sent to backend
       firstSpanContext._trace.tags[tags.DD_PARENT_ID] = w3cSpanContext._trace.tags[tags.DD_PARENT_ID]
