@@ -13,12 +13,14 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 
+const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
 const {
   informationalResponse,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
+  responseSetHeader,
   responseWriteHead,
 } = require('../../dd-trace/src/appsec/channels')
 const { FOREIGN_HTTP2_SERVER } = require('../../dd-trace/src/constants')
@@ -27,6 +29,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./naming')
 
 const finishSetHeader = dc.channel('datadog:http:server:response:set-header:finish')
+const legacyStorage = storage('legacy')
 
 /**
  * @param {typeof import('http2')} http2
@@ -114,11 +117,26 @@ function abortResponseWithBlockedResponse ({ res, abortController }) {
 }
 
 /**
+ * @param {{ res: { writeHead: Function, end: Function }, abortController: AbortController }} ctx
+ * @returns {void}
+ */
+function abortCompatibilityResponse (ctx) {
+  responseSetHeader.unsubscribe(abortCompatibilityResponse)
+  abortWithBlockedResponse(ctx)
+}
+
+/**
  * @returns {void}
  */
 function observeResponseHeader () {}
 
+/**
+ * @returns {void}
+ */
+function observeIncomingHttpRequestStart () {}
+
 let observedResponseHeader
+let observedResponseHeaderCount = 0
 
 /**
  * @param {{ name: string, value: unknown }} message
@@ -126,6 +144,7 @@ let observedResponseHeader
  */
 function captureResponseHeader ({ name, value }) {
   observedResponseHeader = { name, value }
+  observedResponseHeaderCount++
 }
 
 let incomingHttpRequestEndMessage
@@ -426,11 +445,41 @@ describe('Plugin', () => {
           request(http2, `http://localhost:${port}/user`).catch(done)
         })
 
+        it('restores the caller context after request-start publication', async () => {
+          const emit = appListener.emit
+          let storeBeforeRequest
+          let storeAfterRequest
+          appListener.emit = function (eventName) {
+            const store = legacyStorage.getStore()
+            const result = Reflect.apply(emit, this, arguments)
+            if (eventName === 'request') {
+              storeBeforeRequest = store
+              storeAfterRequest = legacyStorage.getStore()
+            }
+            return result
+          }
+          incomingHttpRequestStart.subscribe(observeIncomingHttpRequestStart)
+
+          try {
+            await Promise.all([
+              agent.assertFirstTraceSpan({ name: 'web.request' }),
+              request(http2, `http://localhost:${port}/user`),
+            ])
+            assert.strictEqual(storeAfterRequest, storeBeforeRequest)
+          } finally {
+            incomingHttpRequestStart.unsubscribe(observeIncomingHttpRequestStart)
+          }
+        })
+
         it('preserves response operations without security subscribers', async () => {
           const informationalHeaders = []
           app = (req, res) => {
             assert.strictEqual(res.setHeader('x-test', 'value'), undefined)
             assert.strictEqual(res.getHeader('x-test'), 'value')
+            if (res.appendHeader) {
+              res.appendHeader('x-appended', 'value')
+              assert.strictEqual(res.getHeader('x-appended'), 'value')
+            }
             res.removeHeader('x-test')
             res.writeContinue()
             res.writeEarlyHints({ link: '</style.css>; rel=preload; as=style' })
@@ -443,6 +492,74 @@ describe('Plugin', () => {
           assert.strictEqual(informationalHeaders.length, 2)
           assert.strictEqual(informationalHeaders[0][':status'], 100)
           assert.strictEqual(informationalHeaders[1][':status'], 103)
+        })
+
+        it('retains a compatibility block after its subscriber is removed', async () => {
+          let operationError
+          /**
+           * @param {import('node:http2').Http2ServerRequest} req
+           * @param {import('node:http2').Http2ServerResponse} res
+           */
+          app = (req, res) => {
+            res.setHeader('x-block', 'value')
+            try {
+              res.setHeader('x-after-block', 'ignored')
+            } catch (error) {
+              operationError = error
+            }
+          }
+          responseSetHeader.subscribe(abortCompatibilityResponse)
+
+          try {
+            const [, body] = await Promise.all([
+              agent.assertFirstTraceSpan({ name: 'web.request', meta: { 'http.status_code': '403' } }),
+              request(http2, `http://localhost:${port}/user`),
+            ])
+            assert.strictEqual(operationError, undefined)
+            assert.strictEqual(body.toString(), 'blocked')
+          } finally {
+            responseSetHeader.unsubscribe(abortCompatibilityResponse)
+          }
+        })
+
+        it('publishes appendHeader once for absent and existing headers', async function () {
+          if (!http2.Http2ServerResponse.prototype.appendHeader) this.skip()
+
+          let countAfterExisting
+          let countAfterFalsy
+          let countAfterMissing
+          observedResponseHeaderCount = 0
+          finishSetHeader.subscribe(captureResponseHeader)
+          /**
+           * @param {import('node:http2').Http2ServerRequest} req
+           * @param {import('node:http2').Http2ServerResponse} res
+           */
+          app = (req, res) => {
+            res.appendHeader('x-missing', 'value')
+            countAfterMissing = observedResponseHeaderCount
+
+            res.setHeader('x-existing', 'first')
+            observedResponseHeaderCount = 0
+            res.appendHeader('x-existing', 'second')
+            countAfterExisting = observedResponseHeaderCount
+
+            res.setHeader('x-falsy', '')
+            observedResponseHeaderCount = 0
+            res.appendHeader('x-falsy', 'value')
+            countAfterFalsy = observedResponseHeaderCount
+          }
+
+          try {
+            await Promise.all([
+              agent.assertFirstTraceSpan({ name: 'web.request' }),
+              request(http2, `http://localhost:${port}/user`),
+            ])
+            assert.strictEqual(countAfterMissing, 1)
+            assert.strictEqual(countAfterExisting, 1)
+            assert.strictEqual(countAfterFalsy, 1)
+          } finally {
+            finishSetHeader.unsubscribe(captureResponseHeader)
+          }
         })
 
         it('stops the request handler when a request subscriber aborts', async () => {

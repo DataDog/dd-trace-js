@@ -60,12 +60,11 @@ class Http2ServerPlugin extends ServerPlugin {
     if (incomingHttpRequestStart.hasSubscribers) {
       // AppSec and IAST observe both HTTP/2 APIs through the same bridge the
       // plain `http` plugin publishes; they read `req` off the async store.
-      // The bind enters `currentStore` only after this returns, so enter it
-      // here first — subscribers resolve their context from the active store.
+      // The bind enters `currentStore` only after this returns, so scope the
+      // publication explicitly — subscribers resolve context from the store.
       ctx.currentStore = withRequest(ctx.currentStore, req)
-      legacyStorage.enterWith(ctx.currentStore)
       ctx.abortController = new AbortController()
-      incomingHttpRequestStart.publish(ctx)
+      legacyStorage.run(ctx.currentStore, publishIncomingHttpRequestStart, ctx)
     }
 
     return ctx.currentStore
@@ -112,6 +111,14 @@ class Http2ServerPlugin extends ServerPlugin {
   configure (config) {
     return super.configure(web.normalizeConfig(config))
   }
+}
+
+/**
+ * @param {{ req: object, res: object, abortController: AbortController }} ctx
+ * @returns {void}
+ */
+function publishIncomingHttpRequestStart (ctx) {
+  incomingHttpRequestStart.publish(ctx)
 }
 
 /**

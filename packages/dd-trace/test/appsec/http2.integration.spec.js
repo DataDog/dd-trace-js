@@ -195,19 +195,33 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(body, blockedTemplateJson)
   })
 
-  it('keeps a compatibility response stream blocked after AppSec is disabled', async () => {
+  it('keeps compatibility response operations blocked after AppSec is disabled', async () => {
+    let operationError
     await listen(() => http2.createServer((req, res) => {
       res.stream.respond({ ':status': 404, k: '404' })
       appsec.disable()
-      res.stream.respond({ ':status': 200 })
-      res.stream.write('ignored')
-      res.stream.end('ignored')
+      try {
+        res.removeHeader('k')
+        res.setHeader('after-block', 'ignored')
+        res.appendHeader?.('after-block', 'ignored')
+        res.writeHead(200, { 'after-block-write-head': 'ignored' })
+        res.write('ignored')
+        res.end('ignored')
+        res.stream.respond({ ':status': 200 })
+        res.stream.write('ignored')
+        res.stream.end('ignored')
+      } catch (error) {
+        operationError = error
+      }
     }))
 
     try {
       const { body, headers } = await request()
 
+      assert.strictEqual(operationError, undefined)
       assert.strictEqual(headers[':status'], 403)
+      assert.strictEqual(headers['after-block'], undefined)
+      assert.strictEqual(headers['after-block-write-head'], undefined)
       assert.strictEqual(body, blockedTemplateJson)
     } finally {
       appsec.enable(config)
@@ -1228,6 +1242,13 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(body, blockedTemplateJson)
   })
 
+  it('preserves rejected array server options', function () {
+    if (!SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS) this.skip()
+
+    assert.throws(() => http2.createServer([]), { code: 'ERR_INVALID_ARG_TYPE' })
+    assert.throws(() => http2.createSecureServer([]), { code: 'ERR_INVALID_ARG_TYPE' })
+  })
+
   it('blocks duplicate single-value fields sent through a compatibility response stream', async function () {
     if (!SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS) this.skip()
 
@@ -1368,6 +1389,30 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(responseStream.sentHeaders['X-Value'], 'first')
     assert.strictEqual(responseStream.sentHeaders['x-value'], undefined)
     assert.strictEqual(reads, 1)
+    assert.strictEqual(body, 'body')
+  })
+
+  it('preserves ignored response fields in stream.sentHeaders', async () => {
+    let responseStream
+    await listenCore(stream => {
+      responseStream = stream
+      stream.respond({
+        ':status': 200,
+        '': 'ignored',
+        empty: [],
+        skipped: undefined,
+      })
+      stream.end('body')
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[''], undefined)
+    assert.strictEqual(headers.empty, undefined)
+    assert.strictEqual(headers.skipped, undefined)
+    assert.strictEqual(Object.hasOwn(responseStream.sentHeaders, ''), true)
+    assert.deepStrictEqual(responseStream.sentHeaders.empty, [])
+    assert.strictEqual(Object.hasOwn(responseStream.sentHeaders, 'skipped'), true)
     assert.strictEqual(body, 'body')
   })
 
@@ -1637,6 +1682,47 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
     assert.strictEqual(headers[':status'], 200)
     assert.strictEqual(body, 'fallback')
+  })
+
+  it('uses the stream HEAD state when validating file responses', async () => {
+    let headErrorCode
+    /**
+     * @param {import('node:http2').Http2ServerRequest} req
+     * @param {import('node:http2').Http2ServerResponse} res
+     */
+    function handleFileResponse (req, res) {
+      const fileDescriptor = openSync(__filename, 'r')
+      res.stream.once('close', () => closeSync(fileDescriptor))
+      if (req.url === '/get') {
+        req.method = 'HEAD'
+        res.stream.respondWithFD(fileDescriptor, { ':status': 404, k: '404' })
+        return
+      }
+
+      req.method = 'GET'
+      try {
+        res.stream.respondWithFD(fileDescriptor, { ':status': 404, k: '404' })
+      } catch (error) {
+        headErrorCode = error.code
+      }
+      if (!res.stream.headersSent) {
+        res.stream.respond({ ':status': 200 })
+        res.stream.end()
+      }
+    }
+
+    await listen(() => http2.createServer(handleFileResponse))
+
+    const [getResponse, headResponse] = await Promise.all([
+      request('/get'),
+      request('/head', { ':method': 'HEAD' }),
+    ])
+
+    assert.strictEqual(getResponse.headers[':status'], 403)
+    assert.strictEqual(getResponse.body, blockedTemplateJson)
+    assert.strictEqual(headErrorCode, 'ERR_HTTP2_PAYLOAD_FORBIDDEN')
+    assert.strictEqual(headResponse.headers[':status'], 200)
+    assert.strictEqual(headResponse.body, '')
   })
 
   it('blocks respondWithFD headers without statCheck', async () => {

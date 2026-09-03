@@ -80,12 +80,13 @@ const SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS = NODE_MAJOR >= 26 ||
   (NODE_MAJOR === 24 && NODE_MINOR >= 15)
 
 const responseContexts = new WeakMap()
+const blockedResponses = new WeakSet()
 const wrappedStreamPrototypes = new WeakSet()
-let activeBlockedStreamCount = 0
-// Retained streams can still receive delayed application calls after close.
-// Keep the inactive-path gate armed until each blocked stream is unreachable.
-const blockedStreamFinalizer = new FinalizationRegistry(() => {
-  activeBlockedStreamCount--
+let activeBlockedResponseCount = 0
+// Retained responses can still receive delayed application calls after close.
+// Keep the inactive-path gate armed until each blocked response is unreachable.
+const blockedResponseFinalizer = new FinalizationRegistry(() => {
+  activeBlockedResponseCount--
 })
 
 const FILE_HANDLE_VALIDATION_ERROR = {}
@@ -109,7 +110,7 @@ addHook({ name: 'http2' }, http2 => {
     shimmer.wrap(responseProto, 'end', wrapEnd)
     shimmer.wrap(responseProto, 'removeHeader', wrapResponseOperation)
     shimmer.wrap(responseProto, 'setHeader', wrapSetHeader)
-    if (responseProto.appendHeader) shimmer.wrap(responseProto, 'appendHeader', wrapSetHeader)
+    if (responseProto.appendHeader) shimmer.wrap(responseProto, 'appendHeader', wrapAppendHeader)
     shimmer.wrap(responseProto, 'write', wrapWrite)
     shimmer.wrap(responseProto, 'writeHead', wrapWriteHead)
   }
@@ -120,7 +121,8 @@ addHook({ name: 'http2' }, http2 => {
 function wrapCreateServer (createServer) {
   return function (...args) {
     let strictSingleValueFields = true
-    if (SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS && args[0] !== null && typeof args[0] === 'object') {
+    if (SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS && args[0] !== null &&
+      typeof args[0] === 'object' && !Array.isArray(args[0])) {
       args[0] = { ...args[0] }
       strictSingleValueFields = args[0].strictSingleValueFields !== false
     }
@@ -224,15 +226,11 @@ function wrapEmit (originalEmit, strictSingleValueFields) {
  */
 function wrapSetHeader (setHeader) {
   return function () {
-    if (!startSetHeaderCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers) {
+    if (!startSetHeaderCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers && activeBlockedResponseCount === 0) {
       return Reflect.apply(setHeader, this, arguments)
     }
 
-    if (startSetHeaderCh.hasSubscribers) {
-      const abortController = new AbortController()
-      startSetHeaderCh.publish({ res: this, abortController })
-      if (abortController.signal.aborted) return
-    }
+    if (responseOperationIsBlocked(this)) return
 
     const result = Reflect.apply(setHeader, this, arguments)
 
@@ -245,17 +243,38 @@ function wrapSetHeader (setHeader) {
 }
 
 /**
+ * @param {Function} appendHeader
+ */
+function wrapAppendHeader (appendHeader) {
+  return function () {
+    if (!startSetHeaderCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers && activeBlockedResponseCount === 0) {
+      return Reflect.apply(appendHeader, this, arguments)
+    }
+
+    if (responseOperationIsBlocked(this)) return
+
+    const existingValue = finishSetHeaderCh.hasSubscribers && this.getHeader(arguments[0])
+    const result = Reflect.apply(appendHeader, this, arguments)
+
+    // Node delegates absent and falsy values to setHeader(), whose wrapper publishes the sink.
+    if (existingValue && finishSetHeaderCh.hasSubscribers) {
+      finishSetHeaderCh.publish({ name: arguments[0], value: arguments[1], res: this })
+    }
+
+    return result
+  }
+}
+
+/**
  * @param {Function} responseOperation
  */
 function wrapResponseOperation (responseOperation) {
   return function () {
-    if (!startSetHeaderCh.hasSubscribers) {
+    if (!startSetHeaderCh.hasSubscribers && activeBlockedResponseCount === 0) {
       return Reflect.apply(responseOperation, this, arguments)
     }
 
-    const abortController = new AbortController()
-    startSetHeaderCh.publish({ res: this, abortController })
-    if (abortController.signal.aborted) return
+    if (responseOperationIsBlocked(this)) return
 
     return Reflect.apply(responseOperation, this, arguments)
   }
@@ -266,7 +285,9 @@ function wrapResponseOperation (responseOperation) {
  */
 function wrapWriteHead (writeHead) {
   return function () {
-    if (!startSetHeaderCh.hasSubscribers) return Reflect.apply(writeHead, this, arguments)
+    if (!startSetHeaderCh.hasSubscribers && activeBlockedResponseCount === 0) {
+      return Reflect.apply(writeHead, this, arguments)
+    }
     if (responseOperationIsBlocked(this)) return this
     return Reflect.apply(writeHead, this, arguments)
   }
@@ -277,7 +298,9 @@ function wrapWriteHead (writeHead) {
  */
 function wrapWrite (write) {
   return function () {
-    if (!startSetHeaderCh.hasSubscribers) return Reflect.apply(write, this, arguments)
+    if (!startSetHeaderCh.hasSubscribers && activeBlockedResponseCount === 0) {
+      return Reflect.apply(write, this, arguments)
+    }
     if (responseOperationIsBlocked(this)) return true
     return Reflect.apply(write, this, arguments)
   }
@@ -288,7 +311,9 @@ function wrapWrite (write) {
  */
 function wrapEnd (end) {
   return function () {
-    if (!startSetHeaderCh.hasSubscribers) return Reflect.apply(end, this, arguments)
+    if (!startSetHeaderCh.hasSubscribers && activeBlockedResponseCount === 0) {
+      return Reflect.apply(end, this, arguments)
+    }
     if (responseOperationIsBlocked(this)) return this
     return Reflect.apply(end, this, arguments)
   }
@@ -299,9 +324,15 @@ function wrapEnd (end) {
  * @returns {boolean}
  */
 function responseOperationIsBlocked (res) {
+  if (activeBlockedResponseCount !== 0 && blockedResponses.has(res)) return true
+  if (!startSetHeaderCh.hasSubscribers) return false
+
   const abortController = new AbortController()
   startSetHeaderCh.publish({ res, abortController })
-  return abortController.signal.aborted
+  if (!abortController.signal.aborted) return false
+
+  markResponseBlocked(res)
+  return true
 }
 
 /**
@@ -328,13 +359,13 @@ function instrumentStreamResponse (stream, ctx) {
 function wrapStreamRespond (respond) {
   return function () {
     const hasSubscribers = startWriteHeadCh.hasSubscribers || finishSetHeaderCh.hasSubscribers
-    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+    if (!hasSubscribers && activeBlockedResponseCount === 0) {
       return Reflect.apply(respond, this, arguments)
     }
 
+    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return this
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
-    if (ctx.responseBlocked) return this
     if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(respond, this, arguments)
     }
@@ -364,13 +395,13 @@ function wrapStreamRespond (respond) {
 function wrapStreamRespondWithFD (respond) {
   return function () {
     const hasSubscribers = startWriteHeadCh.hasSubscribers || finishSetHeaderCh.hasSubscribers
-    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+    if (!hasSubscribers && activeBlockedResponseCount === 0) {
       return Reflect.apply(respond, this, arguments)
     }
 
+    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return this
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
-    if (ctx.responseBlocked) return this
     if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(respond, this, arguments)
     }
@@ -396,7 +427,7 @@ function wrapStreamRespondWithFD (respond) {
     if (!responseHeaders) return Reflect.apply(respond, this, arguments)
 
     const statusCode = getResponseStatusCode(responseHeaders)
-    if (statusCode === 204 || statusCode === 205 || statusCode === 304 || ctx.req.method === 'HEAD') {
+    if (statusCode === 204 || statusCode === 205 || statusCode === 304 || this.headRequest) {
       return Reflect.apply(respond, this, arguments)
     }
 
@@ -434,13 +465,13 @@ function assertFileHandle (respond, stream, fileHandle) {
 function wrapStreamRespondWithFile (respond) {
   return function () {
     const hasSubscribers = startWriteHeadCh.hasSubscribers || finishSetHeaderCh.hasSubscribers
-    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+    if (!hasSubscribers && activeBlockedResponseCount === 0) {
       return Reflect.apply(respond, this, arguments)
     }
 
+    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return this
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
-    if (ctx.responseBlocked) return this
     if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(respond, this, arguments)
     }
@@ -466,13 +497,13 @@ function wrapStreamRespondWithFile (respond) {
 function wrapStreamAdditionalHeaders (additionalHeaders) {
   return function () {
     const hasSubscribers = startInformationalResponseCh.hasSubscribers
-    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+    if (!hasSubscribers && activeBlockedResponseCount === 0) {
       return Reflect.apply(additionalHeaders, this, arguments)
     }
 
+    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(additionalHeaders, this, arguments)
-    if (ctx.responseBlocked) return
     if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(additionalHeaders, this, arguments)
     }
@@ -523,13 +554,13 @@ function wrapStreamStatCheck (statCheck, ctx, stream, sendDate) {
 function wrapStreamWrite (write) {
   return function () {
     const hasSubscribers = startWriteHeadCh.hasSubscribers
-    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+    if (!hasSubscribers && activeBlockedResponseCount === 0) {
       return Reflect.apply(write, this, arguments)
     }
 
+    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return true
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(write, this, arguments)
-    if (ctx.responseBlocked) return true
     if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(write, this, arguments)
     }
@@ -544,13 +575,13 @@ function wrapStreamWrite (write) {
 function wrapStreamEnd (end) {
   return function () {
     const hasSubscribers = startWriteHeadCh.hasSubscribers
-    if (!hasSubscribers && activeBlockedStreamCount === 0) {
+    if (!hasSubscribers && activeBlockedResponseCount === 0) {
       return Reflect.apply(end, this, arguments)
     }
 
+    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return this
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(end, this, arguments)
-    if (ctx.responseBlocked) return this
     if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
       return Reflect.apply(end, this, arguments)
     }
@@ -803,16 +834,20 @@ function getValidatedResponseHeaders (
 function validateResponseHeaders (responseHeaders, responseHeaderNames, strictSingleValueFields) {
   if (getResponseStatusCode(responseHeaders) === undefined) return
 
+  let validatedResponseHeaders = responseHeaders
   for (const name of responseHeaderNames) {
     const value = responseHeaders[name]
     if (value === undefined || name === '' || (Array.isArray(value) && value.length === 0)) {
-      delete responseHeaders[name]
+      if (validatedResponseHeaders === responseHeaders) {
+        validatedResponseHeaders = { __proto__: null, ...responseHeaders }
+      }
+      delete validatedResponseHeaders[name]
       continue
     }
     if (!isValidResponseHeader(name, value, HTTP_HEADER_NAME_PATTERN, strictSingleValueFields)) return
   }
 
-  return responseHeaders
+  return validatedResponseHeaders
 }
 
 /**
@@ -890,11 +925,17 @@ function publishImplicitStreamResponse (ctx, stream) {
  * @param {StreamRequestContext} ctx
  */
 function markStreamResponseBlocked (ctx) {
-  if (ctx.responseBlocked) return
+  markResponseBlocked(ctx.req.stream)
+  markResponseBlocked(ctx.res)
+}
 
-  ctx.responseBlocked = true
-  activeBlockedStreamCount++
-  blockedStreamFinalizer.register(ctx.req.stream)
+/**
+ * @param {object} response
+ */
+function markResponseBlocked (response) {
+  blockedResponses.add(response)
+  activeBlockedResponseCount++
+  blockedResponseFinalizer.register(response)
 }
 
 /**
@@ -1050,7 +1091,6 @@ class Http2StreamResponse {
  * @property {object} res.req back-reference used by `wrapResponseEmit`/finish
  * @property {number} res.statusCode read at finish from `stream.sentHeaders`
  * @property {(name: string) => string | number | string[] | undefined} res.getHeader response-header tagging
- * @property {boolean} [responseBlocked] subsequent response operations are suppressed after blocking
  * @property {false} [strictSingleValueFields] mirrors relaxed Node response validation
  */
 
