@@ -1629,7 +1629,15 @@ function isAsciiDigit (code) {
  * @returns {{ file: string, line: number } | null}
  */
 function parseStackFrameLocation (frame, expectedPath) {
-  const scope = frame.slice(frame.lastIndexOf(expectedPath))
+  let pathStart = frame.lastIndexOf(expectedPath)
+  while (frame.charCodeAt(pathStart - 1) !== 0x28 /* ( */ &&
+         !frame.startsWith('at ', pathStart - 3) &&
+         !frame.startsWith('file://', pathStart - 7)) {
+    const previousPathStart = frame.lastIndexOf(expectedPath, pathStart - 1)
+    if (previousPathStart === -1) break
+    pathStart = previousPathStart
+  }
+  const scope = frame.slice(pathStart)
   let end = scope.length
   if (scope.charCodeAt(end - 1) === 0x29 /* ) */) end--
 

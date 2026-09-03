@@ -2225,6 +2225,31 @@ describe('getFileAndLineNumberFromError', () => {
     assert.deepStrictEqual(getFileAndLineNumberFromError(unwrappedError, '/repo'), ['/repo/src/a(b).js', 12, 0])
   })
 
+  it('preserves a repeated repository root in wrapped and unwrapped file paths', () => {
+    const wrappedError = { stack: 'Error\n    at handler (/app/packages/app/index.js:12:3)' }
+    const unwrappedError = { stack: 'Error\n    at /app/packages/app/index.js:12:3' }
+
+    assert.deepStrictEqual(
+      getFileAndLineNumberFromError(wrappedError, '/app'),
+      ['/app/packages/app/index.js', 12, 0]
+    )
+    assert.deepStrictEqual(
+      getFileAndLineNumberFromError(unwrappedError, '/app'),
+      ['/app/packages/app/index.js', 12, 0]
+    )
+  })
+
+  it('does not parse a repository root from the function name', () => {
+    const error = { stack: 'Error\n    at /app (/app/src/index.js:12:3)' }
+    const fileUrlError = { stack: 'Error\n    at /app (file:///app/packages/app/index.js:12:3)' }
+
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/app'), ['/app/src/index.js', 12, 0])
+    assert.deepStrictEqual(
+      getFileAndLineNumberFromError(fileUrlError, '/app'),
+      ['/app/packages/app/index.js', 12, 0]
+    )
+  })
+
   it('ignores parentheses in the function name', () => {
     const error = { stack: 'Error\n    at foo(bar) (/repo/src/run.js:12:3)' }
     assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/run.js', 12, 0])

@@ -658,6 +658,20 @@ describe('CiPlugin', () => {
     assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
   })
 
+  it('adds a DI probe using the full path when the repository root repeats', () => {
+    const plugin = createPlugin('jest_worker')
+    const addLineProbe = sinon.stub().returns(['probe-1', Promise.resolve()])
+    const file = '/app/packages/app/index.js'
+    const line = 23
+    const error = { stack: `Error: test failed\n    at test (${file}:${line}:5)` }
+    plugin.di = { addLineProbe }
+    plugin._setRepositoryRoot('/app', [])
+
+    plugin.addDiProbe(error)
+
+    assert.deepStrictEqual(addLineProbe.firstCall.args[0], { file, line })
+  })
+
   it('adds a new DI probe after removing one from the same location', async () => {
     const plugin = createPlugin('jest_worker')
     const setProbePromise = Promise.resolve()
