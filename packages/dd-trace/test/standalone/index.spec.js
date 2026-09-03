@@ -160,20 +160,28 @@ describe('Disabled APM Tracing or Standalone', () => {
       assert.strictEqual(spanContext._trace.tags[DECISION_MAKER_KEY], '-5')
     })
 
-    it('should set USER_KEEP priority if _dd.p.ts=02 is present', () => {
+    it('should replace an extracted probability drop with a non-probability keep', () => {
       standalone.configure(config)
 
       const carrier = {
-        'x-datadog-trace-id': '123123',
-        'x-datadog-parent-id': '345345',
-        'x-datadog-sampling-priority': '1',
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        'x-datadog-sampling-priority': '-1',
         'x-datadog-tags': '_dd.p.ts=02',
+        traceparent: '00-0000000000000000000000000000007b-00000000000001c8-00',
+        tracestate: 'ot=rv:123456789abcde;th:8',
       }
 
       const propagator = new TextMapPropagator(config)
       const spanContext = propagator.extract(carrier)
 
       assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+      assert.strictEqual(spanContext._sampling.probabilityRate, undefined)
+      assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
+
+      const injected = propagator.inject(spanContext, {})
+      assert.match(injected.traceparent, /-01$/)
+      assert.match(injected.tracestate, /(?:^|,)ot=rv:123456789abcde(?:,|$)/)
     })
 
     it('should keep priority if apm tracing is enabled', () => {
