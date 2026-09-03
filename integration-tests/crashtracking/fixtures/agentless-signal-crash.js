@@ -33,18 +33,16 @@ const testLibdatadogExtras = {
     return name === 'crashtracker' ? testBinding : libdatadogExtras.load(name)
   },
 }
-testLibdatadogExtras['@runtimeGlobal'] = true
+testLibdatadogExtras['@global'] = true
 
 function getAgentlessTelemetryUrl () {
   return new URL(intakeUrl)
 }
-getAgentlessTelemetryUrl['@runtimeGlobal'] = true
+getAgentlessTelemetryUrl['@global'] = true
 
-proxyquire('../../../packages/dd-trace/src/bootstrap', {
+// Initialize through the normal fixture while the global stubs are active. Runtime-global stubs
+// bypass the module cache and split tracer singleton state across duplicate module instances.
+proxyquire('../signal-crash', {
   '@datadog/libdatadog-extras': testLibdatadogExtras,
-  './telemetry/agentless-url': getAgentlessTelemetryUrl,
-}).init({
-  crashtracking: { enabled: true },
+  '../../packages/dd-trace/src/telemetry/agentless-url': getAgentlessTelemetryUrl,
 })
-
-process.kill(process.pid, 'SIGABRT')
