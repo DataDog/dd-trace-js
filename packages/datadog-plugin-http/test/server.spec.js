@@ -185,6 +185,18 @@ describe('Plugin', () => {
           axios.get(`http://localhost:${port}/user`).catch(done)
         })
 
+        it('should trace OPTIONS requests by default', async () => {
+          const serverPort = appListener.address().port
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const serverTrace = traces.find(trace => trace[0]?.name === 'web.request')
+              assert.strictEqual(serverTrace?.[0].meta['http.method'], 'OPTIONS')
+            }),
+            axios.options(`http://localhost:${serverPort}/user`),
+          ])
+        })
+
         it('should run the request listener in the request scope', done => {
           const spy = sinon.spy(() => {
             assert.notStrictEqual(tracer.scope().active(), null)
@@ -309,6 +321,43 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
               assert.strictEqual(traces[0][0].error, 1)
+            }),
+            axios.get(`http://localhost:${port}/user`),
+          ])
+        })
+      })
+
+      describe('with disabled OPTIONS request tracing', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED = 'false'
+          await agent.load('http', { client: false })
+          http = require(pluginToBeLoaded)
+        })
+
+        beforeEach(done => {
+          appListener = new http.Server(listener).listen(0, 'localhost', () => {
+            port = appListener.address().port
+            done()
+          })
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED
+        })
+
+        it('should drop OPTIONS request traces', async () => {
+          await Promise.all([
+            agent.assertNoTraces(() => {
+              assert.fail('OPTIONS requests should not be traced')
+            }, { timeoutMs: 100 }),
+            axios.options(`http://localhost:${port}/user`),
+          ])
+        })
+
+        it('should continue to trace other request methods', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
             }),
             axios.get(`http://localhost:${port}/user`),
           ])

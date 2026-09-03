@@ -21,10 +21,10 @@ const { rawExpectedSchema } = require('./naming')
 /**
  * @param {typeof import('http2')} http2
  * @param {string} url
- * @param {{ signal?: import('node:events').EventEmitter }} [options]
+ * @param {{ method?: string, signal?: import('node:events').EventEmitter }} [options]
  */
 function request (http2, url, options = {}) {
-  const { signal } = options
+  const { method = 'GET', signal } = options
   const urlObj = new URL(url)
   return new Promise((resolve, reject) => {
     const client = http2
@@ -33,7 +33,7 @@ function request (http2, url, options = {}) {
 
     const req = client.request({
       ':path': urlObj.pathname + urlObj.search,
-      ':method': 'GET',
+      ':method': method,
     })
     req.on('error', reject)
 
@@ -344,6 +344,16 @@ describe('Plugin', () => {
           request(http2, `http://localhost:${port}/user`).catch(done)
         })
 
+        it('should trace OPTIONS requests by default', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const serverTrace = traces.find(trace => trace[0]?.name === 'web.request')
+              assert.strictEqual(serverTrace?.[0].meta['http.method'], 'OPTIONS')
+            }),
+            request(http2, `http://localhost:${port}/user`, { method: 'OPTIONS' }),
+          ])
+        })
+
         it('should run the request\'s close event in the correct context', done => {
           app = (req, res) => {
             req.on('close', () => {
@@ -420,6 +430,44 @@ describe('Plugin', () => {
             .then(done, done)
 
           request(http2, `http://localhost:${port}/health`).catch(done)
+        })
+      })
+
+      describe('with disabled OPTIONS request tracing', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED = 'false'
+          await agent.load('http2', { client: false })
+          http2 = require(pluginToBeLoaded)
+        })
+
+        beforeEach(done => {
+          appListener = http2.createServer(listener).listen(0, 'localhost', () => {
+            port = appListener.address().port
+            done()
+          })
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED
+        })
+
+        it('should drop OPTIONS request traces', async () => {
+          await Promise.all([
+            agent.assertNoTraces(() => {
+              assert.fail('OPTIONS requests should not be traced')
+            }, { timeoutMs: 100 }),
+            request(http2, `http://localhost:${port}/user`, { method: 'OPTIONS' }),
+          ])
+        })
+
+        it('should continue to trace other request methods', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const serverTrace = traces.find(trace => trace[0]?.name === 'web.request')
+              assert.strictEqual(serverTrace?.[0].meta['http.method'], 'GET')
+            }),
+            request(http2, `http://localhost:${port}/user`),
+          ])
         })
       })
 

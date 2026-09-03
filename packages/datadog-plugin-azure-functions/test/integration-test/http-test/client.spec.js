@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const { spawn } = require('child_process')
 const {
@@ -31,6 +32,7 @@ describe('esm', () => {
       this.timeout(60000)
       agent = await new FakeAgent().start()
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
+        DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED: 'false',
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       })
     })
@@ -60,6 +62,19 @@ describe('esm', () => {
           resource: 'GET /api/httptest',
         }]])
       })
+    }).timeout(60_000)
+
+    it('does not trace OPTIONS requests when disabled', async () => {
+      const messagePromise = once(agent, 'message')
+      const url = 'http://127.0.0.1:7071/api/httptest'
+
+      await fetch(url, { method: 'OPTIONS' })
+      await fetch(url)
+
+      const [{ payload }] = await messagePromise
+      assert.strictEqual(payload.length, 1)
+      assert.strictEqual(payload[0].length, 1)
+      assert.strictEqual(payload[0][0].meta['http.method'], 'GET')
     }).timeout(60_000)
 
     it('propagates context to child http requests', async () => {
