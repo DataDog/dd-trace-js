@@ -490,6 +490,42 @@ describe('shimmer', () => {
       assert.strictEqual(wrapped(1), 2)
     })
 
+    it('should wrap the frozen function', () => {
+      const count = Object.freeze(function count (inc) { return inc })
+
+      const wrapped = shimmer.wrapFunction(count, count => inc => count(inc) + 1)
+
+      assert.strictEqual(wrapped(1), 2)
+      assert.strictEqual(wrapped.name, count.name)
+      assert.strictEqual(wrapped.length, count.length)
+      assert.strictEqual(wrapped.prototype, count.prototype)
+    })
+
+    it('should keep an existing non-configurable wrapper property', () => {
+      const count = () => {}
+      const wrapped = () => {}
+
+      Object.defineProperty(count, 'property', { value: 'original' })
+      Object.defineProperty(wrapped, 'property', { value: 'wrapped' })
+
+      assert.strictEqual(shimmer.wrapFunction(count, () => wrapped).property, 'wrapped')
+    })
+
+    it('should rethrow unexpected property copy errors', () => {
+      const error = new Error('boom')
+      const count = () => {}
+      const wrapped = new Proxy(() => {}, {
+        defineProperty (target, property, descriptor) {
+          if (property === 'property') throw error
+          return Reflect.defineProperty(target, property, descriptor)
+        },
+      })
+
+      Object.defineProperty(count, 'property', { value: 'original' })
+
+      assert.throws(() => shimmer.wrapFunction(count, () => wrapped), value => value === error)
+    })
+
     it('should wrap the constructor', () => {
       const Counter = function (start) {
         this.value = start

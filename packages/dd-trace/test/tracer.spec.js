@@ -473,6 +473,18 @@ describe('Tracer', () => {
       assert.deepStrictEqual(Object.getOwnPropertyDescriptor(fn, property), descriptor)
     })
 
+    it('should wrap a frozen function', () => {
+      const Callback = Object.freeze(function Callback (value) { return value })
+
+      const WrappedCallback = tracer.wrap('name', {}, Callback)
+
+      assert.strictEqual(WrappedCallback('value'), 'value')
+      assert.strictEqual(WrappedCallback.length, Callback.length)
+      assert.strictEqual(WrappedCallback.name, Callback.name)
+      assert.strictEqual(WrappedCallback.prototype, Callback.prototype)
+      assert.ok(new WrappedCallback() instanceof Callback)
+    })
+
     it('should preserve constructor behavior', () => {
       function Value (value) {
         this.value = value
