@@ -1631,8 +1631,8 @@ function isAsciiDigit (code) {
 function parseStackFrameLocation (frame, expectedPath) {
   let pathStart = frame.lastIndexOf(expectedPath)
   while (frame.charCodeAt(pathStart - 1) !== 0x28 /* ( */ &&
-         !frame.startsWith('at ', pathStart - 3) &&
-         !frame.startsWith('file://', pathStart - 7)) {
+        !frame.startsWith('at ', pathStart - 3) &&
+        !frame.startsWith('file://', pathStart - 7)) {
     const previousPathStart = frame.lastIndexOf(expectedPath, pathStart - 1)
     if (previousPathStart === -1) break
     pathStart = previousPathStart
