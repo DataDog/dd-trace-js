@@ -80,6 +80,37 @@ describe('DataStreamWriter unix', () => {
     sinon.assert.calledOnce(resetController.reset)
   })
 
+  it('drops compressed payloads created before an identity refresh', () => {
+    let gzipCallback
+    const localRequest = sinon.stub()
+    localRequest.writable = true
+    const resetController = {
+      generation: 0,
+      reset () {
+        this.generation++
+      },
+    }
+    const delayedZlib = {
+      gzip: (payload, _opts, callback) => {
+        gzipCallback = callback
+      },
+    }
+    localRequest.createResetController = sinon.stub().returns(resetController)
+    const { DataStreamsWriter: ResettableWriter } = proxyquire(
+      '../../src/datastreams/writer', {
+        '../exporters/common/request': localRequest,
+        '../serverless': { IS_AWS_LAMBDA_MICROVM: true },
+        zlib: delayedZlib,
+      })
+    const resettable = new ResettableWriter(unixConfig)
+
+    resettable.flush({ Stats: [] })
+    resettable.resetPendingRequests()
+    gzipCallback(undefined, Buffer.from('compressed'))
+
+    sinon.assert.notCalled(localRequest)
+  })
+
   it('drops the payload and logs when msgpack encoding hits the chunk cap', () => {
     const localStubRequest = sinon.stub()
     const errorLog = sinon.stub()
