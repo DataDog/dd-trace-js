@@ -1,6 +1,7 @@
 'use strict'
 
 const os = require('os')
+const { channel } = require('dc-polyfill')
 const pkg = require('../../../../package.json')
 
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
@@ -15,6 +16,11 @@ const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Only one processor is live in normal tracer operation. Tests can construct several, so replace
+// the subscription on construction instead of stacking callbacks that retain old processors.
+let unsubscribeBucketReset = null
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -237,6 +243,19 @@ class DataStreamsProcessor {
       this.timer.unref?.()
     }
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.onInterval.bind(this))
+
+    unsubscribeBucketReset?.()
+    unsubscribeBucketReset = null
+    if (this.enabled) {
+      // Buckets don't store runtime-id directly, but they serialize with live tags at flush time.
+      // Drop inherited pre-snapshot buckets so clone-local tags aren't applied to old DSM data.
+      const onIdentityRefresh = (config) => {
+        this.tags = config?.tags ?? this.tags
+        this.buckets = new TimeBuckets()
+      }
+      identityRefreshChannel.subscribe(onIdentityRefresh)
+      unsubscribeBucketReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
+    }
   }
 
   onInterval () {
