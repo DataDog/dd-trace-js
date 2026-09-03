@@ -111,6 +111,56 @@ describe('TelemetryDeliveryTracker', () => {
 
     assert.strictEqual(done, 1)
   })
+
+  it('reports a synchronous delivery failure before rethrowing it', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    const deliveryError = new Error('delivery failed')
+    let reportedError
+
+    assert.throws(() => tracker.track(
+      () => { throw deliveryError },
+      error => { reportedError = error }
+    ), deliveryError)
+
+    assert.strictEqual(reportedError, deliveryError)
+  })
+
+  it('does not retain failures completed before the flush boundary', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    let flushError
+
+    tracker.track(complete => complete(new Error('delivery failed')))
+    tracker.waitForIdle(error => { flushError = error }, { reportErrors: true })
+
+    assert.strictEqual(flushError, undefined)
+  })
+
+  it('aggregates failures from deliveries active at the flush boundary', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    const firstError = new Error('first delivery failed')
+    const secondError = new Error('second delivery failed')
+    const complete = []
+    let flushError
+
+    tracker.track(callback => complete.push(callback))
+    tracker.track(callback => complete.push(callback))
+    tracker.waitForIdle(error => { flushError = error }, { reportErrors: true })
+    complete[0](firstError)
+    complete[1](secondError)
+
+    assert.ok(flushError instanceof AggregateError)
+    assert.deepStrictEqual(flushError.errors, [firstError, secondError])
+  })
+
+  it('keeps delivery failures private unless requested', () => {
+    const tracker = new TelemetryDeliveryTracker()
+
+    tracker.track(complete => complete(new Error('delivery failed')))
+
+    tracker.waitForIdle(error => {
+      assert.strictEqual(error, undefined)
+    })
+  })
 })
 
 describe('flushServerlessTelemetry', () => {

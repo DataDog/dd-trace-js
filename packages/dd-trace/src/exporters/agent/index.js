@@ -1,6 +1,7 @@
 'use strict'
 
 const { URL } = require('url')
+const getFlushError = require('../../flush-error')
 const log = require('../../log')
 const { createServerlessDeliveryTracker } = require('../../serverless')
 const Writer = require('./writer')
@@ -59,26 +60,42 @@ class AgentExporter {
     }
   }
 
-  flush (done) {
+  /**
+   * @param {(error?: Error) => void} [done]
+   * @param {{ reportErrors?: boolean }} [options]
+   */
+  flush (done, options) {
     clearTimeout(this.#timer)
     this.#timer = undefined
 
     if (!this.#serverlessDeliveryTracker) {
       try {
-        return this._writer.flush(done)
+        return this._writer.flush(done, options)
       } catch (error) {
         log.error('Failed to flush traces: %s', error.message)
-        done?.()
+        done?.(options?.reportErrors ? error : undefined)
         return
       }
     }
 
+    let boundaryError
+    let waiting = false
+    const captureError = error => {
+      if (!waiting) boundaryError = error
+    }
     try {
-      this._writer.flush()
+      this._writer.flush(captureError, options)
     } catch (error) {
       log.error('Failed to flush traces: %s', error.message)
+      boundaryError = error
     }
-    this.#serverlessDeliveryTracker.waitForIdle(done)
+    waiting = true
+    if (!done) return
+
+    this.#serverlessDeliveryTracker.waitForIdle(error => {
+      if (!options?.reportErrors || !boundaryError) return done(error)
+      done(getFlushError(error ? [boundaryError, error] : [boundaryError]))
+    }, options)
   }
 }
 

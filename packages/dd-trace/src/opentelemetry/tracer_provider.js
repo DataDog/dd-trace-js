@@ -6,12 +6,45 @@ const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentele
 const tracer = require('../../')
 
 const ContextManager = require('./context_manager')
-const { MultiSpanProcessor, NoopSpanProcessor } = require('./span_processor')
+const { MultiSpanProcessor, NoopSpanProcessor, settleAllFlushes } = require('./span_processor')
 const Tracer = require('./tracer')
+
+/**
+ * @typedef {{
+ *   flush?: (done?: (error?: Error) => void, options?: { reportErrors?: boolean }) => void
+ * }} TraceExporter
+ */
+
+/**
+ * @param {TraceExporter} exporter
+ * @returns {Promise<void>}
+ */
+function flushExporter (exporter) {
+  if (typeof exporter.flush !== 'function') return Promise.resolve()
+
+  /**
+   * @param {() => void} resolve
+   * @param {(reason?: unknown) => void} reject
+   */
+  function flush (resolve, reject) {
+    /**
+     * @param {Error} [error]
+     */
+    function done (error) {
+      if (error) reject(error)
+      else resolve()
+    }
+
+    exporter.flush(done, { reportErrors: true })
+  }
+
+  return new Promise(flush)
+}
 
 class TracerProvider {
   #activeProcessor = new NoopSpanProcessor()
   #contextManager = new ContextManager()
+  #flush
   #processors = []
   #tracers = new Map()
 
@@ -84,8 +117,19 @@ class TracerProvider {
       return Promise.reject(new Error('Not started'))
     }
 
-    exporter._writer?.flush()
-    return this.#activeProcessor.forceFlush()
+    const flush = () => settleAllFlushes([
+      flushExporter(exporter),
+      this.#activeProcessor.forceFlush(),
+    ])
+    const pending = this.#flush ? this.#flush.then(flush, flush) : flush()
+    this.#flush = pending
+
+    const clear = () => {
+      if (this.#flush === pending) this.#flush = undefined
+    }
+    pending.then(clear, clear)
+
+    return pending
   }
 
   shutdown () {

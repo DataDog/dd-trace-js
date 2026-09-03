@@ -1,8 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { EventEmitter, once } = require('node:events')
+const http = require('node:http')
 
-const { describe, it } = require('mocha')
+const { after, before, describe, it } = require('mocha')
 const sinon = require('sinon')
 const { trace } = require('@opentelemetry/api')
 
@@ -10,7 +12,62 @@ require('../setup/core')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const { MultiSpanProcessor, NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
-require('../../index').init()
+
+const agentResponse = JSON.stringify({ rate_by_service: {} })
+
+let traceRequestCount = 0
+let traceRequestEvents
+let traceRequestResolve
+
+/**
+ * @param {(response: import('node:http').ServerResponse) => void} resolve
+ */
+function captureTraceRequest (resolve) {
+  traceRequestResolve = resolve
+}
+
+/**
+ * @param {string[]} [events]
+ * @returns {Promise<import('node:http').ServerResponse>}
+ */
+function waitForTraceRequest (events) {
+  traceRequestEvents = events
+  return new Promise(captureTraceRequest)
+}
+
+/**
+ * @param {import('node:http').IncomingMessage} request
+ * @param {import('node:http').ServerResponse} response
+ */
+function handleAgentRequest (request, response) {
+  request.resume()
+
+  if (!request.url?.endsWith('/traces')) {
+    response.end('{}')
+    return
+  }
+
+  traceRequestCount++
+  if (!traceRequestResolve) {
+    response.end(agentResponse)
+    return
+  }
+
+  const resolve = traceRequestResolve
+  traceRequestResolve = undefined
+  traceRequestEvents?.push('agent-received')
+  traceRequestEvents = undefined
+  resolve(response)
+}
+
+/**
+ * @param {Error & { status?: number }} error
+ * @returns {boolean}
+ */
+function isAgentFailure (error) {
+  assert.strictEqual(error.status, 500)
+  return true
+}
 
 describe('OTel TracerProvider', () => {
   it('should register with OTel API', () => {
@@ -113,13 +170,203 @@ describe('OTel TracerProvider', () => {
     sinon.assert.calledOnce(processor.shutdown)
   })
 
-  it('should delegate forceFlush to active span processor', () => {
-    const provider = new TracerProvider()
-    const processor = new NoopSpanProcessor()
-    provider.addSpanProcessor(processor)
-    processor.forceFlush = sinon.stub()
+  describe('forceFlush without an initialized tracer', () => {
+    it('rejects', async () => {
+      const provider = new TracerProvider()
 
-    provider.forceFlush()
-    sinon.assert.calledOnce(processor.forceFlush)
+      await assert.rejects(provider.forceFlush(), { message: 'Not started' })
+    })
+  })
+
+  describe('forceFlush with an initialized tracer', () => {
+    let agent
+    let originalRemoteConfigEnabled
+
+    before(async () => {
+      originalRemoteConfigEnabled = process.env.DD_REMOTE_CONFIGURATION_ENABLED
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
+
+      agent = http.createServer(handleAgentRequest)
+      agent.listen(0, '127.0.0.1')
+      await once(agent, 'listening')
+
+      const { port } = agent.address()
+      require('../../index').init({
+        flushInterval: 60_000,
+        plugins: false,
+        startupLogs: false,
+        url: `http://127.0.0.1:${port}`,
+      })
+    })
+
+    after(async () => {
+      if (originalRemoteConfigEnabled === undefined) {
+        delete process.env.DD_REMOTE_CONFIGURATION_ENABLED
+      } else {
+        process.env.DD_REMOTE_CONFIGURATION_ENABLED = originalRemoteConfigEnabled
+      }
+
+      const closed = once(agent, 'close')
+      agent.close()
+      agent.closeAllConnections?.()
+      await closed
+    })
+
+    it('waits for Datadog delivery to complete', async () => {
+      const events = []
+      const requestReceived = waitForTraceRequest(events)
+      const provider = new TracerProvider()
+      provider.getTracer().startSpan('otel.force_flush.delayed').end()
+
+      const forceFlush = provider.forceFlush().then(() => events.push('forceFlush-resolved'))
+      const response = await requestReceived
+
+      assert.deepStrictEqual(events, ['agent-received'])
+
+      const responseFinished = once(response, 'finish')
+      response.end(agentResponse)
+      await responseFinished
+      events.push('agent-responded')
+      await forceFlush
+
+      assert.deepStrictEqual(events, ['agent-received', 'agent-responded', 'forceFlush-resolved'])
+    })
+
+    it('serializes overlapping flush generations', async () => {
+      const provider = new TracerProvider()
+      const firstRequest = waitForTraceRequest()
+      provider.getTracer().startSpan('otel.force_flush.first_generation').end()
+      let firstSettled = false
+      const firstFlush = provider.forceFlush().finally(() => { firstSettled = true })
+      const firstResponse = await firstRequest
+
+      provider.getTracer().startSpan('otel.force_flush.second_generation').end()
+      let secondSettled = false
+      const secondFlush = provider.forceFlush().finally(() => { secondSettled = true })
+      assert.strictEqual(firstSettled, false)
+      assert.strictEqual(secondSettled, false)
+
+      const secondRequest = waitForTraceRequest()
+      firstResponse.end(agentResponse)
+      await firstFlush
+      const secondResponse = await secondRequest
+      assert.strictEqual(secondSettled, false)
+
+      secondResponse.end(agentResponse)
+      await secondFlush
+      assert.strictEqual(secondSettled, true)
+    })
+
+    it('resolves without sending when the Datadog buffer is empty', async () => {
+      const requestsBeforeFlush = traceRequestCount
+
+      await new TracerProvider().forceFlush()
+
+      assert.strictEqual(traceRequestCount, requestsBeforeFlush)
+    })
+
+    it('waits for every configured span processor', async () => {
+      const firstSignal = new EventEmitter()
+      const secondSignal = new EventEmitter()
+      const firstDone = once(firstSignal, 'done')
+      const secondDone = once(secondSignal, 'done')
+      const first = new NoopSpanProcessor()
+      const second = new NoopSpanProcessor()
+      first.forceFlush = sinon.stub().returns(firstDone)
+      second.forceFlush = sinon.stub().returns(secondDone)
+      const provider = new TracerProvider({ spanProcessors: [first, second] })
+      let settled = false
+
+      const forceFlush = provider.forceFlush().finally(() => { settled = true })
+
+      sinon.assert.calledOnce(first.forceFlush)
+      sinon.assert.calledOnce(second.forceFlush)
+      firstSignal.emit('done')
+      await firstDone
+      assert.strictEqual(settled, false)
+      secondSignal.emit('done')
+      await forceFlush
+      assert.strictEqual(settled, true)
+    })
+
+    it('waits for delivery after a span processor fails, then rejects with the original error', async () => {
+      const processorError = new Error('processor failed')
+      const processor = new NoopSpanProcessor()
+      processor.forceFlush = sinon.stub().rejects(processorError)
+      const provider = new TracerProvider({ spanProcessors: [processor] })
+      const requestReceived = waitForTraceRequest()
+      provider.getTracer().startSpan('otel.force_flush.processor_error').end()
+      let settled = false
+
+      const forceFlush = provider.forceFlush().finally(() => { settled = true })
+      await assert.rejects(processor.forceFlush.firstCall.returnValue, processorError)
+      assert.strictEqual(settled, false)
+
+      const response = await requestReceived
+      response.end(agentResponse)
+
+      await assert.rejects(forceFlush, error => {
+        assert.strictEqual(error, processorError)
+        return true
+      })
+      assert.strictEqual(settled, true)
+    })
+
+    it('aggregates multiple span processor failures', async () => {
+      const firstError = new Error('first processor failed')
+      const secondError = new Error('second processor failed')
+      const first = new NoopSpanProcessor()
+      const second = new NoopSpanProcessor()
+      first.forceFlush = sinon.stub().rejects(firstError)
+      second.forceFlush = sinon.stub().rejects(secondError)
+      const provider = new TracerProvider({ spanProcessors: [first, second] })
+
+      await assert.rejects(provider.forceFlush(), error => {
+        assert.ok(error instanceof AggregateError)
+        assert.deepStrictEqual(error.errors, [firstError, secondError])
+        return true
+      })
+    })
+
+    it('rejects when Datadog delivery fails', async () => {
+      const requestReceived = waitForTraceRequest()
+      const provider = new TracerProvider()
+      provider.getTracer().startSpan('otel.force_flush.exporter_error').end()
+
+      const forceFlush = provider.forceFlush()
+      const response = await requestReceived
+      response.statusCode = 500
+      response.end('agent failed')
+
+      await assert.rejects(forceFlush, isAgentFailure)
+    })
+
+    it('delegates to the active span processor', async () => {
+      const provider = new TracerProvider()
+      const processor = new NoopSpanProcessor()
+      provider.addSpanProcessor(processor)
+      processor.forceFlush = sinon.stub().resolves()
+
+      await provider.forceFlush()
+
+      sinon.assert.calledOnce(processor.forceFlush)
+    })
+
+    it('still flushes processors when the exporter has no flush method', async () => {
+      const datadogTracer = require('../../index')._tracer
+      const originalExporter = datadogTracer._exporter
+      datadogTracer._exporter = { export: sinon.stub() }
+      const processor = new NoopSpanProcessor()
+      processor.forceFlush = sinon.stub().resolves()
+      const provider = new TracerProvider({ spanProcessors: [processor] })
+
+      try {
+        await provider.forceFlush()
+      } finally {
+        datadogTracer._exporter = originalExporter
+      }
+
+      sinon.assert.calledOnce(processor.forceFlush)
+    })
   })
 })
