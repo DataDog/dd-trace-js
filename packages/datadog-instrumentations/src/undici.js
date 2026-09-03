@@ -6,6 +6,7 @@ const shimmer = require('../../datadog-shimmer')
 const satisfies = require('../../../vendor/dist/semifies')
 const {
   addHook,
+  getHooks,
 } = require('./helpers/instrument')
 const { createWrapFetch } = require('./helpers/fetch')
 
@@ -14,6 +15,10 @@ const ch = tracingChannel('apm:undici:fetch')
 // Undici 5.0.x has a bug where fetch doesn't preserve AggregateError in the error cause chain
 // Use native DC only for versions where error handling works correctly
 const NATIVE_DC_VERSION = '>=4.7.0 <5.0.0 || >=5.1.0'
+
+for (const hook of getHooks('undici')) {
+  addHook(hook, moduleExports => moduleExports)
+}
 
 addHook({
   name: 'undici',

@@ -114,11 +114,14 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
+        let tracer
+
         beforeEach(() => {
           return agent.load('undici', {
             service: 'test',
           })
-            .then(() => {
+            .then(currentTracer => {
+              tracer = currentTracer
               express = require('express')
               fetch = require(`../../../versions/undici@${version}`, {}).get()
             })
@@ -126,6 +129,7 @@ describe('Plugin', () => {
 
         afterEach(() => {
           express = null
+          tracer = null
         })
 
         withNamingSchema(
@@ -166,6 +170,60 @@ describe('Plugin', () => {
 
             fetch.fetch(`http://localhost:${port}/user`, { method: 'GET' })
           })
+        })
+
+        it('should keep the caller span active while creating a request', async function () {
+          if (!satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')) {
+            this.skip()
+            return
+          }
+
+          const app = express()
+          app.get('/user', (_request, response) => response.status(200).send())
+          appListener = server(app)
+          await once(appListener, 'listening')
+          const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
+          const parent = tracer.startSpan('parent')
+
+          try {
+            await tracer.scope().activate(parent, async () => {
+              const responsePromise = fetch.fetch(`http://localhost:${port}/user`)
+              assert.strictEqual(tracer.scope().active(), parent)
+              const response = await responsePromise
+              await response.arrayBuffer()
+            })
+          } finally {
+            parent.finish()
+          }
+        })
+
+        it('should finish the request span when the server accepts an upgrade', async function () {
+          if (!satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')) {
+            this.skip()
+            return
+          }
+
+          appListener = require('node:http').createServer()
+          appListener.once('upgrade', (_request, socket) => {
+            socket.write(
+              'HTTP/1.1 101 Switching Protocols\r\n' +
+              'Connection: Upgrade\r\n' +
+              'Upgrade: test\r\n' +
+              '\r\n'
+            )
+          })
+          appListener.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
+          const client = new fetch.Client(`http://localhost:${port}`)
+          const tracePromise = agent.assertFirstTraceSpan(span => {
+            assert.strictEqual(span.resource, 'GET')
+            assert.strictEqual(span.meta['http.status_code'], '101')
+          })
+
+          const { socket } = await client.upgrade({ path: '/', protocol: 'test' })
+          socket.destroy()
+          await Promise.all([tracePromise, client.close()])
         })
 
         it('should support URL input', done => {
@@ -672,18 +730,24 @@ describe('Plugin', () => {
       })
       describe('with hooks configuration', () => {
         let config
+        let activeSpan
+        let hookSpan
+        let tracer
 
         beforeEach(() => {
           config = {
             hooks: {
               request: (span, req, res) => {
+                activeSpan = tracer.scope().active()
+                hookSpan = span
                 span.setTag('foo', '/foo')
               },
             },
           }
 
           return agent.load('undici', config)
-            .then(() => {
+            .then(currentTracer => {
+              tracer = currentTracer
               express = require('express')
               fetch = require(`../../../versions/undici@${version}`, {}).get()
             })
@@ -700,6 +764,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].meta.foo, '/foo')
+                assert.strictEqual(activeSpan, hookSpan)
               })
               .then(done)
               .catch(done)
