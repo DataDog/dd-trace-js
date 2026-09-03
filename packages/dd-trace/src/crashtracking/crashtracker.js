@@ -7,11 +7,57 @@ const libdatadogExtras = require('@datadog/libdatadog-extras')
 const binding = libdatadogExtras.load('crashtracker')
 
 const { channel } = require('dc-polyfill')
+const { getEnvironmentVariable } = require('../config/helper')
 const log = require('../log')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
+const getAgentlessTelemetryUrl = require('../telemetry/agentless-url')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
+const INHERITED_RECEIVER_ENVIRONMENT_VARIABLES = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+]
+
+/**
+ * Builds the minimal receiver environment libdatadog needs to select its two direct crash
+ * destinations independently: instrumentation telemetry and Errors Tracking intake.
+ *
+ * @param {import('../config/config-base')} config - Tracer configuration
+ * @returns {Array<[string, string]>}
+ */
+function getAgentlessReceiverEnvironment (config) {
+  if (!config.DD_API_KEY) {
+    throw new Error('DD_API_KEY is required for agentless crash tracking')
+  }
+
+  const site = config.site.toLowerCase()
+  const telemetryUrl = getAgentlessTelemetryUrl(site).origin
+
+  const environment = /** @type {Array<[string, string]>} */ ([
+    ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
+    ['DD_API_KEY', config.DD_API_KEY],
+    ['DD_SITE', site],
+    ['DD_APM_TELEMETRY_DD_URL', telemetryUrl],
+    // libdatadog v43 parses the dedicated URL above but does not use it when constructing the
+    // endpoint. Keep this compatibility fallback until its telemetry config honors that setting.
+    ['DD_TRACE_AGENT_URL', telemetryUrl],
+  ])
+
+  // The receiver environment does not inherit from this process.
+  for (const name of INHERITED_RECEIVER_ENVIRONMENT_VARIABLES) {
+    const value = getEnvironmentVariable(name)
+    if (value) environment.push([name, value])
+  }
+
+  return environment
+}
 
 class Crashtracker {
   #started = false
@@ -36,7 +82,7 @@ class Crashtracker {
     try {
       binding.init(
         this.#getConfig(config),
-        this.#getReceiverConfig(),
+        this.#getReceiverConfig(config),
         this.#getMetadata(config)
       )
       this.#started = true
@@ -71,7 +117,21 @@ class Crashtracker {
    * @param {import('../config/config-base')} config - Tracer configuration
    */
   #getConfig (config) {
-    const url = config.url
+    let endpoint = null
+    if (!config.DD_AGENTLESS_ENABLED) {
+      const url = config.url
+      endpoint = {
+        // TODO: Use the string directly when deserialization is fixed.
+        url: {
+          scheme: url.protocol.slice(0, -1),
+          authority: url.protocol === 'unix:'
+            ? Buffer.from(url.pathname).toString('hex')
+            : url.host,
+          path_and_query: '',
+        },
+        timeout_ms: 3000,
+      }
+    }
 
     // Out-of-process symbolication currently works on
     // Linux only, does not work on Mac.
@@ -84,17 +144,7 @@ class Crashtracker {
       collect_all_threads: true,
       create_alt_stack: true,
       use_alt_stack: true,
-      endpoint: {
-        // TODO: Use the string directly when deserialization is fixed.
-        url: {
-          scheme: url.protocol.slice(0, -1),
-          authority: url.protocol === 'unix:'
-            ? Buffer.from(url.pathname).toString('hex')
-            : url.host,
-          path_and_query: '',
-        },
-        timeout_ms: 3000,
-      },
+      endpoint,
       timeout: { secs: 5, nanos: 0 },
       demangle_names: true,
       signals: [],
@@ -128,10 +178,20 @@ class Crashtracker {
     }
   }
 
-  #getReceiverConfig () {
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   * @returns {{
+   *   args: string[],
+   *   env: Array<[string, string]>,
+   *   path_to_receiver_binary: string,
+   *   stderr_filename: null,
+   *   stdout_filename: null
+   * }}
+   */
+  #getReceiverConfig (config) {
     return {
       args: [],
-      env: [],
+      env: config.DD_AGENTLESS_ENABLED ? getAgentlessReceiverEnvironment(config) : [],
       path_to_receiver_binary: libdatadogExtras.find('crashtracker-receiver', true),
       stderr_filename: null,
       stdout_filename: null,
