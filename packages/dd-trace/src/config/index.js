@@ -651,7 +651,6 @@ class Config extends ConfigBase {
         setAndTrack(this, 'dynamicInstrumentation.enabled', false)
       }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
-      setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
       setAndTrack(this, 'dsmEnabled', false)
       const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
       setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
