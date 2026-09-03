@@ -57,6 +57,16 @@ describe('common Writer', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('reports a chunk overflow when requested', () => {
+    const error = new OverflowError(MAX_SIZE + 1)
+    encoder.makePayload.throws(error)
+    const done = sinon.stub()
+
+    writer.flush(done, { reportErrors: true })
+
+    sinon.assert.calledOnceWithExactly(done, error)
+  })
+
   it('rethrows non-overflow makePayload errors', () => {
     encoder.makePayload.throws(new Error('not an overflow'))
 
@@ -87,6 +97,18 @@ describe('common Writer', () => {
     sinon.assert.calledOnce(writer._sendPayload)
   })
 
+  it('preserves deadline errors through the configured delivery tracker', () => {
+    const error = new Error('deadline exceeded')
+    const deliveryTracker = { track: sinon.stub().callsFake((flush, done) => flush(done)) }
+    const done = sinon.stub()
+    writer = new Writer({ url: 'http://localhost:8126', deliveryTracker })
+    writer.flushDirect = sinon.stub().callsFake(callback => callback(error))
+
+    writer.flush(done, { deadline: Date.now() + 1000 })
+
+    sinon.assert.calledOnceWithExactly(done, error)
+  })
+
   it('passes final flush options to the payload sender', () => {
     const done = sinon.stub()
     const options = { deadline: Date.now() + 1000 }
@@ -110,6 +132,18 @@ describe('common Writer', () => {
 
     sinon.assert.calledOnce(encoder.reset)
     sinon.assert.calledOnceWithExactly(done)
+  })
+
+  it('reports a dropped payload when the request buffer is full and errors are requested', () => {
+    request.writable = false
+    const done = sinon.stub()
+
+    writer.flush(done, { reportErrors: true })
+
+    sinon.assert.calledOnceWithMatch(done, {
+      code: 'ERR_DD_REQUEST_BUFFER_FULL',
+      message: 'Maximum active request buffer size reached: payload is discarded.',
+    })
   })
 
   it('retains a non-final payload under backpressure when configured', () => {
