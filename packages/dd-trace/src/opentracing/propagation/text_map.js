@@ -632,6 +632,13 @@ class TextMapPropagator {
       return firstSpanContext
     }
 
+    const selectedPriority = firstSpanContext._sampling.priority
+    if (selectedPriority !== undefined &&
+        (selectedPriority >= AUTO_KEEP) !== (w3cSpanContext._sampling.priority >= AUTO_KEEP)) {
+      // The W3C threshold describes its sampled bit, not the conflicting decision selected from another style.
+      firstSpanContext._sampling.isProbabilityDecision = false
+    }
+
     firstSpanContext._tracestate = w3cSpanContext._tracestate
     if (firstSpanContext.toSpanId() === w3cSpanContext.toSpanId()) return firstSpanContext
 
