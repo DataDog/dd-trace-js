@@ -2,6 +2,7 @@
 
 const request = require('../exporters/common/request')
 const log = require('../log')
+const getAgentlessTelemetryUrl = require('./agentless-url')
 
 /**
  * @typedef {Record<string, unknown>} TelemetryPayloadObject
@@ -99,16 +100,6 @@ function getHeaders (config, application, reqType) {
   return headers
 }
 
-/**
- * @param {string | undefined} site
- */
-function getAgentlessTelemetryEndpoint (site) {
-  if (site === 'datad0g.com') { // staging
-    return 'https://all-http-intake.logs.datad0g.com'
-  }
-  return `https://instrumentation-telemetry-intake.${site}`
-}
-
 let seqId = 0
 
 /**
@@ -155,8 +146,8 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   if (isAgentlessMode) {
     try {
       url = isCiVisibilityAgentlessMode
-        ? testOptimization.DD_CIVISIBILITY_AGENTLESS_URL ?? new URL(getAgentlessTelemetryEndpoint(config.site))
-        : new URL(getAgentlessTelemetryEndpoint(config.site))
+        ? testOptimization.DD_CIVISIBILITY_AGENTLESS_URL ?? getAgentlessTelemetryUrl(config.site)
+        : getAgentlessTelemetryUrl(config.site)
     } catch (err) {
       log.error('Telemetry endpoint url is invalid', err)
       // No point to do the request if the URL is invalid
@@ -195,7 +186,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
       // figure out which data center to send to
       let backendUrl
       try {
-        backendUrl = new URL(getAgentlessTelemetryEndpoint(config.site))
+        backendUrl = getAgentlessTelemetryUrl(config.site)
       } catch {
         log.error('Invalid Telemetry URL')
         return
