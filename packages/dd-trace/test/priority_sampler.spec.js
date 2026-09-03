@@ -113,12 +113,13 @@ describe('PrioritySampler', () => {
       assert.strictEqual(prioritySampler.isSampled(span), true)
     })
 
-    it('should not set the priority while evaluating', () => {
-      context._sampling.priority = USER_REJECT
+    it('should not overwrite a committed manual decision while evaluating', () => {
+      prioritySampler.setPriority(span, USER_REJECT)
 
       assert.strictEqual(prioritySampler.isSampled(span), true)
       assert.strictEqual(context._sampling.priority, USER_REJECT)
-      assert.strictEqual(context._sampling.isProbabilityDecision, true)
+      assert.strictEqual(context._sampling.probabilityRate, undefined)
+      assert.strictEqual(context._sampling.isProbabilityDecision, false)
     })
 
     it('should accept a span context', () => {

@@ -33,13 +33,14 @@ class TraceSourcePrioritySampler extends PrioritySampler {
   /**
    * @override
    * @param {import('../opentracing/span')} span
+   * @param {boolean} [recordDecision]
    * @returns {import('../priority_sampler').SamplingPriority}
    */
-  _getPriorityFromAuto (span) {
+  _getPriorityFromAuto (span, recordDecision = false) {
     const context = this._getContext(span)
 
     context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
-    this._recordDecisionMetadata(context)
+    if (recordDecision) this._recordDecisionMetadata(context)
 
     if (hasTraceSourcePropagationTag(context._trace.tags)) {
       return USER_KEEP

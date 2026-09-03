@@ -243,7 +243,8 @@ class PrioritySampler {
    */
   _decideFromAuto (span) {
     const context = this._getContext(span)
-    const priority = this._getPriorityFromAuto(span)
+    const priority = this._getPriorityFromAuto(span, true)
+
     context._sampling.priority = priority
     return priority
   }
@@ -252,15 +253,16 @@ class PrioritySampler {
    * Computes priority using rules and agent rates when no manual tag is present.
    *
    * @param {DatadogSpan} span
+   * @param {boolean} [recordDecision]
    * @returns {SamplingPriority}
    */
-  _getPriorityFromAuto (span) {
+  _getPriorityFromAuto (span, recordDecision = false) {
     const context = this._getContext(span)
     const rule = this.#findRule(span)
 
     return rule
-      ? this.#getPriorityByRule(context, rule)
-      : this.#getPriorityByAgent(context)
+      ? this.#getPriorityByRule(context, rule, recordDecision)
+      : this.#getPriorityByAgent(context, recordDecision)
   }
 
   /**
@@ -314,9 +316,10 @@ class PrioritySampler {
    *
    * @param {DatadogSpanContext} context
    * @param {import('./sampling_rule')} rule
+   * @param {boolean} recordDecision
    * @returns {SamplingPriority}
    */
-  #getPriorityByRule (context, rule) {
+  #getPriorityByRule (context, rule, recordDecision) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rule.sampleRate)
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
@@ -327,16 +330,16 @@ class PrioritySampler {
     }
 
     if (!rule.isSampled(context)) {
-      this._recordDecisionMetadata(context, rule.sampleRate)
+      if (recordDecision) this._recordDecisionMetadata(context, rule.sampleRate)
       return USER_REJECT
     }
 
     if (!rule.isAllowed() || !this._isSampledByRateLimit(context)) {
-      this._recordDecisionMetadata(context)
+      if (recordDecision) this._recordDecisionMetadata(context)
       return USER_REJECT
     }
 
-    this._recordDecisionMetadata(context, rule.sampleRate)
+    if (recordDecision) this._recordDecisionMetadata(context, rule.sampleRate)
     return USER_KEEP
   }
 
@@ -360,9 +363,10 @@ class PrioritySampler {
    * Computes priority using agent-provided sampling rates.
    *
    * @param {DatadogSpanContext} context
+   * @param {boolean} recordDecision
    * @returns {SamplingPriority}
    */
-  #getPriorityByAgent (context) {
+  #getPriorityByAgent (context, recordDecision) {
     const key = `service:${context.getTag(SERVICE_NAME)},env:${this._env}`
     // TODO: Change underscored properties to private ones.
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
@@ -378,7 +382,7 @@ class PrioritySampler {
     }
 
     const sampled = sampler.isSampled(context)
-    this._recordDecisionMetadata(context, rate)
+    if (recordDecision) this._recordDecisionMetadata(context, rate)
     return sampled ? AUTO_KEEP : AUTO_REJECT
   }
 
