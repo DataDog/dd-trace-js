@@ -8,19 +8,44 @@ const request = require('./request')
 const { safeJSONStringify } = require('./util')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
+const noop = () => {}
 
 class Writer {
-  constructor ({ url, beforeFirstFlush }) {
+  #deliveryTracker
+  #retainOnBackpressure
+
+  constructor ({ url, beforeFirstFlush, deliveryTracker, retainOnBackpressure = false }) {
     this._url = url
     this._beforeFirstFlush = beforeFirstFlush
+    this.#retainOnBackpressure = retainOnBackpressure
+    this.#deliveryTracker = deliveryTracker
   }
 
   #isFirstFlush = true
 
-  flush (done = () => {}, options) {
+  /**
+   * Flushes queued telemetry, retaining delivery on supported serverless platforms.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flush (done, options) {
+    if (this.#deliveryTracker) {
+      return this.#deliveryTracker.track(callback => this.flushDirect(callback, options), done)
+    }
+    this.flushDirect(done, options)
+  }
+
+  /**
+   * Flushes queued telemetry without registering serverless delivery retention.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flushDirect (done = noop, options) {
     const count = this._encoder.count()
 
-    if (!request.writable && options?.deadline === undefined) {
+    if (!request.writable && options?.deadline === undefined && !this.#retainOnBackpressure) {
       this._encoder.reset()
       done()
     } else if (count > 0) {
@@ -55,7 +80,7 @@ class Writer {
   }
 
   append (payload, options) {
-    if (!request.writable && options?.deadline === undefined) {
+    if (!request.writable && options?.deadline === undefined && !this.#retainOnBackpressure) {
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
       return false
@@ -64,12 +89,11 @@ class Writer {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
 
-    this._encode(payload)
-    return true
+    return this._encode(payload) !== false
   }
 
   _encode (payload) {
-    this._encoder.encode(payload)
+    return this._encoder.encode(payload)
   }
 
   setUrl (url) {

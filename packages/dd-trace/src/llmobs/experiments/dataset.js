@@ -1,8 +1,18 @@
 'use strict'
 
 const { randomUUID } = require('node:crypto')
+const createRfdc = require('../../../../../vendor/dist/rfdc')
+const snapshotPayload = createRfdc({ proto: false, circles: false })
 
 /** @typedef {{add?: string[], remove?: string[], replace?: string[]}} TagOperations */
+/**
+ * @typedef {object} DatasetRecordNew
+ * @property {string} [id]
+ * @property {unknown} inputData
+ * @property {unknown} [expectedOutput]
+ * @property {Record<string, unknown>} [metadata]
+ * @property {string[]} [tags]
+ */
 /**
  * @typedef {object} PendingBatch
  * @property {object} attributes
@@ -114,6 +124,9 @@ function updateFromInsertedRecord (recordId, record, payload) {
     update.expectedOutput = record.expectedOutput
   }
   if (!valuesAreEqual(record.metadata, payload.metadata)) update.metadata = record.metadata
+  if (!valuesAreEqual(record.tags, payload.tags ?? [])) {
+    update.tagOperations = { replace: [...record.tags] }
+  }
   return update
 }
 
@@ -170,6 +183,36 @@ class Dataset {
       ? recordOrInput
       : new DatasetRecord(recordOrInput, expectedOutput, metadata, null, tags)
     this.#addRecord(record)
+    return this
+  }
+
+  /**
+   * Add multiple records to a dataset.
+   * @param {DatasetRecordNew[]} records
+   * @returns {Dataset} This dataset for chaining.
+   */
+  addRecords (records) {
+    const newRecords = []
+    const recordIds = new Set(this.#recordsById.keys())
+
+    // Construct and validate the entire batch before mutating the dataset.
+    for (const record of records) {
+      if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
+        throw new Error('record id must be a non-empty string')
+      }
+      const newRecord = new DatasetRecord(
+        record.inputData,
+        record.expectedOutput,
+        record.metadata,
+        record.id,
+        record.tags
+      )
+      if (recordIds.has(newRecord.id)) throw new Error(`Duplicate record id '${newRecord.id}'`)
+      recordIds.add(newRecord.id)
+      newRecords.push(newRecord)
+    }
+
+    for (const record of newRecords) this.#addRecord(record)
     return this
   }
 
@@ -336,6 +379,10 @@ class Dataset {
     return this.#projectId
   }
 
+  projectName () {
+    return this.#client.projectName
+  }
+
   version () {
     return this.#version
   }
@@ -416,7 +463,7 @@ class Dataset {
     const insertRecords = []
     const insertPayloads = new Map()
     for (const [recordId, record] of this.#newRecordsById) {
-      const payload = serializedRecord(record)
+      const payload = snapshotPayload(serializedRecord(record))
       insertRecords.push(payload)
       insertPayloads.set(recordId, payload)
     }
@@ -427,7 +474,7 @@ class Dataset {
       const tagOperations = this.#pendingTagOperations.get(recordId)
       if (tagOperations) update.tagOperations = tagOperations
       else delete update.tagOperations
-      const payload = serializedRecordUpdate(update)
+      const payload = snapshotPayload(serializedRecordUpdate(update))
       updateRecords.push(payload)
       updatePayloads.set(recordId, payload)
     }
@@ -522,6 +569,9 @@ class Dataset {
         updateFromInsertedRecord(recordId, current, payload)
       const queuedOperations = this.#pendingTagOperations.get(recordId)
       if (queuedOperations) update.tagOperations = queuedOperations
+      if (update.tagOperations) {
+        this.#pendingTagOperations.set(recordId, copyTagOperations(update.tagOperations))
+      }
       this.#updatedRecordsById.set(recordId, update)
     }
 

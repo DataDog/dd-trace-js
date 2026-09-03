@@ -2,10 +2,12 @@
 
 const log = require('../../log')
 const { ExperimentsClient } = require('./client')
-const { Dataset, DatasetRecord } = require('./dataset')
+const { Dataset } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
+
+const DEFAULT_PROJECT_NAME = 'default-project'
 
 // Poll `attempt` with exponential backoff until it returns true or the time
 // budget is spent. Used for eventually-consistent reads (pullDataset).
@@ -33,8 +35,8 @@ class Experiments {
 
   constructor (config, llmobs) {
     this.#config = config
-    this.#llmobs = llmobs
-    this.#projectName = config.llmobs?.mlApp || config.service
+    this.#llmobs = config.llmobs?.mlApp || config.service ? llmobs : undefined
+    this.#projectName = config.llmobs?.projectName || DEFAULT_PROJECT_NAME
     this.#client = this.#clientForProject(this.#projectName)
   }
 
@@ -51,27 +53,26 @@ class Experiments {
     })
   }
 
+  /**
+   * @param {string | undefined} projectName
+   * @returns {ExperimentsClient}
+   */
+  #clientForOperation (projectName) {
+    if (projectName !== undefined && projectName !== this.#projectName) {
+      return this.#clientForProject(projectName)
+    }
+    if (this.#client === undefined) this.#client = this.#clientForProject(projectName)
+    return this.#client
+  }
+
   // Create a local dataset buffer. Pushed remotely on first experiment run.
   createDataset (name, descriptionOrOptions = '') {
     const options = typeof descriptionOrOptions === 'string'
       ? { description: descriptionOrOptions }
       : (descriptionOrOptions ?? {})
-    const dataset = new Dataset(this.#client, name, options.description ?? '')
-    const recordIds = new Set()
-    if ((options.records) != null) {
-      for (const record of options.records) {
-        if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
-          throw new Error('record id must be a non-empty string')
-        }
-        if (record.id !== undefined) {
-          if (recordIds.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)
-          recordIds.add(record.id)
-        }
-        dataset.addRecord(
-          new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id, record.tags)
-        )
-      }
-    }
+    const client = this.#clientForOperation(options.projectName)
+    const dataset = new Dataset(client, name, options.description ?? '')
+    if ((options.records) != null) dataset.addRecords(options.records)
     return dataset
   }
 
@@ -80,9 +81,11 @@ class Experiments {
   // wait until that many records are readable. Pass `tags` to filter records by
   // dataset record tags.
   async pullDataset (name, options = {}) {
-    const { expectedRecordCount, maxWaitMs = 30_000, tags, version } = options
+    const { expectedRecordCount, maxWaitMs = 30_000, projectName, tags, version } = options
     const filterTags = validateTagsList(tags)
-    const projectId = await this.#client.ensureProjectId()
+    const client = this.#clientForOperation(projectName)
+    const resolvedProjectName = projectName ?? this.#projectName
+    const projectId = await client.ensureProjectId()
 
     let pulledDataset = null
     let records = []
@@ -93,7 +96,7 @@ class Experiments {
     const succeeded = await retryWithBackoff(async () => {
       try {
         if (pulledDataset === null) {
-          const datasets = await this.#client.listDatasets(projectId, { name })
+          const datasets = await client.listDatasets(projectId, { name })
           for (const dataset of datasets) {
             if (dataset.name() === name) {
               pulledDataset = dataset
@@ -109,7 +112,7 @@ class Experiments {
         // Follow the meta.after / page[cursor] pagination until the last page.
         for (;;) {
           // eslint-disable-next-line no-await-in-loop
-          const page = await this.#client.listDatasetRecords(projectId, pulledDataset.id(), {
+          const page = await client.listDatasetRecords(projectId, pulledDataset.id(), {
             cursor,
             tags: filterTags,
             version: datasetVersion,
@@ -129,13 +132,13 @@ class Experiments {
     }, { maxTotalMs: maxWaitMs })
 
     if (pulledDataset === null && lastError) {
-      throw new Error(`Failed to list datasets in project '${this.#projectName}': ${lastError}`)
+      throw new Error(`Failed to list datasets in project '${resolvedProjectName}': ${lastError}`)
     }
     if (pulledDataset === null) {
-      throw new Error(`Dataset '${name}' not found in project '${this.#projectName}' (after ${maxWaitMs}ms)`)
+      throw new Error(`Dataset '${name}' not found in project '${resolvedProjectName}' (after ${maxWaitMs}ms)`)
     }
     if (!succeeded && lastError) {
-      throw new Error(`Failed to fetch records for dataset '${name}' in project '${this.#projectName}': ${lastError}`)
+      throw new Error(`Failed to fetch records for dataset '${name}' in project '${resolvedProjectName}': ${lastError}`)
     }
     if (!succeeded && expectedRecordCount != null) {
       throw new Error(
@@ -151,7 +154,7 @@ class Experiments {
     }
 
     return Dataset.fromExisting(
-      this.#client,
+      client,
       name,
       pulledDataset.description(),
       pulledDataset.id(),
@@ -163,9 +166,26 @@ class Experiments {
     )
   }
 
-  // Build an experiment: { name, dataset, task, evaluators, description?, config?, tags? }.
+  // Build an experiment with a dataset, task, evaluators, and optional project/config/tags.
   experiment (options) {
-    return new Experiment(this.#client, options, this.#llmobs)
+    const datasetProjectName = options?.dataset?.projectName?.()
+    if (options?.projectName !== undefined &&
+        datasetProjectName !== undefined &&
+        options.projectName !== datasetProjectName) {
+      throw new Error(
+        `Experiment project '${options.projectName}' does not match dataset project '${datasetProjectName}'`
+      )
+    }
+    const projectName = options?.projectName ?? datasetProjectName
+    const client = this.#clientForOperation(projectName)
+    const usesDatasetOverride = datasetProjectName !== undefined && datasetProjectName !== this.#projectName
+    const resolvedProjectName = projectName ?? this.#config.llmobs?.projectName
+    const experimentOptions = options?.projectName === undefined &&
+      (usesDatasetOverride || this.#config.llmobs?.projectName !== undefined) &&
+      resolvedProjectName !== undefined
+      ? { ...options, projectName: resolvedProjectName }
+      : options
+    return new Experiment(client, experimentOptions, this.#llmobs)
   }
 
   /**
@@ -177,10 +197,11 @@ class Experiments {
    * @returns {Promise<ExternalExperiment>}
    */
   startExperiment (options) {
-    const client = options?.projectName === undefined || options.projectName === this.#projectName
-      ? this.#client
-      : this.#clientForProject(options.projectName)
-    return new Experiment(client, { ...options, external: true }).start()
+    const client = this.#clientForOperation(options?.projectName)
+    const experimentOptions = options?.projectName === undefined && this.#config.llmobs?.projectName !== undefined
+      ? { ...options, projectName: this.#config.llmobs.projectName }
+      : options
+    return new Experiment(client, { ...experimentOptions, external: true }).start()
       .then(experiment => new ExternalExperiment(experiment))
   }
 }
@@ -194,15 +215,6 @@ function createExperiments (config, llmobs) {
   if (!(config.DD_API_KEY) || !config.DD_APP_KEY) {
     log.warn('LLMObs experiments: missing api and/or app keys, set DD_API_KEY and DD_APP_KEY')
     return new NoopExperiments('DD_API_KEY and DD_APP_KEY are required for experiments')
-  }
-  if (!config.llmobs?.mlApp && !config.service) {
-    const reason = 'no project name configured; set the DD_LLMOBS_ML_APP environment variable (or llmobs.mlApp in ' +
-      'tracer.init()) to name the LLM Obs project, or DD_SERVICE (or service in tracer.init()) as a fallback, ' +
-      'then retry'
-    const experiments = new Experiments(config, llmobs)
-    return new NoopExperiments(reason, {
-      startExperiment: (options) => experiments.startExperiment(options),
-    })
   }
   return new Experiments(config, llmobs)
 }

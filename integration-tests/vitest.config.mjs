@@ -85,30 +85,51 @@ if (process.env.VITEST_RUNNER) {
   config.test.runner = process.env.VITEST_RUNNER
 }
 
-if (process.env.VITEST_BROWSER_MODE) {
-  const provider = process.env.VITEST_BROWSER_PROVIDER_FACTORY
-    ? (await import('@vitest/browser-playwright')).playwright()
-    : 'playwright'
+const browserProvider = process.env.VITEST_BROWSER_PROVIDER || 'playwright'
+const browserName = browserProvider === 'webdriverio' ? 'chrome' : 'chromium'
 
+async function getBrowserProvider () {
+  if (!process.env.VITEST_BROWSER_PROVIDER_FACTORY) return browserProvider
+
+  if (browserProvider === 'webdriverio') {
+    const { webdriverio } = await import('@vitest/browser-webdriverio')
+    const capabilities = {
+      'goog:chromeOptions': {
+        args: ['disable-dev-shm-usage', 'no-sandbox'],
+      },
+    }
+    if (process.env.VITEST_BROWSER_BINARY) {
+      capabilities['goog:chromeOptions'].binary = process.env.VITEST_BROWSER_BINARY
+    }
+    if (process.env.VITEST_BROWSER_DRIVER_BINARY) {
+      capabilities['wdio:chromedriverOptions'] = {
+        binary: process.env.VITEST_BROWSER_DRIVER_BINARY,
+      }
+    }
+    return webdriverio({
+      capabilities,
+    })
+  }
+
+  return (await import('@vitest/browser-playwright')).playwright()
+}
+
+if (process.env.VITEST_BROWSER_MODE) {
   config.test.browser = {
     connectTimeout: process.env.VITEST_BROWSER_CONNECT_TIMEOUT
       ? Number(process.env.VITEST_BROWSER_CONNECT_TIMEOUT)
       : undefined,
     enabled: true,
     headless: true,
-    provider,
+    provider: await getBrowserProvider(),
     instances: [{
-      browser: 'chromium',
-      name: 'browser-chromium',
+      browser: browserName,
+      name: `browser-${browserName}`,
     }],
   }
 }
 
 if (process.env.VITEST_MIXED_BROWSER_MODE) {
-  const provider = process.env.VITEST_BROWSER_PROVIDER_FACTORY
-    ? (await import('@vitest/browser-playwright')).playwright()
-    : 'playwright'
-
   config.test.projects = [
     {
       test: {
@@ -122,10 +143,10 @@ if (process.env.VITEST_MIXED_BROWSER_MODE) {
         browser: {
           enabled: true,
           headless: true,
-          provider,
+          provider: await getBrowserProvider(),
           instances: [{
-            browser: 'chromium',
-            name: 'browser-chromium',
+            browser: browserName,
+            name: `browser-${browserName}`,
           }],
         },
         include: ['ci-visibility/vitest-browser-tests/browser-reporting.mjs'],

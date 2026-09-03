@@ -3,12 +3,15 @@
 const { EOL, platform } = require('node:os')
 
 // Load binding first to not import other modules if it throws
-const libdatadog = require('@datadog/libdatadog')
-const binding = libdatadog.load('crashtracker')
+const libdatadogExtras = require('@datadog/libdatadog-extras')
+const binding = libdatadogExtras.load('crashtracker')
 
+const { channel } = require('dc-polyfill')
 const log = require('../log')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 class Crashtracker {
   #started = false
@@ -38,6 +41,7 @@ class Crashtracker {
       )
       this.#started = true
       this.#trackUnhandledExceptions()
+      identityRefreshChannel.subscribe((config) => this.configure(config))
     } catch (e) {
       log.error('Error initializing crashtracker', e)
     }
@@ -128,7 +132,7 @@ class Crashtracker {
     return {
       args: [],
       env: [],
-      path_to_receiver_binary: libdatadog.find('crashtracker-receiver', true),
+      path_to_receiver_binary: libdatadogExtras.find('crashtracker-receiver', true),
       stderr_filename: null,
       stdout_filename: null,
     }

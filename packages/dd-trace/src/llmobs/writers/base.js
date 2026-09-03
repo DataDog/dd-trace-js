@@ -4,6 +4,7 @@ const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config/helper')
+const { createServerlessDeliveryTracker } = require('../../serverless')
 
 const logger = require('../../log')
 
@@ -16,13 +17,20 @@ const {
 } = require('../constants/writers')
 const { parseResponseAndLog } = require('./util')
 
+const MAX_BUFFER_EVENTS = 1000
+
 class LLMObsBuffer {
-  constructor ({ events, size, routing = {}, isDefault = false, limit = 1000 }) {
+  /**
+   * @param {{
+   *   events: Record<string, unknown>[],
+   *   size: number,
+   *   routing?: { apiKey?: string, site?: string }
+   * }} options
+   */
+  constructor ({ events, size, routing = {} }) {
     this.events = events
     this.size = size
     this.routing = routing
-    this.isDefault = isDefault
-    this.limit = limit
   }
 
   clear () {
@@ -33,6 +41,9 @@ class LLMObsBuffer {
 
 class BaseLLMObsWriter {
   #destroyer
+  /** @type {Function[]} */
+  #pendingFlushes = []
+  #serverlessDeliveryTracker = createServerlessDeliveryTracker()
   /** @type {Map<string, LLMObsBuffer>} */
   #multiTenantBuffers = new Map()
 
@@ -42,7 +53,7 @@ class BaseLLMObsWriter {
     this._eventType = eventType
 
     /** @type {LLMObsBuffer} */
-    this._buffer = new LLMObsBuffer({ events: [], size: 0, isDefault: true })
+    this._buffer = new LLMObsBuffer({ events: [], size: 0 })
 
     /** @type {import('../../config/config-base')} */
     this._config = config
@@ -98,8 +109,8 @@ class BaseLLMObsWriter {
   append (event, routing, byteLength) {
     const buffer = this._getBuffer(routing)
 
-    if (buffer.events.length >= buffer.limit) {
-      logger.warn(`${this.constructor.name} event buffer full (limit is ${buffer.limit}), dropping event`)
+    if (buffer.events.length >= MAX_BUFFER_EVENTS) {
+      logger.warn(`${this.constructor.name} event buffer full (limit is ${MAX_BUFFER_EVENTS}), dropping event`)
       telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
       return false
     }
@@ -111,80 +122,118 @@ class BaseLLMObsWriter {
     return true
   }
 
-  flush () {
+  /**
+   * Drains buffered events and joins requests active at this flush boundary.
+   * @param {Function} [done]
+   */
+  flush (done) {
     if (this._agentless == null) {
+      if (done) this.#pendingFlushes.push(done)
       return
     }
 
-    // Flush default buffer
+    const requests = this.#drainBuffers()
+    if (!this.#serverlessDeliveryTracker) {
+      // Only invocation-retaining platforms need completion-aware delivery.
+      for (const request of requests) this.#sendSafely(request)
+      done?.()
+      return
+    }
+
+    for (const request of requests) this.#sendSafely(request)
+    this.#serverlessDeliveryTracker.waitForIdle(done)
+  }
+
+  #sendSafely (requestToSend) {
+    try {
+      if (this.#serverlessDeliveryTracker) {
+        this.#serverlessDeliveryTracker.track(done => this.#send(requestToSend, done))
+      } else {
+        this.#send(requestToSend)
+      }
+    } catch (error) {
+      logger.error('Failed to send LLMObs %s events: %s', this._eventType, error.message)
+    }
+  }
+
+  #drainBuffers () {
+    const requests = []
     if (this._buffer.events.length > 0) {
       const events = this._buffer.events
       this._buffer.clear()
-
-      const payload = this._encode(this.makePayload(events))
-
-      log.debug('Encoded LLMObs payload: %s', payload)
-
-      const options = this._getOptions()
-
-      request(payload, options, (err, resp, code) => {
-        parseResponseAndLog(err, code, events.length, this.url, this._eventType)
-      })
+      requests.push({ events, options: this._getOptions(), url: this.url })
     }
 
-    // Flush multi-tenant buffers
     for (const [apiKey, buffer] of this.#multiTenantBuffers) {
-      if (buffer.events.length === 0) continue
+      if (buffer.events.length === 0) {
+        this.#multiTenantBuffers.delete(apiKey)
+        continue
+      }
+      const site = buffer.routing.site || this._config.site
+      const maskedApiKey = `****${apiKey.slice(-4)}`
+      let options
+      let url
+      try {
+        options = {
+          headers: {
+            'Content-Type': 'application/json',
+            'DD-API-KEY': apiKey,
+          },
+          method: 'POST',
+          timeout: this._timeout,
+          url: new URL(format({
+            protocol: 'https:',
+            hostname: `${this._intake}.${site}`,
+          })),
+          path: this._baseEndpoint,
+        }
+        url = this.#buildUrl(options.url.href, options.path)
+      } catch (error) {
+        buffer.clear()
+        this.#multiTenantBuffers.delete(apiKey)
+        logger.error(
+          'Failed to route LLMObs %s events for API key %s: %s',
+          this._eventType,
+          maskedApiKey,
+          error.message
+        )
+        continue
+      }
 
       const events = buffer.events
       buffer.clear()
-
-      const payload = this._encode(this.makePayload(events))
-      const site = buffer.routing.site || this._config.site
-      const options = {
-        headers: {
-          'Content-Type': 'application/json',
-          'DD-API-KEY': apiKey,
-        },
-        method: 'POST',
-        timeout: this._timeout,
-        url: new URL(format({
-          protocol: 'https:',
-          hostname: `${this._intake}.${site}`,
-        })),
-        path: this._baseEndpoint,
-      }
-      const url = this.#buildUrl(options.url.href, options.path)
-      const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
-
+      this.#multiTenantBuffers.delete(apiKey)
       log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
-      log.debug('Encoded LLMObs payload: %s', payload)
-
-      request(payload, options, (err, resp, code) => {
-        parseResponseAndLog(err, code, events.length, url, this._eventType)
-      })
+      requests.push({ events, options, url })
     }
 
-    this.#cleanupEmptyBuffers()
+    return requests
   }
 
-  #cleanupEmptyBuffers () {
-    for (const [key, buffer] of this.#multiTenantBuffers) {
-      if (buffer.events.length === 0) {
-        this.#multiTenantBuffers.delete(key)
-      }
-    }
+  #send ({ events, options, url }, done) {
+    const payload = this._encode(this.makePayload(events))
+    log.debug('Encoded LLMObs payload: %s', payload)
+    request(payload, options, (err, resp, code) => {
+      parseResponseAndLog(err, code, events.length, url, this._eventType)
+      done?.()
+    })
   }
 
   makePayload (events) {}
 
-  destroy () {
+  /**
+   * Stops periodic flushing and drains buffered events.
+   * @param {Function} [done] Called after queued and active deliveries complete.
+   */
+  destroy (done) {
     if (this.#destroyer) {
       logger.debug(`Stopping ${this.constructor.name}`)
       clearInterval(this._periodic)
       globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
-      this.flush()
+      this.flush(done)
       this.#destroyer = undefined
+    } else {
+      done?.()
     }
   }
 
@@ -196,6 +245,10 @@ class BaseLLMObsWriter {
     this._endpoint = endpoint
 
     logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
+
+    const pendingFlushes = this.#pendingFlushes
+    this.#pendingFlushes = []
+    for (const done of pendingFlushes) this.flush(done)
   }
 
   _getUrlAndPath () {

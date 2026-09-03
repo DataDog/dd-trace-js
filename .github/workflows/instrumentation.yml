@@ -35,6 +35,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-esbuild
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
 
   webpack:
     runs-on: ubuntu-latest
@@ -50,6 +54,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-webpack
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
 
   instrumentation-ai:
     runs-on: ubuntu-latest
@@ -111,15 +119,38 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test
 
+  # @confluentinc/kafka-javascript does not provide a Node 26 prebuild and its
+  # bundled librdkafka cannot build from source there. Keep this aligned with
+  # the Kafka-backed plugin matrix until upstream supports Node 26.
   instrumentation-confluentinc-kafka-javascript:
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
+        range: [">=1.0.0"]
+        include:
+          - node-version: 24
+            range: ">=1.4.0"
     runs-on: ubuntu-latest
     permissions:
       id-token: write
     env:
       PLUGINS: confluentinc-kafka-javascript
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/instrumentations/test
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
+      - uses: ./.github/actions/install
+      - run: npm run test:instrumentations:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: instrumentations-${{ github.job }}-${{ matrix.node-version }}
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   instrumentation-connect:
     runs-on: ubuntu-latest
@@ -183,6 +214,16 @@ jobs:
       id-token: write
     env:
       PLUGINS: crypto
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-cypress-config:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: cypress-config
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test

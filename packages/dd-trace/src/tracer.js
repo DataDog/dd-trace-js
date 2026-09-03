@@ -13,6 +13,7 @@ const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
+const { flushServerlessTelemetry } = require('./flush')
 const log = require('./log')
 // Always-on writer (console.warn), not the channel-gated `log`: these surface regardless of
 // DD_TRACE_DEBUG.
@@ -42,13 +43,10 @@ class DatadogTracer extends Tracer {
 
     if (!IS_SERVERLESS) {
       const storeConfig = require('./tracer_metadata')
-      // Keep a reference to the handle, to keep the memfd alive in memory.
-      // It is read by the service discovery feature.
       const metadata = storeConfig(config)
       if (metadata === undefined) {
         log.warn('Could not store tracer configuration for service discovery')
       }
-      this._inmem_cfg = metadata
     }
   }
 
@@ -148,6 +146,27 @@ class DatadogTracer extends Tracer {
   setUrl (url) {
     this._exporter.setUrl(url)
     this._dataStreamsProcessor.setUrl(url)
+  }
+
+  /**
+   * Flushes every configured telemetry pipeline for a serverless lifecycle.
+   * @param {Function} [done] Called after every configured export completes
+   * @param {{ timeout?: number }} [options] Bounds this flush operation.
+   */
+  flushAll (done, options) {
+    const traceExporter = this._exporter
+    const spanStats = this._processor?._stats
+    const traceFlusher = typeof traceExporter?.flush === 'function'
+      ? callback => traceExporter.flush(callback)
+      : undefined
+    const spanStatsFlusher = typeof spanStats?.forceFlush === 'function'
+      ? callback => spanStats.forceFlush(callback)
+      : undefined
+
+    flushServerlessTelemetry(done, options, {
+      trace: traceFlusher,
+      spanStats: spanStatsFlusher,
+    })
   }
 
   scope () {

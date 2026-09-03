@@ -4,8 +4,11 @@ const fs = require('node:fs')
 const os = require('node:os')
 const { URL, format } = require('node:url')
 
+const { channel } = require('dc-polyfill')
+
 const exporters = require('../../../../ext/exporters')
-const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const createRfdc = require('../../../../vendor/dist/rfdc')
+const rfdc = createRfdc({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
@@ -42,7 +45,6 @@ const {
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
 
-const RUNTIME_ID = uuid()
 const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
   exporters.CUCUMBER_WORKER,
   exporters.JEST_WORKER,
@@ -50,6 +52,21 @@ const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
   exporters.PLAYWRIGHT_WORKER,
   exporters.VITEST_WORKER,
 ])
+
+let runtimeId
+
+channel('datadog:identity:update').subscribe(refreshRuntimeId)
+
+/**
+ * Lazily generates the process-wide runtime ID on first access instead of at module load,
+ * so modules that merely require this file without constructing a Config never pay for it.
+ *
+ * @returns {string}
+ */
+function getRuntimeId () {
+  runtimeId ??= uuid()
+  return runtimeId
+}
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -160,6 +177,19 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
   } else {
     trackedConfigOrigins.set(name, source)
   }
+}
+
+/**
+ * @param {Config} config
+ * @param {ConfigPath} name
+ */
+function clearAndTrack (config, name) {
+  if (get(config, name) === undefined) return
+
+  changeTracker.calculated.add(name)
+  set(config, name, undefined)
+  generateTelemetry(undefined, 'calculated', name)
+  trackedConfigOrigins.set(name, 'calculated')
 }
 
 module.exports = getConfig
@@ -390,11 +420,6 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('dogstatsd.hostname')) {
       setAndTrack(this, 'dogstatsd.hostname', agentHostname)
     }
-    // Disable log injection when OTEL logs are enabled
-    // OTEL logs and DD log injection are mutually exclusive
-    if (this.DD_LOGS_OTEL_ENABLED) {
-      setAndTrack(this, 'logInjection', false)
-    }
     if (this.DD_METRICS_OTEL_ENABLED &&
         trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
         this.OTEL_METRICS_EXPORTER === 'none') {
@@ -489,6 +514,14 @@ class Config extends ConfigBase {
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
 
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
+      clearAndTrack(this, 'sampleRate')
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
+      setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', false)
+    }
+
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
       try {
         // TODO: Should we log a warning in case this is defined next to spanSamplingRules?
@@ -510,7 +543,8 @@ class Config extends ConfigBase {
     if (!this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
         (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
-        trackedConfigOrigins.has('llmobs.mlApp'))) {
+        trackedConfigOrigins.has('llmobs.mlApp') ||
+        trackedConfigOrigins.has('llmobs.projectName'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
@@ -601,7 +635,7 @@ class Config extends ConfigBase {
     if (this.version) {
       this.tags.version = this.version
     }
-    this.tags['runtime-id'] = RUNTIME_ID
+    this.tags['runtime-id'] = getRuntimeId()
     const platformTags = getServerlessPlatformTags()
     if (platformTags) {
       for (let i = 0; i < platformTags.length; i += 2) {
@@ -621,11 +655,30 @@ class Config extends ConfigBase {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 
-    // Experimental agentless APM span intake
-    // When enabled, sends spans directly to Datadog intake without an agent
-    // TODO: Replace this with a proper configuration
-    const agentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessEnabled) {
+    if (this.DD_AGENTLESS_ENABLED) {
+      if (this.isCiVisibility) {
+        setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
+      }
+      setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
+      setAndTrack(this, 'llmobs.agentlessEnabled', true)
+      setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
+      if (this.DD_API_KEY === undefined) {
+        setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+      }
+      setAndTrack(this, 'runtimeMetrics.enabled', false)
+      setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
+      setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
+      setAndTrack(this, 'dsmEnabled', false)
+      setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
+
+      const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
+      setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
+      if (profilingExporters.length === 0) {
+        setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
+      }
+    }
+
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
@@ -639,6 +692,12 @@ class Config extends ConfigBase {
       if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
         setAndTrack(this, 'traceId128BitGenerationEnabled', false)
       }
+    }
+
+    // Disable log injection when OTEL logs are enabled
+    // OTEL logs and DD log injection are mutually exclusive
+    if (this.DD_LOGS_OTEL_ENABLED) {
+      setAndTrack(this, 'logInjection', false)
     }
 
     // Apply all fallbacks to the calculated config.
@@ -786,4 +845,16 @@ function getConfig (options) {
     configInstance = new Config(options)
   }
   return configInstance
+}
+
+/**
+ * Regenerates the runtime ID.
+ *
+ * Used for Lambda MicroVM `/run` lifecycle hooks, giving each clone a distinct runtime identity.
+ *
+ * @param {import('./config-base')} config
+ */
+function refreshRuntimeId (config) {
+  runtimeId = uuid()
+  config.tags['runtime-id'] = runtimeId
 }

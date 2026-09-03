@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
 
+const { getAllBaggageItems } = require('../../../packages/dd-trace/src/baggage')
 const id = require('../../../packages/dd-trace/src/id')
 const SpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../../../packages/dd-trace/src/opentracing/propagation/text_map')
@@ -18,11 +19,11 @@ const propagator = new TextMapPropagator({
     extract: ['datadog', 'tracecontext', 'baggage'],
     inject: ['datadog', 'tracecontext', 'baggage'],
   },
-  legacyBaggageEnabled: false,
+  legacyBaggageEnabled: true,
   baggageMaxItems: 64,
   baggageMaxBytes: 8192,
-  tagsHeaderMaxLength: 512,
-  tracePropagationExtractFirst: false,
+  DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512,
+  DD_TRACE_PROPAGATION_EXTRACT_FIRST: false,
   DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
   baggageTagKeys: ['user.id', 'session.id', 'account.id'],
 })
@@ -41,6 +42,14 @@ const EXTRACT_CARRIER_PERCENT = {
   baggage: 'tenant=acme%20corp,path=%2Forders%2Fnew,note=hello%20world',
 }
 
+const EXTRACT_CARRIER_DATADOG = {
+  'x-datadog-trace-id': '1234567890',
+  'x-datadog-parent-id': '9876543210',
+  'x-datadog-sampling-priority': '1',
+  'x-datadog-origin': 'synthetics',
+  'x-datadog-tags': '_dd.p.dm=-1,_dd.p.tid=1234567890abcdef',
+}
+
 const injectContext = new SpanContext({
   traceId: id('1234567890abcdef'),
   spanId: id('abcdef1234567890'),
@@ -53,14 +62,29 @@ const injectContext = new SpanContext({
   },
 })
 
-// Pre-flight: confirm extract / inject are doing real work; catches a silent
+// Pre-flight: confirm the selected variant does real work; catches a silent
 // breakage where the duck-typed config is missing a field the propagator now reads.
-const sanityExtract = propagator.extract(EXTRACT_CARRIER_ASCII)
-assert.ok(sanityExtract?._traceId, 'extract returned no trace id')
-
-const sanityInjected = {}
-propagator.inject(injectContext, sanityInjected)
-assert.ok(sanityInjected.traceparent && sanityInjected['x-datadog-trace-id'], 'inject populated no headers')
+if (VARIANT === 'extract') {
+  const sanityExtract = propagator.extract(EXTRACT_CARRIER_ASCII)
+  assert.ok(sanityExtract?._traceId, 'extract returned no trace id')
+} else if (VARIANT === 'extract-baggage-percent') {
+  const sanityExtract = propagator.extract(EXTRACT_CARRIER_PERCENT)
+  assert.ok(sanityExtract?._traceId, 'extract returned no trace id')
+  assert.strictEqual(getAllBaggageItems().tenant, 'acme corp')
+} else if (VARIANT === 'extract-datadog') {
+  const sanityExtract = propagator.extract(EXTRACT_CARRIER_DATADOG)
+  assert.strictEqual(sanityExtract?.toTraceId(), '1234567890')
+  assert.strictEqual(sanityExtract?._sampling.priority, 1)
+  assert.strictEqual(sanityExtract?._trace.origin, 'synthetics')
+  assert.deepStrictEqual(sanityExtract?._trace.tags, {
+    '_dd.p.dm': '-1',
+    '_dd.p.tid': '1234567890abcdef',
+  })
+} else if (VARIANT === 'inject') {
+  const sanityInjected = {}
+  propagator.inject(injectContext, sanityInjected)
+  assert.ok(sanityInjected.traceparent && sanityInjected['x-datadog-trace-id'], 'inject populated no headers')
+}
 
 guard.loopStart()
 if (VARIANT === 'extract') {
@@ -70,6 +94,10 @@ if (VARIANT === 'extract') {
 } else if (VARIANT === 'extract-baggage-percent') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     propagator.extract(EXTRACT_CARRIER_PERCENT)
+  }
+} else if (VARIANT === 'extract-datadog') {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+    propagator.extract(EXTRACT_CARRIER_DATADOG)
   }
 } else if (VARIANT === 'inject') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {

@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/5645ffb8-c97e-4ce4-89f2-c41931318fd9/datasets/01a05521-e815-4d74-88e4-91d73d747b5f/records",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "293"
+    },
+    "body": "{\"data\":{\"type\":\"datasets\",\"attributes\":{\"records\":[{\"id\":\"custom-a\",\"input\":{\"value\":1},\"expected_output\":{\"value\":2},\"metadata\":{\"source\":\"client-custom-records-test\"}},{\"id\":\"custom-b\",\"input\":{\"value\":2},\"expected_output\":{\"value\":3},\"metadata\":{\"source\":\"client-custom-records-test\"}}]}}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "942",
+      "date": "Fri, 31 Jul 2026 21:35:30 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": "{\"data\":[{\"id\":\"custom-a\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"canonical_id\":\"7e4ff9f4-188a-44b0-b2e7-f55cf340e0cb\",\"created_at\":\"2026-07-31T21:35:30.142298637Z\",\"dataset_id\":\"01a05521-e815-4d74-88e4-91d73d747b5f\",\"expected_output\":{\"value\":2},\"input\":{\"value\":1},\"metadata\":{\"source\":\"client-custom-records-test\"},\"tags\":[],\"ttl\":\"2029-07-30T21:35:30.152253983Z\",\"updated_at\":\"2026-07-31T21:35:30.142298637Z\",\"version\":1}},{\"id\":\"custom-b\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"canonical_id\":\"a4f472e3-90ce-42dd-9fe0-fe88dc503822\",\"created_at\":\"2026-07-31T21:35:30.142298637Z\",\"dataset_id\":\"01a05521-e815-4d74-88e4-91d73d747b5f\",\"expected_output\":{\"value\":3},\"input\":{\"value\":2},\"metadata\":{\"source\":\"client-custom-records-test\"},\"tags\":[],\"ttl\":\"2029-07-30T21:35:30.152263591Z\",\"updated_at\":\"2026-07-31T21:35:30.142298637Z\",\"version\":1}}]}"
+  }
+}

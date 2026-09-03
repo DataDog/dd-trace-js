@@ -1,12 +1,10 @@
 'use strict'
 
 describe('early flake detection focus', () => {
-  // eslint-disable-next-line mocha/no-exclusive-tests
   test.only('known focused test', () => {
     expect(1 + 2).toBe(3)
   })
 
-  // eslint-disable-next-line mocha/no-exclusive-tests
   test.only('new focused test skipped by pattern', () => {
     expect(2 + 1).toBe(3)
   })
@@ -25,6 +23,7 @@ describe.only('early flake detection focused block', () => {
   })
 })
 
+// This skipped block verifies that Early Flake Detection does not retry skipped tests.
 describe.skip('early flake detection skipped block', () => {
   test('new test inside a skipped block', () => {
     expect(3 + 3).toBe(6)

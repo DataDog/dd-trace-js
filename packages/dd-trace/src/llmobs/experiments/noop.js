@@ -7,6 +7,15 @@ const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
 const NOOP_SPAN_ID = '0000000000000000'
 const NOOP_TRACE_ID = '00000000000000000000000000000000'
 
+/**
+ * @typedef {object} DatasetRecordNew
+ * @property {string} [id]
+ * @property {unknown} inputData
+ * @property {unknown} [expectedOutput]
+ * @property {Record<string, unknown>} [metadata]
+ * @property {string[]} [tags]
+ */
+
 class NoopDataset {
   #name
   #description
@@ -34,6 +43,24 @@ class NoopDataset {
       metadata: metadata ?? {},
       tags: [...(tags ?? [])],
     })
+    return this
+  }
+
+  /**
+   * Add multiple records to a dataset.
+   * @param {DatasetRecordNew[]} records
+   * @returns {NoopDataset} This dataset for chaining.
+   */
+  addRecords (records) {
+    for (const record of records) {
+      this.#records.push({
+        id: record.id ?? null,
+        input: record.inputData,
+        expectedOutput: record.expectedOutput ?? null,
+        metadata: record.metadata ?? {},
+        tags: [...(record.tags ?? [])],
+      })
+    }
     return this
   }
 
@@ -114,6 +141,10 @@ class NoopDataset {
     return null
   }
 
+  projectName () {
+    return null
+  }
+
   version () {
     return null
   }
@@ -165,7 +196,13 @@ class NoopExperiment {
   }
 
   run () {
-    return Promise.resolve({ experimentId: null, rows: [], url: null })
+    return Promise.resolve({
+      experimentId: null,
+      rows: [],
+      summaryEvaluations: {},
+      runs: [],
+      url: null,
+    })
   }
 
   /**
@@ -200,11 +237,9 @@ class NoopExperiment {
 // throwing, so intentionally disabled experiments remain graceful.
 class NoopExperiments {
   #reason
-  #startExperiment
 
-  constructor (reason, options = {}) {
+  constructor (reason) {
     this.#reason = reason || 'LLMObs experiments are not available'
-    this.#startExperiment = options.startExperiment
   }
 
   #warn () {
@@ -231,10 +266,6 @@ class NoopExperiments {
    * @returns {Promise<ExternalExperiment>}
    */
   startExperiment (options = {}) {
-    if (this.#startExperiment !== undefined && options.projectName) {
-      return this.#startExperiment(options)
-    }
-
     this.#warn()
     return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name, true)))
   }

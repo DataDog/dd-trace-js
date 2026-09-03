@@ -65,6 +65,7 @@ export interface GeneratedConfig {
   };
   dbmPropagationMode: "disabled" | "service" | "full" | "dynamic_service";
   DD_ACTION_EXECUTION_ID: string | undefined;
+  DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_API_KEY: string | undefined;
@@ -272,6 +273,7 @@ export interface GeneratedConfig {
   DD_TRACE_HAPI_ENABLED: boolean;
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HONO_ENABLED: boolean;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;
@@ -418,6 +420,7 @@ export interface GeneratedConfig {
       endpoint: string | undefined;
       maxContentSize: number;
       maxMessagesLength: number;
+      redactionEnabled: boolean;
       timeout: number;
     };
     appsec: {
@@ -473,6 +476,7 @@ export interface GeneratedConfig {
     agentlessEnabled: boolean | undefined;
     DD_LLMOBS_ENABLED: boolean;
     mlApp: string | undefined;
+    projectName: string | undefined;
     sampleRate: number;
   };
   logInjection: boolean;
@@ -578,6 +582,7 @@ export interface GeneratedConfig {
     DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
     DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
     DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
+    DD_TEST_FAILURE_VIDEOS_ENABLED: boolean | undefined;
     DD_TEST_FLEET_CONFIG_PATH: string | undefined;
     DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
     DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
@@ -607,6 +612,7 @@ export interface GeneratedEnvVarConfig {
   DATADOG_API_KEY: string | undefined;
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENT_HOST: string;
+  DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_AI_GUARD_BLOCK: boolean;
@@ -614,6 +620,7 @@ export interface GeneratedEnvVarConfig {
   DD_AI_GUARD_ENDPOINT: string | undefined;
   DD_AI_GUARD_MAX_CONTENT_SIZE: number;
   DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
+  DD_AI_GUARD_REDACTION_ENABLED: boolean;
   DD_AI_GUARD_TIMEOUT: number;
   DD_API_KEY: string | undefined;
   DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
@@ -758,6 +765,7 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
   DD_LLMOBS_ENABLED: boolean;
   DD_LLMOBS_ML_APP: string | undefined;
+  DD_LLMOBS_PROJECT_NAME: string | undefined;
   DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
@@ -822,6 +830,7 @@ export interface GeneratedEnvVarConfig {
   DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
   DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
+  DD_TEST_FAILURE_VIDEOS_ENABLED: boolean | undefined;
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
@@ -970,6 +979,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HEADER_TAGS: string[];
   DD_TRACE_HONO_ENABLED: boolean;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;

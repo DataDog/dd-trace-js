@@ -25,6 +25,7 @@ const {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
   getLineCoverageBitmap,
+  getTestCoverageLinesData,
   getTestCoverageLinesPercentage,
   applySkippedCoverageToCoverage,
   mergeCoverage,
@@ -403,11 +404,13 @@ describe('getTestSessionName', () => {
   let originalEnv
 
   function getTestSessionNameWithMajor (ddMajor) {
-    const lage = proxyquire.noPreserveCache()('../../../src/ci-visibility/lage', {
+    const loadLage = proxyquire.noPreserveCache()
+    const lage = loadLage('../../../src/ci-visibility/lage', {
       '../../../../version': { DD_MAJOR: ddMajor },
     })
 
-    return proxyquire.noPreserveCache()('../../../src/plugins/util/test', {
+    const loadTest = proxyquire.noPreserveCache()
+    return loadTest('../../../src/plugins/util/test', {
       '../../ci-visibility/lage': lage,
     }).getTestSessionName
   }
@@ -781,7 +784,8 @@ describe('attempt to fix summary', () => {
 describe('test management summary', () => {
   it('does not read report configuration for unmanaged tests', () => {
     const getValueFromEnvSources = sinon.stub()
-    const { recordTestManagementExecution: recordExecution } = proxyquire.noPreserveCache()(
+    const loadTest = proxyquire.noPreserveCache()
+    const { recordTestManagementExecution: recordExecution } = loadTest(
       '../../../src/plugins/util/test',
       {
         '../../config/helper': {
@@ -1517,6 +1521,24 @@ describe('coverage utils', () => {
       assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 75)
     })
 
+    it('calculates coverage and executable-line files together', () => {
+      const partialCoverage = getPartialCoverage()
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.deepStrictEqual(getTestCoverageLinesData(partialCoverage, skippedCoverage, undefined, true), {
+        percentage: 75,
+        executableFiles: [{
+          filename: 'file.js',
+          bitmap: Buffer.from('Hg==', 'base64'),
+        }],
+      })
+    })
+
     it('uses rootDir to match skipped coverage to absolute coverage paths', () => {
       const rootDir = path.join(path.sep, 'repo')
       const coverage = getPartialCoverage(path.join(rootDir, 'file.js'))
@@ -1528,6 +1550,25 @@ describe('coverage utils', () => {
       }
 
       assert.strictEqual(getTestCoverageLinesPercentage(coverage, skippedCoverage, rootDir), 75)
+    })
+
+    it('merges coverage paths that normalize to the same file', () => {
+      const rootDir = path.join(path.sep, 'repo')
+      const filename = path.join(rootDir, 'file.js')
+      const alias = `${path.join(rootDir, 'sub')}${path.sep}..${path.sep}file.js`
+      const aliasedCoverage = getPartialCoverage(alias)
+      aliasedCoverage[alias].s[0] = 0
+
+      assert.deepStrictEqual(getTestCoverageLinesData({
+        ...getPartialCoverage(filename),
+        ...aliasedCoverage,
+      }, undefined, rootDir, true), {
+        percentage: 25,
+        executableFiles: [{
+          filename: 'file.js',
+          bitmap: Buffer.from('Hg==', 'base64'),
+        }],
+      })
     })
 
     it('ignores skipped coverage for files outside the executable coverage map', () => {

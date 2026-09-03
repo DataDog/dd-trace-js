@@ -423,13 +423,10 @@ describe('profiler', () => {
     await agent.stop()
   })
 
-  describe('on non-Windows platforms', () => {
-    before(function () {
-      if (process.platform === 'win32') {
-        this.skip()
-      }
-    })
+  const nonWindowsDescribe = process.platform === 'win32' ? describe.skip : describe
 
+  // The profiler is not supported on Windows.
+  nonWindowsDescribe('on non-Windows platforms', () => {
     it('code hotspots and endpoint tracing works', async function () {
       // see comment on busyCycleTimeNs recomputation below. Ideally a single retry should be enough
       // with recomputed busyCycleTimeNs, but let's give ourselves more leeway.
@@ -659,20 +656,22 @@ describe('profiler', () => {
       }
     })
 
-    it('gc timeline events work with the minor mark-sweep collector', async function () {
+    {
+      const gcTimelineTest = satisfies(process.versions.node, '>=22.0.0') ? it : it.skip
+
       // V8's --minor-ms collector emits GC events with kind 2, which has no
       // NODE_PERFORMANCE_GC_* constant and used to crash the profiler.
       // It is stable since Node 22. See issue #8839.
-      if (!satisfies(process.versions.node, '>=22.0.0')) {
-        this.skip()
-      }
-      const gcTypes = await gatherGcTypes(cwd, 'profiler/gctest.js', agent.port, ['--minor-ms'])
-      // The collector was renamed from minor_mark_compact to minor_mark_sweep in Node 22.
-      assert.ok(gcTypes.has('minor_mark_sweep'), `Expected a minor_mark_sweep GC event, got ${inspect(gcTypes)}`)
-      for (const gcType of gcTypes) {
-        assert.doesNotMatch(gcType, /^unknown/, `Unexpected unknown GC type: ${gcType}`)
-      }
-    })
+      // This regression test requires the stable Node.js 22 inspector implementation.
+      gcTimelineTest('gc timeline events work with the minor mark-sweep collector', async function () {
+        const gcTypes = await gatherGcTypes(cwd, 'profiler/gctest.js', agent.port, ['--minor-ms'])
+        // The collector was renamed from minor_mark_compact to minor_mark_sweep in Node 22.
+        assert.ok(gcTypes.has('minor_mark_sweep'), `Expected a minor_mark_sweep GC event, got ${inspect(gcTypes)}`)
+        for (const gcType of gcTypes) {
+          assert.doesNotMatch(gcType, /^unknown/, `Unexpected unknown GC type: ${gcType}`)
+        }
+      })
+    }
   })
 
   context('shutdown', () => {
@@ -708,13 +707,10 @@ describe('profiler', () => {
       await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
     })
 
-    describe('on non-Windows platform', () => {
-      before(function () {
-        if (process.platform === 'win32') {
-          this.skip()
-        }
-      })
+    const nonWindowsOomDescribe = process.platform === 'win32' ? describe.skip : describe
 
+    // The profiler is not supported on Windows.
+    nonWindowsOomDescribe('on non-Windows platform', () => {
       // All OOM tests below are retried 3 times because OOM export behavior is timing-sensitive
       // and Node.js version-dependent: newer V8 versions (e.g. Node 26) crash faster or handle
       // worker OOM differently, making these tests inherently unreliable without retries.
@@ -883,43 +879,44 @@ describe('profiler', () => {
       assert.strictEqual(requestCount, pointsCount)
     })
 
-    it('sends wall profiler sample context telemetry', async function () {
-      if (satisfies(process.versions.node, '<24.0.0')) {
-        this.skip() // Wall profiler context count telemetry is not supported in Node < 24
-      }
-      if (process.platform === 'win32') {
-        this.skip() // Wall profiler context count telemetry is not supported on Windows
-      }
-      proc = fork(profilerTestFile, {
-        cwd,
-        env: {
-          DD_TRACE_AGENT_PORT: agent.port,
-          DD_PROFILING_ENABLED: '1',
-          DD_PROFILING_UPLOAD_PERIOD: '1',
-          DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '1',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1', // every second
-          TEST_DURATION_MS: 3000,
-        },
-      })
+    {
+      const wallProfilerSupported = satisfies(process.versions.node, '>=24.0.0') && process.platform !== 'win32'
+      const wallProfilerTest = wallProfilerSupported ? it : it.skip
 
-      const checkMetrics = agent.assertTelemetryReceived({
-        fn: ({ _, payload }) => {
-          const pp = payload.payload;
-          ['live', 'used'].forEach(metricName => {
-            const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
-            assert.notStrictEqual(sampleContexts, undefined)
-            assert.strictEqual(sampleContexts.type, 'gauge')
-            assert.ok(sampleContexts.points[0][1] >= 1, `Expected ${sampleContexts.points[0][1]} >= 1`)
-          })
-        },
-        requestType: 'generate-metrics',
-        timeout,
-        resolveAtFirstSuccess: true,
-        namespace: 'profilers',
-      })
+      // Wall profiler context count telemetry is not supported before Node.js 24.
+      // Wall profiler context count telemetry is not supported on Windows.
+      wallProfilerTest('sends wall profiler sample context telemetry', async function () {
+        proc = fork(profilerTestFile, {
+          cwd,
+          env: {
+            DD_TRACE_AGENT_PORT: agent.port,
+            DD_PROFILING_ENABLED: '1',
+            DD_PROFILING_UPLOAD_PERIOD: '1',
+            DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '1',
+            DD_TELEMETRY_HEARTBEAT_INTERVAL: '1', // every second
+            TEST_DURATION_MS: 3000,
+          },
+        })
 
-      await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics])
-    })
+        const checkMetrics = agent.assertTelemetryReceived({
+          fn: ({ _, payload }) => {
+            const pp = payload.payload;
+            ['live', 'used'].forEach(metricName => {
+              const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
+              assert.notStrictEqual(sampleContexts, undefined)
+              assert.strictEqual(sampleContexts.type, 'gauge')
+              assert.ok(sampleContexts.points[0][1] >= 1, `Expected ${sampleContexts.points[0][1]} >= 1`)
+            })
+          },
+          requestType: 'generate-metrics',
+          timeout,
+          resolveAtFirstSuccess: true,
+          namespace: 'profilers',
+        })
+
+        await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics])
+      })
+    }
   })
 
   function forkSsi (args) {

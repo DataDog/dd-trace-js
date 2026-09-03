@@ -2,14 +2,17 @@
 
 const { URL } = require('url')
 const log = require('../../log')
+const { createServerlessDeliveryTracker } = require('../../serverless')
 const Writer = require('./writer')
 
 class AgentExporter {
   #timer
+  #serverlessDeliveryTracker
 
   constructor (config, prioritySampler) {
+    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._config = config
-    const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
+    const { lookup, protocolVersion, stats = {}, apmTracingEnabled, flushInterval } = config
     this._url = config.url
 
     const headers = {}
@@ -22,7 +25,9 @@ class AgentExporter {
       prioritySampler,
       lookup,
       protocolVersion,
+      flushInterval,
       headers,
+      deliveryTracker: this.#serverlessDeliveryTracker,
     })
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
@@ -54,10 +59,26 @@ class AgentExporter {
     }
   }
 
-  flush (done = () => {}) {
+  flush (done) {
     clearTimeout(this.#timer)
     this.#timer = undefined
-    this._writer.flush(done)
+
+    if (!this.#serverlessDeliveryTracker) {
+      try {
+        return this._writer.flush(done)
+      } catch (error) {
+        log.error('Failed to flush traces: %s', error.message)
+        done?.()
+        return
+      }
+    }
+
+    try {
+      this._writer.flush()
+    } catch (error) {
+      log.error('Failed to flush traces: %s', error.message)
+    }
+    this.#serverlessDeliveryTracker.waitForIdle(done)
   }
 }
 

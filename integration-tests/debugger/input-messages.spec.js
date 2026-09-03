@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('assert')
+const { on, once } = require('node:events')
+const { setTimeout: delay } = require('node:timers/promises')
+
 const { pollInterval, setup, testBasicInput } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -9,60 +12,58 @@ describe('Dynamic Instrumentation', function () {
   describe('input messages', function () {
     it('should capture and send expected payload when a log line probe is triggered', testBasicInput.bind(null, t))
 
-    it('should respond with updated message if probe message is updated', function (done) {
+    it('should respond with updated message if probe message is updated', async function () {
       const expectedMessages = ['Hello World!', 'Hello Updated World!']
-      const triggers = [
-        async () => {
-          await t.axios.get(t.breakpoint.url)
-          t.rcConfig.config.version++
-          t.rcConfig.config.template = 'Hello Updated World!'
-          t.agent.updateRemoteConfig(t.rcConfig.id, t.rcConfig.config)
-        },
-        async () => {
-          await t.axios.get(t.breakpoint.url)
-        },
-      ]
+      const receivedMessages = []
 
-      t.agent.on('debugger-diagnostics', ({ payload }) => {
-        payload.forEach((event) => {
-          if (event.debugger.diagnostics.status === 'INSTALLED') {
-            const trigger = triggers.shift()
-            assert.ok(trigger, 'expecting a trigger function to be defined')
-            trigger().catch(done)
-          }
-        })
-      })
+      /** @param {{ payload: Array<{ message: string }> }} event */
+      function collectMessages ({ payload }) {
+        for (const { message } of payload) receivedMessages.push(message)
+      }
+      t.agent.on('debugger-input', collectMessages)
 
-      t.agent.on('debugger-input', ({ payload: [payload] }) => {
-        assert.strictEqual(payload.message, expectedMessages.shift())
-        if (expectedMessages.length === 0) done()
-      })
+      try {
+        const firstInput = once(t.agent, 'debugger-input')
+        const firstTrigger = t.triggerBreakpoint()
+        t.agent.addRemoteConfig(t.rcConfig)
+        await Promise.all([firstTrigger, firstInput])
 
-      t.agent.addRemoteConfig(t.rcConfig)
+        t.rcConfig.config.version++
+        t.rcConfig.config.template = 'Hello Updated World!'
+        const secondInput = once(t.agent, 'debugger-input')
+        const secondTrigger = t.triggerBreakpoint()
+        t.agent.updateRemoteConfig(t.rcConfig.id, t.rcConfig.config)
+        await Promise.all([secondTrigger, secondInput])
+        await delay(pollInterval * 2 * 1000)
+      } finally {
+        t.agent.removeListener('debugger-input', collectMessages)
+      }
+
+      assert.deepStrictEqual(receivedMessages, expectedMessages)
     })
 
-    it('should not trigger if probe is deleted', function (done) {
-      t.agent.on('debugger-diagnostics', ({ payload }) => {
-        payload.forEach((event) => {
-          if (event.debugger.diagnostics.status === 'INSTALLED') {
-            t.agent.once('remote-config-responded', async () => {
-              await t.axios.get(t.breakpoint.url)
-              // We want to wait enough time to see if the client triggers on the breakpoint so that the test can fail
-              // if it does, but not so long that the test times out.
-              // TODO: Is there some signal we can use instead of a timer?
-              setTimeout(done, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
-            })
+    it('should not trigger if probe is deleted', async function () {
+      const diagnostics = on(t.agent, 'debugger-diagnostics')
+      let inputCount = 0
+      const countInput = () => inputCount++
+      t.agent.on('debugger-input', countInput)
 
-            t.agent.removeRemoteConfig(t.rcConfig.id)
-          }
-        })
-      })
+      try {
+        t.agent.addRemoteConfig(t.rcConfig)
+        for await (const [{ payload }] of diagnostics) {
+          if (payload.some(event => event.debugger.diagnostics.status === 'INSTALLED')) break
+        }
 
-      t.agent.on('debugger-input', () => {
-        assert.fail('should not capture anything when the probe is deleted')
-      })
+        const configRemoved = once(t.agent, 'remote-config-responded')
+        t.agent.removeRemoteConfig(t.rcConfig.id)
+        await configRemoved
+        await t.request(t.breakpoint.url)
+        await delay(pollInterval * 2 * 1000)
+      } finally {
+        t.agent.removeListener('debugger-input', countInput)
+      }
 
-      t.agent.addRemoteConfig(t.rcConfig)
+      assert.strictEqual(inputCount, 0)
     })
   })
 })

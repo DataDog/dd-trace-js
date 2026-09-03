@@ -1,7 +1,9 @@
 'use strict'
 const getConfig = require('../../../config')
-const log = require('../../../log')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../../evp_proxy/path')
 const { safeJSONStringify } = require('../../../exporters/common/util')
+const log = require('../../../log')
 
 const {
   incrementCountMetric,
@@ -14,6 +16,7 @@ const {
 } = require('../../../ci-visibility/telemetry')
 const { CoverageCIVisibilityEncoder } = require('../../../encode/coverage-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
+const { getAgent } = require('../agents')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
 
@@ -21,7 +24,7 @@ class Writer extends BaseWriter {
   #requestTracker
 
   constructor ({ url, evpProxyPrefix = '' }) {
-    super(...arguments)
+    super({ ...arguments[0], retainOnBackpressure: true })
     this.#requestTracker = new TestOptimizationRequestTracker(this)
     this._url = url
     this._encoder = new CoverageCIVisibilityEncoder(this)
@@ -49,17 +52,18 @@ class Writer extends BaseWriter {
       },
       timeout: 15_000,
       url: this._url,
+      agent: getAgent(this._url),
       deadline: flushOptions?.deadline,
     }
 
     if (this._evpProxyPrefix) {
-      options.path = `${this._evpProxyPrefix}/api/v2/citestcov`
+      options.path = joinEVPProxyPath(this._evpProxyPrefix, '/api/v2/citestcov')
       delete options.headers['dd-api-key']
-      options.headers['X-Datadog-EVP-Subdomain'] = 'citestcov-intake'
+      options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'citestcov-intake'
     }
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
+    log.debug(() => `Request to the intake: ${safeJSONStringify({ ...options, agent: undefined })}`)
 
     const startRequestTime = Date.now()
 
@@ -75,11 +79,11 @@ class Writer extends BaseWriter {
       if (err) {
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-          { endpoint: 'code_coverage', statusCode }
+          { endpoint: 'code_coverage', statusCode, errorType: statusCode ? undefined : err.code }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'code_coverage' }
+          { endpoint: 'code_coverage', statusCode, errorType: statusCode ? undefined : err.code }
         )
         log.error('Error sending CI coverage payload', err)
         done(err)

@@ -48,14 +48,21 @@ const { NODE_MAJOR } = require('../../version')
 const latestVersions = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const isLegacyBrowserProvider = process.env.VITEST_BROWSER_LEGACY === '1' || NODE_MAJOR <= 18
 const vitestVersion = isLegacyBrowserProvider ? '3.2.6' : latestVersions.vitest
+const browserProvider = process.env.VITEST_BROWSER_PROVIDER || 'playwright'
+const browserName = browserProvider === 'webdriverio' ? 'chrome' : 'chromium'
+const browserProjectName = `browser-${browserName}`
+const browserProviderDescription = browserProvider === 'playwright' ? '' : ` with ${browserProvider}`
 const playwrightVersion = getLatestPlaywrightSpecifier()
 const browserProviderDependency = isLegacyBrowserProvider
   ? `@vitest/browser@${vitestVersion}`
-  : `@vitest/browser-playwright@${vitestVersion}`
+  : `@vitest/browser-${browserProvider}@${vitestVersion}`
+const browserRuntimeDependency = browserProvider === 'webdriverio'
+  ? `webdriverio@${latestVersions.webdriverio}`
+  : `playwright@${playwrightVersion}`
 const sandboxDependencies = [
   `vitest@${vitestVersion}`,
   browserProviderDependency,
-  `playwright@${playwrightVersion}`,
+  browserRuntimeDependency,
 ]
 if (isLegacyBrowserProvider) {
   sandboxDependencies.push('vite@6.1.0')
@@ -76,7 +83,7 @@ function getTestByName (tests, name) {
   return test
 }
 
-describe(`vitest@${vitestVersion} Browser Mode`, function () {
+describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, function () {
   this.timeout(180_000)
 
   const runtimeEfdSuiteAdmissionIt = isLegacyBrowserProvider ? it.skip : it
@@ -90,7 +97,9 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
   before(function () {
     this.timeout(120_000)
     cwd = sandboxCwd()
-    installPlaywrightChromium(cwd)
+    if (browserProvider === 'playwright') {
+      installPlaywrightChromium(cwd)
+    }
   })
 
   beforeEach(async () => {
@@ -157,8 +166,8 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       const passedTest = getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
       assert.strictEqual(passedTest.meta[TEST_STATUS], 'pass')
       assert.strictEqual(passedTest.meta[TEST_TYPE], 'browser')
-      assert.strictEqual(passedTest.meta[TEST_BROWSER_NAME], 'chromium')
-      assert.strictEqual(passedTest.meta[TEST_BROWSER_DRIVER], 'playwright')
+      assert.strictEqual(passedTest.meta[TEST_BROWSER_NAME], browserName)
+      assert.strictEqual(passedTest.meta[TEST_BROWSER_DRIVER], browserProvider)
       assert.strictEqual(passedTest.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
       assert.strictEqual(passedTest.meta[TEST_FINAL_STATUS], 'pass')
       assert.strictEqual(passedTest.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
@@ -167,8 +176,8 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.ok(!(TEST_IS_RUM_ACTIVE in passedTest.meta))
       assert.deepStrictEqual(JSON.parse(passedTest.meta[TEST_PARAMETERS]), {
         arguments: {
-          browser: 'chromium',
-          project: 'browser-chromium',
+          browser: browserName,
+          project: browserProjectName,
         },
         metadata: {},
       })
@@ -176,7 +185,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       const skippedTest = getTestByName(tests, 'vitest browser reporting reports skipped browser tests')
       assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
       assert.strictEqual(skippedTest.meta[TEST_TYPE], 'browser')
-      assert.strictEqual(skippedTest.meta[TEST_BROWSER_NAME], 'chromium')
+      assert.strictEqual(skippedTest.meta[TEST_BROWSER_NAME], browserName)
       assert.strictEqual(skippedTest.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
       assert.strictEqual(skippedTest.meta[TEST_FINAL_STATUS], 'skip')
       assert.strictEqual(skippedTest.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
@@ -584,7 +593,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
         const browserTest = getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
         assert.strictEqual(browserTest.meta[TEST_STATUS], 'pass')
         assert.strictEqual(browserTest.meta[TEST_TYPE], 'browser')
-        assert.strictEqual(browserTest.meta[TEST_BROWSER_NAME], 'chromium')
+        assert.strictEqual(browserTest.meta[TEST_BROWSER_NAME], browserName)
 
         const [testSession] = getEventContents(events, 'test_session_end')
         assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
@@ -634,8 +643,10 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
-  if (!isLegacyBrowserProvider) {
-    it('honors object-form retries before quarantining browser failures', async () => {
+  {
+    const objectRetryTest = isLegacyBrowserProvider ? it.skip : it
+
+    objectRetryTest('honors object-form retries before quarantining browser failures', async () => {
       const testSuite = 'ci-visibility/vitest-browser-tests/browser-object-retry-quarantine.mjs'
       receiver.setSettings({
         test_management: {
@@ -677,7 +688,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
-    it('quarantines failures when an object-form retry condition stops retries', async () => {
+    objectRetryTest('quarantines failures when an object-form retry condition stops retries', async () => {
       const testSuite = 'ci-visibility/vitest-browser-tests/browser-conditional-retry-quarantine.mjs'
       receiver.setSettings({
         test_management: {

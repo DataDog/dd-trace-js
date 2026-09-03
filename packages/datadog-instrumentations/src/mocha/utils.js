@@ -299,6 +299,9 @@ function retryTest (test, numRetries, tags, retryPolicy) {
         clonedTest[tag] = true
       }
     }
+    if (clonedTest._ddIsQuarantined && !clonedTest._ddIsAttemptToFix) {
+      testsQuarantined.add(clonedTest)
+    }
   }
 }
 
@@ -504,7 +507,8 @@ function inheritDatadogPropertiesFromRetriedTest (test) {
 }
 
 function runnableWrapper (RunnablePackage, libraryConfig) {
-  shimmer.wrap(RunnablePackage.prototype, 'run', run => function (...args) {
+  const Runnable = RunnablePackage.Runnable ?? RunnablePackage
+  shimmer.wrap(Runnable.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
@@ -1146,7 +1150,7 @@ function getRunTestsWrapper (runTests, config) {
                 retryTest(
                   test,
                   config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
-                  ['_ddIsModified', '_ddIsEfdRetry'],
+                  ['_ddIsModified', '_ddIsEfdRetry', test._ddIsQuarantined && '_ddIsQuarantined'],
                   config.earlyFlakeDetectionRetryPolicy
                 )
               }
@@ -1165,7 +1169,7 @@ function getRunTestsWrapper (runTests, config) {
             retryTest(
               test,
               config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
-              ['_ddIsNew', '_ddIsEfdRetry'],
+              ['_ddIsNew', '_ddIsEfdRetry', test._ddIsQuarantined && '_ddIsQuarantined'],
               config.earlyFlakeDetectionRetryPolicy
             )
           }

@@ -15,6 +15,9 @@ const {
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
+  TEST_NAME,
+  TEST_IS_NEW,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_IS_RETRY,
   TEST_RETRY_REASON,
   TEST_HAS_FAILED_ALL_RETRIES,
@@ -32,11 +35,7 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   // TODO: Remove this once we drop suppport for v5
-  const contextNewVersions = (...args) => {
-    if (satisfies(version, '>=1.38.0') || version === 'latest') {
-      context(...args)
-    }
-  }
+  const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
@@ -252,6 +251,19 @@ versions.forEach((version) => {
         })
         receiver.setKnownTests({ playwright: {} })
 
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const uniqueTests = new Map(tests.map(test => [test.meta[TEST_NAME], test]))
+
+            assert.strictEqual(uniqueTests.size, 8)
+            for (const test of uniqueTests.values()) {
+              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+              assert.strictEqual(test.meta[TEST_HAS_DYNAMIC_NAME], 'true')
+            }
+          }, 30000)
+
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
@@ -267,14 +279,9 @@ versions.forEach((version) => {
         proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
         proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
-        const eventsPromise = receiver
-          .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), () => {
-            assert.match(testOutput, /detected as new but their names contain dynamic data/)
-          })
-
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
-        // Dynamic names differ between discovery and worker processes, so Playwright cannot find these tests.
-        assert.strictEqual(exitCode, 1, testOutput)
+        assert.strictEqual(exitCode, 0, testOutput)
+        assert.match(testOutput, /detected as new but their names contain dynamic data/)
       })
     })
   })

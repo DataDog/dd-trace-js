@@ -3,11 +3,13 @@
 const assert = require('node:assert/strict')
 const { hostname } = require('os')
 
+const { channel } = require('dc-polyfill')
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
+
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const { version } = require('../src/pkg')
 const pkg = require('../../../package.json')
@@ -27,6 +29,7 @@ const {
   DEFAULT_SERVICE_NAME,
 } = require('../src/encode/tags-processors')
 const processTags = require('../src/process-tags')
+const { getConfigFresh } = require('./helpers/config')
 
 // Mock spans use the post-format field name `start` (nanoseconds), matching
 // what `SpanProcessor.process` hands to `onSpanFinished` via the formatted
@@ -81,12 +84,14 @@ const syntheticSpan = {
 
 const exporter = {
   export: sinon.stub(),
+  flush: sinon.stub(),
 }
 
 const SpanStatsExporter = sinon.stub().returns(exporter)
 
 const otlpExporter = {
   export: sinon.stub(),
+  flush: sinon.stub(),
 }
 
 const {
@@ -444,7 +449,6 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(processor.hostname, hostname())
     assert.strictEqual(processor.enabled, config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED)
     assert.strictEqual(processor.env, config.env)
-    assert.deepStrictEqual(processor.tags, config.tags)
     assert.strictEqual(processor.version, config.version)
   })
 
@@ -557,10 +561,29 @@ describe('SpanStatsProcessor', () => {
       }],
       Lang: 'javascript',
       TracerVersion: pkg.version,
-      RuntimeID: processor.tags['runtime-id'],
+      RuntimeID: config.tags['runtime-id'],
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
     })
+  })
+
+  it('should export the current runtime ID after remote config replaces tags', () => {
+    const config = getConfigFresh({ stats: true })
+    const processor = new SpanStatsProcessor(config)
+    clearTimeout(processor.timer)
+    const originalTags = config.tags
+    const originalRuntimeId = originalTags['runtime-id']
+
+    processor.onInterval()
+    assert.strictEqual(exporter.export.lastCall.args[0].RuntimeID, originalRuntimeId)
+
+    config.setRemoteConfig({ tags: { team: 'backend' } })
+    assert.notStrictEqual(config.tags, originalTags)
+    channel('datadog:identity:update').publish(config)
+    processor.onInterval()
+
+    assert.notStrictEqual(config.tags['runtime-id'], originalRuntimeId)
+    assert.strictEqual(exporter.export.lastCall.args[0].RuntimeID, config.tags['runtime-id'])
   })
 
   it('should export on interval with default version', () => {
@@ -576,7 +599,7 @@ describe('SpanStatsProcessor', () => {
       Stats: [],
       Lang: 'javascript',
       TracerVersion: pkg.version,
-      RuntimeID: processor.tags['runtime-id'],
+      RuntimeID: versionlessConfig.tags['runtime-id'],
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
     })
@@ -641,6 +664,101 @@ describe('SpanStatsProcessor', () => {
 
     assert.ok(exporter.export.notCalled)
     assert.ok(otlpExporter.export.calledOnce)
+  })
+
+  it('force flushes pending OTLP span statistics', () => {
+    const exporter = {
+      export: sinon.stub().callsFake((_drained, _bucketSizeNs, done) => done()),
+      flush: sinon.stub().callsFake(done => done()),
+    }
+    const p = new SpanStatsProcessor(config, exporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+
+    let flushed = false
+    p.forceFlush(() => { flushed = true })
+
+    assert.ok(exporter.export.calledOnce)
+    assert.ok(exporter.flush.calledOnce)
+    assert.ok(flushed)
+    assert.strictEqual(p.buckets.size, 0)
+  })
+
+  it('snapshots prior OTLP exports before starting the boundary export', () => {
+    let priorDone
+    let exportDone
+    const exporter = {
+      flush: sinon.stub().callsFake(done => { priorDone = done }),
+      export: sinon.stub().callsFake((_drained, _bucketSizeNs, done) => { exportDone = done }),
+    }
+    const p = new SpanStatsProcessor(config, exporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    const done = sinon.spy()
+
+    p.forceFlush(done)
+
+    sinon.assert.callOrder(exporter.flush, exporter.export)
+    exportDone()
+    sinon.assert.notCalled(done)
+    priorDone()
+    sinon.assert.calledOnce(done)
+  })
+
+  it('waits for a prior OTLP export when the boundary export throws', () => {
+    let priorDone
+    const exporter = {
+      flush: sinon.stub().callsFake(done => { priorDone = done }),
+      export: sinon.stub().throws(new Error('encode failed')),
+    }
+    const p = new SpanStatsProcessor(config, exporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    const done = sinon.spy()
+
+    p.forceFlush(done)
+
+    sinon.assert.notCalled(done)
+    priorDone()
+    sinon.assert.calledOnce(done)
+  })
+
+  it('force flushes pending agent span statistics', () => {
+    exporter.export.resetHistory()
+    exporter.flush.resetHistory()
+    exporter.export.callsFake((_payload, done) => done())
+    const p = new SpanStatsProcessor(config)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+
+    let flushed = false
+    p.forceFlush(() => { flushed = true })
+
+    assert.ok(exporter.export.calledOnce)
+    assert.ok(exporter.flush.notCalled)
+    assert.ok(flushed)
+    assert.strictEqual(p.buckets.size, 0)
+    exporter.export.resetBehavior()
+  })
+
+  it('joins an in-flight agent span statistics export during force flush', () => {
+    exporter.export.resetHistory()
+    exporter.flush.resetHistory()
+    const p = new SpanStatsProcessor(config)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+
+    let flushDone
+    exporter.export.callsFake((_payload, done) => { flushDone = done })
+    let flushed = false
+    p.forceFlush(() => { flushed = true })
+
+    assert.ok(exporter.export.calledOnce)
+    assert.ok(exporter.flush.notCalled)
+    assert.strictEqual(flushed, false)
+    flushDone()
+    assert.strictEqual(flushed, true)
+    exporter.export.resetBehavior()
   })
 
   it('should record spans when only OTLP is enabled', () => {

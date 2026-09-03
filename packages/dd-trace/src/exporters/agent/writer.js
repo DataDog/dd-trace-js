@@ -19,18 +19,19 @@ class AgentWriter extends BaseWriter {
   #requestTracker
 
   constructor (...args) {
+    const { isTestOptimization } = args[0]
     super({
       ...args[0],
       beforeFirstFlush: () => firstFlushChannel.publish(),
+      retainOnBackpressure: isTestOptimization,
     })
-    const { prioritySampler, lookup, protocolVersion, headers, isTestOptimization } = args[0]
-    const AgentEncoder = getEncoder(protocolVersion)
+    const { prioritySampler, lookup, protocolVersion, flushInterval, headers } = args[0]
 
     this._prioritySampler = prioritySampler
     this._lookup = lookup
     this._protocolVersion = protocolVersion
     this._headers = headers
-    this._encoder = new AgentEncoder(this)
+    this._encoder = createEncoder(protocolVersion, flushInterval, this)
     if (isTestOptimization) {
       this.#request = require('../../ci-visibility/exporters/request')
       const TestOptimizationRequestTracker = require('../../ci-visibility/exporters/agentless/request-tracker')
@@ -39,18 +40,18 @@ class AgentWriter extends BaseWriter {
   }
 
   /**
-   * Flushes payloads, including requests already in flight during Test Optimization finalization.
-   *
+   * Performs the writer flush without registering a serverless delivery.
+   * Test Optimization owns its own request lifecycle tracking.
    * @param {(error?: Error) => void} [done]
    * @param {{ deadline?: number }} [options]
    * @returns {void}
    */
-  flush (done, options) {
+  flushDirect (done, options) {
     if (this.#requestTracker) {
       this.#requestTracker.flush(done, options)
       return
     }
-    super.flush(done, options)
+    super.flushDirect(done, options)
   }
 
   _sendPayload (data, count, done, flushOptions) {
@@ -113,10 +114,26 @@ class AgentWriter extends BaseWriter {
   }
 }
 
-function getEncoder (protocolVersion) {
-  return protocolVersion === '0.5'
-    ? require('../../encode/0.5').AgentEncoder
-    : require('../../encode/0.4').AgentEncoder
+/**
+ * @param {string} protocolVersion
+ * @param {number | undefined} flushInterval
+ * @param {AgentWriter} writer
+ * @returns {import('../../encode/0.4').AgentEncoder}
+ */
+function createEncoder (protocolVersion, flushInterval, writer) {
+  if (protocolVersion === '0.5') {
+    const { AgentEncoder } = require('../../encode/0.5')
+    return new AgentEncoder(writer)
+  }
+  if (flushInterval === 0) {
+    const { createAgentEncoder } = require('../../encode/0.4-cross-payload')
+    const disableCrossPayloadCache = () => {
+      writer._encoder = createEncoder('0.4', undefined, writer)
+    }
+    return createAgentEncoder(writer, disableCrossPayloadCache)
+  }
+  const { AgentEncoder } = require('../../encode/0.4')
+  return new AgentEncoder(writer)
 }
 
 function makeRequest (version, data, count, url, headers, lookup, flushOptions, request, requestTracker, cb) {

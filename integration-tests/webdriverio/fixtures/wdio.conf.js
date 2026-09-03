@@ -32,6 +32,13 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  automaticLogSubmission: {
+    after () {
+      require('./automatic-log-submission-logger').info('Hello from WebdriverIO after hook!')
+    },
+    maxInstances: 1,
+    specs: ['./automatic-log-submission.e2e.js'],
+  },
   atr: {
     maxInstances: 1,
     specs: ['./atr.e2e.js'],
@@ -139,6 +146,7 @@ const scenarioConfig = {
     ]],
   },
   jasmineStatuses: {
+    injectGlobals: false,
     maxInstances: 1,
     specs: ['./jasmine-statuses.e2e.js'],
   },

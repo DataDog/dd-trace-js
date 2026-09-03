@@ -8,6 +8,14 @@
         "default": null
       }
     ],
+    "DD_AGENTLESS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "description": "Enable agentless mode for supported features and disable Agent-only features."
+      }
+    ],
     "DD_AGENTLESS_LOG_SUBMISSION_ENABLED": [
       {
         "implementation": "A",
@@ -91,6 +99,16 @@
           "experimental.aiguard.maxMessagesLength"
         ],
         "default": "16"
+      }
+    ],
+    "DD_AI_GUARD_REDACTION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.aiguard.redactionEnabled"
+        ],
+        "default": "true"
       }
     ],
     "DD_AI_GUARD_TIMEOUT": [
@@ -1341,6 +1359,16 @@
         "default": null
       }
     ],
+    "DD_LLMOBS_PROJECT_NAME": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "llmobs.projectName"
+        ],
+        "default": null
+      }
+    ],
     "DD_LLMOBS_SAMPLE_RATE": [
       {
         "implementation": "A",
@@ -1902,6 +1930,14 @@
       }
     ],
     "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_TEST_FAILURE_VIDEOS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -2997,6 +3033,13 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true"
+      }
+    ],
+    "DD_TRACE_HTTP_CLIENT_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "400-499"
       }
     ],
     "DD_TRACE_HTTP_ENABLED": [

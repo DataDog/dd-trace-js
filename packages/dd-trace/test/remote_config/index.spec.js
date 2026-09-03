@@ -6,6 +6,7 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const Capabilities = require('../../src/remote_config/capabilities')
@@ -17,6 +18,11 @@ describe('RemoteConfig', () => {
   let uuid
   let scheduler
   let Scheduler
+  let RemoteConfigFetcher
+  let setStorage
+  let storage
+  let storageRun
+  let fetcher
   let request
   let log
   let extraServices
@@ -25,6 +31,7 @@ describe('RemoteConfig', () => {
   let rc
   let tagger
   let getGitMetadata
+  let getHostname
 
   before(() => {
     require('../../src/process-tags').initialize()
@@ -40,10 +47,22 @@ describe('RemoteConfig', () => {
 
     Scheduler = sinon.stub().returns(scheduler)
 
+    fetcher = {
+      fetchChanges: sinon.stub().resolves([]),
+      setConfigState: sinon.stub(),
+      setExtraServices: sinon.stub(),
+      setProductCapabilities: sinon.stub().returns([]),
+    }
+    RemoteConfigFetcher = sinon.stub().returns(fetcher)
+    setStorage = sinon.stub()
+    storageRun = sinon.stub().callsFake((_store, callback) => callback())
+    storage = sinon.stub().returns({ run: storageRun })
+
     request = sinon.stub()
 
     log = {
       error: sinon.spy(),
+      errorWithoutTelemetry: sinon.spy(),
     }
 
     tagger = {
@@ -53,8 +72,12 @@ describe('RemoteConfig', () => {
     extraServices = []
 
     getGitMetadata = sinon.stub().returns({ commitSHA: undefined, repositoryUrl: undefined })
+    getHostname = sinon.stub().returns('application-host')
 
     RemoteConfig = proxyquire('../../src/remote_config', {
+      'node:os': { hostname: getHostname },
+      '../../../datadog-core': { storage },
+      '@datadog/libdatadog/remote-config': { RemoteConfigFetcher, setStorage, '@noCallThru': true },
       '../../../../vendor/dist/crypto-randomuuid': uuid,
       './scheduler': Scheduler,
       '../../../../package.json': { version: '3.0.0' },
@@ -68,7 +91,11 @@ describe('RemoteConfig', () => {
     })
 
     config = {
+      DD_AGENTLESS_ENABLED: false,
+      DD_API_KEY: 'api-key',
       url: new URL('http://127.0.0.1:1337'),
+      hostname: 'host',
+      site: 'datadoghq.com',
       tags: {
         'runtime-id': 'runtimeId',
       },
@@ -82,6 +109,10 @@ describe('RemoteConfig', () => {
 
     rc = new RemoteConfig(config)
   })
+
+  function poll () {
+    return new Promise(resolve => rc.poll(resolve))
+  }
 
   it('should instantiate RemoteConfig', () => {
     sinon.stub(rc, 'poll')
@@ -132,6 +163,281 @@ describe('RemoteConfig', () => {
     })
 
     assert.ok(rc.appliedConfigs instanceof Map)
+    sinon.assert.notCalled(RemoteConfigFetcher)
+    sinon.assert.notCalled(setStorage)
+  })
+
+  describe('agentless', () => {
+    beforeEach(() => {
+      config.DD_AGENTLESS_ENABLED = true
+      rc = new RemoteConfig(config)
+    })
+
+    it('should configure the native client before polling', async () => {
+      RemoteConfigFetcher.resetHistory()
+      setStorage.resetHistory()
+      storage.resetHistory()
+      storageRun.resetHistory()
+      config.env = undefined
+      config.version = undefined
+      rc = new RemoteConfig(config)
+      rc.updateCapabilities(Capabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
+      sinon.assert.calledOnceWithExactly(
+        fetcher.setProductCapabilities,
+        [],
+        ['APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION']
+      )
+      fetcher.setProductCapabilities.returns(['UNKNOWN'])
+      rc.setProductHandler('LIVE_DEBUGGING', noop)
+      extraServices.push('extra-service')
+
+      sinon.assert.calledTwice(fetcher.setProductCapabilities)
+      assert.deepStrictEqual(fetcher.setProductCapabilities.secondCall.args, [
+        ['LIVE_DEBUGGING'],
+        ['APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION'],
+      ])
+
+      await poll()
+
+      const options = RemoteConfigFetcher.lastCall.firstArg
+      assert.strictEqual(options.clientId, '1234-5678')
+      assert.strictEqual(options.runtimeId, 'runtimeId')
+      assert.strictEqual(options.env, '')
+      assert.strictEqual(options.appVersion, '')
+      assert.strictEqual(options.url, 'https://datadoghq.com')
+      assert.strictEqual(options.timeoutMs, 5000)
+      assert.strictEqual(options.apiKey, 'api-key')
+      assert.strictEqual(options.hostname, 'application-host')
+      sinon.assert.calledTwice(fetcher.setProductCapabilities)
+      sinon.assert.calledOnceWithExactly(fetcher.setExtraServices, ['extra-service'])
+      sinon.assert.calledOnce(fetcher.fetchChanges)
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        '[RC] Unrecognized remote config products or capabilities: %s',
+        'UNKNOWN'
+      )
+
+      sinon.assert.calledOnceWithExactly(setStorage, sinon.match.func)
+      const runWithoutTracing = setStorage.firstCall.firstArg
+      const callback = sinon.spy()
+      runWithoutTracing(callback)
+      sinon.assert.calledOnceWithExactly(storage, 'legacy')
+      sinon.assert.calledOnceWithExactly(storageRun, { noop: true }, callback)
+    })
+
+    it('should apply, modify, and remove configs through the registered handler', async () => {
+      const acknowledgements = []
+      const handler = sinon.spy((action, file, id, acknowledge) => acknowledgements.push(acknowledge))
+      rc.setProductHandler('LIVE_DEBUGGING', handler)
+      const path = 'datadog/42/LIVE_DEBUGGING/probe/config'
+      fetcher.fetchChanges.resolves([{
+        kind: 'add',
+        path,
+        product: 'LIVE_DEBUGGING',
+        configId: 'probe',
+        version: 1,
+        contents: '{"id":"probe","version":1}',
+      }])
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(handler, 'apply', { id: 'probe', version: 1 }, 'probe', sinon.match.func)
+      sinon.assert.calledWithExactly(fetcher.setConfigState, path, UNACKNOWLEDGED, '')
+
+      fetcher.fetchChanges.resolves([{
+        kind: 'update',
+        path,
+        product: 'LIVE_DEBUGGING',
+        configId: 'probe',
+        version: 2,
+        contents: '{"id":"probe","version":2}',
+      }])
+      await poll()
+
+      sinon.assert.calledWithExactly(handler, 'modify', { id: 'probe', version: 2 }, 'probe', sinon.match.func)
+      fetcher.setConfigState.resetHistory()
+      acknowledgements[0]()
+      sinon.assert.notCalled(fetcher.setConfigState)
+      acknowledgements[1]()
+      sinon.assert.calledOnceWithExactly(fetcher.setConfigState, path, ACKNOWLEDGED, '')
+
+      fetcher.fetchChanges.resolves([{
+        kind: 'remove',
+        path,
+        product: 'LIVE_DEBUGGING',
+        configId: 'probe',
+        version: 2,
+      }])
+      await poll()
+
+      sinon.assert.calledWithExactly(handler, 'unapply', { id: 'probe', version: 2 }, 'probe', sinon.match.func)
+      assert.strictEqual(rc.appliedConfigs.size, 0)
+    })
+
+    it('should report delayed unapply outcomes unless the config was replaced', async () => {
+      const removedPath = 'datadog/42/LIVE_DEBUGGING/removed/config'
+      const replacedPath = 'datadog/42/LIVE_DEBUGGING/replaced/config'
+      const acknowledgements = []
+      rc.setProductHandler('LIVE_DEBUGGING', (action, file, id, acknowledge) => {
+        acknowledgements.push(acknowledge)
+      })
+      for (const [path, id] of [[removedPath, 'removed'], [replacedPath, 'replaced']]) {
+        rc.appliedConfigs.set(path, {
+          path,
+          product: 'LIVE_DEBUGGING',
+          id,
+          version: 1,
+          apply_state: ACKNOWLEDGED,
+          apply_error: '',
+          file: { id, version: 1 },
+        })
+      }
+      fetcher.fetchChanges.resolves([
+        { kind: 'remove', path: removedPath, product: 'LIVE_DEBUGGING', configId: 'removed', version: 1 },
+        { kind: 'remove', path: replacedPath, product: 'LIVE_DEBUGGING', configId: 'replaced', version: 1 },
+      ])
+
+      await poll()
+
+      fetcher.fetchChanges.resolves([{
+        kind: 'add',
+        path: replacedPath,
+        product: 'LIVE_DEBUGGING',
+        configId: 'replaced',
+        version: 2,
+        contents: '{"id":"replaced","version":2}',
+      }])
+      await poll()
+
+      fetcher.setConfigState.resetHistory()
+      acknowledgements[0]()
+      acknowledgements[1]()
+
+      sinon.assert.calledOnceWithExactly(fetcher.setConfigState, removedPath, ACKNOWLEDGED, '')
+      assert.strictEqual(rc.appliedConfigs.get(replacedPath).version, 2)
+    })
+
+    it('should report invalid config contents without dispatching them', async () => {
+      const handler = sinon.spy()
+      rc.setProductHandler('LIVE_DEBUGGING', handler)
+      const path = 'datadog/42/LIVE_DEBUGGING/probe/config'
+      fetcher.fetchChanges.resolves([{
+        kind: 'add',
+        path,
+        product: 'LIVE_DEBUGGING',
+        configId: 'probe',
+        version: 1,
+        contents: '{invalid',
+      }])
+
+      await poll()
+
+      sinon.assert.notCalled(handler)
+      sinon.assert.calledOnceWithExactly(fetcher.setConfigState, path, ERROR, sinon.match.string)
+      assert.strictEqual(rc.appliedConfigs.size, 0)
+
+      fetcher.setConfigState.resetHistory()
+      fetcher.fetchChanges.resolves([{
+        kind: 'remove',
+        path,
+        product: 'LIVE_DEBUGGING',
+        configId: 'probe',
+        version: 1,
+      }])
+      await poll()
+
+      sinon.assert.notCalled(fetcher.setConfigState)
+      sinon.assert.notCalled(handler)
+    })
+
+    it('should dispatch one change per path', async () => {
+      const handler = sinon.spy()
+      rc.setProductHandler('LIVE_DEBUGGING', handler)
+      const change = {
+        kind: 'add',
+        path: 'datadog/42/LIVE_DEBUGGING/probe/config',
+        product: 'LIVE_DEBUGGING',
+        configId: 'probe',
+        version: 1,
+        contents: '',
+      }
+      fetcher.fetchChanges.resolves([change, { ...change, kind: 'update' }])
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(handler, 'apply', null, 'probe')
+    })
+
+    it('should report batch-handler outcomes to the native client', async () => {
+      const path = 'datadog/42/ASM_FEATURES/config/config'
+      const unrelatedHandler = sinon.spy()
+      rc.setBatchHandler(['ASM_FEATURES'], transaction => transaction.ack(path))
+      rc.setBatchHandler(['ASM_DATA'], unrelatedHandler)
+      rc.subscribeProducts('ASM_FEATURES')
+      fetcher.fetchChanges.resolves([{
+        kind: 'add',
+        path,
+        product: 'ASM_FEATURES',
+        configId: 'config',
+        version: 1,
+        contents: '{}',
+      }])
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(fetcher.setConfigState, path, ACKNOWLEDGED, '')
+      sinon.assert.notCalled(unrelatedHandler)
+      assert.strictEqual(rc.appliedConfigs.get(path).apply_state, ACKNOWLEDGED)
+    })
+
+    it('should stop when the API key is missing', () => {
+      config.DD_API_KEY = undefined
+      RemoteConfigFetcher.resetHistory()
+      setStorage.resetHistory()
+      scheduler.start.resetHistory()
+      log.error.resetHistory()
+
+      rc = new RemoteConfig(config)
+      rc.setProductHandler('LIVE_DEBUGGING', noop)
+
+      sinon.assert.notCalled(RemoteConfigFetcher)
+      sinon.assert.notCalled(setStorage)
+      sinon.assert.notCalled(scheduler.start)
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        '[RC] DD_API_KEY is required for agentless Remote Config; Remote Config is disabled'
+      )
+    })
+
+    it('should stop when the site is invalid', () => {
+      config.site = 'datadoghq.com@evil.example'
+      RemoteConfigFetcher.resetHistory()
+      setStorage.resetHistory()
+      scheduler.start.resetHistory()
+      log.error.resetHistory()
+
+      rc = new RemoteConfig(config)
+      rc.setProductHandler('LIVE_DEBUGGING', noop)
+
+      sinon.assert.notCalled(RemoteConfigFetcher)
+      sinon.assert.notCalled(setStorage)
+      sinon.assert.notCalled(scheduler.start)
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        '[RC] Invalid DD_SITE for agentless Remote Config: %s; Remote Config is disabled',
+        config.site
+      )
+    })
+
+    it('should continue polling after native client failures', async () => {
+      const error = new Error('request failed')
+      rc.setProductHandler('LIVE_DEBUGGING', noop)
+      fetcher.fetchChanges.rejects(error)
+
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(log.errorWithoutTelemetry, '[RC] Error in request', error)
+    })
   })
 
   it('should include process_tags in client_tracer', () => {
@@ -194,7 +500,10 @@ describe('RemoteConfig', () => {
     })
 
     it('should set multiple capabilities to false', () => {
-      rc.state.client.capabilities = 'jg=='
+      rc.updateCapabilities(Capabilities.ASM_ACTIVATION, true)
+      rc.updateCapabilities(Capabilities.ASM_IP_BLOCKING, true)
+      rc.updateCapabilities(Capabilities.ASM_DD_RULES, true)
+      rc.updateCapabilities(Capabilities.ASM_USER_BLOCKING, true)
 
       rc.updateCapabilities(Capabilities.ASM_USER_BLOCKING, false)
       assert.strictEqual(rc.state.client.capabilities, 'Dg==')
@@ -423,6 +732,33 @@ describe('RemoteConfig', () => {
       assert.deepStrictEqual(rc.state, previousState)
     })
 
+    it('should throw when a target file contains invalid JSON', () => {
+      const path = 'datadog/42/PRODUCT/confId/config'
+      payload = {
+        client_configs: [path],
+        targets: toBase64({
+          signed: {
+            custom: { opaque_backend_state: 'state' },
+            targets: {
+              [path]: {
+                custom: { v: 1 },
+                hashes: { sha256: 'haaaxx' },
+              },
+            },
+            version: 1,
+          },
+        }),
+        target_files: [{
+          path,
+          raw: Buffer.from('{invalid').toString('base64'),
+        }],
+      }
+
+      assert.throws(parsePayload, SyntaxError)
+      sinon.assert.notCalled(rc.dispatch)
+      assert.deepStrictEqual(rc.state, previousState)
+    })
+
     it('should throw when config path cannot be parsed', () => {
       payload = {
         client_configs: ['datadog/42/confId/config'],
@@ -555,7 +891,7 @@ describe('RemoteConfig', () => {
         length: 147,
         hashes: { sha256: 'anotherHash' },
         file: { asm: { enabled: true } },
-      }], 'unapply', sinon.match.instanceOf(Set))
+      }], 'unapply', sinon.match.instanceOf(Map))
       sinon.assert.calledWithMatch(rc.dispatch.secondCall, [{
         path: 'datadog/42/APPLY/confId/config',
         product: 'APPLY',
@@ -566,7 +902,7 @@ describe('RemoteConfig', () => {
         length: 0,
         hashes: { sha256: 'haaaxx' },
         file: null,
-      }], 'apply', sinon.match.instanceOf(Set))
+      }], 'apply', sinon.match.instanceOf(Map))
       sinon.assert.calledWithMatch(rc.dispatch.thirdCall, [{
         path: 'datadog/42/MODIFY/confId/config',
         product: 'MODIFY',
@@ -577,7 +913,7 @@ describe('RemoteConfig', () => {
         length: 147,
         hashes: { sha256: 'newHash' },
         file: { config: 'newConf' },
-      }], 'modify', sinon.match.instanceOf(Set))
+      }], 'modify', sinon.match.instanceOf(Map))
 
       assert.deepStrictEqual(rc.state.client.state.config_states, [
         {
@@ -745,7 +1081,7 @@ describe('RemoteConfig', () => {
         }
       }
 
-      rc.dispatch(list, 'apply', new Set())
+      rc.dispatch(list, 'apply', new Map())
 
       sinon.assert.calledOnceWithExactly(syncGoodNonAckHandler, 'apply', list[0].file, list[0].id)
       sinon.assert.calledOnceWithExactly(syncBadNonAckHandler, 'apply', list[1].file, list[1].id)
@@ -814,10 +1150,167 @@ describe('RemoteConfig', () => {
         file: { asm: { enabled: true } },
       })
 
-      rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply', new Set())
+      rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply', new Map())
 
       sinon.assert.calledOnceWithExactly(handler, 'unapply', { asm: { enabled: true } }, 'asm_data')
       assert.strictEqual(rc.appliedConfigs.size, 0)
+    })
+  })
+
+  describe('identity state refresh', () => {
+    it('should replace state.client.id when identity is updated', () => {
+      const originalId = rc.state.client.id
+
+      uuid.returns('refreshed-client-id')
+      channel('datadog:identity:update').publish(config)
+
+      assert.strictEqual(rc.state.client.id, 'refreshed-client-id')
+      assert.notStrictEqual(rc.state.client.id, originalId)
+    })
+
+    it('should replace client_tracer.runtime_id when identity is updated', () => {
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'runtimeId')
+
+      config.tags['runtime-id'] = 'refreshed-runtime-id'
+      channel('datadog:identity:update').publish(config)
+
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'refreshed-runtime-id')
+
+      config.tags['runtime-id'] = 'runtimeId' // restore for other tests
+    })
+
+    it('should include refreshed runtime_id and id in the JSON payload', () => {
+      uuid.returns('refreshed-client-id')
+      config.tags['runtime-id'] = 'live-runtime-id'
+      channel('datadog:identity:update').publish(config)
+      const payload = JSON.parse(rc.getPayload())
+
+      assert.strictEqual(payload.client.client_tracer.runtime_id, 'live-runtime-id')
+      assert.strictEqual(payload.client.id, 'refreshed-client-id')
+
+      config.tags['runtime-id'] = 'runtimeId'
+    })
+
+    it('should cache client_tracer.tags and only refresh it on datadog:identity:update', () => {
+      const originalTags = rc.state.client.client_tracer.tags
+
+      config.tags['new-tag'] = 'new-value'
+
+      // unlike runtime_id, tags is a cached string, so a direct config mutation isn't picked up
+      assert.strictEqual(rc.state.client.client_tracer.tags, originalTags)
+
+      channel('datadog:identity:update').publish(config)
+
+      assert.notStrictEqual(rc.state.client.client_tracer.tags, originalTags)
+      assert.ok(rc.state.client.client_tracer.tags.includes('new-tag:new-value'))
+
+      delete config.tags['new-tag']
+    })
+  })
+
+  describe('refreshClientId', () => {
+    let refreshIdentity
+    let uuidStub
+    let RemoteConfigWithId
+
+    beforeEach(() => {
+      uuidStub = sinon.stub()
+      // first call is the module-load-time `let clientId = uuid()`, second is the refresh
+      uuidStub.onFirstCall().returns('1234-5678')
+      uuidStub.onSecondCall().returns('new-client-id-uuid')
+
+      RemoteConfigWithId = proxyquire('../../src/remote_config', {
+        'dc-polyfill': {
+          channel: sinon.stub().returns({
+            subscribe: (listener) => { refreshIdentity = listener },
+          }),
+        },
+        '../../../../vendor/dist/crypto-randomuuid': uuidStub,
+        './scheduler': Scheduler,
+        '../../../../package.json': { version: '3.0.0' },
+        '../exporters/common/request': request,
+        '../log': log,
+        '../tagger': tagger,
+        '../git_metadata': getGitMetadata,
+        '../service-naming/extra-services': {
+          getExtraServices: () => extraServices,
+        },
+      })
+    })
+
+    it('should update state.client.id on the existing instance after refresh', () => {
+      const rcInstance = new RemoteConfigWithId(config)
+      assert.strictEqual(rcInstance.state.client.id, '1234-5678')
+
+      refreshIdentity(config)
+
+      assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
+    })
+
+    it('should rebuild client_tracer.tags to reflect the refreshed _dd.rc.client_id', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old-client-id' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      const rcInstance = new RemoteConfigWithId(rcConfig)
+      assert.deepStrictEqual(rcInstance.state.client.client_tracer.tags, [
+        'runtime-id:runtimeId',
+        '_dd.rc.client_id:old-client-id',
+      ])
+
+      delete rcConfig.tags['_dd.rc.client_id']
+      refreshIdentity(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
+      const refreshedTags = rcInstance.state.client.client_tracer.tags
+      assert.deepStrictEqual(refreshedTags, [
+        'runtime-id:runtimeId',
+        '_dd.rc.client_id:new-client-id-uuid',
+      ])
+    })
+
+    it('should set clientId to the value returned by uuid after a client exists', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      const rcInstance = new RemoteConfigWithId(rcConfig)
+      assert.strictEqual(rcInstance.state.client.id, '1234-5678')
+
+      refreshIdentity(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
+    })
+
+    it('should not add config.tags[_dd.rc.client_id] before a client exists', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      refreshIdentity(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], undefined)
+    })
+
+    it('should call uuid again to generate the new ID', () => {
+      refreshIdentity(config)
+
+      // once at module load for the initial clientId, once on refresh
+      sinon.assert.calledTwice(uuidStub)
+      // the buffered pool is drained by the publisher, so the refresh must not opt out of it
+      assert.deepStrictEqual(uuidStub.secondCall.args, [])
     })
   })
 })
