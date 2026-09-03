@@ -407,6 +407,7 @@ export interface GeneratedConfig {
   dynamicInstrumentation: {
     captureTimeoutMs: number;
     enabled: boolean;
+    evaluationTimeoutMs: number;
     probeFile: string | undefined;
     queueMaxBytes: number;
     redactedIdentifiers: string[];
@@ -692,6 +693,7 @@ export interface GeneratedEnvVarConfig {
   DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED: boolean;
   DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: number;
   DD_DYNAMIC_INSTRUMENTATION_ENABLED: boolean;
+  DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: number;
   DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: string | undefined;
   DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: number;
   DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: string[];

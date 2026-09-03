@@ -79,6 +79,7 @@ const config = {
   dynamicInstrumentation: {
     captureTimeoutMs: Number(process.env.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS || '1000'),
     enabled: true,
+    evaluationTimeoutMs: Number(process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS || '10'),
     probeFile: undefined,
     queueMaxBytes: 10 * 1024 * 1024,
     redactedIdentifiers: [],

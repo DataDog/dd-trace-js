@@ -7,8 +7,20 @@ const SAMPLER_EXPRESSION = `globalThis[Symbol.for(${JSON.stringify(DD_TRACE_SYMB
 
 module.exports = {
   compileBreakpointCondition,
+  getEvaluationTimedOutExpression,
   getRemoveProbeExpression,
   getTakeConditionErrorExpression,
+}
+
+/**
+ * Build the expression that throttles a probe whose evaluation exceeded its time budget in the worker. Called by the
+ * devtools worker and evaluated on the debuggee.
+ *
+ * @param {string} id - The probe id.
+ * @returns {string}
+ */
+function getEvaluationTimedOutExpression (id) {
+  return `${SAMPLER_EXPRESSION}?.evaluationTimedOut(${JSON.stringify(id)})`
 }
 
 /**
@@ -77,22 +89,23 @@ function compileBreakpointCondition (probes) {
  * @returns {string}
  */
 function compileProbeCondition (probe) {
-  const sample = `$dd_sampler.makeSampleDecision(${probe.samplingIndex}, ${JSON.stringify(probe.id)}, ` +
-    `${probe.nsBetweenSampling}n, ${probe.captureSnapshot === true || probe.compiledCaptureExpressions !== undefined})`
+  const id = JSON.stringify(probe.id)
+  const isSnapshotProducingProbe = probe.captureSnapshot === true || probe.compiledCaptureExpressions !== undefined
+  const samplingArgs = `${probe.nsBetweenSampling}n, ${isSnapshotProducingProbe}`
 
   if (probe.condition === undefined) {
-    return `$dd_sampled = ${sample} || $dd_sampled`
+    return `$dd_sampled = $dd_sampler.makeSampleDecision(${probe.samplingIndex}, ${id}, ${samplingArgs}) || $dd_sampled`
   }
 
-  // A condition that throws is reported once per throttle window and skipped at probe entry in between
-  return `if ($dd_sampler.shouldEvaluateCondition(${JSON.stringify(probe.id)})) {
+  // The condition is timed against the evaluation budget. A condition that throws or exceeds its budget is reported
+  // once per throttle window and skipped at probe entry in between.
+  return `if ($dd_sampler.shouldEvaluateCondition(${id}, ${isSnapshotProducingProbe})) {
+      const $dd_start = $dd_sampler.now()
       try {
-        if ((${probe.condition}) === true) {
-          $dd_sampled = ${sample} || $dd_sampled
-        }
+        $dd_sampled = $dd_sampler.conditionEvaluated(${probe.samplingIndex}, ${id}, $dd_start,
+          (${probe.condition}) === true, ${samplingArgs}) || $dd_sampled
       } catch ($dd_error) {
-        $dd_sampled = $dd_sampler.conditionError(${probe.samplingIndex}, ${JSON.stringify(probe.id)}, $dd_error) ||
-          $dd_sampled
+        $dd_sampled = $dd_sampler.conditionError(${probe.samplingIndex}, ${id}, $dd_error) || $dd_sampled
       }
     }`
 }
