@@ -73,6 +73,7 @@ function describeWriter (protocolVersion) {
       '../../log': log,
       '../../runtime_metrics': runtimeMetrics,
       '../../startup-log': startupLog,
+      '../../serverless': { IS_AWS_LAMBDA_MICROVM: false },
     })
     writer = new Writer({ url, prioritySampler, protocolVersion })
 
@@ -187,7 +188,7 @@ function describeWriter (protocolVersion) {
         const options = request.getCall(0).args[1]
         const { resetController, ...requestOptions } = options
         assert.deepStrictEqual(request.getCall(0).args[0], [expectedData])
-        assert.strictEqual(resetController, writer._resetController)
+        assert.strictEqual(resetController, writer._identityRefreshController)
         assert.deepStrictEqual(requestOptions, {
           url,
           path: `/v${protocolVersion}/traces`,
