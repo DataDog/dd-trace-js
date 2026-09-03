@@ -448,6 +448,44 @@ describe('Tracer', () => {
       assert.strictEqual(result, 'test')
     })
 
+    it('should preserve the original function shape', () => {
+      const property = Symbol('property')
+      const descriptor = {
+        configurable: false,
+        enumerable: false,
+        value: 'value',
+        writable: false,
+      }
+
+      function callback (error, request, response, next) {
+        return [error, request, response, next]
+      }
+
+      callback.custom = 'custom'
+      Object.defineProperty(callback, property, descriptor)
+
+      const fn = tracer.wrap('name', {}, callback)
+
+      assert.strictEqual(fn.length, callback.length)
+      assert.strictEqual(fn.name, callback.name)
+      assert.strictEqual(fn.prototype, callback.prototype)
+      assert.strictEqual(fn.custom, callback.custom)
+      assert.deepStrictEqual(Object.getOwnPropertyDescriptor(fn, property), descriptor)
+    })
+
+    it('should preserve constructor behavior', () => {
+      function Value (value) {
+        this.value = value
+      }
+
+      const WrappedValue = tracer.wrap('name', {}, Value)
+      const value = new WrappedValue('value')
+
+      assert.ok(value instanceof Value)
+      assert.ok(value instanceof WrappedValue)
+      assert.strictEqual(value.value, 'value')
+    })
+
     it('should wait for the callback to be called before finishing the span', done => {
       const fn = tracer.wrap('name', {}, sinon.spy(function (cb) {
         const span = tracer.scope().active()
@@ -479,6 +517,19 @@ describe('Tracer', () => {
         .catch(catchHandler)
         .then(() => sinon.assert.called(catchHandler))
         .then(() => done())
+    })
+
+    it('should preserve promise return values', async () => {
+      const fn = tracer.wrap('name', {}, () => Promise.resolve('test'))
+
+      assert.strictEqual(await fn(), 'test')
+    })
+
+    it('should preserve thrown errors', () => {
+      const error = new Error('boom')
+      const fn = tracer.wrap('name', {}, () => { throw error })
+
+      assert.throws(() => fn(), value => value === error)
     })
 
     it('should accept an options object', () => {

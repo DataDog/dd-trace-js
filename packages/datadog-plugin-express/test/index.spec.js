@@ -336,6 +336,67 @@ describe('Plugin', () => {
           })
         })
 
+        it('should dispatch tracer-wrapped request middleware', async () => {
+          const app = express()
+
+          function requestMiddleware (request, response, next) {
+            response.locals.path = request.path
+            next()
+          }
+
+          const middleware = tracer.wrap('request.middleware', requestMiddleware)
+
+          app.use(middleware)
+          app.get('/wrapped', (request, response) => {
+            response.status(200).send(response.locals.path)
+          })
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const port = appListener.address().port
+          const tracePromise = agent.assertSomeTraces(traces => {
+            assert.ok(traces[0].some(span => span.name === 'request.middleware'))
+          })
+          const responsePromise = axios.get(`http://localhost:${port}/wrapped`)
+          const [, response] = await Promise.all([tracePromise, responsePromise])
+
+          assert.strictEqual(middleware.length, 3)
+          assert.strictEqual(response.status, 200)
+          assert.strictEqual(response.data, '/wrapped')
+        })
+
+        it('should dispatch tracer-wrapped error middleware', async () => {
+          const app = express()
+
+          app.use(() => { throw new Error('boom') })
+
+          function errorMiddleware (error, request, response, next) {
+            next()
+            response.status(418).send(`${error.message}:${request.path}`)
+          }
+
+          const middleware = tracer.wrap('error.middleware', errorMiddleware)
+          app.use(middleware)
+          app.use((_request, _response, _next) => {})
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const port = appListener.address().port
+          const tracePromise = agent.assertSomeTraces(traces => {
+            assert.ok(traces[0].some(span => span.name === 'error.middleware'))
+          })
+          const responsePromise = axios.get(`http://localhost:${port}/wrapped`, {
+            validateStatus: status => status === 418,
+          })
+          const [, response] = await Promise.all([tracePromise, responsePromise])
+
+          assert.strictEqual(middleware.length, 4)
+          assert.strictEqual(response.status, 418)
+          assert.strictEqual(response.data, 'boom:/wrapped')
+        })
+
         it('should do automatic instrumentation on middleware that break the async context', done => {
           let next
 
