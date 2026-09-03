@@ -2510,7 +2510,7 @@ describe('Plugin', () => {
           return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
-        it('should not record a depth-gated child error on its collapsed parent span', async () => {
+        v6DepthTest('should not record a depth-gated child error on its collapsed parent span', async () => {
           const Nested = new graphql.GraphQLObjectType({
             name: 'DepthGatedResolverErrorNested',
             fields: {
