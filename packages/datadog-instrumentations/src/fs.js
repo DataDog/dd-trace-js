@@ -2,7 +2,6 @@
 
 const { errorMonitor } = require('events')
 const shimmer = require('../../datadog-shimmer')
-const log = require('../../dd-trace/src/log')
 const { channel, addHook } = require('./helpers/instrument')
 
 const startChannel = channel('apm:fs:operation:start')
@@ -208,42 +207,21 @@ function wrapCreateStream (original) {
         errorChannel.publish(ctx)
         onFinish()
       }
-      let finished = false
       const onFinish = () => {
-        if (finished) return
-        finished = true
         finishChannel.runStores(ctx, () => {})
-        removeStreamListener(stream, 'close', onFinish)
-        removeStreamListener(stream, 'end', onFinish)
-        removeStreamListener(stream, 'finish', onFinish)
-        removeStreamListener(stream, errorMonitor, onError)
+        stream.removeListener('close', onFinish)
+        stream.removeListener('end', onFinish)
+        stream.removeListener('finish', onFinish)
+        stream.removeListener(errorMonitor, onError)
       }
 
-      try {
-        stream.on('close', onFinish)
-        stream.on('end', onFinish)
-        stream.on('finish', onFinish)
-        stream.on(errorMonitor, onError)
-      } catch (error) {
-        log.error('Error adding fs stream instrumentation listeners', error)
-        onFinish()
-      }
+      stream.once('close', onFinish)
+      stream.once('end', onFinish)
+      stream.once('finish', onFinish)
+      stream.once(errorMonitor, onError)
 
       return stream
     })
-  }
-}
-
-/**
- * @param {import('node:events').EventEmitter} stream
- * @param {string | symbol} event
- * @param {(...args: unknown[]) => void} listener
- */
-function removeStreamListener (stream, event, listener) {
-  try {
-    stream.removeListener(event, listener)
-  } catch (error) {
-    log.error('Error removing fs stream instrumentation listener', error)
   }
 }
 
