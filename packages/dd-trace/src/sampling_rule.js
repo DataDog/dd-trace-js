@@ -35,6 +35,21 @@ class AlwaysMatcher {
 }
 
 /**
+ * Matcher that always returns false for unsupported patterns.
+ * Implements the minimal `RuleMatcher` interface.
+ * @implements {RuleMatcher}
+ */
+class NeverMatcher {
+  /**
+   * @param {DatadogSpan} span
+   * @returns {boolean}
+   */
+  match (span) {
+    return false
+  }
+}
+
+/**
  * Matcher that evaluates a glob pattern against a derived subject.
  */
 class GlobMatcher {
@@ -62,6 +77,8 @@ class GlobMatcher {
  * Matcher that evaluates a regular expression against a derived subject.
  */
 class RegExpMatcher {
+  #resetLastIndex
+
   /**
    * @param {RegExp} pattern - Regular expression used to test the subject.
    * @param {Locator} locator - Function extracting the subject to test.
@@ -69,6 +86,7 @@ class RegExpMatcher {
   constructor (pattern, locator) {
     this.pattern = pattern
     this.locator = locator
+    this.#resetLastIndex = pattern.global || pattern.sticky
   }
 
   /**
@@ -77,17 +95,23 @@ class RegExpMatcher {
    */
   match (span) {
     const subject = this.locator(span)
-    if (!subject) return false
-    return this.pattern.test(subject)
+    if (subject === undefined) return false
+    if (!this.#resetLastIndex) return this.pattern.test(subject)
+
+    this.pattern.lastIndex = 0
+    const matched = this.pattern.test(subject)
+    this.pattern.lastIndex = 0
+    return matched
   }
 }
 
 /**
  * Creates a matcher for the provided pattern and locator.
  * Returns a glob matcher for non-trivial strings, a regexp matcher for RegExp,
- * or an always-true matcher for wildcard or missing patterns.
+ * an always-true matcher for wildcard patterns, or an always-false matcher for
+ * unsupported patterns.
  *
- * @param {string|RegExp|undefined} pattern
+ * @param {unknown} pattern
  * @param {Locator} locator
  * @returns {RuleMatcher}
  */
@@ -96,10 +120,13 @@ function matcher (pattern, locator) {
     return new RegExpMatcher(pattern, locator)
   }
 
-  if (typeof pattern === 'string' && pattern !== '*' && pattern !== '**' && pattern !== '***') {
+  if (typeof pattern === 'string') {
+    if (pattern === '*' || pattern === '**' || pattern === '***') {
+      return new AlwaysMatcher()
+    }
     return new GlobMatcher(pattern, locator)
   }
-  return new AlwaysMatcher()
+  return new NeverMatcher()
 }
 
 /**
@@ -171,13 +198,13 @@ class SamplingRule {
   constructor ({ name, service, resource, tags, sampleRate = 1, provenance, maxPerSecond } = {}) {
     this.matchers = []
 
-    if (name) {
+    if (name !== undefined) {
       this.matchers.push(matcher(name, nameLocator))
     }
-    if (service) {
+    if (service !== undefined) {
       this.matchers.push(matcher(service, serviceLocator))
     }
-    if (resource) {
+    if (resource !== undefined) {
       this.matchers.push(matcher(resource, resourceLocator))
     }
     if (tags) {
