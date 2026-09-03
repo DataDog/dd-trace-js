@@ -339,11 +339,11 @@ class AgentEncoder {
       // Replaces up to ten separate `bytes.reserve` calls per span with one.
       let typeEntry
       if (span.type) {
-        typeEntry = stringMap[span.type] ?? this._cacheString(span.type)
+        typeEntry = stringMap[span.type] ?? this._cacheString(span.type, true)
       }
-      const nameEntry = stringMap[span.name] ?? this._cacheString(span.name)
-      const resourceEntry = stringMap[span.resource] ?? this._cacheString(span.resource)
-      const serviceEntry = stringMap[span.service] ?? this._cacheString(span.service)
+      const nameEntry = stringMap[span.name] ?? this._cacheString(span.name, true)
+      const resourceEntry = stringMap[span.resource] ?? this._cacheString(span.resource, true)
+      const serviceEntry = stringMap[span.service] ?? this._cacheString(span.service, true)
       const nameLen = nameEntry.length
       const resourceLen = resourceEntry.length
       const serviceLen = serviceEntry.length
@@ -589,7 +589,7 @@ class AgentEncoder {
       const entryValue = value[key]
       if (typeof entryValue !== 'string' && typeof entryValue !== 'number') continue
 
-      const keyEntry = stringMap[key] ?? this._cacheString(key)
+      const keyEntry = stringMap[key] ?? this._cacheString(key, true)
       const keyEntryLen = keyEntry.length
       const writeOffset = bytes.length
 

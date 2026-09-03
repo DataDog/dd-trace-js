@@ -35,7 +35,6 @@ const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const contexts = new WeakMap()
-const requests = new WeakMap()
 
 // TODO: change this to no longer rely on creating a dummy plugin to be able to access startSpan
 function createWebPlugin (tracer, config = {}) {
@@ -129,7 +128,6 @@ const web = {
     context.tracer = tracer
     context.span = span
     context.res = res
-    requests.set(span, req)
 
     this.setConfig(req, config)
     addRequestTags(context, this.TYPE)
@@ -314,7 +312,6 @@ const web = {
     web.finishMiddleware(context)
 
     web.finishSpan(context, spanType)
-    requests.delete(context.span)
 
     finishInferredProxySpan(context)
   },
@@ -343,9 +340,6 @@ const web = {
   },
   getContext (req) {
     return contexts.get(req)
-  },
-  getRequest (span) {
-    return requests.get(span)
   },
   setRouteOrEndpointTag (req) {
     const context = contexts.get(req)

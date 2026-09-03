@@ -10,7 +10,28 @@ ruleTester.run('eslint-no-unnecessary-array-join', /** @type {import('eslint').R
   valid: [
     "const parts = ['a']; parts.join('')",
     "const parts = ['a']; parts.join(separator)",
-    "[...parts].join('')",
+    "const text = ['first', 'second'].join('\\n')",
+    {
+      code: "[...parts].join('')",
+      options: [{ reportLiteralArrayJoins: true }],
+    },
+    {
+      code: "['first',, 'second'].join('')",
+      options: [{ reportLiteralArrayJoins: true }],
+    },
+    "messages.map(message => message.text).join('')",
+    {
+      code: "messages.map(message => message.text, receiver).join('')",
+      options: [{ reportMapJoinChains: true }],
+    },
+    {
+      code: "const Boolean = value => value; ['receive', source].filter(Boolean).join(' ')",
+      options: [{ reportLiteralArrayJoins: true }],
+    },
+    {
+      code: "[first, second, third].filter(Boolean).join(' ')",
+      options: [{ reportLiteralArrayJoins: true }],
+    },
     "const parts = []; parts.push('a'); consume(parts); parts.join('')",
     "const parts = []; parts.push('a'); parts.join(separator)",
     "const parts = []; parts.push('a'); parts.join(`$" + '{separator}`)',
@@ -45,6 +66,47 @@ ruleTester.run('eslint-no-unnecessary-array-join', /** @type {import('eslint').R
     "var parts = []; var parts; parts.push('a'); parts.join('')",
     "const parts = []; parts[0] = 'a'; parts.join('')",
     `
+      function appendNothing (parts) {}
+      const parts = []
+      parts.push('value')
+      appendNothing(parts)
+      parts.join('')
+    `,
+    `
+      function appendNull (parts) {
+        parts.push(null)
+      }
+      const parts = []
+      appendNull(parts)
+      parts.join('')
+    `,
+    `
+      async function appendValue (parts) {
+        parts.push('value')
+      }
+      const parts = []
+      appendValue(parts)
+      parts.join('')
+    `,
+    `
+      function * appendValue (parts) {
+        parts.push('value')
+      }
+      const parts = []
+      appendValue(parts)
+      parts.join('')
+    `,
+    `
+      function appendEmptyTag (parts) {
+        parts.push()
+      }
+      function build () {
+        const parts = []
+        appendEmptyTag(parts)
+        return parts.join('')
+      }
+    `,
+    `
       function build () {
         const parts = []
         function append () {
@@ -54,10 +116,24 @@ ruleTester.run('eslint-no-unnecessary-array-join', /** @type {import('eslint').R
         return parts.join('')
       }
     `,
+    `
+      function appendValue (parts) {
+        parts.push('a')
+      }
+      function build () {
+        const parts = []
+        function append () {
+          appendValue(parts)
+        }
+        append()
+        return parts.join('')
+      }
+    `,
   ],
   invalid: [
     {
       code: "[this.constructor.name, generateStream.name].join('.')",
+      options: [{ reportLiteralArrayJoins: true }],
       errors: [{ messageId: 'buildLiteralStringDirectly' }],
     },
     {
@@ -80,10 +156,47 @@ ruleTester.run('eslint-no-unnecessary-array-join', /** @type {import('eslint').R
               '',
             ].join('\\n')
       `,
+      options: [{ reportLiteralArrayJoins: true }],
       errors: [
         { messageId: 'buildLiteralStringDirectly' },
         { messageId: 'buildLiteralStringDirectly' },
       ],
+    },
+    {
+      code: `
+        function appendLogTag (tags, key, value) {
+          if (value !== undefined) tags.push(\`\${key}:\${value}\`)
+        }
+        function getLogTags (logMessage) {
+          const tags = []
+          if (Array.isArray(logMessage.ddtags)) {
+            for (const tag of logMessage.ddtags) tags.push(tag)
+          }
+          appendLogTag(tags, 'env', 'ci')
+          return tags.join(',')
+        }
+      `,
+      errors: [{ messageId: 'buildStringDirectly', data: { name: 'tags' } }],
+    },
+    {
+      code: "new RegExp([NUMERIC_LITERAL, STRING_LITERAL, LINE_COMMENT].join('|'), 'gmi')",
+      options: [{ reportLiteralArrayJoins: true }],
+      errors: [{ messageId: 'buildLiteralStringDirectly' }],
+    },
+    {
+      code: "['receive', source].filter(Boolean).join(' ')",
+      options: [{ reportLiteralArrayJoins: true }],
+      errors: [{ messageId: 'buildLiteralStringDirectly' }],
+    },
+    {
+      code: `
+        const content = messages
+          .filter(message => message.type === 'text')
+          .map(message => message.text)
+          .join('')
+      `,
+      options: [{ reportMapJoinChains: true }],
+      errors: [{ messageId: 'buildMappedStringDirectly' }],
     },
     {
       code: "const parts = []; parts.push('a'); parts.join()",

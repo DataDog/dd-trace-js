@@ -145,14 +145,18 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   let url = config.url
 
   const isCiVisibilityAgentlessMode = isCiVisibility && testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED
+  const isApmTracingAgentlessMode = config.experimental?.exporter === 'agentless'
+  const isAgentlessMode = isCiVisibilityAgentlessMode || isApmTracingAgentlessMode
 
   if (isCiVisibility && getTestOptimizationAgent === undefined) {
     ({ getAgent: getTestOptimizationAgent } = require('../ci-visibility/exporters/agents'))
   }
 
-  if (isCiVisibilityAgentlessMode) {
+  if (isAgentlessMode) {
     try {
-      url = testOptimization.DD_CIVISIBILITY_AGENTLESS_URL ?? new URL(getAgentlessTelemetryEndpoint(config.site))
+      url = isCiVisibilityAgentlessMode
+        ? testOptimization.DD_CIVISIBILITY_AGENTLESS_URL ?? new URL(getAgentlessTelemetryEndpoint(config.site))
+        : new URL(getAgentlessTelemetryEndpoint(config.site))
     } catch (err) {
       log.error('Telemetry endpoint url is invalid', err)
       // No point to do the request if the URL is invalid
@@ -165,7 +169,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     hostname,
     port,
     method: 'POST',
-    path: isCiVisibilityAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
+    path: isAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
     headers: getHeaders(config, application, reqType),
   }
   if (isCiVisibility) options.agent = getTestOptimizationAgent(url)
@@ -183,7 +187,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   })
 
   request(data, options, (error) => {
-    if (error && config.DD_API_KEY && config.site) {
+    if (!isAgentlessMode && error && config.DD_API_KEY && config.site) {
       if (agentTelemetry) {
         log.warn('Agent telemetry failed, started agentless telemetry')
         agentTelemetry = false
@@ -211,7 +215,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
       })
     }
 
-    if (!error && !agentTelemetry) {
+    if (!isAgentlessMode && !error && !agentTelemetry) {
       agentTelemetry = true
       log.info('Started agent telemetry')
     }

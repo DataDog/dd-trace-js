@@ -522,7 +522,7 @@ describe('API Security Sampler', () => {
     })
 
     describe('missing route', () => {
-      const routeless = { ...request, route: null }
+      const routeless = { ...request, route: undefined }
 
       it('returns MISSING_ROUTE when there is no route', () => {
         assert.strictEqual(

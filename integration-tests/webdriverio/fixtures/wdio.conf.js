@@ -146,6 +146,7 @@ const scenarioConfig = {
     ]],
   },
   jasmineStatuses: {
+    injectGlobals: false,
     maxInstances: 1,
     specs: ['./jasmine-statuses.e2e.js'],
   },
