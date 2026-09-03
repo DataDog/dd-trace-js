@@ -4,7 +4,7 @@
 #
 #   export LLMVAL_PLATFORM=/path/to/llm-validation-platform
 #   .llm-validation/docker/run.sh --level minimum --fake
-#   .llm-validation/docker/run.sh --level minimum --case js-perf-lens-ungated-publish-001 --runs 1
+#   .llm-validation/docker/run.sh --level minimum --case js-perf-lens-ungated-publish --runs 1
 set -euo pipefail
 
 IMAGE="${LLMVAL_IMAGE_TAG:-llmval-dd-apm-sdk-review}"

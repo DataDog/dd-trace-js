@@ -2,7 +2,7 @@ name: dd-apm-sdk-review
 version: "0.1"
 
 cases:
-  - id: js-perf-lens-ungated-publish-001
+  - id: js-perf-lens-ungated-publish
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/performance.md
       - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
@@ -40,7 +40,7 @@ cases:
       - Invents a Datadog-internal collection/utility type that doesn't exist in this
         repo's real toolkit (e.g. a fictitious `BoundedMap` helper).
 
-  - id: js-correctness-inverted-condition-009
+  - id: js-correctness-inverted-condition
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/correctness.md
       - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
@@ -75,7 +75,7 @@ cases:
       - Flags the defect without naming a concrete input/state that demonstrates it.
       - The final verdict is not CHANGE_ME.
 
-  - id: js-perf-pipeline-full-review-002
+  - id: js-perf-pipeline-full-review
     files:
       - .agents/skills/dd-apm-sdk-review/SKILL.md
       - .agents/skills/dd-apm-sdk-review/reviewers/report-template.md
@@ -112,7 +112,7 @@ cases:
       - Reports SEV-1 / SEV-2 labels in the final report without resolving them to
         P0/P1/P2.
 
-  - id: js-full-skill-simple-review-010
+  - id: js-full-skill-simple-review
     files:
       - .agents/skills/dd-apm-sdk-review/SKILL.md
       - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
@@ -155,7 +155,7 @@ cases:
       - Omits one or more reviewers from the "Rule files used" roster.
       - Approves the inverted `shouldRecord` behavior or claims it matches the comment.
 
-  - id: js-coherence-comment-contradicts-code-003
+  - id: js-coherence-comment-contradicts-code
     files: [.agents/skills/dd-apm-sdk-review/reviewers/coherence.md]
     input: |
       Apply this repo's coherence-review criteria (reviewers/coherence.md and _common.md) to
@@ -181,7 +181,7 @@ cases:
       - Claims the code retries when it does not.
       - Reviews performance or design concerns instead of the coherence contradiction.
 
-  - id: js-security-secret-into-log-004
+  - id: js-security-secret-into-log
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/security.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
@@ -215,7 +215,7 @@ cases:
       - Reports this only as a P2 style issue.
       - Suggests pasting the finding's detail directly into a public PR description.
 
-  - id: js-design-bypasses-config-registration-005
+  - id: js-design-bypasses-config-registration
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/design.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
@@ -243,7 +243,7 @@ cases:
       - Approves the direct `process.env` read with no config-registration concern.
       - Invents a config file path or step that does not exist in this repo.
 
-  - id: js-maintainability-silent-catch-006
+  - id: js-maintainability-silent-catch
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
@@ -273,7 +273,7 @@ cases:
       - Treats this as a performance or security issue instead of an
         observability/maintainability one.
 
-  - id: js-conventions-async-in-production-path-007
+  - id: js-conventions-async-in-production-path
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/conventions.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
@@ -300,7 +300,7 @@ cases:
       - Confuses this with an unrelated style rule (e.g. `for-in`) instead of the
         async/await prohibition.
 
-  - id: js-cross-sdk-new-env-var-not-verified-008
+  - id: js-cross-sdk-new-env-var-not-verified
     files: [.agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md]
     input: |
       Apply this repo's cross-SDK-consistency criteria (reviewers/cross-sdk.md and

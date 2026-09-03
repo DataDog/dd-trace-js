@@ -55,7 +55,7 @@ chmod +x .llm-validation/docker/run.sh
 .llm-validation/docker/run.sh --level gate --runs 1 --base-sha main
 
 # One named case (id from suites/dd-apm-sdk-review.yaml)
-.llm-validation/docker/run.sh --case js-security-secret-into-log-004 --runs 1 --base-sha main
+.llm-validation/docker/run.sh --case js-security-secret-into-log --runs 1 --base-sha main
 ```
 
 `--level` picks **which cases** run. `--runs` only changes how many times **those** cases
@@ -102,7 +102,7 @@ that level already selected.
 
 | Level | Cases | Default runs | Use |
 |---|---|---|---|
-| `minimum` | **1** (`js-perf-lens-ungated-publish-001`) | 3 | First smoke |
+| `minimum` | **1** (`js-perf-lens-ungated-publish`) | 3 | First smoke |
 | `gate` (default) | **10** listed in `config.yaml` | 5 | CI-shaped |
 | `full` | **every** case in `suites/` | 3 | Broader pass |
 
@@ -117,18 +117,18 @@ To run every case once, use `--level full`. To run the CI set once, use `--level
 ### One specific case
 
 `--case` takes the `id` from [`suites/dd-apm-sdk-review.yaml`](./suites/dd-apm-sdk-review.yaml)
-(e.g. `js-perf-lens-ungated-publish-001`, `js-security-secret-into-log-004`). It overrides
+(e.g. `js-perf-lens-ungated-publish`, `js-security-secret-into-log`). It overrides
 the preset’s case list; `--level` still supplies default `--runs` unless you pass `--runs`.
 
 ```bash
 # Docker
-.llm-validation/docker/run.sh --case js-security-secret-into-log-004 --runs 1 --base-sha main
+.llm-validation/docker/run.sh --case js-security-secret-into-log --runs 1 --base-sha main
 
 # Host .NET (from the platform repo)
 dotnet run --project src/Datadog.LlmValidation.Cli -- run \
   --repo /path/to/dd-trace-js \
   --base-sha master \
-  --case js-security-secret-into-log-004 \
+  --case js-security-secret-into-log \
   --runs 1 \
   --out results.json --report report.md --details details.json
 ```
