@@ -1175,6 +1175,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
+        evaluationTimeoutMs: 10,
         probeFile: undefined,
         uploadIntervalSeconds: 1,
       },
@@ -1310,6 +1311,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_PORT', value: 8125, origin: 'default' },
       { name: 'DD_DATA_STREAMS_ENABLED', value: false, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 10, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: null, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: '', origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: '', origin: 'default' },
@@ -1523,6 +1525,7 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '20'
     process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -1658,6 +1661,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: true,
+        evaluationTimeoutMs: 20,
         probeFile: 'probes.json',
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
@@ -1796,6 +1800,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_HOST', value: 'dsd-agent', origin: 'env_var' },
       { name: 'DD_DOGSTATSD_PORT', value: 5218, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'env_var' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 20, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'env_var' },
@@ -2200,6 +2205,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: true,
+        evaluationTimeoutMs: 30,
         probeFile: 'probes.json',
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
@@ -2313,6 +2319,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: true,
+        evaluationTimeoutMs: 30,
         probeFile: 'probes.json',
         uploadIntervalSeconds: 0.1,
       },
@@ -2463,6 +2470,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_HOST', value: 'agent-dsd', origin: 'code' },
       { name: 'DD_DOGSTATSD_PORT', value: '5218', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'code' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 30, origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'code' },
@@ -2780,6 +2788,7 @@ describe('Config', () => {
     process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '20'
     process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -2874,6 +2883,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
+        evaluationTimeoutMs: 30,
         probeFile: 'probes2.json',
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
@@ -2981,6 +2991,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
+        evaluationTimeoutMs: 30,
         probeFile: 'probes2.json',
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
