@@ -1,3 +1,12 @@
+codecov:
+  notify:
+    # All Green uploads coverage per sibling workflow as each one finishes, so without this,
+    # Codecov would compute and post its status/patch check after the first upload lands, well
+    # before the rest have arrived. `scripts/all-green.mjs` calls `codecovcli send-notifications`
+    # once every workflow's uploads are done, which is the only thing that triggers notification
+    # while this is set.
+    manual_trigger: true
+
 coverage:
   range: 90..100
   round: down
