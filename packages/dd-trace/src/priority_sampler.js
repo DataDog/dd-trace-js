@@ -248,6 +248,13 @@ class PrioritySampler {
       ? this.#getPriorityByRule(context, rule, true)
       : this.#getPriorityByAgent(context)
 
+    if (context._sampling.isProbabilityDecision !== false) {
+      const probabilityRate = rule
+        ? context._trace[SAMPLING_RULE_DECISION]
+        : context._trace[SAMPLING_AGENT_DECISION]
+      this._recordDecisionMetadata(context, probabilityRate)
+    }
+
     context._sampling.priority = priority
     return priority
   }
@@ -385,13 +392,15 @@ class PrioritySampler {
   }
 
   /**
-   * Records that a sampling decision does not represent a probability.
+   * Records whether a sampling decision represents a probability.
    *
    * @param {DatadogSpanContext} context
+   * @param {number} [probabilityRate]
    * @returns {void}
    */
-  _recordDecisionMetadata (context) {
-    context._sampling.isProbabilityDecision = false
+  _recordDecisionMetadata (context, probabilityRate) {
+    context._sampling.probabilityRate = probabilityRate
+    context._sampling.isProbabilityDecision = probabilityRate !== undefined
   }
 
   /**

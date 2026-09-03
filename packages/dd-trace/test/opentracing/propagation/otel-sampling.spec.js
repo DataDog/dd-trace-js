@@ -125,13 +125,17 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       })
     }
 
-    it('does not fabricate fields for a sampled trace without ot', () => {
-      const parent = extractParent({ sampled: true, tracestate: 'dd=s:1' })
-      const { span, prioritySampler } = startSpan({ parent, sampleRate: 0.1 })
-      const carrier = inject(span, prioritySampler)
+    for (const [source, sampleRate] of [['rule-based', 0.1], ['agent-based', undefined]]) {
+      it(`does not fabricate fields after probing ${source} sampling on a sampled trace without ot`, () => {
+        const parent = extractParent({ sampled: true, tracestate: 'dd=s:1' })
+        const { span, prioritySampler } = startSpan({ parent, sampleRate })
 
-      assert.strictEqual(parseTracestate(carrier.tracestate).ot, undefined)
-    })
+        prioritySampler.isSampled(span)
+        const carrier = inject(span, prioritySampler)
+
+        assert.strictEqual(parseTracestate(carrier.tracestate).ot, undefined)
+      })
+    }
 
     it('preserves an unknown-only ot member without fabricating sampling fields', () => {
       const parent = extractParent({ sampled: true, tracestate: 'ot=foo:bar' })

@@ -2,7 +2,6 @@
 
 const { AUTO_KEEP } = require('../../../ext/priority')
 const knuthHash = require('./knuth-hash')
-const { SAMPLING_AGENT_DECISION, SAMPLING_RULE_DECISION } = require('./constants')
 
 const MAX_OTEL_VALUE_BYTES = 256
 const MAX_THRESHOLD = 2n ** 56n
@@ -81,9 +80,7 @@ function generateFields (context) {
  * @returns {number | undefined}
  */
 function getProbabilityRate (context) {
-  if (context._sampling.isProbabilityDecision === false) return
-  if (context._sampling.probabilityRate !== undefined) return context._sampling.probabilityRate
-  return context._trace[SAMPLING_RULE_DECISION] ?? context._trace[SAMPLING_AGENT_DECISION]
+  if (context._sampling.isProbabilityDecision === true) return context._sampling.probabilityRate
 }
 
 /**
