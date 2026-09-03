@@ -11,6 +11,7 @@ const {
   runOutsidePoolQueryAcquire,
   runPoolAcquireError,
   runWithPoolWait,
+  setPromisePoolConnectionConfig,
   takePoolWaitTime,
   wrapPoolQueryMethod,
 } = require('./helpers/pool-acquire')
@@ -97,6 +98,8 @@ function createWrapQuery (options) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
       const ctx = { sql, conf: options }
+      const poolWaitTime = takePoolWaitTime(this)
+      if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
 
       return startCh.runStores(ctx, query, this, ...arguments)
         .then(result => {
@@ -146,8 +149,11 @@ function createWrapQueryCallback (options) {
 function wrapConnection (promiseMethod, Connection) {
   return function (options) {
     Connection.apply(this, arguments)
+    setPromisePoolConnectionConfig(this, options)
 
+    const query = this[promiseMethod]
     shimmer.wrap(this, promiseMethod, createWrapQuery(options))
+    if (this.query === query) this.query = this[promiseMethod]
     shimmer.wrap(this, '_queryCallback', createWrapQueryCallback(options))
   }
 }
