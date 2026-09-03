@@ -10,7 +10,7 @@ const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { isLoopbackHost, parseUrl } = require('./url')
+const { canSendApiKey, parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const {
@@ -30,7 +30,7 @@ let activeBufferSize = 0
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
  * @param {object} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
- *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
+ *   headers?: import('node:http').IncomingHttpHeaders, dropped?: boolean) => void} callback
  */
 function request (data, options, callback) {
   if (!options.headers) {
@@ -54,7 +54,7 @@ function request (data, options, callback) {
   // rather than drop the request: the agent proxies telemetry with its own key, while an https
   // intake URL is required to authenticate agentless traffic.
   const hasApiKey = options.headers['dd-api-key'] !== undefined || options.headers['DD-API-KEY'] !== undefined
-  if (hasApiKey && options.protocol === 'http:' && !isLoopbackHost(options.hostname)) {
+  if (hasApiKey && !canSendApiKey(options.protocol, options.hostname)) {
     log.error(
       'Not sending the Datadog API key over a non-TLS connection to %s. Configure an https intake URL.',
       options.hostname
@@ -89,7 +89,8 @@ function request (data, options, callback) {
   if (!Array.isArray(data)) {
     dataArray = [data]
   }
-  options.headers['Content-Length'] = byteLength(dataArray)
+  const contentLength = byteLength(dataArray)
+  options.headers['Content-Length'] = contentLength
 
   docker.inject(options.headers)
 
@@ -172,20 +173,23 @@ function request (data, options, callback) {
   // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
   /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
-    if (!request.writable) {
-      log.debug('Maximum number of active requests reached: payload is discarded.')
-      return callback(null)
+    if (activeBufferSize + contentLength > maxActiveBufferSize) {
+      const error = new log.NoTransmitError('Maximum active request buffer size reached: payload is discarded.')
+      error.code = 'ERR_DD_REQUEST_BUFFER_FULL'
+      log.debug(error.message)
+      return callback(error, undefined, undefined, undefined, true)
     }
 
-    activeBufferSize += options.headers['Content-Length'] ?? 0
+    activeBufferSize += contentLength
 
     legacyStorage.run({ noop: true }, () => {
       let finished = false
       let settled = false
+      let timeoutImmediate
       const finalize = () => {
         if (finished) return
         finished = true
-        activeBufferSize -= options.headers['Content-Length'] ?? 0
+        activeBufferSize -= contentLength
       }
 
       /**
@@ -197,6 +201,7 @@ function request (data, options, callback) {
       const complete = (error, result, statusCode, headers) => {
         if (settled) return
         settled = true
+        clearImmediate(timeoutImmediate)
         finalize()
         callback(error, result, statusCode, headers)
       }
@@ -206,6 +211,7 @@ function request (data, options, callback) {
        */
       const handleError = (error) => {
         if (settled) return
+        clearImmediate(timeoutImmediate)
 
         if (options.retry !== false &&
             attemptIndex < getMaxAttempts(options) &&
@@ -224,10 +230,11 @@ function request (data, options, callback) {
       const req = client.request(connectionOptions, (res) => onResponse(res, complete, handleError))
 
       req.once('close', finalize)
-      req.once('timeout', finalize)
+      if (!options.deferTimeoutAbort) req.once('timeout', finalize)
       req.once('error', handleError)
 
-      req.setTimeout(timeout, () => {
+      const abortRequest = () => {
+        if (settled) return
         try {
           if (typeof req.abort === 'function') {
             req.abort()
@@ -237,6 +244,19 @@ function request (data, options, callback) {
         } catch {
           // ignore
         }
+      }
+
+      req.setTimeout(timeout, () => {
+        if (!options.deferTimeoutAbort) {
+          abortRequest()
+          return
+        }
+
+        timeoutImmediate = setImmediate(() => {
+          abortRequest()
+          finalize()
+        })
+        if (!options.keepProcessAlive) timeoutImmediate.unref?.()
       })
 
       for (const buffer of dataArray) req.write(buffer)

@@ -4,8 +4,8 @@ const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
@@ -47,6 +47,7 @@ describe('profiler', function () {
         systemInfoReport: { oomMonitoring: { enabled: false } },
       }
     },
+    getProfilingTags: (config) => ({ ...config.tags }),
   }
 
   async function waitForExport () {
@@ -121,7 +122,10 @@ describe('profiler', function () {
   }
 
   describe('not serverless', function () {
-    function initProfiler () {
+    /**
+     * @param {Record<string, object>} [stubs]
+     */
+    function initProfiler (stubs = {}) {
       Profiler = proxyquire('../../src/profiling/profiler', {
         '../log': consoleLogger,
         './config': configStub,
@@ -129,6 +133,7 @@ describe('profiler', function () {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),
         },
+        ...stubs,
       }).Profiler
 
       profiler = new Profiler()
@@ -382,6 +387,21 @@ describe('profiler', function () {
       await shouldExportProfiles('zstd-4', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
     })
 
+    it('should use the libdatadog zstd fallback', async () => {
+      profiler.stop()
+      const compressed = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
+      const zstdCompress = sinon.stub().returns(compressed)
+      initProfiler({
+        '@datadog/libdatadog': { zstd_compress: zstdCompress },
+        zlib: { zstdCompress: undefined },
+      })
+
+      await shouldExportProfiles('zstd-4', compressed)
+
+      sinon.assert.callCount(zstdCompress, 2)
+      sinon.assert.alwaysCalledWithExactly(zstdCompress, sinon.match.instanceOf(Buffer), 4)
+    })
+
     it('should log exporter errors', async () => {
       exporter.export.rejects(new Error('boom'))
 
@@ -573,6 +593,45 @@ describe('profiler', function () {
       const { infos } = await exporterPromise
 
       assert.strictEqual(infos.hasMissingSourceMaps, false)
+    })
+
+    it('uses the tags captured at each snapshot start', async () => {
+      const exportSpecs = []
+      exporter.export = sinon.stub().callsFake((exportSpec) => {
+        exportSpecs.push(exportSpec)
+        return Promise.resolve()
+      })
+      const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
+      await profiler.start(startOptions)
+
+      startOptions.tags['runtime-id'] = 'refreshed-id'
+
+      await clock.tickAsync(interval)
+
+      assert.strictEqual(exportSpecs.length, 1)
+      assert.strictEqual(exportSpecs[0].tags['runtime-id'], 'initial-id')
+
+      await clock.tickAsync(interval)
+
+      assert.strictEqual(exportSpecs.length, 2)
+      assert.strictEqual(exportSpecs[1].tags['runtime-id'], 'refreshed-id')
+    })
+
+    it('uses the current snapshot tags for near-OOM exports', async () => {
+      exporterPromise = new Promise(resolve => {
+        exporter.export = (exportSpec) => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        }
+      })
+      const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
+      await profiler.start(startOptions)
+
+      startOptions.tags['runtime-id'] = 'refreshed-id'
+      wallProfiler.start.firstCall.args[0].nearOOMCallback('wall', wallProfile, {})
+
+      const { tags } = await exporterPromise
+      assert.strictEqual(tags['runtime-id'], 'initial-id')
     })
   })
 

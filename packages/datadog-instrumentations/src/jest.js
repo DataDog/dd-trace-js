@@ -18,6 +18,8 @@ const {
   getEfdRetryCountForDuration,
   hasEfdRetries,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { FINAL_FLUSH_FALLBACK_DELAY, FINAL_FLUSH_TIMEOUT } =
+  require('../../dd-trace/src/ci-visibility/final-flush')
 const {
   getCoveredFilesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -95,10 +97,10 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
 const CHILD_MESSAGE_CALL = 1
 
-// Maximum time we'll wait for the tracer to flush
-// The exporter has a 10-second bounded final-flush deadline. Leave enough time
-// for its completion callback before Jest's --forceExit fallback takes over.
-const FLUSH_TIMEOUT = 12_000
+// Maximum time we'll wait for the tracer to flush.
+// Let the exporter enforce its hard deadline and invoke its completion callback
+// before Jest's --forceExit fallback takes over.
+const FLUSH_TIMEOUT = FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY + 5000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
@@ -342,16 +344,17 @@ function getTestStats (testStatuses) {
 function formatIgnoredFailuresSummary (ignoredFailures) {
   if (!ignoredFailures?.efdFailureCount) return ''
 
-  const items = ignoredFailures.efdNames.map(text => ({ text, suffix: 'Early Flake Detection' }))
-
-  if (items.length === 0) return ''
-
-  const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
-  const more = items.length - shown.length
+  const shown = ignoredFailures.efdNames.slice(0, MAX_IGNORED_TEST_NAMES)
+  const more = ignoredFailures.efdNames.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const formattedItems = shown
-    .map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`)
-    .join('\n') + moreSuffix
+  let formattedItems = ''
+  let isFirstItem = true
+  for (const text of shown) {
+    if (!isFirstItem) formattedItems += '\n'
+    formattedItems += `  • ${text} (Early Flake Detection)`
+    isFirstItem = false
+  }
+  formattedItems += moreSuffix
 
   return `${ignoredFailures.efdFailureCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
 }
@@ -764,7 +767,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
             return test.call(this, testName, testFn, ...callArgs)
           }
-          const eachBind = bind(eachTest).apply(this, eachArgs)
+          const boundTest = bind(eachTest)
+          const eachBind = boundTest.apply(this, eachArgs)
           return eachBind.apply(this, testArgs)
         }
       }
@@ -877,7 +881,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
             return concurrentTest.call(this, testName, testFn, ...callArgs)
           }
-          const eachBind = bind(concurrentEachTest, false, needsEachError).apply(this, eachArgs)
+          const boundTest = bind(concurrentEachTest, false, needsEachError)
+          const eachBind = boundTest.apply(this, eachArgs)
           return eachBind.apply(this, testArgs)
         }
       }
@@ -926,10 +931,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       let jestEach
       try {
-        jestEach = createRequire(path.join(this.rootDir, 'package.json'))('jest-each')
+        const requireFromPath = createRequire(path.join(this.rootDir, 'package.json'))
+        jestEach = requireFromPath('jest-each')
       } catch {
         try {
-          jestEach = createRequire(path.join(process.cwd(), 'package.json'))('jest-each')
+          const requireFromPath = createRequire(path.join(process.cwd(), 'package.json'))
+          jestEach = requireFromPath('jest-each')
         } catch {
           jestEach = undefined
         }
@@ -3067,9 +3074,7 @@ function getCliWrapper (isNewJestVersion) {
         result = await runCLI.apply(this, arguments)
       } catch (error) {
         try {
-          await waitForTestSessionFinish(getTestSessionFinishPayload('fail', error, {
-            isTestSessionFinalizationError: true,
-          }))
+          await waitForTestSessionFinish(getTestSessionFinishPayload('fail', error))
         } catch (finalizationError) {
           log.error('Jest test session finalization error: %s', finalizationError)
         }

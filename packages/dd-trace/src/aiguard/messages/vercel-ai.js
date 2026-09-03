@@ -62,19 +62,26 @@ function convertVercelPromptToMessages (prompt) {
         if (hasImages) {
           messages.push({ role: 'user', content: contentParts })
         } else {
-          messages.push({ role: 'user', content: contentParts.map(p => p.text).join('\n') })
+          let content = ''
+          let isFirstPart = true
+          for (const part of contentParts) {
+            if (!isFirstPart) content += '\n'
+            content += part.text
+            isFirstPart = false
+          }
+          messages.push({ role: 'user', content })
         }
         break
       }
 
       case 'assistant': {
-        const textParts = []
+        let text
         const toolCalls = []
         if (!Array.isArray(msg.content)) break
 
         for (const part of msg.content) {
           if (part.type === 'text') {
-            textParts.push(part.text)
+            text = text === undefined ? part.text : `${text}\n${part.text}`
           } else if (part.type === 'tool-call') {
             toolCalls.push({
               id: part.toolCallId,
@@ -88,8 +95,8 @@ function convertVercelPromptToMessages (prompt) {
 
         if (toolCalls.length > 0) {
           messages.push({ role: 'assistant', tool_calls: toolCalls })
-        } else if (textParts.length > 0) {
-          messages.push({ role: 'assistant', content: textParts.join('\n') })
+        } else if (text !== undefined) {
+          messages.push({ role: 'assistant', content: text })
         }
         break
       }
@@ -161,7 +168,14 @@ function buildTextOutputMessages (inputMessages, text) {
 function buildOutputMessages (inputMessages, content) {
   const toolCalls = content.filter(c => c.type === 'tool-call')
   if (toolCalls.length) return buildToolCallOutputMessages(inputMessages, toolCalls)
-  const text = content.filter(c => c.type === 'text').map(c => c.text).join('\n')
+  let text = ''
+  let isFirstTextPart = true
+  for (const part of content) {
+    if (part.type !== 'text') continue
+    if (!isFirstTextPart) text += '\n'
+    text += part.text
+    isFirstTextPart = false
+  }
   if (text) return buildTextOutputMessages(inputMessages, text)
   return []
 }

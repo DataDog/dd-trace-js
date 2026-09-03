@@ -6,6 +6,21 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 The module exported by this library is an instance of the [Tracer](./interfaces/tracer.html) class.
 
+<h2 id="agentless-mode">Agentless mode</h2>
+
+Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog without a local Agent.
+Agentless mode disables features that require an Agent.
+
+Set the API key with `DD_API_KEY` or `DATADOG_API_KEY`.
+
+Agentless mode uses the Datadog trace intake and ignores `OTEL_TRACES_EXPORTER`.
+Explicit `DD_TRACE_SAMPLE_RATE`, `OTEL_TRACES_SAMPLER`, and `OTEL_TRACES_SPAN_METRICS_ENABLED` settings still apply.
+
+Agentless mode submits Bunyan, Pino, and Winston logs directly by default. Set
+`DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the
+OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
+`DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:

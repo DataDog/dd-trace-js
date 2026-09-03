@@ -76,6 +76,16 @@ class OtlpTransformerBase {
   }
 
   /**
+   * Recomputes the cached OTLP resource attributes (e.g. after `config.tags` changes post-
+   * construction, such as a MicroVM clone resume regenerating its runtime-id). Leaves the
+   * reader/exporter/protocol otherwise untouched.
+   * @param {Attributes} resourceAttributes - Resource attributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    this.#resourceAttributes = this.transformAttributes(resourceAttributes)
+  }
+
+  /**
    * Transforms attributes to OTLP KeyValue format.
    * @param {Attributes} attributes - Attributes to transform
    * @returns {object[]} Array of OTLP KeyValue objects
@@ -170,10 +180,15 @@ function stableStringify (attributes) {
   // Attributes are sorted by key to ensure consistent serialization regardless of key order.
   // Keys are always strings and values are always strings, numbers, booleans,
   // or arrays of strings, numbers, or booleans.
-  return Object.keys(attributes)
-    .sort()
-    .map(key => `${key}:${JSON.stringify(attributes[key])}`)
-    .join(',')
+  const keys = Object.keys(attributes).sort()
+  let serialized = ''
+  let isFirstKey = true
+  for (const key of keys) {
+    if (!isFirstKey) serialized += ','
+    serialized += `${key}:${JSON.stringify(attributes[key])}`
+    isFirstKey = false
+  }
+  return serialized
 }
 
 module.exports = OtlpTransformerBase

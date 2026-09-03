@@ -112,7 +112,8 @@ describe('helpers/pool-acquire', () => {
         }
         return expectedReturn
       })
-      const actualReturn = internal ? wrapPoolQueryMethod(invoke, channels.connectionStartCh)() : invoke()
+      const query = internal ? wrapPoolQueryMethod(invoke, channels.connectionStartCh) : invoke
+      const actualReturn = query()
 
       assert.strictEqual(actualReturn, expectedReturn)
       assert.strictEqual(contexts.length, reportsError ? 2 : 0)

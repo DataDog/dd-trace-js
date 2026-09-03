@@ -180,6 +180,11 @@ describe('aiguard/messages/vercel-ai', () => {
       ])
     })
 
+    it('should preserve an empty assistant text part', () => {
+      const prompt = [{ role: 'assistant', content: [{ type: 'text', text: '' }] }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{ role: 'assistant', content: '' }])
+    })
+
     it('should ignore assistant messages with non-array content', () => {
       const prompt = [{
         role: 'assistant',

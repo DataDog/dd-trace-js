@@ -16,6 +16,7 @@ const {
 } = require('../../../ci-visibility/telemetry')
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
+const { getAgent } = require('../agents')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
 
@@ -23,11 +24,10 @@ class Writer extends BaseWriter {
   #requestTracker
 
   constructor ({ url, tags, evpProxyPrefix = '' }) {
-    super(...arguments)
+    super({ ...arguments[0], retainOnBackpressure: true })
     this.#requestTracker = new TestOptimizationRequestTracker(this)
-    const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
-    this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
+    this._encoder = new AgentlessCiVisibilityEncoder(this, { tags })
     this._evpProxyPrefix = evpProxyPrefix
   }
 
@@ -52,6 +52,7 @@ class Writer extends BaseWriter {
       },
       timeout: 15_000,
       url: this._url,
+      agent: getAgent(this._url),
       deadline: flushOptions?.deadline,
     }
 
@@ -62,7 +63,7 @@ class Writer extends BaseWriter {
     }
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
+    log.debug(() => `Request to the intake: ${safeJSONStringify({ ...options, agent: undefined })}`)
 
     const startRequestTime = Date.now()
 
@@ -78,11 +79,11 @@ class Writer extends BaseWriter {
       if (err) {
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-          { endpoint: 'test_cycle', statusCode }
+          { endpoint: 'test_cycle', statusCode, errorType: statusCode ? undefined : err.code }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'test_cycle' }
+          { endpoint: 'test_cycle', statusCode, errorType: statusCode ? undefined : err.code }
         )
         log.error('Error sending CI agentless payload', err)
         done(err)

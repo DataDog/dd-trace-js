@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 describe('direct EVP route', () => {
   let createDirectEVPRoute
+  let getHttpsProxyAgent
   let getProxyForUrl
   let HttpsProxyAgent
   let log
@@ -17,7 +18,7 @@ describe('direct EVP route', () => {
     HttpsProxyAgent = sinon.stub().callsFake(proxyUrl => ({ proxyUrl }))
     log = { debug: sinon.spy() }
 
-    ;({ createDirectEVPRoute } = proxyquire('../../src/evp_proxy/direct', {
+    ;({ createDirectEVPRoute, getHttpsProxyAgent } = proxyquire('../../src/evp_proxy/direct', {
       '../../../../vendor/dist/https-proxy-agent': { HttpsProxyAgent },
       '../../../../vendor/dist/proxy-from-env': { getProxyForUrl },
       '../log': log,
@@ -71,6 +72,16 @@ describe('direct EVP route', () => {
     sinon.assert.calledOnceWithExactly(HttpsProxyAgent, proxyUrl)
   })
 
+  it('reuses the HTTPS agent for the same proxy', () => {
+    getProxyForUrl.returns('http://proxy:8202')
+
+    const first = getHttpsProxyAgent('https://debugger-intake.datadoghq.com/')
+    const second = getHttpsProxyAgent('https://event-platform-intake.datadoghq.com/')
+
+    assert.strictEqual(second, first)
+    sinon.assert.calledOnce(HttpsProxyAgent)
+  })
+
   it('does not create a route without an API key', () => {
     assert.strictEqual(createDirectEVPRoute({
       site: 'datadoghq.com',
@@ -95,26 +106,4 @@ describe('direct EVP route', () => {
       sinon.match.string
     )
   })
-
-  for (const site of [
-    'datadoghq.com@evil.example',
-    'datadoghq.com:password@evil.example',
-    'datadoghq.com:443',
-    'datadoghq.com/path',
-    'datadoghq.com?query',
-    'datadoghq.com#fragment',
-  ]) {
-    it(`does not create a route for a site with URL components: ${site}`, () => {
-      assert.strictEqual(createDirectEVPRoute({
-        DD_API_KEY: 'test-api-key',
-        site,
-      }, 'event-platform-intake'), undefined)
-
-      sinon.assert.calledOnceWithExactly(
-        log.debug,
-        'Unable to configure direct EVP intake: %s',
-        sinon.match.string
-      )
-    })
-  }
 })

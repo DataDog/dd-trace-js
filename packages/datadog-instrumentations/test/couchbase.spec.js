@@ -207,7 +207,10 @@ describe('couchbase instrumentation: v3.2.x StreamableRowPromise', () => {
   })
 
   afterEach(() => {
-    while (cleanups.length) cleanups.pop()()
+    while (cleanups.length) {
+      const cleanup = cleanups.pop()
+      cleanup()
+    }
   })
 
   function subscribe (ch, names = ['start', 'asyncStart', 'asyncEnd', 'error', 'end']) {

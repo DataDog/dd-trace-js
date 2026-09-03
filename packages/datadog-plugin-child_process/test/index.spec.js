@@ -469,7 +469,8 @@ describe('Child process plugin', () => {
       const callPromise = withBluebird(() => {
         assert.strictEqual(global.Promise, Bluebird)
         assert.ok(/** @type {{ version?: string }} */ (global.Promise).version)
-        return util.promisify(childProcess.execFile)('echo', ['bluebird-test'])
+        const execFileAsync = util.promisify(childProcess.execFile)
+        return execFileAsync('echo', ['bluebird-test'])
       })
 
       await Promise.all([expectedPromise, (async () => {
@@ -529,8 +530,10 @@ describe('Child process plugin', () => {
         },
       })
 
-      const callPromise = withBluebird(() =>
-        util.promisify(childProcess.execFile)('node', ['-invalidFlag'], { stdio: 'pipe' }))
+      const callPromise = withBluebird(() => {
+        const execFileAsync = util.promisify(childProcess.execFile)
+        return execFileAsync('node', ['-invalidFlag'], { stdio: 'pipe' })
+      })
 
       await Promise.all([expectedPromise, assert.rejects(callPromise, error => {
         assert.ok(error.code)
@@ -550,7 +553,10 @@ describe('Child process plugin', () => {
         },
       })
 
-      const callPromise = withBluebird(() => util.promisify(childProcess.execFile)('echo', ['util-promisify-test']))
+      const callPromise = withBluebird(() => {
+        const execFileAsync = util.promisify(childProcess.execFile)
+        return execFileAsync('echo', ['util-promisify-test'])
+      })
 
       await Promise.all([expectedPromise, (async () => {
         const result = await callPromise

@@ -53,6 +53,7 @@ const {
   TEST_COMMAND,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { FINAL_FLUSH_TIMEOUT } = require('../../packages/dd-trace/src/ci-visibility/final-flush')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR } = require('../../version')
 const { version: ddTraceVersion } = require('../../package.json')
@@ -2197,9 +2198,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   it('bounds the final flush if the server is not available and logs an error', async function () {
-    this.timeout(20_000)
+    this.timeout(FINAL_FLUSH_TIMEOUT + 20_000)
     // Very slow intake
-    receiver.setWaitingTime(30000)
+    receiver.setWaitingTime(FINAL_FLUSH_TIMEOUT + 30_000)
     // Needs to run with the CLI if we want --forceExit to work
     childProcess = exec(
       'node ./node_modules/jest/bin/jest --config config-jest.js --forceExit',
@@ -2259,11 +2260,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(tests.length, 1)
 
         const [testSuite] = testSuites
-        for (const event of [testSession, testModule, testSuite]) {
+        for (const event of [testSession, testModule]) {
           assert.strictEqual(event.meta[TEST_STATUS], 'fail')
           assert.strictEqual(event.error, 1)
           assert.match(event.meta[ERROR_MESSAGE], /custom reporter failed/)
         }
+        assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
         assert.strictEqual(testSuite.test_session_id.toString(), testSession.test_session_id.toString())
         assert.strictEqual(testSuite.test_module_id.toString(), testModule.test_module_id.toString())
         assert.strictEqual(tests[0].test_suite_id.toString(), testSuite.test_suite_id.toString())

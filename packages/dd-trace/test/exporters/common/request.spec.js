@@ -314,6 +314,69 @@ describe('request', function () {
     assert.strictEqual(callbacks, 1)
   })
 
+  it('lets callers defer a timeout abort until a ready response is processed', async () => {
+    const response = new EventEmitter()
+    response.headers = {}
+    response.statusCode = 200
+    response.setTimeout = sinon.spy()
+
+    let respond
+    const requestMessage = new EventEmitter()
+    requestMessage.abort = sinon.spy()
+    requestMessage.setTimeout = (timeout, callback) => {
+      assert.strictEqual(timeout, 2000)
+      requestMessage.once('timeout', callback)
+    }
+    requestMessage.write = sinon.spy()
+    requestMessage.end = sinon.spy()
+
+    /**
+     * @param {object} options
+     * @param {(response: EventEmitter) => void} onResponse
+     */
+    const createRequest = (options, onResponse) => {
+      assert.strictEqual(options.method, 'GET')
+      assert.strictEqual(options.deferTimeoutAbort, true)
+      respond = onResponse
+      return requestMessage
+    }
+    const deferredTimeoutRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+
+    const completed = new Promise(resolve => {
+      deferredTimeoutRequest(
+        Buffer.alloc(64 * 1024 * 1024),
+        { method: 'GET', retry: false, deferTimeoutAbort: true },
+        (...args) => resolve(args)
+      )
+    })
+
+    requestMessage.emit('timeout')
+    assert.strictEqual(deferredTimeoutRequest.writable, false)
+    respond(response)
+    response.emit('data', Buffer.from('OK'))
+    response.emit('end')
+
+    const [error, result, statusCode] = await completed
+    await new Promise(resolve => setImmediate(resolve))
+
+    assert.strictEqual(error, null)
+    assert.strictEqual(result, 'OK')
+    assert.strictEqual(statusCode, 200)
+    assert.strictEqual(deferredTimeoutRequest.writable, true)
+    sinon.assert.notCalled(requestMessage.abort)
+  })
+
   it('should handle an http error', done => {
     nock('http://localhost:8080')
       .put('/path')
@@ -790,6 +853,49 @@ describe('request', function () {
     })
   })
 
+  it('tracks concurrent payload sizes independently when options are shared', () => {
+    const requests = []
+
+    /**
+     * @returns {EventEmitter} Pending request
+     */
+    function createRequest () {
+      const pending = new EventEmitter()
+      pending.setTimeout = sinon.stub()
+      pending.write = sinon.stub()
+      pending.end = sinon.stub()
+      requests.push(pending)
+
+      return pending
+    }
+
+    const accountingRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const large = Buffer.alloc(63 * 1024 * 1024)
+    const small = Buffer.alloc(1024 * 1024)
+    const options = { method: 'POST', headers: {} }
+
+    accountingRequest(large, options, sinon.stub())
+    accountingRequest(small, options, sinon.stub())
+    requests[0].emit('close')
+    requests[1].emit('close')
+
+    accountingRequest(large, options, sinon.stub())
+
+    assert.strictEqual(accountingRequest.writable, true)
+    requests[2].emit('close')
+  })
+
   it('should drop requests when too much data is buffered', (done) => {
     const bufferSize = 8 * 1024 * 1024
     const buffer = Buffer.alloc(bufferSize).fill(69)
@@ -820,14 +926,15 @@ describe('request', function () {
             'Content-Type': 'application/octet-stream',
           },
         },
-        (err, res) => {
-          if (err) return done(err)
-
-          if (res) {
-            assert.strictEqual(res, 'OK')
-            okCount++
-          } else {
+        (error, res, statusCode, headers, dropped) => {
+          if (error) {
+            assert.strictEqual(error.code, 'ERR_DD_REQUEST_BUFFER_FULL')
+            assert.strictEqual(dropped, true)
             koCount++
+          } else {
+            assert.strictEqual(res, 'OK')
+            assert.strictEqual(dropped, undefined)
+            okCount++
           }
 
           if (okCount + koCount === 10) {
