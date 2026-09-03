@@ -220,10 +220,10 @@ function wrapCreateStream (original) {
       }
 
       try {
-        stream.once('close', onFinish)
-        stream.once('end', onFinish)
-        stream.once('finish', onFinish)
-        stream.once(errorMonitor, onError)
+        stream.on('close', onFinish)
+        stream.on('end', onFinish)
+        stream.on('finish', onFinish)
+        stream.on(errorMonitor, onError)
       } catch (error) {
         log.error('Error adding fs stream instrumentation listeners', error)
         onFinish()

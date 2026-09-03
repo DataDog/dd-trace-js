@@ -234,13 +234,21 @@ describe('fs instrumentation', () => {
 
         it('finishes tracing when the stream emits an error', async () => {
           const originalConstructor = fs[className]
+          const cleanupError = new Error('listener cleanup failed')
           const streamError = new Error('stream failed')
+          let cleanupErrorThrown = false
           let createdStream
 
           fs[className] = class extends EventEmitter {
             constructor () {
               super()
               createdStream = this
+              this.on('removeListener', (event, listener) => {
+                if (event === errorMonitor && listener.name === 'onError') {
+                  cleanupErrorThrown = true
+                  throw cleanupError
+                }
+              })
             }
           }
 
@@ -274,6 +282,7 @@ describe('fs instrumentation', () => {
             fs[className] = originalConstructor
           }
 
+          assert.strictEqual(cleanupErrorThrown, true)
           assert.strictEqual(publishedError, streamError)
           assert.strictEqual(tracer.scope().active(), activeSpan)
           for (const event of streamEvents) {
@@ -294,7 +303,9 @@ describe('fs instrumentation', () => {
             assert.strictEqual(spans[0].meta['file.path'], filename)
           })
           const activeSpan = tracer.scope().active()
+          const cleanupError = new Error('listener cleanup failed')
           const terminalEvent = methodName === 'createReadStream' ? 'end' : 'finish'
+          let cleanupErrorThrown = false
           let publishedFinishes = 0
 
           /**
@@ -310,6 +321,12 @@ describe('fs instrumentation', () => {
               const stream = fs[methodName](filename)
               const closePromise = once(stream, 'close')
               const terminalPromise = once(stream, terminalEvent)
+              stream.on('removeListener', (event, listener) => {
+                if (event === terminalEvent && listener.name === 'onFinish') {
+                  cleanupErrorThrown = true
+                  throw cleanupError
+                }
+              })
 
               assert.ok(stream instanceof fs[className])
               if (methodName === 'createReadStream') {
@@ -331,6 +348,7 @@ describe('fs instrumentation', () => {
             })
 
             await Promise.all([streamPromise, tracePromise])
+            assert.strictEqual(cleanupErrorThrown, true)
             assert.strictEqual(publishedFinishes, 1)
             assert.strictEqual(tracer.scope().active(), activeSpan)
           } finally {
