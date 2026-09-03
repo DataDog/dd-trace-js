@@ -216,6 +216,7 @@ function wrapCreateStream (original) {
         ctx.error = error
         errorChannel.publish(ctx)
         finishChannel.runStores(ctx, () => {})
+        throw error
       }
     })
   }
