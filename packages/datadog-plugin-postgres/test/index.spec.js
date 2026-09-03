@@ -559,6 +559,24 @@ describe('Plugin', () => {
         }
       })
 
+      it('omits TCP endpoint tags for Unix-domain sockets', async () => {
+        const socketPath = path.join(__dirname, 'fixtures', 'missing.sock')
+        const unixSocket = postgres({ ...POSTGRES_TARGET, path: socketPath })
+        const spanPromise = agent.assertFirstTraceSpan(span => {
+          assert.strictEqual(span.meta['out.host'], undefined)
+          assert.strictEqual(span.metrics['network.destination.port'], undefined)
+        }, { spanResourceMatch: /^SELECT 1 AS value$/ })
+
+        try {
+          await Promise.all([
+            assert.rejects(unixSocket`SELECT 1 AS value`, { code: 'ENOENT' }),
+            spanPromise,
+          ])
+        } finally {
+          await unixSocket.end({ timeout: 0 })
+        }
+      })
+
       it('supports a configured service name', async () => {
         tracer.use('postgres', { service: 'custom-postgres' })
         const spanPromise = agent.assertFirstTraceSpan({ service: 'custom-postgres' })
