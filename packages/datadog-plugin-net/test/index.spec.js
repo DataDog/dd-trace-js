@@ -326,7 +326,7 @@ describe('Plugin', () => {
             assert.deepStrictEqual(socket.listeners(event), listeners.get(event))
           }
           assert.strictEqual(socket.emit, emit)
-          assert.strictEqual(Object.hasOwn(socket, 'emit'), false)
+          assert.strictEqual(Object.hasOwn(socket, 'emit'), true)
         } finally {
           socket.destroy()
         }
@@ -343,14 +343,14 @@ describe('Plugin', () => {
             code: 'ERR_INVALID_ARG_TYPE',
           })
           assert.deepStrictEqual(socket.listeners('connect'), [callback])
+          assert.strictEqual(socket.emit, emit)
 
           const ready = once(socket, 'ready')
           socket.connect({ port, host: 'localhost' })
           await ready
 
           assert.strictEqual(callbackCalls, 1)
-          assert.strictEqual(socket.emit, emit)
-          assert.strictEqual(Object.hasOwn(socket, 'emit'), false)
+          assert.strictEqual(Object.hasOwn(socket, 'emit'), true)
         } finally {
           socket.destroy()
         }

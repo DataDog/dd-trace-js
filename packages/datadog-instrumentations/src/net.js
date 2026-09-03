@@ -39,25 +39,24 @@ addHook({ name: 'net' }, (net) => {
     return startCh.runStores(ctx, () => {
       const cleanup = setupListeners(this, protocol, ctx, finishCh, errorCh)
 
-      const hadOwnEmit = Object.hasOwn(this, 'emit')
-      const emit = this.emit
+      const originalEmit = this.emit
       let pendingReadyEvents = 2
       // Named `emit`/arity-1 mirrors the socket method so the per-socket wrap
       // skips its name/length rewrite.
-      this.emit = shimmer.wrapFunction(emit, originalEmit => function emit (eventName) {
+      this.emit = shimmer.wrapFunction(originalEmit, wrappedEmit => function emit (eventName) {
         switch (eventName) {
           case 'ready':
           case 'connect':
-            if (--pendingReadyEvents === 0) restoreEmit(this, emit, hadOwnEmit)
+            if (--pendingReadyEvents === 0) this.emit = originalEmit
             return readyCh.runStores(ctx, () => {
-              return Reflect.apply(originalEmit, this, arguments)
+              return Reflect.apply(wrappedEmit, this, arguments)
             })
           case 'error':
           case 'close':
-            restoreEmit(this, emit, hadOwnEmit)
-            return Reflect.apply(originalEmit, this, arguments)
+            this.emit = originalEmit
+            return Reflect.apply(wrappedEmit, this, arguments)
           default:
-            return Reflect.apply(originalEmit, this, arguments)
+            return Reflect.apply(wrappedEmit, this, arguments)
         }
       })
 
@@ -65,7 +64,7 @@ addHook({ name: 'net' }, (net) => {
         return connect.apply(this, args)
       } catch (error) {
         cleanup()
-        restoreEmit(this, emit, hadOwnEmit)
+        this.emit = originalEmit
         errorCh.publish(error)
         finishCh.runStores(ctx, () => {})
 
@@ -76,19 +75,6 @@ addHook({ name: 'net' }, (net) => {
 
   return net
 })
-
-/**
- * @param {import('node:net').Socket} socket
- * @param {import('node:net').Socket['emit']} emit
- * @param {boolean} hadOwnEmit
- */
-function restoreEmit (socket, emit, hadOwnEmit) {
-  if (hadOwnEmit) {
-    socket.emit = emit
-  } else {
-    delete socket.emit
-  }
-}
 
 function getOptions (args) {
   if (!args[0]) return
