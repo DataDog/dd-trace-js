@@ -118,8 +118,9 @@ class DatadogTracer extends Tracer {
 
   wrap (name, options, fn) {
     const tracer = this
+    const shimmer = require('../../datadog-shimmer')
 
-    return function (...args) {
+    return shimmer.wrapFunction(fn, original => function (...args) {
       let optionsObj = options
       if (typeof optionsObj === 'function' && typeof fn === 'function') {
         optionsObj = optionsObj.apply(this, args)
@@ -136,11 +137,11 @@ class DatadogTracer extends Tracer {
             return scopeBoundCb.apply(this, arguments)
           }
 
-          return fn.apply(this, args)
+          return original.apply(this, args)
         })
       }
-      return tracer.trace(name, optionsObj, () => fn.apply(this, args))
-    }
+      return tracer.trace(name, optionsObj, () => original.apply(this, args))
+    })
   }
 
   setUrl (url) {
