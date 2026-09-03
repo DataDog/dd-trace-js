@@ -153,6 +153,32 @@ function buildOtelMember (context, member) {
   return fields.length === 0 ? undefined : fields.join(';')
 }
 
+/**
+ * Updates the OTel tracestate member to represent the context's sampling decision.
+ *
+ * @param {import('./opentracing/span_context')} context
+ * @param {import('./opentracing/propagation/tracestate')} traceState
+ * @returns {void}
+ */
+function updateOtelTraceState (context, traceState) {
+  const otelMember = traceState.get('ot')
+  if (context._sampling.isProbabilityDecision === false) {
+    if (otelMember === undefined) return
+  } else if (context._sampling.probabilityRate === undefined) {
+    // Reinsert the inherited member to keep it leftmost without rebuilding its fields.
+    if (otelMember !== undefined) traceState.set('ot', otelMember)
+    return
+  }
+
+  const rebuiltOtelMember = buildOtelMember(context, otelMember)
+  if (rebuiltOtelMember === undefined) {
+    traceState.delete('ot')
+  } else {
+    traceState.set('ot', rebuiltOtelMember)
+  }
+}
+
 module.exports = {
   buildOtelMember,
+  updateOtelTraceState,
 }

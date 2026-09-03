@@ -110,7 +110,7 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       const members = carrier.tracestate.split(',')
 
       assert.match(members[0], /^dd=/)
-      assert.strictEqual(members[1], 'ot=rv:ef284ace7a91e1;th:e6666666666668;foo:bar')
+      assert.strictEqual(members[1], 'ot=th:e6666666666668;foo:bar;rv:ef284ace7a91e1')
       assert.strictEqual(parseTracestate(carrier.tracestate).congo, 't61rcWkgMzE')
       assert.strictEqual(span.context()._sampling.priority, USER_KEEP)
     })
@@ -141,7 +141,7 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       assert.deepStrictEqual(parseOtel(carrier.tracestate), { foo: 'bar' })
     })
 
-    it('clears malformed rv and th independently', () => {
+    it('forwards malformed inherited rv and th unchanged', () => {
       const malformedBoth = extractParent({
         sampled: true,
         tracestate: 'dd=s:1,ot=rv:not-hex;th:not-hex,congo=value',
@@ -149,7 +149,7 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       const first = startSpan({ parent: malformedBoth, sampleRate: 0.1 })
       const firstCarrier = inject(first.span, first.prioritySampler)
 
-      assert.strictEqual(parseTracestate(firstCarrier.tracestate).ot, undefined)
+      assert.strictEqual(parseTracestate(firstCarrier.tracestate).ot, 'rv:not-hex;th:not-hex')
       assert.strictEqual(parseTracestate(firstCarrier.tracestate).congo, 'value')
 
       const malformedThreshold = extractParent({
@@ -159,7 +159,7 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       const second = startSpan({ parent: malformedThreshold, sampleRate: 0.1 })
       const secondCarrier = inject(second.span, second.prioritySampler)
 
-      assert.deepStrictEqual(parseOtel(secondCarrier.tracestate), { rv: '1234567890abcd' })
+      assert.strictEqual(parseTracestate(secondCarrier.tracestate).ot, 'rv:1234567890abcd;th:not-hex')
     })
   })
 
