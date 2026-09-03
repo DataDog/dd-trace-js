@@ -13,7 +13,6 @@ module.exports = [
   ...require('./modelcontextprotocol-sdk'),
   ...require('./openai-agents'),
   ...require('./playwright'),
-  ...require('./undici'),
   ...require('./webdriverio'),
   ...require('./aws-durable-execution-sdk-js'),
 ]

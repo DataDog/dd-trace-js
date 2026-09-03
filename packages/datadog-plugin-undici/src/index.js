@@ -16,7 +16,7 @@ const {
   HTTP_RESPONSE_HEADERS,
 } = tags
 
-const UPGRADE_PREFIX = 'tracing:orchestrion:undici:Request_onUpgrade'
+const UPGRADE_CHANNEL = 'apm:undici:request:upgrade'
 
 // WeakMap to store span context for native undici request objects
 const requestContexts = new WeakMap()
@@ -35,7 +35,7 @@ class UndiciPlugin extends HttpClientPlugin {
     this.addSub('undici:request:headers', this.#onNativeRequestHeaders.bind(this))
     this.addSub('undici:request:trailers', this.#onNativeRequestTrailers.bind(this))
     this.addSub('undici:request:error', this.#onNativeRequestError.bind(this))
-    this.addSub(`${UPGRADE_PREFIX}:start`, this.#onNativeRequestUpgrade.bind(this))
+    this.addSub(UPGRADE_CHANNEL, this.#onNativeRequestUpgrade.bind(this))
   }
 
   // ===========================================
@@ -156,9 +156,9 @@ class UndiciPlugin extends HttpClientPlugin {
   }
 
   /**
-   * @param {{ arguments: [number, unknown], self: object }} context
+   * @param {{ headers: unknown, request: object, statusCode: number }} context
    */
-  #onNativeRequestUpgrade ({ arguments: [statusCode, headers], self: request }) {
+  #onNativeRequestUpgrade ({ headers, request, statusCode }) {
     this.#onNativeRequestHeaders({ request, response: { headers, statusCode } })
     this.#finishNativeRequest(request)
   }

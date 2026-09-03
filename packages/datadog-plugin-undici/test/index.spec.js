@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 
+const { channel } = require('dc-polyfill')
 const semver = require('semver')
 const satisfies = require('../../../vendor/dist/semifies')
 const tags = require('../../../ext/tags')
@@ -16,6 +17,7 @@ const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 const SERVICE_NAME = 'test'
+const upgradeChannel = channel('apm:undici:request:upgrade')
 
 // Helper to find an error with a specific type in the caught error's cause chain
 // Different undici versions wrap errors differently, so we need to walk the chain
@@ -198,10 +200,20 @@ describe('Plugin', () => {
         })
 
         it('should finish the request span when the server accepts an upgrade', async function () {
-          if (!satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')) {
+          if (!satisfies(resolvedVersion, '>=4.7.0')) {
             this.skip()
             return
           }
+
+          let requestHookCalls = 0
+          agent.reload('undici', {
+            hooks: {
+              request () {
+                requestHookCalls++
+              },
+            },
+            service: 'test',
+          })
 
           appListener = require('node:http').createServer()
           appListener.once('upgrade', (_request, socket) => {
@@ -216,14 +228,51 @@ describe('Plugin', () => {
           await once(appListener, 'listening')
           const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
           const client = new fetch.Client(`http://localhost:${port}`)
+          const fallbackMessages = []
+          const fallbackSubscriber = message => fallbackMessages.push(message)
           const tracePromise = agent.assertFirstTraceSpan(span => {
             assert.strictEqual(span.resource, 'GET')
             assert.strictEqual(span.meta['http.status_code'], '101')
           })
+          upgradeChannel.subscribe(fallbackSubscriber)
 
-          const { socket } = await client.upgrade({ path: '/', protocol: 'test' })
-          socket.destroy()
-          await Promise.all([tracePromise, client.close()])
+          try {
+            const { headers, socket } = await client.upgrade({ path: '/', protocol: 'test' })
+            assert.notStrictEqual(headers, undefined)
+            socket.destroy()
+            await Promise.all([tracePromise, client.close()])
+
+            assert.strictEqual(fallbackMessages.length, 1)
+            assert.strictEqual(fallbackMessages[0].statusCode, 101)
+            assert.strictEqual(requestHookCalls, 1)
+          } finally {
+            upgradeChannel.unsubscribe(fallbackSubscriber)
+          }
+        })
+
+        it('should not use the accepted-upgrade fallback when the server rejects an upgrade', async function () {
+          if (!satisfies(resolvedVersion, '>=4.7.0')) {
+            this.skip()
+            return
+          }
+
+          appListener = require('node:http').createServer((_request, response) => response.end())
+          appListener.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
+          const client = new fetch.Client(`http://localhost:${port}`)
+          const fallbackMessages = []
+          const fallbackSubscriber = message => fallbackMessages.push(message)
+          const tracePromise = agent.assertFirstTraceSpan({ resource: 'GET' })
+          upgradeChannel.subscribe(fallbackSubscriber)
+
+          try {
+            await assert.rejects(client.upgrade({ path: '/', protocol: 'test' }))
+            await Promise.all([tracePromise, client.close()])
+            assert.deepStrictEqual(fallbackMessages, [])
+          } finally {
+            upgradeChannel.unsubscribe(fallbackSubscriber)
+          }
         })
 
         it('should support URL input', done => {
@@ -932,6 +981,16 @@ describe('Plugin', () => {
             return
           }
 
+          let requestHookCalls = 0
+          agent.reload('undici', {
+            hooks: {
+              request () {
+                requestHookCalls++
+              },
+            },
+            service: 'test',
+          })
+
           const http = require('node:http')
           const net = require('node:net')
 
@@ -985,6 +1044,7 @@ describe('Plugin', () => {
           })
           const { body } = await fetch.request(`http://localhost:${downstreamPort}/data`, { dispatcher })
           await Promise.all([body.text(), tracePromise])
+          assert.strictEqual(requestHookCalls, 2)
         })
       })
     })
