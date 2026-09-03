@@ -241,11 +241,17 @@ describe('undici instrumentation', () => {
 
           const expectedError = new Error('upgrade failed')
           const throwingHandler = createHandler(methodName, result, [], expectedError)
+          const throwingRequest = new Request(throwingHandler, controller)
           assert.throws(
-            () => new Request(throwingHandler, controller)[methodName](101, headers, socket),
+            () => throwingRequest[methodName](101, headers, socket),
             error => error === expectedError
           )
-          assert.strictEqual(messages.length, 1)
+          assert.deepStrictEqual(messages.at(-1), {
+            error: expectedError,
+            headers,
+            request: throwingRequest,
+            statusCode: 101,
+          })
 
           const abortingHandler = {
             [methodName] () {
@@ -255,7 +261,7 @@ describe('undici instrumentation', () => {
           }
           const abortedRequest = new Request(abortingHandler, controller)
           assert.strictEqual(abortedRequest[methodName](101, headers, socket), result)
-          assert.strictEqual(messages.length, 1)
+          assert.strictEqual(messages.length, 2)
         } finally {
           upgradeChannel.unsubscribe(subscriber)
         }

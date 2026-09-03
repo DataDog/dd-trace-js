@@ -156,11 +156,11 @@ class UndiciPlugin extends HttpClientPlugin {
   }
 
   /**
-   * @param {{ headers: unknown, request: object, statusCode: number }} context
+   * @param {{ error?: Error, headers: unknown, request: object, statusCode: number }} context
    */
-  #onNativeRequestUpgrade ({ headers, request, statusCode }) {
+  #onNativeRequestUpgrade ({ error, headers, request, statusCode }) {
     this.#onNativeRequestHeaders({ request, response: { headers, statusCode } })
-    this.#finishNativeRequest(request)
+    this.#finishNativeRequest(request, error)
   }
 
   /**

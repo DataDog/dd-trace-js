@@ -63,7 +63,13 @@ function createWrapUpgrade (upgrade) {
   return function (statusCode, headers, socket) {
     if (!upgradeCh.hasSubscribers) return upgrade.apply(this, arguments)
 
-    const result = upgrade.apply(this, arguments)
+    let result
+    try {
+      result = upgrade.apply(this, arguments)
+    } catch (error) {
+      upgradeCh.publish({ error, headers, request: this, statusCode })
+      throw error
+    }
     if (!this.aborted) {
       upgradeCh.publish({ headers, request: this, statusCode })
     }

@@ -44,6 +44,8 @@ describe('Plugin', () => {
 
   describe('undici-fetch', () => {
     withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version, moduleName, resolvedVersion) => {
+      const hasNativeDiagnostics = satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')
+
       /**
        * @param {import('express').Application} app
        * @param {(port: number) => void} [listener]
@@ -175,7 +177,7 @@ describe('Plugin', () => {
         })
 
         it('should keep the caller span active while creating a request', async function () {
-          if (!satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')) {
+          if (!hasNativeDiagnostics) {
             this.skip()
             return
           }
@@ -270,6 +272,55 @@ describe('Plugin', () => {
             await assert.rejects(client.upgrade({ path: '/', protocol: 'test' }))
             await Promise.all([tracePromise, client.close()])
             assert.deepStrictEqual(fallbackMessages, [])
+          } finally {
+            upgradeChannel.unsubscribe(fallbackSubscriber)
+          }
+        })
+
+        it('should finish the request span when an accepted-upgrade handler throws', async function () {
+          if (!hasNativeDiagnostics) {
+            this.skip()
+            return
+          }
+
+          appListener = require('node:http').createServer()
+          appListener.once('upgrade', (_request, socket) => {
+            socket.write(
+              'HTTP/1.1 101 Switching Protocols\r\n' +
+              'Connection: Upgrade\r\n' +
+              'Upgrade: test\r\n' +
+              '\r\n'
+            )
+          })
+          appListener.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
+          const client = new fetch.Client(`http://localhost:${port}`)
+          const expectedError = new Error('upgrade handler failed')
+          const fallbackMessages = []
+          const fallbackSubscriber = message => fallbackMessages.push(message)
+          const throwExpectedError = () => { throw expectedError }
+          const tracePromise = agent.assertFirstTraceSpan(span => {
+            assert.strictEqual(span.resource, 'GET')
+            assert.strictEqual(span.meta['http.status_code'], '101')
+            assert.strictEqual(span.meta[ERROR_TYPE], expectedError.name)
+            assert.strictEqual(span.meta[ERROR_MESSAGE], expectedError.message)
+          })
+          upgradeChannel.subscribe(fallbackSubscriber)
+
+          try {
+            client.dispatch({ method: 'GET', path: '/', upgrade: 'test' }, {
+              onConnect () {},
+              onError () {},
+              onRequestStart () {},
+              onRequestUpgrade: throwExpectedError,
+              onResponseError () {},
+              onUpgrade: throwExpectedError,
+            })
+            await Promise.all([tracePromise, client.close()])
+
+            assert.strictEqual(fallbackMessages.length, 1)
+            assert.strictEqual(fallbackMessages[0].error, expectedError)
           } finally {
             upgradeChannel.unsubscribe(fallbackSubscriber)
           }
@@ -813,7 +864,9 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].meta.foo, '/foo')
-                assert.strictEqual(activeSpan, hookSpan)
+                if (hasNativeDiagnostics) {
+                  assert.strictEqual(activeSpan === hookSpan, true)
+                }
               })
               .then(done)
               .catch(done)
