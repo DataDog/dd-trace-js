@@ -179,19 +179,6 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
   }
 }
 
-/**
- * @param {Config} config
- * @param {ConfigPath} name
- */
-function clearAndTrack (config, name) {
-  if (get(config, name) === undefined) return
-
-  changeTracker.calculated.add(name)
-  set(config, name, undefined)
-  generateTelemetry(undefined, 'calculated', name)
-  trackedConfigOrigins.set(name, 'calculated')
-}
-
 module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
@@ -501,6 +488,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
+    }
+
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
     // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
     // that don't set the sampler still get parent-based sampling. Electron exporter spans go over
@@ -512,14 +505,6 @@ class Config extends ConfigBase {
           (this.OTEL_TRACES_EXPORTER === 'otlp' && this.experimental.exporter !== 'electron'))) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
-    }
-
-    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
-      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessTracingEnabled && !this.isCiVisibility) {
-      clearAndTrack(this, 'sampleRate')
-      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
-      setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', false)
     }
 
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
@@ -656,7 +641,7 @@ class Config extends ConfigBase {
     }
 
     if (this.DD_AGENTLESS_ENABLED) {
-      if (this.isCiVisibility) {
+      if (!trackedConfigOrigins.has('DD_AGENTLESS_LOG_SUBMISSION_ENABLED') && !this.DD_LOGS_OTEL_ENABLED) {
         setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
       }
       setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
@@ -666,7 +651,6 @@ class Config extends ConfigBase {
         setAndTrack(this, 'dynamicInstrumentation.enabled', false)
       }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
-      setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
       setAndTrack(this, 'dsmEnabled', false)
       setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
@@ -676,6 +660,10 @@ class Config extends ConfigBase {
       if (profilingExporters.length === 0) {
         setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
       }
+    }
+
+    if (this.DD_AGENTLESS_LOG_SUBMISSION_ENABLED && this.DD_LOGS_OTEL_ENABLED) {
+      setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
     }
 
     if (agentlessTracingEnabled && !this.isCiVisibility) {
