@@ -220,7 +220,7 @@ class PrioritySampler {
 
     log.trace(span, samplingPriority, mechanism)
 
-    this.#addDecisionMaker(root)
+    this.#addDecisionMaker(root, product === undefined)
   }
 
   /**
@@ -411,16 +411,17 @@ class PrioritySampler {
    * Tags the trace with a decision maker when priority is keep, or removes it otherwise.
    *
    * @param {DatadogSpan} span
+   * @param {boolean} [overwrite]
    * @returns {void}
    */
-  #addDecisionMaker (span) {
+  #addDecisionMaker (span, overwrite = false) {
     const context = span.context()
     const trace = context._trace
     const priority = context._sampling.priority
     const mechanism = context._sampling.mechanism
 
     if (priority >= AUTO_KEEP) {
-      if (!trace.tags[DECISION_MAKER_KEY]) {
+      if (overwrite || !trace.tags[DECISION_MAKER_KEY]) {
         trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
       }
     } else if (trace.tags[DECISION_MAKER_KEY] !== undefined) {

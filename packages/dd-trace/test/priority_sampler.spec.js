@@ -539,12 +539,14 @@ describe('PrioritySampler', () => {
   describe('setPriorityFromTag', () => {
     it('should let a manual sampling tag override an automatic decision', () => {
       prioritySampler.sample(span)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-0')
 
       prioritySampler.setPriorityFromTag(span, SAMPLING_PRIORITY, `${USER_KEEP}`)
 
       assert.strictEqual(context._sampling.priority, USER_KEEP)
       assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_MANUAL)
       assert.strictEqual(context._sampling.isProbabilityDecision, false)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-4')
     })
 
     it('should ignore a disabled manual sampling tag', () => {
