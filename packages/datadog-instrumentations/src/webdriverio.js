@@ -471,7 +471,7 @@ async function cleanupRumBrowser (browser) {
 /**
  * Removes the current test's RUM correlation from every prepared browser.
  *
- * @returns {Promise<object[]>}
+ * @returns {Promise<void>}
  */
 async function cleanupRumBrowsers () {
   isRumCleanupPending = false
@@ -482,7 +482,6 @@ async function cleanupRumBrowsers () {
     // eslint-disable-next-line no-await-in-loop
     await cleanupRumBrowser(browser)
   }
-  return browsers
 }
 
 /**
@@ -574,6 +573,16 @@ async function startRumTest () {
     // eslint-disable-next-line no-await-in-loop
     await correlateRumBrowser(browser, testExecutionId)
   }
+}
+
+/**
+ * Replaces the completed test's RUM correlation before WebdriverIO runs callbacks for the next test or hook.
+ *
+ * @returns {Promise<void>}
+ */
+async function prepareNextRumTest () {
+  await cleanupRumBrowsers()
+  await startRumTest()
 }
 
 /**
@@ -731,7 +740,7 @@ function waitForFailedRumCleanup (context) {
 /**
  * Cleans a completed test's RUM state before the next non-afterEach wrapper.
  *
- * @param {{arguments?: unknown[], rumCleanupCallback?: () => Promise<object[]>}} context
+ * @param {{arguments?: unknown[], rumCleanupCallback?: () => Promise<void>}} context
  * @returns {void}
  */
 function waitForPendingRumCleanup (context) {
@@ -739,7 +748,8 @@ function waitForPendingRumCleanup (context) {
   const hookName = context.arguments?.[7]
   if (!isRumCleanupPending || (type === 'Hook' && hookName === 'afterEach')) return
 
-  context.rumCleanupCallback = cleanupRumBrowsers
+  const startsTest = type === 'Test' || (type === 'Hook' && hookName === 'beforeEach')
+  context.rumCleanupCallback = startsTest ? prepareNextRumTest : cleanupRumBrowsers
 }
 
 /**

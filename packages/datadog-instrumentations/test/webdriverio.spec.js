@@ -1072,7 +1072,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('re-correlates a RUM page reused by the next test without navigation', async () => {
+  it('re-correlates a reused RUM page before failing WebdriverIO test and hook callbacks', async () => {
     require('../src/webdriverio')
 
     const source = fs.readFileSync(utilsFixturePath, 'utf8')
@@ -1119,7 +1119,7 @@ describe('webdriverio instrumentation', () => {
       await runCallback(navigationContext.resolveCallback)
 
       fs.writeFileSync(outputPath, rewrittenSource)
-      const { executeAsync, testFrameworkFnWrapper } = await import(pathToFileURL(outputPath))
+      const { testFrameworkFnWrapper } = await import(pathToFileURL(outputPath))
       const firstTestError = new Error('first test failed')
       await assert.rejects(testFrameworkFnWrapper({}, 'Test', {
         specFn () {
@@ -1127,18 +1127,40 @@ describe('webdriverio instrumentation', () => {
           throw firstTestError
         },
       }), error => error === firstTestError)
-      await testFrameworkFnWrapper({}, 'Test', {
-        async specFn () {
-          testExecutionId = 'second-test-id'
-          await executeAsync(() => {
-            calls.push('second-test')
-          }, { attempts: 0, limit: 0 })
+      testExecutionId = 'second-test-id'
+      const beforeTestError = new Error('before test failed')
+      await assert.rejects(testFrameworkFnWrapper({}, 'Test', {
+        specFn () {
+          calls.push('second-test')
         },
       }, {
         beforeFn () {
           calls.push('before-test')
+          throw beforeTestError
         },
-      })
+      }), error => error === beforeTestError)
+
+      testExecutionId = 'third-test-id'
+      const beforeHookError = new Error('before hook failed')
+      await assert.rejects(testFrameworkFnWrapper(
+        {},
+        'Hook',
+        {
+          specFn () {
+            calls.push('before-each')
+          },
+        },
+        {
+          beforeFn () {
+            calls.push('before-hook')
+            throw beforeHookError
+          },
+        },
+        undefined,
+        '0-0',
+        0,
+        'beforeEach'
+      ), error => error === beforeHookError)
 
       assert.deepStrictEqual(calls, [
         'detect',
@@ -1146,11 +1168,14 @@ describe('webdriverio instrumentation', () => {
         'first-test',
         'detect',
         'delete',
-        'before-test',
         'detect',
         'set:second-test-id',
-        'second-test',
+        'before-test',
         'detect',
+        'delete',
+        'detect',
+        'set:third-test-id',
+        'before-hook',
       ])
     } finally {
       correlationCh.unsubscribe(correlate)
