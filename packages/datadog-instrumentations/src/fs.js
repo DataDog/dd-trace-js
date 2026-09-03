@@ -213,22 +213,13 @@ function wrapCreateStream (original) {
         if (finished) return
         finished = true
         finishChannel.runStores(ctx, () => {})
-        try {
-          if (typeof stream.removeListener !== 'function') return
-          stream.removeListener('close', onFinish)
-          stream.removeListener('end', onFinish)
-          stream.removeListener('finish', onFinish)
-          stream.removeListener(errorMonitor, onError)
-        } catch (error) {
-          log.error('Error removing fs stream instrumentation listeners', error)
-        }
+        removeStreamListener(stream, 'close', onFinish)
+        removeStreamListener(stream, 'end', onFinish)
+        removeStreamListener(stream, 'finish', onFinish)
+        removeStreamListener(stream, errorMonitor, onError)
       }
 
       try {
-        if (typeof stream.once !== 'function') {
-          onFinish()
-          return stream
-        }
         stream.once('close', onFinish)
         stream.once('end', onFinish)
         stream.once('finish', onFinish)
@@ -240,6 +231,19 @@ function wrapCreateStream (original) {
 
       return stream
     })
+  }
+}
+
+/**
+ * @param {import('node:events').EventEmitter} stream
+ * @param {string | symbol} event
+ * @param {(...args: unknown[]) => void} listener
+ */
+function removeStreamListener (stream, event, listener) {
+  try {
+    stream.removeListener(event, listener)
+  } catch (error) {
+    log.error('Error removing fs stream instrumentation listener', error)
   }
 }
 

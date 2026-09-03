@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { errorMonitor, EventEmitter, once } = require('node:events')
+const nativeFs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { describe, it, after, afterEach, before, beforeEach } = require('mocha')
@@ -10,7 +11,6 @@ const dc = require('dc-polyfill')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 
-const logErrorCh = dc.channel('datadog:log:error')
 const opErrorCh = dc.channel('apm:fs:operation:error')
 const opFinishCh = dc.channel('apm:fs:operation:finish')
 const opStartCh = dc.channel('apm:fs:operation:start')
@@ -20,6 +20,10 @@ const streamConstructors = [
   { methodName: 'createWriteStream', className: 'WriteStream', resource: 'WriteStream' },
 ]
 const streamEvents = ['close', 'end', 'finish', errorMonitor]
+const expectedErrors = new Map()
+for (const { methodName } of streamConstructors) {
+  expectedErrors.set(methodName, getThrownError(() => nativeFs[methodName](null)))
+}
 
 /**
  * @param {() => unknown} callback
@@ -70,7 +74,7 @@ describe('fs instrumentation', () => {
     for (const { methodName, className, resource } of streamConstructors) {
       describe(methodName, () => {
         it('preserves invalid path errors', () => {
-          const expectedError = getThrownError(() => Reflect.construct(fs[className], [null]))
+          const expectedError = expectedErrors.get(methodName)
           const activeSpan = tracer.scope().active()
 
           assert.throws(() => fs[methodName](null), {
@@ -131,180 +135,101 @@ describe('fs instrumentation', () => {
           await tracePromise
         })
 
-        it('returns the stream when tracing listener setup fails', async () => {
+        it('returns the native stream when tracing listener setup fails', async () => {
           const originalConstructor = fs[className]
           const listenerError = new Error('listener setup failed')
+          const directory = methodName === 'createWriteStream'
+            ? fs.mkdtempSync(path.join(os.tmpdir(), 'dd-fs-stream-'))
+            : undefined
+          const filename = directory ? path.join(directory, 'output') : __filename
+          let cleanupErrorThrown = false
           let createdStream
+          let failListeners = false
 
-          fs[className] = class extends EventEmitter {
-            constructor () {
-              super()
+          fs[className] = class extends originalConstructor {
+            constructor (...args) {
+              super(...args)
               createdStream = this
+              this.on('newListener', event => {
+                if (failListeners && event === errorMonitor) throw listenerError
+              })
+              this.on('removeListener', event => {
+                if (failListeners && event === 'close' && !cleanupErrorThrown) {
+                  cleanupErrorThrown = true
+                  this.emit(methodName === 'createReadStream' ? 'end' : 'finish')
+                  throw listenerError
+                }
+              })
+            }
+          }
+
+          try {
+            tracer.use('fs', { enabled: false })
+            const nativeStream = fs[methodName](filename)
+            const nativeClosePromise = once(nativeStream, 'close')
+            if (methodName === 'createReadStream') {
+              nativeStream.resume()
+            } else {
+              nativeStream.end('test')
+            }
+            await nativeClosePromise
+
+            tracer.use('fs', { enabled: true })
+            failListeners = true
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].error, 0)
+            })
+            const activeSpan = tracer.scope().active()
+            let publishedErrors = 0
+            let publishedFinishes = 0
+
+            /**
+             * @param {{ operation: string }} ctx
+             */
+            function onError (ctx) {
+              if (ctx.operation === resource) publishedErrors++
             }
 
             /**
-             * @param {string | symbol} event
-             * @param {(...args: unknown[]) => void} listener
-             * @returns {this}
+             * @param {{ operation: string }} ctx
              */
-            once (event, listener) {
-              super.once(event, listener)
-              if (event === 'end') throw listenerError
-              return this
+            function onFinish (ctx) {
+              if (ctx.operation === resource) publishedFinishes++
             }
 
-            /**
-             * @param {string | symbol} event
-             * @param {(...args: unknown[]) => void} listener
-             * @returns {this}
-             */
-            removeListener (event, listener) {
-              super.removeListener(event, listener)
-              if (event === errorMonitor) throw listenerError
-              return this
+            opErrorCh.subscribe(onError)
+            opFinishCh.subscribe(onFinish)
+            try {
+              tracer.trace('parent', parentSpan => {
+                assert.strictEqual(fs[methodName](filename), createdStream)
+                assert.strictEqual(tracer.scope().active(), parentSpan)
+              })
+            } finally {
+              opErrorCh.unsubscribe(onError)
+              opFinishCh.unsubscribe(onFinish)
             }
-          }
 
-          const tracePromise = agent.assertSomeTraces(traces => {
-            const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
-            assert.strictEqual(spans.length, 1)
-            assert.strictEqual(spans[0].error, 0)
-          })
-          const activeSpan = tracer.scope().active()
-          let publishedErrors = 0
-          let publishedFinishes = 0
+            assert.strictEqual(cleanupErrorThrown, true)
+            assert.strictEqual(publishedErrors, 0)
+            assert.strictEqual(publishedFinishes, 1)
+            assert.strictEqual(tracer.scope().active(), activeSpan)
+            for (const event of streamEvents) {
+              assert.strictEqual(createdStream.listenerCount(event), 0)
+            }
 
-          /**
-           * @param {{ operation: string }} ctx
-           */
-          function onError (ctx) {
-            if (ctx.operation === resource) publishedErrors++
-          }
-
-          /**
-           * @param {{ operation: string }} ctx
-           */
-          function onFinish (ctx) {
-            if (ctx.operation !== resource) return
-            publishedFinishes++
-            createdStream.emit('close')
-          }
-
-          opErrorCh.subscribe(onError)
-          opFinishCh.subscribe(onFinish)
-          try {
-            tracer.trace('parent', parentSpan => {
-              assert.strictEqual(fs[methodName]('unused'), createdStream)
-              assert.strictEqual(tracer.scope().active(), parentSpan)
-            })
+            const closePromise = once(createdStream, 'close')
+            if (methodName === 'createReadStream') {
+              createdStream.resume()
+            } else {
+              createdStream.end('test')
+            }
+            await Promise.all([closePromise, tracePromise])
           } finally {
-            opErrorCh.unsubscribe(onError)
-            opFinishCh.unsubscribe(onFinish)
             fs[className] = originalConstructor
+            if (directory) fs.rmSync(directory, { recursive: true })
           }
-
-          assert.strictEqual(publishedErrors, 0)
-          assert.strictEqual(publishedFinishes, 1)
-          assert.strictEqual(tracer.scope().active(), activeSpan)
-          for (const event of streamEvents) {
-            assert.strictEqual(createdStream.listenerCount(event), 0)
-          }
-          await tracePromise
-        })
-
-        it('returns the stream when tracing listener methods are absent', async () => {
-          const originalConstructor = fs[className]
-          let createdStream
-
-          fs[className] = class {
-            constructor () {
-              createdStream = this
-            }
-          }
-
-          const tracePromise = agent.assertSomeTraces(traces => {
-            const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
-            assert.strictEqual(spans.length, 1)
-            assert.strictEqual(spans[0].error, 0)
-          })
-          const activeSpan = tracer.scope().active()
-          let loggedErrors = 0
-          let publishedErrors = 0
-
-          function onLogError () {
-            loggedErrors++
-          }
-
-          /**
-           * @param {{ operation: string }} ctx
-           */
-          function onError (ctx) {
-            if (ctx.operation === resource) publishedErrors++
-          }
-
-          logErrorCh.subscribe(onLogError)
-          opErrorCh.subscribe(onError)
-          try {
-            tracer.trace('parent', parentSpan => {
-              assert.strictEqual(fs[methodName]('unused'), createdStream)
-              assert.strictEqual(tracer.scope().active(), parentSpan)
-            })
-          } finally {
-            logErrorCh.unsubscribe(onLogError)
-            opErrorCh.unsubscribe(onError)
-            fs[className] = originalConstructor
-          }
-
-          assert.strictEqual(loggedErrors, 0)
-          assert.strictEqual(publishedErrors, 0)
-          assert.strictEqual(tracer.scope().active(), activeSpan)
-          await tracePromise
-        })
-
-        it('returns the stream when tracing listener lookup fails', async () => {
-          const originalConstructor = fs[className]
-          const listenerError = new Error('listener lookup failed')
-          let createdStream
-
-          fs[className] = class {
-            constructor () {
-              createdStream = this
-            }
-
-            get once () {
-              throw listenerError
-            }
-          }
-
-          const tracePromise = agent.assertSomeTraces(traces => {
-            const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
-            assert.strictEqual(spans.length, 1)
-            assert.strictEqual(spans[0].error, 0)
-          })
-          const activeSpan = tracer.scope().active()
-          let publishedErrors = 0
-
-          /**
-           * @param {{ operation: string }} ctx
-           */
-          function onError (ctx) {
-            if (ctx.operation === resource) publishedErrors++
-          }
-
-          opErrorCh.subscribe(onError)
-          try {
-            tracer.trace('parent', parentSpan => {
-              assert.strictEqual(fs[methodName]('unused'), createdStream)
-              assert.strictEqual(tracer.scope().active(), parentSpan)
-            })
-          } finally {
-            opErrorCh.unsubscribe(onError)
-            fs[className] = originalConstructor
-          }
-
-          assert.strictEqual(publishedErrors, 0)
-          assert.strictEqual(tracer.scope().active(), activeSpan)
-          await tracePromise
         })
 
         it('finishes tracing when the stream emits an error', async () => {
@@ -369,29 +294,47 @@ describe('fs instrumentation', () => {
             assert.strictEqual(spans[0].meta['file.path'], filename)
           })
           const activeSpan = tracer.scope().active()
+          const terminalEvent = methodName === 'createReadStream' ? 'end' : 'finish'
+          let publishedFinishes = 0
 
-          const streamPromise = tracer.trace('parent', async parentSpan => {
-            const stream = fs[methodName](filename)
-            const closePromise = once(stream, 'close')
+          /**
+           * @param {{ operation: string }} ctx
+           */
+          function onFinish (ctx) {
+            if (ctx.operation === resource) publishedFinishes++
+          }
 
-            assert.ok(stream instanceof fs[className])
-            if (methodName === 'createReadStream') {
-              stream.resume()
-            } else {
-              stream.end('test')
-            }
-            await closePromise
-
-            assert.strictEqual(tracer.scope().active(), parentSpan)
-            for (const event of streamEvents) {
-              assert.strictEqual(stream.listenerCount(event), 0)
-            }
-          })
-
+          opFinishCh.subscribe(onFinish)
           try {
+            const streamPromise = tracer.trace('parent', async parentSpan => {
+              const stream = fs[methodName](filename)
+              const closePromise = once(stream, 'close')
+              const terminalPromise = once(stream, terminalEvent)
+
+              assert.ok(stream instanceof fs[className])
+              if (methodName === 'createReadStream') {
+                stream.resume()
+              } else {
+                stream.end('test')
+              }
+              await terminalPromise
+
+              assert.strictEqual(tracer.scope().active(), parentSpan)
+              for (const event of streamEvents) {
+                assert.strictEqual(stream.listenerCount(event), event === 'close' ? 1 : 0)
+              }
+
+              await closePromise
+              for (const event of streamEvents) {
+                assert.strictEqual(stream.listenerCount(event), 0)
+              }
+            })
+
             await Promise.all([streamPromise, tracePromise])
+            assert.strictEqual(publishedFinishes, 1)
             assert.strictEqual(tracer.scope().active(), activeSpan)
           } finally {
+            opFinishCh.unsubscribe(onFinish)
             if (directory) fs.rmSync(directory, { recursive: true })
           }
         })
