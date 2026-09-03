@@ -34,25 +34,45 @@ module.exports = {
  * Awaits an optional context callback at the start of the matched node's enclosing async function.
  *
  * @param {Parameters<typeof awaitContextCallback>[0]} state
- * @param {import('estree').Node} _node
+ * @param {import('estree').Node} node
  * @param {import('estree').Node} _parent
  * @param {import('estree').Node[]} ancestry
  * @returns {void}
  */
-function awaitContextCallbackAtFunctionStart (state, _node, _parent, ancestry) {
-  const enclosingFunction = ancestry.find(ancestor => functionTypes.has(ancestor.type))
+function awaitContextCallbackAtFunctionStart (state, node, _parent, ancestry) {
+  let enclosingFunction = functionTypes.has(node.type)
+    ? node
+    : ancestry.find(ancestor => functionTypes.has(ancestor.type))
+  let callbackAncestry = ancestry
+
+  if (enclosingFunction === node) {
+    callbackAncestry = [node, ...ancestry]
+    if (!node.async) {
+      // Function queries create a synchronous trace wrapper before custom transforms run.
+      const [wrappedFunction] = query(node,
+        'VariableDeclarator[id.name="__apm$traced"] > ArrowFunctionExpression > BlockStatement > ' +
+        'VariableDeclaration > VariableDeclarator[id.name="__apm$wrapped"] > ' +
+        ':matches(FunctionDeclaration, FunctionExpression)[async=true]')
+      if (wrappedFunction) {
+        enclosingFunction = wrappedFunction
+        callbackAncestry.unshift(wrappedFunction)
+      }
+    }
+  }
   assert(enclosingFunction?.async && enclosingFunction.body?.type === 'BlockStatement',
     'awaitContextCallbackAtFunctionStart: expected an enclosing async function with a block body')
 
   const generatedCallback = createAwaitedContextCallback(
     state,
     enclosingFunction.body,
-    ancestry,
+    callbackAncestry,
     'awaitContextCallbackAtFunctionStart'
   )
   if (!generatedCallback) return
 
-  enclosingFunction.body.body.unshift(...generatedCallback.callbackStatements)
+  let insertionIndex = 0
+  while (typeof enclosingFunction.body.body[insertionIndex]?.directive === 'string') insertionIndex++
+  enclosingFunction.body.body.splice(insertionIndex, 0, ...generatedCallback.callbackStatements)
 }
 
 /**
