@@ -48,5 +48,4 @@ policy:
 
 # The structural reference-integrity check (verify-skill-references.js) was removed:
 # it hand-duplicated a file list already kept in SKILL.md's roster table and
-# repo-context.md's references. Not reinstated pending the .llm-validation vs
-# .promptfoo consolidation decision.
+# repo-context.md's references, so it is not reinstated.
