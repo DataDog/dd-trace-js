@@ -27,7 +27,7 @@ function runProgrammaticRegExpRules (ruleSampleRate) {
     const prefix = ruleSampleRate === 0 ? 'drop' : 'keep'
     const matchers = {
       name: vm.runInNewContext('new RegExp("^" + prefix + "[.]name$", "g")', { prefix }),
-      service: new RegExp('^' + prefix + '[.]service$', 'y'),
+      service: new RegExp(prefix + '[.]service', 'y'),
       resource: new RegExp('^' + prefix + '[.]resource$', 'g'),
       tag: new RegExp('^' + prefix + '[.]tag$', 'y'),
       emptyTag: /^$/,
@@ -73,7 +73,7 @@ function runProgrammaticRegExpRules (ruleSampleRate) {
     assert.strictEqual(matchers.service.lastIndex, 0)
     const serviceMatchingAgain = getPriority('service', { service: prefix + '.service' })
     assert.strictEqual(matchers.service.lastIndex, 0)
-    const serviceNonMatching = getPriority('service', { service: 'other.service' })
+    const serviceNonMatching = getPriority('service', { service: 'other.' + prefix + '.service' })
     const resourceMatching = getPriority('resource', { resource: prefix + '.resource' })
     assert.strictEqual(matchers.resource.lastIndex, 0)
     const resourceMatchingAgain = getPriority('resource', { resource: prefix + '.resource' })

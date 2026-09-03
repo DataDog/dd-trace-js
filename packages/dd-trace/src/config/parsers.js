@@ -77,15 +77,16 @@ const transformers = {
    * @param {unknown} value
    */
   toCamelCase (value) {
-    if (isRegExp(value)) {
-      return new RegExp(value)
-    }
     if (Array.isArray(value)) {
       return value.map(item => {
         return transformers.toCamelCase(item)
       })
     }
     if (typeof value === 'object' && value !== null) {
+      // RegExp matchers are supported configuration leaves and need their own clone.
+      if (isRegExp(value)) {
+        return new RegExp(value)
+      }
       const result = {}
       for (const [key, innerValue] of Object.entries(value)) {
         const camelCaseKey = key.replaceAll(/_(\w)/g, (_, letter) => letter.toUpperCase())
