@@ -1,5 +1,7 @@
 'use strict'
 
+const { AsyncResource } = require('node:async_hooks')
+
 const dc = require('dc-polyfill')
 
 const { storage } = require('../../datadog-core')
@@ -231,11 +233,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
    * @param {object} rootCtx
    */
   storeRootContext (ctx, contextValue, rootCtx) {
+    ctx.currentStore.graphqlRootCtx = rootCtx
     if (isWeakMapKey(contextValue)) {
       contexts.set(contextValue, rootCtx)
       ctx.ddContextValue = contextValue
-    } else {
-      ctx.currentStore.graphqlRootCtx = rootCtx
     }
   }
 
@@ -436,9 +437,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     field.span = span
     if (rootCtx.config.collapse) {
-      if (field.jitPathKey === false) {
-        field.currentStore.graphqlResolveField = { field }
-      }
       field.nextResolveField = rootCtx.resolveFields
       rootCtx.resolveFields = field
     }
@@ -1094,10 +1092,19 @@ function invokeResolver (resolve, self, args, isJit) {
  * @returns {unknown}
  */
 function callInCollapsedScope (fn, thisArg, args, field, isJit) {
+  if (!isJit) {
+    field.asyncResource ??= legacyStorage.run(field.currentStore, createResolverAsyncResource)
+    return field.asyncResource.runInAsyncScope(invokeResolver, undefined, fn, thisArg, args, false)
+  }
+
   if (legacyStorage.getStore() !== field.currentStore) {
     legacyStorage.enterWith(field.currentStore)
   }
   return invokeResolver(fn, thisArg, args, isJit)
+}
+
+function createResolverAsyncResource () {
+  return new AsyncResource('dd-trace:graphql:resolve', { requireManualDestroy: true })
 }
 
 /**
@@ -1517,11 +1524,7 @@ function releaseRootContext (rootCtx, finishPendingFields) {
       runResolveHooks(rootCtx)
     }
     for (let field = rootCtx.resolveFields; field; field = field.nextResolveField) {
-      const holder = field.currentStore?.graphqlResolveField
-      if (holder?.field === field) {
-        holder.field = undefined
-        field.currentStore.graphqlResolveField = undefined
-      }
+      field.asyncResource?.emitDestroy()
       field.span.finish(field.endTime > PENDING_FIELD_END_TIME ? field.endTime : endTime)
     }
   } else if (finishPendingFields && rootCtx.fields !== undefined) {
