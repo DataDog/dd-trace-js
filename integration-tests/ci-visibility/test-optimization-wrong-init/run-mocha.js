@@ -4,7 +4,8 @@ require('dd-trace').init({
   service: 'sum-service-tests',
 })
 
-const Mocha = require('mocha')
+const MochaPackage = require('mocha')
+const Mocha = MochaPackage.default ?? MochaPackage
 
 async function main () {
   const mocha = new Mocha()

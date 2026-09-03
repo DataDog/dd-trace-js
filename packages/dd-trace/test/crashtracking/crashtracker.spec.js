@@ -6,6 +6,8 @@ const { inspect } = require('node:util')
 
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
+const actualGetAgentlessTelemetryUrl = require('../../src/telemetry/agentless-url')
 require('../setup/core')
 
 const describeNotWindows = os.platform() !== 'win32' ? describe : describe.skip
@@ -15,20 +17,22 @@ describeNotWindows('crashtracker', () => {
   let binding
   let config
   let identityRefreshChannel
-  let libdatadog
+  let libdatadogExtras
   let log
+  let getAgentlessTelemetryUrl
 
   before(() => {
     require('../../src/process-tags').initialize()
   })
 
   beforeEach(() => {
-    libdatadog = require('@datadog/libdatadog')
+    libdatadogExtras = require('@datadog/libdatadog-extras')
 
-    binding = libdatadog.load('crashtracker')
+    binding = libdatadogExtras.load('crashtracker')
 
     config = {
       url: new URL('http://127.0.0.1:7357'),
+      DD_AGENTLESS_ENABLED: false,
       tags: {
         foo: 'bar',
       },
@@ -40,6 +44,7 @@ describeNotWindows('crashtracker', () => {
     identityRefreshChannel = {
       subscribe: sinon.stub(),
     }
+    getAgentlessTelemetryUrl = sinon.stub().callsFake(actualGetAgentlessTelemetryUrl)
 
     sinon.stub(binding, 'init')
     sinon.stub(binding, 'updateConfig')
@@ -49,6 +54,7 @@ describeNotWindows('crashtracker', () => {
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
       'dc-polyfill': { channel: sinon.stub().returns(identityRefreshChannel) },
       '../log': log,
+      '../telemetry/agentless-url': getAgentlessTelemetryUrl,
     })
   })
 
@@ -112,6 +118,118 @@ describeNotWindows('crashtracker', () => {
 
       sinon.assert.called(binding.init)
       sinon.assert.notCalled(log.error)
+    })
+
+    it('should configure independent direct intakes in agentless mode', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'US3.DatadogHQ.com'
+
+      crashtracker.start(config)
+
+      sinon.assert.calledOnce(binding.init)
+      assert.strictEqual(binding.init.firstCall.args[0].endpoint, null)
+      assert.deepStrictEqual(binding.init.firstCall.args[1].env, [
+        ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
+        ['DD_API_KEY', 'test-api-key'],
+        ['DD_SITE', 'us3.datadoghq.com'],
+        ['DD_APM_TELEMETRY_DD_URL', 'https://instrumentation-telemetry-intake.us3.datadoghq.com'],
+        ['DD_TRACE_AGENT_URL', 'https://instrumentation-telemetry-intake.us3.datadoghq.com'],
+      ])
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('should use the staging telemetry intake in agentless mode', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'datad0g.com'
+
+      crashtracker.start(config)
+
+      assert.deepStrictEqual(binding.init.firstCall.args[1].env, [
+        ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
+        ['DD_API_KEY', 'test-api-key'],
+        ['DD_SITE', 'datad0g.com'],
+        ['DD_APM_TELEMETRY_DD_URL', 'https://all-http-intake.logs.datad0g.com'],
+        ['DD_TRACE_AGENT_URL', 'https://all-http-intake.logs.datad0g.com'],
+      ])
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('should preserve proxy and TLS settings in the receiver environment', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'datadoghq.com'
+      getAgentlessTelemetryUrl.returns(new URL('http://127.0.0.1:1234'))
+      const environment = {
+        HTTP_PROXY: 'http://uppercase-http-proxy',
+        HTTPS_PROXY: 'http://uppercase-https-proxy',
+        NO_PROXY: 'uppercase-no-proxy',
+        http_proxy: 'http://lowercase-http-proxy',
+        https_proxy: 'http://lowercase-https-proxy',
+        no_proxy: 'lowercase-no-proxy',
+        SSL_CERT_FILE: '/path/to/certificate.pem',
+        SSL_CERT_DIR: '/path/to/certificates',
+      }
+      const previousEnvironment = {}
+      for (const [name, value] of Object.entries(environment)) {
+        previousEnvironment[name] = process.env[name]
+        process.env[name] = value
+      }
+
+      try {
+        crashtracker.start(config)
+      } finally {
+        for (const [name, value] of Object.entries(previousEnvironment)) {
+          if (value === undefined) {
+            delete process.env[name]
+          } else {
+            process.env[name] = value
+          }
+        }
+      }
+
+      assert.deepStrictEqual(binding.init.firstCall.args[1].env, [
+        ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
+        ['DD_API_KEY', 'test-api-key'],
+        ['DD_SITE', 'datadoghq.com'],
+        ['DD_APM_TELEMETRY_DD_URL', 'http://127.0.0.1:1234'],
+        ['DD_TRACE_AGENT_URL', 'http://127.0.0.1:1234'],
+        ['HTTP_PROXY', 'http://uppercase-http-proxy'],
+        ['HTTPS_PROXY', 'http://uppercase-https-proxy'],
+        ['NO_PROXY', 'uppercase-no-proxy'],
+        ['http_proxy', 'http://lowercase-http-proxy'],
+        ['https_proxy', 'http://lowercase-https-proxy'],
+        ['no_proxy', 'lowercase-no-proxy'],
+        ['SSL_CERT_FILE', '/path/to/certificate.pem'],
+        ['SSL_CERT_DIR', '/path/to/certificates'],
+      ])
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('should not initialize agentless crash tracking without an API key', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.site = 'datadoghq.com'
+
+      crashtracker.start(config)
+
+      sinon.assert.notCalled(binding.init)
+      sinon.assert.calledOnce(log.error)
+      assert.match(log.error.firstCall.args[1].message, /DD_API_KEY is required/)
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
+    })
+
+    it('should reject an agentless site that could redirect the API key', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'datadoghq.com@evil.example'
+
+      crashtracker.start(config)
+
+      sinon.assert.notCalled(binding.init)
+      sinon.assert.calledOnce(log.error)
+      assert.match(log.error.firstCall.args[1].message, /Invalid DD_SITE/)
+      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
     })
   })
 

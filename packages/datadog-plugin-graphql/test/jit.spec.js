@@ -11,8 +11,13 @@ const { after, before, describe, it } = require('mocha')
 
 const semifies = require('../../../vendor/dist/semifies')
 const { assertObjectContains, sandboxCwd, useSandbox } = require('../../../integration-tests/helpers')
+const createGraphqlJitRuntime = require('../../datadog-instrumentations/src/helpers/graphql-jit-runtime')
+const { parse, query } = require('../../datadog-instrumentations/src/helpers/rewriter/compiler')
 const rewriterInstrumentations = require('../../datadog-instrumentations/src/helpers/rewriter/instrumentations')
 const { rewrite } = require('../../datadog-instrumentations/src/helpers/rewriter')
+const {
+  configureGraphqlJitDeferredField,
+} = require('../../datadog-instrumentations/src/helpers/rewriter/transforms')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema } = require('./naming')
@@ -22,6 +27,15 @@ const generatedCodeLinter = semifies(process.version, require('eslint/package.js
   : undefined
 
 function noop () {}
+
+/**
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
+function identity (value) {
+  return value
+}
 
 /**
  * @param {WeakRef<object>} reference
@@ -267,6 +281,49 @@ describe('Plugin', () => {
       )
     }
 
+    it('generates lint-clean resolver dispatch', async () => {
+      function resolver () {}
+
+      const { runtime } = createGraphqlJitRuntime({
+        createFieldMetadata: noop,
+        recordResolverError: noop,
+        resolveDefaultInvocation: noop,
+        resolveField: noop,
+        startExecution: noop,
+        unwrapResolver: identity,
+        wrapResolver: identity,
+      })
+      const resolverCallSource = '__context.resolvers.resolver(source, args, contextValue, info)'
+
+      const unregisteredContext = { resolvers: { resolver } }
+      assert.strictEqual(
+        runtime.compileResolverCall(unregisteredContext, resolverCallSource, 'resolver'),
+        resolverCallSource
+      )
+      assert.strictEqual(unregisteredContext.resolvers.resolver, resolver)
+
+      const context = { resolvers: { resolver } }
+      const resolverCall = runtime.compileResolverCall(context, resolverCallSource, 'resolver', 0)
+      assert.strictEqual(context.resolvers.resolver, resolver)
+      assert.match(resolverCall, /jitRuntime\.resolveField/)
+      assert.match(resolverCall, /depthDisabled/)
+
+      if (generatedCodeLinter === undefined) return
+
+      const source = `'use strict'
+
+function generatedResolver (__context, source, args, contextValue, info) {
+  return ${resolverCall}
+}
+
+void generatedResolver
+`
+      const [{ messages }] = await generatedCodeLinter.lintText(source, {
+        filePath: join(__dirname, '../src/generated-resolver-dispatch.js'),
+      })
+      assert.deepStrictEqual(messages, [])
+    })
+
     withVersions('graphql', 'graphql-jit', '>=0.7.0', version => {
       const packageRoot = join(__dirname, '../../../versions', `graphql-jit@${version}`, 'node_modules/graphql-jit')
 
@@ -339,6 +396,44 @@ describe('Plugin', () => {
         }
       })
 
+      it('rejects unsupported resolver call source shapes in the rewriter', () => {
+        const installedVersion = require(join(packageRoot, 'package.json')).version
+        const filePaths = new Set()
+        for (const { module } of rewriterInstrumentations) {
+          if (module.name === 'graphql-jit' && semifies(installedVersion, module.versionRange)) {
+            filePaths.add(module.filePath)
+          }
+        }
+
+        for (const filePath of filePaths) {
+          const content = readFileSync(join(packageRoot, filePath), 'utf8')
+          const isModule = filePath.endsWith('.mjs') || filePath.includes('/esm/')
+          for (const testCase of [
+            {
+              source: '.resolvers.$' + '{resolverName}(',
+              replacement: '.resolver.$' + '{resolverName}(',
+              error: /resolver map access not found/,
+            },
+            {
+              source: '$' + '{executionInfo})`',
+              replacement: '$' + '{executionInfo}`',
+              error: /resolver call end not found/,
+            },
+          ]) {
+            const unsupported = content.replace(testCase.source, testCase.replacement)
+            assert.notStrictEqual(unsupported, content, `${filePath} did not contain ${testCase.source}`)
+
+            const ast = parse(unsupported, { isModule })
+            const deferredFields = query(ast, 'FunctionDeclaration[id.name="compileDeferredField"]')
+            assert.strictEqual(deferredFields.length, 1)
+            assert.throws(
+              () => configureGraphqlJitDeferredField({}, deferredFields[0]),
+              testCase.error
+            )
+          }
+        }
+      })
+
       it('emits graphql.execute for a JIT-compiled query', async () => {
         const document = graphql.parse('query GetHello($name: String!) { hello(name: $name) }')
         const { query } = compileQuery(schema, document)
@@ -373,6 +468,20 @@ describe('Plugin', () => {
           assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
         })
         assert.deepStrictEqual(result.data, { hello: 'Ada' })
+      })
+
+      it('does not nest schema and compiled resolver instrumentation', async () => {
+        const localSchema = buildSchema()
+        const document = graphql.parse('query ReusedSchema { hello }')
+
+        await executeWithTrace(() => graphql.execute({ schema: localSchema, document }), /ReusedSchema/)
+
+        const { query } = compileQuery(localSchema, document)
+        const result = await executeWithTrace(() => query({}, {}, {}), /ReusedSchema/, traces => {
+          const resolves = traces[0].filter(span => span.name === 'graphql.resolve')
+          assert.strictEqual(resolves.length, 1)
+        })
+        assert.deepStrictEqual(result.data, { hello: 'world' })
       })
 
       it('releases operation inputs retained through resolver timers', async function () {
@@ -805,6 +914,66 @@ describe('Plugin', () => {
         assert.deepStrictEqual(rejections.map(reason => reason?.message), [])
       })
 
+      it('runs the execute hook before collapsed JIT resolver spans finish', async () => {
+        const tracer = require('../../dd-trace')
+        const Item = new graphql.GraphQLObjectType({
+          name: 'HookOrderItem',
+          fields: {
+            value: {
+              type: graphql.GraphQLString,
+              resolve: source => source.value,
+            },
+          },
+        })
+        const hookSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'HookOrderQuery',
+            fields: {
+              items: {
+                type: new graphql.GraphQLList(Item),
+                resolve: () => [{ value: 'one' }, { value: 'two' }],
+              },
+            },
+          }),
+        })
+        const hookOrder = []
+        let resolveSpan
+        let resolveFinishedAtExecute
+
+        /**
+         * @param {import('../../dd-trace/src/opentracing/span')} span
+         * @param {{ fieldName: string }} field
+         */
+        function resolveHook (span, field) {
+          if (field.fieldName === 'value') {
+            hookOrder.push('resolve')
+            resolveSpan = span
+          }
+        }
+
+        function executeHook () {
+          hookOrder.push('execute')
+          resolveFinishedAtExecute = resolveSpan?._duration !== undefined
+        }
+
+        try {
+          tracer.use('graphql', {
+            collapse: true,
+            variables: ['id', 'name'],
+            hooks: { execute: executeHook, resolve: resolveHook },
+          })
+          const { query } = compileQuery(hookSchema, graphql.parse('query HookOrder { items { value } }'))
+          const result = await executeWithTrace(() => query({}, {}, {}), /HookOrder/)
+
+          assert.strictEqual(resolveFinishedAtExecute, false)
+          assert.ok(resolveSpan, 'expected the resolve hook to receive the resolver span')
+          assert.deepStrictEqual(hookOrder, ['resolve', 'execute'])
+          assert.deepStrictEqual(result.data, { items: [{ value: 'one' }, { value: 'two' }] })
+        } finally {
+          tracer.use('graphql', { variables: ['id', 'name'] })
+        }
+      })
+
       it('preserves nested promise-valued default fields', async () => {
         const User = new graphql.GraphQLObjectType({
           name: 'NestedPromiseUser',
@@ -1128,6 +1297,173 @@ describe('Plugin', () => {
           } finally {
             if (withResolverSubscriber) resolverStartChannel.unsubscribe(noop)
           }
+        }
+      })
+
+      it('records errors from every collapsed explicit resolver invocation', async () => {
+        const tracer = require('../../dd-trace')
+
+        try {
+          for (const testCase of [
+            {
+              name: 'Sync',
+              error: 'sync sibling error',
+              hookError: 'sync sibling error',
+              fail (message) {
+                throw new Error(message)
+              },
+            },
+            {
+              name: 'Async',
+              error: 'async sibling error',
+              hookError: 'async sibling error',
+              fail (message) {
+                return Promise.reject(new Error(message))
+              },
+            },
+            {
+              name: 'Falsy',
+              error: '',
+              hookError: 'GraphQL resolver rejected without an error',
+              fail () {
+                // eslint-disable-next-line prefer-promise-reject-errors -- Exercise a falsy rejection.
+                return Promise.reject()
+              },
+            },
+          ]) {
+            const hookCalls = []
+            const hookOrder = []
+            let items = [
+              { value: 'one' },
+              { error: testCase.error },
+              { value: 'three' },
+            ]
+            const Item = new graphql.GraphQLObjectType({
+              name: `Collapsed${testCase.name}ErrorItem`,
+              fields: {
+                value: {
+                  type: graphql.GraphQLString,
+                  resolve (source) {
+                    return source.error !== undefined ? testCase.fail(source.error) : source.value
+                  },
+                },
+              },
+            })
+            const errorSchema = new graphql.GraphQLSchema({
+              query: new graphql.GraphQLObjectType({
+                name: `Collapsed${testCase.name}ErrorQuery`,
+                fields: {
+                  items: {
+                    type: new graphql.GraphQLList(Item),
+                    resolve: () => items,
+                  },
+                },
+              }),
+            })
+            const operationName = `Collapsed${testCase.name}SiblingError`
+
+            tracer.use('graphql', {
+              collapse: true,
+              hooks: {
+                execute () {
+                  hookOrder.push('execute')
+                },
+                resolve (_span, field) {
+                  if (field.fieldName === 'value') {
+                    hookOrder.push('resolve')
+                    hookCalls.push({
+                      error: field.error?.message,
+                      result: field.result,
+                    })
+                  }
+                },
+              },
+            })
+            const compiled = compileQuery(
+              errorSchema,
+              graphql.parse(`query ${operationName} { items { value } }`),
+              undefined,
+              { debug: true }
+            )
+            const compilation = compiled.__DO_NOT_USE_THIS_OR_YOU_WILL_BE_FIRED_compilation
+            assert.match(compilation, /jitRuntime\.resolveField/)
+            assert.match(compilation, /jitRuntime\.recordResolverError/)
+            const { query } = compiled
+            const result = await executeWithTrace(() => query({}, {}, {}), new RegExp(operationName), traces => {
+              const resolve = traces[0].find(span =>
+                span.name === 'graphql.resolve' && span.meta['graphql.field.name'] === 'value')
+              assert.ok(resolve, 'expected the collapsed value span')
+              assert.strictEqual(resolve.error, 1)
+            })
+
+            assert.deepStrictEqual(result.data, {
+              items: [
+                { value: 'one' },
+                { value: null },
+                { value: 'three' },
+              ],
+            })
+            assert.strictEqual(result.errors.length, 1)
+            assert.strictEqual(result.errors[0].message, testCase.error)
+            assert.deepStrictEqual(hookCalls, [{
+              error: testCase.hookError,
+              result: undefined,
+            }])
+            assert.deepStrictEqual(hookOrder, ['resolve', 'execute'])
+
+            if (testCase.name === 'Sync') {
+              hookCalls.length = 0
+              items = [
+                { error: 'first resolver error' },
+                { error: 'second resolver error' },
+              ]
+              const repeatedResult = await executeWithTrace(() => query({}, {}, {}), new RegExp(operationName))
+              assert.deepStrictEqual(repeatedResult.errors.map(error => error.message), [
+                'first resolver error',
+                'second resolver error',
+              ])
+              assert.deepStrictEqual(hookCalls, [{
+                error: 'first resolver error',
+                result: undefined,
+              }])
+
+              hookCalls.length = 0
+              items = [{ value: 'one' }, { value: 'two' }]
+              const successfulResult = await executeWithTrace(() => query({}, {}, {}), new RegExp(operationName))
+              assert.deepStrictEqual(successfulResult.data, {
+                items: [{ value: 'one' }, { value: 'two' }],
+              })
+              assert.deepStrictEqual(hookCalls, [{ error: undefined, result: 'one' }])
+
+              let releaseFirstResolver = () => {}
+              const firstResolver = new Promise(resolve => {
+                releaseFirstResolver = resolve
+              })
+              hookCalls.length = 0
+              items = [
+                { value: firstResolver },
+                { error: 'later resolver error' },
+              ]
+              const pendingResult = executeWithTrace(
+                () => query({}, {}, {}),
+                new RegExp(operationName)
+              )
+              releaseFirstResolver('one')
+              const delayedResult = await pendingResult
+              assert.deepStrictEqual(delayedResult.data, {
+                items: [{ value: 'one' }, { value: null }],
+              })
+              assert.deepStrictEqual(delayedResult.errors.map(error => error.message), [
+                'later resolver error',
+              ])
+              assert.deepStrictEqual(hookCalls, [{
+                error: 'later resolver error',
+                result: undefined,
+              }])
+            }
+          }
+        } finally {
+          tracer.use('graphql', { variables: ['id', 'name'] })
         }
       })
 

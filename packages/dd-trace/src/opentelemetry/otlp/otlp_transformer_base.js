@@ -180,10 +180,15 @@ function stableStringify (attributes) {
   // Attributes are sorted by key to ensure consistent serialization regardless of key order.
   // Keys are always strings and values are always strings, numbers, booleans,
   // or arrays of strings, numbers, or booleans.
-  return Object.keys(attributes)
-    .sort()
-    .map(key => `${key}:${JSON.stringify(attributes[key])}`)
-    .join(',')
+  const keys = Object.keys(attributes).sort()
+  let serialized = ''
+  let isFirstKey = true
+  for (const key of keys) {
+    if (!isFirstKey) serialized += ','
+    serialized += `${key}:${JSON.stringify(attributes[key])}`
+    isFirstKey = false
+  }
+  return serialized
 }
 
 module.exports = OtlpTransformerBase

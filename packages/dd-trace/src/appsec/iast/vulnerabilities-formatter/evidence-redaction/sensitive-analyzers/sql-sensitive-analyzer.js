@@ -8,58 +8,33 @@ const MYSQL_STRING_LITERAL = String.raw`"(?:\\"|[^"])*"|'(?:\\'|[^'])*'`
 const LINE_COMMENT = '--.*$'
 const BLOCK_COMMENT = String.raw`/\*[\s\S]*\*/`
 const EXPONENT = String.raw`(?:E[-+]?\d+[fd]?)?`
-const INTEGER_NUMBER = String.raw`(?<!\w)\d+`
+const INTEGER_NUMBER = String.raw`\b\d+`
 const DECIMAL_NUMBER = String.raw`\d*\.\d+`
 const HEX_NUMBER = 'x\'[0-9a-f]+\'|0x[0-9a-f]+'
 const BIN_NUMBER = 'b\'[0-9a-f]+\'|0b[0-9a-f]+'
 const NUMERIC_LITERAL =
-  `[-+]?(?:${
-    [
-      HEX_NUMBER,
-      BIN_NUMBER,
-      DECIMAL_NUMBER + EXPONENT,
-      INTEGER_NUMBER + EXPONENT,
-    ].join('|')
-  })`
+  `[-+]?(?:${HEX_NUMBER}|${BIN_NUMBER}|${DECIMAL_NUMBER + EXPONENT}|${INTEGER_NUMBER + EXPONENT})`
 const ORACLE_ESCAPED_LITERAL = String.raw`q'<.*?>'|q'\(.*?\)'|q'\{.*?\}'|q'\[.*?\]'|q'(?<ESCAPE>.).*?\k<ESCAPE>'`
 
 const patterns = {
   ANSI: new RegExp( // Default
-    [
-      NUMERIC_LITERAL,
-      STRING_LITERAL,
-      LINE_COMMENT,
-      BLOCK_COMMENT,
-    ].join('|'),
+    `${NUMERIC_LITERAL}|${STRING_LITERAL}|${LINE_COMMENT}|${BLOCK_COMMENT}`,
     'gmi'
   ),
   MYSQL: new RegExp(
-    [
-      NUMERIC_LITERAL,
-      MYSQL_STRING_LITERAL,
-      LINE_COMMENT,
-      BLOCK_COMMENT,
-    ].join('|'),
+    `${NUMERIC_LITERAL}|${MYSQL_STRING_LITERAL}|${LINE_COMMENT}|${BLOCK_COMMENT}`,
     'gmi'
   ),
   POSTGRES: new RegExp(
-    [
-      NUMERIC_LITERAL,
-      POSTGRESQL_ESCAPED_LITERAL,
-      STRING_LITERAL,
-      LINE_COMMENT,
-      BLOCK_COMMENT,
-    ].join('|'),
+    `${NUMERIC_LITERAL}|${POSTGRESQL_ESCAPED_LITERAL}|${STRING_LITERAL}|${LINE_COMMENT}|${BLOCK_COMMENT}`,
     'gmi'
   ),
-  ORACLE: new RegExp([
-    NUMERIC_LITERAL,
-    ORACLE_ESCAPED_LITERAL,
-    STRING_LITERAL,
-    LINE_COMMENT,
-    BLOCK_COMMENT,
-  ].join('|'),
-  'gmi'),
+  ORACLE: new RegExp(
+    // The capture owns the quote delimiter while the lazy quantifier owns the body.
+    // eslint-disable-next-line regexp/optimal-quantifier-concatenation
+    `${NUMERIC_LITERAL}|${ORACLE_ESCAPED_LITERAL}|${STRING_LITERAL}|${LINE_COMMENT}|${BLOCK_COMMENT}`,
+    'gmi'
+  ),
 }
 patterns.SQLITE = patterns.MYSQL
 patterns.MARIADB = patterns.MYSQL

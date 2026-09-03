@@ -1,6 +1,7 @@
 'use strict'
 
-const Mocha = require('mocha')
+const MochaPackage = require('mocha')
+const Mocha = MochaPackage.default ?? MochaPackage
 
 const mocha = new Mocha({
   parallel: !!process.env.RUN_IN_PARALLEL,

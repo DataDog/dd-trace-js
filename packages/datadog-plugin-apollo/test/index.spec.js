@@ -21,7 +21,6 @@ describe('Plugin', () => {
   let ApolloGateway
   let LocalGraphQLDataSource
   let buildSubgraphSchema
-  let legacySubgraphInput
   let ApolloServer
   let startStandaloneServer
   let gql
@@ -32,18 +31,11 @@ describe('Plugin', () => {
     accounts.typeDefs = gql(typeDefs)
   }
 
-  /**
-   * @param {string} gatewayVersion
-   * @param {string} [subgraphVersion]
-   */
-  function setupApollo (gatewayVersion, subgraphVersion) {
+  function setupApollo (version) {
     require('../../dd-trace/index.js')
-    const apollo = require(`../../../versions/@apollo/gateway@${gatewayVersion}`).get()
-    const subgraph = subgraphVersion
-      ? require(`../../../versions/@apollo/subgraph@${subgraphVersion}`)
-      : require('../../../versions/@apollo/subgraph')
-    buildSubgraphSchema = subgraph.get().buildSubgraphSchema
-    legacySubgraphInput = semver.lt(subgraph.version(), '2.15.0')
+    const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
+    const subgraph = require('../../../versions/@apollo/subgraph').get()
+    buildSubgraphSchema = subgraph.buildSubgraphSchema
     ApolloGateway = apollo.ApolloGateway
     LocalGraphQLDataSource = apollo.LocalGraphQLDataSource
   }
@@ -52,7 +44,7 @@ describe('Plugin', () => {
     const localDataSources = Object.fromEntries(
       fixtures.map((f) => [
         f.name,
-        new LocalGraphQLDataSource(buildSubgraphSchema(legacySubgraphInput ? f : [f])),
+        new LocalGraphQLDataSource(buildSubgraphSchema([f])),
       ])
     )
 
@@ -83,35 +75,7 @@ describe('Plugin', () => {
   }
 
   describe('@apollo/gateway', () => {
-    withVersions('apollo', '@apollo/gateway', (gatewayVersion, moduleName, resolvedVersion) => {
-      withVersions('apollo', '@apollo/subgraph', (subgraphVersion) => {
-        before(async () => {
-          await agent.load('apollo')
-          setupFixtures()
-          setupApollo(gatewayVersion, subgraphVersion)
-        })
-
-        after(() => agent.close())
-
-        it('should instrument requests with the input supported by the subgraph version', async () => {
-          const source = '{ hello(name: "world") }'
-          const { executor } = await gateway()
-
-          await Promise.all([
-            agent.assertSomeTraces((traces) => {
-              assertObjectContains(traces[0][0], {
-                name: expectedSchema.server.opName,
-                meta: {
-                  component: 'apollo.gateway',
-                  '_dd.integration': 'apollo.gateway',
-                },
-              })
-            }),
-            execute(executor, source),
-          ])
-        })
-      })
-
+    withVersions('apollo', '@apollo/gateway', (version, moduleName, resolvedVersion) => {
       after(() => {
         return agent.close()
       })
@@ -123,7 +87,7 @@ describe('Plugin', () => {
         before(async () => {
           await agent.load('apollo')
           await setupFixtures()
-          await setupApollo(gatewayVersion)
+          await setupApollo(version)
           ApolloServer = require('../../../versions/@apollo/server/index.js').get().ApolloServer
           startStandaloneServer =
             require('../../../versions/@apollo/server@4.0.0/node_modules/@apollo/server/dist/cjs/standalone/index.js')
@@ -176,7 +140,7 @@ describe('Plugin', () => {
         before(async () => {
           await agent.load('apollo')
           await setupFixtures()
-          await setupApollo(gatewayVersion)
+          await setupApollo(version)
         })
 
         it('should instrument apollo/gateway', done => {
@@ -553,7 +517,7 @@ describe('Plugin', () => {
           before(async () => {
             await agent.load('apollo', { service: 'custom', source: true, signature: false })
             await setupFixtures()
-            await setupApollo(gatewayVersion)
+            await setupApollo(version)
           })
 
           it('should be configured with the correct values', done => {
@@ -607,7 +571,7 @@ describe('Plugin', () => {
           before(async () => {
             await agent.load('apollo', config)
             await setupFixtures()
-            await setupApollo(gatewayVersion)
+            await setupApollo(version)
           })
 
           afterEach(() => Object.keys(config.hooks).forEach(

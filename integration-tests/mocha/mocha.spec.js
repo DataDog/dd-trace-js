@@ -94,6 +94,7 @@ const {
   ERROR_TYPE,
 } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, VERSION: ddTraceVersion } = require('../../version')
+const { getLatestMochaSpecifier } = require('./versions')
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
@@ -119,6 +120,7 @@ const extraStdout = 'end event: can add event listeners to mocha'
 const requestedMochaVersion = process.env.MOCHA_VERSION || 'latest'
 const oldestMochaVersion = DD_MAJOR >= 6 ? '8.0.0' : '5.2.0'
 const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : requestedMochaVersion
+const mochaDependencyVersion = MOCHA_VERSION === 'latest' ? getLatestMochaSpecifier() : MOCHA_VERSION
 const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
 const supportsMochaRetryEvents = mochaMajor >= 6
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
@@ -211,7 +213,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
   useSandbox(
     [
-      `mocha@${MOCHA_VERSION}`,
+      `mocha@${mochaDependencyVersion}`,
       'nyc',
       'mocha-each',
       'workerpool',
@@ -1385,6 +1387,29 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       await assertProgrammaticRunWaitsForFinalPayload(runInParallel)
     })
   }
+
+  onlyLatestIt('requests library configuration once with the programmatic API', async function () {
+    this.timeout(20_000)
+    childProcess = exec(runTestsCommand, {
+      cwd,
+      env: getCiVisAgentlessConfig(receiver.port),
+    })
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const settingsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/libraries/tests/services/setting'),
+      payloads => assert.strictEqual(payloads.length, 1),
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      settingsPromise,
+    ])
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
 
   const nonLegacyReportingOptions = ['evp proxy', 'agentless']
 
@@ -6580,7 +6605,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 assert.match(stdout, /Attempt to fix passed/)
               } else {
                 assert.match(stdout, /Attempt to fix failed/)
-                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
               }
               if (isQuarantined || isDisabled) {
                 assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)

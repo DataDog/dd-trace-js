@@ -28,10 +28,12 @@ class NetTCPPlugin extends ClientPlugin {
     const host = ctx.options.host || 'localhost'
     const port = ctx.options.port || 0
     const family = ctx.options.family || 4
+    let resource = host
+    if (port) resource += `:${port}`
 
     this.startSpan('tcp.connect', {
       service: this.config.service,
-      resource: [host, port].filter(Boolean).join(':'),
+      resource,
       kind: 'client',
       meta: {
         'tcp.remote.host': host,

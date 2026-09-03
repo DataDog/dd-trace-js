@@ -509,7 +509,7 @@ versions.forEach((version) => {
                     assert.match(stdout, /Attempt to fix passed/)
                   } else {
                     assert.match(stdout, /Attempt to fix failed/)
-                    assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                    assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
                   }
                   if (isQuarantining || isDisabling) {
                     assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)

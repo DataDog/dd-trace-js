@@ -45,7 +45,7 @@ module.exports = {
   apollo: [
     {
       name: '@apollo/subgraph',
-      versions: ['>=2.3.0 <2.15.0', '>=2.15.0'],
+      versions: ['>=2.3.0'],
     },
     {
       name: 'graphql',
