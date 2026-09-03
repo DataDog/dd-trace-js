@@ -1,11 +1,14 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
+const { LRUCache } = require('../../../../../../vendor/dist/lru-cache')
 const BaseLLMObsPlugin = require('../base')
 const { getModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
 
-const toolCreationCh = channel('tracing:orchestrion:ai:tool:start')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')
+const TOOL_ID_CACHE_MAX = 500
+const TOOL_CALL_NAME_CACHE_MAX = 1000
+const NO_DESCRIPTION = Symbol('no description')
 
 const { MODEL_NAME, MODEL_PROVIDER, NAME } = require('../../constants/tags')
 const {
@@ -20,10 +23,6 @@ const {
   getLlmObsSpanName,
   getTelemetryMetadata,
 } = require('./util')
-
-/**
- * @typedef {Record<string, unknown> & { description?: string, id?: string }} AvailableToolArgs
- */
 
 /**
  * @typedef {string | number | boolean | null | undefined | string[] | number[] | boolean[]} TagValue
@@ -77,28 +76,28 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
   static prefix = 'tracing:dd-trace:vercel-ai'
 
   /**
-   * The available tools within the runtime scope of this integration.
-   * This essentially acts as a global registry for all tools made through the Vercel AI SDK.
-   * @type {Set<AvailableToolArgs>}
+   * Maps tool descriptions to provider tool IDs with a bounded cache.
+   * @type {LRUCache<string | symbol, string>}
    */
-  #availableTools
+  #toolIdsByDescription
 
   /**
-   * A mapping of tool call IDs to tool names.
-   * This is used to map the tool call ID to the tool name for the output message.
-   * @type {Record<string, string>}
+   * Maps tool call IDs to tool names with a bounded cache.
+   * @type {LRUCache<string, string>}
    */
   #toolCallIdsToName
 
   constructor (...args) {
     super(...args)
 
-    this.#toolCallIdsToName = {}
-    this.#availableTools = new Set()
-    toolCreationCh.subscribe(ctx => {
-      const toolArgs = ctx.arguments
-      const tool = toolArgs[0] ?? {}
-      this.#availableTools.add(tool)
+    this.#toolIdsByDescription = new LRUCache({ max: TOOL_ID_CACHE_MAX })
+    this.#toolCallIdsToName = new LRUCache({ max: TOOL_CALL_NAME_CACHE_MAX })
+    this.addSub('tracing:orchestrion:ai:tool:start', ctx => {
+      const tool = ctx.arguments?.[0]
+      const id = tool?.id
+      if (typeof id !== 'string') return
+      const { description } = tool
+      this.#toolIdsByDescription.set(typeof description === 'string' ? description : NO_DESCRIPTION, id)
     })
 
     setAttributesCh.subscribe(({ ctx, attributes }) => {
@@ -119,13 +118,9 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
    */
   findToolName (toolName, toolDescription) {
     if (Number.isNaN(Number.parseInt(toolName, 10))) return toolName
-
-    for (const availableTool of this.#availableTools) {
-      const description = availableTool.description
-      if (description === toolDescription && availableTool.id) {
-        return availableTool.id
-      }
-    }
+    return this.#toolIdsByDescription.get(
+      typeof toolDescription === 'string' ? toolDescription : NO_DESCRIPTION
+    )
   }
 
   /**
@@ -297,7 +292,7 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
 
   setToolTags (span, tags) {
     const toolCallId = tags['ai.toolCall.id']
-    const name = getToolNameFromTags(tags) ?? this.#toolCallIdsToName[toolCallId]
+    const name = getToolNameFromTags(tags) ?? this.#toolCallIdsToName.get(toolCallId)
     if (name) this._tagger._setTag(span, NAME, name)
 
     const input = tags['ai.toolCall.args']
@@ -316,7 +311,7 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
       const toolCallArgs = typeof toolArgs === 'string' ? getJsonStringValue(toolArgs, {}) : toolArgs
       const toolDescription = toolsForModel?.find(tool => toolCall.toolName === tool.name)?.description
       const name = this.findToolName(toolCall.toolName, toolDescription)
-      this.#toolCallIdsToName[toolCall.toolCallId] = name
+      if (name) this.#toolCallIdsToName.set(toolCall.toolCallId, name)
 
       formattedToolCalls.push({
         arguments: toolCallArgs,
@@ -413,3 +408,5 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
 }
 
 module.exports = DdTelemetryPlugin
+module.exports.TOOL_ID_CACHE_MAX = TOOL_ID_CACHE_MAX
+module.exports.TOOL_CALL_NAME_CACHE_MAX = TOOL_CALL_NAME_CACHE_MAX
