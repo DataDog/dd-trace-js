@@ -3059,6 +3059,14 @@
         ]
       }
     ],
+    "DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "description": "Enable tracing for incoming HTTP OPTIONS requests."
+      }
+    ],
     "DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED": [
       {
         "implementation": "A",

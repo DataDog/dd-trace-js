@@ -379,6 +379,7 @@ describe('Plugin Manager', () => {
         serviceMapping: { two: 'deux' },
         logInjection: true,
         DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
+        DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED: true,
         clientIpEnabled: true,
       }))
       loadChannel.publish({ name: 'two' })
@@ -388,12 +389,14 @@ describe('Plugin Manager', () => {
         service: 'deux',
         logInjection: true,
         queryStringObfuscation: '.*',
+        DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED: true,
         clientIpEnabled: true,
       })
       sinon.assert.calledWithMatch(Four.prototype.configure, {
         enabled: true,
         logInjection: true,
         queryStringObfuscation: '.*',
+        DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED: true,
         clientIpEnabled: true,
       })
     })

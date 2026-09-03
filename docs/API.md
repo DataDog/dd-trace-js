@@ -31,6 +31,9 @@ The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project n
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
 
+Set `DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED=false` to exclude incoming HTTP `OPTIONS` requests from exported
+traces. The default is `true` through v7 and `false` from v8.
+
 Built-in plugins can be configured individually:
 
 ```javascript

@@ -52,6 +52,11 @@ function startSpanHelper (tracer, name, options, traceCtx, config = {}) {
   return web.plugin.startSpan(name, { ...options, tracer, config }, traceCtx)
 }
 
+function dropTrace (span) {
+  span.setTag(MANUAL_DROP, true)
+  span.context()._trace.isRecording = false
+}
+
 const web = {
   TYPE: WEB,
   /** @type {TracingPlugin | null} */
@@ -101,10 +106,7 @@ const web = {
 
     context.config = config
 
-    if (!config.filter(req.url)) {
-      span.setTag(MANUAL_DROP, true)
-      span.context()._trace.isRecording = false
-    }
+    if (!config.filter(req.url)) dropTrace(span)
 
     if (config.service) {
       web.plugin.setServiceName(span, config.service)
@@ -230,7 +232,13 @@ const web = {
       }
     }
 
-    return startSpanHelper(tracer, name, { childOf }, traceCtx, config)
+    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
+
+    if (req.method === 'OPTIONS' && config.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED === false) {
+      dropTrace(span)
+    }
+
+    return span
   },
 
   extractIncomingServerContext (tracer, headers) {
