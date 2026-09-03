@@ -58,6 +58,11 @@ class AgentWriter extends BaseWriter {
 
     const { _headers, _lookup, _protocolVersion, _url } = this
     const onResponse = (err, res, status, headers) => {
+      if (err?.code === 'ERR_DD_IDENTITY_REFRESH') {
+        done()
+        return
+      }
+
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -145,6 +150,11 @@ function makeRequest (version, data, count, url, headers, lookup, flushOptions, 
   log.debug('Request to the agent: %j', options)
 
   const onResponse = (err, res, status, headers) => {
+    if (err?.code === 'ERR_DD_IDENTITY_REFRESH') {
+      cb(err, res, status, headers)
+      return
+    }
+
     logIntegrations()
     if (status !== 404 && status !== 200 && err) {
       logAgentError({ status, message: err.message ?? inspect(err) })

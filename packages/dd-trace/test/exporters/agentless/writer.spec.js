@@ -307,6 +307,18 @@ describe('AgentlessWriter', () => {
       })
     })
 
+    it('should silently discard requests cancelled on identity refresh', (done) => {
+      const error = new Error('request cancelled')
+      error.code = 'ERR_DD_IDENTITY_REFRESH'
+      request.yieldsAsync(error)
+      encoder.count.returns(1)
+
+      writer.flush(() => {
+        sinon.assert.notCalled(log.error)
+        done()
+      })
+    })
+
     it('should log generic errors for other status codes', (done) => {
       const error = new Error('bad request')
 

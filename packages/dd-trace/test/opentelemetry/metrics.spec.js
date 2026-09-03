@@ -1344,6 +1344,39 @@ describe('OpenTelemetry Meter Provider', () => {
       ])
     })
 
+    it('discards the first later ObservableCounter reading for a series absent during identity refresh', () => {
+      const clock = sinon.useFakeTimers()
+      const exportedValues = []
+      mockOtlpExport((decoded) => {
+        const metric = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        exportedValues.push(metric.sum.dataPoints[0].asInt)
+      })
+
+      const { config } = setupMetrics()
+      const meter = metrics.getMeter('app')
+      let value = 20
+      let reportSeries = true
+      meter.createObservableCounter('obs').addCallback((result) => {
+        if (reportSeries) result.observe(value, { route: '/checkout' })
+      })
+
+      clock.tick(100)
+
+      value = 23
+      reportSeries = false
+      identityRefreshChannel.publish(config)
+
+      // The series returns after the refresh. Its snapshot-time growth is discarded and becomes
+      // the new baseline; only later clone-local growth is exported.
+      value = 25
+      reportSeries = true
+      clock.tick(100)
+      value = 27
+      clock.tick(100)
+
+      assert.deepStrictEqual(exportedValues, [20, 2])
+    })
+
     it('rebases the CUMULATIVE start time on identity refresh so it does not span the pause', () => {
       const clock = sinon.useFakeTimers()
       const startTimes = []

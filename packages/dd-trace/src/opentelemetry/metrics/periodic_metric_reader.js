@@ -99,6 +99,7 @@ class PeriodicMetricReader {
   #measurements = []
   #cumulativeState = new Map()
   #lastExportedState = new Map()
+  #pendingObservableCounterBaselines
   #droppedCount = 0
   #timer = null
   #isShutdown = false
@@ -259,7 +260,14 @@ class PeriodicMetricReader {
     }
     this.#cumulativeState.clear()
     this.#aggregator.resetStartTime()
-    this.#aggregator.resetObservableCounterBaselines(this.#collectObservableMeasurements(), this.#lastExportedState)
+    // ObservableCounter series absent from this collection still have a pre-refresh baseline.
+    // Keep their keys until they next appear, when that reading is discarded as their new baseline.
+    this.#pendingObservableCounterBaselines = new Set(this.#lastExportedState.keys())
+    this.#aggregator.resetObservableCounterBaselines(
+      this.#collectObservableMeasurements(),
+      this.#lastExportedState,
+      this.#pendingObservableCounterBaselines
+    )
   }
 
   /**
@@ -355,7 +363,8 @@ class PeriodicMetricReader {
     const metrics = this.#aggregator.aggregate(
       allMeasurements,
       this.#cumulativeState,
-      this.#lastExportedState
+      this.#lastExportedState,
+      this.#pendingObservableCounterBaselines
     )
 
     this.exporter.export(metrics, callback)
@@ -422,9 +431,11 @@ class MetricAggregator {
    *
    * @param {Measurement[]} measurements - Measurements collected from observable callbacks
    * @param {Map<string, LastExportedStateValue>} lastExportedState - Last exported metric state
+   * @param {Set<string>} pendingObservableCounterBaselines - ObservableCounter state keys whose
+   * next reading must establish a discarded post-refresh baseline
    * @returns {void}
    */
-  resetObservableCounterBaselines (measurements, lastExportedState) {
+  resetObservableCounterBaselines (measurements, lastExportedState, pendingObservableCounterBaselines) {
     for (const measurement of measurements) {
       const { type } = measurement
       if (type !== METRIC_TYPES.OBSERVABLECOUNTER || this.#getTemporality(type) !== TEMPORALITY.DELTA) {
@@ -435,6 +446,7 @@ class MetricAggregator {
       const attrKey = stableStringify(measurement.attributes)
       const stateKey = this.#getStateKey(scopeKey, measurement.name, type, attrKey)
       lastExportedState.set(stateKey, measurement.value)
+      pendingObservableCounterBaselines.delete(stateKey)
     }
   }
 
@@ -474,9 +486,11 @@ class MetricAggregator {
    * @param {Measurement[]} measurements - The measurements to aggregate
    * @param {Map<string, CumulativeStateValue>} cumulativeState - The cumulative state of the metrics
    * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
-   * @returns {Iterable<AggregatedMetric>} The aggregated metrics
+   * @param {Set<string>|undefined} pendingObservableCounterBaselines - ObservableCounter state
+   * keys whose next reading must establish a discarded post-refresh baseline
+   * @returns {Map<string, AggregatedMetric>} The aggregated metrics
    */
-  aggregate (measurements, cumulativeState, lastExportedState) {
+  aggregate (measurements, cumulativeState, lastExportedState, pendingObservableCounterBaselines) {
     const metricsMap = new Map()
 
     for (const measurement of measurements) {
@@ -529,7 +543,7 @@ class MetricAggregator {
       }
     }
 
-    this.#applyDeltaTemporality(metricsMap.values(), lastExportedState)
+    this.#applyDeltaTemporality(metricsMap, lastExportedState, pendingObservableCounterBaselines)
     return metricsMap
   }
 
@@ -571,21 +585,30 @@ class MetricAggregator {
   /**
    * Applies delta temporality to the metrics.
    *
-   * @param {Iterable<AggregatedMetric>} metrics - The metrics to apply delta temporality to
+   * @param {Map<string, AggregatedMetric>} metrics - The metrics to apply delta temporality to
    * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
+   * @param {Set<string>|undefined} pendingObservableCounterBaselines - ObservableCounter state
+   * keys whose next reading must establish a discarded post-refresh baseline
    * @returns {void}
    */
-  #applyDeltaTemporality (metrics, lastExportedState) {
-    for (const metric of metrics) {
+  #applyDeltaTemporality (metrics, lastExportedState, pendingObservableCounterBaselines) {
+    for (const [metricKey, metric] of metrics) {
       if (metric.temporality === TEMPORALITY.DELTA && this.#isDeltaType(metric.type)) {
         const scopeKey = this.#getScopeKey(metric.instrumentationScope)
+        const discardedDataPointKeys = []
 
         for (const dataPoint of metric.dataPointMap.values()) {
           const stateKey = this.#getStateKey(scopeKey, metric.name, metric.type, dataPoint.attrKey)
 
           if (metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER) {
-            const lastValue = lastExportedState.get(stateKey) || 0
             const currentValue = dataPoint.value
+            if (metric.type === METRIC_TYPES.OBSERVABLECOUNTER &&
+                pendingObservableCounterBaselines?.delete(stateKey)) {
+              lastExportedState.set(stateKey, currentValue)
+              discardedDataPointKeys.push(dataPoint.attrKey)
+              continue
+            }
+            const lastValue = lastExportedState.get(stateKey) || 0
             dataPoint.value = currentValue - lastValue
             lastExportedState.set(stateKey, currentValue)
           } else if (metric.type === METRIC_TYPES.HISTOGRAM) {
@@ -609,6 +632,14 @@ class MetricAggregator {
             lastExportedState.set(stateKey, currentState)
           }
         }
+
+        for (const attrKey of discardedDataPointKeys) {
+          metric.dataPointMap.delete(attrKey)
+        }
+      }
+
+      if (metric.dataPointMap.size === 0) {
+        metrics.delete(metricKey)
       }
     }
   }

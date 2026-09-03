@@ -141,6 +141,11 @@ class AgentlessWriter extends BaseWriter {
     log.debug('Request to the agentless intake: %j', options)
 
     request(data, options, (err, res, statusCode) => {
+      if (err?.code === 'ERR_DD_IDENTITY_REFRESH') {
+        done()
+        return
+      }
+
       if (err) {
         this.#logRequestError(err, statusCode, count)
         done()
