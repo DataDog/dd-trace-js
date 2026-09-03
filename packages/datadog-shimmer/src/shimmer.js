@@ -53,8 +53,15 @@ function copyProperties (original, wrapped) {
       const descriptor = /** @type {Descriptor} */ (Object.getOwnPropertyDescriptor(original, key))
       if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
         wrapped[key] = original[key]
-      } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
-        Object.defineProperty(wrapped, key, descriptor)
+      } else {
+        try {
+          Object.defineProperty(wrapped, key, descriptor)
+        } catch (error) {
+          const wrappedDescriptor = Object.getOwnPropertyDescriptor(wrapped, key)
+          if (wrappedDescriptor?.configurable !== false || wrappedDescriptor.writable) {
+            throw error
+          }
+        }
       }
     }
   }
@@ -320,19 +327,17 @@ function assertMethod (target, name, method) {
 }
 
 /**
- * Asserts that a target is not a class constructor.
+ * Asserts that a target is not an identifiable class constructor.
  *
  * @param {Function} target - The target function.
- * @throws {Error} If the target is a class constructor.
+ * @throws {Error} If the target is a non-frozen class constructor.
  */
 function assertNotClass (target) {
-  // Class constructors have a non-writable `prototype` property; functions have a
-  // writable one and arrows / async / method-shorthand have none at all. The
-  // `'prototype' in target` gate skips the descriptor lookup for the no-prototype
-  // shapes; the `in` operator is cheaper than reading `target.prototype` since
-  // it returns a boolean instead of materialising the prototype reference.
+  // Class constructors have a non-writable `prototype` property, but frozen
+  // functions do as well. Frozen targets are accepted when the descriptors are ambiguous.
   if ('prototype' in target &&
-      Object.getOwnPropertyDescriptor(target, 'prototype').writable === false) {
+      Object.getOwnPropertyDescriptor(target, 'prototype').writable === false &&
+      !Object.isFrozen(target)) {
     throw new TypeError('Target is a native class constructor and cannot be wrapped.')
   }
 }
