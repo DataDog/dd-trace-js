@@ -1132,6 +1132,7 @@ describe('check-require-cache', () => {
       filePath: 'pregel-class.js',
     })
 
+    // eslint-disable-next-line regexp/no-super-linear-backtracking -- Generated fixture content is bounded.
     assert.match(content, /\bimport\s+.+\s+from\s+"file:\/\//)
     assert.match(content, /tr_ch_apm_tracingChannel/)
     assert.doesNotMatch(content, /require\("/)

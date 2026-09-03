@@ -127,6 +127,7 @@ function normalizeScriptGlob (raw, opts = {}) {
   // Convert bash extglob + command substitution patterns used in this repo into plain env vars.
   // Example: @($(echo $PLUGINS)) -> $PLUGINS
   // Example: @($(echo ${SPEC:-'*'})) -> ${SPEC:-*}
+  // eslint-disable-next-line regexp/no-super-linear-backtracking -- Parses bounded repository package scripts.
   p = p.replaceAll(/@\(\$\(\s*echo\s+([^)]+?)\s*\)\)/g, '$1')
 
   // For global analysis we treat env vars as wildcards, but when evaluating a specific CI run
@@ -311,7 +312,7 @@ function parseExportAssignments (run) {
   const out = {}
   const lines = String(run).split('\n')
   for (const line of lines) {
-    const m = line.match(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$/)
+    const m = line.match(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$/)
     if (!m) continue
     out[m[1]] = stripOuterQuotes(m[2].trim())
   }

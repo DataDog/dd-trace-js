@@ -481,7 +481,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                     'across 1 of 1 test\\(s\\)\\.'
                   )
                 )
-                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
               }
               if (isQuarantined || isDisabled) {
                 assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
@@ -1873,7 +1873,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           // Verify Datadog Test Optimization message is shown for suppressed quarantine failures
           assert.match(stdout, /Datadog Test Optimization/)
           assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
-          assert.match(stdout, /test-quarantine-1.*›.*quarantine tests can quarantine a test/)
+          assert.match(stdout, /test-quarantine-1[^\n\r\u2028\u2029›]*›.*quarantine tests can quarantine a test/)
         } else {
           assert.strictEqual(exitCode, 1)
         }

@@ -212,7 +212,7 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
       continue
     }
 
-    const openTagMatch = xml.match(/<testsuite\s+[^>]*>/)
+    const openTagMatch = xml.match(/<testsuite\s[^>]*>/)
     if (!openTagMatch) continue
 
     const openTag = openTagMatch[0]
