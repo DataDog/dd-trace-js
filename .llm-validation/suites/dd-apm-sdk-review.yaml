@@ -32,7 +32,7 @@ cases:
         SEV-1 label.
       - Names the concrete fixes — gate the publish call on `channel.hasSubscribers`, and
         bound the map (by count and bytes, or don't key it by request id at all).
-      - The final verdict is not BLOCK.
+      - The final verdict is BLOCK.
     bad_signals:
       - Treats the ungated `channel.publish` call as a style nit rather than a hot-path
         cost concern (it runs on every request, per the override's "Hot paths" section).
