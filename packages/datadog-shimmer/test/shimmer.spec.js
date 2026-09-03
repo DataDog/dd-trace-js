@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const childProcess = require('node:child_process')
+const { promisify } = require('node:util')
 
 const sinon = require('sinon')
 
@@ -488,6 +490,45 @@ describe('shimmer', () => {
 
       assert.notStrictEqual(wrapped, count)
       assert.strictEqual(wrapped(1), 2)
+    })
+
+    it('should wrap the custom promisify function', async () => {
+      let calls = 0
+      const target = () => {}
+      target[promisify.custom] = childProcess.execFile[promisify.custom]
+      const original = new Proxy(target, {
+        getOwnPropertyDescriptor (target, key) {
+          if (key === promisify.custom) throw new Error('custom descriptor accessed')
+          return Reflect.getOwnPropertyDescriptor(target, key)
+        },
+      })
+
+      const wrapped = shimmer.wrapFunction(original, original => function (...args) {
+        calls++
+        return original.apply(this, args)
+      })
+      const promisified = promisify(wrapped)
+      const { stdout } = await promisified(process.execPath, ['--version'])
+
+      assert.strictEqual(stdout.trim(), process.version)
+      assert.strictEqual(calls, 1)
+      wrapped[promisify.custom] = target[promisify.custom]
+      assert.strictEqual(wrapped[promisify.custom], target[promisify.custom])
+    })
+
+    it('should preserve a custom promisify function defined by the wrapper', () => {
+      const originalCustom = () => Promise.resolve('original')
+      const wrappedCustom = () => Promise.resolve('wrapped')
+      const original = () => {}
+      Object.defineProperty(original, promisify.custom, { value: originalCustom })
+
+      const wrapped = shimmer.wrapFunction(original, original => {
+        const wrapped = function (...args) { return original.apply(this, args) }
+        Object.defineProperty(wrapped, promisify.custom, { value: wrappedCustom })
+        return wrapped
+      })
+
+      assert.strictEqual(promisify(wrapped), wrappedCustom)
     })
 
     it('should wrap the constructor', () => {

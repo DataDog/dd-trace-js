@@ -1,6 +1,8 @@
 'use strict'
 
-const { isModuleNamespaceObject } = require('node:util').types
+const { promisify, types: { isModuleNamespaceObject } } = require('node:util')
+
+const customPromisifySymbol = promisify.custom
 
 /**
  * @type {Set<string | symbol>}
@@ -29,14 +31,20 @@ const nameDescriptor = { value: '', configurable: true }
 /**
  * @param {Function} original
  * @param {Function} wrapped
+ * @param {string | symbol} [skipKey]
  */
-function copyProperties (original, wrapped) {
+function copyProperties (original, wrapped, skipKey) {
   if (original.constructor !== wrapped.constructor) {
     const proto = Object.getPrototypeOf(original)
     Object.setPrototypeOf(wrapped, proto)
   }
 
   const ownKeys = Reflect.ownKeys(original)
+  if (skipKey !== undefined) {
+    const index = ownKeys.indexOf(skipKey)
+    if (index !== -1) ownKeys.splice(index, 1)
+  }
+
   const originalLength = original.length
   if (originalLength !== wrapped.length) {
     lengthDescriptor.value = originalLength
@@ -87,7 +95,18 @@ function wrapFunction (original, wrapper) {
 
   const wrapped = wrapper(original)
   assertNotClass(original)
-  copyProperties(original, wrapped)
+  const custom = original[customPromisifySymbol]
+  if (typeof custom !== 'function') {
+    copyProperties(original, wrapped)
+    return wrapped
+  }
+
+  copyProperties(original, wrapped, customPromisifySymbol)
+  if (!Object.hasOwn(wrapped, customPromisifySymbol)) {
+    const wrappedCustom = wrapper(custom)
+    copyProperties(custom, wrappedCustom, customPromisifySymbol)
+    wrapped[customPromisifySymbol] = wrappedCustom
+  }
 
   return wrapped
 }
