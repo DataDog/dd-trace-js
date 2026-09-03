@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const { isRegExp } = require('node:util').types
 
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const tagger = require('../tagger')
@@ -72,7 +73,13 @@ const transformers = {
   toUpperCase (value) {
     return toCase(value, 'toUpperCase')
   },
+  /**
+   * @param {unknown} value
+   */
   toCamelCase (value) {
+    if (isRegExp(value)) {
+      return new RegExp(value)
+    }
     if (Array.isArray(value)) {
       return value.map(item => {
         return transformers.toCamelCase(item)
