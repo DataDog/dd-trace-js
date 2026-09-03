@@ -12,6 +12,7 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { tracingChannel } = require('dc-polyfill')
+const { parse, query } = require('../../../src/helpers/rewriter/compiler')
 
 // TODO: Test actual functionality and not just the start channel.
 describe('check-require-cache', () => {
@@ -399,7 +400,7 @@ describe('check-require-cache', () => {
             versionRange: '>=0.1',
             filePath: 'trace-await-context-callback.js',
           },
-          astQuery: 'FunctionDeclaration[id.name="runFromStart"] ReturnStatement',
+          astQuery: 'FunctionDeclaration[id.name="runFromStart"]',
           channelName: 'trace_await_context_callback_at_function_start',
           transform: 'awaitContextCallbackAtFunctionStart',
           transformOptions: {
@@ -963,6 +964,10 @@ describe('check-require-cache', () => {
   it('should await a context callback before starting an async function body', async () => {
     const { runFromStart } = compileFile('trace-await-context-callback')
     const steps = []
+
+    const [rewrittenFunction] = query(parse(content), 'FunctionDeclaration[id.name="runFromStart"] ' +
+      'VariableDeclarator[id.name="__apm$wrapped"] > FunctionExpression[async=true]')
+    assert.equal(rewrittenFunction.body.body[0].directive, 'use strict')
 
     subs = {
       start (ctx) {
