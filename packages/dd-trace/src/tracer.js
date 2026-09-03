@@ -7,6 +7,7 @@ const {
   flushFrameworkWarnings,
   flushLoadOrderWarnings,
 } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
+const shimmer = require('../../datadog-shimmer')
 const Tracer = require('./opentracing/tracer')
 const Scope = require('./scope')
 const { isError } = require('./util')
@@ -118,7 +119,6 @@ class DatadogTracer extends Tracer {
 
   wrap (name, options, fn) {
     const tracer = this
-    const shimmer = require('../../datadog-shimmer')
 
     return shimmer.wrapFunction(fn, original => function (...args) {
       let optionsObj = options
