@@ -105,7 +105,7 @@ function wrapPostgresHandler (handler, queryParameter, channelVariable) {
           database: ${POSTGRES_OPTIONS}.database,
           user: ${POSTGRES_OPTIONS}.user
         };
-        if (${POSTGRES_OPTIONS}.host.length === 1) {
+        if (${POSTGRES_OPTIONS}.host.length === 1 && !${POSTGRES_OPTIONS}.path) {
           __ddTraceContext.host = ${POSTGRES_OPTIONS}.host[0];
           __ddTraceContext.port = ${POSTGRES_OPTIONS}.port[0];
         }
