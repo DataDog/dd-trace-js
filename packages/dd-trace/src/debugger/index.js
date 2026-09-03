@@ -6,6 +6,7 @@ const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
+const telemetryMetrics = require('../telemetry/metrics')
 const getDebuggerConfig = require('./config')
 const {
   DEBUGGER_DIAGNOSTICS_V1,
@@ -13,6 +14,7 @@ const {
   DEBUGGER_INPUT_V2,
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
 } = require('./constants')
+const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
@@ -23,12 +25,19 @@ const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler'
  * @typedef {import('../remote_config')} RemoteConfig
  */
 
+// Guardrail counters are aggregated in shared memory and only converted into telemetry metrics at this interval, so
+// the interval bounds the delay before a guardrail hit becomes visible, not the cost of recording it.
+const GUARDRAIL_METRICS_FLUSH_INTERVAL_MS = 10_000
+
 let worker = null
 let configChannel = null
 let ackId = 0
 let rcAckCallbacks = null
 let rc = null
 let inputPath = null
+/** @type {GuardrailMetrics | null} */
+let guardrailMetrics = null
+let guardrailMetricsTimer = null
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -77,7 +86,12 @@ function start (config, rcInstance) {
   debuggerGlobals.utilTypes = types
   debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] = require('./inspect-segment')
 
-  const probeSamplerBuffer = installProbeSampler()
+  const guardrailMetricsBuffer = GuardrailMetrics.createBuffer()
+  guardrailMetrics = new GuardrailMetrics(guardrailMetricsBuffer)
+  guardrailMetricsTimer = setInterval(flushGuardrailMetrics, GUARDRAIL_METRICS_FLUSH_INTERVAL_MS)
+  guardrailMetricsTimer.unref?.()
+
+  const probeSamplerBuffer = installProbeSampler(guardrailMetrics)
 
   readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
     const action = 'apply'
@@ -125,6 +139,7 @@ function start (config, rcInstance) {
           logPort: logChannel.port1,
           configPort: configChannel.port1,
           probeSamplerBuffer,
+          guardrailMetricsBuffer,
         },
         transferList: [probeChannel.port1, logChannel.port1, configChannel.port1],
       }
@@ -211,6 +226,15 @@ function cleanup (error) {
   configChannel = null
   inputPath = null
 
+  if (guardrailMetricsTimer !== null) {
+    clearInterval(guardrailMetricsTimer)
+    guardrailMetricsTimer = null
+  }
+  if (guardrailMetrics !== null) {
+    flushGuardrailMetrics() // Report what the worker counted up until it was stopped
+    guardrailMetrics = null
+  }
+
   // Call any pending ack callbacks
   // Pass error for unexpected exits, or undefined for graceful shutdown
   if (rcAckCallbacks) {
@@ -221,6 +245,17 @@ function cleanup (error) {
     }
     rcAckCallbacks = null
   }
+}
+
+/**
+ * Convert the guardrail counters accumulated by the probe sampler and the worker into telemetry metrics.
+ */
+function flushGuardrailMetrics () {
+  if (guardrailMetrics === null) return
+  const namespace = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
+  guardrailMetrics.drain((metric, tags, count) => {
+    namespace.count(metric, tags).inc(count)
+  })
 }
 
 /**

@@ -11,6 +11,7 @@ const {
   SAMPLED_PROBE_INDEXES_START,
   SAMPLED_PROBE_OVERFLOW_INDEX,
 } = require('../../src/debugger/probe_sampler_constants')
+const { GuardrailMetrics } = require('../../src/debugger/guardrail-metrics')
 const { installProbeSampler, uninstallProbeSampler } = require('../../src/debugger/probe_sampler')
 const {
   compileBreakpointCondition,
@@ -21,6 +22,9 @@ const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('../../src/debugger/devtoo
 const ddTraceSymbol = Symbol.for('dd-trace')
 const samplerSymbol = Symbol.for('dd-trace.debugger.probeSampler')
 
+/** @type {GuardrailMetrics} */
+let guardrailMetrics
+
 describe('probe sampler', function () {
   /** @type {typeof process.hrtime.bigint} */
   let originalHrtimeBigint
@@ -29,6 +33,7 @@ describe('probe sampler', function () {
 
   beforeEach(function () {
     delete getDatadogGlobal()[samplerSymbol]
+    guardrailMetrics = new GuardrailMetrics(GuardrailMetrics.createBuffer())
     originalHrtimeBigint = process.hrtime.bigint
     now = 1_000_000_000n
     process.hrtime.bigint = () => now
@@ -41,7 +46,7 @@ describe('probe sampler', function () {
 
   describe('shared buffer', function () {
     it('should create a shared buffer with the expected layout', function () {
-      const buffer = installProbeSampler()
+      const buffer = installProbeSampler(guardrailMetrics)
       const sampledProbeIndexes = new Int32Array(buffer)
 
       assert(buffer instanceof SharedArrayBuffer)
@@ -49,7 +54,7 @@ describe('probe sampler', function () {
     })
 
     it('should initialize the shared buffer', function () {
-      const installedBuffer = installProbeSampler()
+      const installedBuffer = installProbeSampler(guardrailMetrics)
       const installedSampledProbeIndexes = new Int32Array(installedBuffer)
 
       assert.strictEqual(Atomics.load(installedSampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 0)
@@ -151,6 +156,22 @@ describe('probe sampler', function () {
 
       assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 200000n, false), false)
       assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 1)
+      assert.deepStrictEqual(drainGuardrailMetrics(), [
+        ['events.skipped', ['event_type:log', 'reason:rateLimitProbe'], 1],
+      ])
+    })
+
+    it('should count snapshot-producing probes skipped by the per-probe rate limit as snapshots', function () {
+      installSampler()
+      const sampler = getSampler()
+
+      assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 200000n, true), true)
+      assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 200000n, true), false)
+      assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 200000n, true), false)
+
+      assert.deepStrictEqual(drainGuardrailMetrics(), [
+        ['events.skipped', ['event_type:snapshot', 'reason:rateLimitProbe'], 2],
+      ])
     })
 
     it('should allow a removed probe to sample again immediately', function () {
@@ -182,6 +203,9 @@ describe('probe sampler', function () {
         Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX),
         MAX_SNAPSHOTS_PER_SECOND_GLOBALLY + 1
       )
+      assert.deepStrictEqual(drainGuardrailMetrics(), [
+        ['events.skipped', ['event_type:snapshot', 'reason:rateLimitGlobal'], 1],
+      ])
     })
 
     it('should not advance the sampled probe count when global snapshot rate rejects a probe', function () {
@@ -213,6 +237,7 @@ describe('probe sampler', function () {
 
       now += 1_000_000_001n
       assert.strictEqual(sampler.makeSampleDecision(99, 'snapshot-next-window', 0n, true), true)
+      assert.deepStrictEqual(drainGuardrailMetrics(), [])
     })
 
     it('should set overflow and skip probes when the shared buffer is full', function () {
@@ -226,6 +251,8 @@ describe('probe sampler', function () {
         false
       )
       assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX), 1)
+      // The overflow guard is an internal limit without a canonical skip reason, so it's not reported as a skip
+      assert.deepStrictEqual(drainGuardrailMetrics(), [])
     })
   })
 })
@@ -234,7 +261,19 @@ describe('probe sampler', function () {
  * Install the runtime sampler for tests.
  */
 function installSampler () {
-  return new Int32Array(installProbeSampler())
+  return new Int32Array(installProbeSampler(guardrailMetrics))
+}
+
+/**
+ * Drain the guardrail counters recorded by the runtime sampler.
+ *
+ * @returns {Array<[string, string[], number]>} The non-zero counters as `[metric, tags, count]` tuples.
+ */
+function drainGuardrailMetrics () {
+  /** @type {Array<[string, string[], number]>} */
+  const reported = []
+  guardrailMetrics.drain((metric, tags, count) => reported.push([metric, tags, count]))
+  return reported
 }
 
 /**

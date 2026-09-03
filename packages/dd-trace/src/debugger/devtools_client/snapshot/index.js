@@ -1,5 +1,6 @@
 'use strict'
 
+const { INCOMPLETE_REASON } = require('../../guardrail-metrics')
 const session = require('../session')
 const { collectObjectProperties } = require('./collector')
 const { processRawState, processRemoteObject } = require('./processor')
@@ -26,8 +27,11 @@ module.exports = {
  * @param {CaptureLimits} limits - The capture limits
  * @param {bigint} [deadlineNs] - The deadline in nanoseconds compared to `process.hrtime.bigint()`. Defaults to
  *   {@link BIGINT_MAX}. If the deadline is reached, the snapshot will be truncated.
- * @returns {Promise<{ processLocalState: () => ReturnType<typeof processRawState>, fatalErrors: Error[] }>} The local
- *   state for the call frame
+ * @returns {Promise<{
+ *   processLocalState: () => ReturnType<typeof processRawState>,
+ *   fatalErrors: Error[],
+ *   incomplete: import('./processor').IncompleteCapture
+ * }>} The local state for the call frame. `incomplete` is only fully populated once `processLocalState` has run.
  */
 async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT_MAX) {
   const { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength } = limits
@@ -35,6 +39,8 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
   const ctx = { deadlineReached: false, fatalErrors: [] }
   const opts = { maxReferenceDepth, maxCollectionSize, maxFieldCount, deadlineNs, ctx }
   const rawState = []
+  /** @type {import('./processor').IncompleteCapture} */
+  const incomplete = { reasons: 0 }
   /** @type {ReturnType<typeof processRawState> | null} */
   let processedState = null
 
@@ -58,13 +64,17 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
     if (ctx.deadlineReached === true) break // TODO: Bad UX; Variables in remaining scopes are silently dropped
   }
 
+  // Scopes remaining after the deadline is reached are dropped without any node carrying the timeout marker
+  if (ctx.deadlineReached === true) incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
+
   // Delay calling `processRawState` so caller can resume the main thread before processing `rawState`
   return {
     processLocalState () {
-      processedState ??= processRawState(rawState, maxLength)
+      processedState ??= processRawState(rawState, maxLength, incomplete)
       return processedState
     },
     fatalErrors: ctx.fatalErrors,
+    incomplete,
   }
 }
 
@@ -82,6 +92,8 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
  * @property {{ expr: string, message: string }[]} evaluationErrors - Transient errors from expression evaluation
  *   (safe to retry)
  * @property {Error[]} fatalErrors - Fatal errors that should disable capture expressions for this probe permanently
+ * @property {import('./processor').IncompleteCapture} incomplete - The capture limits enforced on the expressions.
+ *   Only fully populated once `processCaptureExpressions` has run.
  */
 
 /**
@@ -108,6 +120,8 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
   const evaluationErrors = []
   /** @type {Error[]} */
   const fatalErrors = []
+  /** @type {import('./processor').IncompleteCapture} */
+  const incomplete = { reasons: 0 }
   /** @type {Record<string, ReturnType<typeof processRemoteObject>> | null} */
   let processedResult = null
 
@@ -156,6 +170,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
         }
 
         if (ctx.deadlineReached) {
+          incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
           // Add the current expression (properties may be incomplete due to timeout)
           rawResults.push({ name, remoteObject: result, maxLength })
           // Add stub entries for remaining uncaptured expressions
@@ -189,7 +204,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
       for (const { name, remoteObject, maxLength } of rawResults) {
         // If the remote object has notCapturedReason (e.g., timeout), use it as-is without processing
         processedResult[name] = remoteObject.notCapturedReason === undefined
-          ? processRemoteObject(remoteObject, maxLength)
+          ? processRemoteObject(remoteObject, maxLength, incomplete)
           : remoteObject
       }
 
@@ -197,6 +212,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
     },
     evaluationErrors,
     fatalErrors,
+    incomplete,
   }
 }
 
