@@ -100,17 +100,22 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
   })
 
   describe('inherited decisions', () => {
-    it('forwards rv, th, unknown OTel fields, and unrelated vendors with dd and ot leftmost', () => {
+    it('forwards inherited state without changing unrelated member order', () => {
       const parent = extractParent({
         sampled: true,
-        tracestate: 'congo=t61rcWkgMzE,ot=th:e6666666666668;foo:bar;rv:ef284ace7a91e1,dd=s:2;t.dm:-3',
+        tracestate: 'dd=s:2;t.dm:-3,congo=t61rcWkgMzE,' +
+          'ot=th:e6666666666668;foo:bar;rv:ef284ace7a91e1,something=else',
       })
       const { span, prioritySampler } = startSpan({ parent, sampleRate: 0 })
       const carrier = inject(span, prioritySampler)
       const members = carrier.tracestate.split(',')
 
       assert.match(members[0], /^dd=/)
-      assert.strictEqual(members[1], 'ot=th:e6666666666668;foo:bar;rv:ef284ace7a91e1')
+      assert.deepStrictEqual(members.slice(1), [
+        'congo=t61rcWkgMzE',
+        'ot=th:e6666666666668;foo:bar;rv:ef284ace7a91e1',
+        'something=else',
+      ])
       assert.strictEqual(parseTracestate(carrier.tracestate).congo, 't61rcWkgMzE')
       assert.strictEqual(span.context()._sampling.priority, USER_KEEP)
     })

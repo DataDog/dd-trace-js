@@ -176,8 +176,6 @@ function updateOtelTraceState (context, traceState) {
   if (context._sampling.isProbabilityDecision === false) {
     if (otelMember === undefined) return
   } else if (getProbabilityRate(context) === undefined) {
-    // Reinsert the inherited member to keep it leftmost without rebuilding its fields.
-    if (otelMember !== undefined) traceState.set('ot', otelMember)
     return
   }
 
