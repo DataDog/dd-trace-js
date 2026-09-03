@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { closeSync, openSync, readFileSync } = require('node:fs')
 const { open } = require('node:fs/promises')
-const https = require('node:https')
 const path = require('node:path')
 
 const { after, afterEach, before, describe, it } = require('mocha')
@@ -19,6 +18,7 @@ const {
   cookieParser,
   expressProcessParams,
   expressSession,
+  incomingHttpRequestEnd,
   queryParser,
   responseBody,
 } = require('../../src/appsec/channels')
@@ -44,6 +44,17 @@ const runtimeSupported = Boolean(process.env.DD_INJECT_FORCE) ||
   semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
 const describeSupported = runtimeSupported ? describe : describe.skip
 
+/** @type {typeof import('node:https')} */
+let https
+let incomingHttpRequestEndCount = 0
+
+/**
+ * @returns {void}
+ */
+function countIncomingHttpRequestEnd () {
+  incomingHttpRequestEndCount++
+}
+
 describeSupported('AppSec HTTP/2 response blocking', () => {
   let config
   let http2
@@ -52,6 +63,9 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
   before(async () => {
     await agent.load(['http2', 'http'], { client: false })
+    // Exercise the dual-plugin load order that wraps HTTP/1 fallback responses.
+    require('node:http')
+    https = require('node:https')
     http2 = require('node:http2')
     config = getConfigFresh({
       appsec: {
@@ -184,8 +198,9 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
   })
 
   it('blocks responses sent through the compatibility response stream', async () => {
+    let returnValue
     await listen(() => http2.createServer((req, res) => {
-      res.stream.respond({ ':status': 404, k: '404' })
+      returnValue = res.stream.respond({ ':status': 404, k: '404' })
       res.stream.end('ignored')
     }))
 
@@ -193,6 +208,29 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
     assert.strictEqual(headers[':status'], 403)
     assert.strictEqual(body, blockedTemplateJson)
+    assert.strictEqual(returnValue, undefined)
+  })
+
+  it('preserves undefined returns after blocking a core file response', async () => {
+    let returnValue
+    let repeatedReturnValues
+    await listenCore(stream => {
+      const fileDescriptor = openSync(__filename, 'r')
+      returnValue = stream.respondWithFD(fileDescriptor, { ':status': 404, k: '404' })
+      repeatedReturnValues = [
+        stream.respond({ ':status': 200 }),
+        stream.respondWithFD(fileDescriptor, { ':status': 200 }),
+        stream.respondWithFile(__filename, { ':status': 200 }),
+      ]
+      closeSync(fileDescriptor)
+    })
+
+    const { body, headers } = await request()
+
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+    assert.strictEqual(returnValue, undefined)
+    assert.deepStrictEqual(repeatedReturnValues, [undefined, undefined, undefined])
   })
 
   it('keeps compatibility response operations blocked after AppSec is disabled', async () => {
@@ -231,12 +269,16 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
 
   it('preserves HTTP/1 fallback requests on secure compatibility servers', async () => {
     let requestVersion
+    let responseClosedPromise
+    incomingHttpRequestEndCount = 0
+    incomingHttpRequestEnd.subscribe(countIncomingHttpRequestEnd)
     await listen(() => http2.createSecureServer({
       allowHTTP1: true,
       cert: serverCert,
       key: serverKey,
     }, (req, res) => {
       requestVersion = req.httpVersion
+      responseClosedPromise = once(res, 'close')
       res.end('body')
     }))
 
@@ -263,10 +305,16 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
       })
       clientRequest.once('error', reject)
     })
-    const [, responseBody] = await Promise.all([traceAsserted, responseBodyPromise])
+    try {
+      const [, responseBody] = await Promise.all([traceAsserted, responseBodyPromise])
+      await responseClosedPromise
 
-    assert.strictEqual(requestVersion, '1.1')
-    assert.strictEqual(responseBody, 'body')
+      assert.strictEqual(requestVersion, '1.1')
+      assert.strictEqual(responseBody, 'body')
+      assert.strictEqual(incomingHttpRequestEndCount, 1)
+    } finally {
+      incomingHttpRequestEnd.unsubscribe(countIncomingHttpRequestEnd)
+    }
   })
 
   it('preserves HTTP/1 CONNECT events on secure compatibility servers', async () => {
@@ -1278,7 +1326,7 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
   it('leaves exotic valid response values to Node without analyzing them', async () => {
     await listenCore((stream, headers) => {
       if (headers[':path'] === '/status') {
-        stream.respond({ ':status': {}, k: '404' })
+        stream.respond({ ':status': {}, K: '404' })
       } else if (headers[':path'] === '/value') {
         stream.respond({ ':status': 404, k: '404', value: [{}] })
       } else {
@@ -1294,6 +1342,7 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     ])
 
     assert.strictEqual(statusResponse.headers[':status'], 200)
+    assert.strictEqual(statusResponse.headers.k, '404')
     assert.strictEqual(statusResponse.body, 'body')
     assert.strictEqual(valueResponse.headers[':status'], 404)
     assert.strictEqual(valueResponse.body, 'body')

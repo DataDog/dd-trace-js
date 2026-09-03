@@ -37,10 +37,11 @@ const legacyStorage = storage('legacy')
  * @param {{
  *   signal?: import('node:events').EventEmitter,
  *   informationalHeaders?: import('node:http2').IncomingHttpHeaders[]
+ *   responseHeaders?: import('node:http2').IncomingHttpHeaders
  * }} [options]
  */
 function request (http2, url, options = {}) {
-  const { informationalHeaders, signal } = options
+  const { informationalHeaders, responseHeaders, signal } = options
   const urlObj = new URL(url)
   return new Promise((resolve, reject) => {
     const client = http2
@@ -58,6 +59,9 @@ function request (http2, url, options = {}) {
         informationalHeaders.push(headers)
       }
       req.on('headers', recordInformationalHeaders)
+    }
+    if (responseHeaders) {
+      req.on('response', headers => Object.assign(responseHeaders, headers))
     }
 
     if (signal) {
@@ -137,6 +141,7 @@ function observeIncomingHttpRequestStart () {}
 
 let observedResponseHeader
 let observedResponseHeaderCount = 0
+let observedResponseHeaders
 
 /**
  * @param {{ name: string, value: unknown }} message
@@ -145,6 +150,7 @@ let observedResponseHeaderCount = 0
 function captureResponseHeader ({ name, value }) {
   observedResponseHeader = { name, value }
   observedResponseHeaderCount++
+  observedResponseHeaders?.push({ name, value })
 }
 
 let incomingHttpRequestEndMessage
@@ -504,6 +510,9 @@ describe('Plugin', () => {
             res.setHeader('x-block', 'value')
             try {
               res.setHeader('x-after-block', 'ignored')
+              res.stream.respond({ ':status': 200 })
+              res.stream.write('ignored')
+              res.stream.end('ignored')
             } catch (error) {
               operationError = error
             }
@@ -558,6 +567,32 @@ describe('Plugin', () => {
             assert.strictEqual(countAfterExisting, 1)
             assert.strictEqual(countAfterFalsy, 1)
           } finally {
+            finishSetHeader.unsubscribe(captureResponseHeader)
+          }
+        })
+
+        it('does not republish an unchanged compatibility response header at commit', async () => {
+          observedResponseHeaders = []
+          finishSetHeader.subscribe(captureResponseHeader)
+          /**
+           * @param {import('node:http2').Http2ServerRequest} req
+           * @param {import('node:http2').Http2ServerResponse} res
+           */
+          app = (req, res) => {
+            res.setHeader('x-response', 'value')
+          }
+
+          try {
+            await Promise.all([
+              agent.assertFirstTraceSpan({ name: 'web.request' }),
+              request(http2, `http://localhost:${port}/user`),
+            ])
+            assert.deepStrictEqual(
+              observedResponseHeaders.filter(({ name }) => name === 'x-response'),
+              [{ name: 'x-response', value: 'value' }]
+            )
+          } finally {
+            observedResponseHeaders = undefined
             finishSetHeader.unsubscribe(captureResponseHeader)
           }
         })
@@ -949,6 +984,39 @@ describe('Plugin', () => {
             }
           })
 
+          it('forwards response headers that collide with inherited setters', async () => {
+            const server = appListener
+            server.removeAllListeners('stream')
+            server.on('stream', stream => {
+              stream.respond({ ':status': 200, 'x-inherited-setter': 'present' })
+              stream.end()
+            })
+
+            let setterCalls = 0
+            // eslint-disable-next-line no-extend-native -- Exercise an inherited setter at the copy boundary.
+            Object.defineProperty(Object.prototype, 'x-inherited-setter', {
+              configurable: true,
+              get () { return undefined },
+              set () {
+                setterCalls++
+              },
+            })
+            const responseHeaders = { __proto__: null }
+            finishSetHeader.subscribe(observeResponseHeader)
+
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({ name: 'web.request' }),
+                request(http2, `http://localhost:${port}/user`, { responseHeaders }),
+              ])
+              assert.strictEqual(setterCalls, 0)
+              assert.strictEqual(responseHeaders['x-inherited-setter'], 'present')
+            } finally {
+              finishSetHeader.unsubscribe(observeResponseHeader)
+              delete Object.prototype['x-inherited-setter']
+            }
+          })
+
           it('forwards core response methods after response subscribers are removed', async () => {
             const server = appListener
             server.removeAllListeners('stream')
@@ -1069,6 +1137,48 @@ describe('Plugin', () => {
               assert.strictEqual(serverSpanCount, 0)
             } finally {
               agent.unsubscribe(countHandler)
+            }
+          })
+
+          it('retains compatibility blocks for a foreign server', async () => {
+            let operationError
+            const server = http2.createServer((req, res) => {
+              try {
+                res.setHeader('x-block', 'value')
+                res.setHeader('x-after-block', 'ignored')
+                res.end('ignored')
+              } catch (error) {
+                operationError = error
+              }
+            })
+            server[FOREIGN_HTTP2_SERVER] = true
+            await new Promise(resolve => listen(server, resolve))
+            responseSetHeader.subscribe(abortCompatibilityResponse)
+
+            try {
+              const body = await request(http2, `http://localhost:${port}/user`)
+              assert.strictEqual(operationError, undefined)
+              assert.strictEqual(body.toString(), 'blocked')
+            } finally {
+              responseSetHeader.unsubscribe(abortCompatibilityResponse)
+            }
+          })
+
+          it('publishes compatibility response headers for a foreign server', async () => {
+            const server = http2.createServer((req, res) => {
+              res.setHeader('x-response', 'value')
+              res.end()
+            })
+            server[FOREIGN_HTTP2_SERVER] = true
+            await new Promise(resolve => listen(server, resolve))
+            observedResponseHeader = undefined
+            finishSetHeader.subscribe(captureResponseHeader)
+
+            try {
+              await request(http2, `http://localhost:${port}/user`)
+              assert.deepStrictEqual(observedResponseHeader, { name: 'x-response', value: 'value' })
+            } finally {
+              finishSetHeader.unsubscribe(captureResponseHeader)
             }
           })
 

@@ -235,7 +235,7 @@ function wrapSetHeader (setHeader) {
     const result = Reflect.apply(setHeader, this, arguments)
 
     if (finishSetHeaderCh.hasSubscribers) {
-      finishSetHeaderCh.publish({ name: arguments[0], value: arguments[1], res: this })
+      publishCompatibilityResponseHeader(this, arguments[0], arguments[1])
     }
 
     return result
@@ -258,7 +258,7 @@ function wrapAppendHeader (appendHeader) {
 
     // Node delegates absent and falsy values to setHeader(), whose wrapper publishes the sink.
     if (existingValue && finishSetHeaderCh.hasSubscribers) {
-      finishSetHeaderCh.publish({ name: arguments[0], value: arguments[1], res: this })
+      publishCompatibilityResponseHeader(this, arguments[0], arguments[1])
     }
 
     return result
@@ -331,7 +331,12 @@ function responseOperationIsBlocked (res) {
   startSetHeaderCh.publish({ res, abortController })
   if (!abortController.signal.aborted) return false
 
-  markResponseBlocked(res)
+  const ctx = responseContexts.get(res.stream)
+  if (ctx) {
+    markStreamResponseBlocked(ctx)
+  } else {
+    markResponseBlocked(res)
+  }
   return true
 }
 
@@ -363,7 +368,7 @@ function wrapStreamRespond (respond) {
       return Reflect.apply(respond, this, arguments)
     }
 
-    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return this
+    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
     if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
@@ -380,7 +385,7 @@ function wrapStreamRespond (respond) {
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
     if (!responseAllowed) {
       markStreamResponseBlocked(ctx)
-      return this
+      return
     }
 
     const result = Reflect.apply(respond, this, arguments)
@@ -399,7 +404,7 @@ function wrapStreamRespondWithFD (respond) {
       return Reflect.apply(respond, this, arguments)
     }
 
-    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return this
+    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
     if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
@@ -434,7 +439,7 @@ function wrapStreamRespondWithFD (respond) {
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
     if (!responseAllowed) {
       markStreamResponseBlocked(ctx)
-      return this
+      return
     }
 
     const result = Reflect.apply(respond, this, arguments)
@@ -469,7 +474,7 @@ function wrapStreamRespondWithFile (respond) {
       return Reflect.apply(respond, this, arguments)
     }
 
-    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return this
+    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
     if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
@@ -731,7 +736,7 @@ function getValidatedResponseHeaders (
       return
     }
   } else {
-    responseHeaders = {}
+    responseHeaders = { __proto__: null }
     forwardedHeaders = responseHeaders
     responseHeaderNames = Object.keys(headers)
     for (const rawName of responseHeaderNames) {
@@ -743,16 +748,7 @@ function getValidatedResponseHeaders (
         if (!descriptor || !Object.hasOwn(descriptor, 'value')) return
         value = descriptor.value
       }
-      if (rawName === '__proto__') {
-        Object.defineProperty(responseHeaders, rawName, {
-          configurable: true,
-          enumerable: true,
-          value,
-          writable: true,
-        })
-      } else {
-        responseHeaders[rawName] = value
-      }
+      responseHeaders[rawName] = value
       let normalizedName
       if (value === undefined || rawName === '' || (Array.isArray(value) && value.length === 0)) {
         canReturnFast = false
@@ -893,11 +889,37 @@ function publishStreamResponseStart (ctx, responseHeaders) {
  * @param {Record<string, unknown>} responseHeaders
  */
 function publishStreamResponseFinish (ctx, responseHeaders) {
+  const publishedResponseHeaders = ctx.publishedResponseHeaders
   if (!finishSetHeaderCh.hasSubscribers) return
+  if (publishedResponseHeaders) ctx.publishedResponseHeaders = undefined
 
   for (const name of Object.keys(responseHeaders)) {
-    finishSetHeaderCh.publish({ name, value: responseHeaders[name], res: ctx.res })
+    const value = responseHeaders[name]
+    if (publishedResponseHeaders?.get(name) === value) continue
+    finishSetHeaderCh.publish({ name, value, res: ctx.res })
   }
+}
+
+/**
+ * @param {import('node:http2').Http2ServerResponse} res
+ * @param {string} name
+ * @param {unknown} value
+ */
+function publishCompatibilityResponseHeader (res, name, value) {
+  finishSetHeaderCh.publish({ name, value, res })
+
+  const ctx = responseContexts.get(res.stream)
+  if (!ctx) return
+
+  const normalizedName = name.trim().toLowerCase()
+  const storedValue = res.getHeader(name)
+  if (Array.isArray(storedValue)) {
+    ctx.publishedResponseHeaders?.delete(normalizedName)
+    return
+  }
+
+  const publishedResponseHeaders = ctx.publishedResponseHeaders ??= new Map()
+  publishedResponseHeaders.set(normalizedName, storedValue)
 }
 
 /**
@@ -1091,6 +1113,7 @@ class Http2StreamResponse {
  * @property {object} res.req back-reference used by `wrapResponseEmit`/finish
  * @property {number} res.statusCode read at finish from `stream.sentHeaders`
  * @property {(name: string) => string | number | string[] | undefined} res.getHeader response-header tagging
+ * @property {Map<string, unknown>} [publishedResponseHeaders] compatibility sink values already published
  * @property {false} [strictSingleValueFields] mirrors relaxed Node response validation
  */
 
