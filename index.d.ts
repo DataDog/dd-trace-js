@@ -3279,7 +3279,7 @@ declare namespace tracer {
   }
 
   export namespace opentelemetry {
-    export interface MeterProvider extends otel.MeterProvider {
+    export interface MeterProvider {
       forceFlush(callback?: (error?: Error) => void): void;
       shutdown(callback?: (error?: Error) => void): void;
     }

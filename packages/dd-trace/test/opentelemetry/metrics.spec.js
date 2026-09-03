@@ -755,15 +755,18 @@ describe('OpenTelemetry Meter Provider', () => {
       const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
       const provider = new MeterProvider({ reader })
       const forceFlushDone = sinon.spy()
+      const shutdownFlushDone = sinon.spy()
       const done = sinon.spy()
 
       provider.getMeter('test').createCounter('requests').add(1)
       provider.forceFlush(forceFlushDone)
       provider.getMeter('test').createCounter('final').add(1)
       assert.strictEqual(provider.shutdown(done), undefined)
+      provider.forceFlush(shutdownFlushDone)
 
       assert.strictEqual(exports.length, 1)
       sinon.assert.notCalled(exporter.shutdown)
+      sinon.assert.notCalled(shutdownFlushDone)
       exports[0]({ code: 0 })
       completeNext(flushes)
       sinon.assert.calledOnce(forceFlushDone)
@@ -774,7 +777,29 @@ describe('OpenTelemetry Meter Provider', () => {
       exports[1]({ code: 0 })
       completeNext(flushes)
       sinon.assert.calledOnce(exporter.shutdown)
+      sinon.assert.calledOnce(shutdownFlushDone)
       sinon.assert.calledOnce(done)
+    })
+
+    it('isolates lifecycle callback errors', async () => {
+      const flushes = []
+      const exporter = {
+        export: sinon.spy(),
+        flush: done => { flushes.push(done) },
+        shutdown: done => { done() },
+      }
+      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
+      const shutdownDone = sinon.spy()
+
+      reader.forceFlush(() => { throw new Error('force flush callback failed') })
+      reader.shutdown(() => { throw new Error('shutdown callback failed') })
+      reader.shutdown(shutdownDone)
+
+      completeNext(flushes)
+      await Promise.resolve()
+      completeNext(flushes)
+      sinon.assert.notCalled(exporter.export)
+      sinon.assert.calledOnce(shutdownDone)
     })
 
     it('handles shutdown gracefully', (done) => {

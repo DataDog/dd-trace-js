@@ -26,6 +26,7 @@ import {
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
+import { metrics } from '@opentelemetry/api';
 import { IncomingMessage, OutgoingMessage } from 'http';
 
 opentracing.initGlobalTracer(tracer);
@@ -566,7 +567,8 @@ const provider: opentelemetry.TracerProvider = new tracer.TracerProvider();
 provider.register();
 
 const otelTracer: opentelemetry.Tracer = provider.getTracer("name", "version")
-const otelMeterProvider = {} as opentelemetry.MeterProvider
+const otelMeterProvider = metrics.getMeterProvider() as ReturnType<typeof metrics.getMeterProvider> &
+  opentelemetry.MeterProvider
 const otelForceFlush: (callback?: (error?: Error) => void) => void = otelMeterProvider.forceFlush
 const otelShutdown: (callback?: (error?: Error) => void) => void = otelMeterProvider.shutdown
 

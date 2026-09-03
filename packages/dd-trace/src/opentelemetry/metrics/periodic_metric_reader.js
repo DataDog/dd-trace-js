@@ -9,6 +9,19 @@ const { ObservableInstrument } = require('./instruments')
 const { nowUnixNano } = require('./time')
 
 /**
+ * @param {(error?: Error) => void} [done]
+ * @param {Error} [error]
+ */
+function callDone (done, error) {
+  if (!done) return
+  try {
+    done(error)
+  } catch (callbackError) {
+    log.error('Error completing OTLP metrics lifecycle callback:', callbackError)
+  }
+}
+
+/**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
  * @typedef {import('./instruments').Measurement} Measurement
@@ -201,12 +214,14 @@ class PeriodicMetricReader {
 
   /**
    * Forces an immediate collection and export of all metrics.
-   * @param {Function} [done] Called after the metric export completes
+   * @param {(error?: Error) => void} [done] Called after the metric export completes
+   * @returns {void}
    */
   forceFlush (done) {
     if (this.#isShutdown) {
       log.warn('PeriodicMetricReader is shutdown. %d measurement(s) were dropped', this.#droppedCount)
-      done?.()
+      if (this.#shutdownComplete) callDone(done)
+      else if (done) this.#shutdownCallbacks.push(done)
       return
     }
     this.#enqueueExport(true, done)
@@ -214,12 +229,13 @@ class PeriodicMetricReader {
 
   /**
    * Shuts down the reader and stops periodic collection.
-   * @param {Function} [done] Called after the final export and exporter shutdown complete
+   * @param {(error?: Error) => void} [done] Called after the final export and exporter shutdown complete
+   * @returns {void}
    */
   shutdown (done) {
     if (this.#isShutdown) {
       log.warn('PeriodicMetricReader is already shutdown')
-      if (this.#shutdownComplete) done?.()
+      if (this.#shutdownComplete) callDone(done)
       else if (done) this.#shutdownCallbacks.push(done)
       return
     }
@@ -254,11 +270,17 @@ class PeriodicMetricReader {
     }
   }
 
+  /**
+   * @param {boolean} flushExporter Whether to flush the exporter after export
+   * @param {(error?: Error) => void} [done] Called when the queued export completes
+   * @returns {void}
+   */
   #enqueueExport (flushExporter, done) {
     this.#exportQueue.push({ flushExporter, done })
     this.#drainExportQueue()
   }
 
+  /** @returns {void} */
   #drainExportQueue () {
     if (this.#isExporting || this.#exportQueue.length === 0) return
 
@@ -270,7 +292,7 @@ class PeriodicMetricReader {
       completed = true
       this.#isExporting = false
       queueMicrotask(() => this.#drainExportQueue())
-      done?.(error)
+      callDone(done, error)
     }
     let exportCompleted = false
     const afterExport = error => {
@@ -294,6 +316,10 @@ class PeriodicMetricReader {
     }
   }
 
+  /**
+   * @param {Error} [exportError] Error from the final export
+   * @returns {void}
+   */
   #shutdownExporter (exportError) {
     let completed = false
     const complete = shutdownError => {
@@ -301,7 +327,7 @@ class PeriodicMetricReader {
       completed = true
       this.#shutdownComplete = true
       const callbacks = this.#shutdownCallbacks.splice(0)
-      for (const callback of callbacks) callback(exportError || shutdownError)
+      for (const callback of callbacks) callDone(callback, exportError || shutdownError)
     }
 
     try {
