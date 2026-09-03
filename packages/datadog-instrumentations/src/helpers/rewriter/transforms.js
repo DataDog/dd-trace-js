@@ -25,6 +25,7 @@ module.exports = {
   configureGraphqlJitDeferredField,
   configureGraphqlJitExecute,
   configureGraphqlJitRuntime,
+  configureGraphqlFastPath,
   configureMercuriusRequest,
   waitForAsyncEnd,
 }
@@ -316,12 +317,43 @@ function queryOne (root, selector) {
 
 /**
  * @param {object} _state
- * @param {import('estree').FunctionExpression} node
- * @param {import('estree').Node} _parent
+ * @param {import('estree').FunctionDeclaration} node
+ * @param {import('estree').Node} parent
  * @param {import('estree').Node[]} ancestry
  */
-function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
-  const context = queryOne(node, 'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression')
+function configureGraphqlFastPath (_state, node, parent, ancestry) {
+  assert.strictEqual(node.type, 'FunctionDeclaration', 'configureGraphqlFastPath: expected a function declaration')
+  assert(identifierPattern.test(node.id?.name), 'configureGraphqlFastPath: expected a named function')
+
+  const insertionRoot = Array.isArray(parent?.body)
+    ? parent
+    : ancestry.find(ancestor => Array.isArray(ancestor?.body) && ancestor.body.includes(parent))
+  assert(insertionRoot, 'configureGraphqlFastPath: expected an enclosing statement list')
+  const insertionTarget = insertionRoot === parent ? node : parent
+
+  const originalName = `__apm$original_${node.id.name}`
+  assert.strictEqual(
+    query(insertionRoot, `VariableDeclarator[id.name="${originalName}"]`).length,
+    0,
+    'configureGraphqlFastPath: original function binding already exists'
+  )
+  configureGraphqlTraceFastPath(
+    node,
+    insertionRoot,
+    insertionTarget,
+    originalName,
+    'configureGraphqlFastPath'
+  )
+}
+
+/**
+ * @param {import('estree').Function} node
+ * @param {import('estree').Node} insertionRoot
+ * @param {import('estree').Node} insertionTarget
+ * @param {string} originalName
+ * @param {string} transformName
+ */
+function configureGraphqlTraceFastPath (node, insertionRoot, insertionTarget, originalName, transformName) {
   const tracedDeclaration = queryOne(
     node,
     'VariableDeclaration:has(VariableDeclarator[id.name="__apm$traced"])'
@@ -340,12 +372,44 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
     'IfStatement[test.operator="!"][consequent.type="ReturnStatement"]' +
       ':has(CallExpression[callee.name="__apm$traced"])'
   )
-  const activeCall = queryOne(
-    node,
-    'AssignmentExpression[left.object.name="__apm$ctx"][left.property.name="result"] > ' +
-      'CallExpression[callee.name="__apm$traced"]'
+  const fastCall = subscriberGuard.consequent.argument
+  const tracedCalls = query(node, 'CallExpression[callee.name="__apm$traced"]')
+  assert.strictEqual(tracedCalls.length, 2, `${transformName}: expected inactive and active traced calls`)
+  const activeCall = tracedCalls.find(call => call !== fastCall)
+  assert(activeCall, `${transformName}: active traced call not found`)
+  assert(functionTypes.has(wrapped.init?.type), `${transformName}: expected a wrapped function`)
+
+  wrapped.id.name = originalName
+  assert(
+    insertBeforeStatement(insertionRoot, insertionTarget, [wrappedDeclaration]),
+    `${transformName}: could not hoist original function`
   )
-  assert(wrapped.init, 'configureGraphqlJitExecute: wrapped query has no implementation')
+
+  fastCall.callee = parse(`${originalName}.apply`).body[0].expression
+  fastCall.arguments = parse('call(this, arguments)').body[0].expression.arguments
+  subscriberGuard.consequent = { type: 'BlockStatement', body: [subscriberGuard.consequent] }
+  activeCall.callee = parse(`${originalName}.apply`).body[0].expression
+  activeCall.arguments = parse('call(this, __apm$arguments)').body[0].expression.arguments
+
+  const statements = node.body.body
+  const subscriberGuardIndex = statements.indexOf(subscriberGuard)
+  const tracedDeclarationIndex = statements.indexOf(tracedDeclaration)
+  assert.notStrictEqual(subscriberGuardIndex, -1, `${transformName}: subscriber guard is not top-level`)
+  assert.notStrictEqual(tracedDeclarationIndex, -1, `${transformName}: traced declaration is not top-level`)
+  statements.splice(subscriberGuardIndex, 1)
+  statements.splice(statements.indexOf(tracedDeclaration), 1)
+  statements.unshift(subscriberGuard)
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
+  const context = queryOne(node, 'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression')
+  const wrapped = queryOne(node, 'VariableDeclarator[id.name="__apm$wrapped"]')
 
   const createBoundQuery = ancestry.find(ancestor =>
     ancestor.type === 'FunctionDeclaration' && ancestor.id?.name === 'createBoundQuery'
@@ -382,25 +446,16 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
   context.properties.push(...properties)
 
   assert(
-    insertBeforeStatement(createBoundQuery.body, retDeclaration, [...bindings, wrappedDeclaration]),
-    'configureGraphqlJitExecute: could not hoist original query'
+    insertBeforeStatement(createBoundQuery.body, retDeclaration, bindings),
+    'configureGraphqlJitExecute: could not insert query bindings'
   )
-
-  const fastCall = subscriberGuard.consequent.argument
-  fastCall.callee = parse('__apm$wrapped.apply').body[0].expression
-  fastCall.arguments = parse('call(this, arguments)').body[0].expression.arguments
-  subscriberGuard.consequent = { type: 'BlockStatement', body: [subscriberGuard.consequent] }
-  activeCall.callee = parse('__apm$wrapped.apply').body[0].expression
-  activeCall.arguments = parse('call(this, __apm$arguments)').body[0].expression.arguments
-
-  const statements = node.body.body
-  const subscriberGuardIndex = statements.indexOf(subscriberGuard)
-  const tracedDeclarationIndex = statements.indexOf(tracedDeclaration)
-  assert.notStrictEqual(subscriberGuardIndex, -1, 'configureGraphqlJitExecute: subscriber guard is not top-level')
-  assert.notStrictEqual(tracedDeclarationIndex, -1, 'configureGraphqlJitExecute: traced declaration is not top-level')
-  statements.splice(subscriberGuardIndex, 1)
-  statements.splice(statements.indexOf(tracedDeclaration), 1)
-  statements.unshift(subscriberGuard)
+  configureGraphqlTraceFastPath(
+    node,
+    createBoundQuery.body,
+    retDeclaration,
+    '__apm$wrapped',
+    'configureGraphqlJitExecute'
+  )
 }
 
 /**

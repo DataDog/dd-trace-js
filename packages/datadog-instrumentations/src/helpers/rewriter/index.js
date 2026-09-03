@@ -104,6 +104,7 @@ function createMatcher (moduleType) {
   const {
     awaitContextCallback,
     awaitContextCallbackAtTryStart,
+    configureGraphqlFastPath,
     configureGraphqlJitCompileObject,
     configureGraphqlJitDeferredField,
     configureGraphqlJitExecute,
@@ -117,6 +118,7 @@ function createMatcher (moduleType) {
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
   matcher.addTransform('awaitContextCallbackAtTryStart', awaitContextCallbackAtTryStart)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
+  matcher.addTransform('configureGraphqlFastPath', configureGraphqlFastPath)
   matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
   matcher.addTransform('configureGraphqlJitDeferredField', configureGraphqlJitDeferredField)
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)

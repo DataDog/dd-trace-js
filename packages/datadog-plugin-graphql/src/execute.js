@@ -577,11 +577,10 @@ function wrapResolve (resolve, isJit = false) {
     // pathString built incrementally off the parent's cached value
     // (rootCtx.pathCache, keyed by path node) — avoids re-walking the whole
     // path linked-list on every resolver call, which is O(depth) per call for
-    // deeply nested resolvers. Shared between the IAST publish and the field
-    // record. Collapse-aware: list-index segments become '*'.
+    // deeply nested resolvers. Collapse-aware: list-index segments become '*'.
     let pathString
     let collapsedKey
-    if (infoPath && (hasIastSub || traceResolver)) {
+    if (infoPath && traceResolver) {
       const pathCache = rootCtx.pathCache ??= new Map()
       pathString = buildCachedPathString(infoPath, pathCache, config.collapse)
       if (config.collapse) collapsedKey = pathString
@@ -590,12 +589,14 @@ function wrapResolve (resolve, isJit = false) {
     // IAST and AppSec subscribers see EVERY resolver call, regardless of
     // depth or collapse. The depth knob caps span creation only.
     if (hasIastSub) {
-      iastResolveCh.publish({ rootCtx, args, info, path: pathToArray(infoPath), pathString })
+      iastResolveCh.publish({ rootCtx, args })
     }
     if (hasResolverSub) {
       resolverStartCh.publish({
         abortController: rootCtx.abortController,
-        resolverInfo: getResolverInfo(info, args),
+        createResolverInfo,
+        info,
+        args,
       })
     }
 
@@ -723,22 +724,16 @@ function unwrapResolve (resolve) {
 function resolveCompiledJitField (rootCtx, descriptorId, resolve, self, source, args, contextValue, info) {
   const descriptor = rootCtx.jitPlan.fields[descriptorId]
   const config = rootCtx.config
-  const path = config.collapse ? undefined : pathToArray(info.path)
-  const pathString = path ? path.join('.') : descriptor.collapsedPath
 
   if (rootCtx.hasIastSub) {
-    iastResolveCh.publish({
-      rootCtx,
-      args,
-      info,
-      path: path ?? pathToArray(info.path),
-      pathString,
-    })
+    iastResolveCh.publish({ rootCtx, args })
   }
   if (rootCtx.hasResolverSub) {
     resolverStartCh.publish({
       abortController: rootCtx.abortController,
-      resolverInfo: getResolverInfo(info, args),
+      createResolverInfo,
+      info,
+      args,
     })
   }
 
@@ -751,6 +746,8 @@ function resolveCompiledJitField (rootCtx, descriptorId, resolve, self, source, 
     return resolve.call(self, source, args, contextValue, info)
   }
 
+  const path = config.collapse ? undefined : pathToArray(info.path)
+  const pathString = path ? path.join('.') : descriptor.collapsedPath
   let field
   if (config.collapse) {
     field = rootCtx.jitFields[descriptor.id]
@@ -917,28 +914,20 @@ function readJitDefaultInScope (rootCtx, descriptorId, source, path) {
  */
 function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path, argumentFactory) {
   const descriptor = rootCtx.jitPlan.fields[descriptorId]
-  const pathString = path ? path.join('.') : descriptor.collapsedPath
   if (rootCtx.hasIastSub || rootCtx.hasResolverSub) {
-    const info = {
-      fieldName: descriptor.fieldName,
-      fieldNodes: descriptor.fieldNodes,
-    }
     if (rootCtx.hasIastSub) {
       iastResolveCh.publish({
         rootCtx,
         args: getJitDefaultArguments(rootCtx, descriptor, argumentFactory, true),
-        info,
-        path: path ?? descriptor.collapsedPathSegments,
-        pathString,
       })
     }
     if (rootCtx.hasResolverSub) {
       resolverStartCh.publish({
         abortController: rootCtx.abortController,
-        resolverInfo: getResolverInfo(
-          info,
-          getJitDefaultArguments(rootCtx, descriptor, argumentFactory, false)
-        ),
+        createResolverInfo: createJitDefaultResolverInfo,
+        rootCtx,
+        descriptor,
+        argumentFactory,
       })
     }
   }
@@ -952,6 +941,7 @@ function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path, argum
     return source[descriptor.fieldName]
   }
 
+  const pathString = path ? path.join('.') : descriptor.collapsedPath
   const field = rootCtx.config.collapse
     ? rootCtx.jitFields[descriptorId]
     : rootCtx.jitFieldsByPath.get(`${descriptorId}:${pathString}`)
@@ -1323,8 +1313,33 @@ function getParentField (rootCtx, field) {
   return null
 }
 
-// Build the resolverInfo payload that AppSec's datadog:graphql:resolver:start
-// subscriber expects: { [fieldName]: { ...args, ...directives } }.
+/**
+ * @param {{ info: import('graphql').GraphQLResolveInfo, args: Record<string, unknown> }} data
+ * @returns {Record<string, Record<string, unknown>> | null}
+ */
+function createResolverInfo ({ info, args }) {
+  return getResolverInfo(info, args)
+}
+
+/**
+ * @param {{
+ *   rootCtx: object,
+ *   descriptor: JitDescriptor,
+ *   argumentFactory: ArgumentFactory | undefined
+ * }} data
+ * @returns {Record<string, Record<string, unknown>> | null}
+ */
+function createJitDefaultResolverInfo ({ rootCtx, descriptor, argumentFactory }) {
+  const args = getJitDefaultArguments(rootCtx, descriptor, argumentFactory, false)
+
+  return getResolverInfo(descriptor, args)
+}
+
+/**
+ * @param {{ fieldName: string, fieldNodes?: readonly import('graphql').FieldNode[] }} info
+ * @param {Record<string, unknown> | undefined} args
+ * @returns {Record<string, Record<string, unknown>> | null}
+ */
 function getResolverInfo (info, args) {
   let resolverVars = args ? { ...args } : undefined
 

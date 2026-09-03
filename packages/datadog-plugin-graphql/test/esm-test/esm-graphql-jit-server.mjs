@@ -40,8 +40,9 @@ if (warmResult.errors) throw warmResult.errors[0]
 
 /** @type {Record<string, number>} */
 const resolverCalls = {}
-/** @param {{ resolverInfo: Record<string, unknown> }} message */
-dc.channel('datadog:graphql:resolver:start').subscribe(({ resolverInfo }) => {
+/** @param {{ createResolverInfo: (data: object) => Record<string, unknown> }} message */
+dc.channel('datadog:graphql:resolver:start').subscribe((message) => {
+  const resolverInfo = message.createResolverInfo(message)
   const [fieldName] = Object.keys(resolverInfo)
   resolverCalls[fieldName] = (resolverCalls[fieldName] ?? 0) + 1
 })
