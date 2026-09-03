@@ -357,6 +357,41 @@ describe('Config', () => {
     assert.strictEqual(config.lookup, lookup)
   })
 
+  it('should preserve RegExp sampling rules in the programmatic configuration snapshot', () => {
+    const name = /^health/
+    const service = /^web/
+    const resource = /^GET/
+    const tag = /^2/
+    const samplingRules = [{ name, service, resource, tags: { status: tag }, sampleRate: 0 }]
+    const config = getConfig({ samplingRules })
+
+    assert.ok(config.samplingRules[0].name instanceof RegExp)
+    assert.ok(config.samplingRules[0].service instanceof RegExp)
+    assert.ok(config.samplingRules[0].resource instanceof RegExp)
+    assert.ok(config.samplingRules[0].tags.status instanceof RegExp)
+    assert.notStrictEqual(config.samplingRules[0].name, name)
+    assert.notStrictEqual(config.samplingRules[0].service, service)
+    assert.notStrictEqual(config.samplingRules[0].resource, resource)
+    assert.notStrictEqual(config.samplingRules[0].tags.status, tag)
+
+    const activeName = config.samplingRules[0].name
+    activeName.lastIndex = 2
+
+    config.setRemoteConfig({ samplingRules: [{ name: 'remote', sampleRate: 1 }] })
+    config.setRemoteConfig(null)
+
+    assert.ok(config.samplingRules[0].name instanceof RegExp)
+    assert.ok(config.samplingRules[0].service instanceof RegExp)
+    assert.ok(config.samplingRules[0].resource instanceof RegExp)
+    assert.ok(config.samplingRules[0].tags.status instanceof RegExp)
+    assert.notStrictEqual(config.samplingRules[0].name, activeName)
+    assert.strictEqual(config.samplingRules[0].name.lastIndex, 0)
+    assert.strictEqual(samplingRules[0].name, name)
+    assert.strictEqual(samplingRules[0].service, service)
+    assert.strictEqual(samplingRules[0].resource, resource)
+    assert.strictEqual(samplingRules[0].tags.status, tag)
+  })
+
   it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
     process.env.DD_SERVICE = 'service'
     process.env.OTEL_SERVICE_NAME = 'otel_service'
