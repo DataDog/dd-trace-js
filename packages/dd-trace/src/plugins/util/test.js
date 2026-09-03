@@ -1641,7 +1641,7 @@ function parseStackFrameLocation (frame, expectedPath) {
   let end = scope.length
   if (scope.charCodeAt(end - 1) === 0x29 /* ) */) end--
 
-  for (;;) {
+  while (true) {
     let lastNumberStart = end
     while (lastNumberStart > 0 && isAsciiDigit(scope.charCodeAt(lastNumberStart - 1))) {
       lastNumberStart--
