@@ -407,22 +407,46 @@ describe('Tracer', () => {
       Date.now.restore()
     })
 
-    it('should be disabled by default', () => {
+    it('should return an empty string when disabled', () => {
       tracer.trace('getRumData', {}, () => {
         assert.strictEqual(tracer.getRumData(), '')
       })
     })
 
-    it('should return correct string', () => {
-      tracer._enableGetRumData = true
-      tracer.trace('getRumData', {}, () => {
-        const data = tracer.getRumData()
-        const time = Date.now()
-        const re = /<meta name="dd-trace-id" content="(\w+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
-        const [, traceId, traceTime] = re.exec(data)
-        const span = tracer.scope().active().context()
-        assert.strictEqual(traceId, span.toTraceId())
-        assert.strictEqual(traceTime, time.toString())
+    describe('when enabled', () => {
+      let previousEnableGetRumData
+
+      beforeEach(() => {
+        previousEnableGetRumData = config.experimental.enableGetRumData
+        config.experimental.enableGetRumData = true
+        tracer = new Tracer(config)
+        tracer._exporter.export = sinon.stub()
+      })
+
+      afterEach(() => {
+        config.experimental.enableGetRumData = previousEnableGetRumData
+      })
+
+      it('should return an empty string without an active span', () => {
+        assert.strictEqual(tracer.getRumData(), '')
+      })
+
+      it('should return the active trace data', () => {
+        tracer.trace('getRumData', {}, () => {
+          const traceId = tracer.scope().active().context().toTraceId()
+          const expected = `\
+<meta name="dd-trace-id" content="${traceId}" />\
+<meta name="dd-trace-time" content="${Date.now()}" />`
+
+          assert.strictEqual(tracer.getRumData(), expected)
+        })
+      })
+
+      it('should return an empty string after restoring the previous context', () => {
+        tracer.trace('getRumData', {}, () => {})
+
+        assert.strictEqual(tracer.scope().active(), null)
+        assert.strictEqual(tracer.getRumData(), '')
       })
     })
   })
