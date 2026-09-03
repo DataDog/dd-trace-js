@@ -2,6 +2,7 @@
 
 const { AUTO_KEEP } = require('../../../ext/priority')
 const knuthHash = require('./knuth_hash')
+const { SAMPLING_AGENT_DECISION, SAMPLING_RULE_DECISION } = require('./constants')
 
 const MAX_OTEL_VALUE_BYTES = 256
 const MAX_THRESHOLD = 2n ** 56n
@@ -53,7 +54,8 @@ function formatThreshold (threshold) {
  * @returns {{ randomValue: string, threshold: string } | undefined}
  */
 function generateFields (context) {
-  const { priority, probabilityRate } = context._sampling
+  const { priority } = context._sampling
+  const probabilityRate = getProbabilityRate(context)
   if (priority === undefined || probabilityRate === undefined) return
 
   const thresholdValue = thresholdFor(probabilityRate)
@@ -70,6 +72,18 @@ function generateFields (context) {
     randomValue: randomValue.toString(16).padStart(14, '0'),
     threshold: formatThreshold(thresholdValue),
   }
+}
+
+/**
+ * Returns the probability rate already recorded by the regular Datadog sampling path.
+ *
+ * @param {import('./opentracing/span_context')} context
+ * @returns {number | undefined}
+ */
+function getProbabilityRate (context) {
+  if (context._sampling.isProbabilityDecision === false) return
+  if (context._sampling.probabilityRate !== undefined) return context._sampling.probabilityRate
+  return context._trace[SAMPLING_RULE_DECISION] ?? context._trace[SAMPLING_AGENT_DECISION]
 }
 
 /**
@@ -164,7 +178,7 @@ function updateOtelTraceState (context, traceState) {
   const otelMember = traceState.get('ot')
   if (context._sampling.isProbabilityDecision === false) {
     if (otelMember === undefined) return
-  } else if (context._sampling.probabilityRate === undefined) {
+  } else if (getProbabilityRate(context) === undefined) {
     // Reinsert the inherited member to keep it leftmost without rebuilding its fields.
     if (otelMember !== undefined) traceState.set('ot', otelMember)
     return

@@ -37,7 +37,6 @@ const {
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
-const { updateOtelTraceState } = require('../../otel_sampling')
 const tags = require('../../../../../ext/tags')
 const { getConfiguredEnvName } = require('../../config/helper')
 const { setAllBaggageItems, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
@@ -86,6 +85,8 @@ const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
 const percentByte = /%([0-9A-Fa-f]{2})/g
+
+let updateOtelTraceState
 
 class TextMapPropagator {
   /** @type {Set<string> | undefined} Cached `Set` view of `_config.baggageTagKeys`. */
@@ -395,6 +396,7 @@ class TextMapPropagator {
 
     writeTraceparent(carrier, spanContext.toTraceparent())
 
+    updateOtelTraceState ??= require('../../otel_sampling').updateOtelTraceState
     updateOtelTraceState(spanContext, ts)
 
     ts.forVendor('dd', state => {

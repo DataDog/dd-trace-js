@@ -243,7 +243,10 @@ class PrioritySampler {
    */
   _decideFromAuto (span) {
     const context = this._getContext(span)
-    const priority = this._getPriorityFromAuto(span, true)
+    const rule = this.#findRule(span)
+    const priority = rule
+      ? this.#getPriorityByRule(context, rule, true)
+      : this.#getPriorityByAgent(context)
 
     context._sampling.priority = priority
     return priority
@@ -253,16 +256,15 @@ class PrioritySampler {
    * Computes priority using rules and agent rates when no manual tag is present.
    *
    * @param {DatadogSpan} span
-   * @param {boolean} [recordDecision]
    * @returns {SamplingPriority}
    */
-  _getPriorityFromAuto (span, recordDecision = false) {
+  _getPriorityFromAuto (span) {
     const context = this._getContext(span)
     const rule = this.#findRule(span)
 
     return rule
-      ? this.#getPriorityByRule(context, rule, recordDecision)
-      : this.#getPriorityByAgent(context, recordDecision)
+      ? this.#getPriorityByRule(context, rule, false)
+      : this.#getPriorityByAgent(context)
   }
 
   /**
@@ -306,9 +308,8 @@ class PrioritySampler {
       const priority = this._getPriorityFromTag(MANUAL_DROP, tags[MANUAL_DROP], _context)
       if (priority !== undefined) return priority
     }
-    if (Object.hasOwn(tags, SAMPLING_PRIORITY)) {
-      return this._getPriorityFromTag(SAMPLING_PRIORITY, tags[SAMPLING_PRIORITY], _context)
-    }
+    const priority = tags[SAMPLING_PRIORITY]
+    if (priority !== undefined) return this._getPriorityFromTag(SAMPLING_PRIORITY, priority, _context)
   }
 
   /**
@@ -329,17 +330,17 @@ class PrioritySampler {
       context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
     }
 
-    if (!rule.isSampled(context)) {
-      if (recordDecision) this._recordDecisionMetadata(context, rule.sampleRate)
+    const sampled = rule.sample(context, true)
+    if (sampled !== true) {
+      if (recordDecision && sampled === undefined) this._recordDecisionMetadata(context)
       return USER_REJECT
     }
 
-    if (!rule.isAllowed() || !this._isSampledByRateLimit(context)) {
+    if (!this._isSampledByRateLimit(context)) {
       if (recordDecision) this._recordDecisionMetadata(context)
       return USER_REJECT
     }
 
-    if (recordDecision) this._recordDecisionMetadata(context, rule.sampleRate)
     return USER_KEEP
   }
 
@@ -363,10 +364,9 @@ class PrioritySampler {
    * Computes priority using agent-provided sampling rates.
    *
    * @param {DatadogSpanContext} context
-   * @param {boolean} recordDecision
    * @returns {SamplingPriority}
    */
-  #getPriorityByAgent (context, recordDecision) {
+  #getPriorityByAgent (context) {
     const key = `service:${context.getTag(SERVICE_NAME)},env:${this._env}`
     // TODO: Change underscored properties to private ones.
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
@@ -381,34 +381,29 @@ class PrioritySampler {
       context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
     }
 
-    const sampled = sampler.isSampled(context)
-    if (recordDecision) this._recordDecisionMetadata(context, rate)
-    return sampled ? AUTO_KEEP : AUTO_REJECT
+    return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
   }
 
   /**
-   * Records whether a sampling decision represents a probability.
+   * Records that a sampling decision does not represent a probability.
    *
    * @param {DatadogSpanContext} context
-   * @param {number} [probabilityRate]
    * @returns {void}
    */
-  _recordDecisionMetadata (context, probabilityRate) {
-    context._sampling.probabilityRate = probabilityRate
-    context._sampling.isProbabilityDecision = probabilityRate !== undefined
+  _recordDecisionMetadata (context) {
+    context._sampling.isProbabilityDecision = false
   }
 
   /**
-   * Records a local sampling decision and whether it represents a probability.
+   * Records a local non-probability sampling decision.
    *
    * @param {DatadogSpanContext} context
    * @param {SamplingPriority} priority
-   * @param {number} [probabilityRate]
    * @returns {SamplingPriority}
    */
-  _recordDecision (context, priority, probabilityRate) {
+  _recordDecision (context, priority) {
     context._sampling.priority = priority
-    this._recordDecisionMetadata(context, probabilityRate)
+    this._recordDecisionMetadata(context)
     return priority
   }
 

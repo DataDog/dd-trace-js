@@ -410,6 +410,15 @@ describe('sampling rule', () => {
       assert.strictEqual(rule.sample(spanContext), false)
     })
 
+    it('should distinguish probability and rate-limit rejections', () => {
+      const probabilityRule = new SamplingRule({ sampleRate: 0 })
+      const limitedRule = new SamplingRule({ sampleRate: 1, maxPerSecond: 0 })
+      const spanContext = new SpanContext({ traceId: id('2986627970102095326', 10) })
+
+      assert.strictEqual(probabilityRule.sample(spanContext, true), false)
+      assert.strictEqual(limitedRule.sample(spanContext, true), undefined)
+    })
+
     it('should allow unlimited rate limits', () => {
       rule = new SamplingRule({
         service: 'test',

@@ -50,6 +50,20 @@ class TraceSourcePrioritySampler extends PrioritySampler {
   }
 
   /**
+   * Evaluates and records the standalone automatic sampling decision.
+   *
+   * @override
+   * @param {import('../opentracing/span')} span
+   * @returns {import('../priority_sampler').SamplingPriority}
+   */
+  _decideFromAuto (span) {
+    const context = this._getContext(span)
+    const priority = this._getPriorityFromAuto(span, true)
+    context._sampling.priority = priority
+    return priority
+  }
+
+  /**
    * @override
    */
   setPriority (span, samplingPriority, product) {
