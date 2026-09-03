@@ -564,7 +564,7 @@ class TextMapPropagator {
 
     writeTraceparent(carrier, spanContext.toTraceparent())
 
-    updateOtelTraceState ??= require('../../otel_sampling').updateOtelTraceState
+    updateOtelTraceState ??= require('../../otel-sampling').updateOtelTraceState
     updateOtelTraceState(spanContext, ts)
 
     ts.forVendor('dd', state => {

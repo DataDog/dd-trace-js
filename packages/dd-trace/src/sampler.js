@@ -5,7 +5,7 @@
 // as it is cast into a float64 when computing the threshold
 const MAX_TRACE_ID = 2 ** 64 - 1
 
-const knuthHash = require('./knuth_hash')
+const knuthHash = require('./knuth-hash')
 
 /**
  * `Sampler` determines whether or not to sample a trace/span based on the trace ID.

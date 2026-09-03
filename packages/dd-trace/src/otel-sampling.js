@@ -1,7 +1,7 @@
 'use strict'
 
 const { AUTO_KEEP } = require('../../../ext/priority')
-const knuthHash = require('./knuth_hash')
+const knuthHash = require('./knuth-hash')
 const { SAMPLING_AGENT_DECISION, SAMPLING_RULE_DECISION } = require('./constants')
 
 const MAX_OTEL_VALUE_BYTES = 256
