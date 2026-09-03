@@ -157,7 +157,7 @@ class Profiler extends EventEmitter {
                 }
               }
             } else {
-              const { zstd_compress: zstdCompress } = require('@datadog/libdatadog')
+              const { zstd_compress: zstdCompress } = require('@datadog/libdatadog/zstd')
               const level = clevel ?? 0 // 0 is zstd default compression level
               this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
             }
