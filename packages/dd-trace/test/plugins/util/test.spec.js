@@ -54,6 +54,8 @@ const {
   TEST_BROWSER_VERSION,
   TEST_IS_RUM_ACTIVE,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  getTestLineStart,
+  getFileAndLineNumberFromError,
 } = require('../../../src/plugins/util/test')
 
 const {
@@ -2138,5 +2140,115 @@ describe('checkShaDiscrepancies', () => {
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
 
     sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_SHA_MATCH, { matched: true })
+  })
+})
+
+describe('getTestLineStart', () => {
+  it('returns the line of the first frame matching the suite path', () => {
+    const error = {
+      stack: [
+        'Error: boom',
+        '    at assert (/repo/node_modules/chai/lib.js:100:7)',
+        '    at Context.<anonymous> (/repo/test/foo.spec.js:42:13)',
+      ].join('\n'),
+    }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/foo.spec.js'), 42)
+  })
+
+  it('ignores parentheses in the function name', () => {
+    const error = { stack: 'Error\n    at foo(bar) (/repo/test/foo.spec.js:42:13)' }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/foo.spec.js'), 42)
+  })
+
+  it('parses frames without a parenthesized function name', () => {
+    const error = { stack: 'Error\n    at /repo/test/bar.spec.js:7:2' }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/bar.spec.js'), 7)
+  })
+
+  it('parses a frame without a column number', () => {
+    const error = { stack: 'Error\n    at /repo/test/bar.spec.js:7' }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/bar.spec.js'), 7)
+  })
+
+  it('uses the source location from an eval frame', () => {
+    const error = {
+      stack: 'Error\n    at eval (eval at run (/repo/test/foo.spec.js:42:13), <anonymous>:1:3)',
+    }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/foo.spec.js'), 42)
+  })
+
+  it('uses the source location from a nested eval frame', () => {
+    const error = {
+      stack: 'Error\n    at eval (eval at outer (eval at run (/repo/test/foo.spec.js:42:13)), <anonymous>:1:3)',
+    }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/foo.spec.js'), 42)
+  })
+
+  it('returns null without a stack or matching frame', () => {
+    assert.strictEqual(getTestLineStart({}, '/repo/test/foo.spec.js'), null)
+    assert.strictEqual(getTestLineStart({ stack: 'Error\n    at fn (/repo/x.js:1:1)' }, '/repo/miss.js'), null)
+    assert.strictEqual(
+      getTestLineStart({ stack: 'Error\n    at /repo/test/foo.spec.js' }, '/repo/test/foo.spec.js'),
+      null
+    )
+  })
+
+  it('stays linear on an attacker-shaped newline-free frame', () => {
+    const suite = '/repo/test/evil.spec.js'
+    const error = { stack: `at ${'('.repeat(200_000)}${suite}:5:1` }
+    assert.strictEqual(getTestLineStart(error, suite), 5)
+  })
+})
+
+describe('getFileAndLineNumberFromError', () => {
+  it('returns the file, line, and index of the first non-dependency frame under the repo root', () => {
+    const error = {
+      stack: [
+        'Error: boom',
+        '    at dep (/repo/node_modules/x/index.js:9:9)',
+        '    at handler (/repo/src/server.js:128:20)',
+      ].join('\n'),
+    }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/server.js', 128, 1])
+  })
+
+  it('parses frames without a parenthesized function name', () => {
+    const error = { stack: 'Error\n    at /repo/src/run.js:3:7' }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/run.js', 3, 0])
+  })
+
+  it('preserves parentheses in wrapped and unwrapped file paths', () => {
+    const wrappedError = { stack: 'Error\n    at handler (/repo/src/a(b).js:12:3)' }
+    const unwrappedError = { stack: 'Error\n    at /repo/src/a(b).js:12:3' }
+
+    assert.deepStrictEqual(getFileAndLineNumberFromError(wrappedError, '/repo'), ['/repo/src/a(b).js', 12, 0])
+    assert.deepStrictEqual(getFileAndLineNumberFromError(unwrappedError, '/repo'), ['/repo/src/a(b).js', 12, 0])
+  })
+
+  it('ignores parentheses in the function name', () => {
+    const error = { stack: 'Error\n    at foo(bar) (/repo/src/run.js:12:3)' }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/run.js', 12, 0])
+  })
+
+  it('uses the source location from an eval frame', () => {
+    const error = { stack: 'Error\n    at eval (eval at run (/repo/src/run.js:42:13), <anonymous>:1:3)' }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/run.js', 42, 0])
+  })
+
+  it('uses the source location from a nested eval frame', () => {
+    const error = {
+      stack: 'Error\n    at eval (eval at outer (eval at run (/repo/src/run.js:42:13)), <anonymous>:1:3)',
+    }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/run.js', 42, 0])
+  })
+
+  it('returns an empty array when only dependency frames match', () => {
+    const error = { stack: 'Error\n    at dep (/repo/node_modules/x.js:1:1)' }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), [])
+  })
+
+  it('stays linear on an attacker-shaped newline-free frame', () => {
+    const error = { stack: `at (${'a'.repeat(200_000)} /repo/src/x.js:5:1)` }
+    assert.strictEqual(getFileAndLineNumberFromError(error, '/repo')[1], 5)
   })
 })
