@@ -51,7 +51,7 @@ describe('Dynamic Instrumentation', function () {
         const requestsPerInterval = 4
         const timers = [t.breakpoints[0].url, t.breakpoints[1].url].map(url => setInterval(() => {
           for (let i = 0; i < requestsPerInterval; i++) {
-            t.axios.get(url).catch(rejectSnapshots)
+            t.request(url).catch(rejectSnapshots)
           }
         }, 10))
 
@@ -66,8 +66,12 @@ describe('Dynamic Instrumentation', function () {
         const duration = timestamps[maxSnapshotsPerSecond] - timestamps[0]
         const quietPeriod = timestamps[maxSnapshotsPerSecond] - timestamps[maxSnapshotsPerSecond - 1]
 
-        assert.ok(duration >= 925, `Expected ${duration} >= 925`)
-        assert.ok(duration < 1050, `Expected ${duration} < 1050`)
+        assert.ok(
+          duration >= 925 && duration < 1050,
+          `Expected duration (${duration}ms) to be at least 925 and less than 1050`
+        )
+
+        // A quiet period proves the global limit was exhausted before the window reset instead of saturating the loop.
         assert.ok(quietPeriod >= 250, `Expected ${quietPeriod} >= 250`)
       })
     })

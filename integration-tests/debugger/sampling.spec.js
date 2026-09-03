@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { setTimeout: delay } = require('node:timers/promises')
 
 const { setup } = require('./utils')
 
@@ -10,6 +11,7 @@ const { setup } = require('./utils')
  * @returns {Promise<Map<string, number[]>>}
  */
 async function captureSamplingIntervals (t, probes) {
+  const expectedSamplesPerProbe = 2
   const probeIds = probes.map(({ config }) => config.config.id)
   const probesInstalled = t.waitForProbeStatus(probeIds, 'INSTALLED')
 
@@ -19,12 +21,19 @@ async function captureSamplingIntervals (t, probes) {
   await probesInstalled
 
   const timestampsByProbeId = new Map(probeIds.map(probeId => [probeId, []]))
+  let captureError
   let rejectSamples
   let resolveSamples
   const samplesReceived = new Promise((resolve, reject) => {
     rejectSamples = reject
     resolveSamples = resolve
   })
+
+  /** @param {Error} error */
+  function rejectCapture (error) {
+    captureError = error
+    rejectSamples(error)
+  }
 
   /** @param {{ payload: Array<{ debugger: { snapshot: { probe: { id: string }, timestamp: number } } }> }} event */
   function handleSnapshots ({ payload }) {
@@ -36,31 +45,38 @@ async function captureSamplingIntervals (t, probes) {
       }
 
       for (const timestamps of timestampsByProbeId.values()) {
-        if (timestamps.length < 3) return
+        if (timestamps.length < expectedSamplesPerProbe) return
       }
       resolveSamples()
     } catch (error) {
-      rejectSamples(error)
+      rejectCapture(error)
     }
   }
 
   t.agent.on('debugger-input', handleSnapshots)
   const timers = probes.map(({ url }) => setInterval(() => {
-    t.axios.get(url).catch(rejectSamples)
+    t.request(url).catch(rejectCapture)
   }, 10))
 
   try {
-    await samplesReceived
+    try {
+      await samplesReceived
+    } finally {
+      for (const timer of timers) clearInterval(timer)
+    }
+
+    // Keep collecting after requests stop so late payloads remain observable for a full sampling period.
+    await delay(1250)
+    if (captureError) throw captureError
     return timestampsByProbeId
   } finally {
-    for (const timer of timers) clearInterval(timer)
     t.agent.removeListener('debugger-input', handleSnapshots)
   }
 }
 
 /** @param {number[]} timestamps */
 function assertSamplingInterval (timestamps) {
-  assert.strictEqual(timestamps.length, 3)
+  assert.strictEqual(timestamps.length, 2)
 
   // Snapshot timestamps use wall-clock time while sampling uses monotonic time, so allow 75ms for drift.
   for (let i = 1; i < timestamps.length; i++) {

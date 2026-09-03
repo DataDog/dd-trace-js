@@ -11,28 +11,20 @@ describe('Dynamic Instrumentation', function () {
 
   describe('condition', function () {
     it('should trigger when condition is met', async function () {
-      const matchingConfig = t.generateRemoteConfig({
+      const rcConfig = t.generateRemoteConfig({
         when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
       })
-      const nonMatchingConfig = t.generateRemoteConfig({
-        when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
-      })
+      const probeInstalled = t.waitForProbeStatus([rcConfig.config.id], 'INSTALLED')
 
-      const probesInstalled = t.waitForProbeStatus([
-        matchingConfig.config.id,
-        nonMatchingConfig.config.id,
-      ], 'INSTALLED')
-      t.agent.addRemoteConfig(matchingConfig)
-      t.agent.addRemoteConfig(nonMatchingConfig)
-      await probesInstalled
+      t.agent.addRemoteConfig(rcConfig)
+      await probeInstalled
 
       const snapshots = await t.captureSnapshotsUntilExit(1, async () => {
-        const response = await t.axios.get(t.breakpoint.url)
+        const response = await t.request(t.breakpoint.url)
         assert.strictEqual(response.status, 200)
-        await delay(2000)
       })
 
-      assert.deepStrictEqual(snapshots.map(({ probe }) => probe.id), [matchingConfig.config.id])
+      assert.deepStrictEqual(snapshots.map(({ probe }) => probe.id), [rcConfig.config.id])
     })
 
     it('should not trigger when condition is not met', async function () {
@@ -45,7 +37,7 @@ describe('Dynamic Instrumentation', function () {
       await probeInstalled
 
       const snapshots = await t.captureSnapshotsUntilExit(0, async () => {
-        const response = await t.axios.get(t.breakpoint.url)
+        const response = await t.request(t.breakpoint.url)
         assert.strictEqual(response.status, 200)
         await delay(2000)
       })

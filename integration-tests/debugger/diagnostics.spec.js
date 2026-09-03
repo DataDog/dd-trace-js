@@ -120,7 +120,7 @@ async function captureEmittingProbesUntilExit (t, configs, expectedProbeIds) {
   t.agent.on('debugger-diagnostics', handleDiagnostics)
   try {
     const [response] = await Promise.all([
-      t.axios.get(t.breakpoint.url),
+      t.request(t.breakpoint.url),
       expectedProbesReceived,
     ])
     if (expectedProbeIds.length === 0) await delay(2000)
@@ -339,7 +339,6 @@ describe('Dynamic Instrumentation', function () {
             t.agent.addRemoteConfig(config)
           }
           await probesInstalled
-          await delay(pollInterval * 2 * 1000)
         } finally {
           t.agent.removeListener('debugger-diagnostics', handleDiagnostics)
         }

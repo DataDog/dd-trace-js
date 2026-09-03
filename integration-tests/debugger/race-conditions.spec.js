@@ -32,9 +32,9 @@ describe('Dynamic Instrumentation', function () {
       await Promise.all([firstProbeReplaced, secondProbeInstalled])
 
       const snapshots = await t.captureSnapshotsUntilExit(1, async () => {
-        const response = await t.axios.get(t.breakpoint.url)
+        const response = await t.request(t.breakpoint.url)
         assert.strictEqual(response.status, 200)
-        assert.deepStrictEqual(response.data, { hello: 'bar' })
+        assert.deepStrictEqual(response.body, { hello: 'bar' })
       })
 
       assert.deepStrictEqual(snapshots.map(({ probe }) => probe.id), [rcConfig2.config.id])
