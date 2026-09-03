@@ -654,6 +654,38 @@ describe('request', function () {
     requestMessage.emit('error', error)
   })
 
+  it('aborts active requests when pending requests are reset', () => {
+    const requestMessage = new EventEmitter()
+    requestMessage.write = sinon.stub()
+    requestMessage.end = sinon.stub()
+    requestMessage.setTimeout = sinon.stub()
+    requestMessage.abort = sinon.spy()
+    const httpStub = {
+      ...http,
+      request: sinon.stub().returns(requestMessage),
+    }
+    request = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: httpStub,
+      './docker': docker,
+      '../../log': log,
+    })
+    const resetController = request.createResetController()
+    const callback = sinon.spy()
+
+    request(Buffer.from(''), { path: '/path', method: 'PUT', resetController }, callback)
+    resetController.reset()
+
+    sinon.assert.calledOnce(requestMessage.abort)
+    sinon.assert.calledOnce(callback)
+    assert.strictEqual(callback.firstCall.args[0].code, 'ERR_DD_IDENTITY_REFRESH')
+
+    requestMessage.emit('error', Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }))
+    sinon.assert.calledOnce(callback)
+  })
+
   it('should retry on UDS ENOENT (socket file not yet present)', (done) => {
     const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
 

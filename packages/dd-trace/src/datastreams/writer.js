@@ -65,7 +65,7 @@ class DataStreamsWriter {
       if (this._resetController && identityRefreshGeneration !== this._resetController.generation) return
       makeRequest(compressedData, this._url, this._resetController, (err, res) => {
         log.debug('Response from the agent:', res)
-        if (err) {
+        if (err && err.code !== 'ERR_DD_IDENTITY_REFRESH') {
           log.error('Error sending datastream', err)
         }
       })

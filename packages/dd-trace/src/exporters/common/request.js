@@ -33,22 +33,33 @@ function createIdentityRefreshError () {
 }
 
 /**
- * Trace writers pass request() encoded payload Buffers whose span meta or agentless metadata can
- * already contain the pre-refresh runtime-id. A retry timer owns that Buffer after the encoder is
- * reset, so writers opt into this controller to cancel only their own stale-runtime-id retries.
- * @returns {{ generation: number, pendingRetryTimers: Set<object>, reset: () => void }}
+ * An encoder reset cannot reach a payload already handed to request(). On a MicroVM clone resume,
+ * this controller cancels retry timers and active requests so stale pre-refresh buffers cannot be
+ * sent under the clone's new runtime ID. Only MicroVM-aware writers pass this controller, so
+ * ordinary non-MicroVM requests keep their existing lifecycle.
+ * @returns {{ generation: number, pendingRetryTimers: Set<object>,
+ *   activeRequests: Set<() => void>, reset: () => void }}
  */
 function createResetController () {
   const controller = {
     generation: 0,
     pendingRetryTimers: new Set(),
+    activeRequests: new Set(),
     reset () {
+      // Identity-refresh handlers call reset() when a MicroVM clone starts. Active requests must be
+      // aborted in addition to clearing buffers because they may still be connecting and send later.
       controller.generation++
 
       for (const retry of controller.pendingRetryTimers) {
         retry.cancel()
       }
       controller.pendingRetryTimers.clear()
+
+      const activeRequests = [...controller.activeRequests]
+      controller.activeRequests.clear()
+      for (const cancel of activeRequests) {
+        cancel()
+      }
     },
   }
 
@@ -220,10 +231,12 @@ function request (data, options, callback) {
       let finished = false
       let settled = false
       let timeoutImmediate
+      let cancelActiveRequest
       const finalize = () => {
         if (finished) return
         finished = true
         activeBufferSize -= contentLength
+        resetController?.activeRequests.delete(cancelActiveRequest)
       }
 
       /**
@@ -287,8 +300,8 @@ function request (data, options, callback) {
       if (!options.deferTimeoutAbort) req.once('timeout', finalize)
       req.once('error', handleError)
 
-      const abortRequest = () => {
-        if (settled) return
+      const abortRequest = (force = false) => {
+        if (settled && !force) return
         try {
           if (typeof req.abort === 'function') {
             req.abort()
@@ -298,6 +311,20 @@ function request (data, options, callback) {
         } catch {
           // ignore
         }
+      }
+
+      if (resetController) {
+        // Only reset-aware writers track active requests; non-MicroVM writers do not pass a
+        // controller, so their request path has no additional tracking or cancellation work.
+        cancelActiveRequest = () => {
+          if (settled) return
+          settled = true
+          abortRequest(true)
+          clearImmediate(timeoutImmediate)
+          finalize()
+          callback(createIdentityRefreshError())
+        }
+        resetController.activeRequests.add(cancelActiveRequest)
       }
 
       req.setTimeout(timeout, () => {
