@@ -13,29 +13,6 @@ module.exports = {
  */
 
 /**
- * Normalize sdk_config.config to a plain { KEY: value } object.
- *
- * The wire shape changed from an array of { key, value } entries to a flat object (dd-go#14029),
- * but stored configs aren't rewritten on deploy: a config saved before that change keeps
- * delivering the legacy array shape indefinitely, until it's next updated.
- *
- * @param {Array<{key: string, value: string}>|Record<string, string>} config
- * @returns {Record<string, string>}
- */
-function normalizeSdkConfig (config) {
-  if (Array.isArray(config)) {
-    const out = {}
-    for (const entry of config) {
-      if (typeof entry?.key === 'string' && typeof entry.value === 'string') {
-        out[entry.key] = entry.value
-      }
-    }
-    return out
-  }
-  return config
-}
-
-/**
  * Manages multiple remote configurations with priority-based merging
  */
 class RCClientManager {
@@ -119,20 +96,37 @@ class RCClientManager {
       return
     }
 
-    // sdk_config is delivered as { service_name, env, config: { KEY: value, ... } }; only the
-    // allowlisted subset of config is ever retained.
+    // sdk_config is delivered as { service_name, env, config: { KEY: value, ... } }, or as the
+    // legacy { config: [{ key, value }, ...] } array shape for a config stored before dd-go#14029
+    // and not updated since (stored bytes aren't rewritten on deploy). Only the allowlisted subset
+    // of config is ever retained.
     const rawEntries = conf.sdk_config?.config
     let sdkConfig
-    if (rawEntries != null) {
-      const entries = normalizeSdkConfig(rawEntries)
+    if (Array.isArray(rawEntries)) {
+      // Entries can only be matched against the allowlist by scanning the array, so this scan is
+      // O(payload size), not O(allowlist size).
       sdkConfig = {}
-      for (const key of Object.keys(entries)) {
-        if (!sdkConfigAllowlist.has(key)) continue
+      for (const entry of rawEntries) {
+        if (entry == null || !sdkConfigAllowlist.has(entry.key)) continue
+
+        // The backend's SDKConfigEntry.value is typed as a string with no custom unmarshaling, so a
+        // non-string value can never reach this code from a real RC payload; drop it defensively only
+        // for malformed entries rather than let it reach setRemoteConfig.
+        const { value } = entry
+        if (typeof value === 'string') {
+          sdkConfig[entry.key] = value
+        }
+      }
+    } else if (rawEntries != null) {
+      // The flat object shape is keyed by env-var name, so bound the scan by the allowlist
+      // (fixed, small) instead of the payload (backend-controlled, potentially large).
+      sdkConfig = {}
+      for (const key of sdkConfigAllowlist) {
+        const value = rawEntries[key]
 
         // The schema pins config values to strings (additionalProperties: {type: 'string'}), so a
         // non-string value can never reach this code from a real RC payload; drop it defensively only
         // for malformed entries rather than let it reach setRemoteConfig.
-        const value = entries[key]
         if (typeof value === 'string') {
           sdkConfig[key] = value
         }

@@ -510,13 +510,13 @@ describe('TracerProxy', () => {
 
       it('does not load Dynamic Instrumentation for a disabled remote config update', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf['dynamicInstrumentation.enabled']
+          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
         const handleApmTracing = handlers.get('APM_TRACING')
         handleApmTracing(createApmTracingTransaction('debugger-disabled', {
-          dynamic_instrumentation_enabled: false,
+          DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'false',
         }))
 
         sinon.assert.notCalled(dynamicInstrumentation.configure)
@@ -527,13 +527,13 @@ describe('TracerProxy', () => {
 
       it('loads Dynamic Instrumentation when remote config enables it', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf['dynamicInstrumentation.enabled']
+          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
         const handleApmTracing = handlers.get('APM_TRACING')
         handleApmTracing(createApmTracingTransaction('debugger-enabled', {
-          dynamic_instrumentation_enabled: true,
+          DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
         }))
 
         sinon.assert.calledOnce(dynamicInstrumentation.isStarted)
