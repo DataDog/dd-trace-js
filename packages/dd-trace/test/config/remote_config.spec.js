@@ -163,7 +163,37 @@ describe('Tracing Remote Config', () => {
         sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.5' })
       })
 
-      it('should ignore malformed entries in the sdk_config array', () => {
+      it('should accept the legacy array-shape sdk_config.config', () => {
+        // Configs stored before dd-go#14029 changed the wire shape from an array of
+        // { key, value } entries to a flat object keep delivering the array shape until
+        // they're next updated, so both must be supported indefinitely.
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+
+        const transaction = createTransaction([
+          {
+            id: 'config-1',
+            file: {
+              sdk_config: {
+                config: [
+                  { key: 'DD_TRACE_ENABLED', value: 'true' },
+                  { key: 'DD_TRACE_SAMPLE_RATE', value: '0.5' },
+                ],
+              },
+            },
+          },
+        ])
+
+        handler(transaction)
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, {
+          DD_TRACE_ENABLED: 'true',
+          DD_TRACE_SAMPLE_RATE: '0.5',
+        })
+      })
+
+      it('should ignore malformed entries in the legacy sdk_config array', () => {
         enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
@@ -339,9 +369,9 @@ function buildPayloadWithKeyCount (keyCount) {
   return payload
 }
 
-// Mirrors the wire shape RC actually delivers: { service_name, env, config: [{ key, value }, ...] }
+// Mirrors the wire shape RC actually delivers: { service_name, env, config: { KEY: value, ... } }
 function sdkConfigPayload (values) {
-  return { config: Object.entries(values).map(([key, value]) => ({ key, value })) }
+  return { config: values }
 }
 
 function createTransaction (toApply = [], toModify = [], toUnapply = []) {

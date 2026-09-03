@@ -13,6 +13,29 @@ module.exports = {
  */
 
 /**
+ * Normalize sdk_config.config to a plain { KEY: value } object.
+ *
+ * The wire shape changed from an array of { key, value } entries to a flat object (dd-go#14029),
+ * but stored configs aren't rewritten on deploy: a config saved before that change keeps
+ * delivering the legacy array shape indefinitely, until it's next updated.
+ *
+ * @param {Array<{key: string, value: string}>|Record<string, string>} config
+ * @returns {Record<string, string>}
+ */
+function normalizeSdkConfig (config) {
+  if (Array.isArray(config)) {
+    const out = {}
+    for (const entry of config) {
+      if (typeof entry?.key === 'string' && typeof entry.value === 'string') {
+        out[entry.key] = entry.value
+      }
+    }
+    return out
+  }
+  return config
+}
+
+/**
  * Manages multiple remote configurations with priority-based merging
  */
 class RCClientManager {
@@ -96,22 +119,22 @@ class RCClientManager {
       return
     }
 
-    // sdk_config is delivered as { service_name, env, config: [{ key, value }, ...] } rather than a
-    // flat map, so entries can only be matched against the allowlist by scanning the array; only the
-    // allowlisted subset is ever retained, but the scan itself is O(payload size), not O(allowlist size).
-    const entries = conf.sdk_config?.config
+    // sdk_config is delivered as { service_name, env, config: { KEY: value, ... } }; only the
+    // allowlisted subset of config is ever retained.
+    const rawEntries = conf.sdk_config?.config
     let sdkConfig
-    if (Array.isArray(entries)) {
+    if (rawEntries != null) {
+      const entries = normalizeSdkConfig(rawEntries)
       sdkConfig = {}
-      for (const entry of entries) {
-        if (entry == null || !sdkConfigAllowlist.has(entry.key)) continue
+      for (const key of Object.keys(entries)) {
+        if (!sdkConfigAllowlist.has(key)) continue
 
-        // The backend's SDKConfigEntry.value is typed as a string with no custom unmarshaling, so a
+        // The schema pins config values to strings (additionalProperties: {type: 'string'}), so a
         // non-string value can never reach this code from a real RC payload; drop it defensively only
-        // for malformed entries (e.g. null) rather than let it reach setRemoteConfig.
-        const { value } = entry
+        // for malformed entries rather than let it reach setRemoteConfig.
+        const value = entries[key]
         if (typeof value === 'string') {
-          sdkConfig[entry.key] = value
+          sdkConfig[key] = value
         }
       }
     }
