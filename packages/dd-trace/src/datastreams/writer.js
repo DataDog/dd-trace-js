@@ -54,11 +54,15 @@ class DataStreamsWriter {
       return
     }
 
+    // A pending gzip callback may finish after a MicroVM clone starts; discard that payload before
+    // sending it because it belongs to the previous runtime ID. No controller exists otherwise.
+    const identityRefreshGeneration = this._resetController?.generation
     zlib.gzip(encodedPayload, { level: 1 }, (err, compressedData) => {
       if (err) {
         log.error('Error zipping datastream', err)
         return
       }
+      if (this._resetController && identityRefreshGeneration !== this._resetController.generation) return
       makeRequest(compressedData, this._url, this._resetController, (err, res) => {
         log.debug('Response from the agent:', res)
         if (err) {

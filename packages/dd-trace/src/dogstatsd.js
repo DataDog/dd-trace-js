@@ -88,6 +88,7 @@ class DogStatsDClient {
   #family
   #host
   #httpOptions
+  #identityRefreshGeneration
   #lookup
   #metrics = { message: '', offset: 0, queue: [] }
   #port
@@ -154,6 +155,10 @@ class DogStatsDClient {
    * @returns {void}
    */
   updateTags (tags) {
+    // Identity refresh is published only when a MicroVM clone starts. Invalidate detached buffers
+    // that may contain the previous runtime ID; the generation stays undefined in normal operation.
+    this.#identityRefreshGeneration = (this.#identityRefreshGeneration ?? 0) + 1
+
     const tagsPrefix = tags.length ? `|#${tags.join(',')}` : ''
     if (tagsPrefix !== this.#tagsPrefix) {
       this.#updateTagPrefixes(tagsPrefix)
@@ -315,10 +320,16 @@ class DogStatsDClient {
     log.debug('Flushing %s metrics via %s', queue.length, this.#httpOptions ? 'HTTP' : 'UDP')
 
     state.queue = []
+    const identityRefreshGeneration = this.#identityRefreshGeneration
 
     const send = complete => {
-      if (this.#httpOptions) this._sendHttp(queue, recordTelemetry, complete)
-      else this._sendUdp(queue, recordTelemetry, complete)
+      if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+        complete?.()
+        return
+      }
+
+      if (this.#httpOptions) this._sendHttp(queue, recordTelemetry, complete, identityRefreshGeneration)
+      else this._sendUdp(queue, recordTelemetry, complete, identityRefreshGeneration)
     }
 
     if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.track(send)
@@ -355,12 +366,23 @@ class DogStatsDClient {
    * @param {Buffer[]} queue - The metrics to send
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
    * @param {() => void} [done] - Called after delivery completes
+   * @param {number} [identityRefreshGeneration] - Generation captured before detaching the queue
    * @returns {void}
    * @memberof DogStatsDClient
    */
-  _sendHttp (queue, recordTelemetry, done) {
+  _sendHttp (queue, recordTelemetry, done, identityRefreshGeneration) {
+    if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+      done?.()
+      return
+    }
+
     const buffer = Buffer.concat(queue)
     request(buffer, this.#httpOptions, (error, _result, _statusCode, _headers, dropped) => {
+      if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+        done?.()
+        return
+      }
+
       if (dropped) {
         if (recordTelemetry && this.telemetry) {
           this.#recordDropped(buffer.length)
@@ -375,7 +397,7 @@ class DogStatsDClient {
           // options. Either way, we can give UDP a try.
           this.#httpOptions = undefined
         }
-        this._sendUdp(queue, recordTelemetry, done)
+        this._sendUdp(queue, recordTelemetry, done, identityRefreshGeneration)
       } else {
         if (recordTelemetry && this.telemetry) this.#recordSent(buffer.length)
         done?.()
@@ -389,15 +411,26 @@ class DogStatsDClient {
    * @param {Buffer[]} queue - The metrics to send
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
    * @param {() => void} [done] - Called after delivery completes
+   * @param {number} [identityRefreshGeneration] - Generation captured before detaching the queue
    * @returns {void}
    * @memberof DogStatsDClient
    */
-  _sendUdp (queue, recordTelemetry, done) {
+  _sendUdp (queue, recordTelemetry, done, identityRefreshGeneration) {
+    if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+      done?.()
+      return
+    }
+
     // dgram resolves the local address via the instrumented dns.lookup when it
     // binds on first send; the noop store keeps that self-traffic off the trace.
     legacyStorage.run({ noop: true }, () => {
       if (this.#family === 0) {
         this.#lookup(this.#host, (error, address, family) => {
+          if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+            done?.()
+            return
+          }
+
           if (error) {
             if (recordTelemetry && this.telemetry) {
               let bytes = 0
@@ -409,10 +442,12 @@ class DogStatsDClient {
             log.error('DogStatsDClient: Host not found', error)
             return done?.()
           }
-          this._sendUdpFromQueue(queue, address, family, recordTelemetry, done)
+          this._sendUdpFromQueue(queue, address, family, recordTelemetry, done, identityRefreshGeneration)
         })
       } else {
-        this._sendUdpFromQueue(queue, this.#host, this.#family, recordTelemetry, done)
+        this._sendUdpFromQueue(
+          queue, this.#host, this.#family, recordTelemetry, done, identityRefreshGeneration
+        )
       }
     })
   }
@@ -425,10 +460,11 @@ class DogStatsDClient {
    * @param {number} family - The family of the address
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
    * @param {() => void} [done] - Called after every packet completes
+   * @param {number} [identityRefreshGeneration] - Generation captured before detaching the queue
    * @returns {void}
    * @memberof DogStatsDClient
    */
-  _sendUdpFromQueue (queue, address, family, recordTelemetry, done) {
+  _sendUdpFromQueue (queue, address, family, recordTelemetry, done, identityRefreshGeneration) {
     const socket = family === 6 ? this.#udp6 : this.#udp4
     let pending = queue.length
     const complete = () => {
@@ -436,6 +472,11 @@ class DogStatsDClient {
     }
 
     for (const buffer of queue) {
+      if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+        complete()
+        continue
+      }
+
       log.debug('Sending to DogStatsD: %s', buffer)
 
       if (!this.telemetry && !done) {
@@ -445,7 +486,10 @@ class DogStatsDClient {
 
       try {
         socket.send(buffer, 0, buffer.length, this.#port, address, (error) => {
-          if (error) {
+          if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+            complete()
+            return
+          } else if (error) {
             if (recordTelemetry && this.telemetry) {
               this.#recordDropped(buffer.length)
             }
@@ -460,6 +504,14 @@ class DogStatsDClient {
         complete()
       }
     }
+  }
+
+  /**
+   * @param {number|undefined} identityRefreshGeneration - Generation captured before detaching the queue
+   * @returns {boolean} Whether the detached queue still belongs to the current identity
+   */
+  #isCurrentIdentity (identityRefreshGeneration) {
+    return identityRefreshGeneration === this.#identityRefreshGeneration
   }
 
   /**
