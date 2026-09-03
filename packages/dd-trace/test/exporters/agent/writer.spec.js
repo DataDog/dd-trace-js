@@ -129,8 +129,11 @@ function describeWriter (protocolVersion) {
       encoder.count.returns(2)
       encoder.makePayload.returns([expectedData])
       writer.flush(() => {
+        const options = request.getCall(0).args[1]
+        const { resetController, ...requestOptions } = options
         assert.deepStrictEqual(request.getCall(0).args[0], [expectedData])
-        assert.deepStrictEqual(request.getCall(0).args[1], {
+        assert.strictEqual(resetController, writer._resetController)
+        assert.deepStrictEqual(requestOptions, {
           url,
           path: `/v${protocolVersion}/traces`,
           method: 'PUT',

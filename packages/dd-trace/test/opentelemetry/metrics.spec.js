@@ -1291,7 +1291,7 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Identity refresh', () => {
-    it('exports refreshed resources without resetting the ObservableCounter delta baseline', () => {
+    it('rebases the ObservableCounter delta baseline on identity refresh', () => {
       const clock = sinon.useFakeTimers()
       const exportedMetrics = []
       mockOtlpExport((decoded) => {
@@ -1312,7 +1312,9 @@ describe('OpenTelemetry Meter Provider', () => {
 
       clock.tick(100)
 
-      // Refresh happens after the first export already established a baseline of 20.
+      // Refresh happens after the first export established a baseline of 20, but before the
+      // snapshot-time value of 23 was exported. The post-refresh delta should start from 23.
+      value = 23
       config.tags['runtime-id'] = 'refreshed-id'
       identityRefreshChannel.publish(config)
       value = 25
@@ -1321,7 +1323,7 @@ describe('OpenTelemetry Meter Provider', () => {
 
       assert.deepStrictEqual(exportedMetrics, [
         { runtimeId: initialRuntimeId, value: 20 },
-        { runtimeId: 'refreshed-id', value: 5 },
+        { runtimeId: 'refreshed-id', value: 2 },
       ])
     })
 
@@ -1373,6 +1375,38 @@ describe('OpenTelemetry Meter Provider', () => {
       clock.tick(100)
 
       assert.deepStrictEqual(exportedValues, [7])
+    })
+
+    it('clears the dropped measurement count on identity refresh', () => {
+      const constants = require('../../src/opentelemetry/metrics/constants')
+      const SmallQueueReader = proxyquire('../../src/opentelemetry/metrics/periodic_metric_reader', {
+        './constants': {
+          ...constants,
+          DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE: 1,
+        },
+      })
+      const clock = sinon.useFakeTimers()
+      try {
+        const log = require('../../src/log')
+        const warnSpy = sinon.spy(log, 'warn')
+        const exporter = {
+          export: sinon.stub().callsFake((metrics, done) => done?.()),
+          flush: sinon.stub().callsFake(done => done?.()),
+        }
+        const reader = new SmallQueueReader(exporter, 30000, constants.TEMPORALITY.DELTA, 10)
+        const meterProvider = new MeterProvider({ reader })
+        const meter = meterProvider.getMeter('app')
+
+        meter.createCounter('queued').add(1)
+        meter.createCounter('dropped').add(1)
+
+        reader.resetPendingState()
+        reader.forceFlush()
+
+        sinon.assert.notCalled(warnSpy)
+      } finally {
+        clock.restore()
+      }
     })
   })
 })

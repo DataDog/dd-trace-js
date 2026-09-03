@@ -227,24 +227,29 @@ class PeriodicMetricReader {
   }
 
   /**
-   * Discards queued measurements and sync-instrument cumulative state. Used on a MicroVM clone
-   * resume so measurements recorded before the snapshot don't get exported under the clone's
-   * identity.
+   * Discards queued measurements and sync-instrument cumulative state. Measurements don't carry
+   * runtime-id directly, but the OTLP exporter attaches refreshed resource attributes at export
+   * time; any pre-refresh reader state that survives would be reported under the clone's runtime-id.
    *
-   * Only clears `#lastExportedState` entries that have a matching `#cumulativeState` entry (sync
-   * Counter/Histogram delta baselines) - an ObservableCounter's baseline lives only in
-   * `#lastExportedState`, and clearing it too would turn its next export into an absolute
-   * reading instead of a delta.
+   * Also rebases ObservableCounter delta baselines to the current callback readings, so observable
+   * increments recorded between the last export and the snapshot are discarded instead of being
+   * reported by every clone.
    * @returns {void}
    */
   resetPendingState () {
     this.#measurements = []
+    // Drop stale accounting from measurements that were intentionally discarded on identity refresh.
+    this.#droppedCount = 0
 
     for (const key of this.#cumulativeState.keys()) {
       this.#lastExportedState.delete(key)
     }
     this.#cumulativeState.clear()
     this.#aggregator.resetStartTime()
+    this.#aggregator.resetObservableCounterBaselines(
+      this.#collectObservableMeasurements(),
+      this.#lastExportedState
+    )
   }
 
   /**
@@ -297,32 +302,14 @@ class PeriodicMetricReader {
     const allMeasurements = this.#measurements
     this.#measurements = []
 
-    for (const instrument of this.observableInstruments) {
-      const observableMeasurements = instrument.collect()
-
-      if (allMeasurements.length >= DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE) {
-        this.#droppedCount += observableMeasurements.length
-        continue
-      }
-
+    const observableMeasurements = this.#collectObservableMeasurements()
+    if (observableMeasurements.length > 0) {
       const remainingCapacity = DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE - allMeasurements.length
-
       if (observableMeasurements.length <= remainingCapacity) {
         allMeasurements.push(...observableMeasurements)
       } else {
         allMeasurements.push(...observableMeasurements.slice(0, remainingCapacity))
         this.#droppedCount += observableMeasurements.length - remainingCapacity
-      }
-    }
-
-    const batchMeasurements = this.#collectBatchObservables()
-    if (batchMeasurements.length > 0) {
-      const remainingCapacity = DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE - allMeasurements.length
-      if (batchMeasurements.length <= remainingCapacity) {
-        allMeasurements.push(...batchMeasurements)
-      } else {
-        allMeasurements.push(...batchMeasurements.slice(0, remainingCapacity))
-        this.#droppedCount += batchMeasurements.length - remainingCapacity
       }
     }
 
@@ -344,6 +331,26 @@ class PeriodicMetricReader {
     )
 
     this.exporter.export(metrics, callback)
+  }
+
+  /**
+   * Collects measurements from all asynchronous instruments.
+   *
+   * @returns {Measurement[]}
+   */
+  #collectObservableMeasurements () {
+    const measurements = []
+
+    for (const instrument of this.observableInstruments) {
+      measurements.push(...instrument.collect())
+    }
+
+    const batchMeasurements = this.#collectBatchObservables()
+    if (batchMeasurements.length > 0) {
+      measurements.push(...batchMeasurements)
+    }
+
+    return measurements
   }
 }
 
@@ -369,6 +376,29 @@ class MetricAggregator {
    */
   resetStartTime () {
     this.#startTime = nowUnixNano()
+  }
+
+  /**
+   * Establishes current ObservableCounter readings as the next delta baseline without exporting
+   * them. Otherwise the first post-refresh delta would include pre-refresh observable growth and
+   * export it under the clone's refreshed runtime-id resource attribute.
+   *
+   * @param {Measurement[]} measurements - Measurements collected from observable callbacks
+   * @param {Map<string, LastExportedStateValue>} lastExportedState - Last exported metric state
+   * @returns {void}
+   */
+  resetObservableCounterBaselines (measurements, lastExportedState) {
+    for (const measurement of measurements) {
+      const { type } = measurement
+      if (type !== METRIC_TYPES.OBSERVABLECOUNTER || this.#getTemporality(type) !== TEMPORALITY.DELTA) {
+        continue
+      }
+
+      const scopeKey = this.#getScopeKey(measurement.instrumentationScope)
+      const attrKey = stableStringify(measurement.attributes)
+      const stateKey = this.#getStateKey(scopeKey, measurement.name, type, attrKey)
+      lastExportedState.set(stateKey, measurement.value)
+    }
   }
 
   /**

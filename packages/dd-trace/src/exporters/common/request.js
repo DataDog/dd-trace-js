@@ -26,6 +26,35 @@ const maxActiveBufferSize = 1024 * 1024 * 64
 
 let activeBufferSize = 0
 
+function createIdentityRefreshError () {
+  const error = new log.NoTransmitError('Pending request retry cancelled on identity refresh.')
+  error.code = 'ERR_DD_IDENTITY_REFRESH'
+  return error
+}
+
+/**
+ * Trace writers pass request() encoded payload Buffers whose span meta or agentless metadata can
+ * already contain the pre-refresh runtime-id. A retry timer owns that Buffer after the encoder is
+ * reset, so writers opt into this controller to cancel only their own stale-runtime-id retries.
+ * @returns {{ generation: number, pendingRetryTimers: Set<object>, reset: () => void }}
+ */
+function createResetController () {
+  const controller = {
+    generation: 0,
+    pendingRetryTimers: new Set(),
+    reset () {
+      controller.generation++
+
+      for (const retry of controller.pendingRetryTimers) {
+        retry.cancel()
+      }
+      controller.pendingRetryTimers.clear()
+    },
+  }
+
+  return controller
+}
+
 /**
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
  * @param {object} options
@@ -91,6 +120,10 @@ function request (data, options, callback) {
   }
   const contentLength = byteLength(dataArray)
   options.headers['Content-Length'] = contentLength
+  // Captured once per logical request; if the writer resets before a retry fires, this Buffer may
+  // carry the old runtime-id and must be discarded instead of sent under the clone's identity.
+  const resetController = options.resetController
+  const capturedRequestGeneration = resetController?.generation
 
   docker.inject(options.headers)
 
@@ -98,6 +131,7 @@ function request (data, options, callback) {
     ...options,
     agent: options.agent ?? (isSecure ? httpsAgent : httpAgent),
   }
+  delete connectionOptions.resetController
 
   /**
    * @param {import('node:http').IncomingMessage} res
@@ -210,6 +244,11 @@ function request (data, options, callback) {
       const handleError = (error) => {
         if (settled) return
 
+        if (resetController && capturedRequestGeneration !== resetController.generation) {
+          complete(createIdentityRefreshError())
+          return
+        }
+
         if (options.retry !== false &&
             attemptIndex < getMaxAttempts(options) &&
             isRetriableNetworkError(error)) {
@@ -218,7 +257,22 @@ function request (data, options, callback) {
           // Unref so a pending retry never keeps the host process alive past
           // its natural exit point; long-running apps still retry because the
           // event loop is held open by their own work.
-          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
+          const retry = {
+            cancel () {
+              clearTimeout(timer)
+              callback(createIdentityRefreshError())
+            },
+          }
+          const timer = setTimeout(() => {
+            resetController?.pendingRetryTimers.delete(retry)
+            if (resetController && capturedRequestGeneration !== resetController.generation) {
+              callback(createIdentityRefreshError())
+              return
+            }
+            attempt(attemptIndex + 1)
+          }, getRetryDelay(options, attemptIndex))
+          resetController?.pendingRetryTimers.add(retry)
+          timer.unref?.()
         } else {
           complete(error)
         }
@@ -259,5 +313,7 @@ Object.defineProperty(request, 'writable', {
     return activeBufferSize < maxActiveBufferSize
   },
 })
+
+request.createResetController = createResetController
 
 module.exports = request

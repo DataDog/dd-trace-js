@@ -108,6 +108,7 @@ class AgentWriter extends BaseWriter {
       flushOptions,
       this.#request,
       this.#requestTracker,
+      this._resetController,
       onResponse
     )
   }
@@ -119,7 +120,8 @@ function getEncoder (protocolVersion) {
     : require('../../encode/0.4').AgentEncoder
 }
 
-function makeRequest (version, data, count, url, headers, lookup, flushOptions, request, requestTracker, cb) {
+function makeRequest (version, data, count, url, headers, lookup, flushOptions, request, requestTracker,
+  resetController, cb) {
   const options = {
     path: `/v${version}/traces`,
     method: 'PUT',
@@ -133,6 +135,7 @@ function makeRequest (version, data, count, url, headers, lookup, flushOptions, 
       'Datadog-Meta-Lang-Interpreter': process.versions.bun ? 'JavaScriptCore' : 'v8',
     },
     lookup,
+    resetController,
     url,
   }
   if (flushOptions?.deadline !== undefined) {

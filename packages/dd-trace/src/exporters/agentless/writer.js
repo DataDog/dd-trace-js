@@ -133,6 +133,7 @@ class AgentlessWriter extends BaseWriter {
         'Datadog-Meta-Lang-Interpreter': process.versions.bun ? 'JavaScriptCore' : 'v8',
         'Datadog-Meta-Tracer-Version': tracerVersion,
       },
+      resetController: this._resetController,
       timeout: 15_000,
       url: this._url,
     }

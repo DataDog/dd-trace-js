@@ -506,6 +506,91 @@ describe('request', function () {
     })
   })
 
+  it('cancels scheduled retries when pending retries are reset', (done) => {
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+    const requestMessage = new EventEmitter()
+    requestMessage.write = sinon.stub()
+    requestMessage.end = () => requestMessage.emit('error', error)
+    requestMessage.setTimeout = sinon.stub()
+    const httpStub = {
+      ...http,
+      request: sinon.stub().returns(requestMessage),
+    }
+    retryStubs.getRetryDelay = sinon.fake.returns(1000)
+    request = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: httpStub,
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const resetController = request.createResetController()
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      resetController,
+    }, (err) => {
+      try {
+        assert.strictEqual(err.code, 'ERR_DD_IDENTITY_REFRESH')
+        assert.strictEqual(httpStub.request.callCount, 1)
+        done()
+      } catch (assertionError) {
+        done(assertionError)
+      }
+    })
+
+    resetController.reset()
+  })
+
+  it('does not schedule a retry for in-flight requests after pending retries are reset', (done) => {
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+    const requestMessage = new EventEmitter()
+    requestMessage.write = sinon.stub()
+    requestMessage.end = sinon.stub()
+    requestMessage.setTimeout = sinon.stub()
+    const httpStub = {
+      ...http,
+      request: sinon.stub().returns(requestMessage),
+    }
+    request = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: httpStub,
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const resetController = request.createResetController()
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      resetController,
+    }, (err) => {
+      try {
+        assert.strictEqual(err.code, 'ERR_DD_IDENTITY_REFRESH')
+        assert.strictEqual(httpStub.request.callCount, 1)
+        sinon.assert.notCalled(retryStubs.getRetryDelay)
+        done()
+      } catch (assertionError) {
+        done(assertionError)
+      }
+    })
+
+    resetController.reset()
+    requestMessage.emit('error', error)
+  })
+
   it('should retry on UDS ENOENT (socket file not yet present)', (done) => {
     const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
 

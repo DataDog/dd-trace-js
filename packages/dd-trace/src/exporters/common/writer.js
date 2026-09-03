@@ -17,6 +17,9 @@ class Writer {
     this._url = url
     this._beforeFirstFlush = beforeFirstFlush
     this.#deliveryTracker = deliveryTracker
+    // resetPendingBatch() clears encoder-owned spans. It also needs to cancel retries for Buffers
+    // already returned by makePayload(), because those Buffers can contain the old runtime-id.
+    this._resetController = request.createResetController?.()
   }
 
   #isFirstFlush = true
@@ -106,6 +109,8 @@ class Writer {
    */
   resetPendingBatch () {
     this._encoder.reset()
+    // Encoder reset cannot reach payload Buffers already owned by request retry timers.
+    this._resetController?.reset()
   }
 }
 

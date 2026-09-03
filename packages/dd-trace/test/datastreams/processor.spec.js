@@ -7,6 +7,7 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
@@ -14,6 +15,7 @@ const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@d
 const propagationHash = require('../../src/propagation-hash')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 const pkg = require('../../../../package.json')
 const DEFAULT_TIMESTAMP = Number(new Date('2023-04-20T16:20:00.000Z'))
@@ -305,6 +307,44 @@ describe('DataStreamsProcessor', () => {
       'pathway.hash',
       DEFAULT_CURRENT_HASH.readBigUInt64LE().toString()
     )
+  })
+
+  it('drops pending buckets on identity refresh', () => {
+    const flushCallCount = writer.flush.callCount
+    processor.recordCheckpoint(mockCheckpoint)
+    processor.recordOffset({
+      timestamp: DEFAULT_TIMESTAMP,
+      offset: 12,
+      type: 'kafka_consume',
+      consumer_group: 'test-consumer',
+      partition: 0,
+      topic: 'test-topic',
+    })
+    processor.trackTransaction('tx-1', 'checkpoint-1')
+    assert.ok(processor.buckets.size > 0)
+
+    const refreshedTags = { foo: 'refreshed' }
+    identityRefreshChannel.publish({ tags: refreshedTags })
+
+    assert.strictEqual(processor.buckets.size, 0)
+    assert.strictEqual(processor.tags, refreshedTags)
+    processor.onInterval()
+    assert.strictEqual(writer.flush.callCount, flushCallCount)
+  })
+
+  it('does not stack identity-refresh bucket reset subscriptions', () => {
+    processor.recordCheckpoint(mockCheckpoint)
+    assert.ok(processor.buckets.size > 0)
+
+    const newerProcessor = new DataStreamsProcessor(config)
+    clearTimeout(newerProcessor.timer)
+    newerProcessor.recordCheckpoint(anotherMockCheckpoint)
+    assert.ok(newerProcessor.buckets.size > 0)
+
+    identityRefreshChannel.publish({ tags: config.tags })
+
+    assert.ok(processor.buckets.size > 0)
+    assert.strictEqual(newerProcessor.buckets.size, 0)
   })
 
   it('should export on interval', () => {
