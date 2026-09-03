@@ -29,12 +29,26 @@ update_central_configurations_version_range_v2:
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks/gitlab-ci.yml"
+  # LLM Validation gate for .llm-validation/ (same job as DataDog/dd-trace-dotnet#8845).
+  # Pin BOTH refs to the same value: include:ref: is the YAML GitLab merges in; LLMVAL_PLATFORM_REF
+  # is the ref the job clones and executes. GitLab does not expand variables inside include:.
+  # Temporary: track ddoghq/llm-validation-platform#32 until it lands on main, then re-pin to that SHA.
+  - project: "ddoghq/llm-validation-platform"
+    ref: roberto/advisory-candidate-accuracy
+    file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
     ref: "main"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-hapi-redis-parallel.yml"
     ref: "main"
+
+# Re-open the included job to pin the clone/execute ref (must match include:ref: above).
+# Do not put LLMVAL_* in the top-level variables: block — a job-level default would win.
+"llm validation":
+  variables:
+    LLMVAL_PLATFORM_PROJECT: "ddoghq/llm-validation-platform"
+    LLMVAL_PLATFORM_REF: "roberto/advisory-candidate-accuracy"   # must match include ref above
 
 workflow:
   auto_cancel:

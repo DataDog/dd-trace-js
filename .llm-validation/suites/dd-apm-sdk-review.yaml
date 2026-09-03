@@ -32,6 +32,7 @@ cases:
         SEV-1 label.
       - Names the concrete fixes — gate the publish call on `channel.hasSubscribers`, and
         bound the map (by count and bytes, or don't key it by request id at all).
+      - The final verdict is not BLOCK.
     bad_signals:
       - Treats the ungated `channel.publish` call as a style nit rather than a hot-path
         cost concern (it runs on every request, per the override's "Hot paths" section).
@@ -72,6 +73,7 @@ cases:
       - Approves the change or treats the inverted condition as a style nit.
       - Comments on module placement, naming, or allocation cost instead of the logic defect.
       - Flags the defect without naming a concrete input/state that demonstrates it.
+      - The final verdict is not CHANGE_ME.
 
   - id: js-perf-pipeline-full-review-002
     files:

@@ -164,3 +164,8 @@ __queuestorage__/AzuriteConfig
 
 # promptfoo eval output (e.g. `promptfoo eval -o .promptfoo/dd-apm-sdk-review/results.json`)
 .promptfoo/**/results.json
+
+# LLM Validation local/CI artifacts
+.llm-validation/results.json
+.llm-validation/report.md
+.llm-validation/details.json
