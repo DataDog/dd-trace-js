@@ -51,7 +51,7 @@ chmod +x .llm-validation/docker/run.sh
 # All cases in suites/ (one repeat each)
 .llm-validation/docker/run.sh --level full --runs 1 --base-sha main
 
-# CI-shaped set (9 cases)
+# CI-shaped set (10 cases)
 .llm-validation/docker/run.sh --level gate --runs 1 --base-sha main
 
 # One named case (id from suites/dd-apm-sdk-review.yaml)
@@ -103,7 +103,7 @@ that level already selected.
 | Level | Cases | Default runs | Use |
 |---|---|---|---|
 | `minimum` | **1** (`js-perf-lens-ungated-publish-001`) | 3 | First smoke |
-| `gate` (default) | **9** listed in `config.yaml` | 5 | CI-shaped |
+| `gate` (default) | **10** listed in `config.yaml` | 5 | CI-shaped |
 | `full` | **every** case in `suites/` | 3 | Broader pass |
 
 So this command runs **one** case once, not the whole suite:

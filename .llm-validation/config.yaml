@@ -25,6 +25,7 @@ presets:
     cases:
       - js-perf-lens-ungated-publish-001
       - js-perf-pipeline-full-review-002
+      - js-full-skill-simple-review-010
       - js-coherence-comment-contradicts-code-003
       - js-correctness-inverted-condition-009
       - js-security-secret-into-log-004

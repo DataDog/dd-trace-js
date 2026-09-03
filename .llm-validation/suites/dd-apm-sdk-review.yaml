@@ -112,6 +112,49 @@ cases:
       - Reports SEV-1 / SEV-2 labels in the final report without resolving them to
         P0/P1/P2.
 
+  - id: js-full-skill-simple-review-010
+    files:
+      - .agents/skills/dd-apm-sdk-review/SKILL.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/report-template.md
+      - .agents/dd-apm-sdk-review-overrides/repo-context.md
+    input: |
+      Run the complete dd-apm-sdk-review skill on this small change. There is no git
+      repository to inspect — this pasted diff is the entire change set. Run every
+      reviewer in the skill's roster and produce the consolidated final report.
+
+      ```diff
+      diff --git a/packages/dd-trace/src/feature.js b/packages/dd-trace/src/feature.js
+      index 1111111..2222222 100644
+      --- a/packages/dd-trace/src/feature.js
+      +++ b/packages/dd-trace/src/feature.js
+      @@ -1,3 +1,4 @@
+      -function shouldRecord (enabled) {
+      -  return enabled
+      -}
+      +function shouldRecord (enabled) {
+      +  // Record only when the feature is enabled.
+      +  return !enabled
+      +}
+      ```
+    expected_criteria:
+      - The report's Mode line states pasted diff / no git.
+      - Includes a "Rule files used" section covering every reviewer in the roster —
+        coherence, correctness, security, design, performance, maintainability,
+        conventions, and cross-SDK consistency.
+      - Includes a "Related skills in this repo" section derived from repo-context.md,
+        including at least `apm-integrations` and `architecture-review`.
+      - Flags the inverted return value — `shouldRecord(true)` now returns false and
+        `shouldRecord(false)` returns true, contradicting the comment and prior behavior.
+      - Classifies the finding using P0/P1/P2, states an explicit verdict, and ends with
+        READY TO PUSH or DO NOT PUSH consistently with that verdict.
+    bad_signals:
+      - Attempts to run git commands despite the complete change being pasted inline.
+      - Reviews only the obvious logic defect without producing the complete consolidated
+        report and the bookkeeping sections.
+      - Omits one or more reviewers from the "Rule files used" roster.
+      - Approves the inverted `shouldRecord` behavior or claims it matches the comment.
+
   - id: js-coherence-comment-contradicts-code-003
     files: [.agents/skills/dd-apm-sdk-review/reviewers/coherence.md]
     input: |
