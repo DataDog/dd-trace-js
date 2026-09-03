@@ -27,8 +27,6 @@ addHook({ name: 'net' }, (net) => {
     }
 
     const options = getOptions(args)
-    const lastIndex = args.length - 1
-    const callback = args[lastIndex]
 
     if (!options) return connect.apply(this, args)
 
@@ -38,15 +36,10 @@ addHook({ name: 'net' }, (net) => {
     const errorCh = protocol === 'ipc' ? errorICPCh : errorTCPCh
     const ctx = { options }
 
-    if (typeof callback === 'function') {
-      args[lastIndex] = function (...args) {
-        return finishCh.runStores(ctx, callback, this, ...args)
-      }
-    }
-
     return startCh.runStores(ctx, () => {
-      setupListeners(this, protocol, ctx, finishCh, errorCh)
+      const cleanup = setupListeners(this, protocol, ctx, finishCh, errorCh)
 
+      const hadOwnEmit = Object.hasOwn(this, 'emit')
       const emit = this.emit
       let pendingReadyEvents = 2
       // Named `emit`/arity-1 mirrors the socket method so the per-socket wrap
@@ -55,13 +48,13 @@ addHook({ name: 'net' }, (net) => {
         switch (eventName) {
           case 'ready':
           case 'connect':
-            if (--pendingReadyEvents === 0) this.emit = originalEmit
+            if (--pendingReadyEvents === 0) restoreEmit(this, emit, hadOwnEmit)
             return readyCh.runStores(ctx, () => {
               return Reflect.apply(originalEmit, this, arguments)
             })
           case 'error':
           case 'close':
-            this.emit = originalEmit
+            restoreEmit(this, emit, hadOwnEmit)
             return Reflect.apply(originalEmit, this, arguments)
           default:
             return Reflect.apply(originalEmit, this, arguments)
@@ -70,16 +63,32 @@ addHook({ name: 'net' }, (net) => {
 
       try {
         return connect.apply(this, args)
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        cleanup()
+        restoreEmit(this, emit, hadOwnEmit)
+        errorCh.publish(error)
+        finishCh.runStores(ctx, () => {})
 
-        throw err
+        throw error
       }
     })
   })
 
   return net
 })
+
+/**
+ * @param {import('node:net').Socket} socket
+ * @param {import('node:net').Socket['emit']} emit
+ * @param {boolean} hadOwnEmit
+ */
+function restoreEmit (socket, emit, hadOwnEmit) {
+  if (hadOwnEmit) {
+    socket.emit = emit
+  } else {
+    delete socket.emit
+  }
+}
 
 function getOptions (args) {
   if (!args[0]) return
@@ -142,4 +151,6 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
   for (const event of events) {
     socket.once(event, wrapListener)
   }
+
+  return cleanupOtherListeners
 }
