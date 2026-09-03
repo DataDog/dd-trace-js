@@ -12,10 +12,12 @@ const noop = () => {}
 
 class Writer {
   #deliveryTracker
+  #retainOnBackpressure
 
-  constructor ({ url, beforeFirstFlush, deliveryTracker }) {
+  constructor ({ url, beforeFirstFlush, deliveryTracker, retainOnBackpressure = false }) {
     this._url = url
     this._beforeFirstFlush = beforeFirstFlush
+    this.#retainOnBackpressure = retainOnBackpressure
     this.#deliveryTracker = deliveryTracker
     // resetPendingBatch() clears encoder-owned spans. It also needs to cancel retries for Buffers
     // already returned by makePayload(), because those Buffers can contain the old runtime-id.
@@ -46,7 +48,7 @@ class Writer {
   flushDirect (done = noop, options) {
     const count = this._encoder.count()
 
-    if (!request.writable && options?.deadline === undefined) {
+    if (!request.writable && options?.deadline === undefined && !this.#retainOnBackpressure) {
       this._encoder.reset()
       done()
     } else if (count > 0) {
@@ -81,7 +83,7 @@ class Writer {
   }
 
   append (payload, options) {
-    if (!request.writable && options?.deadline === undefined) {
+    if (!request.writable && options?.deadline === undefined && !this.#retainOnBackpressure) {
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
       return false
@@ -90,12 +92,11 @@ class Writer {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
 
-    this._encode(payload)
-    return true
+    return this._encode(payload) !== false
   }
 
   _encode (payload) {
-    this._encoder.encode(payload)
+    return this._encoder.encode(payload)
   }
 
   setUrl (url) {

@@ -20,6 +20,7 @@ const identifierPattern = /^[$A-Z_a-z][$\w]*$/
 
 module.exports = {
   awaitContextCallback,
+  awaitContextCallbackAtTryStart,
   configureGraphqlJitCompileObject,
   configureGraphqlJitDeferredField,
   configureGraphqlJitExecute,
@@ -37,7 +38,8 @@ module.exports = {
  * @param {{
  *   transformOptions?: {
  *     callbackArgumentNames?: string[],
- *     callbackName?: string
+ *     callbackName?: string,
+ *     callbackThis?: boolean
  *   }
  * }} state
  * @param {import('estree').IfStatement} node
@@ -49,11 +51,74 @@ function awaitContextCallback (state, node, _parent, ancestry) {
   assert(node.type === 'IfStatement' && node.consequent?.type === 'BlockStatement',
     'awaitContextCallback: expected an if statement with a block body')
 
-  const { callbackArgumentNames = [], callbackName } = state.transformOptions ?? {}
+  const originalStatements = node.consequent.body
+  const generatedCallback = createAwaitedContextCallback(
+    state,
+    node.consequent,
+    ancestry,
+    'awaitContextCallback'
+  )
+  if (!generatedCallback) return
 
-  assert(identifierPattern.test(callbackName), 'awaitContextCallback: callbackName must be an identifier')
-  assert(callbackArgumentNames.every(name => identifierPattern.test(name)),
-    'awaitContextCallback: callbackArgumentNames must be identifiers')
+  const { callbackStatements, callbackVariable } = generatedCallback
+  const callbackBranch = parse(`
+    if (typeof ${callbackVariable} === 'function') {
+    } else {
+    }
+  `).body[0]
+  callbackBranch.consequent.body.push(clone(node))
+  callbackBranch.alternate = {
+    type: 'BlockStatement',
+    body: originalStatements,
+  }
+  node.consequent.body = [...callbackStatements, callbackBranch]
+}
+
+/**
+ * Awaits an optional context callback before entering the matched node's enclosing try block.
+ *
+ * @param {Parameters<typeof awaitContextCallback>[0]} state
+ * @param {import('estree').Node} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ * @returns {void}
+ */
+function awaitContextCallbackAtTryStart (state, node, _parent, ancestry) {
+  let tryStatement = node.type === 'TryStatement' ? node : undefined
+  for (const ancestor of ancestry) {
+    if (tryStatement || functionTypes.has(ancestor.type)) break
+    if (ancestor.type === 'TryStatement') tryStatement = ancestor
+  }
+  assert(tryStatement?.block?.type === 'BlockStatement',
+    'awaitContextCallbackAtTryStart: expected an enclosing try statement with a block body')
+
+  const generatedCallback = createAwaitedContextCallback(
+    state,
+    tryStatement.block,
+    ancestry,
+    'awaitContextCallbackAtTryStart'
+  )
+  if (!generatedCallback) return
+
+  tryStatement.block.body.unshift(...generatedCallback.callbackStatements)
+}
+
+/**
+ * @param {Parameters<typeof awaitContextCallback>[0]} state
+ * @param {import('estree').BlockStatement} insertionTarget
+ * @param {import('estree').Node[]} ancestry
+ * @param {string} transformName
+ * @returns {{
+ *   callbackStatements: import('estree').Statement[],
+ *   callbackVariable: string
+ * }|undefined}
+ */
+function createAwaitedContextCallback (state, insertionTarget, ancestry, transformName) {
+  const { callbackArgumentNames = [], callbackName, callbackThis = false } = state.transformOptions ?? {}
+
+  assert(identifierPattern.test(callbackName), `${transformName}: callbackName must be an identifier`)
+  assert(Array.isArray(callbackArgumentNames) && callbackArgumentNames.every(name => identifierPattern.test(name)),
+    `${transformName}: callbackArgumentNames must be identifiers`)
 
   let enclosingFunction
   let hasTraceWrapper = false
@@ -76,35 +141,32 @@ function awaitContextCallback (state, node, _parent, ancestry) {
     hasTraceWrapper ||= hasContextBinding && hasTracedBinding
   }
 
-  assert(enclosingFunction?.async, 'awaitContextCallback: expected an enclosing async function')
-  assert(hasTraceWrapper, 'awaitContextCallback: expected an enclosing trace wrapper')
+  assert(enclosingFunction?.async, `${transformName}: expected an enclosing async function`)
+  assert(hasTraceWrapper, `${transformName}: expected an enclosing trace wrapper`)
 
   const callbackVariable = `__apm$${callbackName}`
-  if (query(node, `[id.name="${callbackVariable}"]`).length > 0) {
-    return
-  }
+  if (query(insertionTarget, `[id.name="${callbackVariable}"]`).length > 0) return
 
-  const originalStatements = node.consequent.body
+  const callbackArguments = callbackArgumentNames.join(', ')
+  const callbackInvocation = callbackThis
+    ? `${callbackVariable}.call(this${callbackArguments ? `, ${callbackArguments}` : ''})`
+    : `${callbackVariable}(${callbackArguments})`
   const callbackStatements = parse(`
     async function wrapper () {
-      const ${callbackVariable} = __apm$ctx.${callbackName};
-      if (typeof ${callbackVariable} === 'function') {
-        try {
-          await ${callbackVariable}(${callbackArgumentNames.join(', ')});
-        } catch {}
-        if (true) {}
-      } else {
-      }
+      let ${callbackVariable};
+      try {
+        ${callbackVariable} = __apm$ctx.${callbackName};
+        if (typeof ${callbackVariable} === 'function') {
+          await ${callbackInvocation};
+        }
+      } catch {}
     }
   `).body[0].body.body
 
-  const callbackBranch = callbackStatements[1]
-  const recheckedBranch = callbackBranch.consequent.body[1]
-  recheckedBranch.test = clone(node.test)
-  recheckedBranch.consequent.body.push(...clone(originalStatements))
-  recheckedBranch.alternate = clone(node.alternate)
-  callbackBranch.alternate.body.push(...originalStatements)
-  node.consequent.body = callbackStatements
+  return {
+    callbackStatements,
+    callbackVariable,
+  }
 }
 
 /**

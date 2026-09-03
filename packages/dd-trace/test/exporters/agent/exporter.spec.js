@@ -82,6 +82,10 @@ describe('Exporter', () => {
       exporter = new Exporter({ url, flushInterval }, prioritySampler)
     })
 
+    it('should pass the interval to the writer', () => {
+      assert.strictEqual(writerOptions.flushInterval, flushInterval)
+    })
+
     it('should not flush if export has not been called', (done) => {
       exporter = new Exporter({ url, flushInterval }, prioritySampler)
       setTimeout(() => {
@@ -116,6 +120,10 @@ describe('Exporter', () => {
   describe('when interval is set to 0', () => {
     beforeEach(() => {
       exporter = new Exporter({ url, flushInterval: 0 })
+    })
+
+    it('should pass the interval to the writer', () => {
+      assert.strictEqual(writerOptions.flushInterval, 0)
     })
 
     it('should flush right away when interval is set to 0', () => {
