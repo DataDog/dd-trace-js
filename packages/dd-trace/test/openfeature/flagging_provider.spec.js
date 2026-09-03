@@ -21,6 +21,11 @@ describe('FlaggingProvider', () => {
   let mockEvalMetricsHookClass
   let mockSpanEnrichmentHook
   let mockSpanEnrichmentHookClass
+  let mockFlagEvalWriter
+  let mockFlagEvalWriterClass
+  let mockFlagEvalEVPHook
+  let mockFlagEvalEVPHookClass
+  let setExposureDeliveryStrategyStub
 
   beforeEach(() => {
     mockTracer = {
@@ -31,6 +36,9 @@ describe('FlaggingProvider', () => {
       service: 'test-service',
       version: '1.0.0',
       env: 'test',
+      featureFlags: {
+        DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true,
+      },
       experimental: {
         flaggingProvider: {
           enabled: true,
@@ -68,6 +76,17 @@ describe('FlaggingProvider', () => {
     }
     mockSpanEnrichmentHookClass = sinon.stub().returns(mockSpanEnrichmentHook)
 
+    mockFlagEvalWriter = {
+      destroy: sinon.spy(),
+      setEnabled: sinon.spy(),
+    }
+    mockFlagEvalWriterClass = sinon.stub().returns(mockFlagEvalWriter)
+
+    mockFlagEvalEVPHook = {}
+    mockFlagEvalEVPHookClass = sinon.stub().returns(mockFlagEvalEVPHook)
+
+    setExposureDeliveryStrategyStub = sinon.stub()
+
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
@@ -76,6 +95,9 @@ describe('FlaggingProvider', () => {
       './configuration_source': configurationSource,
       './eval-metrics-hook': mockEvalMetricsHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
+      './writers/flag-evaluations': mockFlagEvalWriterClass,
+      './writers/flag-eval-evp-hook': mockFlagEvalEVPHookClass,
+      './writers/util': { setExposureDeliveryStrategy: setExposureDeliveryStrategyStub },
       '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
     })
   })
@@ -123,20 +145,59 @@ describe('FlaggingProvider', () => {
       sinon.assert.notCalled(mockSpanEnrichmentHookClass)
     })
 
-    it('should register EvalMetricsHook and SpanEnrichmentHook as hooks when enabled', () => {
+    it('should register EvalMetricsHook, FlagEvalEVPHook and SpanEnrichmentHook when all enabled', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      assert.strictEqual(provider.hooks.length, 3)
+      assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
+      assert.strictEqual(provider.hooks[1], mockFlagEvalEVPHook)
+      assert.strictEqual(provider.hooks[2], mockSpanEnrichmentHook)
+    })
+
+    it('should only register EvalMetricsHook + FlagEvalEVPHook when span enrichment is disabled', () => {
+      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.strictEqual(provider.hooks.length, 2)
       assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
-      assert.strictEqual(provider.hooks[1], mockSpanEnrichmentHook)
+      assert.strictEqual(provider.hooks[1], mockFlagEvalEVPHook)
     })
 
-    it('should only register EvalMetricsHook when span enrichment is disabled', () => {
-      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
+    it('should not register FlagEvalEVPHook when DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED=false', () => {
+      mockConfig.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
+      assert.ok(!provider.hooks.includes(mockFlagEvalEVPHook),
+        'EVP hook must not be registered when killswitch is false')
+      sinon.assert.notCalled(mockFlagEvalWriterClass)
+      sinon.assert.notCalled(setExposureDeliveryStrategyStub)
+      assert.ok(!setExposureDeliveryStrategyStub.called,
+        'agent probe must not run when the killswitch disables the writer')
+    })
 
-      assert.strictEqual(provider.hooks.length, 1)
-      assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
+    it('applies the selected EVP delivery route', () => {
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.calledOnce(setExposureDeliveryStrategyStub)
+      const setEnabled = mockFlagEvalWriter.setEnabled
+      const selectRoute = setExposureDeliveryStrategyStub.firstCall.args[1]
+      const route = {
+        url: new URL('https://event-platform-intake.datadoghq.com'),
+        basePath: '',
+        headers: { 'DD-API-KEY': 'test-api-key' },
+      }
+
+      selectRoute(true, route)
+      sinon.assert.calledWith(setEnabled, true, route)
+
+      selectRoute(false)
+      sinon.assert.calledWith(setEnabled, false)
+    })
+
+    it('OTel EvalMetricsHook is always registered regardless of killswitch', () => {
+      mockConfig.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED = false
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      assert.ok(provider.hooks.includes(mockEvalMetricsHook),
+        'OTel EvalMetricsHook must always be registered')
     })
 
     it('should log info message when span enrichment is enabled', () => {
@@ -160,6 +221,14 @@ describe('FlaggingProvider', () => {
       provider.onClose()
 
       sinon.assert.calledOnce(mockSpanEnrichmentHook.destroy)
+    })
+
+    it('should call destroy on FlagEvaluationsWriter when EVP enabled', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+
+      sinon.assert.calledOnce(mockFlagEvalWriter.destroy)
     })
 
     it('should not throw when span enrichment is disabled', () => {
