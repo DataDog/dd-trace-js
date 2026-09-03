@@ -410,17 +410,17 @@ function selectProduct (scopes) {
  */
 function selectLabeledProduct (labels) {
   const labelSet = new Set(labels)
-  const selected = []
+  let selected
   for (const [product, , productLabels = []] of PRODUCTS) {
     for (const label of productLabels) {
       if (labelSet.has(label)) {
-        selected.push(product)
+        selected = selected === undefined ? product : `${selected} / ${product}`
         break
       }
     }
   }
 
-  return selected.length > 0 ? selected.join(' / ') : undefined
+  return selected
 }
 
 /**
