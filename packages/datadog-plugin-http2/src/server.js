@@ -93,6 +93,7 @@ class Http2ServerPlugin extends ServerPlugin {
     const context = web.getContext(req)
 
     if (!context || !context.res) return // Not created by a http.Server instance.
+    if (context.finished) return ctx.currentStore
 
     if (incomingHttpRequestEnd.hasSubscribers) {
       if (req !== context.req) copyRequestData(req, context.req)

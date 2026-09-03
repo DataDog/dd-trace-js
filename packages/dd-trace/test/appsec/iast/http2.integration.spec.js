@@ -192,6 +192,15 @@ describeSupported('IAST HTTP/2 server', () => {
       await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
     })
 
+    it('analyzes in-place response header array mutations before commit', async () => {
+      handler = (req, res) => {
+        const cookies = ['first=1; HttpOnly']
+        res.setHeader('set-cookie', cookies)
+        cookies.push('second=2')
+      }
+      await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+    })
+
     it('continues cookie analysis after a numeric value', async () => {
       handler = (req, res) => {
         res.setHeader('set-cookie', 42)
