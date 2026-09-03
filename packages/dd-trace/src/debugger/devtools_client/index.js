@@ -7,11 +7,13 @@ const processTags = require('../../process-tags')
 const { INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('../constants')
 const { EVENT_TYPE, INCOMPLETE_REASON } = require('../guardrail-metrics')
 const {
+  CONDITION_ERROR_FLAG,
   MAX_SAMPLED_PROBES_PER_PAUSE,
   SAMPLED_PROBE_COUNT_INDEX,
   SAMPLED_PROBE_INDEXES_START,
   SAMPLED_PROBE_OVERFLOW_INDEX,
 } = require('../probe_sampler_constants')
+const { getTakeConditionErrorExpression } = require('./probe_sampler')
 const { breakpointToProbes, samplingIndexToProbe } = require('./state')
 const { refreshBreakpoint } = require('./breakpoints')
 const session = require('./session')
@@ -57,7 +59,11 @@ session.on('Debugger.paused', async ({ params }) => {
   let numberOfProbesWithSnapshots = 0
   let probesWithCaptureExpressions = false
   const probes = []
-  let templateExpressions = ''
+  // Expressions evaluated on the paused frame in one round trip, in the order of `probes`: the evaluated template for
+  // probes whose template requires evaluation, and the recorded error for probes paused to report a condition error
+  let frameExpressions = ''
+  /** @type {Set<object> | undefined} */
+  let conditionErrorProbes
 
   // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
   // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
@@ -83,7 +89,8 @@ session.on('Debugger.paused', async ({ params }) => {
     }
 
     for (let j = 0; j < numberOfSampledProbeIndexes; j++) {
-      const samplingIndex = Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START + j)
+      const sampledValue = Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START + j)
+      const samplingIndex = sampledValue & ~CONDITION_ERROR_FLAG
       const probe = samplingIndexToProbe.get(samplingIndex)
 
       if (probe === undefined) {
@@ -93,6 +100,15 @@ session.on('Debugger.paused', async ({ params }) => {
       if (!probesAtLocation.has(probe.id)) {
         log.error('[debugger:devtools_client] Sampled probe %s was not found at breakpoint %s',
           probe.id, params.hitBreakpoints[i])
+        continue
+      }
+
+      if ((sampledValue & CONDITION_ERROR_FLAG) !== 0) {
+        // The condition threw, so there's nothing to capture. Only the recorded error is needed from the paused thread.
+        conditionErrorProbes ??= new Set()
+        conditionErrorProbes.add(probe)
+        frameExpressions += `,${getTakeConditionErrorExpression(probe.id)}`
+        probes.push(probe)
         continue
       }
 
@@ -109,7 +125,7 @@ session.on('Debugger.paused', async ({ params }) => {
       }
 
       if (probe.templateRequiresEvaluation) {
-        templateExpressions += `,${probe.template}`
+        frameExpressions += `,${probe.template}`
       }
 
       probes.push(probe)
@@ -127,9 +143,9 @@ session.on('Debugger.paused', async ({ params }) => {
   const { result } = /** @type {EvaluateOnCallFrameResult} */ (
     await session.post('Debugger.evaluateOnCallFrame', {
       callFrameId: params.callFrames[0].callFrameId,
-      expression: templateExpressions.length === 0
+      expression: frameExpressions.length === 0
         ? `[${getDDTagsExpression}]`
-        : `${templateExpressionSetupCode}[${getDDTagsExpression}${templateExpressions}]`,
+        : `${templateExpressionSetupCode}[${getDDTagsExpression}${frameExpressions}]`,
       returnByValue: true,
       includeCommandLineAPI: true,
     })
@@ -188,7 +204,7 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const stack = await getStackFromCallFrames(params.callFrames)
-  const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the probe template results
+  const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the frame expression results
   let messageIndex = 1
 
   // A probe whose capture got permanently disabled during this pause, if any
@@ -214,6 +230,22 @@ session.on('Debugger.paused', async ({ params }) => {
     /** @type {number} */
     let eventType = EVENT_TYPE.LOG
     let incompleteReasons = 0
+
+    if (conditionErrorProbes?.has(probe)) {
+      // Report the failing condition instead of a probe result, so the user can see why the probe doesn't fire
+      const error = evalResults[messageIndex++]
+      const message = typeof error === 'string' ? error : 'Unknown evaluation error'
+      log.debug('[debugger:devtools_client] Condition of probe %s failed to evaluate: %s', probe.id, message)
+      snapshot.evaluationErrors = [{ expr: probe.when.dsl, message }]
+      ackEmitting(probe)
+      send(message, logger, dd, snapshot,
+        config.propagateProcessTags.enabled ? processTags.serialized : undefined,
+        probe.captureSnapshot === true || probe.compiledCaptureExpressions !== undefined
+          ? EVENT_TYPE.SNAPSHOT
+          : EVENT_TYPE.LOG,
+        0)
+      continue
+    }
 
     if (probe.captureSnapshot) {
       eventType = EVENT_TYPE.SNAPSHOT
