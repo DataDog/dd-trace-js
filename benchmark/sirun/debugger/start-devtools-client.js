@@ -80,6 +80,7 @@ const config = {
     captureTimeoutMs: Number(process.env.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS || '1000'),
     enabled: true,
     probeFile: undefined,
+    queueMaxBytes: 10 * 1024 * 1024,
     redactedIdentifiers: [],
     redactionExcludedIdentifiers: [],
     uploadIntervalSeconds: 1,
