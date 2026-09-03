@@ -22,6 +22,7 @@ const stubZlib = {
 const { DataStreamsWriter } = proxyquire(
   '../../src/datastreams/writer', {
     '../exporters/common/request': stubRequest,
+    '../serverless': { IS_AWS_LAMBDA_MICROVM: false },
     zlib: stubZlib,
   })
 
@@ -41,10 +42,11 @@ describe('DataStreamWriter unix', () => {
   it("should call 'request' through flush with correct options", () => {
     writer = new DataStreamsWriter(unixConfig)
     writer.flush({})
-    const stubRequestCall = stubRequest.getCalls()[0]
-    const decodedPayload = msgpack.decode(stubRequestCall?.args[0])
-    const requestOptions = stubRequestCall?.args[1]
+    const [payload, options] = stubRequest.firstCall.args
+    const decodedPayload = msgpack.decode(payload)
+    const { resetController, ...requestOptions } = options
     assert.deepStrictEqual(decodedPayload, {})
+    assert.strictEqual(resetController, undefined)
     assert.deepStrictEqual(requestOptions, {
       path: '/v0.1/pipeline_stats',
       method: 'POST',
@@ -56,6 +58,26 @@ describe('DataStreamWriter unix', () => {
       },
       url: unixConfig.url,
     })
+  })
+
+  it('passes a reset controller to requests and resets it on identity refresh', () => {
+    const localRequest = sinon.stub()
+    localRequest.writable = true
+    const resetController = { reset: sinon.stub() }
+    localRequest.createResetController = sinon.stub().returns(resetController)
+    const { DataStreamsWriter: ResettableWriter } = proxyquire(
+      '../../src/datastreams/writer', {
+        '../exporters/common/request': localRequest,
+        '../serverless': { IS_AWS_LAMBDA_MICROVM: true },
+        zlib: stubZlib,
+      })
+    const resettable = new ResettableWriter(unixConfig)
+
+    resettable.flush({})
+    assert.strictEqual(localRequest.firstCall.args[1].resetController, resetController)
+
+    resettable.resetPendingRequests()
+    sinon.assert.calledOnce(resetController.reset)
   })
 
   it('drops the payload and logs when msgpack encoding hits the chunk cap', () => {
