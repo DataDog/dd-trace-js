@@ -2,19 +2,29 @@
 
 const { Writable } = require('node:stream')
 
-const request = require('../../exporters/common/request')
-const log = require('../../log')
-const Plugin = require('../../plugins/plugin')
-const { FinalFlushRequestTracker } = require('../exporters/agentless/request-tracker')
-const { FINAL_FLUSH_TIMEOUT } = require('../final-flush')
+const FinalFlushRequestTracker = require('../exporters/common/final-flush-request-tracker')
+const request = require('../exporters/common/request')
+const log = require('../log')
+const Plugin = require('../plugins/plugin')
 
 const MAX_BATCH_BYTES = 5 * 1024 * 1024
 const MAX_BATCH_LOGS = 1000
 const BATCH_FLUSH_INTERVAL = 1000
+const FINAL_FLUSH_TIMEOUT = 60_000
 
 /**
- * @param {import('../../config/config-base')} config
- * @returns {URL | undefined}
+ * @returns {Error & { code: string }}
+ */
+function createFinalFlushTimeoutError () {
+  return Object.assign(
+    new Error('Timed out waiting for automatic log submission to flush'),
+    { code: 'ERR_DD_LOG_SUBMISSION_FLUSH_TIMEOUT' }
+  )
+}
+
+/**
+ * @param {import('../config/config-base')} config
+ * @returns {URL | void}
  */
 function getLogSubmissionUrl (config) {
   if (config.DD_AGENTLESS_LOG_SUBMISSION_URL) {
@@ -39,7 +49,15 @@ function getLogSubmissionUrl (config) {
 }
 
 /**
- * @param {import('../../config/config-base')} config
+ * @param {unknown} config
+ * @returns {import('../config/config-base')}
+ */
+function asTracerConfig (config) {
+  return /** @type {import('../config/config-base')} */ (config)
+}
+
+/**
+ * @param {import('../config/config-base')} config
  * @param {string} source
  * @returns {string}
  */
@@ -54,6 +72,8 @@ class LogSubmissionPlugin extends Plugin {
   #batch = []
   #batchBytes = 2
   #batchSource
+  /** @type {import('../config/config-base') | undefined} */
+  #config
   #logSubmissionUrl
   #requestTracker
   #timer
@@ -71,12 +91,19 @@ class LogSubmissionPlugin extends Plugin {
     },
   })
 
-  constructor (...args) {
-    super(...args)
-    this.#requestTracker = new FinalFlushRequestTracker((done) => {
-      this.#flushLogs()
-      done?.()
-    })
+  /**
+   * @param {object} tracer
+   * @param {unknown} tracerConfig
+   */
+  constructor (tracer, tracerConfig) {
+    super(tracer, asTracerConfig(tracerConfig))
+    this.#requestTracker = new FinalFlushRequestTracker(
+      (done) => {
+        this.#flushLogs()
+        done?.()
+      },
+      createFinalFlushTimeoutError
+    )
 
     // The main-module hook (configure) and the logger.js hook (add-transport) can fire in either
     // order depending on how Winston is required, so buffer loggers that arrive before configure.
@@ -128,8 +155,9 @@ class LogSubmissionPlugin extends Plugin {
     if (this._enabled) this.#flushLogs()
 
     const isEnabled = typeof config === 'boolean' ? config : config.enabled
-    this.#logSubmissionUrl = isEnabled && typeof config !== 'boolean'
-      ? getLogSubmissionUrl(config)
+    this.#config = isEnabled && typeof config !== 'boolean' ? asTracerConfig(config) : undefined
+    this.#logSubmissionUrl = this.#config
+      ? getLogSubmissionUrl(this.#config)
       : undefined
     super.configure(config)
 
@@ -189,7 +217,8 @@ class LogSubmissionPlugin extends Plugin {
     clearTimeout(this.#timer)
     this.#timer = undefined
 
-    if (this.#batch.length === 0 || !this.#logSubmissionUrl) return
+    const config = this.#config
+    if (this.#batch.length === 0 || !this.#logSubmissionUrl || !config) return
 
     const source = this.#batchSource
     const data = `[${this.#batch.join(',')}]`
@@ -197,10 +226,10 @@ class LogSubmissionPlugin extends Plugin {
     this.#batchBytes = 2
     this.#batchSource = undefined
     const options = {
-      path: getLogSubmissionPath(this.config, source),
+      path: getLogSubmissionPath(config, source),
       method: 'POST',
       headers: {
-        'DD-API-KEY': this.config.DD_API_KEY,
+        'DD-API-KEY': config.DD_API_KEY,
         'Content-Type': 'application/json',
       },
       url: this.#logSubmissionUrl,
