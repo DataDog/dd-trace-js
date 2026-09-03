@@ -242,6 +242,7 @@ class SpanStatsProcessor {
     unsubscribeBucketReset?.()
     const onIdentityRefresh = () => {
       this.buckets = new TimeBuckets(Boolean(this.otlpExporter))
+      this.exporter?.resetPendingState()
     }
     identityRefreshChannel.subscribe(onIdentityRefresh)
     unsubscribeBucketReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)

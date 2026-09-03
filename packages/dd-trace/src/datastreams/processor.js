@@ -252,6 +252,7 @@ class DataStreamsProcessor {
       const onIdentityRefresh = (config) => {
         this.tags = config?.tags ?? this.tags
         this.buckets = new TimeBuckets()
+        this.writer.resetPendingRequests()
       }
       identityRefreshChannel.subscribe(onIdentityRefresh)
       unsubscribeBucketReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)

@@ -173,18 +173,31 @@ class PeriodicMetricReader {
   /**
    * Invokes batch observable callbacks and returns the produced measurements.
    *
+   * @param {number} [maxMeasurements] Maximum number of measurements to retain
+   * @param {() => void} [onDrop] Called for every measurement that exceeds the limit
    * @returns {Measurement[]}
    */
-  #collectBatchObservables () {
+  #collectBatchObservables (maxMeasurements = Infinity, onDrop) {
     if (this.#batchCallbacks.length === 0) return []
     const out = []
     for (const { callback, instruments } of this.#batchCallbacks) {
-      const result = {
-        observe: (instrument, value, attributes) => {
-          if (instruments.has(instrument)) {
-            out.push(instrument.createObservation(value, attributes))
+      const observe = maxMeasurements === Infinity
+        ? (instrument, value, attributes) => {
+            if (instruments.has(instrument)) {
+              out.push(instrument.createObservation(value, attributes))
+            }
           }
-        },
+        : (instrument, value, attributes) => {
+            if (instruments.has(instrument)) {
+              if (out.length < maxMeasurements) {
+                out.push(instrument.createObservation(value, attributes))
+              } else {
+                onDrop?.()
+              }
+            }
+          }
+      const result = {
+        observe,
       }
       try {
         callback(result)
@@ -246,10 +259,7 @@ class PeriodicMetricReader {
     }
     this.#cumulativeState.clear()
     this.#aggregator.resetStartTime()
-    this.#aggregator.resetObservableCounterBaselines(
-      this.#collectObservableMeasurements(),
-      this.#lastExportedState
-    )
+    this.#aggregator.resetObservableCounterBaselines(this.#collectObservableMeasurements(), this.#lastExportedState)
   }
 
   /**
@@ -302,14 +312,32 @@ class PeriodicMetricReader {
     const allMeasurements = this.#measurements
     this.#measurements = []
 
-    const observableMeasurements = this.#collectObservableMeasurements()
-    if (observableMeasurements.length > 0) {
+    for (const instrument of this.observableInstruments) {
+      const observableMeasurements = instrument.collect()
+
+      if (allMeasurements.length >= DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE) {
+        this.#droppedCount += observableMeasurements.length
+        continue
+      }
+
       const remainingCapacity = DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE - allMeasurements.length
+
       if (observableMeasurements.length <= remainingCapacity) {
         allMeasurements.push(...observableMeasurements)
       } else {
         allMeasurements.push(...observableMeasurements.slice(0, remainingCapacity))
         this.#droppedCount += observableMeasurements.length - remainingCapacity
+      }
+    }
+
+    const batchMeasurements = this.#collectBatchObservables()
+    if (batchMeasurements.length > 0) {
+      const remainingCapacity = DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE - allMeasurements.length
+      if (batchMeasurements.length <= remainingCapacity) {
+        allMeasurements.push(...batchMeasurements)
+      } else {
+        allMeasurements.push(...batchMeasurements.slice(0, remainingCapacity))
+        this.#droppedCount += batchMeasurements.length - remainingCapacity
       }
     }
 
@@ -335,19 +363,28 @@ class PeriodicMetricReader {
 
   /**
    * Collects measurements from all asynchronous instruments.
+   * This bounded path is used only to establish discarded baselines on identity refresh; ordinary
+   * periodic exports keep their existing per-instrument collection flow below.
    *
+   * @param {number} [maxMeasurements] Maximum number of measurements to retain
+   * @param {() => void} [onDrop] Called for every measurement that exceeds the limit
    * @returns {Measurement[]}
    */
-  #collectObservableMeasurements () {
+  #collectObservableMeasurements (maxMeasurements = DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE, onDrop) {
     const measurements = []
 
     for (const instrument of this.observableInstruments) {
-      measurements.push(...instrument.collect())
+      const remainingCapacity = maxMeasurements - measurements.length
+      const observableMeasurements = instrument.collect(remainingCapacity, onDrop)
+      for (const measurement of observableMeasurements) {
+        measurements.push(measurement)
+      }
     }
 
-    const batchMeasurements = this.#collectBatchObservables()
-    if (batchMeasurements.length > 0) {
-      measurements.push(...batchMeasurements)
+    const remainingCapacity = maxMeasurements - measurements.length
+    const batchMeasurements = this.#collectBatchObservables(remainingCapacity, onDrop)
+    for (const measurement of batchMeasurements) {
+      measurements.push(measurement)
     }
 
     return measurements

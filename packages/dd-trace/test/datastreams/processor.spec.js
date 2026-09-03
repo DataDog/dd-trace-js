@@ -27,6 +27,7 @@ const ANOTHER_CURRENT_HASH = Buffer.from('e851212fd11a21e9', 'hex')
 
 const writer = {
   flush: sinon.stub(),
+  resetPendingRequests: sinon.stub(),
 }
 const DataStreamsWriter = sinon.stub().returns(writer)
 const {
@@ -310,6 +311,7 @@ describe('DataStreamsProcessor', () => {
   })
 
   it('drops pending buckets on identity refresh', () => {
+    writer.resetPendingRequests.resetHistory()
     const flushCallCount = writer.flush.callCount
     processor.recordCheckpoint(mockCheckpoint)
     processor.recordOffset({
@@ -328,6 +330,7 @@ describe('DataStreamsProcessor', () => {
 
     assert.strictEqual(processor.buckets.size, 0)
     assert.strictEqual(processor.tags, refreshedTags)
+    sinon.assert.calledOnce(writer.resetPendingRequests)
     processor.onInterval()
     assert.strictEqual(writer.flush.callCount, flushCallCount)
   })

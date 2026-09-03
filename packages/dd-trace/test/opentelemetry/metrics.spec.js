@@ -14,6 +14,7 @@ require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
+const { ObservableGauge } = require('../../src/opentelemetry/metrics/instruments')
 const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
 
@@ -1153,6 +1154,22 @@ describe('OpenTelemetry Meter Provider', () => {
       meter.createObservableGauge('gauge.4').addCallback((result) => result.observe(40))
 
       setTimeout(() => { validator(); warnSpy.restore(); done() }, 200)
+    })
+
+    it('bounds observable callback measurements before allocation', () => {
+      const reader = { observableInstruments: new Set() }
+      const gauge = new ObservableGauge('gauge', {}, { name: 'test', version: '', schemaUrl: '' }, reader)
+      const onDrop = sinon.spy()
+      gauge.addCallback((result) => {
+        result.observe(1)
+        result.observe(2)
+        result.observe(3)
+      })
+
+      const measurements = gauge.collect(2, onDrop)
+
+      assert.strictEqual(measurements.length, 2)
+      sinon.assert.calledOnce(onDrop)
     })
 
     it('overflows with 2 synchronous + 2 observable metrics when max is 3', (done) => {

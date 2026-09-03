@@ -87,6 +87,7 @@ const syntheticSpan = {
 const exporter = {
   export: sinon.stub(),
   flush: sinon.stub(),
+  resetPendingState: sinon.stub(),
 }
 
 const SpanStatsExporter = sinon.stub().returns(exporter)
@@ -780,6 +781,7 @@ describe('SpanStatsProcessor', () => {
   })
 
   it('should clear pending buckets when the identity-refresh channel fires', () => {
+    exporter.resetPendingState.resetHistory()
     const p = new SpanStatsProcessor(config)
     clearTimeout(p.timer)
 
@@ -791,6 +793,7 @@ describe('SpanStatsProcessor', () => {
 
     assert.notStrictEqual(p.buckets, previousBuckets)
     assert.strictEqual(p.buckets.size, 0)
+    sinon.assert.calledOnce(exporter.resetPendingState)
   })
 
   it('should preserve OTLP trace-root splitting after an identity refresh', () => {
