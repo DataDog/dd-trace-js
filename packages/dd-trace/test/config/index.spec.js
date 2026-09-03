@@ -696,19 +696,100 @@ describe('Config', () => {
     })
   })
 
-  it('should correctly map OTEL_RESOURCE_ATTRIBUTES', () => {
-    process.env.OTEL_RESOURCE_ATTRIBUTES =
-      'deployment.environment=test1,service.name=test2,service.version=5,foo=bar1,baz=qux1'
-    const config = getConfig()
+  describe('OTEL_RESOURCE_ATTRIBUTES mapping', () => {
+    it('maps deployment.environment as a fallback', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES =
+        'deployment.environment=legacy,service.name=test2,service.version=5,foo=bar1,baz=qux1'
 
-    assertObjectContains(config, {
-      env: 'test1',
-      service: 'test2',
-      version: '5',
-      tags: {
-        foo: 'bar1',
-        baz: 'qux1',
-      },
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        env: 'legacy',
+        service: 'test2',
+        version: '5',
+        tags: {
+          foo: 'bar1',
+          baz: 'qux1',
+        },
+      })
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
+    })
+
+    it('maps deployment.environment.name', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES =
+        'deployment.environment.name=stable,service.name=test2,service.version=5,foo=bar1,baz=qux1'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        env: 'stable',
+        service: 'test2',
+        version: '5',
+        tags: {
+          foo: 'bar1',
+          baz: 'qux1',
+        },
+      })
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
+    })
+
+    it('prefers deployment.environment.name when it precedes deployment.environment', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES =
+        'deployment.environment.name=stable,deployment.environment=legacy,' +
+        'service.name=test2,service.version=5,foo=bar1,baz=qux1'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        env: 'stable',
+        service: 'test2',
+        version: '5',
+        tags: {
+          foo: 'bar1',
+          baz: 'qux1',
+        },
+      })
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
+    })
+
+    it('prefers deployment.environment.name when it follows deployment.environment', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES =
+        'deployment.environment=legacy,deployment.environment.name=stable,' +
+        'service.name=test2,service.version=5,foo=bar1,baz=qux1'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        env: 'stable',
+        service: 'test2',
+        version: '5',
+        tags: {
+          foo: 'bar1',
+          baz: 'qux1',
+        },
+      })
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
+    })
+
+    it('keeps DD_ENV precedence over deployment environment resource attributes', () => {
+      process.env.DD_ENV = 'datadog'
+      process.env.OTEL_RESOURCE_ATTRIBUTES =
+        'deployment.environment=legacy,deployment.environment.name=stable,foo=bar1'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        env: 'datadog',
+        tags: {
+          foo: 'bar1',
+        },
+      })
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
     })
   })
 

@@ -90,8 +90,10 @@ const transformers = {
   },
   parseOtelTags (object) {
     const tags = {}
+    const environment = object['deployment.environment.name'] ?? object['deployment.environment']
     for (const [key, value] of Object.entries(object)) {
-      tags[RENAMED_OTEL_TAGS.get(key) ?? key] = value
+      const renamedKey = RENAMED_OTEL_TAGS.get(key)
+      tags[renamedKey ?? key] = renamedKey === 'env' ? environment : value
     }
     return tags
   },
