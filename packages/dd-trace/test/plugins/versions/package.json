@@ -237,6 +237,7 @@
     "typescript": "7.0.2",
     "undici": "8.10.0",
     "vitest": "4.1.11",
+    "webdriverio": "9.31.5",
     "when": "3.7.8",
     "winston": "3.19.0",
     "workerpool": "10.0.3",
