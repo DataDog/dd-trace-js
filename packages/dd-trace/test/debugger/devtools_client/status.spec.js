@@ -7,6 +7,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 require('../../setup/mocha')
 
+const { DROPPED_REASON, EVENT_TYPE } = require('../../../src/debugger/guardrail-metrics')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { DEBUGGER_DIAGNOSTICS_V1 } = require('../../../src/debugger/constants')
 const { getRequestOptions } = require('./utils')
@@ -17,6 +18,8 @@ const runtimeId = 'my-runtime-id'
 
 describe('diagnostic message http requests', function () {
   let clock, statusproxy, request, jsonBuffer
+  /** @type {{ eventDropped: sinon.SinonStub, '@noCallThru': boolean }} */
+  let guardrailMetrics
 
   /** @type {Array<[string, string] | [string, string, Error]>} */
   const acks = [
@@ -34,7 +37,10 @@ describe('diagnostic message http requests', function () {
     request = sinon.spy()
     request['@noCallThru'] = true
 
+    guardrailMetrics = { eventDropped: sinon.stub(), '@noCallThru': true }
+
     class JSONBufferSpy extends JSONBuffer {
+      /** @param {ConstructorParameters<typeof JSONBuffer>} args */
       constructor (...args) {
         super(...args)
         jsonBuffer = this
@@ -52,6 +58,7 @@ describe('diagnostic message http requests', function () {
         },
         '@noCallThru': true,
       },
+      './guardrail-metrics': guardrailMetrics,
       './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request,
     })
@@ -148,6 +155,38 @@ describe('diagnostic message http requests', function () {
       })
     })
   }
+
+  describe('diagnostics queue', function () {
+    it('should bound the diagnostics queue to 1MB', function () {
+      const MAX_QUEUE_BYTES = 1024 * 1024
+      let accepted = 0
+
+      // Flush a status per upload interval, without ever completing the uploads, until the queue is full
+      while (!guardrailMetrics.eventDropped.called) {
+        assert.ok(accepted < 10_000, 'the queue should have filled up by now')
+        statusproxy.ackReceived({ id: 'foo', version: accepted++ })
+        clock.tick(1000)
+      }
+
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.eventDropped, DROPPED_REASON.QUEUE_FULL, EVENT_TYPE.DIAGNOSTIC
+      )
+      sinon.assert.callCount(request, accepted - 1)
+      assert.ok(jsonBuffer.queuedBytes <= MAX_QUEUE_BYTES, `Expected ${jsonBuffer.queuedBytes} <= ${MAX_QUEUE_BYTES}`)
+      assert.ok(jsonBuffer.queuedBytes > MAX_QUEUE_BYTES - 1024, `Expected ${jsonBuffer.queuedBytes} to fill the queue`)
+    })
+
+    it('should release a payload from the queue once its upload completes', function () {
+      statusproxy.ackReceived({ id: 'foo', version: 0 })
+      clock.tick(1000)
+      sinon.assert.calledOnce(request)
+      assert.ok(jsonBuffer.queuedBytes > 0, `Expected ${jsonBuffer.queuedBytes} > 0`)
+
+      request.lastCall.args[2](new Error('boom'))
+
+      assert.strictEqual(jsonBuffer.queuedBytes, 0)
+    })
+  })
 
   it('should send directly to the debugger intake in agentless mode', function () {
     const requestAgentless = sinon.spy()

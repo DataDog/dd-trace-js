@@ -777,6 +777,16 @@
         "default": null
       }
     ],
+    "DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "dynamicInstrumentation.queueMaxBytes"
+        ],
+        "default": "10485760"
+      }
+    ],
     "DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS": [
       {
         "implementation": "A",
