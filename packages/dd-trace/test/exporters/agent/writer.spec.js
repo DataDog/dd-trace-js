@@ -235,6 +235,17 @@ function describeWriter (protocolVersion) {
       })
     })
 
+    it('should report request errors when requested', (done) => {
+      const error = new Error('agent unavailable')
+      request.yieldsAsync(error)
+      encoder.count.returns(1)
+
+      writer.flush((flushError) => {
+        assert.strictEqual(flushError, error)
+        done()
+      }, { reportErrors: true })
+    })
+
     it('should propagate terminal errors during a bounded Test Optimization flush', (done) => {
       const error = new Error('agent unavailable')
       const deadline = Date.now() + 10_000
