@@ -2,6 +2,7 @@
 
 const { errorMonitor } = require('events')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 const { channel, addHook } = require('./helpers/instrument')
 
 const startChannel = channel('apm:fs:operation:start')
@@ -191,33 +192,53 @@ function wrapCreateStream (original) {
     const ctx = getMessage(name, ['path', 'options'], arguments)
 
     return startChannel.runStores(ctx, () => {
+      let stream
+
       try {
-        const stream = original.apply(this, arguments)
-        const onError = error => {
-          ctx.error = error
-          errorChannel.publish(ctx)
-          onFinish()
-        }
-        const onFinish = () => {
-          finishChannel.runStores(ctx, () => {})
-          stream.removeListener('close', onFinish)
-          stream.removeListener('end', onFinish)
-          stream.removeListener('finish', onFinish)
-          stream.removeListener(errorMonitor, onError)
-        }
-
-        stream.once('close', onFinish)
-        stream.once('end', onFinish)
-        stream.once('finish', onFinish)
-        stream.once(errorMonitor, onError)
-
-        return stream
+        stream = original.apply(this, arguments)
       } catch (error) {
         ctx.error = error
         errorChannel.publish(ctx)
         finishChannel.runStores(ctx, () => {})
         throw error
       }
+
+      const onError = error => {
+        ctx.error = error
+        errorChannel.publish(ctx)
+        onFinish()
+      }
+      let finished = false
+      const onFinish = () => {
+        if (finished) return
+        finished = true
+        finishChannel.runStores(ctx, () => {})
+        try {
+          if (typeof stream.removeListener !== 'function') return
+          stream.removeListener('close', onFinish)
+          stream.removeListener('end', onFinish)
+          stream.removeListener('finish', onFinish)
+          stream.removeListener(errorMonitor, onError)
+        } catch (error) {
+          log.error('Error removing fs stream instrumentation listeners', error)
+        }
+      }
+
+      try {
+        if (typeof stream.once !== 'function') {
+          onFinish()
+          return stream
+        }
+        stream.once('close', onFinish)
+        stream.once('end', onFinish)
+        stream.once('finish', onFinish)
+        stream.once(errorMonitor, onError)
+      } catch (error) {
+        log.error('Error adding fs stream instrumentation listeners', error)
+        onFinish()
+      }
+
+      return stream
     })
   }
 }

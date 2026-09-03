@@ -10,7 +10,9 @@ const dc = require('dc-polyfill')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 
+const logErrorCh = dc.channel('datadog:log:error')
 const opErrorCh = dc.channel('apm:fs:operation:error')
+const opFinishCh = dc.channel('apm:fs:operation:finish')
 const opStartCh = dc.channel('apm:fs:operation:start')
 
 const streamConstructors = [
@@ -125,6 +127,232 @@ describe('fs instrumentation', () => {
           assert.strictEqual(tracer.scope().active(), activeSpan)
           for (const event of streamEvents) {
             assert.strictEqual(failedStream.listenerCount(event), 0)
+          }
+          await tracePromise
+        })
+
+        it('returns the stream when tracing listener setup fails', async () => {
+          const originalConstructor = fs[className]
+          const listenerError = new Error('listener setup failed')
+          let createdStream
+
+          fs[className] = class extends EventEmitter {
+            constructor () {
+              super()
+              createdStream = this
+            }
+
+            /**
+             * @param {string | symbol} event
+             * @param {(...args: unknown[]) => void} listener
+             * @returns {this}
+             */
+            once (event, listener) {
+              super.once(event, listener)
+              if (event === 'end') throw listenerError
+              return this
+            }
+
+            /**
+             * @param {string | symbol} event
+             * @param {(...args: unknown[]) => void} listener
+             * @returns {this}
+             */
+            removeListener (event, listener) {
+              super.removeListener(event, listener)
+              if (event === errorMonitor) throw listenerError
+              return this
+            }
+          }
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].error, 0)
+          })
+          const activeSpan = tracer.scope().active()
+          let publishedErrors = 0
+          let publishedFinishes = 0
+
+          /**
+           * @param {{ operation: string }} ctx
+           */
+          function onError (ctx) {
+            if (ctx.operation === resource) publishedErrors++
+          }
+
+          /**
+           * @param {{ operation: string }} ctx
+           */
+          function onFinish (ctx) {
+            if (ctx.operation !== resource) return
+            publishedFinishes++
+            createdStream.emit('close')
+          }
+
+          opErrorCh.subscribe(onError)
+          opFinishCh.subscribe(onFinish)
+          try {
+            tracer.trace('parent', parentSpan => {
+              assert.strictEqual(fs[methodName]('unused'), createdStream)
+              assert.strictEqual(tracer.scope().active(), parentSpan)
+            })
+          } finally {
+            opErrorCh.unsubscribe(onError)
+            opFinishCh.unsubscribe(onFinish)
+            fs[className] = originalConstructor
+          }
+
+          assert.strictEqual(publishedErrors, 0)
+          assert.strictEqual(publishedFinishes, 1)
+          assert.strictEqual(tracer.scope().active(), activeSpan)
+          for (const event of streamEvents) {
+            assert.strictEqual(createdStream.listenerCount(event), 0)
+          }
+          await tracePromise
+        })
+
+        it('returns the stream when tracing listener methods are absent', async () => {
+          const originalConstructor = fs[className]
+          let createdStream
+
+          fs[className] = class {
+            constructor () {
+              createdStream = this
+            }
+          }
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].error, 0)
+          })
+          const activeSpan = tracer.scope().active()
+          let loggedErrors = 0
+          let publishedErrors = 0
+
+          function onLogError () {
+            loggedErrors++
+          }
+
+          /**
+           * @param {{ operation: string }} ctx
+           */
+          function onError (ctx) {
+            if (ctx.operation === resource) publishedErrors++
+          }
+
+          logErrorCh.subscribe(onLogError)
+          opErrorCh.subscribe(onError)
+          try {
+            tracer.trace('parent', parentSpan => {
+              assert.strictEqual(fs[methodName]('unused'), createdStream)
+              assert.strictEqual(tracer.scope().active(), parentSpan)
+            })
+          } finally {
+            logErrorCh.unsubscribe(onLogError)
+            opErrorCh.unsubscribe(onError)
+            fs[className] = originalConstructor
+          }
+
+          assert.strictEqual(loggedErrors, 0)
+          assert.strictEqual(publishedErrors, 0)
+          assert.strictEqual(tracer.scope().active(), activeSpan)
+          await tracePromise
+        })
+
+        it('returns the stream when tracing listener lookup fails', async () => {
+          const originalConstructor = fs[className]
+          const listenerError = new Error('listener lookup failed')
+          let createdStream
+
+          fs[className] = class {
+            constructor () {
+              createdStream = this
+            }
+
+            get once () {
+              throw listenerError
+            }
+          }
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].error, 0)
+          })
+          const activeSpan = tracer.scope().active()
+          let publishedErrors = 0
+
+          /**
+           * @param {{ operation: string }} ctx
+           */
+          function onError (ctx) {
+            if (ctx.operation === resource) publishedErrors++
+          }
+
+          opErrorCh.subscribe(onError)
+          try {
+            tracer.trace('parent', parentSpan => {
+              assert.strictEqual(fs[methodName]('unused'), createdStream)
+              assert.strictEqual(tracer.scope().active(), parentSpan)
+            })
+          } finally {
+            opErrorCh.unsubscribe(onError)
+            fs[className] = originalConstructor
+          }
+
+          assert.strictEqual(publishedErrors, 0)
+          assert.strictEqual(tracer.scope().active(), activeSpan)
+          await tracePromise
+        })
+
+        it('finishes tracing when the stream emits an error', async () => {
+          const originalConstructor = fs[className]
+          const streamError = new Error('stream failed')
+          let createdStream
+
+          fs[className] = class extends EventEmitter {
+            constructor () {
+              super()
+              createdStream = this
+            }
+          }
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].error, 0)
+          })
+          const activeSpan = tracer.scope().active()
+          let publishedError
+
+          /**
+           * @param {{ operation: string, error?: Error }} ctx
+           */
+          function onError (ctx) {
+            if (ctx.operation === resource) publishedError = ctx.error
+          }
+
+          opErrorCh.subscribe(onError)
+          try {
+            tracer.trace('parent', parentSpan => {
+              const stream = fs[methodName]('unused')
+              stream.on('error', () => {})
+              stream.emit('error', streamError)
+
+              assert.strictEqual(stream, createdStream)
+              assert.strictEqual(tracer.scope().active(), parentSpan)
+            })
+          } finally {
+            opErrorCh.unsubscribe(onError)
+            fs[className] = originalConstructor
+          }
+
+          assert.strictEqual(publishedError, streamError)
+          assert.strictEqual(tracer.scope().active(), activeSpan)
+          for (const event of streamEvents) {
+            assert.strictEqual(createdStream.listenerCount(event), 0)
           }
           await tracePromise
         })
