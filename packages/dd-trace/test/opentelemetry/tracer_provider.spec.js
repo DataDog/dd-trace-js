@@ -40,6 +40,23 @@ describe('OTel TracerProvider', () => {
     span.end()
   })
 
+  it('should preserve inherited OTel sampling state with the default propagator', () => {
+    const provider = new TracerProvider()
+    provider.register()
+    const incomingCarrier = {
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      tracestate: 'ot=rv:123456789abcde;th:8,vendor=value',
+    }
+    const parentContext = propagation.extract(context.active(), incomingCarrier)
+    const span = provider.getTracer().startSpan('test', {}, parentContext)
+    const outgoingCarrier = {}
+
+    propagation.inject(trace.setSpan(parentContext, span), outgoingCarrier)
+
+    assert.strictEqual(outgoingCarrier.tracestate, incomingCarrier.tracestate)
+    span.end()
+  })
+
   it('should get unique tracers by name and version key', () => {
     const provider = new TracerProvider()
     const tracer = provider.getTracer('a', '1')

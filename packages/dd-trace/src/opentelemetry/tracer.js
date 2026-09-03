@@ -74,12 +74,10 @@ class Tracer {
   _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
     let origin = null
     let samplingPriority = traceFlag
+    const traceStateValue = typeof ts?.serialize === 'function' ? ts.serialize() : ts?.traceparent
+    const traceState = TraceState.fromString(traceStateValue)
 
-    ts = ts?.traceparent
-
-    if (ts) {
-      // Use TraceState.fromString to parse the tracestate header
-      const traceState = TraceState.fromString(ts)
+    if (traceStateValue) {
       let ddTraceStateData = null
 
       // Extract Datadog specific trace state data
@@ -102,12 +100,12 @@ class Tracer {
         const tracestateSamplingPriority = samplingPriorityTs ? Math.trunc(samplingPriorityTs) : undefined
         samplingPriority = getSamplingPriority(traceFlag, tracestateSamplingPriority, origin)
       } else {
-        log.debug('No dd list member in tracestate from incoming request:', ts)
+        log.debug('No dd list member in tracestate from incoming request:', traceStateValue)
       }
     }
 
     const spanContext = new SpanContext({
-      traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16),
+      traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16), tracestate: traceState,
     })
 
     spanContext._ddContext._sampling = { priority: samplingPriority }
