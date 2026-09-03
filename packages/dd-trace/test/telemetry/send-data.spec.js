@@ -271,6 +271,40 @@ describe('sendData', () => {
     assert.strictEqual(options.headers['dd-api-key'], 'secret-key')
   })
 
+  it('uses the staging telemetry intake for APM agentless mode', () => {
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        experimental: { exporter: 'agentless' },
+        tags: { 'runtime-id': '123' },
+        site: 'datad0g.com',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+    assert.deepStrictEqual(options.url, new URL('https://all-http-intake.logs.datad0g.com'))
+  })
+
+  it('rejects an APM agentless site that could redirect the API key', () => {
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        experimental: { exporter: 'agentless' },
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.com@evil.example',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.notCalled(request)
+  })
+
   it('does not fall back to the Agent after an APM agentless telemetry failure', () => {
     request.yields(new Error('intake unavailable'))
 
