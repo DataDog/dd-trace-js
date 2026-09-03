@@ -9,7 +9,6 @@ const sinon = require('sinon')
 require('../setup/core')
 
 const { publishWithCompletion } = require('../../../datadog-instrumentations/src/helpers/channel')
-const { FINAL_FLUSH_TIMEOUT } = require('../../src/ci-visibility/final-flush')
 
 const logSubmissionCh = channel('ci:log-submission:log')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
@@ -26,9 +25,9 @@ const pluginConfig = {
   service: 'my service',
   site: 'datadoghq.com',
 }
-const LogSubmissionPlugin = proxyquire('../../src/ci-visibility/log-submission/log-submission-plugin', {
-  '../../exporters/common/request': request,
-  '../../log': log,
+const LogSubmissionPlugin = proxyquire('../../src/log-submission/log-submission-plugin', {
+  '../exporters/common/request': request,
+  '../log': log,
 })
 
 /**
@@ -185,13 +184,13 @@ describe('LogSubmissionPlugin', () => {
     publishWithCompletion(logSubmissionFlushCh, {}, onDone)
 
     const { signal } = request.firstCall.args[1]
-    clock.tick(FINAL_FLUSH_TIMEOUT - 1)
+    clock.tick(60_000 - 1)
     sinon.assert.notCalled(onDone)
     assert.strictEqual(signal.aborted, false)
     clock.tick(1)
     sinon.assert.calledOnce(onDone)
     assert.strictEqual(signal.aborted, true)
-    assert.strictEqual(signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+    assert.strictEqual(signal.reason.code, 'ERR_DD_LOG_SUBMISSION_FLUSH_TIMEOUT')
   })
 
   it('waits for every intake request in the flush snapshot', () => {
