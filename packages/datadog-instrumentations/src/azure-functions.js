@@ -59,7 +59,7 @@ function traceOrchestrationHandler (handler, functionName) {
     const channelCtx = {
       trigger: 'Orchestration',
       functionName,
-      instanceId: orchestrationBinding.instanceId,
+      instanceId: orchestrationBinding?.instanceId,
       traceparent: traceContext?.traceParent,
       tracestate: traceContext?.traceState,
     }
