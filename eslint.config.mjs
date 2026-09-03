@@ -75,7 +75,6 @@ const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   'packages/dd-trace/src/config/helper.js',
   'packages/dd-trace/src/config/index.js',
   'packages/dd-trace/src/config/stable.js',
-  'packages/dd-trace/src/crashtracking/crashtracker.js',
   'packages/dd-trace/src/debugger/index.js',
   'packages/dd-trace/src/log/index.js',
   'packages/dd-trace/src/telemetry/session-propagation.js',

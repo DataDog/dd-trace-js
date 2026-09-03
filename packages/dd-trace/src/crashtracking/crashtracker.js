@@ -38,11 +38,7 @@ function getAgentlessReceiverEnvironment (config) {
   }
 
   const site = config.site.toLowerCase()
-  const defaultTelemetryUrl = getAgentlessTelemetryUrl(site).origin
-  // These are libdatadog receiver controls, not tracer configuration.
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  const { DD_APM_TELEMETRY_DD_URL, DD_ERRORS_INTAKE_DD_URL } = process.env
-  const telemetryUrl = DD_APM_TELEMETRY_DD_URL ?? defaultTelemetryUrl
+  const telemetryUrl = getAgentlessTelemetryUrl(site).origin
 
   const environment = /** @type {Array<[string, string]>} */ ([
     ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
@@ -53,9 +49,6 @@ function getAgentlessReceiverEnvironment (config) {
     // endpoint. Keep this compatibility fallback until its telemetry config honors that setting.
     ['DD_TRACE_AGENT_URL', telemetryUrl],
   ])
-  if (DD_ERRORS_INTAKE_DD_URL !== undefined) {
-    environment.push(['DD_ERRORS_INTAKE_DD_URL', DD_ERRORS_INTAKE_DD_URL])
-  }
 
   // The receiver environment does not inherit from this process.
   for (const name of INHERITED_RECEIVER_ENVIRONMENT_VARIABLES) {

@@ -212,11 +212,10 @@ describeNotWindows('crashtracking integration', () => {
         const { port } = server.address()
         const intakeUrl = `http://127.0.0.1:${port}`
         const requestsPromise = collectAgentlessCrashRequests(server, 'test-api-key')
-        const exitPromise = spawnCrashFixture('signal-crash.js', agent.port, {
+        const exitPromise = spawnCrashFixture('fixtures/agentless-signal-crash.js', agent.port, {
           DD_AGENTLESS_ENABLED: 'true',
-          DD_APM_TELEMETRY_DD_URL: intakeUrl,
           DD_API_KEY: 'test-api-key',
-          DD_ERRORS_INTAKE_DD_URL: intakeUrl,
+          DD_TEST_AGENTLESS_TELEMETRY_URL: intakeUrl,
         }, chunk => { stderr += chunk })
 
         let requests
