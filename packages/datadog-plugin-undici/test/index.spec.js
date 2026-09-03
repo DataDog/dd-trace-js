@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 
+const { channel } = require('dc-polyfill')
 const semver = require('semver')
 const satisfies = require('../../../vendor/dist/semifies')
 const tags = require('../../../ext/tags')
@@ -16,6 +17,7 @@ const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 const SERVICE_NAME = 'test'
+const upgradeChannel = channel('apm:undici:request:upgrade')
 
 // Helper to find an error with a specific type in the caught error's cause chain
 // Different undici versions wrap errors differently, so we need to walk the chain
@@ -42,6 +44,8 @@ describe('Plugin', () => {
 
   describe('undici-fetch', () => {
     withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version, moduleName, resolvedVersion) => {
+      const hasNativeDiagnostics = satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')
+
       /**
        * @param {import('express').Application} app
        * @param {(port: number) => void} [listener]
@@ -114,11 +118,14 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
+        let tracer
+
         beforeEach(() => {
           return agent.load('undici', {
             service: 'test',
           })
-            .then(() => {
+            .then(currentTracer => {
+              tracer = currentTracer
               express = require('express')
               fetch = require(`../../../versions/undici@${version}`, {}).get()
             })
@@ -126,6 +133,7 @@ describe('Plugin', () => {
 
         afterEach(() => {
           express = null
+          tracer = null
         })
 
         withNamingSchema(
@@ -166,6 +174,156 @@ describe('Plugin', () => {
 
             fetch.fetch(`http://localhost:${port}/user`, { method: 'GET' })
           })
+        })
+
+        it('should keep the caller span active while creating a request', async function () {
+          if (!hasNativeDiagnostics) {
+            this.skip()
+            return
+          }
+
+          const app = express()
+          app.get('/user', (_request, response) => response.status(200).send())
+          appListener = server(app)
+          await once(appListener, 'listening')
+          const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
+          const parent = tracer.startSpan('parent')
+
+          try {
+            await tracer.scope().activate(parent, async () => {
+              const responsePromise = fetch.fetch(`http://localhost:${port}/user`)
+              assert.strictEqual(tracer.scope().active(), parent)
+              const response = await responsePromise
+              await response.arrayBuffer()
+            })
+          } finally {
+            parent.finish()
+          }
+        })
+
+        it('should finish the request span when the server accepts an upgrade', async function () {
+          if (!satisfies(resolvedVersion, '>=4.7.0')) {
+            this.skip()
+            return
+          }
+
+          let requestHookCalls = 0
+          agent.reload('undici', {
+            hooks: {
+              request () {
+                requestHookCalls++
+              },
+            },
+            service: 'test',
+          })
+
+          appListener = require('node:http').createServer()
+          appListener.once('upgrade', (_request, socket) => {
+            socket.write(
+              'HTTP/1.1 101 Switching Protocols\r\n' +
+              'Connection: Upgrade\r\n' +
+              'Upgrade: test\r\n' +
+              '\r\n'
+            )
+          })
+          appListener.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
+          const client = new fetch.Client(`http://localhost:${port}`)
+          const fallbackMessages = []
+          const fallbackSubscriber = message => fallbackMessages.push(message)
+          const tracePromise = agent.assertFirstTraceSpan(span => {
+            assert.strictEqual(span.resource, 'GET')
+            assert.strictEqual(span.meta['http.status_code'], '101')
+          })
+          upgradeChannel.subscribe(fallbackSubscriber)
+
+          try {
+            const { headers, socket } = await client.upgrade({ path: '/', protocol: 'test' })
+            assert.notStrictEqual(headers, undefined)
+            socket.destroy()
+            await Promise.all([tracePromise, client.close()])
+
+            assert.strictEqual(fallbackMessages.length, 1)
+            assert.strictEqual(fallbackMessages[0].statusCode, 101)
+            assert.strictEqual(requestHookCalls, 1)
+          } finally {
+            upgradeChannel.unsubscribe(fallbackSubscriber)
+          }
+        })
+
+        it('should not use the accepted-upgrade fallback when the server rejects an upgrade', async function () {
+          if (!satisfies(resolvedVersion, '>=4.7.0')) {
+            this.skip()
+            return
+          }
+
+          appListener = require('node:http').createServer((_request, response) => response.end())
+          appListener.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
+          const client = new fetch.Client(`http://localhost:${port}`)
+          const fallbackMessages = []
+          const fallbackSubscriber = message => fallbackMessages.push(message)
+          const tracePromise = agent.assertFirstTraceSpan({ resource: 'GET' })
+          upgradeChannel.subscribe(fallbackSubscriber)
+
+          try {
+            await assert.rejects(client.upgrade({ path: '/', protocol: 'test' }))
+            await Promise.all([tracePromise, client.close()])
+            assert.deepStrictEqual(fallbackMessages, [])
+          } finally {
+            upgradeChannel.unsubscribe(fallbackSubscriber)
+          }
+        })
+
+        it('should finish the request span when an accepted-upgrade handler throws', async function () {
+          if (!hasNativeDiagnostics) {
+            this.skip()
+            return
+          }
+
+          appListener = require('node:http').createServer()
+          appListener.once('upgrade', (_request, socket) => {
+            socket.write(
+              'HTTP/1.1 101 Switching Protocols\r\n' +
+              'Connection: Upgrade\r\n' +
+              'Upgrade: test\r\n' +
+              '\r\n'
+            )
+          })
+          appListener.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
+          const client = new fetch.Client(`http://localhost:${port}`)
+          const expectedError = new Error('upgrade handler failed')
+          const fallbackMessages = []
+          const fallbackSubscriber = message => fallbackMessages.push(message)
+          const throwExpectedError = () => { throw expectedError }
+          const tracePromise = agent.assertFirstTraceSpan(span => {
+            assert.strictEqual(span.resource, 'GET')
+            assert.strictEqual(span.meta['http.status_code'], '101')
+            assert.strictEqual(span.meta[ERROR_TYPE], expectedError.name)
+            assert.strictEqual(span.meta[ERROR_MESSAGE], expectedError.message)
+          })
+          upgradeChannel.subscribe(fallbackSubscriber)
+
+          try {
+            client.dispatch({ method: 'GET', path: '/', upgrade: 'test' }, {
+              onConnect () {},
+              onError () {},
+              onRequestStart () {},
+              onRequestUpgrade: throwExpectedError,
+              onResponseError () {},
+              onUpgrade: throwExpectedError,
+            })
+            await Promise.all([tracePromise, client.close()])
+
+            assert.strictEqual(fallbackMessages.length, 1)
+            assert.strictEqual(fallbackMessages[0].error, expectedError)
+          } finally {
+            upgradeChannel.unsubscribe(fallbackSubscriber)
+          }
         })
 
         it('should support URL input', done => {
@@ -672,18 +830,24 @@ describe('Plugin', () => {
       })
       describe('with hooks configuration', () => {
         let config
+        let activeSpan
+        let hookSpan
+        let tracer
 
         beforeEach(() => {
           config = {
             hooks: {
               request: (span, req, res) => {
+                activeSpan = tracer.scope().active()
+                hookSpan = span
                 span.setTag('foo', '/foo')
               },
             },
           }
 
           return agent.load('undici', config)
-            .then(() => {
+            .then(currentTracer => {
+              tracer = currentTracer
               express = require('express')
               fetch = require(`../../../versions/undici@${version}`, {}).get()
             })
@@ -700,6 +864,9 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].meta.foo, '/foo')
+                if (hasNativeDiagnostics) {
+                  assert.strictEqual(activeSpan === hookSpan, true)
+                }
               })
               .then(done)
               .catch(done)
@@ -867,6 +1034,16 @@ describe('Plugin', () => {
             return
           }
 
+          let requestHookCalls = 0
+          agent.reload('undici', {
+            hooks: {
+              request () {
+                requestHookCalls++
+              },
+            },
+            service: 'test',
+          })
+
           const http = require('node:http')
           const net = require('node:net')
 
@@ -920,6 +1097,7 @@ describe('Plugin', () => {
           })
           const { body } = await fetch.request(`http://localhost:${downstreamPort}/data`, { dispatcher })
           await Promise.all([body.text(), tracePromise])
+          assert.strictEqual(requestHookCalls, 2)
         })
       })
     })
