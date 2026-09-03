@@ -65,6 +65,7 @@ const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_s
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
 const testFrameworkFnWrapperCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+const newWindowCh = tracingChannel('orchestrion:webdriverio:newWindow')
 const urlCh = tracingChannel('orchestrion:webdriverio:url')
 
 const NODE_OPTIONS_SEPARATOR_RE = /\s/
@@ -738,18 +739,22 @@ function waitForFailedRumCleanup (context) {
 }
 
 /**
- * Cleans a completed test's RUM state before the next non-afterEach wrapper.
+ * Prepares retained RUM state before the next test or non-afterEach hook starts.
  *
  * @param {{arguments?: unknown[], rumCleanupCallback?: () => Promise<void>}} context
  * @returns {void}
  */
-function waitForPendingRumCleanup (context) {
+function waitForRumTestStart (context) {
   const type = context.arguments?.[1]
   const hookName = context.arguments?.[7]
-  if (!isRumCleanupPending || (type === 'Hook' && hookName === 'afterEach')) return
+  if (type === 'Hook' && hookName === 'afterEach') return
 
   const startsTest = type === 'Test' || (type === 'Hook' && hookName === 'beforeEach')
-  context.rumCleanupCallback = startsTest ? prepareNextRumTest : cleanupRumBrowsers
+  if (startsTest) {
+    context.rumCleanupCallback = isRumCleanupPending ? prepareNextRumTest : startRumTest
+  } else if (isRumCleanupPending) {
+    context.rumCleanupCallback = cleanupRumBrowsers
+  }
 }
 
 /**
@@ -1757,12 +1762,20 @@ urlCh.asyncEnd.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumNavigation)
 )
 
+newWindowCh.start.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumNavigationStart)
+)
+
+newWindowCh.asyncEnd.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumNavigation)
+)
+
 testFrameworkFnWrapperCh.asyncEnd.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumCleanup)
 )
 
 testFrameworkFnWrapperCh.start.subscribe(
-  /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForPendingRumCleanup)
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumTestStart)
 )
 
 testFrameworkFnWrapperCh.error.subscribe(

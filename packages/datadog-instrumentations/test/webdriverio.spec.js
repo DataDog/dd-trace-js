@@ -253,6 +253,7 @@ describe('webdriverio instrumentation', () => {
       const rewrittenSource = rewriter.rewrite(source, modulePath, 'module')
 
       assert.notStrictEqual(rewrittenSource, source)
+      assert.match(rewrittenSource, /orchestrion:webdriverio:newWindow/)
       assert.match(rewrittenSource, /orchestrion:webdriverio:url/)
       assert.match(rewrittenSource, /__apm\$ctx\.rumPreloadCallback/)
       assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
@@ -375,6 +376,69 @@ describe('webdriverio instrumentation', () => {
       ])
     } finally {
       correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('installs BiDi RUM correlation before newWindow loads its first document', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(browserFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, browserFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-browser-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const calls = []
+    const browser = {
+      browsingContextCreate: sinon.stub().callsFake(() => {
+        calls.push('create-window')
+        return Promise.resolve({ context: 'window-b' })
+      }),
+      browsingContextNavigate: sinon.stub().callsFake(() => {
+        calls.push('navigate-window')
+        return Promise.resolve()
+      }),
+      capabilities: {},
+      execute: sinon.stub().callsFake((script) => {
+        calls.push(script.name === 'detectRum' ? 'detect' : 'stop')
+        return Promise.resolve(script.name === 'detectRum'
+          ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
+          : false)
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
+        calls.push('add-preload')
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push('set-cookie')
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchToWindow: sinon.stub().callsFake(() => {
+        calls.push('switch-window')
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { newWindow3 } = await import(pathToFileURL(outputPath))
+      await newWindow3.call(browser, 'https://example.test')
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'create-window',
+        'navigate-window',
+        'switch-window',
+        'detect',
+        'set-cookie',
+      ])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
     }
   })
 
@@ -923,7 +987,7 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(calls, [
         'set',
       ])
-      assert.strictEqual(browser.execute.callCount, 1)
+      assert.strictEqual(browser.execute.callCount, 2)
     } finally {
       correlationCh.unsubscribe(correlate)
       await cleanupRumState()
@@ -1109,8 +1173,11 @@ describe('webdriverio instrumentation', () => {
       }),
       storageDeleteCookies: sinon.stub().resolves(),
     }
-    let testExecutionId = 'first-test-id'
-    const correlate = context => { context.testExecutionId = testExecutionId }
+    let testExecutionId
+    const correlate = context => {
+      context.isTestOptimizationRunner = true
+      context.testExecutionId = testExecutionId
+    }
     correlationCh.subscribe(correlate)
 
     try {
@@ -1120,11 +1187,16 @@ describe('webdriverio instrumentation', () => {
 
       fs.writeFileSync(outputPath, rewrittenSource)
       const { testFrameworkFnWrapper } = await import(pathToFileURL(outputPath))
+      testExecutionId = 'first-test-id'
       const firstTestError = new Error('first test failed')
       await assert.rejects(testFrameworkFnWrapper({}, 'Test', {
         specFn () {
           calls.push('first-test')
           throw firstTestError
+        },
+      }, {
+        beforeFn () {
+          calls.push('before-first-test')
         },
       }), error => error === firstTestError)
       testExecutionId = 'second-test-id'
@@ -1164,7 +1236,9 @@ describe('webdriverio instrumentation', () => {
 
       assert.deepStrictEqual(calls, [
         'detect',
+        'detect',
         'set:first-test-id',
+        'before-first-test',
         'first-test',
         'detect',
         'delete',
@@ -1836,7 +1910,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('cleans RUM before Runner.run ends the browser session', async () => {
+  it('cleans RUM before the SIGINT path ends the browser session', async () => {
     const source = fs.readFileSync(runnerFixturePath, 'utf8')
     const rewrittenSource = rewriter.rewrite(source, runnerFixtureModulePath, 'module')
     const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-runner-rum-rewriter-'))
@@ -1859,10 +1933,11 @@ describe('webdriverio instrumentation', () => {
     try {
       const { Runner } = await import(pathToFileURL(outputPath))
       const runner = new Runner()
+      runner._sigintWasCalled = true
       runner.onEvent = event => steps.push(event)
 
       assert.strictEqual(await runner.run({ watch: false }), 0)
-      assert.deepStrictEqual(steps, ['cleanup:start', 'cleanup:end', 'session:end'])
+      assert.deepStrictEqual(steps, ['cleanup:start', 'cleanup:end', 'sigint', 'session:end'])
     } finally {
       runCh.unsubscribe(subscriber)
     }

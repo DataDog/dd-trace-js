@@ -6,4 +6,12 @@ async function url3 (path, options = {}) {
   return this.navigateTo(path)
 }
 
-export { url3 }
+async function newWindow3 (path) {
+  if (this.isBidi) {
+    const { context } = await this.browsingContextCreate({ type: 'window' })
+    await this.browsingContextNavigate({ context, url: path })
+    await this.switchToWindow(context)
+  }
+}
+
+export { newWindow3, url3 }

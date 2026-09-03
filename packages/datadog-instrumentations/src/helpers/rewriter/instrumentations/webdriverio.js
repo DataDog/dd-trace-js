@@ -77,7 +77,12 @@ module.exports = [
       'MethodDefinition[key.name="run"] IfStatement[test.operator="!"]' +
       '[test.argument.object.name="args"][test.argument.property.name="watch"], ' +
       'ClassDeclaration[id.name="Runner"] > ClassBody > MethodDefinition[key.name="run"] ' +
-      'IfStatement[test.operator="!"][test.argument.object.name="args"][test.argument.property.name="watch"]',
+      'IfStatement[test.operator="!"][test.argument.object.name="args"][test.argument.property.name="watch"], ' +
+      'VariableDeclarator[id.name="Runner"] > ClassExpression > ClassBody > ' +
+      'MethodDefinition[key.name="run"] IfStatement[test.object.type="ThisExpression"]' +
+      '[test.property.name="_sigintWasCalled"], ' +
+      'ClassDeclaration[id.name="Runner"] > ClassBody > MethodDefinition[key.name="run"] ' +
+      'IfStatement[test.object.type="ThisExpression"][test.property.name="_sigintWasCalled"]',
     channelName: 'Runner_run',
     transform: 'awaitContextCallback',
     transformOptions: {
@@ -298,6 +303,88 @@ module.exports = [
     astQuery: 'FunctionDeclaration[async][id.name=/^url[0-9]*$/] ReturnStatement > ' +
       'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
     channelName: 'url',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[async=true][id.name=/^newWindow[0-9]*$/]',
+    functionQuery: {
+      kind: 'Async',
+    },
+    channelName: 'newWindow',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name=/^newWindow[0-9]*$/] ' +
+      'IfStatement[test.object.type="ThisExpression"][test.property.name="isBidi"], ' +
+      'FunctionDeclaration[id.name=/^newWindow[0-9]*$/] ' +
+      'IfStatement[test.operator="&&"][test.left.object.type="ThisExpression"]' +
+      '[test.left.property.name="isBidi"]',
+    channelName: 'newWindow',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumPreloadCallback',
+      callbackThis: true,
+    },
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^newWindow[0-9]*$/] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'newWindow',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[async=true][id.name=/^newWindow[0-9]*$/]',
+    functionQuery: {
+      kind: 'Async',
+    },
+    channelName: 'newWindow',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name=/^newWindow[0-9]*$/] ' +
+      'IfStatement[test.object.type="ThisExpression"][test.property.name="isBidi"], ' +
+      'FunctionDeclaration[id.name=/^newWindow[0-9]*$/] ' +
+      'IfStatement[test.operator="&&"][test.left.object.type="ThisExpression"]' +
+      '[test.left.property.name="isBidi"]',
+    channelName: 'newWindow',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumPreloadCallback',
+      callbackThis: true,
+    },
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^newWindow[0-9]*$/] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'newWindow',
     transform: 'waitForAsyncEnd',
   },
   {
