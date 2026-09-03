@@ -116,6 +116,7 @@ function isCollectable (scope) {
  * @property {import('./processor').IncompleteCapture} incomplete - The capture limits enforced on the expressions,
  *   including a runtime error for every expression that threw or could not be evaluated. Only fully populated once
  *   `processCaptureExpressions` has run.
+ * @property {boolean} timedOut - Whether evaluating an expression exceeded the evaluation time budget
  */
 
 /**
@@ -133,9 +134,16 @@ function isCollectable (scope) {
  * @param {CompiledCaptureExpression[]} expressions - The compiled expressions with precomputed capture limits
  * @param {bigint} [deadlineNs] - The deadline in nanoseconds. Defaults to {@link BIGINT_MAX}. If the deadline is
  *   reached, the snapshot will be truncated.
+ * @param {bigint} [evaluationTimeoutNs] - The time budget in nanoseconds for evaluating a single expression. Defaults
+ *   to {@link BIGINT_MAX}. Evaluation can't be interrupted, so an exceeded budget is reported as an evaluation error.
  * @returns {Promise<CaptureExpressionResult>} Raw results with deferred processing callback
  */
-async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = BIGINT_MAX) {
+async function evaluateCaptureExpressions (
+  callFrame,
+  expressions,
+  deadlineNs = BIGINT_MAX,
+  evaluationTimeoutNs = BIGINT_MAX
+) {
   /** @type {{ name: string, remoteObject: object, maxLength: number }[]} */
   const rawResults = []
   /** @type {{ expr: string, message: string }[]} */
@@ -146,12 +154,14 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
   const incomplete = { reasons: 0 }
   /** @type {Record<string, ReturnType<typeof processRemoteObject>> | null} */
   let processedResult = null
+  let timedOut = false
 
   for (let i = 0; i < expressions.length; i++) {
     const { name, expression, limits } = expressions[i]
     const { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength } = limits
 
     try {
+      const evaluationStart = process.hrtime.bigint()
       const { result, exceptionDetails } = /** @type {EvaluateOnCallFrameResult} */ (
         // eslint-disable-next-line no-await-in-loop
         await session.post('Debugger.evaluateOnCallFrame', {
@@ -159,6 +169,14 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
           expression,
         })
       )
+      if (process.hrtime.bigint() - evaluationStart > evaluationTimeoutNs) {
+        incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
+        timedOut = true
+        evaluationErrors.push({
+          expr: name,
+          message: `Expression evaluation exceeded its time budget of ${evaluationTimeoutNs / 1_000_000n}ms`,
+        })
+      }
 
       // Handle evaluation exceptions (maybe transient - bad expression, undefined var, etc.)
       if (exceptionDetails) {
@@ -238,6 +256,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
     evaluationErrors,
     fatalErrors,
     incomplete,
+    timedOut,
   }
 }
 
