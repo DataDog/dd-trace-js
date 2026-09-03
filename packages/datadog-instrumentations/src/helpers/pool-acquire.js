@@ -19,6 +19,9 @@ const { performance } = require('node:perf_hooks')
  * @typedef {{ deferred: boolean }} PoolWaitTransfer
  * @typedef {{ transfer: PoolWaitTransfer, waitTime: number }} DeferredPoolWait
  * @typedef {{ pending: boolean, pool: object }} DeferredPoolQueryAcquire
+ * @typedef {'mariadb'|'mysql'|'mysql2'|'pg'} DatabaseDriver
+ * @typedef {{ connection?: object, owner: object, pending: boolean }} PromisePoolQueryAcquire
+ * @typedef {{ waitTime?: number }} PoolAcquireCapture
  * @typedef {{
  *   connectionFinishCh: Channel,
  *   acquireStartCh: Channel,
@@ -41,6 +44,12 @@ let currentPoolQueryAcquire
 /** @type {import('node:async_hooks').AsyncLocalStorage<DeferredPoolQueryAcquire>|undefined} */
 let deferredPoolQueryAcquireStorage
 
+/** @type {import('node:async_hooks').AsyncLocalStorage<PromisePoolQueryAcquire>|undefined} */
+let promisePoolQueryAcquireStorage
+
+/** @type {PoolAcquireCapture|undefined} */
+let currentPoolAcquireCapture
+
 /** @type {WeakMap<object, ClusterAcquire>} */
 const deferredClusterAcquires = new WeakMap()
 
@@ -51,6 +60,110 @@ const poolWaitTimes = []
 /** @type {WeakMap<object, DeferredPoolWait>} */
 const deferredPoolWaitTimes = new WeakMap()
 let deferredPoolWaitCount = 0
+
+/** @type {Record<string, { acquireStartCh: Channel, acquireFinishCh: Channel }>} */
+const promisePoolAcquireChannels = {}
+
+/** @type {WeakMap<object, Record<string, unknown>>} */
+const promisePoolConnectionConfigs = new WeakMap()
+
+const deferredPromisePoolWaitTransfer = { deferred: true }
+
+/**
+ * Mark a promise-returning ORM operation as the owner of its next pool acquisition.
+ *
+ * @param {Function} method
+ * @param {(receiver: object, args: ArgumentsLike) => object|undefined} resolveOwner
+ * @param {(receiver: object, args: ArgumentsLike) => DatabaseDriver|undefined} resolveDriver
+ * @returns {Function}
+ */
+function wrapPromisePoolQueryMethod (method, resolveOwner, resolveDriver) {
+  return function () {
+    const driver = resolveDriver(this, arguments)
+    if (driver === undefined || !getPromisePoolAcquireChannels(driver).acquireStartCh.hasSubscribers) {
+      return method.apply(this, arguments)
+    }
+
+    const owner = resolveOwner(this, arguments)
+    if (owner === undefined) return method.apply(this, arguments)
+
+    const storage = getPromisePoolQueryAcquireStorage()
+    return storage.run({ owner, pending: true }, () => method.apply(this, arguments))
+  }
+}
+
+/**
+ * Instrument a promise-returning ORM pool acquisition using the underlying driver contract.
+ *
+ * @param {Function} method
+ * @param {(receiver: object, args: ArgumentsLike) => DatabaseDriver|undefined} resolveDriver
+ * @param {(receiver: object, args: ArgumentsLike) => Record<string, unknown>} resolveConfig
+ * @param {(receiver: object, args: ArgumentsLike) => boolean} hasIdleConnection
+ * @returns {Function}
+ */
+function wrapPromisePoolAcquire (method, resolveDriver, resolveConfig, hasIdleConnection) {
+  return function () {
+    const driver = resolveDriver(this, arguments)
+    if (driver === undefined) return method.apply(this, arguments)
+
+    const channels = getPromisePoolAcquireChannels(driver)
+    if (!channels.acquireStartCh.hasSubscribers) return method.apply(this, arguments)
+
+    const queryAcquire = promisePoolQueryAcquireStorage?.getStore()
+    const internal = queryAcquire?.owner === this && queryAcquire.pending
+    if (internal) queryAcquire.pending = false
+    const start = hasIdleConnection(this, arguments) ? undefined : performance.now()
+    const capture = {}
+    let ctx
+
+    if (!internal) {
+      ctx = createPromisePoolAcquireContext(driver, resolveConfig(this, arguments))
+      channels.acquireStartCh.publish(ctx)
+    }
+
+    let result
+    try {
+      result = runWithPoolAcquireCapture(capture, method, this, arguments)
+    } catch (error) {
+      if (internal) queryAcquire.pending = true
+      finishPromisePoolAcquire(driver, channels, ctx, start, capture, error, resolveConfig(this, arguments))
+      throw error
+    }
+
+    return result.then(connection => {
+      const waitTime = capture.waitTime ?? acquireWait(start)
+      if (internal) {
+        queryAcquire.connection = connection
+        setPoolWaitTime(connection, waitTime)
+      } else {
+        finishPromisePoolAcquireContext(driver, channels, ctx, connection, waitTime)
+      }
+      return connection
+    }, error => {
+      if (internal) queryAcquire.pending = true
+      finishPromisePoolAcquire(driver, channels, ctx, start, capture, error, resolveConfig(this, arguments))
+      throw error
+    })
+  }
+}
+
+/**
+ * Clear an acquisition that was never consumed by a driver query.
+ *
+ * @param {Function} method
+ * @returns {Function}
+ */
+function wrapPoolRelease (method) {
+  return function (connection) {
+    const queryAcquire = promisePoolQueryAcquireStorage?.getStore()
+    if (queryAcquire?.owner === this && queryAcquire.connection === connection) {
+      queryAcquire.connection = undefined
+      queryAcquire.pending = true
+    }
+    if (connection !== undefined) clearPoolWaitTime(connection)
+    return method.apply(this, arguments)
+  }
+}
 
 /**
  * @param {Function} method
@@ -194,6 +307,25 @@ function wrapSynchronousPoolGetConnection (getConnection, channels) {
 
     const pool = this
     const ctx = {}
+    const capture = currentPoolAcquireCapture
+    if (capture !== undefined) {
+      const start = acquireStart(pool)
+
+      arguments[0] = function () {
+        capture.waitTime = acquireWait(start)
+        return connectionFinishCh.runStores(ctx, callback, this, ...arguments)
+      }
+      if (queuedCallbacks !== undefined) queuedCallbacks.add(arguments[0])
+
+      connectionStartCh.publish(ctx)
+      try {
+        return getConnection.apply(pool, arguments)
+      } catch (error) {
+        capture.waitTime = acquireWait(start)
+        throw error
+      }
+    }
+
     const acquire = currentPoolQueryAcquire
     const acquireCtx = acquire === undefined && acquireStartCh.hasSubscribers
       ? { conf: pool.config.connectionConfig }
@@ -326,6 +458,123 @@ function getDeferredPoolQueryAcquireStorage () {
 }
 
 /**
+ * @returns {import('node:async_hooks').AsyncLocalStorage<PromisePoolQueryAcquire>}
+ */
+function getPromisePoolQueryAcquireStorage () {
+  if (promisePoolQueryAcquireStorage === undefined) {
+    const { AsyncLocalStorage } = require('node:async_hooks')
+    promisePoolQueryAcquireStorage = new AsyncLocalStorage()
+  }
+  return promisePoolQueryAcquireStorage
+}
+
+/**
+ * @param {DatabaseDriver} driver
+ * @returns {{ acquireStartCh: Channel, acquireFinishCh: Channel }}
+ */
+function getPromisePoolAcquireChannels (driver) {
+  let channels = promisePoolAcquireChannels[driver]
+  if (channels === undefined) {
+    const { channel } = require('./instrument')
+    channels = {
+      acquireStartCh: channel(`apm:${driver}:pool:acquire:start`),
+      acquireFinishCh: channel(`apm:${driver}:pool:acquire:finish`),
+    }
+    promisePoolAcquireChannels[driver] = channels
+  }
+  return channels
+}
+
+/**
+ * @param {DatabaseDriver} driver
+ * @param {Record<string, unknown>} config
+ * @returns {Record<string, unknown>}
+ */
+function createPromisePoolAcquireContext (driver, config) {
+  return driver === 'pg' ? { poolOptions: config } : { conf: config }
+}
+
+/**
+ * @param {DatabaseDriver} driver
+ * @param {{ acquireFinishCh: Channel }} channels
+ * @param {Record<string, unknown>|undefined} ctx
+ * @param {{
+ *   config?: Record<string, unknown>,
+ *   connectionParameters?: Record<string, unknown>,
+ *   opts?: Record<string, unknown>
+ * }} connection
+ * @param {number} waitTime
+ */
+function finishPromisePoolAcquireContext (driver, channels, ctx, connection, waitTime) {
+  ctx.poolWaitTime = waitTime
+  if (driver === 'pg') ctx.params = connection.connectionParameters
+  else if (driver === 'mariadb') ctx.connectionConfig = promisePoolConnectionConfigs.get(connection)
+  else ctx.connectionConfig = connection.config
+  channels.acquireFinishCh.publish(ctx)
+}
+
+/**
+ * @param {object} connection
+ * @param {Record<string, unknown>} config
+ */
+function setPromisePoolConnectionConfig (connection, config) {
+  promisePoolConnectionConfigs.set(connection, config)
+}
+
+/**
+ * @param {DatabaseDriver} driver
+ * @param {{ acquireStartCh: Channel, acquireFinishCh: Channel }} channels
+ * @param {Record<string, unknown>|undefined} ctx
+ * @param {number|undefined} start
+ * @param {PoolAcquireCapture} capture
+ * @param {unknown} error
+ * @param {Record<string, unknown>} config
+ */
+function finishPromisePoolAcquire (driver, channels, ctx, start, capture, error, config) {
+  const waitTime = capture.waitTime ?? acquireWait(start)
+  if (ctx === undefined) {
+    ctx = createPromisePoolAcquireContext(driver, config)
+    if (start !== undefined) ctx.startTime = performance.timeOrigin + start
+    channels.acquireStartCh.publish(ctx)
+  }
+  ctx.error = error
+  ctx.poolWaitTime = waitTime
+  channels.acquireFinishCh.publish(ctx)
+}
+
+/**
+ * @param {PoolAcquireCapture} capture
+ * @param {Function} method
+ * @param {object} receiver
+ * @param {ArgumentsLike} args
+ * @returns {unknown}
+ */
+function runWithPoolAcquireCapture (capture, method, receiver, args) {
+  const previous = currentPoolAcquireCapture
+  currentPoolAcquireCapture = capture
+  try {
+    return method.apply(receiver, args)
+  } finally {
+    currentPoolAcquireCapture = previous
+  }
+}
+
+/**
+ * @returns {PoolAcquireCapture|undefined}
+ */
+function getPoolAcquireCapture () {
+  return currentPoolAcquireCapture
+}
+
+/**
+ * @param {PoolAcquireCapture} capture
+ * @param {number} waitTime
+ */
+function setPoolAcquireCaptureWaitTime (capture, waitTime) {
+  capture.waitTime = waitTime
+}
+
+/**
  * @param {Function} method
  * @param {Record<string, unknown>} receiver
  * @param {string} acquireMethod
@@ -434,6 +683,15 @@ function runWithPoolWait (transfer, connection, waitTime, channel, ctx, callback
  */
 function clearPoolWaitTime (connection) {
   if (deferredPoolWaitCount !== 0 && deferredPoolWaitTimes.delete(connection)) deferredPoolWaitCount--
+}
+
+/**
+ * @param {object} connection
+ * @param {number} waitTime
+ */
+function setPoolWaitTime (connection, waitTime) {
+  clearPoolWaitTime(connection)
+  deferPoolWaitTime(deferredPromisePoolWaitTransfer, connection, waitTime)
 }
 
 /**
@@ -620,11 +878,15 @@ module.exports = {
   acquireWait,
   clearPoolWaitTime,
   dispatchesAcquireSynchronously,
+  getPoolAcquireCapture,
   isPoolQueryAcquire,
   reportPoolAcquireError,
   runOutsidePoolQueryAcquire,
   runPoolAcquireError,
   runWithPoolWait,
+  setPoolAcquireCaptureWaitTime,
+  setPoolWaitTime,
+  setPromisePoolConnectionConfig,
   takePoolWaitTime,
   wrapPoolAcquireCarrier,
   wrapPoolClusterGetConnection,
@@ -632,4 +894,7 @@ module.exports = {
   wrapPoolClusterQueryMethod,
   wrapPoolGetConnection,
   wrapPoolQueryMethod,
+  wrapPoolRelease,
+  wrapPromisePoolAcquire,
+  wrapPromisePoolQueryMethod,
 }
