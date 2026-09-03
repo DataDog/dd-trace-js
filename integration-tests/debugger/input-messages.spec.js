@@ -57,7 +57,7 @@ describe('Dynamic Instrumentation', function () {
         const configRemoved = once(t.agent, 'remote-config-responded')
         t.agent.removeRemoteConfig(t.rcConfig.id)
         await configRemoved
-        await t.axios.get(t.breakpoint.url)
+        await t.request(t.breakpoint.url)
         await delay(pollInterval * 2 * 1000)
       } finally {
         t.agent.removeListener('debugger-input', countInput)
