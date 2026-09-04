@@ -5,7 +5,12 @@ const web = require('../../plugins/util/web')
 const { storage } = require('../../../../datadog-core')
 const { isEmpty } = require('../../util')
 const { enable: enableFsPlugin, disable: disableFsPlugin, IAST_MODULE } = require('../rasp/fs-plugin')
-const { incomingHttpRequestStart, incomingHttpRequestEnd, responseWriteHead } = require('../channels')
+const {
+  http2ServerRequestAdopt,
+  incomingHttpRequestStart,
+  incomingHttpRequestEnd,
+  responseWriteHead,
+} = require('../channels')
 const vulnerabilityReporter = require('./vulnerability-reporter')
 const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const overheadController = require('./overhead-controller')
@@ -38,6 +43,7 @@ function enable (config, _tracer) {
   incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
   incomingHttpRequestEnd.subscribe(onIncomingHttpRequestEnd)
   responseWriteHead.subscribe(onResponseWriteHeadCollect)
+  http2ServerRequestAdopt.subscribe(onHttp2ServerRequestAdopt)
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   securityControls.configure(config.iast)
@@ -59,6 +65,7 @@ function disable () {
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(onIncomingHttpRequestEnd)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHeadCollect)
+  if (http2ServerRequestAdopt.hasSubscribers) http2ServerRequestAdopt.unsubscribe(onHttp2ServerRequestAdopt)
   vulnerabilityReporter.stop()
 }
 
@@ -93,12 +100,13 @@ function onIncomingHttpRequestEnd (data) {
     const topContext = web.getContext(data.req)
     const iastContext = iastContextFunctions.getIastContext(store, topContext)
     if (iastContext?.rootSpan) {
-      const storedHeaders = collectedResponseHeaders.get(data.res) || {}
+      const responseKey = data.req
+      const storedHeaders = collectedResponseHeaders.get(responseKey) || {}
 
       iastResponseEnd.publish({ ...data, storedHeaders })
 
       if (!isEmpty(storedHeaders)) {
-        collectedResponseHeaders.delete(data.res)
+        collectedResponseHeaders.delete(responseKey)
       }
 
       const vulnerabilities = iastContext.vulnerabilities
@@ -115,12 +123,24 @@ function onIncomingHttpRequestEnd (data) {
   }
 }
 
-// Response headers are collected here because they are not available in the onIncomingHttpRequestEnd when using Fastify
-function onResponseWriteHeadCollect ({ res, responseHeaders = {} }) {
-  if (!res) return
+/**
+ * @param {{ req: object }} data
+ */
+function onHttp2ServerRequestAdopt ({ req }) {
+  const store = storage('legacy').getStore()
+  const topContext = web.patch(req)
+  const iastContext = iastContextFunctions.getIastContext(store, topContext)
+  if (iastContext) taintTrackingPlugin.taintUrl(req, iastContext)
+}
 
+/**
+ * Response headers are not available from the response at request end when using Fastify.
+ *
+ * @param {{ req: object, responseHeaders?: object }} data
+ */
+function onResponseWriteHeadCollect ({ req, responseHeaders = {} }) {
   if (!isEmpty(responseHeaders)) {
-    collectedResponseHeaders.set(res, responseHeaders)
+    collectedResponseHeaders.set(req, responseHeaders)
   }
 }
 

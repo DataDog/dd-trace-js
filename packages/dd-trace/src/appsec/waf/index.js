@@ -6,7 +6,7 @@ const Limiter = require('../../rate_limiter')
 const { keepTrace } = require('../../priority_sampler')
 const { ASM } = require('../../standalone/product')
 const web = require('../../plugins/util/web')
-const { getActiveRequest } = require('../store')
+const { getActiveRequest, getCanonicalRequest } = require('../store')
 const { updateRateLimitedMetric } = require('../telemetry')
 
 class WafUpdateError extends Error {
@@ -130,6 +130,7 @@ function run (data, req, raspRule, rootSpan) {
       return
     }
   }
+  req = getCanonicalRequest(req)
 
   const wafContext = waf.wafManager.getWAFContext(req)
   const result = wafContext.run(data, raspRule, req, rootSpan)
@@ -147,6 +148,7 @@ function run (data, req, raspRule, rootSpan) {
 }
 
 function disposeContext (req) {
+  req = getCanonicalRequest(req)
   const wafContext = waf.wafManager.getWAFContext(req)
 
   if (wafContext && !wafContext.ddwafContext.disposed) {
