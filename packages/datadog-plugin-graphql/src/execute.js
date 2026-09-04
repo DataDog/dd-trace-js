@@ -5,6 +5,7 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
+const { recordResolveError } = require('./resolve-error')
 const {
   extractErrorIntoSpanEvent,
   getBaseTypeName,
@@ -381,9 +382,15 @@ class GraphQLExecutePlugin extends TracingPlugin {
       instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
 
+    const rootCtx = ctx.ddRootCtx
+    const releaseBeforeExecuteHook = rootCtx?.resolveHooksPending === true
+    if (releaseBeforeExecuteHook) {
+      releaseRootContext(rootCtx, finishPendingFields)
+    } else if (rootCtx?.jitResolveHooksPending === true) {
+      runResolveHooks(rootCtx)
+    }
     this.config.hooks.execute(span, ctx.ddArgs, res)
-
-    releaseRootContext(ctx.ddRootCtx, finishPendingFields)
+    if (!releaseBeforeExecuteHook) releaseRootContext(rootCtx, finishPendingFields)
     span.finish()
   }
 
@@ -429,6 +436,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     field.span = span
     if (rootCtx.config.collapse) {
+      if (field.jitPathKey === false) {
+        field.currentStore.graphqlResolveField = { field }
+      }
       field.nextResolveField = rootCtx.resolveFields
       rootCtx.resolveFields = field
     }
@@ -472,11 +482,28 @@ class GraphQLExecutePlugin extends TracingPlugin {
    * @param {object} field
    * @param {unknown} error
    * @param {unknown} result
+   * @param {boolean} [failed]
    */
-  completeResolveSpan (rootCtx, field, error, result) {
+  completeResolveSpan (rootCtx, field, error, result, failed = false) {
     if (rootCtx.resolveFields !== undefined) {
       if (field.endTime !== REUSED_FIELD_END_TIME) {
         field.endTime = rootCtx.executeSpan._getTime()
+      }
+      if (field.jitPathKey === false) {
+        if (failed) recordResolveError(field, error)
+        if (this.config.hooks.resolve) {
+          field.resolveHookContext = createResolveHookContext(field, field.error, result)
+          rootCtx.resolveHooksPending = true
+        }
+        return
+      }
+      if (field.isSharedJitField) {
+        if (error) recordResolveError(field, error)
+        if (this.config.hooks.resolve) {
+          field.resolveHookContext = createResolveHookContext(field, field.error, result)
+          rootCtx.jitResolveHooksPending = true
+        }
+        return
       }
       this.#completeResolveSpan(field, error, result)
       return
@@ -506,14 +533,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     if (error) span.setTag('error', error)
 
     if (this.config.hooks.resolve) {
-      this.config.hooks.resolve(span, {
-        fieldName: field.fieldName,
-        path: field.pathString,
-        error: error || null,
-        // Any thenable from any realm — keep undefined so the hook doesn't
-        // accidentally see the unresolved promise.
-        result: typeof result?.then === 'function' ? undefined : result,
-      })
+      this.config.hooks.resolve(span, createResolveHookContext(field, error, result))
     }
   }
 }
@@ -529,15 +549,13 @@ function wrapResolve (resolve, isJit = false) {
   if (typeof resolve !== 'function' || (!isJit && patchedResolvers.has(resolve))) return resolve
 
   // Replace a schema wrapper with the execution-local JIT variant instead of nesting both.
-  resolve = originalResolvers.get(resolve) ?? resolve
+  resolve = unwrapResolve(resolve)
   if (isJit) {
     const jitResolver = jitResolvers.get(resolve)
     if (jitResolver !== undefined) return jitResolver
   }
 
   function resolveAsync (source, args, contextValue, info) {
-    const descriptorId = isJit ? arguments[4] : undefined
-
     const hasIastSub = iastResolveCh.hasSubscribers
     const hasResolverSub = resolverStartCh.hasSubscribers
 
@@ -551,10 +569,6 @@ function wrapResolve (resolve, isJit = false) {
       ? legacyStorage.getStore()?.graphqlRootCtx
       : contexts.get(contextValue) ?? legacyStorage.getStore()?.graphqlRootCtx
     if (!rootCtx) return invokeResolver(resolve, this, arguments, isJit)
-
-    if (descriptorId !== undefined) {
-      return resolveJitField(resolve, this, arguments, args, info, rootCtx, rootCtx.jitPlan.fields[descriptorId])
-    }
 
     const infoPath = info?.path
     const config = rootCtx.config
@@ -667,9 +681,15 @@ function wrapResolve (resolve, isJit = false) {
     const startTime = executeSpan._getTime()
     rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, info.variableValues)
 
-    return callInAsyncScope(resolve, this, arguments, field.currentStore, (error, res) => {
-      rootCtx.plugin?.completeResolveSpan(rootCtx, field, error, res)
-    }, isJit)
+    /**
+     * @param {unknown} error
+     * @param {unknown} res
+     * @param {boolean} failed
+     */
+    const finishField = (error, res, failed) => {
+      rootCtx.plugin?.completeResolveSpan(rootCtx, field, error, res, failed)
+    }
+    return callInAsyncScope(resolve, this, arguments, field.currentStore, finishField, isJit)
   }
 
   if (isJit) {
@@ -683,15 +703,25 @@ function wrapResolve (resolve, isJit = false) {
 
 /**
  * @param {GraphQLFieldResolver} resolve
- * @param {unknown} self
- * @param {ArgumentsList} callArguments
- * @param {Record<string, unknown>} args
- * @param {import('graphql').GraphQLResolveInfo} info
+ * @returns {GraphQLFieldResolver}
+ */
+function unwrapResolve (resolve) {
+  return originalResolvers.get(resolve) ?? resolve
+}
+
+/**
  * @param {object} rootCtx
- * @param {JitDescriptor} descriptor
+ * @param {number} descriptorId
+ * @param {GraphQLFieldResolver} resolve
+ * @param {unknown} self
+ * @param {unknown} source
+ * @param {Record<string, unknown>} args
+ * @param {unknown} contextValue
+ * @param {import('graphql').GraphQLResolveInfo} info
  * @returns {unknown}
  */
-function resolveJitField (resolve, self, callArguments, args, info, rootCtx, descriptor) {
+function resolveCompiledJitField (rootCtx, descriptorId, resolve, self, source, args, contextValue, info) {
+  const descriptor = rootCtx.jitPlan.fields[descriptorId]
   const config = rootCtx.config
   const path = config.collapse ? undefined : pathToArray(info.path)
   const pathString = path ? path.join('.') : descriptor.collapsedPath
@@ -718,7 +748,7 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
 
   const depth = config.countListIndices ? descriptor.pathDepth : descriptor.selectionDepth
   if (rootCtx.depthDisabled || (config.depth >= 0 && config.depth < depth)) {
-    return invokeResolver(resolve, self, callArguments, true)
+    return resolve.call(self, source, args, contextValue, info)
   }
 
   let field
@@ -730,7 +760,10 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
   }
   if (field) {
     field.endTime = REUSED_FIELD_END_TIME
-    return callInCollapsedScope(resolve, self, callArguments, field, true)
+    if (legacyStorage.getStore() !== field.currentStore) {
+      legacyStorage.enterWith(field.currentStore)
+    }
+    return resolve.call(self, source, args, contextValue, info)
   }
 
   field = startJitField(
@@ -749,13 +782,15 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
   const finishField = (error, result) => {
     rootCtx.plugin?.completeResolveSpan(rootCtx, field, error, result)
   }
-  return callInAsyncScope(
+  return callCompiledJitInAsyncScope(
     resolve,
     self,
-    callArguments,
+    source,
+    args,
+    contextValue,
+    info,
     field.currentStore,
-    finishField,
-    true
+    finishField
   )
 }
 
@@ -783,6 +818,7 @@ function startJitField (rootCtx, descriptor, pathString, path, variableValues, i
     span: null,
     parentStore: null,
     currentStore: null,
+    isSharedJitField: rootCtx.config.collapse && descriptor.pathDepth !== descriptor.selectionDepth,
     tags: rootCtx.config.collapse && !rootCtx.config.source ? descriptor.tags : undefined,
   }
   if (rootCtx.config.collapse) {
@@ -804,6 +840,18 @@ function startJitField (rootCtx, descriptor, pathString, path, variableValues, i
   const executeSpan = rootCtx.executeSpan
   rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, executeSpan._getTime(), variableValues, parentField)
   return field
+}
+
+/**
+ * @param {object} rootCtx
+ * @param {number} descriptorId
+ * @param {unknown} error
+ */
+function recordJitResolverError (rootCtx, descriptorId, error) {
+  const field = rootCtx?.jitFields?.[descriptorId]
+  if (!field?.isSharedJitField) return
+
+  recordResolveError(field, error)
 }
 
 /**
@@ -1063,6 +1111,53 @@ function callInCollapsedScope (fn, thisArg, args, field, isJit) {
 }
 
 /**
+ * @param {GraphQLFieldResolver} resolve
+ * @param {unknown} self
+ * @param {unknown} source
+ * @param {Record<string, unknown>} args
+ * @param {unknown} contextValue
+ * @param {import('graphql').GraphQLResolveInfo} info
+ * @returns {unknown}
+ */
+function invokeCompiledJitResolver (resolve, self, source, args, contextValue, info) {
+  return resolve.call(self, source, args, contextValue, info)
+}
+
+/**
+ * @param {GraphQLFieldResolver} resolve
+ * @param {unknown} self
+ * @param {unknown} source
+ * @param {Record<string, unknown>} args
+ * @param {unknown} contextValue
+ * @param {import('graphql').GraphQLResolveInfo} info
+ * @param {object} store
+ * @param {(error: unknown, result?: unknown) => void} callback
+ * @returns {unknown}
+ */
+function callCompiledJitInAsyncScope (resolve, self, source, args, contextValue, info, store, callback) {
+  try {
+    const result = legacyStorage.run(
+      store,
+      invokeCompiledJitResolver,
+      resolve,
+      self,
+      source,
+      args,
+      contextValue,
+      info
+    )
+    if (result !== null && typeof result === 'object' && typeof result.then === 'function') {
+      return observeThenable(result, callback)
+    }
+    callback(null, result)
+    return result
+  } catch (error) {
+    callback(error)
+    throw error
+  }
+}
+
+/**
  * Runs the resolver inside `store`, including any code after an internal
  * `await`. A `.then()` the caller attaches afterward runs outside `store`.
  *
@@ -1070,7 +1165,7 @@ function callInCollapsedScope (fn, thisArg, args, field, isJit) {
  * @param {unknown} thisArg
  * @param {ArgumentsList} args
  * @param {object} store
- * @param {(error: unknown, result?: unknown) => void} callback
+ * @param {(error: unknown, result?: unknown, failed?: boolean) => void} callback
  * @param {boolean} isJit
  * @returns {unknown}
  */
@@ -1083,7 +1178,7 @@ function callInAsyncScope (fn, thisArg, args, store, callback, isJit) {
     callback(null, result)
     return result
   } catch (error) {
-    callback(error)
+    callback(error, undefined, true)
     throw error
   }
 }
@@ -1104,7 +1199,7 @@ function callInAsyncScope (fn, thisArg, args, store, callback, isJit) {
  * get its real return value, while the settlement callbacks pass through us.
  *
  * @param {Thenable} thenable
- * @param {(error: unknown, result?: unknown) => void} callback
+ * @param {(error: unknown, result?: unknown, failed?: boolean) => void} callback
  * @returns {Thenable}
  */
 function observeThenable (thenable, callback) {
@@ -1127,7 +1222,7 @@ function observeThenable (thenable, callback) {
          * @param {unknown} error
          */
         error => {
-          callback(error)
+          callback(error, undefined, true)
           if (onRejected) return onRejected(error)
           throw error
         }
@@ -1403,7 +1498,15 @@ function tagExecutionErrors (config, span, errors) {
 function releaseRootContext (rootCtx, finishPendingFields) {
   const endTime = rootCtx.executeSpan._getTime()
   if (rootCtx.resolveFields !== undefined) {
+    if (rootCtx.resolveHooksPending || rootCtx.jitResolveHooksPending) {
+      runResolveHooks(rootCtx)
+    }
     for (let field = rootCtx.resolveFields; field; field = field.nextResolveField) {
+      const holder = field.currentStore?.graphqlResolveField
+      if (holder?.field === field) {
+        holder.field = undefined
+        field.currentStore.graphqlResolveField = undefined
+      }
       field.span.finish(field.endTime > PENDING_FIELD_END_TIME ? field.endTime : endTime)
     }
   } else if (finishPendingFields && rootCtx.fields !== undefined) {
@@ -1415,6 +1518,37 @@ function releaseRootContext (rootCtx, finishPendingFields) {
   // Resolver-created async resources retain copied stores that all share this owner.
   for (const key of Object.keys(rootCtx)) {
     rootCtx[key] = undefined
+  }
+}
+
+/**
+ * @param {object} rootCtx
+ */
+function runResolveHooks (rootCtx) {
+  rootCtx.resolveHooksPending = undefined
+  rootCtx.jitResolveHooksPending = undefined
+
+  for (let field = rootCtx.resolveFields; field; field = field.nextResolveField) {
+    if (field.resolveHookContext === undefined) continue
+
+    rootCtx.config.hooks.resolve(field.span, field.resolveHookContext)
+    field.resolveHookContext = undefined
+  }
+}
+
+/**
+ * @param {object} field
+ * @param {unknown} error
+ * @param {unknown} result
+ * @returns {{ fieldName: string, path: string, error: unknown, result: unknown }}
+ */
+function createResolveHookContext (field, error, result) {
+  return {
+    fieldName: field.fieldName,
+    path: field.pathString,
+    error: error || null,
+    // Any thenable from any realm must stay undefined so the hook does not see an unresolved promise.
+    result: error || typeof result?.then === 'function' ? undefined : result,
   }
 }
 
@@ -1446,5 +1580,8 @@ function addVariableTags (config, span, variableValues) {
 
 module.exports = GraphQLExecutePlugin
 module.exports.readJitDefaultInScope = readJitDefaultInScope
-module.exports.wrapJitResolve = wrapJitResolve
+module.exports.recordJitResolverError = recordJitResolverError
+module.exports.resolveCompiledJitField = resolveCompiledJitField
 module.exports.resolveJitDefaultInvocation = resolveJitDefaultInvocation
+module.exports.unwrapJitResolve = unwrapResolve
+module.exports.wrapJitResolve = wrapJitResolve

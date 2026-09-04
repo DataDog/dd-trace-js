@@ -20,12 +20,59 @@ const identifierPattern = /^[$A-Z_a-z][$\w]*$/
 
 module.exports = {
   awaitContextCallback,
+  awaitContextCallbackAtFunctionStart,
+  awaitContextCallbackAtTryStart,
   configureGraphqlJitCompileObject,
   configureGraphqlJitDeferredField,
   configureGraphqlJitExecute,
   configureGraphqlJitRuntime,
   configureMercuriusRequest,
   waitForAsyncEnd,
+}
+
+/**
+ * Awaits an optional context callback at the start of the matched node's enclosing async function.
+ *
+ * @param {Parameters<typeof awaitContextCallback>[0]} state
+ * @param {import('estree').Node} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ * @returns {void}
+ */
+function awaitContextCallbackAtFunctionStart (state, node, _parent, ancestry) {
+  let enclosingFunction = functionTypes.has(node.type)
+    ? node
+    : ancestry.find(ancestor => functionTypes.has(ancestor.type))
+  let callbackAncestry = ancestry
+
+  if (enclosingFunction === node) {
+    callbackAncestry = [node, ...ancestry]
+    if (!node.async) {
+      // Function queries create a synchronous trace wrapper before custom transforms run.
+      const [wrappedFunction] = query(node,
+        'VariableDeclarator[id.name="__apm$traced"] > ArrowFunctionExpression > BlockStatement > ' +
+        'VariableDeclaration > VariableDeclarator[id.name="__apm$wrapped"] > ' +
+        ':matches(FunctionDeclaration, FunctionExpression)[async=true]')
+      if (wrappedFunction) {
+        enclosingFunction = wrappedFunction
+        callbackAncestry.unshift(wrappedFunction)
+      }
+    }
+  }
+  assert(enclosingFunction?.async && enclosingFunction.body?.type === 'BlockStatement',
+    'awaitContextCallbackAtFunctionStart: expected an enclosing async function with a block body')
+
+  const generatedCallback = createAwaitedContextCallback(
+    state,
+    enclosingFunction.body,
+    callbackAncestry,
+    'awaitContextCallbackAtFunctionStart'
+  )
+  if (!generatedCallback) return
+
+  let insertionIndex = 0
+  while (typeof enclosingFunction.body.body[insertionIndex]?.directive === 'string') insertionIndex++
+  enclosingFunction.body.body.splice(insertionIndex, 0, ...generatedCallback.callbackStatements)
 }
 
 /**
@@ -37,7 +84,8 @@ module.exports = {
  * @param {{
  *   transformOptions?: {
  *     callbackArgumentNames?: string[],
- *     callbackName?: string
+ *     callbackName?: string,
+ *     callbackThis?: boolean
  *   }
  * }} state
  * @param {import('estree').IfStatement} node
@@ -49,11 +97,74 @@ function awaitContextCallback (state, node, _parent, ancestry) {
   assert(node.type === 'IfStatement' && node.consequent?.type === 'BlockStatement',
     'awaitContextCallback: expected an if statement with a block body')
 
-  const { callbackArgumentNames = [], callbackName } = state.transformOptions ?? {}
+  const originalStatements = node.consequent.body
+  const generatedCallback = createAwaitedContextCallback(
+    state,
+    node.consequent,
+    ancestry,
+    'awaitContextCallback'
+  )
+  if (!generatedCallback) return
 
-  assert(identifierPattern.test(callbackName), 'awaitContextCallback: callbackName must be an identifier')
-  assert(callbackArgumentNames.every(name => identifierPattern.test(name)),
-    'awaitContextCallback: callbackArgumentNames must be identifiers')
+  const { callbackStatements, callbackVariable } = generatedCallback
+  const callbackBranch = parse(`
+    if (typeof ${callbackVariable} === 'function') {
+    } else {
+    }
+  `).body[0]
+  callbackBranch.consequent.body.push(clone(node))
+  callbackBranch.alternate = {
+    type: 'BlockStatement',
+    body: originalStatements,
+  }
+  node.consequent.body = [...callbackStatements, callbackBranch]
+}
+
+/**
+ * Awaits an optional context callback before entering the matched node's enclosing try block.
+ *
+ * @param {Parameters<typeof awaitContextCallback>[0]} state
+ * @param {import('estree').Node} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ * @returns {void}
+ */
+function awaitContextCallbackAtTryStart (state, node, _parent, ancestry) {
+  let tryStatement = node.type === 'TryStatement' ? node : undefined
+  for (const ancestor of ancestry) {
+    if (tryStatement || functionTypes.has(ancestor.type)) break
+    if (ancestor.type === 'TryStatement') tryStatement = ancestor
+  }
+  assert(tryStatement?.block?.type === 'BlockStatement',
+    'awaitContextCallbackAtTryStart: expected an enclosing try statement with a block body')
+
+  const generatedCallback = createAwaitedContextCallback(
+    state,
+    tryStatement.block,
+    ancestry,
+    'awaitContextCallbackAtTryStart'
+  )
+  if (!generatedCallback) return
+
+  tryStatement.block.body.unshift(...generatedCallback.callbackStatements)
+}
+
+/**
+ * @param {Parameters<typeof awaitContextCallback>[0]} state
+ * @param {import('estree').BlockStatement} insertionTarget
+ * @param {import('estree').Node[]} ancestry
+ * @param {string} transformName
+ * @returns {{
+ *   callbackStatements: import('estree').Statement[],
+ *   callbackVariable: string
+ * }|undefined}
+ */
+function createAwaitedContextCallback (state, insertionTarget, ancestry, transformName) {
+  const { callbackArgumentNames = [], callbackName, callbackThis = false } = state.transformOptions ?? {}
+
+  assert(identifierPattern.test(callbackName), `${transformName}: callbackName must be an identifier`)
+  assert(Array.isArray(callbackArgumentNames) && callbackArgumentNames.every(name => identifierPattern.test(name)),
+    `${transformName}: callbackArgumentNames must be identifiers`)
 
   let enclosingFunction
   let hasTraceWrapper = false
@@ -76,35 +187,32 @@ function awaitContextCallback (state, node, _parent, ancestry) {
     hasTraceWrapper ||= hasContextBinding && hasTracedBinding
   }
 
-  assert(enclosingFunction?.async, 'awaitContextCallback: expected an enclosing async function')
-  assert(hasTraceWrapper, 'awaitContextCallback: expected an enclosing trace wrapper')
+  assert(enclosingFunction?.async, `${transformName}: expected an enclosing async function`)
+  assert(hasTraceWrapper, `${transformName}: expected an enclosing trace wrapper`)
 
   const callbackVariable = `__apm$${callbackName}`
-  if (query(node, `[id.name="${callbackVariable}"]`).length > 0) {
-    return
-  }
+  if (query(insertionTarget, `[id.name="${callbackVariable}"]`).length > 0) return
 
-  const originalStatements = node.consequent.body
+  const callbackArguments = callbackArgumentNames.join(', ')
+  const callbackInvocation = callbackThis
+    ? `${callbackVariable}.call(this${callbackArguments ? `, ${callbackArguments}` : ''})`
+    : `${callbackVariable}(${callbackArguments})`
   const callbackStatements = parse(`
     async function wrapper () {
-      const ${callbackVariable} = __apm$ctx.${callbackName};
-      if (typeof ${callbackVariable} === 'function') {
-        try {
-          await ${callbackVariable}(${callbackArgumentNames.join(', ')});
-        } catch {}
-        if (true) {}
-      } else {
-      }
+      let ${callbackVariable};
+      try {
+        ${callbackVariable} = __apm$ctx.${callbackName};
+        if (typeof ${callbackVariable} === 'function') {
+          await ${callbackInvocation};
+        }
+      } catch {}
     }
   `).body[0].body.body
 
-  const callbackBranch = callbackStatements[1]
-  const recheckedBranch = callbackBranch.consequent.body[1]
-  recheckedBranch.test = clone(node.test)
-  recheckedBranch.consequent.body.push(...clone(originalStatements))
-  recheckedBranch.alternate = clone(node.alternate)
-  callbackBranch.alternate.body.push(...originalStatements)
-  node.consequent.body = callbackStatements
+  return {
+    callbackStatements,
+    callbackVariable,
+  }
 }
 
 /**
@@ -348,6 +456,12 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
 function configureGraphqlJitDeferredField (_state, node) {
   const declarations = query(node, 'VariableDeclaration:has(VariableDeclarator[id.name="resolverCall"])')
   const resolverCalls = query(node, 'VariableDeclarator[id.name="resolverCall"]')
+  const executionErrorDeclarations = query(
+    node,
+    'VariableDeclaration:has(VariableDeclarator[id.name="executionError"])'
+  )
+  const executionErrors = query(node, 'VariableDeclarator[id.name="executionError"]')
+  const emptyErrors = query(node, 'VariableDeclarator[id.name="emptyError"]')
   assert.strictEqual(
     declarations.length,
     1,
@@ -358,6 +472,16 @@ function configureGraphqlJitDeferredField (_state, node) {
     1,
     'configureGraphqlJitDeferredField: resolver call not found'
   )
+  assert.strictEqual(
+    executionErrorDeclarations.length,
+    1,
+    'configureGraphqlJitDeferredField: execution error declaration not found'
+  )
+  assert.strictEqual(executionErrors.length, 1, 'configureGraphqlJitDeferredField: execution error not found')
+  assert.strictEqual(emptyErrors.length, 1, 'configureGraphqlJitDeferredField: empty error not found')
+
+  const [resolverCall] = resolverCalls
+  assertGraphqlJitResolverCall(resolverCall.init)
 
   const [descriptor] = parse(`
     const ddTraceDescriptorId = context.ddTraceRuntime?.registerField(context, responsePath, {
@@ -368,18 +492,58 @@ function configureGraphqlJitDeferredField (_state, node) {
     })
   `).body
   assert(
-    insertBeforeStatement(node.body, declarations[0], [descriptor]),
+    insertBeforeStatement(node.body, executionErrorDeclarations[0], [descriptor]),
     'configureGraphqlJitDeferredField: could not insert descriptor'
   )
 
-  const [resolverCall] = resolverCalls
+  executionErrors[0].init.arguments[4] = parse(`
+    ddTraceDescriptorId === undefined
+      ? 'err'
+      : '(__context.ddTrace?.jitRuntime.recordResolverError(__context.ddTrace, ' +
+        ddTraceDescriptorId + ', err), err)'
+  `).body[0].expression
+  emptyErrors[0].init.arguments[3] = parse(`
+    ddTraceDescriptorId === undefined
+      ? '""'
+      : '(__context.ddTrace?.jitRuntime.recordResolverError(__context.ddTrace, ' +
+        ddTraceDescriptorId + ', err), "")'
+  `).body[0].expression
+
   const replacement = parse(`
-    DD_CALL.slice(0, -1) +
-      (ddTraceDescriptorId === undefined ? '' : ', ' + ddTraceDescriptorId) +
-      ')'
+    context.ddTraceRuntime === undefined
+      ? DD_CALL
+      : context.ddTraceRuntime.compileResolverCall(context, DD_CALL, resolverName, ddTraceDescriptorId)
   `).body[0].expression
   replaceIdentifier(replacement, 'DD_CALL', resolverCall.init)
   resolverCall.init = replacement
+}
+
+/**
+ * @param {import('estree').Expression | null} source
+ */
+function assertGraphqlJitResolverCall (source) {
+  assert.strictEqual(source?.type, 'TemplateLiteral', 'configureGraphqlJitDeferredField: unsupported resolver call')
+
+  const { expressions, quasis } = source
+  assert.ok(expressions.length >= 2, 'configureGraphqlJitDeferredField: resolver call expressions not found')
+  assert.ok(quasis.length >= 3, 'configureGraphqlJitDeferredField: resolver call segments not found')
+  assert.strictEqual(
+    expressions[0].name,
+    'GLOBAL_EXECUTION_CONTEXT',
+    'configureGraphqlJitDeferredField: execution context not found'
+  )
+  assert.strictEqual(
+    quasis[1].value.raw,
+    '.resolvers.',
+    'configureGraphqlJitDeferredField: resolver map access not found'
+  )
+  assert.strictEqual(
+    expressions[1].name,
+    'resolverName',
+    'configureGraphqlJitDeferredField: resolver name not found'
+  )
+  assert.ok(quasis[2].value.raw.startsWith('('), 'configureGraphqlJitDeferredField: resolver call not found')
+  assert.ok(quasis.at(-1).value.raw.endsWith(')'), 'configureGraphqlJitDeferredField: resolver call end not found')
 }
 
 /**

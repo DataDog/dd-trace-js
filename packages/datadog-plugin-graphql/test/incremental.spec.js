@@ -114,6 +114,105 @@ describe('GraphQL incremental execution', () => {
       await assertion
     })
 
+    it('records reused resolver errors from the GraphQL Tools executor', async () => {
+      const operationName = 'ReusedResolverError'
+      const error = new Error('GraphQL Tools resolver failed')
+      const Item = new graphql.GraphQLObjectType({
+        name: 'GraphQLToolsResolverErrorItem',
+        fields: {
+          value: {
+            type: graphql.GraphQLString,
+            /**
+             * @param {{ error?: Error, value?: string }} source
+             */
+            resolve (source) {
+              if (source.error) throw source.error
+              return source.value
+            },
+          },
+        },
+      })
+      const schema = new graphql.GraphQLSchema({
+        query: new graphql.GraphQLObjectType({
+          name: 'GraphQLToolsResolverErrorQuery',
+          fields: {
+            items: {
+              type: new graphql.GraphQLList(Item),
+              resolve: () => [{ value: 'first' }, { error }],
+            },
+          },
+        }),
+      })
+      const document = graphql.parse(`query ${operationName} { items { value } }`)
+
+      /** @param {Array<Array<object>>} traces */
+      const assertTrace = traces => {
+        let span
+        for (const candidate of traces[0]) {
+          if (candidate.meta?.['graphql.field.path'] === 'items.*.value') {
+            span = candidate
+            break
+          }
+        }
+
+        assert.ok(span)
+        assert.strictEqual(span.error, 1)
+        assert.strictEqual(span.meta[ERROR_MESSAGE], error.message)
+      }
+
+      const [result] = await Promise.all([
+        execute({ schema, document }),
+        agent.assertSomeTraces(assertTrace, { spanResourceMatch: new RegExp(operationName) }),
+      ])
+
+      assert.strictEqual(result.data.items[0].value, 'first')
+      assert.strictEqual(result.data.items[1].value, null)
+      assert.strictEqual(result.errors.length, 1)
+    })
+
+    it('does not record a pre-located non-null error on its reused collapsed span', async () => {
+      const operationName = 'PreLocatedNonNullResolverError'
+      const error = Object.assign(new Error('pre-located non-null failure'), { path: ['foreign'] })
+      const Item = new graphql.GraphQLObjectType({
+        name: 'PreLocatedNonNullResolverErrorItem',
+        fields: {
+          value: {
+            type: new graphql.GraphQLNonNull(graphql.GraphQLString),
+            /** @param {{ error?: Error, value?: string }} source */
+            resolve (source) {
+              if (source.error) throw source.error
+              return source.value
+            },
+          },
+        },
+      })
+      const schema = new graphql.GraphQLSchema({
+        query: new graphql.GraphQLObjectType({
+          name: 'PreLocatedNonNullResolverErrorQuery',
+          fields: {
+            items: {
+              type: new graphql.GraphQLList(Item),
+              resolve: () => [{ value: 'first' }, { error }],
+            },
+          },
+        }),
+      })
+      const document = graphql.parse(`query ${operationName} { items { value } }`)
+
+      const [result] = await Promise.all([
+        execute({ schema, document }),
+        agent.assertSomeTraces(traces => {
+          const span = traces[0].find(span => span.meta?.['graphql.field.path'] === 'items.*.value')
+
+          assert.ok(span)
+          assert.strictEqual(span.error, 0)
+          assert.strictEqual(span.meta[ERROR_MESSAGE], undefined)
+        }),
+      ])
+
+      assert.deepStrictEqual(result.errors[0].path, ['foreign'])
+    })
+
     it('finishes once when a deferred iterator is cancelled repeatedly', async () => {
       const operationName = 'CancelledDeferred'
       const deferred = createDeferredOperation(operationName)

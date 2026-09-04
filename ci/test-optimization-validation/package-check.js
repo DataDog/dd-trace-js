@@ -88,7 +88,7 @@ function getFailureDetail (result) {
 }
 
 function sanitizeLine (value) {
-  return sanitizeString(String(value)).replaceAll(/\p{Cc}+/gu, ' ').trim().slice(0, 1000).replace(/[.]+$/, '')
+  return sanitizeString(String(value)).replaceAll(/\p{Cc}+/gu, ' ').trim().slice(0, 1000).replace(/\.+$/, '')
 }
 
 module.exports = { checkInstalledPackage, getInstalledPackageFailure }

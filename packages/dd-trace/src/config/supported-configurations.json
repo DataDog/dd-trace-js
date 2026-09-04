@@ -8,18 +8,28 @@
         "default": null
       }
     ],
+    "DD_AGENTLESS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "description": "Enable agentless mode for supported features and disable Agent-only features."
+      }
+    ],
     "DD_AGENTLESS_LOG_SUBMISSION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "description": "Submit supported logger output directly to the Datadog logs intake."
       }
     ],
     "DD_AGENTLESS_LOG_SUBMISSION_URL": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "description": "Override the automatic log submission intake URL."
       }
     ],
     "_DD_APM_TRACING_AGENTLESS_ENABLED": [
@@ -1922,6 +1932,14 @@
       }
     ],
     "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_TEST_FAILURE_VIDEOS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

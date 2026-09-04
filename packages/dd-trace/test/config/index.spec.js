@@ -357,6 +357,41 @@ describe('Config', () => {
     assert.strictEqual(config.lookup, lookup)
   })
 
+  it('should preserve RegExp sampling rules in the programmatic configuration snapshot', () => {
+    const name = /^health/
+    const service = /^web/
+    const resource = /^GET/
+    const tag = /^2/
+    const samplingRules = [{ name, service, resource, tags: { status: tag }, sampleRate: 0 }]
+    const config = getConfig({ samplingRules })
+
+    assert.ok(config.samplingRules[0].name instanceof RegExp)
+    assert.ok(config.samplingRules[0].service instanceof RegExp)
+    assert.ok(config.samplingRules[0].resource instanceof RegExp)
+    assert.ok(config.samplingRules[0].tags.status instanceof RegExp)
+    assert.notStrictEqual(config.samplingRules[0].name, name)
+    assert.notStrictEqual(config.samplingRules[0].service, service)
+    assert.notStrictEqual(config.samplingRules[0].resource, resource)
+    assert.notStrictEqual(config.samplingRules[0].tags.status, tag)
+
+    const activeName = config.samplingRules[0].name
+    activeName.lastIndex = 2
+
+    config.setRemoteConfig({ samplingRules: [{ name: 'remote', sampleRate: 1 }] })
+    config.setRemoteConfig(null)
+
+    assert.ok(config.samplingRules[0].name instanceof RegExp)
+    assert.ok(config.samplingRules[0].service instanceof RegExp)
+    assert.ok(config.samplingRules[0].resource instanceof RegExp)
+    assert.ok(config.samplingRules[0].tags.status instanceof RegExp)
+    assert.notStrictEqual(config.samplingRules[0].name, activeName)
+    assert.strictEqual(config.samplingRules[0].name.lastIndex, 0)
+    assert.strictEqual(samplingRules[0].name, name)
+    assert.strictEqual(samplingRules[0].service, service)
+    assert.strictEqual(samplingRules[0].resource, resource)
+    assert.strictEqual(samplingRules[0].tags.status, tag)
+  })
+
   it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
     process.env.DD_SERVICE = 'service'
     process.env.OTEL_SERVICE_NAME = 'otel_service'
@@ -430,6 +465,37 @@ describe('Config', () => {
         extract: ['b3', 'datadog'],
       },
     })
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const noop = require('../../src/noop/proxy')
+    assert.strictEqual(indexFile, noop)
+  })
+
+  it('should keep the real proxy when agentless mode disables the OTel trace exporter', () => {
+    process.env.DD_AGENTLESS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const proxy = require('../../src/proxy')
+    assert.strictEqual(indexFile, proxy)
+  })
+
+  it('should keep the real proxy when tracing-only agentless mode disables the OTel trace exporter', () => {
+    process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const proxy = require('../../src/proxy')
+    assert.strictEqual(indexFile, proxy)
+  })
+
+  it('should keep the no-op proxy when tracing is explicitly disabled in agentless mode', () => {
+    process.env.DD_AGENTLESS_ENABLED = 'true'
+    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
@@ -665,19 +731,100 @@ describe('Config', () => {
     })
   })
 
-  it('should correctly map OTEL_RESOURCE_ATTRIBUTES', () => {
-    process.env.OTEL_RESOURCE_ATTRIBUTES =
-      'deployment.environment=test1,service.name=test2,service.version=5,foo=bar1,baz=qux1'
-    const config = getConfig()
+  describe('OTEL_RESOURCE_ATTRIBUTES mapping', () => {
+    it('maps deployment.environment as a fallback', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES =
+        'deployment.environment=legacy,service.name=test2,service.version=5,foo=bar1,baz=qux1'
 
-    assertObjectContains(config, {
-      env: 'test1',
-      service: 'test2',
-      version: '5',
-      tags: {
-        foo: 'bar1',
-        baz: 'qux1',
-      },
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        env: 'legacy',
+        service: 'test2',
+        version: '5',
+        tags: {
+          foo: 'bar1',
+          baz: 'qux1',
+        },
+      })
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
+    })
+
+    it('maps deployment.environment.name', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES =
+        'deployment.environment.name=stable,service.name=test2,service.version=5,foo=bar1,baz=qux1'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        env: 'stable',
+        service: 'test2',
+        version: '5',
+        tags: {
+          foo: 'bar1',
+          baz: 'qux1',
+        },
+      })
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
+    })
+
+    it('prefers deployment.environment.name when it precedes deployment.environment', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES =
+        'deployment.environment.name=stable,deployment.environment=legacy,' +
+        'service.name=test2,service.version=5,foo=bar1,baz=qux1'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        env: 'stable',
+        service: 'test2',
+        version: '5',
+        tags: {
+          foo: 'bar1',
+          baz: 'qux1',
+        },
+      })
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
+    })
+
+    it('prefers deployment.environment.name when it follows deployment.environment', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES =
+        'deployment.environment=legacy,deployment.environment.name=stable,' +
+        'service.name=test2,service.version=5,foo=bar1,baz=qux1'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        env: 'stable',
+        service: 'test2',
+        version: '5',
+        tags: {
+          foo: 'bar1',
+          baz: 'qux1',
+        },
+      })
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
+    })
+
+    it('keeps DD_ENV precedence over deployment environment resource attributes', () => {
+      process.env.DD_ENV = 'datadog'
+      process.env.OTEL_RESOURCE_ATTRIBUTES =
+        'deployment.environment=legacy,deployment.environment.name=stable,foo=bar1'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        env: 'datadog',
+        tags: {
+          foo: 'bar1',
+        },
+      })
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
+      assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
     })
   })
 
@@ -3212,6 +3359,17 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
+  it('should keep remote configuration disabled in AWS Lambda MicroVM agentless mode', () => {
+    process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123456789012:function:test'
+    process.env.DD_AGENTLESS_ENABLED = 'true'
+    process.env.DD_API_KEY = 'api-key'
+    process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'true'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
+  })
+
   describe('graphql plugin config env vars', () => {
     it('parses the defaults onto the config object', () => {
       const config = getConfig()
@@ -3691,6 +3849,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+      delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
       delete process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
@@ -3818,6 +3977,20 @@ describe('Config', () => {
         process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
+      })
+      it('should disable test failure videos by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED, undefined)
+      })
+      it('should enable test failure videos if DD_TEST_FAILURE_VIDEOS_ENABLED is true', () => {
+        process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED, true)
+      })
+      it('should disable test failure videos if DD_TEST_FAILURE_VIDEOS_ENABLED is false', () => {
+        process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED, false)
       })
       it('should leave the Test Management report setting unset by default', () => {
         const config = getConfig(options)
@@ -5093,16 +5266,197 @@ rules:
     })
   })
 
-  context('agentless APM span intake', () => {
+  context('agentless mode', () => {
     it('should not enable agentless exporter by default', () => {
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
+    })
+
+    it('should configure all supported features for agentless mode', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'api-key'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'true'
+      process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+      process.env.DD_DATA_STREAMS_ENABLED = 'true'
+      process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+      process.env.DD_CRASHTRACKING_ENABLED = 'true'
+      process.env.DD_PROFILING_ENABLED = 'true'
+      process.env.DD_PROFILING_EXPORTERS = 'agent'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+      process.env.DD_METRICS_OTEL_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+      const config = getConfig()
+
+      assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
+      assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED, true)
+      assert.strictEqual(config.llmobs.agentlessEnabled, true)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
+      assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, true)
+      assert.strictEqual(config.runtimeMetrics.enabled, false)
+      assert.strictEqual(config.dsmEnabled, false)
+      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
+      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, [])
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+    })
+
+    it('should preserve an explicit trace sample rate', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_TRACE_SAMPLE_RATE = '0.5'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.sampleRate, 0.5)
+      assert.strictEqual(config.sampler.sampleRate, 0.5)
+    })
+
+    it('should preserve an explicit OTel trace sampler', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.OTEL_TRACES_SAMPLER = 'traceidratio'
+      process.env.OTEL_TRACES_SAMPLER_ARG = '0.25'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.sampleRate, 0.25)
+    })
+
+    it('should not infer an OTel sample rate from a disabled trace exporter', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.sampleRate, undefined)
+    })
+
+    it('should preserve explicit OTel span metrics', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+    })
+
+    it('should enable direct log submission when no log transport is configured', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    })
+
+    it('should preserve explicit OTel logs instead of enabling direct log submission', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+    })
+
+    it('should prefer explicit direct log submission when both log transports are enabled', () => {
+      process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    })
+
+    it('should preserve explicitly disabled direct log submission', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    })
+
+    it('should disable log injection when tracing-only agentless mode keeps OTEL logs enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+      assert.strictEqual(config.logInjection, false)
+    })
+
+    it('should disable Dynamic Instrumentation without an API key', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+      const config = getConfig()
+
+      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+    })
+
+    it('should preserve profiling when it does not use the Agent', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_PROFILING_ENABLED = 'true'
+      process.env.DD_PROFILING_EXPORTERS = 'file'
+      const config = getConfig()
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, ['file'])
+    })
+
+    it('should retain DD_API_KEY for direct HTTPS products when the Agent uses remote HTTP', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'test-api-key'
+      process.env.DD_TRACE_AGENT_URL = 'http://agent.example:8126'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_API_KEY, 'test-api-key')
+    })
+
+    for (const exporter of ['datadog', 'jest_worker']) {
+      it(`should preserve the Test Optimization ${exporter} exporter and the OTLP traces exporter`, () => {
+        process.env.DD_AGENTLESS_ENABLED = 'true'
+        process.env.OTEL_TRACES_EXPORTER = 'otlp'
+        const config = getConfig({
+          isCiVisibility: true,
+          experimental: { exporter },
+        })
+
+        assert.strictEqual(config.experimental.exporter, exporter)
+        assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
+        assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      })
+    }
+
+    it('should not enable Dynamic Instrumentation unless configured by the customer', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
     })
 
     it('should enable agentless exporter when _DD_APM_TRACING_AGENTLESS_ENABLED is true', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
       assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
     })
 
     it('should disable rate limiting when agentless is enabled', () => {
@@ -5123,10 +5477,12 @@ rules:
       assert.strictEqual(config.reportHostname, true)
     })
 
-    it('should clear sampling rules when agentless is enabled', () => {
+    it('should preserve the trace sample rate and clear sampling rules when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_TRACE_SAMPLE_RATE = '0.5'
       const config = getConfig()
       assert.deepStrictEqual(config.sampler.rules, [])
+      assert.strictEqual(config.sampler.sampleRate, 0.5)
     })
 
     it('should disable 128-bit trace ID generation when agentless is enabled', () => {

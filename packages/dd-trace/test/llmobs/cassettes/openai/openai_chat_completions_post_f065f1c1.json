@@ -1,0 +1,49 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "506"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"temperature\":0,\"messages\":[{\"role\":\"system\",\"content\":\"You are a helpful assistant\"},{\"role\":\"user\",\"content\":\"What is the weather in Tokyo?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"weather\",\"description\":\"Get the weather in a given location\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"location\"]}}}],\"tool_choice\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 02 Sep 2026 17:25:50 GMT",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a34e375d6a06de97-EWR",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "541",
+      "openai-project": "proj_6cMiry5CHgK3zKotG0LtMb9H",
+      "openai-version": "2020-10-01",
+      "x-openai-proxy-wasm": "v0.1",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999982",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_494f63dce2184029925bb6e421835c31",
+      "set-cookie": "__cf_bm=sy6kLJDg3kJi5NcZOookDhdGnbceo9rMncRuHuhdOXQ-1788369950.3098016-1.0.1.1-e_xurW1sdJJ65LlpnZrYksiyeqSQCH4Goo7pFBY05shSWrT6OQTNLO3oslW.XrwQi.4SmTeIbR269XfuZvdwe4Cuh24ZYXR4YO4etm3G1HR2BzYFPAS4VakltBG8RTuk; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 02 Sep 2026 17:55:50 GMT",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "data: {\"id\":\"chatcmpl-EJj0Y17f2OopCgVoDbG2IEzhJZeGW\",\"object\":\"chat.completion.chunk\",\"created\":1788369950,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_73c73d24da\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"index\":0,\"id\":\"call_QFJDNJKbeCGDAokS9EfcB8Ks\",\"type\":\"function\",\"function\":{\"name\":\"weather\",\"arguments\":\"\"}}],\"refusal\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"gzErBBg1\"}\n\ndata: {\"id\":\"chatcmpl-EJj0Y17f2OopCgVoDbG2IEzhJZeGW\",\"object\":\"chat.completion.chunk\",\"created\":1788369950,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_73c73d24da\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"rhgLD5kObzFDIz\"}\n\ndata: {\"id\":\"chatcmpl-EJj0Y17f2OopCgVoDbG2IEzhJZeGW\",\"object\":\"chat.completion.chunk\",\"created\":1788369950,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_73c73d24da\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"location\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"WPzQuvZWC\"}\n\ndata: {\"id\":\"chatcmpl-EJj0Y17f2OopCgVoDbG2IEzhJZeGW\",\"object\":\"chat.completion.chunk\",\"created\":1788369950,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_73c73d24da\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\":\\\"\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"KA7xYm4lHJON\"}\n\ndata: {\"id\":\"chatcmpl-EJj0Y17f2OopCgVoDbG2IEzhJZeGW\",\"object\":\"chat.completion.chunk\",\"created\":1788369950,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_73c73d24da\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"Tokyo\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"J8LtKNnSik7x\"}\n\ndata: {\"id\":\"chatcmpl-EJj0Y17f2OopCgVoDbG2IEzhJZeGW\",\"object\":\"chat.completion.chunk\",\"created\":1788369950,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_73c73d24da\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"}\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"NaE8FqoLfu8KH5\"}\n\ndata: {\"id\":\"chatcmpl-EJj0Y17f2OopCgVoDbG2IEzhJZeGW\",\"object\":\"chat.completion.chunk\",\"created\":1788369950,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_73c73d24da\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"usage\":null,\"obfuscation\":\"vAh2XJNfWsUJpFV\"}\n\ndata: {\"id\":\"chatcmpl-EJj0Y17f2OopCgVoDbG2IEzhJZeGW\",\"object\":\"chat.completion.chunk\",\"created\":1788369950,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_73c73d24da\",\"choices\":[],\"usage\":{\"prompt_tokens\":66,\"completion_tokens\":13,\"total_tokens\":79,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0}},\"obfuscation\":\"8WXmsBiFRM\"}\n\ndata: [DONE]\n\n"
+  }
+}

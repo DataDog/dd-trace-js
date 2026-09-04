@@ -102,6 +102,61 @@ describe('Test Optimization validation initialization', () => {
     })
   })
 
+  it('selects the agentless exporter when global agentless mode is enabled', () => {
+    const tracer = {
+      init: sinon.stub(),
+      use: sinon.stub(),
+    }
+    const values = {
+      DD_AGENTLESS_ENABLED: true,
+      DD_API_KEY: 'api-key',
+    }
+
+    proxyquire('../../../../ci/init', {
+      '../packages/dd-trace': tracer,
+      '../packages/dd-trace/src/config/helper': {
+        getEnvironmentVariable: name => values[name],
+        getValueFromEnvSources: (name, skipDefault) => values[name] ?? skipDefault,
+      },
+      '../packages/dd-trace/src/log': { debug: sinon.stub() },
+    })
+
+    sinon.assert.calledOnceWithExactly(tracer.init, {
+      startupLogs: false,
+      isCiVisibility: true,
+      flushInterval: 10_000,
+      experimental: { exporter: 'datadog' },
+    })
+  })
+
+  for (const configurationName of ['DD_AGENTLESS_ENABLED', 'DD_CIVISIBILITY_AGENTLESS_ENABLED']) {
+    it(`does not initialize agentless mode without an API key for ${configurationName}`, () => {
+      const tracer = {
+        init: sinon.stub(),
+        use: sinon.stub(),
+      }
+      const values = { [configurationName]: true }
+      const consoleError = sinon.stub(console, 'error')
+
+      try {
+        proxyquire('../../../../ci/init', {
+          '../packages/dd-trace': tracer,
+          '../packages/dd-trace/src/config/helper': {
+            getEnvironmentVariable: name => values[name],
+            getValueFromEnvSources: (name, skipDefault) => values[name] ?? skipDefault,
+          },
+          '../packages/dd-trace/src/log': { debug: sinon.stub() },
+        })
+
+        sinon.assert.notCalled(tracer.init)
+        sinon.assert.calledOnce(consoleError)
+        assert.match(consoleError.firstCall.args[0], new RegExp(configurationName))
+      } finally {
+        consoleError.restore()
+      }
+    })
+  }
+
   for (const missingEnvironmentVariable of [VALIDATION_MANIFEST_ENV, VALIDATION_OUTPUT_ENV]) {
     it(`does not initialize validation mode without ${missingEnvironmentVariable}`, () => {
       const tracer = {
