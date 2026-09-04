@@ -82,13 +82,19 @@ function traceOrchestrationHandler (handler, functionName) {
 
 function traceResumedOrchestrationErrors (handler, channelCtx, thisArg, args) {
   const startTime = Date.now()
-  return handler.apply(thisArg, args).then((value) => {
-    return value
-  }, (error) => {
-    return azureDurableFunctionsChannel.traceSync(() => {
-      throw error
-    }, { ...channelCtx, startTime })
+  const result = handler.apply(thisArg, args)
+
+  result.then(undefined, (error) => {
+    try {
+      azureDurableFunctionsChannel.traceSync(() => {
+        throw error
+      }, { ...channelCtx, startTime })
+    } catch {
+      // The original promise carries this rejection to the caller.
+    }
   })
+
+  return result
 }
 
 // The http methods are overloaded so we need to check which type of argument was passed in order to wrap the handler
