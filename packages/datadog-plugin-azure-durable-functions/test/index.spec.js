@@ -22,6 +22,7 @@ describe('azure-durable-functions plugin', () => {
     setPriority = sinon.stub()
     span = {
       _prioritySampler: { setPriority },
+      finish: sinon.stub(),
       setTag: sinon.stub(),
     }
 
@@ -277,5 +278,54 @@ describe('azure-durable-functions plugin', () => {
     const ctx = bindStart()
 
     assert.strictEqual(ctx.span, span)
+  })
+
+  it('creates an error span for a failed resumed orchestration', () => {
+    const error = new Error('baking failed')
+
+    plugin.orchestrationFailure({
+      arguments: [
+        {
+          functionName: 'PizzaOrderOrchestration',
+          traceContext: {
+            traceParent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+            traceState: 'dd=s:1',
+          },
+        },
+        [
+          { EventType: 13 },
+          { EventType: 12, Timestamp: '2026-09-04T12:34:56.789Z' },
+        ],
+      ],
+      error,
+    })
+
+    sinon.assert.calledWith(
+      startSpan,
+      'azure.functions.invoke',
+      sinon.match({
+        startTime: Date.parse('2026-09-04T12:34:56.789Z'),
+        tags: sinon.match({
+          'aas.function.name': 'PizzaOrderOrchestration',
+          'aas.function.trigger': 'Orchestration',
+          'resource.name': 'Orchestration PizzaOrderOrchestration',
+          'span.kind': 'server',
+        }),
+      })
+    )
+    sinon.assert.calledWith(span.setTag, 'error', error)
+    sinon.assert.calledOnce(span.finish)
+  })
+
+  it('does not create an error span for an initial orchestration failure', () => {
+    plugin.orchestrationFailure({
+      arguments: [
+        { functionName: 'PizzaOrderOrchestration' },
+        [{ EventType: 12, Timestamp: '2026-09-04T12:34:56.789Z' }],
+      ],
+      error: new Error('initial failure'),
+    })
+
+    sinon.assert.notCalled(startSpan)
   })
 })

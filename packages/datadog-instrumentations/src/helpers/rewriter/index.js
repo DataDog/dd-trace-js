@@ -12,6 +12,7 @@ const {
   configureGraphqlJitExecute,
   configureGraphqlJitRuntime,
   configureMercuriusRequest,
+  publishDurableOrchestrationFailure,
   waitForAsyncEnd,
 } = require('./transforms')
 const instrumentations = require('./instrumentations')
@@ -52,6 +53,7 @@ for (const matcher of [matcherCjs, matcherEsm]) {
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
+  matcher.addTransform('publishDurableOrchestrationFailure', publishDurableOrchestrationFailure)
 }
 
 // Keep the marker split: source-map scanners can read a contiguous token in

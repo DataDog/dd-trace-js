@@ -25,7 +25,63 @@ module.exports = {
   configureGraphqlJitExecute,
   configureGraphqlJitRuntime,
   configureMercuriusRequest,
+  publishDurableOrchestrationFailure,
   waitForAsyncEnd,
+}
+
+/**
+ * Publishes the error captured by Durable Functions immediately before its
+ * executor converts that error into a rejected orchestration promise.
+ *
+ * @param {{
+ *   channelName: string,
+ *   transforms: { tracingChannelDeclaration: Function }
+ * }} state
+ * @param {import('estree').FunctionExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ * @returns {void}
+ */
+function publishDurableOrchestrationFailure (state, node, _parent, ancestry) {
+  // Class queries also visit the owning ClassDeclaration so Orchestrion can
+  // synthesize missing methods. This transform targets the concrete method only.
+  if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') return
+
+  const failureBranches = query(node, 'IfStatement').filter(({ test }) =>
+    test.type === 'BinaryExpression' &&
+    test.operator === '!==' &&
+    test.left?.type === 'MemberExpression' &&
+    test.left.object?.type === 'ThisExpression' &&
+    test.left.property?.name === 'exception' &&
+    test.right?.type === 'Identifier' &&
+    test.right.name === 'undefined'
+  )
+
+  assert.strictEqual(
+    failureBranches.length,
+    1,
+    'publishDurableOrchestrationFailure: executor failure branch not found'
+  )
+  assert.strictEqual(
+    failureBranches[0].consequent.type,
+    'BlockStatement',
+    'publishDurableOrchestrationFailure: expected a block failure branch'
+  )
+
+  const program = ancestry[ancestry.length - 1]
+  state.transforms.tracingChannelDeclaration(state, program)
+
+  const channelVariable = `tr_ch_apm$${state.channelName.replace(/[^\w]/g, '_')}`
+  const publishStatements = parse(`
+    if (${channelVariable}.end.hasSubscribers) {
+      ${channelVariable}.end.publish({
+        arguments: [context, history],
+        error: this.exception
+      })
+    }
+  `).body
+
+  failureBranches[0].consequent.body.unshift(...publishStatements)
 }
 
 /**

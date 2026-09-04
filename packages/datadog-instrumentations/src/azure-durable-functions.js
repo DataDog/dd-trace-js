@@ -5,12 +5,17 @@ const shimmer = require('../../datadog-shimmer')
 
 const {
   addHook,
+  getHooks,
 } = require('./helpers/instrument')
 
 /**
  * @type {import('diagnostics_channel').TracingChannel}
  */
 const azureDurableFunctionsChannel = dc.tracingChannel('datadog:azure:durable-functions:invoke')
+
+for (const hook of getHooks('durable-functions')) {
+  addHook(hook, exports => exports)
+}
 
 addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (df) => {
   const { app } = df

@@ -407,6 +407,19 @@ describe('check-require-cache', () => {
         },
         {
           module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'durable-orchestration-executor.js',
+          },
+          functionQuery: {
+            className: 'TaskOrchestrationExecutor',
+            methodName: 'execute',
+          },
+          channelName: 'TaskOrchestrationExecutor_failure',
+          transform: 'publishDurableOrchestrationFailure',
+        },
+        {
+          module: {
             name: 'test-esm',
             versionRange: '>=0.1',
             filePath: 'pregel-class.js',
@@ -922,6 +935,32 @@ describe('check-require-cache', () => {
     assert.strictEqual(content, source)
     assert.equal(await runUnwrapped({ shouldContinue: true }), 'continued')
     assert.equal(subs.start.callCount, 0)
+  })
+
+  it('should publish durable orchestration failures without wrapping the result', () => {
+    ch = tracingChannel('orchestrion:test:TaskOrchestrationExecutor_failure')
+    subs = { end: sinon.spy() }
+    ch.subscribe(subs)
+
+    const TaskOrchestrationExecutor = compileFile('durable-orchestration-executor')
+    const executor = new TaskOrchestrationExecutor()
+    const context = {}
+    const history = []
+
+    const result = executor.execute(context, history)
+    assert.deepStrictEqual(result, { context, history })
+    sinon.assert.notCalled(subs.end)
+
+    const error = new Error('orchestration failed')
+    executor.exception = error
+
+    assert.throws(() => executor.execute(context, history), candidate => candidate === error)
+    sinon.assert.calledOnce(subs.end)
+
+    const failure = subs.end.firstCall.args[0]
+    assert.strictEqual(failure.arguments[0], context)
+    assert.strictEqual(failure.arguments[1], history)
+    assert.strictEqual(failure.error, error)
   })
 
   it('should leave dependencies without a rewrite target untouched', () => {

@@ -55,6 +55,16 @@ function traceOrchestrationHandler (handler, functionName) {
     if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, args)
 
     const orchestrationBinding = args[0]
+    // we do not want to trace if the orchestrator has already completed and is being reactivated
+    const history = orchestrationBinding?.history
+    const hasPreviousActivation = history?.some(
+      event => event.EventType === ORCHESTRATOR_COMPLETED_EVENT_TYPE
+    )
+
+    if (hasPreviousActivation) {
+      return handler.apply(this, args)
+    }
+
     const traceContext = args[1]?.traceContext
     const channelCtx = {
       trigger: 'Orchestration',
@@ -63,38 +73,11 @@ function traceOrchestrationHandler (handler, functionName) {
       tracestate: traceContext?.traceState,
     }
 
-    // we do not want to trace if the orchestrator has already completed and is being reactivated
-    const history = orchestrationBinding?.history
-    const hasPreviousActivation = history?.some(
-      event => event.EventType === ORCHESTRATOR_COMPLETED_EVENT_TYPE
-    )
-
-    if (hasPreviousActivation) {
-      return traceResumedOrchestrationErrors(handler, channelCtx, this, args)
-    }
-
     return azureDurableFunctionsChannel.tracePromise(
       handler,
       channelCtx,
       this, ...args)
   }
-}
-
-function traceResumedOrchestrationErrors (handler, channelCtx, thisArg, args) {
-  const startTime = Date.now()
-  const result = handler.apply(thisArg, args)
-
-  result.then(undefined, (error) => {
-    try {
-      azureDurableFunctionsChannel.traceSync(() => {
-        throw error
-      }, { ...channelCtx, startTime })
-    } catch {
-      // The original promise carries this rejection to the caller.
-    }
-  })
-
-  return result
 }
 
 // The http methods are overloaded so we need to check which type of argument was passed in order to wrap the handler

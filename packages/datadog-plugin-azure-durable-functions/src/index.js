@@ -5,12 +5,22 @@ const { AUTO_KEEP } = require('../../../ext/priority')
 const TraceState = require('../../dd-trace/src/opentracing/propagation/tracestate')
 const { writeTraceparent, writeTracestate } = require('../../dd-trace/src/carrier')
 
+const ORCHESTRATION_FAILURE_END_CHANNEL =
+  'tracing:orchestrion:durable-functions:TaskOrchestrationExecutor_failure:end'
+const ORCHESTRATOR_STARTED_EVENT_TYPE = 12
+const ORCHESTRATOR_COMPLETED_EVENT_TYPE = 13
+
 class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get id () { return 'azure-durable-functions' }
   static get operation () { return 'invoke' }
   static get prefix () { return 'tracing:datadog:azure:durable-functions:invoke' }
   static get type () { return 'serverless' }
   static get kind () { return 'server' }
+
+  addTraceSubs () {
+    super.addTraceSubs()
+    this.addSub(ORCHESTRATION_FAILURE_END_CHANNEL, this.orchestrationFailure)
+  }
 
   bindStart (ctx) {
     // Continue the trace propagated by the Durable Functions host (W3C traceparent
@@ -76,6 +86,54 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
   }
 
   asyncStart (ctx) {
+    super.finish(ctx)
+  }
+
+  /**
+   * Creates a failure-only span after a resumed orchestration throws. The executor
+   * publishes synchronously before Durable Functions converts the error into its
+   * existing rejected promise, so this does not add a promise to replay activations.
+   *
+   * @param {{ arguments?: unknown[], error?: unknown }} executorCtx
+   * @returns {void}
+   */
+  orchestrationFailure (executorCtx) {
+    const args = executorCtx?.arguments
+    if (!Array.isArray(args)) return
+
+    const invocationContext = args[0]
+    const history = args[1]
+    if (!Array.isArray(history)) return
+
+    let hasPreviousActivation = false
+    let startTime
+
+    for (let i = history.length - 1; i >= 0; i--) {
+      const event = history[i]
+      if (event?.EventType === ORCHESTRATOR_COMPLETED_EVENT_TYPE) {
+        hasPreviousActivation = true
+      } else if (startTime === undefined && event?.EventType === ORCHESTRATOR_STARTED_EVENT_TYPE) {
+        const timestamp = Date.parse(event.Timestamp)
+        if (Number.isFinite(timestamp)) startTime = timestamp
+      }
+
+      if (hasPreviousActivation && startTime !== undefined) break
+    }
+
+    if (!hasPreviousActivation) return
+
+    const traceContext = invocationContext?.traceContext
+    const ctx = {
+      trigger: 'Orchestration',
+      functionName: invocationContext?.functionName,
+      traceparent: traceContext?.traceParent,
+      tracestate: traceContext?.traceState,
+      startTime,
+      error: executorCtx.error,
+    }
+
+    this.bindStart(ctx)
+    this.error(ctx)
     super.finish(ctx)
   }
 }
