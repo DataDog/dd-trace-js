@@ -53,6 +53,7 @@ module.exports = {
   addBreakpoint: lock(addBreakpoint),
   removeBreakpoint: lock(removeBreakpoint),
   modifyBreakpoint: lock(modifyBreakpoint),
+  refreshBreakpoint: lock(refreshBreakpoint),
 }
 
 async function addBreakpoint (probe) {
@@ -234,23 +235,50 @@ async function modifyBreakpoint (probe) {
   await addBreakpoint(probe)
 }
 
-async function updateBreakpointInternal (breakpoint, probe) {
+/**
+ * Rebuild the breakpoint condition at a probe's location from the current state of the probes attached to it.
+ *
+ * The breakpoint condition bakes in whether each probe produces snapshots, which decides if a hit counts against the
+ * global snapshot rate limit and how a skipped hit is classified. That changes when the pause handler permanently
+ * disables capture for a probe after a fatal capture error, so the condition has to be recompiled.
+ *
+ * A probe that has been removed in the meantime is ignored: its location no longer needs the update.
+ *
+ * @param {{ id: string }} probe - A probe attached to the breakpoint to refresh.
+ * @returns {Promise<void>}
+ */
+async function refreshBreakpoint ({ id }) {
+  if (!sessionStarted) return
+  const locationKey = probeToLocation.get(id)
+  if (locationKey === undefined) return
+  await updateBreakpointInternal(locationToBreakpoint.get(locationKey), undefined, `while refreshing ${locationKey}`)
+}
+
+/**
+ * Replace the breakpoint at a location with one whose condition matches the probes currently attached to it.
+ *
+ * @param {{ id: string, location: object, locationKey: string }} breakpoint - The breakpoint to replace.
+ * @param {object} [probe] - A probe to attach to the breakpoint first, when one is being added.
+ * @param {string} [context] - What the update is part of, for error messages. Derived from `probe` when omitted.
+ * @returns {Promise<void>}
+ */
+async function updateBreakpointInternal (breakpoint, probe, context) {
   const probesAtLocation = breakpointToProbes.get(breakpoint.id)
 
-  // If a probe is provided, add it to the breakpoint. If not, it's because we're removing a probe. In both cases the
-  // breakpoint condition must be rebuilt to match the remaining probes at the location.
+  // If a probe is provided, add it to the breakpoint. If not, it's because we're removing a probe or the probes at the
+  // location changed. In all cases the breakpoint condition must be rebuilt to match the probes at the location.
   if (probe) {
     probesAtLocation.set(probe.id, probe)
     probeToLocation.set(probe.id, breakpoint.locationKey)
+    context ??= `while adding probe ${probe.id} (version: ${probe.version})`
+  } else {
+    context ??= `after removing probe from ${breakpoint.locationKey}`
   }
 
   try {
     await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
   } catch (err) {
-    const message = probe
-      ? `Error replacing breakpoint while adding probe ${probe.id} (version: ${probe.version})`
-      : `Error replacing breakpoint after removing probe from ${breakpoint.locationKey}`
-    throw new Error(message, { cause: err })
+    throw new Error(`Error replacing breakpoint ${context}`, { cause: err })
   }
   breakpointToProbes.delete(breakpoint.id)
   let result
@@ -260,10 +288,7 @@ async function updateBreakpointInternal (breakpoint, probe) {
       condition: compileBreakpointCondition([...probesAtLocation.values()]),
     }))
   } catch (err) {
-    const message = probe
-      ? `Error setting breakpoint while adding probe ${probe.id} (version: ${probe.version})`
-      : `Error setting breakpoint after removing probe from ${breakpoint.locationKey}`
-    throw new Error(message, { cause: err })
+    throw new Error(`Error setting breakpoint ${context}`, { cause: err })
   }
   breakpoint.id = result.breakpointId
   breakpointToProbes.set(result.breakpointId, probesAtLocation)

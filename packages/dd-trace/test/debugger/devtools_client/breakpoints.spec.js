@@ -1144,6 +1144,80 @@ describe('breakpoints', function () {
     })
   })
 
+  describe('refreshBreakpoint', function () {
+    it('should rebuild the breakpoint condition from the current state of the probes at the location',
+      async function () {
+        await addProbe({ captureSnapshot: true })
+        await addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } })
+        const probe = stateMock.breakpointToProbes.get(breakpointId)?.get('probe-1')
+        const otherProbe = stateMock.breakpointToProbes.get('bp-script-1:19:0')?.get('probe-2')
+        assert(probe !== undefined && otherProbe !== undefined)
+        sessionMock.post.resetHistory()
+
+        // What the pause handler does when it permanently disables capture for the probe
+        probe.captureSnapshot = false
+
+        await breakpoints.refreshBreakpoint(probe)
+
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+          location: {
+            scriptId: 'script-1',
+            lineNumber: 9,
+            columnNumber: 0,
+          },
+          condition: compileBreakpointCondition([
+            { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 1000000000n, captureSnapshot: false },
+          ]),
+        })
+        sinon.assert.calledTwice(sessionMock.post)
+
+        assert.strictEqual(stateMock.probeToLocation.get('probe-1'), 'script-1:10:0')
+        assert.strictEqual(stateMock.breakpointToProbes.get(breakpointId)?.get('probe-1'), probe)
+        assert.strictEqual(stateMock.breakpointToProbes.get('bp-script-1:19:0')?.get('probe-2'), otherProbe,
+          'should leave the other locations alone')
+      })
+
+    it('should ignore a probe that has been removed in the meantime', async function () {
+      await addProbe()
+      await breakpoints.removeBreakpoint({ id: 'probe-1' })
+      sessionMock.post.resetHistory()
+
+      await breakpoints.refreshBreakpoint({ id: 'probe-1' })
+
+      sinon.assert.notCalled(sessionMock.post)
+    })
+
+    it('should ignore a probe when the debugger is not started', async function () {
+      await breakpoints.refreshBreakpoint({ id: 'probe-1' })
+
+      sinon.assert.notCalled(sessionMock.post)
+    })
+
+    it('should wrap errors when setting the replacement breakpoint fails', async function () {
+      await addProbe()
+      sessionMock.post.resetHistory()
+
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method) => {
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.reject(cause)
+        }
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        breakpoints.refreshBreakpoint({ id: 'probe-1' }),
+        (err) => {
+          assert(err instanceof Error)
+          assert.strictEqual(err.message, 'Error setting breakpoint while refreshing script-1:10:0')
+          assert.strictEqual(err.cause, cause)
+          return true
+        }
+      )
+    })
+  })
+
   describe('re-evaluation', function () {
     it('should log errors from async probe re-evaluation', async function () {
       await addProbe()
