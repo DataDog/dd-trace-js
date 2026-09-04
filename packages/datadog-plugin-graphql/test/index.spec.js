@@ -2510,7 +2510,7 @@ describe('Plugin', () => {
           return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
-        v6DepthTest('should not record a depth-gated child error on its collapsed parent span', async () => {
+        it('should not record a depth-gated child error on its collapsed parent span', async () => {
           const Nested = new graphql.GraphQLObjectType({
             name: 'DepthGatedResolverErrorNested',
             fields: {
@@ -2545,11 +2545,12 @@ describe('Plugin', () => {
           })
           const operationName = 'DepthGatedResolverError'
           const localSource = `query ${operationName} { items { nested { failure } } }`
+          const expectedParentPath = DD_MAJOR >= 6 ? 'items.*.nested' : 'items'
 
           const [result] = await Promise.all([
             graphql.graphql({ schema: localSchema, source: localSource }),
             agent.assertSomeTraces(traces => {
-              const span = sort(traces[0]).find(span => span.meta?.['graphql.field.path'] === 'items.*.nested')
+              const span = sort(traces[0]).find(span => span.meta?.['graphql.field.path'] === expectedParentPath)
 
               assert.ok(span)
               assert.strictEqual(span.error, 0)
