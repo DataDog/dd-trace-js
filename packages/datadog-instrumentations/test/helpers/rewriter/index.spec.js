@@ -1351,7 +1351,7 @@ describe('check-require-cache', () => {
     assert.ok(subs.start.calledOnce, 'instrumented start channel should fire once')
   })
 
-  it('should use an aliased Postgres Query require binding', () => {
+  it('should ignore unrelated destructured requires and use an aliased Postgres Query binding', () => {
     ch = tracingChannel('orchestrion:test:query')
     subs = { start: sinon.spy() }
     ch.subscribe(subs)
