@@ -1,8 +1,10 @@
 'use strict'
 
 const os = require('node:os')
-const pkg = require('../../../package.json')
 
+const { channel } = require('dc-polyfill')
+
+const pkg = require('../../../package.json')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const {
   MEASURED,
@@ -28,6 +30,12 @@ const {
   DEFAULT_SPAN_NAME,
   DEFAULT_SERVICE_NAME,
 } = require('./encode/tags-processors')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Only one SpanStatsProcessor is ever live in a real process, so replacing the subscription on
+// construction is safe - it just keeps tests (which build several) from piling up listeners.
+let unsubscribeBucketReset = null
 
 class SpanAggStats {
   constructor (aggKey) {
@@ -229,6 +237,15 @@ class SpanStatsProcessor {
       this.timer = setInterval(this.onInterval.bind(this), intervalMs)
       this.timer.unref?.()
     }
+
+    // A clone resume shouldn't export buckets accumulated before the snapshot under its own identity.
+    unsubscribeBucketReset?.()
+    const onIdentityRefresh = () => {
+      this.buckets = new TimeBuckets(Boolean(this.otlpExporter))
+      this.exporter?.resetPendingState()
+    }
+    identityRefreshChannel.subscribe(onIdentityRefresh)
+    unsubscribeBucketReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
   }
 
   onInterval () {

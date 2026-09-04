@@ -88,6 +88,7 @@ class DogStatsDClient {
   #family
   #host
   #httpOptions
+  #identityRefreshGeneration
   #lookup
   #metrics = { message: '', offset: 0, queue: [] }
   #port
@@ -144,28 +145,46 @@ class DogStatsDClient {
    * Recomputes the cached tags and tag-prefix (mirrors the constructor) after a `config.tags`
    * change, e.g. a MicroVM clone resume.
    *
-   * Buffered lines have the old prefix baked in, and on a clone resume they were produced during
-   * the image build, so every clone holds the same bytes — flushing them would submit one identical
-   * copy per clone. Dropping is right here for that reason only: for a tag change on a live process
-   * the buffer holds unique data whose old tags are still correct, so that case wants a flush
-   * before the swap.
+   * This is only ever called on identity refresh, so buffered lines and pending client telemetry
+   * always describe pre-snapshot activity and must always be dropped - not just when the
+   * serialized tag prefix happens to change. A clone resume with runtime-id tagging disabled and
+   * Remote Config absent produces an identical prefix across clones, which would otherwise skip
+   * the reset entirely.
    *
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
+   * @returns {void}
    */
   updateTags (tags) {
-    const tagsPrefix = tags.length ? `|#${tags.join(',')}` : ''
-    if (tagsPrefix === this.#tagsPrefix) return
+    // Identity refresh is published only when a MicroVM clone starts. Invalidate detached buffers
+    // that may contain the previous runtime ID; the generation stays undefined in normal operation.
+    this.#identityRefreshGeneration = (this.#identityRefreshGeneration ?? 0) + 1
 
-    this.#updateTagPrefixes(tagsPrefix)
+    const tagsPrefix = tags.length ? `|#${tags.join(',')}` : ''
+    if (tagsPrefix !== this.#tagsPrefix) {
+      this.#updateTagPrefixes(tagsPrefix)
+    }
+
     this.#metrics.queue = []
     this.#metrics.message = ''
     this.#metrics.offset = 0
 
-    const payload = this.telemetry?.payload
-    if (payload) {
-      payload.queue = []
-      payload.message = ''
-      payload.offset = 0
+    // Telemetry describes the client's own transport activity (bytes/packets sent or dropped,
+    // metrics counted so far), which is just as pre-snapshot as the buffered lines above - so it
+    // gets the same treatment: dropped and zeroed rather than reported for the refreshed identity.
+    const telemetry = this.telemetry
+    if (telemetry) {
+      telemetry.payload.queue = []
+      telemetry.payload.message = ''
+      telemetry.payload.offset = 0
+      telemetry.bytesSent = 0
+      telemetry.bytesDropped = 0
+      telemetry.packetsSent = 0
+      telemetry.packetsDropped = 0
+      telemetry.nextFlush = performance.now() + TELEMETRY_INTERVAL
+      for (let index = 0; index < TYPE_LABELS.length; index++) {
+        telemetry.aggregatedContextsByType[index] = 0
+        telemetry.metricsByType[index] = 0
+      }
     }
   }
 
@@ -301,10 +320,16 @@ class DogStatsDClient {
     log.debug('Flushing %s metrics via %s', queue.length, this.#httpOptions ? 'HTTP' : 'UDP')
 
     state.queue = []
+    const identityRefreshGeneration = this.#identityRefreshGeneration
 
     const send = complete => {
-      if (this.#httpOptions) this._sendHttp(queue, recordTelemetry, complete)
-      else this._sendUdp(queue, recordTelemetry, complete)
+      if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+        complete?.()
+        return
+      }
+
+      if (this.#httpOptions) this._sendHttp(queue, recordTelemetry, complete, identityRefreshGeneration)
+      else this._sendUdp(queue, recordTelemetry, complete, identityRefreshGeneration)
     }
 
     if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.track(send)
@@ -341,12 +366,23 @@ class DogStatsDClient {
    * @param {Buffer[]} queue - The metrics to send
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
    * @param {() => void} [done] - Called after delivery completes
+   * @param {number} [identityRefreshGeneration] - Generation captured before detaching the queue
    * @returns {void}
    * @memberof DogStatsDClient
    */
-  _sendHttp (queue, recordTelemetry, done) {
+  _sendHttp (queue, recordTelemetry, done, identityRefreshGeneration) {
+    if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+      done?.()
+      return
+    }
+
     const buffer = Buffer.concat(queue)
     request(buffer, this.#httpOptions, (error, _result, _statusCode, _headers, dropped) => {
+      if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+        done?.()
+        return
+      }
+
       if (dropped) {
         if (recordTelemetry && this.telemetry) {
           this.#recordDropped(buffer.length)
@@ -361,7 +397,7 @@ class DogStatsDClient {
           // options. Either way, we can give UDP a try.
           this.#httpOptions = undefined
         }
-        this._sendUdp(queue, recordTelemetry, done)
+        this._sendUdp(queue, recordTelemetry, done, identityRefreshGeneration)
       } else {
         if (recordTelemetry && this.telemetry) this.#recordSent(buffer.length)
         done?.()
@@ -375,15 +411,26 @@ class DogStatsDClient {
    * @param {Buffer[]} queue - The metrics to send
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
    * @param {() => void} [done] - Called after delivery completes
+   * @param {number} [identityRefreshGeneration] - Generation captured before detaching the queue
    * @returns {void}
    * @memberof DogStatsDClient
    */
-  _sendUdp (queue, recordTelemetry, done) {
+  _sendUdp (queue, recordTelemetry, done, identityRefreshGeneration) {
+    if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+      done?.()
+      return
+    }
+
     // dgram resolves the local address via the instrumented dns.lookup when it
     // binds on first send; the noop store keeps that self-traffic off the trace.
     legacyStorage.run({ noop: true }, () => {
       if (this.#family === 0) {
         this.#lookup(this.#host, (error, address, family) => {
+          if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+            done?.()
+            return
+          }
+
           if (error) {
             if (recordTelemetry && this.telemetry) {
               let bytes = 0
@@ -395,10 +442,12 @@ class DogStatsDClient {
             log.error('DogStatsDClient: Host not found', error)
             return done?.()
           }
-          this._sendUdpFromQueue(queue, address, family, recordTelemetry, done)
+          this._sendUdpFromQueue(queue, address, family, recordTelemetry, done, identityRefreshGeneration)
         })
       } else {
-        this._sendUdpFromQueue(queue, this.#host, this.#family, recordTelemetry, done)
+        this._sendUdpFromQueue(
+          queue, this.#host, this.#family, recordTelemetry, done, identityRefreshGeneration
+        )
       }
     })
   }
@@ -411,10 +460,11 @@ class DogStatsDClient {
    * @param {number} family - The family of the address
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
    * @param {() => void} [done] - Called after every packet completes
+   * @param {number} [identityRefreshGeneration] - Generation captured before detaching the queue
    * @returns {void}
    * @memberof DogStatsDClient
    */
-  _sendUdpFromQueue (queue, address, family, recordTelemetry, done) {
+  _sendUdpFromQueue (queue, address, family, recordTelemetry, done, identityRefreshGeneration) {
     const socket = family === 6 ? this.#udp6 : this.#udp4
     let pending = queue.length
     const complete = () => {
@@ -422,6 +472,11 @@ class DogStatsDClient {
     }
 
     for (const buffer of queue) {
+      if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+        complete()
+        continue
+      }
+
       log.debug('Sending to DogStatsD: %s', buffer)
 
       if (!this.telemetry && !done) {
@@ -431,7 +486,10 @@ class DogStatsDClient {
 
       try {
         socket.send(buffer, 0, buffer.length, this.#port, address, (error) => {
-          if (error) {
+          if (!this.#isCurrentIdentity(identityRefreshGeneration)) {
+            complete()
+            return
+          } else if (error) {
             if (recordTelemetry && this.telemetry) {
               this.#recordDropped(buffer.length)
             }
@@ -446,6 +504,14 @@ class DogStatsDClient {
         complete()
       }
     }
+  }
+
+  /**
+   * @param {number|undefined} identityRefreshGeneration - Generation captured before detaching the queue
+   * @returns {boolean} Whether the detached queue still belongs to the current identity
+   */
+  #isCurrentIdentity (identityRefreshGeneration) {
+    return identityRefreshGeneration === this.#identityRefreshGeneration
   }
 
   /**
@@ -595,11 +661,14 @@ class MetricsAggregationClient {
   }
 
   /**
-   * Recomputes the wrapped client's cached tags (e.g. after a MicroVM clone resume).
+   * Recomputes the wrapped client's cached tags (e.g. after a MicroVM clone resume). Pending
+   * counters/gauges/histograms were aggregated under the old identity, so they're always reset
+   * along with the client's buffered lines, regardless of whether the serialized tags changed.
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
    */
   updateTags (tags) {
     this._client.updateTags(tags)
+    this.reset()
   }
 
   /**

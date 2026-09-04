@@ -10,6 +10,7 @@ const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
 const BaseWriter = require('../common/writer')
 const propagationHash = require('../../propagation-hash')
+const { IS_AWS_LAMBDA_MICROVM } = require('../../serverless')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
@@ -31,6 +32,7 @@ class AgentWriter extends BaseWriter {
     this._lookup = lookup
     this._protocolVersion = protocolVersion
     this._headers = headers
+    this._identityRefreshController = IS_AWS_LAMBDA_MICROVM ? this._resetController : undefined
     this._encoder = createEncoder(protocolVersion, flushInterval, this)
     if (isTestOptimization) {
       this.#request = require('../../ci-visibility/exporters/request')
@@ -59,6 +61,11 @@ class AgentWriter extends BaseWriter {
 
     const { _headers, _lookup, _protocolVersion, _url } = this
     const onResponse = (err, res, status, headers) => {
+      if (err?.code === 'ERR_DD_IDENTITY_REFRESH') {
+        done()
+        return
+      }
+
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -109,6 +116,7 @@ class AgentWriter extends BaseWriter {
       flushOptions,
       this.#request,
       this.#requestTracker,
+      this._identityRefreshController,
       onResponse
     )
   }
@@ -136,7 +144,8 @@ function createEncoder (protocolVersion, flushInterval, writer) {
   return new AgentEncoder(writer)
 }
 
-function makeRequest (version, data, count, url, headers, lookup, flushOptions, request, requestTracker, cb) {
+function makeRequest (version, data, count, url, headers, lookup, flushOptions, request, requestTracker,
+  resetController, cb) {
   const options = {
     path: `/v${version}/traces`,
     method: 'PUT',
@@ -150,6 +159,7 @@ function makeRequest (version, data, count, url, headers, lookup, flushOptions, 
       'Datadog-Meta-Lang-Interpreter': process.versions.bun ? 'JavaScriptCore' : 'v8',
     },
     lookup,
+    resetController,
     url,
   }
   if (flushOptions?.deadline !== undefined) {
@@ -159,6 +169,11 @@ function makeRequest (version, data, count, url, headers, lookup, flushOptions, 
   log.debug('Request to the agent: %j', options)
 
   const onResponse = (err, res, status, headers) => {
+    if (err?.code === 'ERR_DD_IDENTITY_REFRESH') {
+      cb(err, res, status, headers)
+      return
+    }
+
     logIntegrations()
     if (status !== 404 && status !== 200 && err) {
       logAgentError({ status, message: err.message ?? inspect(err) })

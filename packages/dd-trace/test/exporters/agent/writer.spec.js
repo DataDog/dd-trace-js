@@ -22,6 +22,8 @@ function describeWriter (protocolVersion) {
   let url
   let prioritySampler
   let log
+  let runtimeMetrics
+  let startupLog
   let AgentEncoder
   let createAgentEncoder
 
@@ -52,6 +54,11 @@ function describeWriter (protocolVersion) {
       error: sinon.spy(),
       errorWithoutTelemetry: sinon.spy(),
     }
+    runtimeMetrics = { increment: sinon.spy() }
+    startupLog = {
+      logAgentError: sinon.spy(),
+      logIntegrations: sinon.spy(),
+    }
 
     AgentEncoder = sinon.stub().returns(encoder)
     createAgentEncoder = sinon.stub().returns(encoder)
@@ -64,6 +71,9 @@ function describeWriter (protocolVersion) {
       '../../encode/0.5': { AgentEncoder },
       '../../../../../package.json': { version: 'tracerVersion' },
       '../../log': log,
+      '../../runtime_metrics': runtimeMetrics,
+      '../../startup-log': startupLog,
+      '../../serverless': { IS_AWS_LAMBDA_MICROVM: false },
     })
     writer = new Writer({ url, prioritySampler, protocolVersion })
 
@@ -175,8 +185,11 @@ function describeWriter (protocolVersion) {
       encoder.count.returns(2)
       encoder.makePayload.returns([expectedData])
       writer.flush(() => {
+        const options = request.getCall(0).args[1]
+        const { resetController, ...requestOptions } = options
         assert.deepStrictEqual(request.getCall(0).args[0], [expectedData])
-        assert.deepStrictEqual(request.getCall(0).args[1], {
+        assert.strictEqual(resetController, writer._identityRefreshController)
+        assert.deepStrictEqual(requestOptions, {
           url,
           path: `/v${protocolVersion}/traces`,
           method: 'PUT',
@@ -231,6 +244,20 @@ function describeWriter (protocolVersion) {
           error.status,
           error
         )
+        done()
+      })
+    })
+
+    it('should silently discard requests cancelled on identity refresh', (done) => {
+      const error = new Error('request cancelled')
+      error.code = 'ERR_DD_IDENTITY_REFRESH'
+      request.yieldsAsync(error)
+      encoder.count.returns(1)
+
+      writer.flush(() => {
+        sinon.assert.neverCalledWithMatch(runtimeMetrics.increment, sinon.match(/errors/))
+        sinon.assert.notCalled(log.errorWithoutTelemetry)
+        sinon.assert.notCalled(startupLog.logAgentError)
         done()
       })
     })

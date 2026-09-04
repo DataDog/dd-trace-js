@@ -99,6 +99,7 @@ class PeriodicMetricReader {
   #measurements = []
   #cumulativeState = new Map()
   #lastExportedState = new Map()
+  #pendingObservableCounterBaselines
   #droppedCount = 0
   #timer = null
   #isShutdown = false
@@ -173,18 +174,31 @@ class PeriodicMetricReader {
   /**
    * Invokes batch observable callbacks and returns the produced measurements.
    *
+   * @param {number} [maxMeasurements] Maximum number of measurements to retain
+   * @param {() => void} [onDrop] Called for every measurement that exceeds the limit
    * @returns {Measurement[]}
    */
-  #collectBatchObservables () {
+  #collectBatchObservables (maxMeasurements = Infinity, onDrop) {
     if (this.#batchCallbacks.length === 0) return []
     const out = []
     for (const { callback, instruments } of this.#batchCallbacks) {
-      const result = {
-        observe: (instrument, value, attributes) => {
-          if (instruments.has(instrument)) {
-            out.push(instrument.createObservation(value, attributes))
+      const observe = maxMeasurements === Infinity
+        ? (instrument, value, attributes) => {
+            if (instruments.has(instrument)) {
+              out.push(instrument.createObservation(value, attributes))
+            }
           }
-        },
+        : (instrument, value, attributes) => {
+            if (instruments.has(instrument)) {
+              if (out.length < maxMeasurements) {
+                out.push(instrument.createObservation(value, attributes))
+              } else {
+                onDrop?.()
+              }
+            }
+          }
+      const result = {
+        observe,
       }
       try {
         callback(result)
@@ -224,6 +238,36 @@ class PeriodicMetricReader {
       log.error('Error exporting OTLP metrics:', error)
       complete()
     }
+  }
+
+  /**
+   * Discards queued measurements and sync-instrument cumulative state. Measurements don't carry
+   * runtime-id directly, but the OTLP exporter attaches refreshed resource attributes at export
+   * time; any pre-refresh reader state that survives would be reported under the clone's runtime-id.
+   *
+   * Also rebases ObservableCounter delta baselines to the current callback readings, so observable
+   * increments recorded between the last export and the snapshot are discarded instead of being
+   * reported by every clone.
+   * @returns {void}
+   */
+  resetPendingState () {
+    this.#measurements = []
+    // Drop stale accounting from measurements that were intentionally discarded on identity refresh.
+    this.#droppedCount = 0
+
+    for (const key of this.#cumulativeState.keys()) {
+      this.#lastExportedState.delete(key)
+    }
+    this.#cumulativeState.clear()
+    this.#aggregator.resetStartTime()
+    // ObservableCounter series absent from this collection still have a pre-refresh baseline.
+    // Keep their keys until they next appear, when that reading is discarded as their new baseline.
+    this.#pendingObservableCounterBaselines = new Set(this.#lastExportedState.keys())
+    this.#aggregator.resetObservableCounterBaselines(
+      this.#collectObservableMeasurements(),
+      this.#lastExportedState,
+      this.#pendingObservableCounterBaselines
+    )
   }
 
   /**
@@ -319,10 +363,40 @@ class PeriodicMetricReader {
     const metrics = this.#aggregator.aggregate(
       allMeasurements,
       this.#cumulativeState,
-      this.#lastExportedState
+      this.#lastExportedState,
+      this.#pendingObservableCounterBaselines
     )
 
     this.exporter.export(metrics, callback)
+  }
+
+  /**
+   * Collects measurements from all asynchronous instruments.
+   * This bounded path is used only to establish discarded baselines on identity refresh; ordinary
+   * periodic exports keep their existing per-instrument collection flow below.
+   *
+   * @param {number} [maxMeasurements] Maximum number of measurements to retain
+   * @param {() => void} [onDrop] Called for every measurement that exceeds the limit
+   * @returns {Measurement[]}
+   */
+  #collectObservableMeasurements (maxMeasurements = DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE, onDrop) {
+    const measurements = []
+
+    for (const instrument of this.observableInstruments) {
+      const remainingCapacity = maxMeasurements - measurements.length
+      const observableMeasurements = instrument.collect(remainingCapacity, onDrop)
+      for (const measurement of observableMeasurements) {
+        measurements.push(measurement)
+      }
+    }
+
+    const remainingCapacity = maxMeasurements - measurements.length
+    const batchMeasurements = this.#collectBatchObservables(remainingCapacity, onDrop)
+    for (const measurement of batchMeasurements) {
+      measurements.push(measurement)
+    }
+
+    return measurements
   }
 }
 
@@ -338,6 +412,42 @@ class MetricAggregator {
   constructor (temporalityPreference, maxBatchedQueueSize) {
     this.#temporalityPreference = temporalityPreference
     this.#maxBatchedQueueSize = maxBatchedQueueSize
+  }
+
+  /**
+   * Rebases the cumulative start time to now, e.g. after a MicroVM clone resume discards
+   * accumulated state. Without this, the first post-resume CUMULATIVE export would report a
+   * start time from before the snapshot, spanning the pause.
+   * @returns {void}
+   */
+  resetStartTime () {
+    this.#startTime = nowUnixNano()
+  }
+
+  /**
+   * Establishes current ObservableCounter readings as the next delta baseline without exporting
+   * them. Otherwise the first post-refresh delta would include pre-refresh observable growth and
+   * export it under the clone's refreshed runtime-id resource attribute.
+   *
+   * @param {Measurement[]} measurements - Measurements collected from observable callbacks
+   * @param {Map<string, LastExportedStateValue>} lastExportedState - Last exported metric state
+   * @param {Set<string>} pendingObservableCounterBaselines - ObservableCounter state keys whose
+   * next reading must establish a discarded post-refresh baseline
+   * @returns {void}
+   */
+  resetObservableCounterBaselines (measurements, lastExportedState, pendingObservableCounterBaselines) {
+    for (const measurement of measurements) {
+      const { type } = measurement
+      if (type !== METRIC_TYPES.OBSERVABLECOUNTER || this.#getTemporality(type) !== TEMPORALITY.DELTA) {
+        continue
+      }
+
+      const scopeKey = this.#getScopeKey(measurement.instrumentationScope)
+      const attrKey = stableStringify(measurement.attributes)
+      const stateKey = this.#getStateKey(scopeKey, measurement.name, type, attrKey)
+      lastExportedState.set(stateKey, measurement.value)
+      pendingObservableCounterBaselines.delete(stateKey)
+    }
   }
 
   /**
@@ -376,9 +486,11 @@ class MetricAggregator {
    * @param {Measurement[]} measurements - The measurements to aggregate
    * @param {Map<string, CumulativeStateValue>} cumulativeState - The cumulative state of the metrics
    * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
-   * @returns {Iterable<AggregatedMetric>} The aggregated metrics
+   * @param {Set<string>|undefined} pendingObservableCounterBaselines - ObservableCounter state
+   * keys whose next reading must establish a discarded post-refresh baseline
+   * @returns {Map<string, AggregatedMetric>} The aggregated metrics
    */
-  aggregate (measurements, cumulativeState, lastExportedState) {
+  aggregate (measurements, cumulativeState, lastExportedState, pendingObservableCounterBaselines) {
     const metricsMap = new Map()
 
     for (const measurement of measurements) {
@@ -431,7 +543,7 @@ class MetricAggregator {
       }
     }
 
-    this.#applyDeltaTemporality(metricsMap.values(), lastExportedState)
+    this.#applyDeltaTemporality(metricsMap, lastExportedState, pendingObservableCounterBaselines)
     return metricsMap
   }
 
@@ -473,21 +585,30 @@ class MetricAggregator {
   /**
    * Applies delta temporality to the metrics.
    *
-   * @param {Iterable<AggregatedMetric>} metrics - The metrics to apply delta temporality to
+   * @param {Map<string, AggregatedMetric>} metrics - The metrics to apply delta temporality to
    * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
+   * @param {Set<string>|undefined} pendingObservableCounterBaselines - ObservableCounter state
+   * keys whose next reading must establish a discarded post-refresh baseline
    * @returns {void}
    */
-  #applyDeltaTemporality (metrics, lastExportedState) {
-    for (const metric of metrics) {
+  #applyDeltaTemporality (metrics, lastExportedState, pendingObservableCounterBaselines) {
+    for (const [metricKey, metric] of metrics) {
       if (metric.temporality === TEMPORALITY.DELTA && this.#isDeltaType(metric.type)) {
         const scopeKey = this.#getScopeKey(metric.instrumentationScope)
+        const discardedDataPointKeys = []
 
         for (const dataPoint of metric.dataPointMap.values()) {
           const stateKey = this.#getStateKey(scopeKey, metric.name, metric.type, dataPoint.attrKey)
 
           if (metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER) {
-            const lastValue = lastExportedState.get(stateKey) || 0
             const currentValue = dataPoint.value
+            if (metric.type === METRIC_TYPES.OBSERVABLECOUNTER &&
+                pendingObservableCounterBaselines?.delete(stateKey)) {
+              lastExportedState.set(stateKey, currentValue)
+              discardedDataPointKeys.push(dataPoint.attrKey)
+              continue
+            }
+            const lastValue = lastExportedState.get(stateKey) || 0
             dataPoint.value = currentValue - lastValue
             lastExportedState.set(stateKey, currentValue)
           } else if (metric.type === METRIC_TYPES.HISTOGRAM) {
@@ -511,6 +632,14 @@ class MetricAggregator {
             lastExportedState.set(stateKey, currentState)
           }
         }
+
+        for (const attrKey of discardedDataPointKeys) {
+          metric.dataPointMap.delete(attrKey)
+        }
+      }
+
+      if (metric.dataPointMap.size === 0) {
+        metrics.delete(metricKey)
       }
     }
   }

@@ -15,6 +15,7 @@ describe('common Writer', () => {
   let encoder
   let request
   let log
+  let resetController
 
   beforeEach(() => {
     encoder = {
@@ -26,6 +27,8 @@ describe('common Writer', () => {
 
     request = sinon.stub()
     request.writable = true
+    resetController = { reset: sinon.stub() }
+    request.createResetController = sinon.stub().returns(resetController)
 
     log = { error: sinon.stub(), debug: sinon.stub() }
 
@@ -160,6 +163,13 @@ describe('common Writer', () => {
 
     assert.strictEqual(writer.append(payload, options), true)
     sinon.assert.calledOnceWithExactly(encoder.encode, payload)
+  })
+
+  it('resetPendingBatch discards the pending encoded batch', () => {
+    writer.resetPendingBatch()
+
+    sinon.assert.calledOnce(encoder.reset)
+    sinon.assert.calledOnce(resetController.reset)
   })
 
   it('accepts a non-final append under backpressure when configured', () => {

@@ -48,10 +48,15 @@ function createMetricsClient (config) {
  *
  * @param {ReturnType<typeof createMetricsAggregationClient>} client - The client returned by `createMetricsClient()`
  * @param {import('../config/config-base')} config - Tracer configuration
+ * @param {() => void} [onRefresh] - Called after the tag update, e.g. to rebase sampler
+ *   baselines (CPU usage, event-loop delay) that would otherwise span the snapshot pause
  * @returns {() => void} Unsubscribe function; call it from the owning module's `stop()`
  */
-function subscribeToIdentityRefresh (client, config) {
-  const onIdentityRefresh = () => client.updateTags(buildClientConfig(config).tags)
+function subscribeToIdentityRefresh (client, config, onRefresh) {
+  const onIdentityRefresh = () => {
+    client.updateTags(buildClientConfig(config).tags)
+    onRefresh?.()
+  }
   identityRefreshChannel.subscribe(onIdentityRefresh)
   return () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 }
