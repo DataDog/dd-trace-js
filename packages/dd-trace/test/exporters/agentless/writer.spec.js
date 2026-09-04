@@ -18,7 +18,9 @@ describe('AgentlessWriter', () => {
   let encoder
   let encoderArgs
   let exporter
+  let getHttpsProxyAgent
   let log
+  let proxyAgent
   let writer
 
   beforeEach(() => {
@@ -34,6 +36,8 @@ describe('AgentlessWriter', () => {
       sendV04: sinon.stub().callsArg(1),
     }
     createAgentlessExporter = sinon.stub().returns(exporter)
+    proxyAgent = {}
+    getHttpsProxyAgent = sinon.stub().returns(proxyAgent)
     log = {
       debug: sinon.stub(),
       error: sinon.stub(),
@@ -55,6 +59,7 @@ describe('AgentlessWriter', () => {
       }),
       '../../encode/0.4': { AgentEncoder },
       '../../log': log,
+      '../common/proxy': { getHttpsProxyAgent },
     })
   })
 
@@ -94,7 +99,10 @@ describe('AgentlessWriter', () => {
       tracerVersion: 'tracer-version',
       languageVersion: process.version,
       languageInterpreter: 'v8',
+    }, {
+      agent: proxyAgent,
     })
+    sinon.assert.calledOnceWithExactly(getHttpsProxyAgent, new URL('https://intake.example/custom-path'))
   })
 
   it('suppresses instrumentation of the data-pipeline intake request', async () => {
@@ -142,6 +150,22 @@ describe('AgentlessWriter', () => {
     )
   })
 
+  it('contains proxy configuration failures before constructing the data pipeline', async () => {
+    const error = new Error('invalid proxy URL')
+    getHttpsProxyAgent.throws(error)
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.notCalled(createAgentlessExporter)
+    sinon.assert.calledWithExactly(
+      log.error,
+      'Failed to send %d trace(s) to the agentless intake: %s',
+      1,
+      'invalid proxy URL'
+    )
+  })
+
   it('contains synchronous data-pipeline send failures', async () => {
     exporter.sendV04.throws(new Error('send failed'))
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
@@ -162,11 +186,21 @@ describe('AgentlessWriter', () => {
     await new Promise(resolve => writer.flush(resolve))
 
     sinon.assert.notCalled(createAgentlessExporter)
+    sinon.assert.notCalled(getHttpsProxyAgent)
     sinon.assert.notCalled(exporter.sendV04)
     sinon.assert.calledWithExactly(
       log.warn,
       'DD_API_KEY will not be sent because the configured receiver is neither HTTPS nor loopback.'
     )
+  })
+
+  it('keeps loopback HTTP receivers direct', async () => {
+    writer = new AgentlessWriter({ url: new URL('http://127.0.0.1:8126') })
+
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.notCalled(getHttpsProxyAgent)
+    assert.strictEqual(createAgentlessExporter.firstCall.args[1].agent, undefined)
   })
 
   it('reuses the pipeline exporter while its endpoint and API key are unchanged', async () => {
