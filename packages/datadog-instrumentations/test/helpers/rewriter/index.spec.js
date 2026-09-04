@@ -57,7 +57,20 @@ describe('check-require-cache', () => {
     return mod.exports
   }
 
+  /** @param {string} source */
+  function assertInactiveFastPath (source) {
+    const guardIndex = source.indexOf('if (!tr_ch_apm_hasSubscribers')
+    const argumentsIndex = source.indexOf('const __apm$arguments =')
+
+    assert.notStrictEqual(guardIndex, -1)
+    assert.ok(argumentsIndex > guardIndex)
+    assert.doesNotMatch(source, /const __apm\$traced =/)
+  }
+
   beforeEach(() => {
+    ch = undefined
+    subs = undefined
+
     rewriter = proxyquire('../../../src/helpers/rewriter', {
       './instrumentations': [
         {
@@ -70,6 +83,18 @@ describe('check-require-cache', () => {
             functionName: 'test',
             kind: 'Sync',
           },
+          channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test-trace-sync',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+          },
+          transform: 'configureGraphqlFastPath',
           channelName: 'test_invoke',
         },
         {
@@ -95,6 +120,18 @@ describe('check-require-cache', () => {
             functionName: 'test',
             kind: 'Async',
           },
+          channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test-trace-async',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+          },
+          transform: 'configureGraphqlFastPath',
           channelName: 'test_invoke',
         },
         {
@@ -524,16 +561,41 @@ describe('check-require-cache', () => {
           },
           channelName: 'pregel_stream',
         },
+        {
+          module: {
+            name: 'test-esm',
+            versionRange: '>=0.1',
+            filePath: 'exported-function.mjs',
+          },
+          functionQuery: {
+            functionName: 'execute',
+            kind: 'Sync',
+          },
+          channelName: 'execute',
+        },
+        {
+          module: {
+            name: 'test-esm',
+            versionRange: '>=0.1',
+            filePath: 'exported-function.mjs',
+          },
+          functionQuery: {
+            functionName: 'execute',
+          },
+          transform: 'configureGraphqlFastPath',
+          channelName: 'execute',
+        },
       ],
     })
   })
 
   afterEach(() => {
-    ch.unsubscribe(subs)
+    if (ch && subs) ch.unsubscribe(subs)
   })
 
   it('should auto instrument sync functions', done => {
     const { test } = compile('test-trace-sync')
+    assertInactiveFastPath(content)
 
     subs = {
       start: () => setImmediate(done),
@@ -560,6 +622,7 @@ describe('check-require-cache', () => {
 
   it('should auto instrument async functions', done => {
     const { test } = compile('test-trace-async')
+    assertInactiveFastPath(content)
 
     subs = {
       start: () => setImmediate(done),
@@ -1190,6 +1253,29 @@ describe('check-require-cache', () => {
     assert.match(content, /\bimport\s+.+\s+from\s+"file:\/\//)
     assert.match(content, /tr_ch_apm_tracingChannel/)
     assert.doesNotMatch(content, /require\("/)
+  })
+
+  it('should apply the inactive fast path to exported ESM functions', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test-esm', 'exported-function.mjs')
+    const source = 'export function execute (value) { return value }\n'
+    const rewritten = rewriter.rewrite(source, filename, 'module', {
+      moduleName: 'test-esm',
+      filePath: 'exported-function.mjs',
+    })
+
+    assertInactiveFastPath(rewritten)
+    const originalIndex = rewritten.indexOf('const __apm$original_execute =')
+    const exportIndex = rewritten.indexOf('export function execute')
+    assert.notStrictEqual(originalIndex, -1)
+    assert.ok(exportIndex > originalIndex)
+
+    const dir = mkdtempSync(join(tmpdir(), 'dd-rewriter-esm-fast-path-'))
+    writeFileSync(join(dir, 'package.json'), '{"type":"module"}')
+    const outFile = join(dir, 'pregel-class.mjs')
+    writeFileSync(outFile, rewritten)
+
+    const mod = await import(pathToFileURL(outFile).href)
+    assert.equal(mod.execute('result'), 'result')
   })
 
   it('should rewrite ESM modules with returnKind: AsyncIterator without injecting require()', async () => {
