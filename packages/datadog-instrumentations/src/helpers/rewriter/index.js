@@ -1,8 +1,9 @@
 'use strict'
 
-const { readFileSync } = require('fs')
-const { join } = require('path')
-const { pathToFileURL } = require('url')
+const { readFileSync } = require('node:fs')
+const { join } = require('node:path')
+const { pathToFileURL } = require('node:url')
+
 const log = require('../../../../dd-trace/src/log')
 const instrumentations = require('./instrumentations')
 const { getRewriteTarget } = require('./targets')
@@ -14,6 +15,9 @@ const { getRewriteTarget } = require('./targets')
  *
  * @typedef {object} Transformer
  * @property {(source: string, moduleType: 'cjs'|'esm') => { code: string, map?: string }} transform
+ *
+ * @typedef {object} CodeTransformer
+ * @property {(instrumentations: object, dcModule?: string) => InstrumentationMatcher} create
  */
 
 /**
@@ -30,6 +34,8 @@ const disabled = new Set()
 let matcherCjs
 /** @type {InstrumentationMatcher|undefined} */
 let matcherEsm
+/** @type {Map<string, InstrumentationMatcher>} */
+const matcherBundlerByDcModule = new Map()
 
 // Keep the marker split: source-map scanners can read a contiguous token in
 // string literals as this file's own inline map.
@@ -57,33 +63,72 @@ function rewrite (content, filename, format, target) {
 
   if (disabled.has(moduleName)) return content
 
-  const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
-
-  if (!transformer) return content
-
   try {
-    const source = getSourceText(content)
+    const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
+    if (!transformer) return content
 
-    // TODO: pass existing sourcemap as input for remapping
+    const source = getSourceText(content)
     const { code, map } = transformer.transform(source, moduleType)
 
     if (!map) return code
 
-    const inlineMap = Buffer.from(map).toString('base64')
-
-    return code + '\n' + SOURCE_MAP_PREFIX + inlineMap
-  } catch (e) {
-    log.error(e)
+    return code + '\n' + SOURCE_MAP_PREFIX + Buffer.from(map).toString('base64')
+  } catch (error) {
+    log.error(error)
   }
 
   return content
 }
 
 /**
+ * @param {string|Buffer|ArrayBuffer|Uint8Array} content
+ * @param {string} filename
+ * @param {string} [format]
+ * @param {{ moduleName: string, filePath: string }} [target]
+ * @param {string|object} [sourceMap]
+ * @param {string} [dcModule]
+ * @returns {{ code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }}
+ */
+function rewriteWithSourceMap (content, filename, format, target, sourceMap, dcModule) {
+  if (!content) return { code: content, map: sourceMap }
+
+  target ||= getRewriteTarget(filename)
+  if (!target) return { code: content, map: sourceMap }
+
+  filename = filename.replace('file://', '')
+
+  const moduleType = format === 'module' ? 'esm' : 'cjs'
+  const { moduleName, filePath } = target
+  const version = getVersion(filename, filePath)
+
+  if (disabled.has(moduleName)) return { code: content, map: sourceMap }
+
+  const matcher = getMatcher(moduleType, dcModule)
+  const transformer = matcher.getTransformer(moduleName, version, filePath)
+
+  if (!transformer) return { code: content, map: sourceMap }
+
+  const source = getSourceText(content)
+  const { code, map } = transformer.transform(source, moduleType, sourceMap)
+  return { code, map }
+}
+
+/**
  * @param {'cjs'|'esm'} moduleType
+ * @param {string} [dcModule]
  * @returns {InstrumentationMatcher}
  */
-function getMatcher (moduleType) {
+function getMatcher (moduleType, dcModule) {
+  if (dcModule !== undefined) {
+    let matcher = matcherBundlerByDcModule.get(dcModule)
+    if (matcher === undefined) {
+      matcher = createMatcher(moduleType, dcModule)
+      matcherBundlerByDcModule.set(dcModule, matcher)
+    }
+
+    return matcher
+  }
+
   if (moduleType === 'esm') {
     matcherEsm ??= createMatcher(moduleType)
 
@@ -97,10 +142,14 @@ function getMatcher (moduleType) {
 
 /**
  * @param {'cjs'|'esm'} moduleType
+ * @param {string} [dcModule]
  * @returns {InstrumentationMatcher}
  */
-function createMatcher (moduleType) {
-  const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+function createMatcher (moduleType, dcModule) {
+  const transformer = /** @type {CodeTransformer} */ (
+    require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+  )
+  const { create } = transformer
   const {
     awaitContextCallback,
     awaitContextCallbackAtFunctionStart,
@@ -114,7 +163,13 @@ function createMatcher (moduleType) {
     waitForAsyncEnd,
   } = require('./transforms')
 
-  const matcher = create(instrumentations, getDcPolyfillSpecifier(moduleType))
+  if (dcModule === undefined) {
+    const resolvedDcPolyfill = require.resolve('dc-polyfill')
+    dcModule = moduleType === 'esm'
+      ? pathToFileURL(resolvedDcPolyfill).href
+      : resolvedDcPolyfill.replaceAll('\\', '/')
+  }
+  const matcher = create(instrumentations, dcModule)
 
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
   matcher.addTransform('awaitContextCallbackAtFunctionStart', awaitContextCallbackAtFunctionStart)
@@ -126,31 +181,7 @@ function createMatcher (moduleType) {
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
-
   return matcher
-}
-
-/**
- * `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
- * (ESM) statements that the transformer splices into the rewritten module.
- * `require()` accepts an absolute filesystem path; the ESM resolver rejects it
- * with `ERR_INVALID_MODULE_SPECIFIER` and needs a `file://` URL instead. Each
- * matcher therefore hands the transformer the form that is valid for the
- * module type it is rewriting.
- *
- * @param {'cjs'|'esm'} moduleType
- * @returns {string|undefined} `undefined` when `dc-polyfill` cannot be resolved
- */
-function getDcPolyfillSpecifier (moduleType) {
-  try {
-    const resolved = require.resolve('dc-polyfill')
-
-    return moduleType === 'esm' ? pathToFileURL(resolved).href : resolved.replaceAll('\\', '/')
-  } catch {
-    // The `dc-polyfill` module is unavailable for some reason (like bundling).
-    // Let's just keep the default of using `diagnostics-channel` as a fallback
-    // which works for most Node versions.
-  }
 }
 
 /** @typedef {{ buffer: ArrayBuffer | SharedArrayBuffer, byteLength: number, byteOffset: number }} BufferView */
@@ -189,4 +220,4 @@ function getVersion (filename, filePath) {
   return moduleVersions[basename]
 }
 
-module.exports = { rewrite, disable }
+module.exports = { rewrite, rewriteWithSourceMap, disable }

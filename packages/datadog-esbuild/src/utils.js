@@ -4,10 +4,9 @@
 const { pathToFileURL, fileURLToPath } = require('node:url')
 const fs = require('node:fs')
 const path = require('node:path')
-const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
-
 const LOAD_OPERATION = 0
 const RESOLVE_OPERATION = 1
+const IMPORT_CONDITIONS = new Set(['import'])
 
 const getExportsImporting = (url) => import(url).then(Object.keys)
 let getExportsModulePromise
@@ -19,16 +18,14 @@ const loadGetExportsModule = () => {
   return getExportsModulePromise
 }
 
-const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
-  ? async (srcUrl, context, getSource) => {
-    const mod = await loadGetExportsModule()
-    const exportNames = mod.getExports(srcUrl, context, getSource)
-    if (exportNames?.next) {
-      return driveGetExportsGenerator(exportNames, getSource)
-    }
-    return exportNames
+const getExports = async (srcUrl, context, getSource) => {
+  const mod = await loadGetExportsModule()
+  const exportNames = mod.getExports(srcUrl, context, getSource)
+  if (exportNames?.next) {
+    return driveGetExportsGenerator(exportNames, getSource)
   }
-  : getExportsImporting
+  return exportNames
+}
 
 function isStarExportLine (line) {
   return /^\* from /.test(line)
@@ -58,10 +55,14 @@ function isBareSpecifier (specifier) {
   }
 }
 
-function resolve (specifier, context) {
-  // This comes from an import, that is why import makes preference
-  const conditions = ['import']
-
+/**
+ * Resolves a module with the import conditions used by ESM instrumentation.
+ *
+ * @param {string} specifier
+ * @param {{ parentURL: URL }} context
+ * @returns {{ format: string, url: URL }}
+ */
+function resolveModule (specifier, context) {
   if (specifier.startsWith('file://')) {
     specifier = fileURLToPath(specifier)
   }
@@ -69,19 +70,12 @@ function resolve (specifier, context) {
   const resolved = require.resolve(specifier, {
     paths: [fileURLToPath(context.parentURL)],
     // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
-    conditions,
+    conditions: IMPORT_CONDITIONS,
   })
 
   return {
     url: pathToFileURL(resolved),
     format: isESMFile(resolved) ? 'module' : 'commonjs',
-  }
-}
-
-function getSource (url, { format }) {
-  return {
-    source: fs.readFileSync(fileURLToPath(url), 'utf8'),
-    format,
   }
 }
 
@@ -122,7 +116,7 @@ function driveGetExportsGenerator (exportsGenerator, getSource) {
       if (operationType === LOAD_OPERATION) {
         result = getSource(operation[1], operation[2])
       } else if (operationType === RESOLVE_OPERATION) {
-        result = resolve(operation[1], operation[2])
+        result = resolveModule(operation[1], operation[2])
       } else {
         throw new Error(`Unsupported import-in-the-middle getExports operation: ${operationType}`)
       }
@@ -144,16 +138,31 @@ function driveGetExportsGenerator (exportsGenerator, getSource) {
  * @param {boolean} [moduleData.internal]
  * @param {object} moduleData.context
  * @param {boolean} [moduleData.excludeDefault]
+ * @param {Map<string, string>} [moduleData.moduleSources]
+ * @param {Set<string>} [activeModules]
  * @returns {Promise<Map>}
  */
-async function processModule ({ path, internal = false, context, excludeDefault = false }) {
+async function processModule (
+  { path, internal = false, context, excludeDefault = false, moduleSources = new Map() },
+  activeModules
+) {
   let exportNames, srcUrl
   if (internal) {
     // we can not read and parse of internal modules
     exportNames = await getExportsImporting(path)
   } else {
     srcUrl = pathToFileURL(path)
-    exportNames = await getExports(srcUrl, context, getSource)
+    const loadSource = (url, { format }) => {
+      const modulePath = fileURLToPath(url)
+      let source = moduleSources.get(modulePath)
+      if (source === undefined) {
+        source = fs.readFileSync(modulePath, 'utf8')
+        moduleSources.set(modulePath, source)
+      }
+      return { source, format }
+    }
+    loadSource(srcUrl, context)
+    exportNames = await getExports(srcUrl, context, loadSource)
   }
 
   const starExports = new Set()
@@ -200,20 +209,26 @@ async function processModule ({ path, internal = false, context, excludeDefault 
       // the `format`. We can't rely on the parents `format` to know if this
       // sub-module is ESM or CJS!
 
-      const result = resolve(newSpecifier, { parentURL: srcUrl })
+      const result = resolveModule(newSpecifier, { parentURL: srcUrl })
+
+      activeModules ??= new Set([srcUrl.href])
+      if (activeModules.has(result.url.href)) continue
+      activeModules.add(result.url.href)
 
       // eslint-disable-next-line no-await-in-loop
       const subSetters = await processModule({
         path: fileURLToPath(result.url),
         context: { ...context, format: result.format },
         excludeDefault: true,
-      })
+        moduleSources,
+      }, activeModules)
+      activeModules.delete(result.url.href)
 
       for (const [name, setter] of subSetters.entries()) {
         addSetter(name, setter, true)
       }
     } else {
-      const variableName = `$${n.replaceAll(/[^a-zA-Z0-9_$]/g, '_')}`
+      const variableName = `$dd${Buffer.from(n).toString('hex')}`
       const objectKey = JSON.stringify(n)
       const reExportedName = n === 'default' ? n : objectKey
 
@@ -246,8 +261,8 @@ async function processModule ({ path, internal = false, context, excludeDefault 
  * @returns {boolean}
  */
 function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
-  if (fullPathToModule.endsWith('.mjs')) return true
-  if (fullPathToModule.endsWith('.cjs')) return false
+  if (fullPathToModule.endsWith('.mjs') || fullPathToModule.endsWith('.mts')) return true
+  if (fullPathToModule.endsWith('.cjs') || fullPathToModule.endsWith('.cts')) return false
 
   const pathParts = fullPathToModule.split(path.sep)
   do {
@@ -273,4 +288,5 @@ function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
 module.exports = {
   processModule,
   isESMFile,
+  resolveModule,
 }

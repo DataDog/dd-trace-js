@@ -4,13 +4,14 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
+const { loadChannel } = require('./register.js')
 const {
-  filename,
-  loadChannel,
-  matchVersion,
-} = require('./register.js')
+  getDisabledInstrumentations,
+  matchesInstrumentation,
+} = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
+const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
 // environments (webpack, esbuild), Node.js built-in modules required by
@@ -69,25 +70,37 @@ function doHook (name) {
 
   try {
     hookFn()
-  } catch {
-    log.error('esbuild-wrapped %s hook failed', name)
+  } catch (error) {
+    log.error('esbuild-wrapped %s hook failed: %s', name, String(error?.message ?? error), error)
   }
 }
 
 /** @type {Set<string>} */
 const instrumentedNodeModules = new Set()
 
-/** @typedef {{ package: string, module: unknown, version: string, path: string }} Payload */
+/**
+ * @typedef {object} Payload
+ * @property {string} [integration]
+ * @property {string} package
+ * @property {unknown} module
+ * @property {string} version
+ * @property {string} path
+ * @property {string} [moduleBaseDir]
+ * @property {string} [moduleName]
+ * @property {(exports: unknown, patchDefault: boolean) => void} [apply]
+ */
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
+  const integration = payload.integration ?? name
+  if (disabledInstrumentations.has(integration)) return
 
-  const isPrefixedWithNode = name.startsWith('node:')
+  const isPrefixedWithNode = integration.startsWith('node:')
 
-  const isNodeModule = isPrefixedWithNode || !hooks[name]
+  const isNodeModule = isPrefixedWithNode || !hooks[integration]
 
   if (isNodeModule) {
-    const nodeName = isPrefixedWithNode ? name.slice(5) : name
+    const nodeName = isPrefixedWithNode ? integration.slice(5) : integration
     // Used for node: prefixed modules to prevent double instrumentation.
     if (instrumentedNodeModules.has(nodeName)) {
       return
@@ -95,7 +108,7 @@ dc.subscribe(CHANNEL, (message) => {
     instrumentedNodeModules.add(nodeName)
   }
 
-  doHook(name)
+  doHook(integration)
 
   const instrumentation = instrumentations[name] ?? instrumentations[`node:${name}`]
 
@@ -104,16 +117,31 @@ dc.subscribe(CHANNEL, (message) => {
     return
   }
 
-  for (const { file, versions, hook } of instrumentation) {
-    if (payload.path !== filename(name, file) || !matchVersion(payload.version, versions)) {
-      continue
-    }
+  for (const entry of instrumentation) {
+    if (!matchesInstrumentation(name, payload.version, payload.path, entry)) continue
+
+    const { patchDefault, hook } = entry
 
     try {
-      loadChannel.publish({ name, version: payload.version, file })
-      payload.module = hook(payload.module, payload.version) ?? payload.module
-    } catch (e) {
-      log.error('Error executing bundler hook', e)
+      loadChannel.publish({ name: integration })
+      let exports = payload.module
+      const namespace = /** @type {Record<string, unknown>} */ (exports)
+      // Only generated ESM proxy payloads need default-export unwrapping.
+      if (typeof payload.apply === 'function' && patchDefault === !!namespace.default) {
+        if (patchDefault) {
+          exports = namespace.default
+        } else {
+          continue
+        }
+      }
+      exports = hook(exports, payload.version, false, {
+        moduleBaseDir: payload.moduleBaseDir,
+        moduleName: payload.moduleName ?? payload.path,
+      }) ?? exports
+      payload.module = exports
+      payload.apply?.(exports, patchDefault)
+    } catch (error) {
+      log.error('Error executing bundler hook: %s', String(error?.message ?? error), error)
     }
   }
 })

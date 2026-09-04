@@ -1148,6 +1148,14 @@ export default [
     },
   },
   {
+    name: 'dd-trace/datadog-esbuild/cyclic-star-fixtures',
+    files: ['packages/datadog-esbuild/test/resources/export-cycle-*.mjs'],
+    rules: {
+      'import/export': 'off',
+      'import/no-cycle': 'off',
+    },
+  },
+  {
     // These fixture apps import dd-trace the way a customer does
     // (`require('dd-trace')`), so dd-trace never appears in their own manifest.
     // Both extraneous-require rules must be off; otherwise the rule fires

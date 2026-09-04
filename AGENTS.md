@@ -174,5 +174,7 @@ New instrumentations belong in `packages/datadog-instrumentations/` and communic
 channels. Validate new plugin structure with
 `./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js`.
 
+Use `dc-polyfill` for production diagnostic-channel imports. Do not import `node:diagnostics_channel` directly.
+
 For vendored rspack dependencies, run yarn from `vendor/`; generated bundles are written under
 `packages/node_modules/`.

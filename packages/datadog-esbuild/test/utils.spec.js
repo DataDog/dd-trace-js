@@ -28,14 +28,41 @@ describe('esbuild utils', () => {
     })
 
     it('should set the nested exports', async () => {
+      const modulePath = path.join(__dirname, 'resources', 'export-method-and-nested-method.mjs')
+      const nestedPath = path.join(__dirname, 'resources', 'export-method.mjs')
+      const moduleSources = new Map()
       const setters = await processModule({
-        path: path.join(__dirname, 'resources', 'export-method-and-nested-method.mjs'),
+        path: modulePath,
         context: { format: 'module' },
+        moduleSources,
       })
 
       assert.strictEqual(setters.size, 2)
       assert.strictEqual(setters.has('exportMethod'), true)
       assert.strictEqual(setters.has('exportedMethod2'), true)
+      assert.strictEqual(moduleSources.size, 2)
+      assert.strictEqual(moduleSources.get(modulePath), fs.readFileSync(modulePath, 'utf8'))
+      assert.strictEqual(moduleSources.get(nestedPath), fs.readFileSync(nestedPath, 'utf8'))
+    })
+
+    it('should resolve bare star exports with import conditions', async () => {
+      const modulePath = path.join(__dirname, 'resources', 'export-bare-star.mjs')
+      const setters = await processModule({
+        path: modulePath,
+        context: { format: 'module' },
+        moduleSources: new Map([[modulePath, "export * from '@actions/core'\n"]]),
+      })
+
+      assert.strictEqual(setters.has('setSecret'), true)
+    })
+
+    it('should terminate cyclic star exports', async () => {
+      const setters = await processModule({
+        path: path.join(__dirname, 'resources', 'export-cycle-a.mjs'),
+        context: { format: 'module' },
+      })
+
+      assert.deepStrictEqual([...setters.keys()].sort(), ['fromA', 'fromB'])
     })
 
     it('should set the native module exports', async () => {
@@ -49,6 +76,29 @@ describe('esbuild utils', () => {
       assert.strictEqual(setters.has('default'), true)
       assert.strictEqual(setters.has('createServer'), true)
       assert.strictEqual(setters.has('METHODS'), true)
+    })
+
+    it('should generate distinct locals for export names that sanitize identically', async () => {
+      const modulePath = path.join(__dirname, 'resources', 'colliding-export-names.mjs')
+      const setters = await processModule({
+        path: modulePath,
+        context: { format: 'module' },
+        moduleSources: new Map([[
+          modulePath,
+          'const foo_bar = 1, fooBar = 2\nexport { foo_bar, fooBar as "foo-bar" }\n',
+        ]]),
+      })
+      const source = `
+        const namespace = { foo_bar: 1, 'foo-bar': 2 }
+        const _ = {}
+        const set = {}
+        const get = {}
+        ${[...setters.values()].join('\n')}
+      `
+      const namespace = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+
+      assert.strictEqual(namespace.foo_bar, 1)
+      assert.strictEqual(namespace['foo-bar'], 2)
     })
   })
 
@@ -73,6 +123,14 @@ describe('esbuild utils', () => {
 
     it('should return false if the file has a .cjs extension', () => {
       assert.strictEqual(isESMFile('/path/to/test.cjs'), false)
+    })
+
+    it('should return true if the file has a .mts extension in a CommonJS package', () => {
+      assert.strictEqual(isESMFile('/path/to/test.mts', '/path/to/package.json', { type: 'commonjs' }), true)
+    })
+
+    it('should return false if the file has a .cts extension in an ESM package', () => {
+      assert.strictEqual(isESMFile('/path/to/test.cts', '/path/to/package.json', { type: 'module' }), false)
     })
 
     it('should return true if the file is in a directory with a package.json that has a type of module', () => {

@@ -565,6 +565,20 @@ describe('check-require-cache', () => {
           module: {
             name: 'test-esm',
             versionRange: '>=0.1',
+            filePath: 'pregel-class.js',
+          },
+          functionQuery: {
+            methodName: 'stream',
+            className: 'Pregel',
+            kind: 'Sync',
+            returnKind: 'AsyncIterator',
+          },
+          channelName: 'pregel_stream_secondary',
+        },
+        {
+          module: {
+            name: 'test-esm',
+            versionRange: '>=0.1',
             filePath: 'exported-function.mjs',
           },
           functionQuery: {
@@ -1238,6 +1252,99 @@ describe('check-require-cache', () => {
     const source = readFileSync(filename, 'utf8')
 
     assert.strictEqual(rewriter.rewrite(source, filename, 'module'), source)
+  })
+
+  it('should compose an existing source map for bundler consumers', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test-trace-sync', 'index.js')
+    const source = readFileSync(filename, 'utf8')
+    const sourceMap = {
+      file: filename,
+      mappings: 'AAAA',
+      names: [],
+      sources: ['original.js'],
+      sourcesContent: [source],
+      version: 3,
+    }
+
+    const result = rewriter.rewriteWithSourceMap(source, filename, 'commonjs', {
+      moduleName: 'test-trace-sync',
+      filePath: 'index.js',
+    }, sourceMap, '../dc-polyfill.js')
+    const map = JSON.parse(result.map)
+
+    assert.match(result.code, /tr_ch_apm_tracingChannel/)
+    assert.match(result.code, /require\("\.\.\/dc-polyfill\.js"\)/)
+    assert.strictEqual(map.sources[0], 'original.js')
+    assert.strictEqual(map.sourcesContent[0], source)
+    assert.strictEqual(map.sources.includes('test-trace-sync/index.js'), true)
+  })
+
+  it('should cache bundler matchers by diagnostic channel module', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test-trace-sync', 'index.js')
+    const source = readFileSync(filename, 'utf8')
+    const target = { moduleName: 'test-trace-sync', filePath: 'index.js' }
+    const codeTransformer = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+    const create = sinon.spy(codeTransformer, 'create')
+
+    try {
+      rewriter.rewriteWithSourceMap(source, filename, 'commonjs', target, undefined, '../dc-polyfill.js')
+      rewriter.rewriteWithSourceMap(source, filename, 'commonjs', target, undefined, '../../dc-polyfill.js')
+      rewriter.rewriteWithSourceMap(source, filename, 'commonjs', target, undefined, '../dc-polyfill.js')
+
+      assert.strictEqual(create.callCount, 2)
+    } finally {
+      create.restore()
+    }
+  })
+
+  it('should preserve regular sources that cannot be rewritten', () => {
+    const source = 'module.exports = true'
+
+    assert.strictEqual(rewriter.rewrite('', '/project/empty.js', 'module'), '')
+    assert.strictEqual(rewriter.rewrite(
+      source,
+      '/project/node_modules/missing/index.js',
+      'commonjs',
+      { moduleName: 'missing', filePath: 'index.js' }
+    ), source)
+    assert.strictEqual(rewriter.rewrite(
+      source,
+      '/project/node_modules/test-trace-sync/index.js',
+      'commonjs',
+      { moduleName: 'test-trace-sync', filePath: 'index.js' }
+    ), source)
+
+    rewriter.disable('test-disabled')
+    assert.strictEqual(rewriter.rewrite(
+      source,
+      '/project/node_modules/test-disabled/index.js',
+      'commonjs',
+      { moduleName: 'test-disabled', filePath: 'index.js' }
+    ), source)
+  })
+
+  it('should preserve bundled sources that cannot be rewritten', () => {
+    const sourceMap = { mappings: '', version: 3 }
+    assert.deepStrictEqual(
+      rewriter.rewriteWithSourceMap('', '/project/empty.js', 'module', undefined, sourceMap),
+      { code: '', map: sourceMap }
+    )
+    assert.deepStrictEqual(rewriter.rewriteWithSourceMap(
+      'module.exports = true',
+      '/project/node_modules/missing/index.js',
+      'commonjs',
+      { moduleName: 'missing', filePath: 'index.js' },
+      sourceMap
+    ), { code: 'module.exports = true', map: sourceMap })
+
+    rewriter.disable('test-disabled')
+    assert.deepStrictEqual(rewriter.rewriteWithSourceMap(
+      'module.exports = true',
+      '/project/node_modules/test-disabled/index.js',
+      'commonjs',
+      { moduleName: 'test-disabled', filePath: 'index.js' },
+      sourceMap
+    ), { code: 'module.exports = true', map: sourceMap })
   })
 
   it('should use import when rewriting esm modules', () => {
