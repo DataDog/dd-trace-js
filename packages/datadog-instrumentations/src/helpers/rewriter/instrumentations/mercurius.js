@@ -38,4 +38,12 @@ module.exports = [
     transform: 'configureMercuriusRequest',
     channelName: 'apm:graphql:request',
   },
+  {
+    module: moduleDefinition,
+    functionQuery: {
+      functionName: 'fastifyGraphQl',
+    },
+    transform: 'configureGraphqlFastPath',
+    channelName: 'apm:graphql:request',
+  },
 ]
