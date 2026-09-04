@@ -152,6 +152,14 @@ never weaken or delete assertions to make them pass.
 
 ## Pull Requests and CI
 
+### Review Guidelines
+
+Before pushing code or creating a pull request, you must run the [dd-apm-sdk-review](./.agents/skills/dd-apm-sdk-review/) skill on your unpushed changes. If any `P0` issues are reported, you must either fix them or get explicit authorization from the human you are working with and record the unresolved finding verbatim in the PR description. `P1` and `P2` findings should be fixed before pushing, but can be dismissed by the human.
+
+Exception: security findings route through [SECURITY.md](SECURITY.md) instead. A PR description is a public forum, so posting one there is an improper disclosure.
+
+### Commit Messages
+
 - Commit format: `type(scope): description`.
 - Types: `feat`, `fix`, `perf`, `refactor`, `test`, `bench`, `docs`, `chore`, `ci`.
 - Reserve `feat`, `fix`, and `perf` for shipped production code; use the area type for tests, benchmarks, CI, or tools.
@@ -169,6 +177,7 @@ Load the relevant repository skill when the task matches:
 - [LLMObs integrations](.agents/skills/llmobs-integration/SKILL.md)
 - [LLMObs tests and VCR cassettes](.agents/skills/llmobs-testing/SKILL.md)
 - [Serverless platform integrations](.agents/skills/serverless-integrations/SKILL.md)
+- [Pre-push code review](.agents/skills/dd-apm-sdk-review/SKILL.md)
 
 New instrumentations belong in `packages/datadog-instrumentations/` and communicate with plugins through diagnostic
 channels. Validate new plugin structure with

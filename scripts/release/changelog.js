@@ -20,15 +20,18 @@ const UNCATEGORIZED_PRODUCT = 'Other'
 const DEPENDENCY_PRODUCT = 'Dependencies'
 const INTERNAL_PATH_PATTERNS = [
   /^\.agents\//,
+  /^\.claude\//,
+  /^\.cursor\//,
   /^\.github\//,
   /^\.gitlab(?:-ci\.yml|\/)/,
+  /^\.llm-validation\//,
   /^benchmark\//,
   /^integration-tests\//,
   /^scripts\//,
   /(^|\/)(?:test|tests|benchmark)(?:\/|$)/,
   /\.(?:spec|test)\.[cm]?[jt]sx?$/,
   /(^|\/)(?:package-lock\.json|yarn\.lock)$/,
-  /^(?:AGENTS\.md|CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json)$/,
+  /^(?:AGENTS\.md|CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json|\.gitignore)$/,
 ]
 // Dependabot tags the commit scope `deps-dev` for development dependencies and
 // `deps` for production ones, but the `deps` manifests under test/benchmark/docs

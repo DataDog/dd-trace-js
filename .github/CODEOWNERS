@@ -8,6 +8,12 @@
 /.gitlab/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.husky/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.vscode/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.llm-validation/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.promptfoo/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.agents/dd-apm-sdk-review-overrides/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.agents/skills/dd-apm-sdk-review/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.claude/skills/dd-apm-sdk-review @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.cursor/skills/dd-apm-sdk-review @DataDog/dd-trace-js @DataDog/lang-platform-js
 /scripts/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /vendor/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 
