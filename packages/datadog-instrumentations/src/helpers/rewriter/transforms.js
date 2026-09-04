@@ -456,6 +456,12 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
 function configureGraphqlJitDeferredField (_state, node) {
   const declarations = query(node, 'VariableDeclaration:has(VariableDeclarator[id.name="resolverCall"])')
   const resolverCalls = query(node, 'VariableDeclarator[id.name="resolverCall"]')
+  const executionErrorDeclarations = query(
+    node,
+    'VariableDeclaration:has(VariableDeclarator[id.name="executionError"])'
+  )
+  const executionErrors = query(node, 'VariableDeclarator[id.name="executionError"]')
+  const emptyErrors = query(node, 'VariableDeclarator[id.name="emptyError"]')
   assert.strictEqual(
     declarations.length,
     1,
@@ -466,6 +472,16 @@ function configureGraphqlJitDeferredField (_state, node) {
     1,
     'configureGraphqlJitDeferredField: resolver call not found'
   )
+  assert.strictEqual(
+    executionErrorDeclarations.length,
+    1,
+    'configureGraphqlJitDeferredField: execution error declaration not found'
+  )
+  assert.strictEqual(executionErrors.length, 1, 'configureGraphqlJitDeferredField: execution error not found')
+  assert.strictEqual(emptyErrors.length, 1, 'configureGraphqlJitDeferredField: empty error not found')
+
+  const [resolverCall] = resolverCalls
+  assertGraphqlJitResolverCall(resolverCall.init)
 
   const [descriptor] = parse(`
     const ddTraceDescriptorId = context.ddTraceRuntime?.registerField(context, responsePath, {
@@ -476,18 +492,58 @@ function configureGraphqlJitDeferredField (_state, node) {
     })
   `).body
   assert(
-    insertBeforeStatement(node.body, declarations[0], [descriptor]),
+    insertBeforeStatement(node.body, executionErrorDeclarations[0], [descriptor]),
     'configureGraphqlJitDeferredField: could not insert descriptor'
   )
 
-  const [resolverCall] = resolverCalls
+  executionErrors[0].init.arguments[4] = parse(`
+    ddTraceDescriptorId === undefined
+      ? 'err'
+      : '(__context.ddTrace?.jitRuntime.recordResolverError(__context.ddTrace, ' +
+        ddTraceDescriptorId + ', err), err)'
+  `).body[0].expression
+  emptyErrors[0].init.arguments[3] = parse(`
+    ddTraceDescriptorId === undefined
+      ? '""'
+      : '(__context.ddTrace?.jitRuntime.recordResolverError(__context.ddTrace, ' +
+        ddTraceDescriptorId + ', err), "")'
+  `).body[0].expression
+
   const replacement = parse(`
-    DD_CALL.slice(0, -1) +
-      (ddTraceDescriptorId === undefined ? '' : ', ' + ddTraceDescriptorId) +
-      ')'
+    context.ddTraceRuntime === undefined
+      ? DD_CALL
+      : context.ddTraceRuntime.compileResolverCall(context, DD_CALL, resolverName, ddTraceDescriptorId)
   `).body[0].expression
   replaceIdentifier(replacement, 'DD_CALL', resolverCall.init)
   resolverCall.init = replacement
+}
+
+/**
+ * @param {import('estree').Expression | null} source
+ */
+function assertGraphqlJitResolverCall (source) {
+  assert.strictEqual(source?.type, 'TemplateLiteral', 'configureGraphqlJitDeferredField: unsupported resolver call')
+
+  const { expressions, quasis } = source
+  assert.ok(expressions.length >= 2, 'configureGraphqlJitDeferredField: resolver call expressions not found')
+  assert.ok(quasis.length >= 3, 'configureGraphqlJitDeferredField: resolver call segments not found')
+  assert.strictEqual(
+    expressions[0].name,
+    'GLOBAL_EXECUTION_CONTEXT',
+    'configureGraphqlJitDeferredField: execution context not found'
+  )
+  assert.strictEqual(
+    quasis[1].value.raw,
+    '.resolvers.',
+    'configureGraphqlJitDeferredField: resolver map access not found'
+  )
+  assert.strictEqual(
+    expressions[1].name,
+    'resolverName',
+    'configureGraphqlJitDeferredField: resolver name not found'
+  )
+  assert.ok(quasis[2].value.raw.startsWith('('), 'configureGraphqlJitDeferredField: resolver call not found')
+  assert.ok(quasis.at(-1).value.raw.endsWith(')'), 'configureGraphqlJitDeferredField: resolver call end not found')
 }
 
 /**

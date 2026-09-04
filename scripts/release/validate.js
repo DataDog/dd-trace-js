@@ -40,8 +40,8 @@ try {
   const currentBranch = capture('git rev-parse --abbrev-ref HEAD')
   const proposalBranch = params[0] || currentBranch
   const tempBranch = randomUUID()
-  const newVersion = proposalBranch.match(/^v([0-9]+\.[0-9]+\.[0-9]+).+/)[1]
-  const releaseLine = newVersion.match(/^([0-9]+).+/)[1]
+  const newVersion = proposalBranch.match(/^v([0-9]+\.[0-9]+\.[0-9]+)[^0-9]/)[1]
+  const releaseLine = newVersion.match(/^([0-9]+)\./)[1]
 
   // Restore current branch on success.
   process.once('exit', code => {

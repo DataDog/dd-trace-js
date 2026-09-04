@@ -130,7 +130,7 @@ const TEST_IS_MODIFIED = 'test.is_modified'
 const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
 const CI_APP_ORIGIN = 'ciapp-test'
 // eslint-disable-next-line no-control-regex
-const TEST_OPTIMIZATION_NAME_CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g
+const TEST_OPTIMIZATION_NAME_CONTROL_RE = /[\u0000-\u0008\v\f\u000E-\u001F\u007F-\u009F]/g
 const TEST_OPTIMIZATION_NAME_WHITESPACE_RE = /\s+/g
 
 // Matches patterns that are almost certainly runtime-generated values in test names:
@@ -1611,19 +1611,77 @@ function fromCoverageMapToCoverage (coverageMap) {
   }, {})
 }
 
+/**
+ * @param {number} code
+ * @returns {boolean}
+ */
+function isAsciiDigit (code) {
+  return code >= 0x30 && code <= 0x39
+}
+
+/**
+ * Parse a V8 stack frame into its file path and 1-based line number.
+ *
+ * Stack text includes caller-controlled function names and can be overwritten. Scan numeric suffixes
+ * right-to-left and discard V8's trailing anonymous location for eval frames.
+ * @param {string} frame
+ * @param {string} expectedPath A known path contained in the frame.
+ * @returns {{ file: string, line: number } | null}
+ */
+function parseStackFrameLocation (frame, expectedPath) {
+  let pathStart = frame.lastIndexOf(expectedPath)
+  while (frame.charCodeAt(pathStart - 1) !== 0x28 /* ( */ &&
+        !frame.startsWith('at ', pathStart - 3) &&
+        !frame.startsWith('file://', pathStart - 7)) {
+    const previousPathStart = frame.lastIndexOf(expectedPath, pathStart - 1)
+    if (previousPathStart === -1) break
+    pathStart = previousPathStart
+  }
+  const scope = frame.slice(pathStart)
+  let end = scope.length
+  if (scope.charCodeAt(end - 1) === 0x29 /* ) */) end--
+
+  while (true) {
+    let lastNumberStart = end
+    while (lastNumberStart > 0 && isAsciiDigit(scope.charCodeAt(lastNumberStart - 1))) {
+      lastNumberStart--
+    }
+    if (lastNumberStart === end || scope.charCodeAt(lastNumberStart - 1) !== 0x3A /* : */) {
+      return null
+    }
+    const colonBeforeLast = lastNumberStart - 1
+    let lineStart = colonBeforeLast
+    while (lineStart > 0 && isAsciiDigit(scope.charCodeAt(lineStart - 1))) {
+      lineStart--
+    }
+    if (lineStart < colonBeforeLast && scope.charCodeAt(lineStart - 1) === 0x3A /* : */) {
+      const fileEnd = lineStart - 1
+      const anonymousStart = fileEnd - 11
+      if (scope.charCodeAt(fileEnd - 1) === 0x3E /* > */ && anonymousStart >= 3 &&
+          scope.startsWith('<anonymous>', anonymousStart) &&
+          scope.charCodeAt(anonymousStart - 1) === 0x20 /* space */ &&
+          scope.charCodeAt(anonymousStart - 2) === 0x2C /* , */ &&
+          scope.charCodeAt(anonymousStart - 3) === 0x29 /* ) */) {
+        end = anonymousStart - 3
+        while (scope.charCodeAt(end - 1) === 0x29 /* ) */) end--
+        continue
+      }
+      return { file: scope.slice(0, fileEnd), line: Number(scope.slice(lineStart, colonBeforeLast)) }
+    }
+    return { file: scope.slice(0, colonBeforeLast), line: Number(scope.slice(lastNumberStart, end)) }
+  }
+}
+
 // Get the start line of a test by inspecting a given error's stack trace
 function getTestLineStart (err, testSuitePath) {
   if (!err.stack) {
     return null
   }
-  // From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L40
   const testFileLine = err.stack.split('\n').find(line => line.includes(testSuitePath))
-  try {
-    const testFileLineMatch = testFileLine.match(/at (?:(.+?)\s+\()?(?:(.+?):(\d+)(?::(\d+))?|([^)]+))\)?/)
-    return Number.parseInt(testFileLineMatch[3], 10) || null
-  } catch {
+  if (!testFileLine) {
     return null
   }
+  return parseStackFrameLocation(testFileLine, testSuitePath)?.line || null
 }
 
 // Get the end line of a test by inspecting a given function's source code
@@ -1646,7 +1704,7 @@ function parseAnnotations (annotations) {
     }
     const { type, description } = annotation
     if (type.startsWith('DD_TAGS')) {
-      const regex = /\[(.*?)\]/
+      const regex = /^DD_TAGS\[([^\]]*)\]/
       const match = regex.exec(type)
       let tagValue = ''
       if (match) {
@@ -1750,15 +1808,9 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
   }
 
   const topFrame = frames[topRelevantFrameIndex]
-  // Regular expression to match the file path, line number, and column number
-  const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
-  const match = topFrame.match(regex)
-
-  if (match) {
-    const filePath = match[1]
-    const lineNumber = Number(match[2])
-
-    return [filePath, lineNumber, topRelevantFrameIndex]
+  const location = parseStackFrameLocation(topFrame, repositoryRoot)
+  if (location) {
+    return [location.file, location.line, topRelevantFrameIndex]
   }
   return []
 }

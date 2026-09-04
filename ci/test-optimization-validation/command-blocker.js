@@ -16,13 +16,15 @@ const MODULE_OR_TRANSFORM_PATTERN =
   /\b(?:Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|ERR_PACKAGE_PATH_NOT_EXPORTED|Package subpath\b[\s\S]+\bnot defined by "exports"|Could not resolve|transform failed)\b/i
 const BUILD_ARTIFACT_PATH_PATTERN = String.raw`(?:^|[\\/])(?:build|dist|generated)(?:[\\/]|['"])`
 const MISSING_ARTIFACT_MESSAGE_PATTERN =
-  '(?:Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|ENOENT|no such file or directory|' +
-  'is not found|does not exist|could not be found)'
+  /Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|ENOENT|no such file or directory|is not found|does not exist|could not be found/
+/* eslint-disable regexp/no-useless-non-capturing-group, regexp/prefer-character-class --
+ * The interpolated message fragment contains alternatives and must stay grouped on both sides of the path. */
 const BUILD_ARTIFACT_MISSING_PATTERN = new RegExp(
-  String.raw`(?:${MISSING_ARTIFACT_MESSAGE_PATTERN}[^\r\n]{0,500}${BUILD_ARTIFACT_PATH_PATTERN}|` +
-    String.raw`${BUILD_ARTIFACT_PATH_PATTERN}[^\r\n]{0,500}${MISSING_ARTIFACT_MESSAGE_PATTERN})`,
+  String.raw`(?:(?:${MISSING_ARTIFACT_MESSAGE_PATTERN.source})[^\r\n]{0,500}${BUILD_ARTIFACT_PATH_PATTERN}|` +
+    String.raw`${BUILD_ARTIFACT_PATH_PATTERN}[^\r\n]{0,500}(?:${MISSING_ARTIFACT_MESSAGE_PATTERN.source}))`,
   'im'
 )
+/* eslint-enable regexp/no-useless-non-capturing-group, regexp/prefer-character-class */
 const FILE_PATH_REFERENCE_PATTERN = /(?:^|[\s('"`])((?:\.{1,2}[\\/]|[\\/]|[A-Za-z]:[\\/])[^'"`\s),;]*)/g
 const CUCUMBER_CONFIG_OPTION_UNSUPPORTED_PATTERN = /unknown option ['"]--config['"]/i
 const CYPRESS_BINARY_PATTERN =
@@ -41,7 +43,7 @@ const PUPPETEER_BROWSER_PATTERN =
 const PUPPETEER_BROWSER_ABORT_PATTERN =
   /Failed to launch the browser process[\s\S]*?(?:signal=SIGABRT|Received signal 6|Abort trap: 6)/i
 const CUCUMBER_BROWSER_FAILURE_PATTERN =
-  /(?:(?:browser|puppeteer|playwright|webdriver)[^\r\n]{0,160}\b(?:aborted|closed|crashed|failed|terminated|unavailable)\b|(?:Failed|Unable) to (?:connect to|launch|start) (?:the )?browser)/i
+  /(?:browser|puppeteer|playwright|webdriver)[^\r\n]{1,160}\b(?:aborted|closed|crashed|failed|terminated|unavailable)\b|(?:Failed|Unable) to (?:connect to|launch|start) (?:the )?browser/i
 const VITEST_BROWSER_PROVIDER_PATTERN =
   /Cannot find (?:module|package).*@vitest\/browser|@vitest\/browser-[^\s'"].*(?:missing|not (?:found|installed))/i
 const RUNNER_COMMAND_NOT_FOUND_PATTERN =

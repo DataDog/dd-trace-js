@@ -357,6 +357,41 @@ describe('Config', () => {
     assert.strictEqual(config.lookup, lookup)
   })
 
+  it('should preserve RegExp sampling rules in the programmatic configuration snapshot', () => {
+    const name = /^health/
+    const service = /^web/
+    const resource = /^GET/
+    const tag = /^2/
+    const samplingRules = [{ name, service, resource, tags: { status: tag }, sampleRate: 0 }]
+    const config = getConfig({ samplingRules })
+
+    assert.ok(config.samplingRules[0].name instanceof RegExp)
+    assert.ok(config.samplingRules[0].service instanceof RegExp)
+    assert.ok(config.samplingRules[0].resource instanceof RegExp)
+    assert.ok(config.samplingRules[0].tags.status instanceof RegExp)
+    assert.notStrictEqual(config.samplingRules[0].name, name)
+    assert.notStrictEqual(config.samplingRules[0].service, service)
+    assert.notStrictEqual(config.samplingRules[0].resource, resource)
+    assert.notStrictEqual(config.samplingRules[0].tags.status, tag)
+
+    const activeName = config.samplingRules[0].name
+    activeName.lastIndex = 2
+
+    config.setRemoteConfig({ samplingRules: [{ name: 'remote', sampleRate: 1 }] })
+    config.setRemoteConfig(null)
+
+    assert.ok(config.samplingRules[0].name instanceof RegExp)
+    assert.ok(config.samplingRules[0].service instanceof RegExp)
+    assert.ok(config.samplingRules[0].resource instanceof RegExp)
+    assert.ok(config.samplingRules[0].tags.status instanceof RegExp)
+    assert.notStrictEqual(config.samplingRules[0].name, activeName)
+    assert.strictEqual(config.samplingRules[0].name.lastIndex, 0)
+    assert.strictEqual(samplingRules[0].name, name)
+    assert.strictEqual(samplingRules[0].service, service)
+    assert.strictEqual(samplingRules[0].resource, resource)
+    assert.strictEqual(samplingRules[0].tags.status, tag)
+  })
+
   it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
     process.env.DD_SERVICE = 'service'
     process.env.OTEL_SERVICE_NAME = 'otel_service'
@@ -430,6 +465,37 @@ describe('Config', () => {
         extract: ['b3', 'datadog'],
       },
     })
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const noop = require('../../src/noop/proxy')
+    assert.strictEqual(indexFile, noop)
+  })
+
+  it('should keep the real proxy when agentless mode disables the OTel trace exporter', () => {
+    process.env.DD_AGENTLESS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const proxy = require('../../src/proxy')
+    assert.strictEqual(indexFile, proxy)
+  })
+
+  it('should keep the real proxy when tracing-only agentless mode disables the OTel trace exporter', () => {
+    process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const proxy = require('../../src/proxy')
+    assert.strictEqual(indexFile, proxy)
+  })
+
+  it('should keep the no-op proxy when tracing is explicitly disabled in agentless mode', () => {
+    process.env.DD_AGENTLESS_ENABLED = 'true'
+    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
@@ -5233,15 +5299,96 @@ rules:
       assert.strictEqual(config.runtimeMetrics.enabled, false)
       assert.strictEqual(config.dsmEnabled, false)
       assert.strictEqual(config.dynamicInstrumentation.enabled, true)
-      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, false)
-      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
-      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+      assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
       assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
-      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
-      assert.strictEqual(config.logInjection, true)
-      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
       assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, [])
       assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+    })
+
+    it('should preserve an explicit trace sample rate', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_TRACE_SAMPLE_RATE = '0.5'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.sampleRate, 0.5)
+      assert.strictEqual(config.sampler.sampleRate, 0.5)
+    })
+
+    it('should preserve an explicit OTel trace sampler', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.OTEL_TRACES_SAMPLER = 'traceidratio'
+      process.env.OTEL_TRACES_SAMPLER_ARG = '0.25'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.sampleRate, 0.25)
+    })
+
+    it('should not infer an OTel sample rate from a disabled trace exporter', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.sampleRate, undefined)
+    })
+
+    it('should preserve explicit OTel span metrics', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+    })
+
+    it('should enable direct log submission when no log transport is configured', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    })
+
+    it('should preserve explicit OTel logs instead of enabling direct log submission', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+    })
+
+    it('should prefer explicit direct log submission when both log transports are enabled', () => {
+      process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    })
+
+    it('should preserve explicitly disabled direct log submission', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
     })
 
     it('should disable log injection when tracing-only agentless mode keeps OTEL logs enabled', () => {
@@ -5283,8 +5430,9 @@ rules:
     })
 
     for (const exporter of ['datadog', 'jest_worker']) {
-      it(`should preserve the Test Optimization ${exporter} exporter`, () => {
+      it(`should preserve the Test Optimization ${exporter} exporter and the OTLP traces exporter`, () => {
         process.env.DD_AGENTLESS_ENABLED = 'true'
+        process.env.OTEL_TRACES_EXPORTER = 'otlp'
         const config = getConfig({
           isCiVisibility: true,
           experimental: { exporter },
@@ -5292,6 +5440,7 @@ rules:
 
         assert.strictEqual(config.experimental.exporter, exporter)
         assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
+        assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       })
     }
 
@@ -5328,12 +5477,12 @@ rules:
       assert.strictEqual(config.reportHostname, true)
     })
 
-    it('should clear client-side sampling when agentless is enabled', () => {
+    it('should preserve the trace sample rate and clear sampling rules when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       process.env.DD_TRACE_SAMPLE_RATE = '0.5'
       const config = getConfig()
       assert.deepStrictEqual(config.sampler.rules, [])
-      assert.strictEqual(config.sampler.sampleRate, undefined)
+      assert.strictEqual(config.sampler.sampleRate, 0.5)
     })
 
     it('should disable 128-bit trace ID generation when agentless is enabled', () => {
