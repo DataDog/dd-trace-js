@@ -225,6 +225,30 @@ module.exports = [
   },
   {
     module: {
+      name: 'webdriver',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="command_default"]',
+    functionQuery: {
+      kind: 'Sync',
+    },
+    channelName: 'command',
+  },
+  {
+    module: {
+      name: 'webdriver',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="command_default"]',
+    functionQuery: {
+      kind: 'Sync',
+    },
+    channelName: 'command',
+  },
+  {
+    module: {
       name: 'webdriverio',
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
@@ -234,24 +258,6 @@ module.exports = [
       kind: 'Async',
     },
     channelName: 'url',
-  },
-  {
-    module: {
-      name: 'webdriverio',
-      versionRange: '>=9.0.0',
-      filePath: 'build/index.js',
-    },
-    astQuery: 'FunctionDeclaration[id.name=/^url[0-9]*$/] ' +
-      'IfStatement[test.object.type="ThisExpression"][test.property.name="isBidi"], ' +
-      'FunctionDeclaration[id.name=/^url[0-9]*$/] ' +
-      'IfStatement[test.operator="&&"][test.left.object.type="ThisExpression"]' +
-      '[test.left.property.name="isBidi"]',
-    channelName: 'url',
-    transform: 'awaitContextCallback',
-    transformOptions: {
-      callbackName: 'rumPreloadCallback',
-      callbackThis: true,
-    },
   },
   {
     module: {
@@ -275,24 +281,6 @@ module.exports = [
       kind: 'Async',
     },
     channelName: 'url',
-  },
-  {
-    module: {
-      name: 'webdriverio',
-      versionRange: '>=9.0.0',
-      filePath: 'build/node.js',
-    },
-    astQuery: 'FunctionDeclaration[id.name=/^url[0-9]*$/] ' +
-      'IfStatement[test.object.type="ThisExpression"][test.property.name="isBidi"], ' +
-      'FunctionDeclaration[id.name=/^url[0-9]*$/] ' +
-      'IfStatement[test.operator="&&"][test.left.object.type="ThisExpression"]' +
-      '[test.left.property.name="isBidi"]',
-    channelName: 'url',
-    transform: 'awaitContextCallback',
-    transformOptions: {
-      callbackName: 'rumPreloadCallback',
-      callbackThis: true,
-    },
   },
   {
     module: {

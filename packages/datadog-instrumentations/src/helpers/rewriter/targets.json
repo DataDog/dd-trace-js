@@ -66,6 +66,8 @@
   "playwright-core/lib/coreBundle.js": "playwright-core",
   "playwright/lib/index.js": "playwright",
   "playwright/lib/runner/index.js": "playwright",
+  "webdriver/build/index.js": "webdriver",
+  "webdriver/build/node.js": "webdriver",
   "webdriverio/build/index.js": "webdriverio",
   "webdriverio/build/node.js": "webdriverio"
 }

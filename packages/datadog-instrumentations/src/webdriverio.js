@@ -66,6 +66,7 @@ const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRun
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
 const testFrameworkFnWrapperCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
 const newWindowCh = tracingChannel('orchestrion:webdriverio:newWindow')
+const webdriverCommandCh = tracingChannel('orchestrion:webdriver:command')
 const urlCh = tracingChannel('orchestrion:webdriverio:url')
 
 const NODE_OPTIONS_SEPARATOR_RE = /\s/
@@ -92,6 +93,15 @@ const rumBrowserPreloadScripts = new WeakMap()
 const rumBrowserSessionEndHandlers = new WeakMap()
 const rumBrowserTestExecutionIds = new WeakMap()
 let isRumCleanupPending = false
+
+/**
+ * Returns the current BiDi browsing context, including an iframe context when one is selected.
+ *
+ * @returns {object}
+ */
+function getCurrentRumContext () {
+  return globalThis.window
+}
 
 addHook({
   name: '@wdio/local-runner',
@@ -254,9 +264,11 @@ async function preloadRumNavigation () {
         typeof browser.scriptAddPreloadScript !== 'function') return
 
     const testExecutionId = getRumTestExecutionId(browser)
-    if (!testExecutionId) return
+    if (!rumRunnerBrowsers.has(browser)) return
 
     retainRumBrowser(browser)
+    if (!testExecutionId) return
+
     rumCorrelationBrowsers.add(browser)
     rumBrowserTestExecutionIds.set(browser, testExecutionId)
     await installRumPreloadScript(browser, testExecutionId)
@@ -306,6 +318,7 @@ async function handleRumNavigation (context) {
       getRumTestExecutionId(browser)
       if (!rumRunnerBrowsers.has(browser)) return
     }
+    retainRumBrowser(browser)
     if (typeof browser.execute !== 'function') return
 
     let rumState
@@ -326,7 +339,6 @@ async function handleRumNavigation (context) {
     const testExecutionId = getRumTestExecutionId(browser, isRumActive)
     if (sampledOut) return
 
-    retainRumBrowser(browser)
     if (!testExecutionId) {
       return
     }
@@ -418,14 +430,29 @@ async function forEachRumWindow (browser, operation, value) {
     return
   }
 
-  for (const windowHandle of windowHandles) {
+  let currentFrameContext
+  if (windowHandles.length > 1 && browser.isBidi &&
+      typeof browser.execute === 'function' && typeof browser.switchFrame === 'function') {
     try {
-      // WebDriver window commands must run in order because each one changes the active window.
-      // eslint-disable-next-line no-await-in-loop
-      await browser.switchToWindow(windowHandle)
+      const currentContext = await browser.execute(getCurrentRumContext)
+      if (currentContext?.context && currentContext.context !== currentWindowHandle) {
+        currentFrameContext = currentContext.context
+      }
     } catch (error) {
-      log.error('WebdriverIO RUM window switch error', error)
-      continue
+      log.error('WebdriverIO RUM frame discovery error', error)
+    }
+  }
+
+  for (const windowHandle of windowHandles) {
+    if (windowHandle !== currentWindowHandle) {
+      try {
+        // WebDriver window commands must run in order because each one changes the active window.
+        // eslint-disable-next-line no-await-in-loop
+        await browser.switchToWindow(windowHandle)
+      } catch (error) {
+        log.error('WebdriverIO RUM window switch error', error)
+        continue
+      }
     }
     // eslint-disable-next-line no-await-in-loop
     await operation(browser, value)
@@ -435,8 +462,9 @@ async function forEachRumWindow (browser, operation, value) {
   if (windowHandles.length > 1 && canRestoreWindow) {
     try {
       await browser.switchToWindow(currentWindowHandle)
+      if (currentFrameContext) await browser.switchFrame(currentFrameContext)
     } catch (error) {
-      log.error('WebdriverIO RUM window restore error', error)
+      log.error('WebdriverIO RUM browsing context restore error', error)
     }
   }
 }
@@ -509,6 +537,54 @@ async function cleanupAllRumBrowsers () {
     // eslint-disable-next-line no-await-in-loop
     await cleanupRumCookies(browser)
     releaseRumBrowser(browser)
+  }
+}
+
+/**
+ * Stops and flushes RUM before WebDriver deletes one retained session.
+ *
+ * @param {object} browser
+ * @returns {Promise<void>}
+ */
+async function cleanupRumBrowserBeforeSessionEnd (browser) {
+  if (!rumBrowsers.has(browser)) return
+
+  if (await stopRumBrowser(browser)) {
+    await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+  }
+  await cleanupRumCookies(browser)
+}
+
+/**
+ * Prepares RUM around low-level WebDriver commands that bypass WebdriverIO's navigation helpers.
+ *
+ * @this {object}
+ * @param {string} command
+ * @returns {Promise<void>|undefined}
+ */
+function handleRumProtocolCommand (command) {
+  if (command === 'navigateTo') return preloadRumNavigation.call(this)
+  if (command === 'deleteSession') return cleanupRumBrowserBeforeSessionEnd(this)
+}
+
+/**
+ * Wraps only WebDriver commands that need to wait for RUM work before their request starts.
+ *
+ * @param {{arguments?: unknown[], result?: Function}} context
+ * @returns {void}
+ */
+function wrapRumProtocolCommand (context) {
+  const command = context.arguments?.[2]?.command
+  const protocolCommand = context.result
+  if ((command !== 'navigateTo' && command !== 'deleteSession') || typeof protocolCommand !== 'function') return
+
+  context.result = async function (...args) {
+    try {
+      await handleRumProtocolCommand.call(this, command)
+    } catch (error) {
+      log.error('WebdriverIO RUM protocol command error', error)
+    }
+    return protocolCommand.apply(this, args)
   }
 }
 
@@ -735,6 +811,9 @@ function waitForFailedRumCleanup (context) {
     setRumWaitCallbacks(context, detectActiveRumBrowsers, false)
   } else {
     isRumCleanupPending = true
+    if (type === 'Hook' && hookName === 'beforeEach') {
+      setRumWaitCallbacks(context, detectActiveRumBrowsers, false)
+    }
   }
 }
 
@@ -1768,6 +1847,10 @@ newWindowCh.start.subscribe(
 
 newWindowCh.asyncEnd.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForRumNavigation)
+)
+
+webdriverCommandCh.end.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (wrapRumProtocolCommand)
 )
 
 testFrameworkFnWrapperCh.asyncEnd.subscribe(
