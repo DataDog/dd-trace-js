@@ -1057,6 +1057,31 @@ describe('Config', () => {
     })
   })
 
+  describe('HTTP server OPTIONS requests', () => {
+    it('should trace OPTIONS requests by default through v7', () => {
+      const config = getConfig(undefined, { ddMajor: 7 })
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED, true)
+    })
+
+    it('should not trace OPTIONS requests by default from v8', () => {
+      const config = getConfig(undefined, { ddMajor: 8 })
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED, false)
+    })
+
+    it('should initialize from DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED', () => {
+      process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED, false)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED', value: false, origin: 'env_var' },
+      ])
+    })
+  })
+
   describe('HTTP client error statuses', () => {
     it('should default to 400-499', () => {
       const config = getConfig()
