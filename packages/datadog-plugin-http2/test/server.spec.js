@@ -35,13 +35,15 @@ const legacyStorage = storage('legacy')
  * @param {typeof import('http2')} http2
  * @param {string} url
  * @param {{
+ *   additionalHeaders?: import('node:http2').OutgoingHttpHeaders,
+ *   method?: string,
  *   signal?: import('node:events').EventEmitter,
  *   informationalHeaders?: import('node:http2').IncomingHttpHeaders[]
  *   responseHeaders?: import('node:http2').IncomingHttpHeaders
  * }} [options]
  */
 function request (http2, url, options = {}) {
-  const { informationalHeaders, responseHeaders, signal } = options
+  const { additionalHeaders, informationalHeaders, method = 'GET', responseHeaders, signal } = options
   const urlObj = new URL(url)
   return new Promise((resolve, reject) => {
     const client = http2
@@ -50,7 +52,8 @@ function request (http2, url, options = {}) {
 
     const req = client.request({
       ':path': urlObj.pathname + urlObj.search,
-      ':method': 'GET',
+      ':method': method,
+      ...additionalHeaders,
     })
     req.on('error', reject)
     if (informationalHeaders) {
@@ -162,7 +165,7 @@ let responseWriteHeadMessages
  * @returns {void}
  */
 function captureIncomingHttpRequestStart (message) {
-  incomingHttpRequestStartMessage = message
+  incomingHttpRequestStartMessage = { req: message.req, res: message.res }
 }
 
 /**
@@ -1272,6 +1275,31 @@ describe('Plugin', () => {
             await assertSingleServerSpan(http2, `http://localhost:${port}/user`)
           })
 
+          it('adds requested propagation headers to mixed OPTIONS responses', async () => {
+            const responseHeaders = {}
+            const server = http2.createServer((req, res) => {
+              res.setHeader('access-control-allow-origin', '*')
+              res.writeHead(204)
+              res.end()
+            })
+            server.on('stream', () => {})
+            await listenAsync(server)
+
+            await Promise.all([
+              agent.assertFirstTraceSpan({ name: 'web.request' }),
+              request(http2, `http://localhost:${port}/user`, {
+                method: 'OPTIONS',
+                additionalHeaders: {
+                  origin: 'https://example.com',
+                  'access-control-request-headers': 'x-datadog-trace-id',
+                },
+                responseHeaders,
+              }),
+            ])
+
+            assert.strictEqual(responseHeaders['access-control-allow-headers'], 'x-datadog-trace-id')
+          })
+
           it('keeps the server span active inside a mixed setup\'s stream listener', async () => {
             let streamActive
             const server = http2.createServer((req, res) => {
@@ -1363,6 +1391,7 @@ describe('Plugin', () => {
                   request(http2, `http://localhost:${port}/user`),
                 ])
                 assert.notStrictEqual(incomingHttpRequestStartMessage.req, realRequest)
+                assert.notStrictEqual(incomingHttpRequestStartMessage.res, realResponse)
                 assert.strictEqual(incomingHttpRequestEndMessage.req, incomingHttpRequestStartMessage.req)
                 assert.strictEqual(incomingHttpRequestEndMessage.res, realResponse)
                 assert.deepStrictEqual(incomingHttpRequestEndMessage.req.body, { inspected: true })
@@ -1371,7 +1400,7 @@ describe('Plugin', () => {
                 assert.ok(responseWriteHeadMessages.length > 0)
                 for (const message of responseWriteHeadMessages) {
                   assert.strictEqual(message.req, incomingHttpRequestStartMessage.req)
-                  assert.strictEqual(message.res, realResponse)
+                  assert.strictEqual(message.res, incomingHttpRequestStartMessage.res)
                 }
               } finally {
                 incomingHttpRequestStart.unsubscribe(captureIncomingHttpRequestStart)
