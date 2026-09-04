@@ -152,12 +152,6 @@ describe('diagnostic message http requests', function () {
   it('should send directly to the debugger intake in agentless mode', function () {
     const requestAgentless = sinon.spy()
     requestAgentless['@noCallThru'] = true
-    const proxyAgent = {}
-    const getHttpsProxyAgent = sinon.stub().returns(proxyAgent)
-    getHttpsProxyAgent['@noCallThru'] = true
-    const requestOptions = proxyquire('../../../src/debugger/devtools_client/request-options', {
-      '../../evp_proxy/direct': { getHttpsProxyAgent },
-    })
     const statusAgentless = proxyquire('../../../src/debugger/devtools_client/status', {
       './config': {
         agentless: true,
@@ -173,7 +167,6 @@ describe('diagnostic message http requests', function () {
         '@noCallThru': true,
       },
       '../../exporters/common/request': requestAgentless,
-      './request-options': requestOptions,
     })
 
     statusAgentless.ackReceived({ id: 'agentless-probe', version: 0 })
@@ -186,8 +179,7 @@ describe('diagnostic message http requests', function () {
     assert.strictEqual(options.url.href, 'https://debugger-intake.us3.datadoghq.com/')
     assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
     assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'agent-debugger')
-    assert.strictEqual(options.agent, proxyAgent)
-    sinon.assert.calledOnceWithExactly(getHttpsProxyAgent, 'https://debugger-intake.us3.datadoghq.com/')
+    assert.strictEqual(options.agent, undefined)
   })
 })
 
