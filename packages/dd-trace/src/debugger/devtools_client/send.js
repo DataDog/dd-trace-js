@@ -48,13 +48,16 @@ const jsonBuffer = new JSONBuffer({
  * @param {number} incompleteReasons - Bitmask of `INCOMPLETE_REASON` flags enforced while capturing the snapshot
  */
 function send (message, logger, dd, snapshot, processTags, eventType, incompleteReasons) {
+  if (message?.length > MAX_MESSAGE_LENGTH) {
+    message = message.slice(0, MAX_MESSAGE_LENGTH) + '…'
+    incompleteReasons |= INCOMPLETE_REASON.STRING_LENGTH
+  }
+
   const payload = {
     ddsource,
     hostname,
     service,
-    message: message?.length > MAX_MESSAGE_LENGTH
-      ? message.slice(0, MAX_MESSAGE_LENGTH) + '…'
-      : message,
+    message,
     logger,
     dd,
     process_tags: processTags,

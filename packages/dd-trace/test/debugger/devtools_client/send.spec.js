@@ -26,6 +26,7 @@ const message = 'my-message'
 const logger = { logger: true }
 const dd = { dd: true }
 const snapshot = { snapshot: true }
+const MAX_MESSAGE_LENGTH = 8 * 1024 // Mirrors the limit in send.js
 
 describe('input message http requests', function () {
   /** @type {sinon.SinonFakeTimers} */
@@ -467,6 +468,23 @@ describe('input message http requests', function () {
         guardrailMetrics.captureIncomplete.calledAfter(jsonBufferWrite),
         'should record after the event is queued'
       )
+    })
+
+    it('should record a truncated message as an enforced string length limit', function () {
+      const longMessage = 'x'.repeat(MAX_MESSAGE_LENGTH + 1)
+
+      send(longMessage, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, INCOMPLETE_REASON.DEPTH)
+
+      assert.strictEqual(JSON.parse(jsonBufferWrite.firstCall.args[0]).message, 'x'.repeat(MAX_MESSAGE_LENGTH) + '…')
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.captureIncomplete, INCOMPLETE_REASON.DEPTH | INCOMPLETE_REASON.STRING_LENGTH, EVENT_TYPE.LOG
+      )
+    })
+
+    it('should not record a message that fits as truncated', function () {
+      send('x'.repeat(MAX_MESSAGE_LENGTH), logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+
+      sinon.assert.notCalled(guardrailMetrics.captureIncomplete)
     })
   })
 })
