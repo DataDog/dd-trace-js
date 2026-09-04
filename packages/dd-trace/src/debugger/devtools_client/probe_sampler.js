@@ -8,6 +8,7 @@ const SAMPLER_EXPRESSION = `globalThis[Symbol.for(${JSON.stringify(DD_TRACE_SYMB
 module.exports = {
   compileBreakpointCondition,
   getRemoveProbeExpression,
+  getTakeConditionErrorExpression,
 }
 
 /**
@@ -19,6 +20,17 @@ module.exports = {
  */
 function getRemoveProbeExpression (id) {
   return `${SAMPLER_EXPRESSION}?.remove(${JSON.stringify(id)})`
+}
+
+/**
+ * Build the expression that hands over the condition error recorded for a probe. Called by the devtools worker and
+ * evaluated on the paused frame of the debuggee.
+ *
+ * @param {string} id - The probe id.
+ * @returns {string}
+ */
+function getTakeConditionErrorExpression (id) {
+  return `${SAMPLER_EXPRESSION}?.takeConditionError(${JSON.stringify(id)})`
 }
 
 /**
@@ -72,9 +84,15 @@ function compileProbeCondition (probe) {
     return `$dd_sampled = ${sample} || $dd_sampled`
   }
 
-  return `try {
-      if ((${probe.condition}) === true) {
-        $dd_sampled = ${sample} || $dd_sampled
+  // A condition that throws is reported once per throttle window and skipped at probe entry in between
+  return `if ($dd_sampler.shouldEvaluateCondition(${JSON.stringify(probe.id)})) {
+      try {
+        if ((${probe.condition}) === true) {
+          $dd_sampled = ${sample} || $dd_sampled
+        }
+      } catch ($dd_error) {
+        $dd_sampled = $dd_sampler.conditionError(${probe.samplingIndex}, ${JSON.stringify(probe.id)}, $dd_error) ||
+          $dd_sampled
       }
-    } catch {}`
+    }`
 }

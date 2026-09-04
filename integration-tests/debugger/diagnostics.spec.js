@@ -330,8 +330,12 @@ describe('Dynamic Instrumentation', function () {
 
       it('should support not triggering any probes when all conditions are not met', function (done) {
         let installed = 0
-        const rcConfig1 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } })
-        const rcConfig2 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'baz'] } } })
+        const rcConfig1 = t.generateRemoteConfig({
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
+        })
+        const rcConfig2 = t.generateRemoteConfig({
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'nope'] } },
+        })
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach((event) => {
@@ -394,12 +398,17 @@ describe('Dynamic Instrumentation', function () {
 
       it('trigger on met condition, even if other condition throws (all have conditions)', function (done) {
         let installed = 0
-        // this condition will throw because `foo` is not defined
+        // this condition will throw because `foo` is not defined, which is reported as an error result
         const rcConfig1 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } })
         const rcConfig2 = t.generateRemoteConfig({
           when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
         })
         const expectedPayloads = new Map([
+          [rcConfig1.config.id, {
+            ddsource: 'dd_debugger',
+            service: 'node',
+            debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'EMITTING' } },
+          }],
           [rcConfig2.config.id, {
             ddsource: 'dd_debugger',
             service: 'node',
