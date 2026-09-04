@@ -1,4 +1,5 @@
 import { startVitest } from 'vitest/node'
+import { getVitestOptions, usesModeArgument } from './options.mjs'
 
 const testFile = process.env.TEST_DIR || 'ci-visibility/vitest-tests/vitest-worker-env.mjs'
 
@@ -6,7 +7,7 @@ async function runProgrammaticTests () {
   let vitest
   let didCollectWithoutFailures = false
   try {
-    vitest = await startVitest('test', [], {
+    const options = getVitestOptions({
       run: false,
       test: {
         environment: 'node',
@@ -14,6 +15,9 @@ async function runProgrammaticTests () {
       },
       watch: false,
     })
+    vitest = usesModeArgument
+      ? await startVitest('test', [], options)
+      : await startVitest([], options)
 
     const testSpecifications = await vitest.globTestSpecifications([testFile])
     await vitest.collectTests(testSpecifications)

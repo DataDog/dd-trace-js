@@ -23,14 +23,8 @@ const quarantinedTests = providedContext.quarantinedTests || {}
 const isRumCorrelationEnabled = providedContext.isRumCorrelationEnabled !== false
 const rumTestExecutionIdCookieName = providedContext.rumTestExecutionIdCookieName
 const testPropertiesByFilepath = providedContext.testPropertiesByFilepath || {}
-let setVitestTaskFn
-if (isNoWorkerInitActive) {
-  try {
-    // Vitest does not expose setFn from the public setup API; keep this optional for strict installers.
-    const vitestRunner = await import('@vitest/runner')
-    setVitestTaskFn = vitestRunner.setFn
-  } catch {}
-}
+const setVitestTaskFn = globalThis[Symbol.for('dd-trace.vitest.set-fn')]
+const importVitestBrowserContext = globalThis[Symbol.for('dd-trace.vitest.browser-context-importer')]
 const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
@@ -62,7 +56,7 @@ if (typeof globalThis.process?.uptime === 'function') {
 async function requestBrowserEfdSuiteAdmission (testSuite, hasNewTest) {
   try {
     if (!browserCommands) {
-      const vitestBrowser = await import('@vitest/browser/context')
+      const vitestBrowser = await importVitestBrowserContext()
       browserCommands = vitestBrowser.commands
     }
     return await browserCommands[efdSuiteAdmissionBrowserCommand](testSuite, hasNewTest) === true
