@@ -8,6 +8,12 @@ const {
 
 const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke')
 
+// Orchestrators register via app.generic; activities/entities use the durable-functions hook.
+const azureDurableFunctionsChannel = dc.tracingChannel('datadog:azure:durable-functions:invoke')
+
+const ORCHESTRATION_TRIGGER_TYPE = 'orchestrationTrigger'
+const ORCHESTRATOR_COMPLETED_EVENT_TYPE = 13
+
 addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (azureFunction) => {
   const { app } = azureFunction
 
@@ -29,8 +35,67 @@ addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (a
   // CosmosDB triggers
   shimmer.wrap(app, 'cosmosDB', wrapHandler)
 
+  // Durable Functions orchestration triggers
+  shimmer.wrap(app, 'generic', wrapGeneric)
+
   return azureFunction
 })
+
+function wrapGeneric (method) {
+  return function (name, options) {
+    if (options?.trigger?.type === ORCHESTRATION_TRIGGER_TYPE && typeof options.handler === 'function') {
+      options.handler = traceOrchestrationHandler(options.handler, name)
+    }
+    return method.apply(this, arguments)
+  }
+}
+
+function traceOrchestrationHandler (handler, functionName) {
+  return function (...args) {
+    if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, args)
+
+    const orchestrationBinding = args[0]
+    const traceContext = args[1]?.traceContext
+    const channelCtx = {
+      trigger: 'Orchestration',
+      functionName,
+      traceparent: traceContext?.traceParent,
+      tracestate: traceContext?.traceState,
+    }
+
+    // we do not want to trace if the orchestrator has already completed and is being reactivated
+    const history = orchestrationBinding?.history
+    const hasPreviousActivation = history?.some(
+      event => event.EventType === ORCHESTRATOR_COMPLETED_EVENT_TYPE
+    )
+
+    if (hasPreviousActivation) {
+      return traceResumedOrchestrationErrors(handler, channelCtx, this, args)
+    }
+
+    return azureDurableFunctionsChannel.tracePromise(
+      handler,
+      channelCtx,
+      this, ...args)
+  }
+}
+
+function traceResumedOrchestrationErrors (handler, channelCtx, thisArg, args) {
+  const startTime = Date.now()
+  const result = handler.apply(thisArg, args)
+
+  result.then(undefined, (error) => {
+    try {
+      azureDurableFunctionsChannel.traceSync(() => {
+        throw error
+      }, { ...channelCtx, startTime })
+    } catch {
+      // The original promise carries this rejection to the caller.
+    }
+  })
+
+  return result
+}
 
 // The http methods are overloaded so we need to check which type of argument was passed in order to wrap the handler
 // The arguments are either an object with a handler property or the handler function itself
