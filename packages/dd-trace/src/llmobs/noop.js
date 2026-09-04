@@ -2,6 +2,10 @@
 
 let NoopExperiments
 
+function promptUnavailable () {
+  return Promise.reject(new Error('Prompt Management requires tracer.init()'))
+}
+
 class NoopLLMObs {
   constructor (noopTracer) {
     this._tracer = noopTracer
@@ -92,6 +96,82 @@ class NoopLLMObs {
   annotationContext (options, fn) { return fn() }
 
   routingContext (options, fn) { return fn() }
+
+  /**
+   * Resolve an exact, environment-targeted, or latest managed prompt.
+   * @param {string} promptId
+   * @param {import('../../../../index').llmobs.GetPromptOptions} [options]
+   * @returns {Promise<import('../../../../index').llmobs.ManagedPrompt>}
+   */
+  getPrompt (promptId, options) { return promptUnavailable() }
+
+  /**
+   * Refresh the prompt selected by the current environment.
+   * @param {string} promptId
+   * @returns {Promise<import('../../../../index').llmobs.ManagedPrompt | undefined>}
+   */
+  refreshPrompt (promptId) { return promptUnavailable() }
+
+  /**
+   * Clear the in-memory and/or persistent prompt caches.
+   * @param {import('../../../../index').llmobs.ClearPromptCacheOptions} [options]
+   */
+  clearPromptCache (options) {}
+
+  /**
+   * Create a prompt and its first version.
+   * @param {string} promptId
+   * @param {import('../../../../index').llmobs.PromptTemplateMessage[]} template
+   * @param {import('../../../../index').llmobs.CreatePromptOptions} [options]
+   * @returns {Promise<import('../../../../index').llmobs.PromptResponse>}
+   */
+  createPrompt (promptId, template, options) { return promptUnavailable() }
+
+  /**
+   * Create another version of an existing prompt.
+   * @param {string} promptId
+   * @param {import('../../../../index').llmobs.PromptTemplateMessage[]} template
+   * @param {import('../../../../index').llmobs.CreatePromptVersionOptions} [options]
+   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse>}
+   */
+  createPromptVersion (promptId, template, options) { return promptUnavailable() }
+
+  /**
+   * Update prompt metadata.
+   * @param {string} promptId
+   * @param {import('../../../../index').llmobs.UpdatePromptOptions} options
+   * @returns {Promise<import('../../../../index').llmobs.PromptResponse>}
+   */
+  updatePrompt (promptId, options) { return promptUnavailable() }
+
+  /**
+   * Update one prompt version.
+   * @param {string} promptId
+   * @param {number} version
+   * @param {import('../../../../index').llmobs.UpdatePromptVersionOptions} options
+   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse>}
+   */
+  updatePromptVersion (promptId, version, options) { return promptUnavailable() }
+
+  /**
+   * Delete a prompt and all its versions.
+   * @param {string} promptId
+   * @returns {Promise<import('../../../../index').llmobs.DeletedPromptResponse>}
+   */
+  deletePrompt (promptId) { return promptUnavailable() }
+
+  /**
+   * List prompts.
+   * @returns {Promise<import('../../../../index').llmobs.PromptResponse[]>}
+   */
+  listPrompts () { return promptUnavailable() }
+
+  /**
+   * List versions for a prompt.
+   * @param {string} promptId
+   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse[]>}
+   */
+  listPromptVersions (promptId) { return promptUnavailable() }
 }
 
 module.exports = NoopLLMObs

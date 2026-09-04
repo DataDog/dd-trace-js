@@ -1330,6 +1330,57 @@ describe('tagger', () => {
     })
 
     describe('tagPrompt', () => {
+      it('serializes managed prompt UUIDs under backend keys', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          id: 'managed',
+          version: '1',
+          template: 'Hello {name}',
+          variables: { name: 'Ada' },
+          promptUuid: 'prompt-uuid',
+          promptVersionUuid: 'version-uuid',
+        })
+
+        assertObjectContains(Tagger.tagMap.get(span)[INPUT_PROMPT], {
+          id: 'managed',
+          version: '1',
+          template: 'Hello {name}',
+          variables: { name: 'Ada' },
+          prompt_uuid: 'prompt-uuid',
+          prompt_version_uuid: 'version-uuid',
+        })
+      })
+
+      it('preserves prompt metadata on partial updates and resets it on replacement', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          id: 'managed',
+          version: '1',
+          template: 'Hello {name}',
+          variables: { name: 'Ada' },
+          contextVariables: ['history'],
+          queryVariables: ['request'],
+          promptUuid: 'prompt-uuid',
+          promptVersionUuid: 'version-uuid',
+        })
+
+        tagger.tagPrompt(span, { variables: { name: 'Grace' } })
+        const prompt = Tagger.tagMap.get(span)[INPUT_PROMPT]
+        assert.equal(prompt.id, 'managed')
+        assert.deepEqual(prompt.variables, { name: 'Grace' })
+        assert.equal(prompt.prompt_uuid, 'prompt-uuid')
+        assert.equal(prompt.prompt_version_uuid, 'version-uuid')
+        assert.deepEqual(prompt._dd_context_variable_keys, ['history'])
+        assert.deepEqual(prompt._dd_query_variable_keys, ['request'])
+
+        tagger.tagPrompt(span, { id: 'local', version: '2', template: 'Hi {name}' })
+        assert.equal(prompt.id, 'local')
+        assert.equal(prompt.prompt_uuid, undefined)
+        assert.equal(prompt.prompt_version_uuid, undefined)
+        assert.deepEqual(prompt._dd_context_variable_keys, ['context'])
+        assert.deepEqual(prompt._dd_query_variable_keys, ['question'])
+      })
+
       it('tags a span with a string prompt template', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
         tagger.tagPrompt(span, {

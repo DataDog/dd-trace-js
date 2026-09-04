@@ -415,6 +415,8 @@ class LLMObsTagger {
       template,
       contextVariables,
       queryVariables,
+      promptUuid,
+      promptVersionUuid,
     } = prompt
 
     if (strictValidation) {
@@ -429,6 +431,8 @@ class LLMObsTagger {
       }
     }
 
+    const currentPrompt = registry.get(span)?.[INPUT_PROMPT]
+    const replacesPrompt = id != null || version != null || template != null
     const finalPromptId = id ?? `${mlApp}_${DEFAULT_PROMPT_NAME}`
     const finalCtxVariablesKeys = contextVariables ?? ['context']
     const finalQueryVariablesKeys = queryVariables ?? ['question']
@@ -468,6 +472,16 @@ class LLMObsTagger {
     // validate prompt version
     if (version && typeof version !== 'string') {
       this.#handleFailure('Prompt version must be a string.', 'invalid_prompt')
+      return
+    }
+
+    if (promptUuid != null && typeof promptUuid !== 'string') {
+      this.#handleFailure('Prompt UUID must be a string.', 'invalid_prompt')
+      return
+    }
+
+    if (promptVersionUuid != null && typeof promptVersionUuid !== 'string') {
+      this.#handleFailure('Prompt version UUID must be a string.', 'invalid_prompt')
       return
     }
 
@@ -522,17 +536,26 @@ class LLMObsTagger {
     }
 
     const validatedPrompt = {}
-    if (finalPromptId) validatedPrompt.id = finalPromptId
+    if (finalPromptId && (!currentPrompt || replacesPrompt)) validatedPrompt.id = finalPromptId
     if (version) validatedPrompt.version = version
+    if (promptUuid) validatedPrompt.prompt_uuid = promptUuid
+    if (promptVersionUuid) validatedPrompt.prompt_version_uuid = promptVersionUuid
     if (variables) validatedPrompt.variables = variables
     if (finalTemplate) validatedPrompt.template = finalTemplate
     if (finalChatTemplate?.length) validatedPrompt.chat_template = finalChatTemplate
     if (tags) validatedPrompt.tags = tags
-    if (finalCtxVariablesKeys) validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
-    if (finalQueryVariablesKeys) validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
+    if (finalCtxVariablesKeys && (!currentPrompt || replacesPrompt || contextVariables != null)) {
+      validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
+    }
+    if (finalQueryVariablesKeys && (!currentPrompt || replacesPrompt || queryVariables != null)) {
+      validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
+    }
 
-    const currentPrompt = registry.get(span)?.[INPUT_PROMPT]
     if (currentPrompt) {
+      if (replacesPrompt) {
+        if (promptUuid == null) delete currentPrompt.prompt_uuid
+        if (promptVersionUuid == null) delete currentPrompt.prompt_version_uuid
+      }
       Object.assign(currentPrompt, validatedPrompt)
     } else {
       this._setTag(span, INPUT_PROMPT, validatedPrompt)
