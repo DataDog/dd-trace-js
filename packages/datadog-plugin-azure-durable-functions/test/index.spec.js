@@ -8,6 +8,7 @@ const sinon = require('sinon')
 require('../../dd-trace/test/setup/core')
 
 const { AUTO_KEEP, USER_KEEP } = require('../../../ext/priority')
+const { SAMPLING_MECHANISM_AGENT, SAMPLING_MECHANISM_RULE } = require('../../dd-trace/src/constants')
 const AzureDurableFunctionsPlugin = require('../src')
 
 describe('azure-durable-functions plugin', () => {
@@ -173,28 +174,67 @@ describe('azure-durable-functions plugin', () => {
     )
   })
 
-  it('re-applies propagated keep when the host cleared the sampled flag', () => {
-    const parent = { _traceId: 'parent' }
+  it('re-applies propagated keep without replacing the sampling mechanism', () => {
+    const parentId = {}
+    const parent = { _traceId: 'parent', _spanId: parentId }
+    const sampling = { priority: 0, mechanism: SAMPLING_MECHANISM_AGENT }
     extract.returns(parent)
+    span.context = sinon.stub().returns({ _parentId: parentId, _sampling: sampling })
 
     bindStart({
       traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00',
       tracestate: 'dd=s:1',
     })
 
-    sinon.assert.calledOnceWithExactly(setPriority, span, AUTO_KEEP)
+    assert.strictEqual(sampling.priority, AUTO_KEEP)
+    assert.strictEqual(sampling.mechanism, SAMPLING_MECHANISM_AGENT)
+    sinon.assert.notCalled(setPriority)
   })
 
   it('preserves stronger propagated keep priorities', () => {
-    const parent = { _traceId: 'parent' }
+    const parentId = {}
+    const parent = { _traceId: 'parent', _spanId: parentId }
+    const sampling = { priority: 0, mechanism: SAMPLING_MECHANISM_RULE }
     extract.returns(parent)
+    span.context = sinon.stub().returns({ _parentId: parentId, _sampling: sampling })
 
     bindStart({
       traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00',
       tracestate: 'dd=s:2',
     })
 
-    sinon.assert.calledOnceWithExactly(setPriority, span, USER_KEEP)
+    assert.strictEqual(sampling.priority, USER_KEEP)
+    assert.strictEqual(sampling.mechanism, SAMPLING_MECHANISM_RULE)
+    sinon.assert.notCalled(setPriority)
+  })
+
+  it('does not re-apply propagated keep when the extracted context is not continued', () => {
+    const parent = { _traceId: 'parent', _spanId: {} }
+    extract.returns(parent)
+    span.context = sinon.stub().returns({ _parentId: null })
+
+    bindStart({
+      traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00',
+      tracestate: 'dd=s:1',
+    })
+
+    sinon.assert.notCalled(setPriority)
+  })
+
+  it('does not re-apply propagated keep to a noop span', () => {
+    const parentId = {}
+    const parent = { _traceId: 'parent', _spanId: parentId }
+    const sampling = { priority: -1 }
+    extract.returns(parent)
+    span._prioritySampler = undefined
+    span.context = sinon.stub().returns({ _parentId: parentId, _sampling: sampling })
+
+    bindStart({
+      traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00',
+      tracestate: 'dd=s:1',
+    })
+
+    assert.strictEqual(sampling.priority, -1)
   })
 
   it('does not override sampling when the sampled flag is still set', () => {
