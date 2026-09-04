@@ -48,8 +48,7 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
   let processedState = null
 
   const { scopeChain } = callFrame
-  for (let i = 0; i < scopeChain.length; i++) {
-    const scope = scopeChain[i]
+  for (const scope of scopeChain) {
     if (!isCollectable(scope)) continue
     const objectId = /** @type {string} */ (scope.object.objectId)
     try {
@@ -74,7 +73,8 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
       // Nodes skipped within this scope carry the timeout marker and are recorded when processed (unless they end up
       // redacted), but the remaining scopes are dropped without any marker.
       // TODO: Bad UX; Variables in remaining scopes are silently dropped
-      if (hasCollectableScope(scopeChain, i + 1)) incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
+      // @ts-expect-error - findLast is available in Node.js 18+ but TypeScript doesn't know about it without ES2023 lib
+      if (scope !== scopeChain.findLast(isCollectable)) incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
       break
     }
   }
@@ -97,18 +97,6 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
 function isCollectable (scope) {
   // The global scope is too noisy, and a scope without an object id is possible according to the types
   return scope.type !== 'global' && scope.object.objectId !== undefined
-}
-
-/**
- * @param {import('inspector').Debugger.Scope[]} scopeChain
- * @param {number} from - The index to start looking from
- * @returns {boolean} Whether any of the scopes from `from` onwards would be collected into the snapshot
- */
-function hasCollectableScope (scopeChain, from) {
-  for (let i = from; i < scopeChain.length; i++) {
-    if (isCollectable(scopeChain[i])) return true
-  }
-  return false
 }
 
 /**
