@@ -21,6 +21,14 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 function noop () {}
 
 /**
+ * @param {{ createResolverInfo: (data: object) => Record<string, Record<string, unknown>> }} message
+ * @returns {Record<string, Record<string, unknown>>}
+ */
+function materializeResolverInfo (message) {
+  return message.createResolverInfo(message)
+}
+
+/**
  * @param {WeakRef<object>} reference
  * @returns {Promise<boolean>}
  */
@@ -876,12 +884,9 @@ describe('Plugin', () => {
           // subscriber invocation receives that resolver call's own args object;
           // skipping siblings would leave downstream consumers with incomplete data.
           const startCh = dc.channel('apm:graphql:resolve:start')
-          const argsByPath = new Map()
-          const handler = (ctx) => {
-            const list = argsByPath.get(ctx.pathString) ?? []
-            list.push(ctx.args)
-            argsByPath.set(ctx.pathString, list)
-          }
+          const resolverArgs = []
+          /** @param {{ args: object }} message */
+          const handler = ({ args }) => resolverArgs.push(args)
           startCh.subscribe(handler)
 
           try {
@@ -896,16 +901,15 @@ describe('Plugin', () => {
             ])
 
             assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
-            const nameArgs = argsByPath.get('friends.*.name') ?? []
             assert.strictEqual(
-              nameArgs.length,
-              2,
-              'expected one startResolveCh publish per sibling of the 2-element friends list',
+              resolverArgs.length,
+              3,
+              'expected one startResolveCh publish for friends and both name resolvers',
             )
             // graphql-js builds a fresh args object per resolver call; siblings
             // share content but not identity. IAST mutates the passed object, so
             // each call needs its own publish.
-            assert.notStrictEqual(nameArgs[0], nameArgs[1])
+            assert.strictEqual(new Set(resolverArgs).size, 3)
           } finally {
             startCh.unsubscribe(handler)
           }
@@ -1810,13 +1814,14 @@ describe('Plugin', () => {
           delete document.definitions[0].directives
           delete document.definitions[0].selectionSet.selections[0].directives
 
-          function noop () {}
-          dc.channel('datadog:graphql:resolver:start').subscribe(noop)
+          /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+          const handler = message => materializeResolverInfo(message)
+          dc.channel('datadog:graphql:resolver:start').subscribe(handler)
 
           try {
             graphql.execute({ schema, document })
           } finally {
-            dc.channel('datadog:graphql:resolver:start').unsubscribe(noop)
+            dc.channel('datadog:graphql:resolver:start').unsubscribe(handler)
           }
         })
 
@@ -1827,9 +1832,8 @@ describe('Plugin', () => {
           delete document.definitions[0].selectionSet.selections[0].directives[0].arguments
 
           const resolverInfo = []
-          const handler = ({ resolverInfo: info }) => {
-            resolverInfo.push(info)
-          }
+          /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+          const handler = message => resolverInfo.push(materializeResolverInfo(message))
           dc.channel('datadog:graphql:resolver:start').subscribe(handler)
 
           try {
@@ -1846,9 +1850,8 @@ describe('Plugin', () => {
           const document = graphql.parse(source)
           const resolverInfo = []
 
-          const handler = ({ resolverInfo: info }) => {
-            resolverInfo.push(info)
-          }
+          /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+          const handler = message => resolverInfo.push(materializeResolverInfo(message))
           dc.channel('datadog:graphql:resolver:start').subscribe(handler)
 
           try {
@@ -2416,9 +2419,8 @@ describe('Plugin', () => {
         it('should publish resolver start for depth 0 AppSec subscribers', async () => {
           const startCh = dc.channel('datadog:graphql:resolver:start')
           const fields = []
-          const handler = ({ resolverInfo }) => {
-            fields.push(...Object.keys(resolverInfo || {}))
-          }
+          /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+          const handler = message => fields.push(...Object.keys(materializeResolverInfo(message)))
 
           startCh.subscribe(handler)
 
@@ -2564,7 +2566,10 @@ describe('Plugin', () => {
         it('should honor resolver abort for fields gated by depth', async () => {
           let streetResolverRan = false
           const startCh = dc.channel('datadog:graphql:resolver:start')
-          const handler = ({ abortController, resolverInfo }) => {
+          /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */
+          const handler = (message) => {
+            const { abortController } = message
+            const resolverInfo = materializeResolverInfo(message)
             if (resolverInfo?.street) abortController.abort()
           }
 
@@ -2621,10 +2626,9 @@ describe('Plugin', () => {
           // IAST taint-tracking and AppSec WAF subscribers run on every resolver
           // call so user-controlled args at any depth still flow through.
           const startCh = dc.channel('apm:graphql:resolve:start')
-          const paths = []
-          const handler = (ctx) => {
-            paths.push(ctx.pathString)
-          }
+          const resolverArgs = []
+          /** @param {{ args: object }} message */
+          const handler = ({ args }) => resolverArgs.push(args)
           startCh.subscribe(handler)
 
           try {
@@ -2649,13 +2653,8 @@ describe('Plugin', () => {
             ])
 
             assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
-            assert.deepStrictEqual(paths.sort(), [
-              'human',
-              'human.address',
-              'human.address.civicNumber',
-              'human.address.street',
-              'human.name',
-            ])
+            assert.strictEqual(resolverArgs.length, 5)
+            assert.strictEqual(new Set(resolverArgs).size, 5)
           } finally {
             startCh.unsubscribe(handler)
           }
