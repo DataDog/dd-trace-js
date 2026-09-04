@@ -412,9 +412,9 @@ describe('check-require-cache', () => {
             versionRange: '>=0.1',
             filePath: 'trace-await-context-callback.js',
           },
-          astQuery: 'FunctionDeclaration[id.name="runAfterSetup"] TryStatement',
+          astQuery: 'FunctionDeclaration[id.name="runAfterSetup"] TryStatement > BlockStatement',
           channelName: 'trace_await_context_callback_at_try_start',
-          transform: 'awaitContextCallbackAtTryStart',
+          transform: 'awaitContextCallback',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -437,9 +437,11 @@ describe('check-require-cache', () => {
             versionRange: '>=0.1',
             filePath: 'trace-await-context-callback.js',
           },
-          astQuery: 'FunctionDeclaration[id.name="runFromStart"]',
+          astQuery: 'FunctionDeclaration[id.name="runFromStart"] ' +
+            'VariableDeclarator[id.name="__apm$wrapped"] > ' +
+            ':matches(FunctionDeclaration, FunctionExpression)[async=true] > BlockStatement',
           channelName: 'trace_await_context_callback_at_function_start',
-          transform: 'awaitContextCallbackAtFunctionStart',
+          transform: 'awaitContextCallback',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -462,9 +464,10 @@ describe('check-require-cache', () => {
             versionRange: '>=0.1',
             filePath: 'trace-await-context-callback-outer-try.js',
           },
-          astQuery: 'FunctionDeclaration[id.name="tracedNested"] CallExpression[callee.name="task"]',
+          astQuery: 'FunctionDeclaration[id.name="runNestedWithoutTry"] > BlockStatement > ' +
+            'TryStatement > BlockStatement',
           channelName: 'trace_await_context_callback_outer_try',
-          transform: 'awaitContextCallbackAtTryStart',
+          transform: 'awaitContextCallback',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -1071,7 +1074,7 @@ describe('check-require-cache', () => {
     assert.equal(await runAfterSetup(() => 'passed'), 'passed')
   })
 
-  it('should not use a try block outside the traced function', async () => {
+  it('should leave a matched block outside the traced function untouched', async () => {
     const filename = resolve(__dirname, 'node_modules', 'test', 'trace-await-context-callback-outer-try.js')
     const source = readFileSync(filename, 'utf8')
     const { runNestedWithoutTry } = compileFile('trace-await-context-callback-outer-try')

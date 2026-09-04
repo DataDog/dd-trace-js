@@ -428,9 +428,11 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression TryStatement',
+    astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression ' +
+      'VariableDeclarator[id.name="__apm$wrapped"] > ' +
+      ':matches(FunctionDeclaration, FunctionExpression)[async=true] > BlockStatement',
     channelName: 'testFrameworkFnWrapper',
-    transform: 'awaitContextCallbackAtFunctionStart',
+    transform: 'awaitContextCallback',
     transformOptions: {
       callbackName: 'rumCleanupCallback',
     },
@@ -453,12 +455,11 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'FunctionDeclaration[id.name="executeAsync"] CatchClause ' +
-      'IfStatement[test.operator=">"][test.left.object.name="retries"]' +
-      '[test.left.property.name="limit"][test.right.object.name="retries"]' +
-      '[test.right.property.name="attempts"]',
+    astQuery: 'FunctionDeclaration[id.name="executeAsync"] ' +
+      'VariableDeclarator[id.name="__apm$wrapped"] > ' +
+      ':matches(FunctionDeclaration, FunctionExpression)[async=true] > BlockStatement > TryStatement > BlockStatement',
     channelName: 'executeAsync',
-    transform: 'awaitContextCallbackAtTryStart',
+    transform: 'awaitContextCallback',
     transformOptions: {
       callbackName: 'rumStartCallback',
     },
