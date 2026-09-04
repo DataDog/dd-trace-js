@@ -263,13 +263,13 @@ class PrioritySampler {
       context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
     }
 
-    const sampled = rule.sample(context) && this._isSampledByRateLimit(context)
-
-    if (!sampled && rule.discard) {
+    if (rule.discard) {
       context._sampling.discard = true
     }
 
-    return sampled ? USER_KEEP : USER_REJECT
+    return rule.sample(context) && this._isSampledByRateLimit(context)
+      ? USER_KEEP
+      : USER_REJECT
   }
 
   /**

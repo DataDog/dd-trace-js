@@ -228,7 +228,7 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._sampling.discard, true)
     })
 
-    it('should not mark the context for discard when a discard=true rule keeps the trace', () => {
+    it('should mark the context for discard when a discard=true rule keeps the trace (but not actually drop)', () => {
       prioritySampler = new PrioritySampler('test', {
         rules: [
           { sampleRate: 1, service: 'test', resource: /res.*/, discard: true },
@@ -237,7 +237,7 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       assert.strictEqual(context._sampling.priority, USER_KEEP)
-      assert.strictEqual(context._sampling.discard, undefined)
+      assert.strictEqual(context._sampling.discard, true)
     })
 
     it('should not mark the context for discard when the rejecting rule has discard=false', () => {
