@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -343,6 +344,7 @@ describe('debugger/index', () => {
   })
 
   describe('guardrail metrics', () => {
+    const appClosingChannel = dc.channel('datadog:telemetry:app-closing')
     /** @type {sinon.SinonFakeTimers} */
     let clock
 
@@ -399,6 +401,26 @@ describe('debugger/index', () => {
         { metric: 'events.skipped', tags: ['event_type:snapshot', 'reason:rateLimitProbe'], value: 1 },
       ])
       assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('should report the counters when telemetry is about to send its final metrics', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerMetrics = new GuardrailMetrics(Worker.firstCall.args[1].workerData.guardrailMetricsBuffer)
+
+      workerMetrics.eventDropped(0, 1, 2) // queueFull, log
+      appClosingChannel.publish()
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.dropped', tags: ['event_type:log', 'reason:queueFull'], value: 2 },
+      ], 'should report without waiting for the flush interval')
+
+      DynamicInstrumentation.stop()
+      workerMetrics.eventDropped(0, 1, 1)
+      appClosingChannel.publish()
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.dropped', tags: ['event_type:log', 'reason:queueFull'], value: 2 },
+      ], 'should stop listening once stopped')
     })
 
     it('should not keep the process alive', () => {

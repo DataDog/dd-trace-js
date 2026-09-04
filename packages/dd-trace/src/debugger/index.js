@@ -4,6 +4,7 @@ const { readFile } = require('fs')
 const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const dc = require('dc-polyfill')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
 const telemetryMetrics = require('../telemetry/metrics')
@@ -28,6 +29,11 @@ const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler'
 // Guardrail counters are aggregated in shared memory and only converted into telemetry metrics at this interval, so
 // the interval bounds the delay before a guardrail hit becomes visible, not the cost of recording it.
 const GUARDRAIL_METRICS_FLUSH_INTERVAL_MS = 10_000
+
+// Published by telemetry right before it sends its final metrics on process exit. The flush interval timer is unref'ed
+// and the worker does not keep the process alive, so without this hook everything counted since the last tick would
+// be lost when the application exits on its own.
+const TELEMETRY_APP_CLOSING_CHANNEL = 'datadog:telemetry:app-closing'
 
 let worker = null
 let configChannel = null
@@ -90,6 +96,7 @@ function start (config, rcInstance) {
   guardrailMetrics = new GuardrailMetrics(guardrailMetricsBuffer)
   guardrailMetricsTimer = setInterval(flushGuardrailMetrics, GUARDRAIL_METRICS_FLUSH_INTERVAL_MS)
   guardrailMetricsTimer.unref?.()
+  dc.subscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
 
   const probeSamplerBuffer = installProbeSampler(guardrailMetrics)
 
@@ -231,6 +238,7 @@ function cleanup (error) {
     guardrailMetricsTimer = null
   }
   if (guardrailMetrics !== null) {
+    dc.unsubscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
     flushGuardrailMetrics() // Report what the worker counted up until it was stopped
     guardrailMetrics = null
   }
