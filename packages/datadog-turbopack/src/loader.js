@@ -5,26 +5,25 @@ const fs = require('node:fs')
 const { builtinModules } = require('node:module')
 const path = require('node:path')
 
-const { BUNDLER_DC_GLOBAL } = require('../../datadog-instrumentations/src/helpers/bundler-constants')
-const { errorMessage } = require('../../datadog-instrumentations/src/helpers/instrumentation-utils')
 const { isESMFile } = require('../../datadog-esbuild/src/utils')
-const { rewriteBundledWithSourceMap } = require('../../datadog-instrumentations/src/helpers/rewriter')
-const { getGenerator, parseSource } = require('./compiler')
+const { rewriteWithSourceMap } = require('../../datadog-instrumentations/src/helpers/rewriter')
+const { parseSource } = require('./compiler')
 
 const BUILTIN_MODULES = new Set(builtinModules)
 const CHANNEL = 'dd-trace:bundler:load'
-const IMPORT_RESOLVE_OPTIONS = { conditionNames: ['node', 'import'] }
+const IMPORT_RESOLVE_OPTIONS = { conditionNames: ['...', 'node', 'import'] }
 const MAX_CACHED_FILES = 2048
-const MAX_CACHED_PLANS = 16
 const MAX_WARNINGS = 128
 const MODULE_SYNTAX_PATTERN = /\b(?:export|import|require)\b/
-const PLAN_VERSION = 4
-const REQUIRE_RESOLVE_OPTIONS = { conditionNames: ['node', 'require'] }
+const PLAN_VERSION = 6
+const PROXY_FILENAME_PATTERN = /^[a-f\d]{64}\.mjs$/
+const REQUIRE_RESOLVE_OPTIONS = { conditionNames: ['...', 'node', 'require'] }
 
 /** @type {Map<string, { ctimeMs: number, hash: string, mtimeMs: number, size: number }>} */
 const fileHashes = new Map()
-/** @type {Map<string, BuildPlan>} */
-const plans = new Map()
+let cachedManifestPath
+/** @type {BuildPlan|undefined} */
+let cachedPlan
 /** @type {Set<string>} */
 const warnedErrors = new Set()
 
@@ -40,10 +39,20 @@ const warnedErrors = new Set()
 
 /**
  * @typedef {object} BuildPlan
- * @property {Record<string, boolean>} proxies
+ * @property {{ generator: string, parser: string, traverse: string }} compiler
+ * @property {string} dcPolyfill
  * @property {Array<PlanTarget & { file: string }>} relativeTargets
  * @property {Record<string, PlanTarget>} targets
  * @property {number} version
+ */
+
+/**
+ * @typedef {object} LoaderContext
+ * @property {Function} async
+ * @property {(warning: Error) => void} [emitWarning]
+ * @property {Function} getOptions
+ * @property {Function} getResolve
+ * @property {string} resourcePath
  */
 
 /**
@@ -59,108 +68,90 @@ const warnedErrors = new Set()
  */
 
 /**
- * @typedef {object} ResolutionState
- * @property {object} ast
- * @property {(code: string, sourceMap?: object) => void} callback
- * @property {Function} generate
- * @property {object} [inputSourceMap]
- * @property {{ emitWarning?: (warning: Error) => void }} loaderContext
- * @property {number} pending
- * @property {string} resourcePath
- * @property {boolean} rewritten
- * @property {string} source
- * @property {Record<string, PlanTarget>} targets
- */
-
-/**
  * Instruments modules selected by a build plan generated from the installed
  * dd-trace integrations.
  *
+ * @this {LoaderContext}
  * @param {string} source
  * @param {object} [inputSourceMap]
  * @returns {void}
  */
 module.exports = function loader (source, inputSourceMap) {
   const callback = this.async()
-  try {
-    load.call(this, source, inputSourceMap, callback)
-  } catch (error) {
-    callback(error)
-  }
+  load.call(this, source, inputSourceMap).then(
+    ({ code, map }) => callback(undefined, code, map),
+    error => callback(error)
+  )
 }
 
 /**
- * @this {{
- *   async: Function,
- *   emitWarning?: (warning: Error) => void,
- *   getOptions: Function,
- *   getResolve: Function,
- *   resourcePath: string
- * }}
+ * @this {LoaderContext}
  * @param {string} source
- * @param {object} [inputSourceMap]
- * @param {(error?: Error, code?: string, sourceMap?: object) => void} callback
+ * @param {object|undefined} inputSourceMap
+ * @returns {Promise<{ code: string, map?: object }>}
  */
-function load (source, inputSourceMap, callback) {
+async function load (source, inputSourceMap) {
   const options = this.getOptions()
-  const plan = getPlan(options.manifestPath, options.manifestHash)
-  const resourcePath = normalizePath(this.resourcePath)
-  const esm = isESMFile(resourcePath)
+  const plan = getPlan(options.manifestPath)
+  const resourcePath = fs.realpathSync(this.resourcePath).replaceAll('\\', '/')
   const match = findTarget(resourcePath, plan, options.targetScope, this)
+  const esm = match?.esm ?? isESMFile(resourcePath)
+  const sourceType = esm ? 'module' : (match ? 'commonjs' : 'unambiguous')
 
-  /**
-   * @param {string} code
-   * @param {object} [sourceMap]
-   */
-  function onRewritten (code, sourceMap) {
-    finishLoad(code, sourceMap, resourcePath, match, esm, callback)
+  if (path.dirname(resourcePath) === path.dirname(options.manifestPath) &&
+    PROXY_FILENAME_PATTERN.test(path.basename(resourcePath)) ||
+    !options.rewriteEdges || !MODULE_SYNTAX_PATTERN.test(source)) {
+    return finishLoad(source, inputSourceMap, resourcePath, match, esm, plan.dcPolyfill)
   }
 
-  if (plan.proxies[resourcePath] || !options.rewriteEdges || !MODULE_SYNTAX_PATTERN.test(source)) {
-    onRewritten(source, inputSourceMap)
-    return
-  }
-
-  rewriteModuleEdges(source, inputSourceMap, resourcePath, plan.targets, options.compiler, this, onRewritten)
+  const rewritten = await rewriteModuleEdges(
+    source,
+    inputSourceMap,
+    resourcePath,
+    plan,
+    this,
+    sourceType
+  )
+  return finishLoad(rewritten.code, rewritten.map, resourcePath, match, esm, plan.dcPolyfill)
 }
 
 /**
  * @param {string} manifestPath
- * @param {string} manifestHash
  * @returns {BuildPlan}
  */
-function getPlan (manifestPath, manifestHash) {
-  if (typeof manifestPath !== 'string' || typeof manifestHash !== 'string') {
-    throw new TypeError('The Datadog Turbopack loader requires a build plan path and hash')
+function getPlan (manifestPath) {
+  if (typeof manifestPath !== 'string') {
+    throw new TypeError('The Datadog Turbopack loader requires a build plan path')
   }
 
-  const key = `${manifestPath}\0${manifestHash}`
-  const cached = plans.get(key)
-  if (cached) return cached
+  if (manifestPath === cachedManifestPath && cachedPlan) return cachedPlan
 
   const serialized = fs.readFileSync(manifestPath, 'utf8')
-  if (hash(serialized) !== manifestHash) {
+  const manifestHash = path.basename(manifestPath, '.json')
+  if (createHash('sha256').update(serialized).digest('hex') !== manifestHash) {
     throw new Error(`The Datadog Turbopack build plan at ${manifestPath} failed its integrity check`)
   }
 
-  const plan = JSON.parse(serialized)
-  if (plan?.version !== PLAN_VERSION || !plan.proxies || typeof plan.proxies !== 'object' ||
-    Array.isArray(plan.proxies) || !Array.isArray(plan.relativeTargets) ||
-    !plan.targets || typeof plan.targets !== 'object') {
+  const plan = /** @type {BuildPlan} */ (JSON.parse(serialized))
+  if (plan?.version !== PLAN_VERSION || typeof plan.compiler?.generator !== 'string' ||
+    typeof plan.compiler.parser !== 'string' || typeof plan.compiler.traverse !== 'string' ||
+    typeof plan.dcPolyfill !== 'string' ||
+    !Array.isArray(plan.relativeTargets) ||
+    !plan.targets || typeof plan.targets !== 'object' || Array.isArray(plan.targets)) {
     throw new Error(`The Datadog Turbopack build plan at ${manifestPath} is not supported`)
   }
 
-  if (plans.size >= MAX_CACHED_PLANS) plans.delete(plans.keys().next().value)
-  plans.set(key, plan)
+  cachedManifestPath = manifestPath
+  cachedPlan = plan
   return plan
 }
 
 /**
  * @param {string} resourcePath
  * @param {BuildPlan} plan
- * @param {'direct'|'relative'} [targetScope]
+ * @param {'direct'|'relative'|undefined} targetScope
  * @param {{ emitWarning?: (warning: Error) => void }} loaderContext
- * @returns {PlanTarget|undefined}
+ * @returns {PlanTarget|void}
  */
 function findTarget (resourcePath, plan, targetScope, loaderContext) {
   const direct = plan.targets[resourcePath]
@@ -184,172 +175,65 @@ function findTarget (resourcePath, plan, targetScope, loaderContext) {
 
 /**
  * @param {string} source
- * @param {object} [inputSourceMap]
+ * @param {object|undefined} inputSourceMap
  * @param {string} resourcePath
- * @param {Record<string, PlanTarget>} targets
- * @param {{ generator: string, parser: string, traverse: string }} compiler
+ * @param {BuildPlan} plan
  * @param {{ emitWarning?: (warning: Error) => void, getResolve: Function }} loaderContext
- * @param {(code: string, sourceMap?: object) => void} callback
+ * @param {'commonjs'|'module'|'unambiguous'} sourceType
+ * @returns {Promise<{ code: string, map?: object }>}
  */
-function rewriteModuleEdges (source, inputSourceMap, resourcePath, targets, compiler, loaderContext, callback) {
-  let ast
-  let generate
-  const state = { edges: new Map() }
-
-  try {
-    const parsed = parseSource(source, resourcePath, compiler)
-    ast = parsed.ast
-    generate = getGenerator(compiler)
-    const { traverse } = parsed
-    traverse(ast, IMPORT_VISITORS, undefined, state)
-  } catch (error) {
-    warnOnce(
-      loaderContext,
-      `imports:${resourcePath}`,
-      `Could not inspect imports in ${resourcePath}: ${errorMessage(error)}`,
-      error
-    )
-    callback(source, inputSourceMap)
-    return
-  }
-
-  if (state.edges.size === 0) {
-    callback(source, inputSourceMap)
-    return
-  }
-
-  resolveModuleEdges(
-    state.edges,
-    source,
-    inputSourceMap,
-    resourcePath,
-    targets,
-    ast,
-    generate,
-    loaderContext,
-    callback
-  )
-}
-
-/**
- * @param {Map<string, ModuleEdge>} edges
- * @param {string} source
- * @param {object} inputSourceMap
- * @param {string} resourcePath
- * @param {Record<string, PlanTarget>} targets
- * @param {object} ast
- * @param {Function} generate
- * @param {{ emitWarning?: (warning: Error) => void, getResolve: Function }} loaderContext
- * @param {(code: string, sourceMap?: object) => void} callback
- */
-function resolveModuleEdges (
-  edges,
+async function rewriteModuleEdges (
   source,
   inputSourceMap,
   resourcePath,
-  targets,
-  ast,
-  generate,
+  plan,
   loaderContext,
-  callback
+  sourceType
 ) {
-  let importResolve
-  let requireResolve
-  try {
-    importResolve = loaderContext.getResolve(IMPORT_RESOLVE_OPTIONS)
-    requireResolve = loaderContext.getResolve(REQUIRE_RESOLVE_OPTIONS)
-  } catch (error) {
-    warnOnce(
-      loaderContext,
-      `resolver:${resourcePath}`,
-      `Could not initialize import resolution in ${resourcePath}: ${errorMessage(error)}`,
-      error
-    )
-    callback(source, inputSourceMap)
-    return
-  }
-
-  const state = {
-    ast,
-    callback,
-    generate,
-    inputSourceMap,
-    loaderContext,
-    pending: edges.size,
-    resourcePath,
-    rewritten: false,
-    source,
-    targets,
-  }
+  const { compiler, targets } = plan
   const directory = path.dirname(resourcePath)
-  for (const edge of edges.values()) {
-    resolveModuleEdge(edge.kind === 'require' ? requireResolve : importResolve, directory, edge, state)
-  }
-}
-
-/**
- * @param {Function} resolve
- * @param {string} directory
- * @param {ModuleEdge} edge
- * @param {ResolutionState} state
- */
-function resolveModuleEdge (resolve, directory, edge, state) {
-  let settled = false
-
-  /**
-   * @param {Error|null|undefined} error
-   * @param {string} [resolved]
-   */
-  function onResolved (error, resolved) {
-    if (settled) return
-    settled = true
-    if (!error && resolved) {
-      state.rewritten = rewriteResolvedEdge(
-        edge,
-        resolved,
-        state.resourcePath,
-        state.targets,
-        state.loaderContext
-      ) || state.rewritten
-    }
-    completeModuleEdge(state)
-  }
-
+  const state = { edges: new Map() }
+  let parsed
   try {
-    resolve(directory, edge.specifier, onResolved)
+    parsed = parseSource(source, resourcePath, compiler, sourceType)
   } catch (error) {
-    onResolved(error)
+    if (sourceType !== 'unambiguous') throw error
+    parsed = parseSource(source, resourcePath, compiler, 'commonjs')
   }
-}
+  const { ast, traverse } = parsed
+  const generate = require(compiler.generator).default
+  traverse(ast, IMPORT_VISITORS, undefined, state)
 
-/**
- * @param {ResolutionState} state
- */
-function completeModuleEdge (state) {
-  state.pending--
-  if (state.pending > 0) return
-  if (!state.rewritten) {
-    state.callback(state.source, state.inputSourceMap)
-    return
-  }
+  if (state.edges.size === 0) return { code: source, map: inputSourceMap }
 
-  try {
-    const { code, map } = state.generate(state.ast, {
-      inputSourceMap: state.inputSourceMap,
-      retainLines: true,
-      sourceFileName: state.resourcePath,
-      sourceMaps: true,
-    }, state.source)
-    state.callback(code, map)
-  } catch (error) {
-    warnOnce(
-      state.loaderContext,
-      `generate:${state.resourcePath}`,
-      `Could not generate rewritten imports in ${state.resourcePath}: ${errorMessage(error)}`,
-      error
-    )
-    state.callback(state.source, state.inputSourceMap)
+  const importResolve = loaderContext.getResolve(IMPORT_RESOLVE_OPTIONS)
+  const requireResolve = loaderContext.getResolve(REQUIRE_RESOLVE_OPTIONS)
+
+  const resolutions = []
+  for (const edge of state.edges.values()) {
+    const resolver = edge.kind === 'require' ? requireResolve : importResolve
+    resolutions.push(new Promise(resolve => {
+      resolver(directory, edge.specifier, (error, resolved) => {
+        resolve(error ? undefined : resolved)
+      })
+    }))
   }
+  const resolvedEdges = await Promise.all(resolutions)
+  let rewritten = false
+  let index = 0
+  for (const edge of state.edges.values()) {
+    const resolved = resolvedEdges[index++]
+    if (resolved) rewritten = rewriteResolvedEdge(edge, resolved, resourcePath, targets, loaderContext) || rewritten
+  }
+  if (!rewritten) return { code: source, map: inputSourceMap }
+
+  const { code, map } = generate(ast, {
+    inputSourceMap,
+    retainLines: true,
+    sourceFileName: resourcePath,
+    sourceMaps: true,
+  }, source)
+  return { code, map }
 }
 
 /**
@@ -362,7 +246,7 @@ function collectModuleDeclaration (modulePath, state) {
 }
 
 /**
- * @param {{ node: { arguments?: object[], callee?: object }, scope: { hasBinding: Function } }} modulePath
+ * @param {{ node: { arguments: object[], callee?: object }, scope: { hasBinding: Function } }} modulePath
  * @param {CollectState} state
  */
 function collectCallExpression (modulePath, state) {
@@ -415,7 +299,7 @@ function collectModuleSource (moduleSource, kind, state) {
 
 /**
  * @param {object|undefined} moduleSource
- * @returns {string|undefined}
+ * @returns {string|void}
  */
 function getModuleSpecifier (moduleSource) {
   if (moduleSource?.type === 'StringLiteral') return moduleSource.value
@@ -458,13 +342,7 @@ const IMPORT_VISITORS = {
  * @returns {boolean}
  */
 function rewriteResolvedEdge (edge, resolved, resourcePath, targets, loaderContext) {
-  let resolvedPath
-  try {
-    resolvedPath = normalizePath(resolved)
-  } catch {
-    return false
-  }
-
+  const resolvedPath = fs.realpathSync(resolved).replaceAll('\\', '/')
   const target = targets[resolvedPath]
   if (!target?.esm || !target.proxyPath) return false
   const changedPath = findChangedSource(resolvedPath, target)
@@ -481,13 +359,13 @@ function rewriteResolvedEdge (edge, resolved, resourcePath, targets, loaderConte
 /**
  * @param {string} resourcePath
  * @param {PlanTarget} target
- * @returns {string|undefined}
+ * @returns {string|void}
  */
 function findChangedSource (resourcePath, target) {
-  if (!matchesSource(resourcePath, target.sourceHash)) return resourcePath
+  if (getFileHash(resourcePath) !== target.sourceHash) return resourcePath
   if (target.dependencies) {
     for (const dependency of target.dependencies) {
-      if (!matchesSource(dependency.path, dependency.sourceHash)) return dependency.path
+      if (getFileHash(dependency.path) !== dependency.sourceHash) return dependency.path
     }
   }
 }
@@ -513,36 +391,36 @@ function setModuleSpecifier (moduleSource, value) {
 
 /**
  * @param {string} source
- * @param {object} [sourceMap]
+ * @param {object|undefined} sourceMap
  * @param {string} resourcePath
- * @param {PlanTarget} [match]
+ * @param {PlanTarget|void} match
  * @param {boolean} esm
- * @param {(error?: Error, code?: string, sourceMap?: object) => void} callback
+ * @param {string} dcPolyfill
+ * @returns {{ code: string, map?: object }}
  */
-function finishLoad (source, sourceMap, resourcePath, match, esm, callback) {
-  if (!match) {
-    callback(undefined, source, sourceMap)
-    return
-  }
+function finishLoad (source, sourceMap, resourcePath, match, esm, dcPolyfill) {
+  if (!match) return { code: source, map: sourceMap }
 
-  const rewritten = rewriteBundledWithSourceMap(
+  const dcModule = relativeImport(path.dirname(resourcePath), dcPolyfill)
+  const rewritten = /** @type {{ code: string, map?: object }} */ (rewriteWithSourceMap(
     source,
     resourcePath,
     esm ? 'module' : 'commonjs',
     match.rewriteTarget,
-    sourceMap
-  )
-  const code = esm ? rewritten.code : appendCommonJsPublications(rewritten.code, resourcePath, match)
-  callback(undefined, code, rewritten.map)
+    sourceMap,
+    dcModule
+  ))
+  const code = esm ? rewritten.code : appendCommonJsPublications(rewritten.code, match, dcModule)
+  return { code, map: rewritten.map }
 }
 
 /**
  * @param {string} source
- * @param {string} resourcePath
  * @param {{ payloads: object[] }} match
+ * @param {string} dcModule
  * @returns {string}
  */
-function appendCommonJsPublications (source, resourcePath, match) {
+function appendCommonJsPublications (source, match, dcModule) {
   let publications = ''
   let publicationIndex = 0
 
@@ -563,24 +441,13 @@ function appendCommonJsPublications (source, resourcePath, match) {
 
   return `${source}
 {
-  /* eslint-disable @stylistic/quotes */
-  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-  const nativeDc = require('node:diagnostics_channel')
-  const dc = globalThis[Symbol.for(${JSON.stringify(BUNDLER_DC_GLOBAL)})] ?? nativeDc
+  /* eslint-disable @stylistic/max-len, @stylistic/quotes */
+  const dc = require(${JSON.stringify(dcModule)})
   const channel = dc.channel('${CHANNEL}')
   if (channel.hasSubscribers) {
 ${publications}  }
 }
 `
-}
-
-/**
- * @param {string} file
- * @param {string} expectedHash
- * @returns {boolean}
- */
-function matchesSource (file, expectedHash) {
-  return getFileHash(file) === expectedHash
 }
 
 /**
@@ -592,28 +459,23 @@ function getFileHash (file) {
   const cached = fileHashes.get(file)
   if (cached?.ctimeMs === ctimeMs && cached.mtimeMs === mtimeMs && cached.size === size) return cached.hash
 
-  const value = hash(fs.readFileSync(file))
-  if (fileHashes.size >= MAX_CACHED_FILES) fileHashes.delete(fileHashes.keys().next().value)
+  const value = createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+  if (fileHashes.size >= MAX_CACHED_FILES) {
+    fileHashes.delete(/** @type {string} */ (fileHashes.keys().next().value))
+  }
   fileHashes.set(file, { ctimeMs, hash: value, mtimeMs, size })
   return value
 }
 
 /**
- * @param {string|Buffer} value
+ * @param {string} from
+ * @param {string} to
  * @returns {string}
  */
-function hash (value) {
-  return createHash('sha256').update(value).digest('hex')
-}
-
 function relativeImport (from, to) {
   let value = path.relative(from, to).replaceAll('\\', '/')
   if (!value.startsWith('.')) value = `./${value}`
   return value
-}
-
-function normalizePath (value) {
-  return fs.realpathSync(value).replaceAll('\\', '/')
 }
 
 /**
@@ -627,6 +489,9 @@ function warnOnce (loaderContext, key, message, cause) {
   warnedErrors.add(key)
   const warning = new Error(message, { cause })
   warning.name = 'DatadogTurbopackWarning'
-  if (typeof loaderContext.emitWarning === 'function') loaderContext.emitWarning(warning)
-  else process.emitWarning(warning)
+  if (typeof loaderContext.emitWarning === 'function') {
+    loaderContext.emitWarning(warning)
+  } else {
+    process.emitWarning(warning)
+  }
 }

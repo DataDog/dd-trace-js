@@ -7,18 +7,6 @@ const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper'
 const { isRelativeRequire } = require('./shared-utils')
 
 /**
- * @param {unknown} error
- * @returns {string}
- */
-function errorMessage (error) {
-  try {
-    return error instanceof Error ? error.message : String(error)
-  } catch {
-    return 'Unknown error'
-  }
-}
-
-/**
  * @param {string|undefined} version
  * @param {string[]|undefined} ranges
  * @returns {boolean}
@@ -77,7 +65,6 @@ function getDisabledInstrumentations () {
 }
 
 module.exports = {
-  errorMessage,
   filename,
   getDisabledInstrumentations,
   matchesInstrumentation,

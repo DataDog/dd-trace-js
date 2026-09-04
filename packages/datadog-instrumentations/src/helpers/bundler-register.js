@@ -4,18 +4,14 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
-const { BUNDLER_DC_GLOBAL } = require('./bundler-constants')
 const { loadChannel } = require('./register.js')
 const {
-  errorMessage,
   getDisabledInstrumentations,
   matchesInstrumentation,
 } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const disabledInstrumentations = getDisabledInstrumentations()
-
-globalThis[Symbol.for(BUNDLER_DC_GLOBAL)] = dc
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
 // environments (webpack, esbuild), Node.js built-in modules required by
@@ -75,7 +71,7 @@ function doHook (name) {
   try {
     hookFn()
   } catch (error) {
-    log.error('esbuild-wrapped %s hook failed: %s', name, errorMessage(error), error)
+    log.error('esbuild-wrapped %s hook failed: %s', name, String(error?.message ?? error), error)
   }
 }
 
@@ -132,8 +128,11 @@ dc.subscribe(CHANNEL, (message) => {
       const namespace = /** @type {Record<string, unknown>} */ (exports)
       // Only generated ESM proxy payloads need default-export unwrapping.
       if (typeof payload.apply === 'function' && patchDefault === !!namespace.default) {
-        if (patchDefault) exports = namespace.default
-        else continue
+        if (patchDefault) {
+          exports = namespace.default
+        } else {
+          continue
+        }
       }
       exports = hook(exports, payload.version, false, {
         moduleBaseDir: payload.moduleBaseDir,
@@ -142,7 +141,7 @@ dc.subscribe(CHANNEL, (message) => {
       payload.module = exports
       payload.apply?.(exports, patchDefault)
     } catch (error) {
-      log.error('Error executing bundler hook: %s', errorMessage(error), error)
+      log.error('Error executing bundler hook: %s', String(error?.message ?? error), error)
     }
   }
 })

@@ -1266,51 +1266,26 @@ describe('check-require-cache', () => {
       version: 3,
     }
 
-    const result = rewriter.rewriteBundledWithSourceMap(source, filename, 'commonjs', {
+    const result = rewriter.rewriteWithSourceMap(source, filename, 'commonjs', {
       moduleName: 'test-trace-sync',
       filePath: 'index.js',
-    }, sourceMap)
+    }, sourceMap, '../dc-polyfill.js')
     const map = JSON.parse(result.map)
 
     assert.match(result.code, /tr_ch_apm_tracingChannel/)
+    assert.match(result.code, /require\("\.\.\/dc-polyfill\.js"\)/)
     assert.strictEqual(map.sources[0], 'original.js')
     assert.strictEqual(map.sourcesContent[0], source)
     assert.strictEqual(map.sources.includes('test-trace-sync/index.js'), true)
   })
 
-  it('should use the shared bundler diagnostics channel with a native fallback', () => {
-    const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
-    const source = readFileSync(filename, 'utf8')
-    const result = rewriter.rewriteBundledWithSourceMap(source, filename, 'module', {
-      moduleName: 'test-esm',
-      filePath: 'pregel-class.js',
-    })
-
-    assert.match(result.code, /\bimport\s+.+\s+from\s+"node:diagnostics_channel"/)
-    assert.match(result.code, /Symbol\.for\("dd-trace:bundler:dc"\)/)
-    assert.doesNotMatch(result.code, /dc-polyfill/)
-    assert.strictEqual(result.code.match(/node:diagnostics_channel/g)?.length, 1)
-
-    const commonJsFilename = resolve(__dirname, 'node_modules', 'test-trace-sync', 'index.js')
-    const commonJsSource = readFileSync(commonJsFilename, 'utf8')
-    const commonJsResult = rewriter.rewriteBundledWithSourceMap(
-      commonJsSource,
-      commonJsFilename,
-      'commonjs',
-      { moduleName: 'test-trace-sync', filePath: 'index.js' }
-    )
-
-    assert.match(commonJsResult.code, /require\("node:diagnostics_channel"\)/)
-    assert.match(commonJsResult.code, /Symbol\.for\("dd-trace:bundler:dc"\)/)
-  })
-
   it('should preserve bundled sources that cannot be rewritten', () => {
     const sourceMap = { mappings: '', version: 3 }
     assert.deepStrictEqual(
-      rewriter.rewriteBundledWithSourceMap('', '/project/empty.js', 'module', undefined, sourceMap),
+      rewriter.rewriteWithSourceMap('', '/project/empty.js', 'module', undefined, sourceMap),
       { code: '', map: sourceMap }
     )
-    assert.deepStrictEqual(rewriter.rewriteBundledWithSourceMap(
+    assert.deepStrictEqual(rewriter.rewriteWithSourceMap(
       'module.exports = true',
       '/project/node_modules/missing/index.js',
       'commonjs',
@@ -1319,7 +1294,7 @@ describe('check-require-cache', () => {
     ), { code: 'module.exports = true', map: sourceMap })
 
     rewriter.disable('test-disabled')
-    assert.deepStrictEqual(rewriter.rewriteBundledWithSourceMap(
+    assert.deepStrictEqual(rewriter.rewriteWithSourceMap(
       'module.exports = true',
       '/project/node_modules/test-disabled/index.js',
       'commonjs',

@@ -7,6 +7,7 @@ const path = require('node:path')
 const { createBuildPlan } = require('./src/targets')
 
 const loader = require.resolve('./src/loader')
+const PHASE_PRODUCTION_SERVER = 'phase-production-server'
 const SOURCE_EXTENSIONS = ['*.js', '*.cjs', '*.mjs', '*.jsx', '*.ts', '*.cts', '*.mts', '*.tsx']
 const SOURCE_PATH_PATTERN = /\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/
 
@@ -15,10 +16,10 @@ const SOURCE_PATH_PATTERN = /\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/
  *
  * @param {object|Promise<object>|Function} [nextConfig]
  * @param {{ projectDir?: string }} [options]
- * @returns {Promise<object>|Function}
+ * @returns {Function}
  */
 function withDatadogTurbopack (nextConfig = {}, options = {}) {
-  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+  if (!isObject(options)) {
     throw new TypeError('withDatadogTurbopack options must be an object')
   }
   if (options.projectDir !== undefined && typeof options.projectDir !== 'string') {
@@ -27,35 +28,38 @@ function withDatadogTurbopack (nextConfig = {}, options = {}) {
 
   const projectDir = path.resolve(options.projectDir ?? process.cwd())
   const nextInfo = getNextInfo(projectDir)
-  if (typeof nextConfig === 'function') {
-    return async function datadogNextConfig (...args) {
-      const config = await nextConfig.apply(this, args)
-      return addDatadogConfig(normalizeConfig(config), projectDir, nextInfo)
-    }
-  }
 
-  return Promise.resolve(nextConfig).then(config =>
-    addDatadogConfig(normalizeConfig(config), projectDir, nextInfo)
-  )
+  return async function datadogNextConfig (...args) {
+    const config = typeof nextConfig === 'function'
+      ? await nextConfig.apply(this, args)
+      : await nextConfig
+    const normalized = normalizeConfig(config)
+    if (args[0] === PHASE_PRODUCTION_SERVER) return normalized
+
+    return addDatadogConfig(normalized, projectDir, nextInfo)
+  }
 }
 
 /**
  * @param {object} nextConfig
  * @param {string} projectDir
- * @param {{ compiler: { generator: string, parser: string, traverse: string }, major: number }} nextInfo
+ * @param {{ compiler: { generator: string, parser: string, traverse: string }, major: number, root: string }} nextInfo
  * @returns {Promise<object>}
  */
 async function addDatadogConfig (nextConfig, projectDir, nextInfo) {
+  const turbopack = nextConfig.turbopack ?? {}
+  let discoveryRoot = nextInfo.root
+  if (typeof turbopack.root === 'string') discoveryRoot = turbopack.root
+  if (typeof nextConfig.outputFileTracingRoot === 'string') discoveryRoot = nextConfig.outputFileTracingRoot
   const plan = await createBuildPlan(projectDir, {
     compiler: nextInfo.compiler,
-    distDir: nextConfig.distDir,
+    discoveryRoot,
   })
-  if (!plan.packagePathPattern || !plan.targetPathPattern || !plan.path || !plan.hash) return nextConfig
+  if (!plan.targetPathPattern || !plan.path) return nextConfig
 
-  const turbopack = nextConfig.turbopack ?? {}
   const configured = nextInfo.major === 15
-    ? addLegacyRules(turbopack, plan, nextInfo.compiler)
-    : addModernRules(turbopack, plan, nextInfo.compiler)
+    ? addLegacyRules(turbopack, plan)
+    : addModernRules(turbopack, plan)
 
   return {
     ...nextConfig,
@@ -69,24 +73,21 @@ async function addDatadogConfig (nextConfig, projectDir, nextInfo) {
  */
 function normalizeConfig (config) {
   if (config === undefined) return {}
-  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+  if (!isObject(config)) {
     throw new TypeError('withDatadogTurbopack expects a Next.js configuration object, promise, or function')
   }
 
   const { turbopack } = config
-  if (turbopack !== undefined && (!turbopack || typeof turbopack !== 'object' || Array.isArray(turbopack))) {
+  if (turbopack !== undefined && !isObject(turbopack)) {
     throw new TypeError('nextConfig.turbopack must be an object')
   }
-  if (turbopack?.rules !== undefined &&
-    (!turbopack.rules || typeof turbopack.rules !== 'object' || Array.isArray(turbopack.rules))) {
+  if (turbopack?.rules !== undefined && !isObject(turbopack.rules)) {
     throw new TypeError('nextConfig.turbopack.rules must be an object')
   }
-  if (turbopack?.conditions !== undefined &&
-    (!turbopack.conditions || typeof turbopack.conditions !== 'object' || Array.isArray(turbopack.conditions))) {
+  if (turbopack?.conditions !== undefined && !isObject(turbopack.conditions)) {
     throw new TypeError('nextConfig.turbopack.conditions must be an object')
   }
-  if (turbopack?.resolveAlias !== undefined &&
-    (!turbopack.resolveAlias || typeof turbopack.resolveAlias !== 'object' || Array.isArray(turbopack.resolveAlias))) {
+  if (turbopack?.resolveAlias !== undefined && !isObject(turbopack.resolveAlias)) {
     throw new TypeError('nextConfig.turbopack.resolveAlias must be an object')
   }
 
@@ -94,22 +95,51 @@ function normalizeConfig (config) {
 }
 
 /**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isObject (value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
  * @param {object} turbopack
  * @param {object} plan
- * @param {{ generator: string, parser: string, traverse: string }} compiler
  * @returns {object}
  */
-function addModernRules (turbopack, plan, compiler) {
+function addModernRules (turbopack, plan) {
   const rules = { ...turbopack.rules }
 
   for (const extension of SOURCE_EXTENSIONS) {
     const existing = rules[extension]
     if (hasDatadogLoader(existing)) continue
 
-    const additions = [createModernTargetRule(plan, compiler)]
-    if (plan.moduleSyntaxPattern) additions.push(createModernImportRule(plan, compiler))
-    if (plan.relativePathPattern) additions.push(createModernRelativeRule(plan))
-
+    const additions = [createModernRule(
+      plan,
+      [{ path: plan.targetPathPattern }],
+      { rewriteEdges: true, targetScope: 'direct' }
+    )]
+    if (plan.moduleSyntaxPattern) {
+      additions.push(createModernRule(
+        plan,
+        [{ not: 'foreign' }, { content: plan.moduleSyntaxPattern }],
+        { rewriteEdges: true }
+      ))
+    }
+    if (plan.foreignModuleSyntaxPattern) {
+      additions.push(createModernRule(
+        plan,
+        ['foreign', { content: plan.foreignModuleSyntaxPattern }],
+        { rewriteEdges: true }
+      ))
+    }
+    if (plan.relativePathPattern) {
+      additions.push(createModernRule(
+        plan,
+        [{ not: 'foreign' }, { path: plan.relativePathPattern }],
+        { targetScope: 'relative' }
+      ))
+    }
     if (existing === undefined) {
       rules[extension] = additions.length === 1 ? additions[0] : additions
     } else {
@@ -123,10 +153,9 @@ function addModernRules (turbopack, plan, compiler) {
 /**
  * @param {object} turbopack
  * @param {object} plan
- * @param {{ generator: string, parser: string, traverse: string }} compiler
  * @returns {object}
  */
-function addLegacyRules (turbopack, plan, compiler) {
+function addLegacyRules (turbopack, plan) {
   const conditions = { ...turbopack.conditions }
   const rules = { ...turbopack.rules }
 
@@ -134,12 +163,8 @@ function addLegacyRules (turbopack, plan, compiler) {
     conditions,
     rules,
     '#dd-trace/target',
-    {
-      path: new RegExp(
-        `(?:${plan.packagePathPattern.source}.*${SOURCE_PATH_PATTERN.source}|${plan.targetPathPattern.source})`
-      ),
-    },
-    { node: { loaders: [createLoader(plan, { compiler, rewriteEdges: true, targetScope: 'direct' })] } }
+    { path: plan.targetPathPattern },
+    { node: { loaders: [createLoader(plan, { rewriteEdges: true, targetScope: 'direct' })] } }
   )
 
   if (plan.moduleSyntaxPattern) {
@@ -148,7 +173,22 @@ function addLegacyRules (turbopack, plan, compiler) {
       rules,
       '#dd-trace/import',
       { content: plan.moduleSyntaxPattern, path: SOURCE_PATH_PATTERN },
-      { node: { foreign: false, loaders: [createLoader(plan, { compiler, rewriteEdges: true })] } }
+      {
+        node: {
+          default: { loaders: [createLoader(plan, { rewriteEdges: true })] },
+          foreign: false,
+        },
+      }
+    )
+  }
+
+  if (plan.foreignModuleSyntaxPattern) {
+    addLegacyRule(
+      conditions,
+      rules,
+      '#dd-trace/foreign-import',
+      { content: plan.foreignModuleSyntaxPattern, path: SOURCE_PATH_PATTERN },
+      { node: { foreign: { loaders: [createLoader(plan, { rewriteEdges: true })] } } }
     )
   }
 
@@ -158,7 +198,12 @@ function addLegacyRules (turbopack, plan, compiler) {
       rules,
       '#dd-trace/relative',
       { path: plan.relativePathPattern },
-      { node: { foreign: false, loaders: [createLoader(plan, { targetScope: 'relative' })] } }
+      {
+        node: {
+          default: { loaders: [createLoader(plan, { targetScope: 'relative' })] },
+          foreign: false,
+        },
+      }
     )
   }
 
@@ -183,61 +228,27 @@ function addLegacyRule (conditions, rules, name, condition, rule) {
 
 /**
  * @param {object} plan
- * @param {{ generator: string, parser: string, traverse: string }} compiler
+ * @param {(object|string)[]} conditions
+ * @param {object} settings
  * @returns {object}
  */
-function createModernTargetRule (plan, compiler) {
+function createModernRule (plan, conditions, settings) {
   return {
-    condition: {
-      all: ['node', {
-        any: [
-          { path: plan.packagePathPattern },
-          { path: plan.targetPathPattern },
-        ],
-      }],
-    },
-    loaders: [createLoader(plan, { compiler, rewriteEdges: true, targetScope: 'direct' })],
-  }
-}
-
-/**
- * @param {object} plan
- * @param {{ generator: string, parser: string, traverse: string }} compiler
- * @returns {object}
- */
-function createModernImportRule (plan, compiler) {
-  return {
-    condition: { all: ['node', { not: 'foreign' }, { content: plan.moduleSyntaxPattern }] },
-    loaders: [createLoader(plan, { compiler, rewriteEdges: true })],
-  }
-}
-
-/**
- * @param {object} plan
- * @returns {object}
- */
-function createModernRelativeRule (plan) {
-  return {
-    condition: { all: ['node', { not: 'foreign' }, { path: plan.relativePathPattern }] },
-    loaders: [createLoader(plan, { targetScope: 'relative' })],
+    condition: { all: ['node', ...conditions] },
+    loaders: [createLoader(plan, settings)],
   }
 }
 
 /**
  * @param {object} plan
  * @param {{
- *   compiler?: { generator: string, parser: string, traverse: string },
  *   rewriteEdges?: boolean,
  *   targetScope?: 'direct'|'relative'
  * }} [settings]
  * @returns {object}
  */
 function createLoader (plan, settings = {}) {
-  const options = {
-    manifestHash: plan.hash,
-    manifestPath: plan.path,
-  }
-  if (settings.compiler) options.compiler = settings.compiler
+  const options = { manifestPath: plan.path }
   if (settings.rewriteEdges) options.rewriteEdges = true
   if (settings.targetScope) options.targetScope = settings.targetScope
   return { loader, options }
@@ -255,7 +266,8 @@ function hasDatadogLoader (value) {
     return false
   }
   if (!value || typeof value !== 'object') return false
-  if (value.loader === loader) return true
+  const candidate = /** @type {{ loader?: unknown }} */ (value)
+  if (candidate.loader === loader) return true
 
   for (const key of Object.keys(value)) {
     if (hasDatadogLoader(value[key])) return true
@@ -265,7 +277,7 @@ function hasDatadogLoader (value) {
 
 /**
  * @param {string} projectDir
- * @returns {{ compiler: { generator: string, parser: string, traverse: string }, major: number }}
+ * @returns {{ compiler: { generator: string, parser: string, traverse: string }, major: number, root: string }}
  */
 function getNextInfo (projectDir) {
   let version
@@ -287,6 +299,11 @@ function getNextInfo (projectDir) {
   }
 
   try {
+    const rootFinder = appRequire('next/dist/lib/find-root')
+    const root = typeof rootFinder.findRootDirAndLockFiles === 'function'
+      ? rootFinder.findRootDirAndLockFiles(projectDir).rootDir
+      : rootFinder.findRootDir(projectDir) ?? projectDir
+
     return {
       compiler: {
         generator: appRequire.resolve('next/dist/compiled/babel/generator'),
@@ -294,6 +311,7 @@ function getNextInfo (projectDir) {
         traverse: appRequire.resolve('next/dist/compiled/babel/traverse'),
       },
       major,
+      root,
     }
   } catch (error) {
     throw new Error(`Next.js ${version} does not provide the compiler required by withDatadogTurbopack`, {

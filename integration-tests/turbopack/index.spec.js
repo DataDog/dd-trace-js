@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { execSync } = require('node:child_process')
+const fs = require('node:fs')
 const path = require('node:path')
 
 const axios = require('axios')
@@ -20,17 +21,32 @@ for (const nextVersion of ['15.5.0', 'latest']) {
     useSandbox([`next@${nextVersion}`, 'react', 'react-dom', 'ai', 'express'], false, [__dirname])
 
     let agent
+    let applicationDirectory
     let proc
 
     before(function () {
       this.timeout(300_000)
-      execSync('npm exec -- next build --turbopack', { cwd: appCwd(), stdio: 'inherit' })
+      applicationDirectory = path.join(sandboxCwd(), 'turbopack')
+      const wrapperDirectory = path.join(sandboxCwd(), 'node_modules/foreign-ai-wrapper')
+      fs.mkdirSync(wrapperDirectory)
+      fs.writeFileSync(path.join(wrapperDirectory, 'package.json'), JSON.stringify({
+        exports: './index.js',
+        name: 'foreign-ai-wrapper',
+        type: 'module',
+        version: '1.0.0',
+      }))
+      fs.writeFileSync(path.join(wrapperDirectory, 'index.js'), [
+        "import { generateText } from 'ai'",
+        'export function wrappedGenerateText (options) { return generateText(options) }',
+        '',
+      ].join('\n'))
+      execSync('npm exec -- next build --turbopack', { cwd: applicationDirectory, stdio: 'inherit' })
     })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
-      proc = await spawnPluginIntegrationTestProc(appCwd(), 'server.js', agent.port, {
-        NODE_OPTIONS: '-r dd-trace/init',
+      proc = await spawnPluginIntegrationTestProc(applicationDirectory, 'server.js', agent.port, {
+        NODE_OPTIONS: '--import=dd-trace/init.js',
       })
     })
 
@@ -56,12 +72,8 @@ for (const nextVersion of ['15.5.0', 'latest']) {
       }, 10_000, 1, true)
 
       const esmResponse = await axios.get(`${proc.url}/api/esm`)
-      assert.deepStrictEqual(esmResponse.data, { dependency: 'ai', text: 'ok' })
+      assert.deepStrictEqual(esmResponse.data, { dependency: 'foreign-ai-wrapper', text: 'ok' })
       await assertEsmTrace
     })
   })
-}
-
-function appCwd () {
-  return path.join(sandboxCwd(), 'turbopack')
 }
