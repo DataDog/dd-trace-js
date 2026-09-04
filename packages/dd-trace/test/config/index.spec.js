@@ -1545,7 +1545,7 @@ describe('Config', () => {
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_SAMPLING_RULES = `[
-      {"service":"usersvc","name":"healthcheck","sample_rate":0.0 },
+      {"service":"usersvc","name":"healthcheck","sample_rate":0.0,"discard":true },
       {"service":"usersvc","sample_rate":0.5},
       {"service":"authsvc","sample_rate":1.0},
       {"sample_rate":0.1}
@@ -1702,7 +1702,7 @@ describe('Config', () => {
       sampleRate: 0.5,
       rateLimit: -1,
       rules: [
-        { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
+        { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0, discard: true },
         { service: 'usersvc', sampleRate: 0.5 },
         { service: 'authsvc', sampleRate: 1.0 },
         { sampleRate: 0.1 },
