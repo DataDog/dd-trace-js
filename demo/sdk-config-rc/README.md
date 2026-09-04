@@ -127,7 +127,54 @@ The tracer reverts on its own once the config stops being served: `setRemoteConf
 RC-managed fields, `DD_PROFILING_ENABLED` falls back to its `env_var` origin, and `profiler.js`
 stops the profiler. `local-harness.js` asserts exactly that transition.
 
-### Running the app against a real Agent
+## End-to-end against a real Agent and real rc-api
+
+This is the full chain: app -> Agent -> RC backend -> `rc-api`, with the config created by curl
+instead of through the Datadog UI (the UI calls the same route).
+
+### Which payload shape to send
+
+The **tracer accepts both** shapes, but the **write path does not**. `rc-schema-validation`
+validates the request against the embedded `apm-tracing.json`, so:
+
+| Target org's rc-api | Send | Request body |
+| --- | --- | --- |
+| includes #14029 | object map | `payloads/jsonapi-profiling-enable.json` |
+| predates #14029 | `[{key, value}]` array | `payloads/jsonapi-profiling-enable-legacy-array.json` |
+
+Sending the object form to a pre-#14029 backend is rejected at schema validation. When in doubt,
+the legacy array form is accepted by both, because #14029 kept a read-path decoder for it.
+
+### 1. Credentials
+
+```bash
+export DD_SITE=datadoghq.com        # or the staging site
+export DD_API_KEY=…                 # keep these in the environment only
+export DD_APP_KEY=…                 # needs APM remote-config read + write
+```
+
+The app key's user also needs write access to the target service, or `POST /configs` returns 403
+from the per-service granular access check.
+
+### 2. Agent with remote config enabled
+
+```bash
+docker run --rm -d --name dd-agent-rc \
+  -e DD_API_KEY="$DD_API_KEY" \
+  -e DD_SITE="$DD_SITE" \
+  -e DD_REMOTE_CONFIGURATION_ENABLED=true \
+  -e DD_APM_ENABLED=true \
+  -e DD_APM_NON_LOCAL_TRAFFIC=true \
+  -p 8126:8126 \
+  gcr.io/datadoghq/agent:7
+
+docker exec dd-agent-rc agent status | grep -iA5 'Remote Configuration'
+```
+
+### 3. App, with profiling off at boot
+
+`DD_SERVICE` and `DD_ENV` must match `service_target` in the payload exactly (or the payload must
+use `*`), otherwise the tracer discards the config client-side.
 
 ```bash
 DD_SERVICE=sdk-config-demo DD_ENV=demo DD_VERSION=0.0.1 \
@@ -137,10 +184,77 @@ DD_PROFILING_ENABLED=false \
 node demo/sdk-config-rc/app.js
 ```
 
-The Agent needs `remote_configuration.enabled: true` and the same `DD_SITE`/API key as above.
-`service` and `env` must match `service_target` in the payload, or the config will not be
-served to this tracer. `curl localhost:8080/state` shows the live config, its origin, whether
-the profiler is running, and every `config:update` seen so far.
+Baseline, from the startup log and `curl -s localhost:8080/state | jq .profiling`:
+
+```
+DD_PROFILING_ENABLED=false origin=env_var profilerStarted=false
+```
+
+### 4. Preflight, then publish
+
+```bash
+./demo/sdk-config-rc/preflight.sh payloads/profiling-enable.json
+
+curl -sS -X POST \
+  "https://api.${DD_SITE}/api/unstable/remote_config/products/apm_tracing/configs" \
+  -H "DD-API-KEY: ${DD_API_KEY}" \
+  -H "DD-APPLICATION-KEY: ${DD_APP_KEY}" \
+  -H 'Content-Type: application/json' \
+  -d @demo/sdk-config-rc/payloads/jsonapi-profiling-enable.json
+```
+
+Keep the returned `data.id` as `CONFIG_ID`.
+
+### 5. Expected behavior, and the evidence to capture
+
+Within one poll interval (5s above, plus backend propagation), the app logs:
+
+```
+config:update  DD_PROFILING_ENABLED=true  origin=remote_config
+>>> CONFIG CHANGED  DD_PROFILING_ENABLED: false -> true (origin=remote_config)
+>>> PROFILER STARTED (was false)
+```
+
+Three independent confirmations:
+
+```bash
+# 1. tracer state: origin is remote_config and the profiler is running
+curl -s localhost:8080/state | jq '.profiling, .configUpdates'
+
+# 2. backend agrees the tracer ACKed it (apply_state 2 = acknowledged)
+curl -sS -H "DD-API-KEY: ${DD_API_KEY}" -H "DD-APPLICATION-KEY: ${DD_APP_KEY}" \
+  "https://api.${DD_SITE}/api/unstable/remote_config/products/apm_tracing/configs/${CONFIG_ID}/status"
+
+# 3. what the backend serves for this target
+curl -sS -H "DD-API-KEY: ${DD_API_KEY}" -H "DD-APPLICATION-KEY: ${DD_APP_KEY}" \
+  "https://api.${DD_SITE}/api/unstable/remote_config/products/apm_tracing/configs/by_target?service=sdk-config-demo&env=demo"
+```
+
+Profiles (the bonus) upload through the Agent's profiling proxy roughly 60s after the profiler
+starts; check APM > Profiles for `service:sdk-config-demo env:demo`.
+
+### 6. Cleanup / revert
+
+```bash
+curl -sS -X DELETE -H "DD-API-KEY: ${DD_API_KEY}" -H "DD-APPLICATION-KEY: ${DD_APP_KEY}" \
+  "https://api.${DD_SITE}/api/unstable/remote_config/products/apm_tracing/configs/${CONFIG_ID}"
+
+docker rm -f dd-agent-rc
+```
+
+The tracer reverts on its own once the config stops being served: `setRemoteConfig(null)` clears
+RC-managed fields, `DD_PROFILING_ENABLED` falls back to its `env_var` origin, and `profiler.js`
+stops the profiler. Expect `>>> PROFILER STOPPED` in the app log.
+
+### Troubleshooting
+
+| Symptom | Cause |
+| --- | --- |
+| No `config:update` at all | Agent RC disabled, or `DD_REMOTE_CONFIGURATION_ENABLED=false` in the app |
+| `config:update` fires but value unchanged | `service_target` does not match `DD_SERVICE`/`DD_ENV`. Run with `DD_TRACE_DEBUG=1` and look for `Ignoring config for service:` / `for env:` |
+| Value applied but profiler never starts | `DD_PROFILING_ENABLED` missing from `sdkConfigAllowlist` (see commit `0a3a81af0`) |
+| 400 at publish | Wrong `sdk_config.config` shape for that backend, or a key the server rejects. Run `preflight.sh` |
+| 403 at publish | App key lacks APM remote-config write, or no granular write access to the service |
 
 ### Verifying the backend has #14029
 
@@ -161,6 +275,8 @@ works either way; only the object-map form specifically requires #14029.
 | `local-harness.js` | FakeAgent-driven end-to-end demo; asserts the off→on→off transition |
 | `preflight.sh` | Validates a payload against real dd-go code |
 | `preflight/preflight_test.go` | The Go test `preflight.sh` runs inside dd-go |
-| `payloads/profiling-enable.json` | RC config-file form (preflight + FakeAgent) |
-| `payloads/jsonapi-profiling-enable.json` | rc-api JSON:API request body (curl) |
+| `payloads/profiling-enable.json` | RC config-file form, object map (preflight + FakeAgent) |
+| `payloads/profiling-enable-legacy-array.json` | Same, pre-#14029 array shape |
+| `payloads/jsonapi-profiling-enable.json` | rc-api request body, object map |
+| `payloads/jsonapi-profiling-enable-legacy-array.json` | rc-api request body, pre-#14029 array shape |
 | `payloads/rejected-example.json` | Payload the real backend rejects, to prove preflight works |
