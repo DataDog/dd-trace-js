@@ -473,7 +473,8 @@ function renderMarkdown (sections, contributors, breakingChanges) {
     }
     if (iconContributors.length > 0) {
       iconContributors.sort(compareContributors)
-      let avatars = ''
+      // Always show DataDog first
+      let avatars = renderContributor({name: 'DataDog', login: 'DataDog'})
       for (const contributor of iconContributors) {
         if (avatars) avatars += ' '
         avatars += renderContributor(contributor)
