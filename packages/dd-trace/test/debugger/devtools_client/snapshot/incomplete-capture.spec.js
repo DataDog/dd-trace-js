@@ -234,22 +234,6 @@ function whilePaused (fn, { line = 6, trigger } = {}) {
       assert.strictEqual(params.hitBreakpoints.length, 1)
       fn(params.callFrames[0]).then(resolve, reject)
     })
-    if (trigger === undefined) {
-      setAndTriggerBreakpoint(target, line).catch(reject)
-    } else {
-      setBreakpoint(line).then(trigger).catch(reject)
-    }
-  })
-}
-
-/**
- * @param {number} line - The line to break on
- */
-async function setBreakpoint (line) {
-  await session.post('Debugger.setBreakpoint', {
-    location: {
-      scriptId: await require(target).scriptId,
-      lineNumber: line - 1, // Beware! lineNumber is zero-indexed
-    },
+    setAndTriggerBreakpoint(target, line, trigger).catch(reject)
   })
 }
