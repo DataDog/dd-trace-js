@@ -22,7 +22,7 @@
     "type:check": "tsc --noEmit -p tsconfig.dev.json",
     "type:doc:build": "cd docs && yarn && yarn build",
     "type:doc:test": "cd docs && yarn && yarn test",
-    "lint": "node scripts/check_licenses.js && node scripts/check-agents-md-size.js && node scripts/check-no-coverage-artifacts.js && node scripts/check-no-mcr-images.js && node scripts/check-docker-image-shas.js && eslint . --concurrency=auto --max-warnings 0 && npm run verify:carrier-fields && npm run lint:codeowners:ci && npm run verify-exercised-tests",
+    "lint": "node scripts/check_licenses.js && node scripts/check-agents-md-size.js && node scripts/check-no-coverage-artifacts.js && node scripts/check-no-mcr-images.js && node scripts/check-docker-image-shas.js && node scripts/lint.mjs && npm run lint:codeowners:ci && npm run verify-exercised-tests",
     "lint:fix": "node scripts/check_licenses.js && node scripts/check-agents-md-size.js && node scripts/check-no-coverage-artifacts.js && node scripts/check-no-mcr-images.js && node scripts/check-docker-image-shas.js && eslint . --concurrency=auto --max-warnings 0 --fix",
     "verify:carrier-fields": "node scripts/verify-carrier-fields.mjs",
     "lint:inspect": "npx @eslint/config-inspector@latest",
