@@ -88,12 +88,18 @@ function writeArray (bytes, value) {
  */
 function writeMap (bytes, value) {
   const keys = Object.keys(value)
+  let size = keys.length
+  for (const key of keys) {
+    if (value[key] === undefined) size--
+  }
 
-  bytes.writeMapPrefix(keys.length)
+  bytes.writeMapPrefix(size)
 
   for (const key of keys) {
+    const item = value[key]
+    if (item === undefined) continue
     bytes.write(key)
-    writeValue(bytes, value[key])
+    writeValue(bytes, item)
   }
 }
 
