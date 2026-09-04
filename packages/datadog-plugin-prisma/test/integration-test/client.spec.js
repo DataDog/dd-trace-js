@@ -212,7 +212,7 @@ const prismaClientConfigs = [{
     title: 'uses active OTel span IDs in Prisma DBM traceparent comments',
     async run ({ agent, config }) {
       let stdout = ''
-      const proc = await spawnPluginIntegrationTestProcAndExpectExit(
+      const spawned = spawnPluginIntegrationTestProcAndExpectExit(
         sandboxCwd(),
         config.serverFile,
         agent.port,
@@ -222,6 +222,8 @@ const prismaClientConfigs = [{
           stdout += data.toString()
         }
       )
+      const { proc } = spawned
+      await spawned.completed
 
       const marker = stdout.match(/TRACEPARENT_OK:(00-[a-f0-9]{32}-[a-f0-9]{16}-01)/)
       assert.ok(marker, `Expected TRACEPARENT_OK output marker, got: ${stdout}`)
@@ -373,7 +375,7 @@ describe('esm', () => {
                   variants[variant],
                   agent.port,
                   { DD_TRACE_FLUSH_INTERVAL: '2000', ...config.env }
-                ),
+                ).completed,
                 res,
               ])
               proc = childProcess

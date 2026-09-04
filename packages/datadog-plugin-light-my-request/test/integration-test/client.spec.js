@@ -51,7 +51,9 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'web.request'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        proc = spawned.proc
+        await spawned.completed
       }).timeout(20000)
     }
   })

@@ -248,7 +248,7 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
         await spawnProcAndExpectExit(unsupportedTestFile, {
           cwd,
           execArgv,
-        })
+        }).completed
       })
     })
   })

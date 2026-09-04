@@ -53,10 +53,12 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'anthropic.request'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
+        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
           NODE_OPTIONS: '--import dd-trace/initialize.mjs',
           ANTHROPIC_API_KEY: '<not-a-real-key>',
         })
+        proc = spawned.proc
+        await spawned.completed
 
         await res
       }).timeout(20000)

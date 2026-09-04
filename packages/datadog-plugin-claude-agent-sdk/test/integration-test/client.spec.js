@@ -58,11 +58,13 @@ describe('esm', () => {
         // Use a fresh HOME so the Claude CLI doesn't pick up a user-level ~/.claude.json (e.g. one that
         // configures an apiKeyHelper unavailable in CI, which would override the ANTHROPIC_API_KEY env).
         const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-agent-sdk-home-'))
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
+        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
           NODE_OPTIONS: '--import dd-trace/initialize.mjs',
           ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
           HOME: isolatedHome,
         })
+        proc = spawned.proc
+        await spawned.completed
 
         await res
       }).timeout(30000)
