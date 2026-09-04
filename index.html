@@ -12,6 +12,18 @@
 <p>This is the API documentation for the Datadog JavaScript Tracer. If you are just looking to get started, check out the <a href="https://docs.datadoghq.com/tracing/setup/nodejs/">tracing setup documentation</a>.</p>
 <h2 id="overview">Overview</h2>
 <p>The module exported by this library is an instance of the <a href="./interfaces/tracer.html">Tracer</a> class.</p>
+<h2 id="agentless-mode">Agentless mode</h2>
+<p>Set <code>DD_AGENTLESS_ENABLED=true</code> to send supported telemetry directly to Datadog without a local Agent.
+Agentless mode disables features that require an Agent.</p>
+<p>Set the API key with <code>DD_API_KEY</code> or <code>DATADOG_API_KEY</code>.
+Agentless crash tracking requires this key and sends crash data directly to Datadog.</p>
+<p>Agentless mode uses the Datadog trace intake and ignores <code>OTEL_TRACES_EXPORTER</code>.
+Explicit <code>DD_TRACE_SAMPLE_RATE</code>, <code>OTEL_TRACES_SAMPLER</code>, <code>OTEL_TRACES_SPAN_METRICS_ENABLED</code>, and
+<code>DD_METRICS_OTEL_ENABLED</code> settings still apply.</p>
+<p>Agentless mode submits Bunyan, Pino, and Winston logs directly by default. Set
+<code>DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false</code> to disable this behavior. Set <code>DD_LOGS_OTEL_ENABLED=true</code> to use the
+OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
+<code>DD_AGENTLESS_LOG_SUBMISSION_URL</code> overrides the Datadog logs intake URL.</p>
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 <p>LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:</p>
 <pre><code class="javascript"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">tracer</span><span class="hl-1"> = </span><span class="hl-3">require</span><span class="hl-1">(</span><span class="hl-4">&#39;dd-trace&#39;</span><span class="hl-1">).</span><span class="hl-3">init</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-5">llmobs:</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-5">projectName:</span><span class="hl-1"> </span><span class="hl-4">&#39;experiments-project&#39;</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">})</span>

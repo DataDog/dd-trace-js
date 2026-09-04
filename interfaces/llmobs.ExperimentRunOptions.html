@@ -13,7 +13,7 @@
 <h1>Interface ExperimentRunOptions</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">ExperimentRunOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#concurrency">concurrency</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#maxretries">maxRetries</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#retrydelay">retryDelay</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">attempt</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#throwonerrors">throwOnErrors</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L3910">index.d.ts:3910</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L3910">index.d.ts:3910</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -35,28 +35,28 @@
 <div class="tsd-comment tsd-typography"><p>Maximum number of task/evaluator executions to process concurrently. Default 10.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L3918">index.d.ts:3918</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L3918">index.d.ts:3918</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="maxretries"><code class="tsd-tag">Optional</code><span>max<wbr/>Retries</span><a href="#maxretries" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">maxRetries</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Maximum retries for task and evaluator failures. Default 0.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L3912">index.d.ts:3912</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L3912">index.d.ts:3912</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="retrydelay"><code class="tsd-tag">Optional</code><span>retry<wbr/>Delay</span><a href="#retrydelay" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">retryDelay</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">attempt</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Delay before a retry, in milliseconds. Default 100 * (attempt + 1).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L3914">index.d.ts:3914</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L3914">index.d.ts:3914</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="throwonerrors"><code class="tsd-tag">Optional</code><span>throw<wbr/>On<wbr/>Errors</span><a href="#throwonerrors" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">throwOnErrors</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>Reject on the first task/evaluator error instead of capturing it. Default false.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L3916">index.d.ts:3916</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L3916">index.d.ts:3916</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

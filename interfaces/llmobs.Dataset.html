@@ -13,7 +13,7 @@
 <h1>Interface Dataset</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Dataset</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#addrecord-1">addRecord</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">input</span><span class="tsd-signature-symbol">:</span> <a href="../types/llmobs.JSONType.html" class="tsd-signature-type tsd-kind-type-alias">JSONType</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">expectedOutput</span><span class="tsd-signature-symbol">?:</span> <a href="../types/llmobs.JSONType.html" class="tsd-signature-type tsd-kind-type-alias">JSONType</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">metadata</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <a href="../types/llmobs.JSONType.html" class="tsd-signature-type tsd-kind-type-alias">JSONType</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">tags</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#addrecords-1">addRecords</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">records</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.DatasetRecordNew.html" class="tsd-signature-type tsd-kind-interface">DatasetRecordNew</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#addtags-1">addTags</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">index</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">tags</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#delete-1">delete</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">index</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#description-1">description</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#filtertags-1">filterTags</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#id-1">id</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#latestversion-1">latestVersion</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#name-1">name</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#projectid-1">projectId</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#projectname-1">projectName</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#push-1">push</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="llmobs.DatasetPushResult.html" class="tsd-signature-type tsd-kind-interface">DatasetPushResult</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#records-1">records</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.DatasetRecord.html" class="tsd-signature-type tsd-kind-interface">DatasetRecord</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#removetags-1">removeTags</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">index</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">tags</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#replacetags-1">replaceTags</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">index</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">tags</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#update-1">update</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">index</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">fields</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span><br/>            <span class="tsd-kind-property">expectedOutput</span><span class="tsd-signature-symbol">?:</span> <a href="../types/llmobs.JSONType.html" class="tsd-signature-type tsd-kind-type-alias">JSONType</a><span class="tsd-signature-symbol">;</span><br/>            <span class="tsd-kind-property">input</span><span class="tsd-signature-symbol">?:</span> <a href="../types/llmobs.JSONType.html" class="tsd-signature-type tsd-kind-type-alias">JSONType</a><span class="tsd-signature-symbol">;</span><br/>            <span class="tsd-kind-property">metadata</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <a href="../types/llmobs.JSONType.html" class="tsd-signature-type tsd-kind-type-alias">JSONType</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>        <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#url-1">url</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#version-1">version</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4052">index.d.ts:4052</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4052">index.d.ts:4052</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -58,7 +58,7 @@
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">tags</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4053">index.d.ts:4053</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4053">index.d.ts:4053</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="addrecords"><span>add<wbr/>Records</span><a href="#addrecords" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -73,7 +73,7 @@
 <li><span><span class="tsd-kind-parameter">records</span>: <a href="llmobs.DatasetRecordNew.html" class="tsd-signature-type tsd-kind-interface">DatasetRecordNew</a><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4060">index.d.ts:4060</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4060">index.d.ts:4060</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="addtags"><span>add<wbr/>Tags</span><a href="#addtags" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -89,7 +89,7 @@
 <li><span><span class="tsd-kind-parameter">tags</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4070">index.d.ts:4070</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4070">index.d.ts:4070</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="delete"><span>delete</span><a href="#delete" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -104,7 +104,7 @@
 <li><span><span class="tsd-kind-parameter">index</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4068">index.d.ts:4068</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4068">index.d.ts:4068</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="description"><span>description</span><a href="#description" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -113,7 +113,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4078">index.d.ts:4078</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4078">index.d.ts:4078</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="filtertags"><span>filter<wbr/>Tags</span><a href="#filtertags" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -124,7 +124,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4087">index.d.ts:4087</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4087">index.d.ts:4087</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="id"><span>id</span><a href="#id" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -133,7 +133,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4079">index.d.ts:4079</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4079">index.d.ts:4079</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="latestversion"><span>latest<wbr/>Version</span><a href="#latestversion" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -142,7 +142,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4084">index.d.ts:4084</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4084">index.d.ts:4084</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="name"><span>name</span><a href="#name" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -151,7 +151,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4077">index.d.ts:4077</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4077">index.d.ts:4077</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="projectid"><span>project<wbr/>Id</span><a href="#projectid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -160,7 +160,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4080">index.d.ts:4080</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4080">index.d.ts:4080</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="projectname"><span>project<wbr/>Name</span><a href="#projectname" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -171,7 +171,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4082">index.d.ts:4082</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4082">index.d.ts:4082</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="push"><span>push</span><a href="#push" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -182,7 +182,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="llmobs.DatasetPushResult.html" class="tsd-signature-type tsd-kind-interface">DatasetPushResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4076">index.d.ts:4076</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4076">index.d.ts:4076</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="records"><span>records</span><a href="#records" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -191,7 +191,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <a href="llmobs.DatasetRecord.html" class="tsd-signature-type tsd-kind-interface">DatasetRecord</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4085">index.d.ts:4085</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4085">index.d.ts:4085</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="removetags"><span>remove<wbr/>Tags</span><a href="#removetags" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -207,7 +207,7 @@
 <li><span><span class="tsd-kind-parameter">tags</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4072">index.d.ts:4072</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4072">index.d.ts:4072</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="replacetags"><span>replace<wbr/>Tags</span><a href="#replacetags" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -223,7 +223,7 @@
 <li><span><span class="tsd-kind-parameter">tags</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4074">index.d.ts:4074</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4074">index.d.ts:4074</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="update"><span>update</span><a href="#update" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -239,7 +239,7 @@
 <li><span><span class="tsd-kind-parameter">fields</span>: <span class="tsd-signature-symbol">{</span><br/>    <span class="tsd-kind-property">expectedOutput</span><span class="tsd-signature-symbol">?:</span> <a href="../types/llmobs.JSONType.html" class="tsd-signature-type tsd-kind-type-alias">JSONType</a><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-property">input</span><span class="tsd-signature-symbol">?:</span> <a href="../types/llmobs.JSONType.html" class="tsd-signature-type tsd-kind-type-alias">JSONType</a><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-property">metadata</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <a href="../types/llmobs.JSONType.html" class="tsd-signature-type tsd-kind-type-alias">JSONType</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-interface">Dataset</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4062">index.d.ts:4062</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4062">index.d.ts:4062</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="url"><span>url</span><a href="#url" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -250,7 +250,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4089">index.d.ts:4089</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4089">index.d.ts:4089</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="version"><span>version</span><a href="#version" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -259,7 +259,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/298497a9a622f4b364362bb19b3d93989799a414/index.d.ts#L4083">index.d.ts:4083</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/478a7de7d344a77652eba60322492fe6b4a50140/index.d.ts#L4083">index.d.ts:4083</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
