@@ -4,10 +4,18 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, spawnProc, FakeAgent, stopProc } = require('../helpers')
 describe('ESM', () => {
-  let axios, cwd, appFile, agent, proc
+  let cwd, appFile, agent, proc
+
+  /**
+   * @param {string} url
+   */
+  async function request (url) {
+    const response = await fetch(new URL(url, proc.url))
+    assert.strictEqual(response.status, 200)
+    await response.arrayBuffer()
+  }
 
   useSandbox(['express'])
 
@@ -36,8 +44,6 @@ describe('ESM', () => {
             NODE_OPTIONS: nodeOptions,
           },
         })
-
-        axios = Axios.create({ baseURL: proc.url })
       })
 
       afterEach(async () => {
@@ -62,7 +68,7 @@ describe('ESM', () => {
       }
 
       it('should detect COMMAND_INJECTION vulnerability', async function () {
-        await axios.get('/cmdi-vulnerable?args=-la')
+        await request('/cmdi-vulnerable?args=-la')
 
         await agent.assertMessageReceived(({ payload }) => {
           verifySpan(payload, span => {
@@ -73,7 +79,7 @@ describe('ESM', () => {
       })
 
       it('should detect COMMAND_INJECTION vulnerability in imported file', async () => {
-        await axios.get('/more/cmdi-vulnerable?args=-la')
+        await request('/more/cmdi-vulnerable?args=-la')
 
         await agent.assertMessageReceived(({ payload }) => {
           verifySpan(payload, span => {
