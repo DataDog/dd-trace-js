@@ -42,7 +42,7 @@ include:
 "llm validation":
   variables:
     LLMVAL_PLATFORM_PROJECT: "ddoghq/llm-validation-platform"
-    LLMVAL_PLATFORM_REF: "d59e4af6d6666092f65740b9a4d1bf3651a64321" 
+    LLMVAL_PLATFORM_REF: "d59e4af6d6666092f65740b9a4d1bf3651a64321"
 
 workflow:
   auto_cancel:
