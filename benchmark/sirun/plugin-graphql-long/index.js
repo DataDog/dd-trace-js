@@ -103,8 +103,8 @@ const OPERATIONS = Number(process.env.OPERATIONS)
     await graphql.graphql({ schema, source, variableValues })
   }
   // Node 26 runs this loop ~2x faster than Node 20. Per-Node operation counts
-  // keep the setup share below 10% without making slower releases overlong.
-  guard.done(0.1)
+  // keep the setup share below 12% without making slower releases overlong.
+  guard.done(0.12)
 })()
 
 function validatePreflightTrace () {

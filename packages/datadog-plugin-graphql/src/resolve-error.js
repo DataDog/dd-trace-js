@@ -20,7 +20,9 @@ class GraphQLResolveErrorPlugin extends TracingPlugin {
     const error = args?.[0]
     const errorPath = error?.path
     const path = Array.isArray(errorPath) ? errorPath : args?.[2]
-    recordActiveResolveError(normalizedFalsyErrors.delete(error) ? undefined : error, path)
+    if (path) {
+      recordResolveErrorForPath(normalizedFalsyErrors.delete(error) ? undefined : error, path, args?.[1])
+    }
   }
 
   /**
@@ -44,7 +46,9 @@ class GraphQLToolsResolveErrorPlugin extends TracingPlugin {
    */
   start (ctx) {
     const error = ctx.arguments?.[0]
-    recordActiveResolveError(error, error?.path)
+    if (error?.path) {
+      recordResolveErrorForPath(error, error.path)
+    }
   }
 
   // `start` owns attribution while the normalized error path is available.
@@ -53,13 +57,18 @@ class GraphQLToolsResolveErrorPlugin extends TracingPlugin {
 
 /**
  * @param {unknown} error
- * @param {(string | number)[]} [path]
+ * @param {(string | number)[]} path
+ * @param {readonly object[]} [fieldNodes]
  */
-function recordActiveResolveError (error, path) {
-  const field = legacyStorage.getStore()?.graphqlResolveField?.field
-  if (!field || (path !== undefined && !matchesPath(field.pathString, path))) return
-
-  recordResolveError(field, error)
+function recordResolveErrorForPath (error, path, fieldNodes) {
+  const fieldNode = fieldNodes?.[0]
+  const rootCtx = legacyStorage.getStore()?.graphqlRootCtx
+  for (let field = rootCtx?.resolveFields; field; field = field.nextResolveField) {
+    if ((!fieldNode || field.fieldNode === fieldNode) && matchesPath(field.pathString, path)) {
+      recordResolveError(field, error)
+      return
+    }
+  }
 }
 
 /**
