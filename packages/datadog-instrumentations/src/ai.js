@@ -6,112 +6,48 @@ const { addHook, getHooks } = require('./helpers/instrument')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
-const doGenerateBeforeChannel = channel('dd-trace:vercel-ai:doGenerate:before')
-const doGenerateAfterChannel = channel('dd-trace:vercel-ai:doGenerate:after')
-const doStreamBeforeChannel = channel('dd-trace:vercel-ai:doStream:before')
-const doStreamAfterChannel = channel('dd-trace:vercel-ai:doStream:after')
+
+// Published synchronously per model call with the native call data. A subscriber may set either
+// callback and this instrumentation applies it, so the wrapping stays here and only the policy
+// lives outside:
+//   beforeResult () => Promise<void>|undefined     holds the result back until it settles
+//   onResult (result) => unknown|Promise<unknown>  inspects or replaces the delivered result
+const modelInterceptChannel = channel('dd-trace:vercel-ai:model:intercept')
+
+const INTERCEPTED_MODEL_METHODS = ['doGenerate', 'doStream']
 
 const tracers = new WeakSet()
 const wrappedModels = new WeakSet()
 
 /**
- * Publishes a provider-native lifecycle payload to a cancelable lifecycle channel.
+ * Wraps a language model's call methods so subscribers can interpose on each call.
  *
- * Subscribers push async work into `pending` synchronously during publication and
- * abort `abortController` with an error before the pushed promise resolves to block.
- *
- * @param {object} lifecycleChannel
- * @param {object} payload
- * @returns {Promise<void>}
+ * @param {object} model
  */
-function publishLifecycle (lifecycleChannel, payload) {
-  const abortController = new AbortController()
-  const ctx = { ...payload, abortController, pending: [] }
-
-  lifecycleChannel.publish(ctx)
-
-  return Promise.all(ctx.pending).then(() => {
-    if (abortController.signal.aborted) {
-      throw abortController.signal.reason
-    }
-  })
-}
-
-/**
- * Wraps a Vercel AI language model's doGenerate and doStream lifecycle methods.
- *
- * @param {object} model - A Vercel AI language model instance
- */
-function wrapModelWithLifecycle (model) {
+function wrapModel (model) {
   if (!model || wrappedModels.has(model)) return
   wrappedModels.add(model)
 
-  if (typeof model.doGenerate === 'function') {
-    shimmer.wrap(model, 'doGenerate', function (original) {
-      return function (options) {
-        const originalResult = original.call(this, options)
+  for (const method of INTERCEPTED_MODEL_METHODS) {
+    if (typeof model[method] !== 'function') continue
 
-        if (!doGenerateBeforeChannel.hasSubscribers && !doGenerateAfterChannel.hasSubscribers) return originalResult
-        if (!options.prompt?.length) return originalResult
+    shimmer.wrap(model, method, original => function (...args) {
+      const result = original.apply(this, args)
+      if (!modelInterceptChannel.hasSubscribers) return result
 
-        const beforeEvaluation = doGenerateBeforeChannel.hasSubscribers
-          ? publishLifecycle(doGenerateBeforeChannel, { prompt: options.prompt, options })
-          : Promise.resolve()
+      const interceptCtx = { method, arguments: args }
+      modelInterceptChannel.publish(interceptCtx)
 
-        return Promise.all([beforeEvaluation, originalResult])
-          .then(([, result]) => {
-            if (!doGenerateAfterChannel.hasSubscribers || !result.content?.length) return result
-            const payload = { prompt: options.prompt, options, result }
-            return publishLifecycle(doGenerateAfterChannel, payload).then(() => result)
-          })
-      }
-    })
-  }
+      if (!interceptCtx.beforeResult && !interceptCtx.onResult) return result
 
-  if (typeof model.doStream === 'function') {
-    shimmer.wrap(model, 'doStream', function (original) {
-      return function (options) {
-        const originalResult = original.call(this, options)
+      // A model may return any thenable, so normalize before attaching handlers.
+      const settled = Promise.resolve(result)
+      // The interceptor's rejection wins over an earlier SDK rejection.
+      settled.catch(() => {})
 
-        if (!doStreamBeforeChannel.hasSubscribers && !doStreamAfterChannel.hasSubscribers) return originalResult
-        if (!options.prompt?.length) return originalResult
-
-        const beforeEvaluation = doStreamBeforeChannel.hasSubscribers
-          ? publishLifecycle(doStreamBeforeChannel, { prompt: options.prompt, options })
-          : Promise.resolve()
-
-        return Promise.all([beforeEvaluation, originalResult])
-          .then(([, result]) => {
-            if (!doStreamAfterChannel.hasSubscribers) return result
-
-            const chunks = []
-            const reader = result.stream.getReader()
-
-            function readAll () {
-              return reader.read().then(({ done, value }) => {
-                if (done) return
-                chunks.push(value)
-                return readAll()
-              })
-            }
-
-            return readAll().then(() => {
-              return publishLifecycle(doStreamAfterChannel, { prompt: options.prompt, options, chunks })
-                .then(() => {
-                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-                  const stream = new ReadableStream({
-                    start (controller) {
-                      for (const chunk of chunks) {
-                        controller.enqueue(chunk)
-                      }
-                      controller.close()
-                    },
-                  })
-                  return { ...result, stream }
-                })
-            })
-          })
-      }
+      return Promise.resolve(interceptCtx.beforeResult?.())
+        .then(() => settled)
+        .then(value => (interceptCtx.onResult ? interceptCtx.onResult(value) : value))
     })
   }
 }
@@ -258,11 +194,14 @@ for (const hook of getHooks('ai')) {
     tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
       end (ctx) {
         const model = ctx.arguments[0]
+
+        // The SDK builds a model from a string id, in which case only the resolved instance is
+        // worth wrapping; when the caller passed an instance, that is the one the SDK calls.
         if (typeof model !== 'string' && model !== ctx.result) {
-          wrapModelWithLifecycle(model)
+          wrapModel(model)
           wrappedModels.add(ctx.result)
         } else {
-          wrapModelWithLifecycle(ctx.result)
+          wrapModel(ctx.result)
         }
       },
     })
@@ -315,5 +254,3 @@ addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
 
   return exports
 })
-
-module.exports = { wrapModelWithLifecycle }
