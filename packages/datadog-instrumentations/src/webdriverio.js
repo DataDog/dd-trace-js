@@ -290,10 +290,8 @@ function getRumTestExecutionId (browser, isRumActive) {
 async function preloadRumNavigation () {
   try {
     const browser = this
-    if (!canCorrelateRumBrowser(browser) || !browser.isBidi ||
-        typeof browser.scriptAddPreloadScript !== 'function') return
-
     const testExecutionId = getRumTestExecutionId(browser)
+    if (!canCorrelateRumBrowser(browser)) return
     if (!rumRunnerBrowsers.has(browser)) return
 
     retainRumBrowser(browser)

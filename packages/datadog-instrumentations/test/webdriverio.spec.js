@@ -459,6 +459,47 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('publishes browser metadata for a direct classic navigateTo command', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(webdriverFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, webdriverFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriver-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const correlationContexts = []
+    const browser = {
+      calls: [],
+      capabilities: {
+        browserName: 'chrome',
+        browserVersion: '123',
+      },
+    }
+    const correlate = context => {
+      correlationContexts.push({
+        browserName: context.browserName,
+        browserVersion: context.browserVersion,
+        isRumActive: context.isRumActive,
+      })
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { navigateTo } = await import(pathToFileURL(outputPath))
+      await navigateTo.call(browser, 'https://example.test')
+
+      assert.deepStrictEqual(browser.calls, ['navigateTo'])
+      assert.deepStrictEqual(correlationContexts, [{
+        browserName: 'chrome',
+        browserVersion: '123',
+        isRumActive: undefined,
+      }])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+    }
+  })
+
   it('preloads RUM correlation for a direct browsingContextNavigate command', async () => {
     require('../src/webdriverio')
 
