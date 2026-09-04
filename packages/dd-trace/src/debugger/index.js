@@ -239,7 +239,11 @@ function cleanup (error) {
   }
   if (guardrailMetrics !== null) {
     dc.unsubscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
-    flushGuardrailMetrics() // Report what the worker counted up until it was stopped
+    // Report what the worker counted up until it was stopped. Known limitation: `Worker#terminate()` interrupts the
+    // worker asynchronously, so anything it counts between this drain and its actual termination is lost. That only
+    // concerns events still sitting in the worker's upload buffer, which die with the worker anyway, so it isn't worth
+    // deferring the drain until the worker has exited.
+    flushGuardrailMetrics()
     guardrailMetrics = null
   }
 
