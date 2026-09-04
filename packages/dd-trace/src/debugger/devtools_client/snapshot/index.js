@@ -32,6 +32,8 @@ module.exports = {
  *   fatalErrors: Error[],
  *   incomplete: import('./processor').IncompleteCapture
  * }>} The local state for the call frame. `incomplete` is only fully populated once `processLocalState` has run.
+ *   Not every fatal error is recorded as a runtime error: the collector also raises one when it hits its large object
+ *   safety threshold, which is reported as the field count limit it is.
  */
 async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT_MAX) {
   const { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength } = limits
@@ -55,6 +57,7 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
       // eslint-disable-next-line no-await-in-loop
       rawState.push(...await collectObjectProperties(objectId, opts))
     } catch (err) {
+      incomplete.reasons |= INCOMPLETE_REASON.RUNTIME_ERROR
       ctx.fatalErrors.push(new Error(
         `Error getting local state for closure scope (type: ${scope.type}). ` +
         'Future snapshots for existing probes in this location will be skipped until the probes are re-applied',
@@ -92,8 +95,9 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
  * @property {{ expr: string, message: string }[]} evaluationErrors - Transient errors from expression evaluation
  *   (safe to retry)
  * @property {Error[]} fatalErrors - Fatal errors that should disable capture expressions for this probe permanently
- * @property {import('./processor').IncompleteCapture} incomplete - The capture limits enforced on the expressions.
- *   Only fully populated once `processCaptureExpressions` has run.
+ * @property {import('./processor').IncompleteCapture} incomplete - The capture limits enforced on the expressions,
+ *   including a runtime error for every expression that threw or could not be evaluated. Only fully populated once
+ *   `processCaptureExpressions` has run.
  */
 
 /**
@@ -140,6 +144,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
 
       // Handle evaluation exceptions (maybe transient - bad expression, undefined var, etc.)
       if (exceptionDetails) {
+        incomplete.reasons |= INCOMPLETE_REASON.RUNTIME_ERROR
         evaluationErrors.push({ expr: name, message: extractErrorMessage(exceptionDetails) })
         continue
       }
@@ -187,6 +192,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
 
       rawResults.push({ name, remoteObject: result, maxLength })
     } catch (err) {
+      incomplete.reasons |= INCOMPLETE_REASON.RUNTIME_ERROR
       fatalErrors.push(new Error(
         `Error capturing expression "${name}". ` +
         'Capture expressions for this probe will be skipped until the probe is re-applied',

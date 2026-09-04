@@ -9,6 +9,7 @@ const sinon = require('sinon')
 
 require('../../setup/mocha')
 
+const { LARGE_OBJECT_SKIP_THRESHOLD } = require('../../../src/debugger/devtools_client/snapshot/constants')
 const { EVENT_TYPE, GuardrailMetrics, INCOMPLETE_REASON } = require('../../../src/debugger/guardrail-metrics')
 const { installProbeSampler } = require('../../../src/debugger/probe_sampler')
 const { MAX_SAMPLED_PROBES_PER_PAUSE } = require('../../../src/debugger/probe_sampler_constants')
@@ -271,6 +272,52 @@ describe('onPause', function () {
     assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.RUNTIME_ERROR)
     assert.strictEqual(probe.captureSnapshot, false, 'should disable future snapshots for the probe')
   })
+
+  it('should not record a runtime error when the large object safety threshold disables the snapshot',
+    async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.captureSnapshot = true
+      probe.capture = { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 }
+      sampleProbe(probe)
+
+      const hugeObjectProperties = Array.from({ length: LARGE_OBJECT_SKIP_THRESHOLD + 1 }, (_, i) => ({
+        name: `property${i}`, value: { type: 'number', value: i }, enumerable: true,
+      }))
+      session.post = sinon.stub().callsFake((method, params) => {
+        if (method === 'Debugger.evaluateOnCallFrame') return Promise.resolve({ result: { value: [{}] } })
+        if (method === 'Runtime.getProperties') {
+          return Promise.resolve(params.objectId === 'scope-object-id'
+            ? {
+                result: [{
+                  name: 'huge',
+                  value: { type: 'object', className: 'Object', description: 'Object', objectId: 'huge-object-id' },
+                  enumerable: true,
+                }],
+              }
+            : { result: hugeObjectProperties })
+        }
+        return Promise.resolve({})
+      })
+      const eventWithScope = {
+        params: {
+          ...event.params,
+          callFrames: [{
+            ...event.params.callFrames[0],
+            scopeChain: [{ type: 'local', object: { objectId: 'scope-object-id' } }],
+          }],
+        },
+      }
+
+      await onPaused(eventWithScope)
+
+      sinon.assert.calledOnce(send)
+      const [, , , snapshot, , eventType, incompleteReasons] = send.firstCall.args
+      assert.strictEqual(snapshot.captures.lines[1].locals.huge.notCapturedReason, 'fieldCount')
+      assert.strictEqual(snapshot.evaluationErrors.length, 1, 'should tell the user why future captures are skipped')
+      assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
+      assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.FIELD_COUNT, 'should not count it as a runtime error')
+      assert.strictEqual(probe.captureSnapshot, false, 'should disable future snapshots for the probe')
+    })
 
   it('should send capture expression results as snapshot events', async function () {
     const probe = genProcessedProbe('probe-1')

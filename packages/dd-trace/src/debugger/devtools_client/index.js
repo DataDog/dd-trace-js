@@ -204,7 +204,9 @@ session.on('Debugger.paused', async ({ params }) => {
       language: 'javascript',
     }
 
-    // Which guardrail bucket the event belongs to, and which capture limits were enforced while producing it
+    // Which guardrail bucket the event belongs to, and which capture limits were enforced while producing it. The
+    // snapshot module records the reasons, including runtime errors: a fatal error does not necessarily mean one, as
+    // the collector also raises a fatal error to disable capture when it hits its large object safety threshold.
     /** @type {number} */
     let eventType = EVENT_TYPE.LOG
     let incompleteReasons = 0
@@ -219,7 +221,6 @@ session.on('Debugger.paused', async ({ params }) => {
           expr: '',
           message: error.message,
         }))
-        incompleteReasons |= INCOMPLETE_REASON.RUNTIME_ERROR
       }
       snapshot.captures = {
         lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
@@ -236,7 +237,6 @@ session.on('Debugger.paused', async ({ params }) => {
             expr: '',
             message: error.message,
           }))
-          incompleteReasons |= INCOMPLETE_REASON.RUNTIME_ERROR
         }
 
         snapshot.captures = {
@@ -246,7 +246,6 @@ session.on('Debugger.paused', async ({ params }) => {
 
         // Handle transient evaluation errors - include in snapshot for this capture
         if (expressionResult.evaluationErrors?.length > 0) {
-          incompleteReasons |= INCOMPLETE_REASON.RUNTIME_ERROR
           if (snapshot.evaluationErrors === undefined) {
             snapshot.evaluationErrors = expressionResult.evaluationErrors
           } else {
