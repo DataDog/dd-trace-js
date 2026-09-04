@@ -103,6 +103,7 @@ function createMatcher (moduleType) {
   const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
   const {
     awaitContextCallback,
+    configureGraphqlFastPath,
     configureGraphqlJitCompileObject,
     configureGraphqlJitDeferredField,
     configureGraphqlJitExecute,
@@ -115,6 +116,7 @@ function createMatcher (moduleType) {
 
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
+  matcher.addTransform('configureGraphqlFastPath', configureGraphqlFastPath)
   matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
   matcher.addTransform('configureGraphqlJitDeferredField', configureGraphqlJitDeferredField)
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
