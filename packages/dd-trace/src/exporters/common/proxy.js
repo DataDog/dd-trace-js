@@ -1,5 +1,7 @@
 'use strict'
 
+const { isIPv6 } = require('node:net')
+
 let defaultAgentKey
 let getProxyForUrl
 let proxyAgents
@@ -14,9 +16,11 @@ let proxyAgents
 function getHttpsProxyAgent (url, directAgent) {
   getProxyForUrl ??= require('../../../../../vendor/dist/proxy-from-env').getProxyForUrl
 
+  const host = typeof url === 'string' ? undefined : url.host ?? url.hostname
+  const isUnbracketedIPv6 = typeof host === 'string' && host.includes(':') && isIPv6(host)
   const target = typeof url === 'string'
     ? url
-    : { protocol: url.protocol, host: url.host ?? url.hostname, port: url.port }
+    : { protocol: url.protocol, host: isUnbracketedIPv6 ? `[${host}]` : host, port: url.port }
   const proxyUrl = getProxyForUrl(target)
   if (!proxyUrl) return directAgent
 

@@ -104,6 +104,25 @@ describe('HTTPS proxy agent selection', () => {
     }
   })
 
+  it('honors NO_PROXY for IPv6 targets', () => {
+    process.env.HTTPS_PROXY = 'http://proxy.example:8202'
+    process.env.NO_PROXY = '[::1]'
+    const directAgent = new https.Agent()
+    const targets = [
+      'https://[::1]:443/path',
+      new URL('https://[::1]:443/path'),
+      { protocol: 'https:', hostname: '::1', port: 443 },
+    ]
+
+    try {
+      for (const target of targets) {
+        assert.strictEqual(getHttpsProxyAgent(target, directAgent), directAgent)
+      }
+    } finally {
+      directAgent.destroy()
+    }
+  })
+
   it('reuses proxy agents without merging direct agent pools', () => {
     process.env.HTTPS_PROXY = 'http://proxy.example:8202'
     const payloadAgent = new https.Agent({ keepAlive: true, maxSockets: 16 })
