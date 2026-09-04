@@ -257,22 +257,22 @@
   dependencies:
     spark-md5 "^3.0.2"
 
-"@datadog/libdatadog-extras@^0.20.0":
-  version "0.20.0"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog-extras/-/libdatadog-extras-0.20.0.tgz#7fdc9ca397d3db45b6c98082c36feabc3054e95a"
-  integrity sha512-ZQmUnNPggzcEhMvs9ncRolgN9P+mRzH+iq+d9OZtMYch2TOFzHPCL8XpiaG4mOv12446SlLSfWK+6s5o1qLaNw==
+"@datadog/libdatadog-extras@^0.21.0":
+  version "0.21.0"
+  resolved "https://registry.yarnpkg.com/@datadog/libdatadog-extras/-/libdatadog-extras-0.21.0.tgz#4b29af59121015ca9a6bafbb60047d5c92120543"
+  integrity sha512-VgAlNdNtilutWsEoDy6cAtn1iRLVQuj84lppjGlrwfvMwoCJ40B4pIttrZr0R7n01a6H83zv2SNt7SiH3smJRg==
 
-"@datadog/libdatadog-wasm@0.20.0":
-  version "0.20.0"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog-wasm/-/libdatadog-wasm-0.20.0.tgz#e7043444944dfa620da686cc8202aab598a0334a"
-  integrity sha512-BMy1aU4o9tpLNPWg3sUILlqvWtFT3iIwdb2MTjWK2ACtayHV9F5nj0k+BC6mp3vil57E6eb7szQ8HxgSNfNCNQ==
+"@datadog/libdatadog-wasm@0.21.0":
+  version "0.21.0"
+  resolved "https://registry.yarnpkg.com/@datadog/libdatadog-wasm/-/libdatadog-wasm-0.21.0.tgz#cf903154a91c0b1570f63424a86ad1d1aff0b489"
+  integrity sha512-2wg5naOV+X7wyCNBJ/mRxE56fK22iz4ZwehzA/dSzuBO4/daNaVM6UgudRjkgXA9Pp0zEYcxmv4e1tNApQAEng==
 
-"@datadog/libdatadog@^0.20.0":
-  version "0.20.0"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.20.0.tgz#d347be5f11780ca25af866195d189dfed96e28db"
-  integrity sha512-LFX9rM9zbfyZJVN4Q/MdOhxB1rsrVnqb1ogM+ULOr5pRWo3FpffvtMnh4fNqliYFrxyXr6HsCEEG0Y0WZO95XA==
+"@datadog/libdatadog@^0.21.0":
+  version "0.21.0"
+  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.21.0.tgz#2c9669f8f6444dc1cbb22272728ee26f26248872"
+  integrity sha512-6JQVv7LGBYG6uiY2wtno5paqP/G1UFXK1tA4LZEt2Bc9AzbCMtO2yrs1VfYDzMyVaFSj0+6QLdR8Hu5DQUODmw==
   dependencies:
-    "@datadog/libdatadog-wasm" "0.20.0"
+    "@datadog/libdatadog-wasm" "0.21.0"
 
 "@datadog/native-appsec@11.0.2":
   version "11.0.2"
