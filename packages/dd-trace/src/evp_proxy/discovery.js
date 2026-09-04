@@ -30,9 +30,9 @@ const TRAILING_SLASHES = /\/+$/
  * retry policy. A valid response without a compatible path returns no route.
  * Discovery sends no events, so the caller can safely select direct intake
  * after either result. The caller also owns later delivery failures. Exposure
- * delivery uses retries and can therefore produce duplicates. After local
- * retries fail, the caller can retry through direct intake and use that route
- * for future batches.
+ * delivery replays a batch through direct intake after a definitive local
+ * rejection. After an ambiguous local failure, it switches future batches to
+ * direct intake without replaying the failed batch.
  *
  * Reference implementations:
  *
@@ -106,11 +106,12 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
  * @param {string[]} options.supportedPaths - Supported paths in preference order
  * @param {string[]} [options.requiredHeaders] - Headers that the proxy must forward unchanged to intake. Each
  * header must appear in `evp_proxy_allowed_headers`. Do not include routing headers that the Agent consumes.
+ * @param {boolean} [options.retry] - Whether the Agent information request retries connection failures
  * @param {(error: Error|null, route?: {url: URL, basePath: string}) => void} callback - Result callback
  * @returns {void}
  */
 function discoverEVPProxy (url, options, callback) {
-  fetchAgentInfo(url, (error, agentInfo) => {
+  const handleAgentInfo = (error, agentInfo) => {
     if (error) {
       callback(error)
       return
@@ -124,7 +125,14 @@ function discoverEVPProxy (url, options, callback) {
 
     log.debug('EVP proxy route %s discovered through the configured local receiver', basePath)
     callback(null, { url, basePath })
-  })
+  }
+
+  if (options.retry === undefined) {
+    fetchAgentInfo(url, handleAgentInfo)
+    return
+  }
+
+  fetchAgentInfo(url, handleAgentInfo, { retry: options.retry })
 }
 
 module.exports = {
