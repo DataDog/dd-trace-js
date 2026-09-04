@@ -23,14 +23,9 @@ const quarantinedTests = providedContext.quarantinedTests || {}
 const isRumCorrelationEnabled = providedContext.isRumCorrelationEnabled !== false
 const rumTestExecutionIdCookieName = providedContext.rumTestExecutionIdCookieName
 const testPropertiesByFilepath = providedContext.testPropertiesByFilepath || {}
-let setVitestTaskFn
-if (isNoWorkerInitActive) {
-  try {
-    // Vitest does not expose setFn from the public setup API; keep this optional for strict installers.
-    const vitestRunner = await import('@vitest/runner')
-    setVitestTaskFn = vitestRunner.setFn
-  } catch {}
-}
+const setVitestTaskFn = globalThis[Symbol.for('dd-trace.vitest.set-fn')]
+const skipVitestTask = globalThis[Symbol.for('dd-trace.vitest.skip-task')]
+const importVitestBrowserContext = globalThis[Symbol.for('dd-trace.vitest.browser-context-importer')]
 const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
@@ -62,7 +57,7 @@ if (typeof globalThis.process?.uptime === 'function') {
 async function requestBrowserEfdSuiteAdmission (testSuite, hasNewTest) {
   try {
     if (!browserCommands) {
-      const vitestBrowser = await import('@vitest/browser/context')
+      const vitestBrowser = await importVitestBrowserContext()
       browserCommands = vitestBrowser.commands
     }
     return await browserCommands[efdSuiteAdmissionBrowserCommand](testSuite, hasNewTest) === true
@@ -100,7 +95,7 @@ if (isNoWorkerInitActive) {
     } else if (isAttemptToFixTest && attemptIndex > 0) {
       task.result.state = 'run'
     } else if (isEarlyFlakeDetectionTestAttempt) {
-      const isSkippedRepeat = prepareEarlyFlakeDetectionAttempt(task, attemptIndex)
+      const isSkippedRepeat = prepareEarlyFlakeDetectionAttempt(task, attemptIndex, skip)
       if (!isSkippedRepeat && attemptIndex > 0) {
         task.result.state = 'run'
       }
@@ -624,7 +619,7 @@ function getPreviousErrorCount (errorCounts, repeatCount) {
   return 0
 }
 
-function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
+function prepareEarlyFlakeDetectionAttempt (task, attemptIndex, skip) {
   if (attemptIndex === 0) {
     earlyFlakeDetectionStartByTask.set(task, now())
     return false
@@ -646,7 +641,8 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     return false
   }
 
-  if (!canReplaceVitestTaskFn()) {
+  const canReplaceTaskFn = canReplaceVitestTaskFn()
+  if (!canReplaceTaskFn && typeof skipVitestTask !== 'function') {
     earlyFlakeDetectionStartByTask.set(task, now())
     return false
   }
@@ -658,7 +654,11 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     })
   }
   task.meta.__ddTestOptEfdSkipCurrentAttempt = true
-  replaceVitestTaskFn(task, noopTest)
+  if (canReplaceTaskFn) {
+    replaceVitestTaskFn(task, noopTest)
+  } else {
+    skipVitestTask(skip)
+  }
   return true
 }
 

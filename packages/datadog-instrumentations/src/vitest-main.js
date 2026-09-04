@@ -68,6 +68,7 @@ const finishWrappedContexts = new WeakSet()
 const runFilesWrappedPrototypes = new WeakSet()
 const activeRunFilesContexts = new WeakSet()
 const runErrorsByContext = new WeakMap()
+const typecheckPoolWorkerRequests = new WeakMap()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
@@ -146,6 +147,10 @@ function getVitestExport (vitestPackage) {
 
 function getTypecheckerExport (vitestPackage) {
   return findExportByName(vitestPackage, 'Typechecker')
+}
+
+function getTypecheckPoolWorkerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'TypecheckPoolWorker')
 }
 
 function getForksPoolWorkerExport (vitestPackage) {
@@ -1690,9 +1695,9 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
   })
 }
 
-async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker) {
+async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker, files = result?.files) {
   if (!testSuiteFinishCh.hasSubscribers) return
-  if (!Array.isArray(result?.files)) return
+  if (!Array.isArray(result?.files) || !Array.isArray(files)) return
 
   const setupState = ctx && mainProcessSetupStates.get(ctx)
   if (
@@ -1702,7 +1707,7 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
     await ensureMainProcessSetup(
       ctx,
       frameworkVersion,
-      result.files,
+      files,
       false,
       !setupState || setupState.disableTestImpactAnalysis
     )
@@ -1712,7 +1717,7 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
     ? await getChannelPromise(testSessionConfigurationCh, { frameworkVersion }) || {}
     : {}
 
-  await Promise.all(result.files.map(file => reportTypecheckFile(
+  await Promise.all(files.map(file => reportTypecheckFile(
     file,
     sessionConfiguration,
     frameworkVersion,
@@ -1739,6 +1744,51 @@ function getTypecheckerWrapper (vitestPackage, frameworkVersion) {
     wrapTypechecker(typechecker.value, frameworkVersion)
   }
   return vitestPackage
+}
+
+function wrapTypecheckPoolWorker (TypecheckPoolWorker, frameworkVersion) {
+  if (!TypecheckPoolWorker?.prototype?.send || !TypecheckPoolWorker.prototype.on) return
+
+  shimmer.wrap(TypecheckPoolWorker.prototype, 'send', send => function (message) {
+    typecheckPoolWorkerRequests.set(this, {
+      type: message?.type,
+      filepaths: new Set(message?.context?.files?.map(file => file.filepath)),
+    })
+    return send.apply(this, arguments)
+  })
+  shimmer.wrap(TypecheckPoolWorker.prototype, 'on', on => function (event, callback) {
+    if (event !== 'message') return on.apply(this, arguments)
+
+    const worker = this
+    arguments[1] = shimmer.wrapFunction(callback, callback => function (message) {
+      const typechecker = worker.project?.typechecker
+      const request = typecheckPoolWorkerRequests.get(worker)
+      if (
+        message?.type !== 'testfileFinished' ||
+        request?.type !== 'run' ||
+        !typechecker
+      ) {
+        return callback.apply(this, arguments)
+      }
+
+      const result = typechecker.getResult?.()
+      const files = result?.files?.filter(file => request.filepaths.has(file.filepath))
+      return reportTypecheckResults(
+        result,
+        frameworkVersion,
+        worker.project?.vitest,
+        typechecker,
+        files
+      ).then(
+        () => callback.apply(this, arguments),
+        (error) => {
+          log.error('Could not report Vitest typecheck results: %s', error?.message)
+          return callback.apply(this, arguments)
+        }
+      )
+    })
+    return on.apply(this, arguments)
+  })
 }
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
@@ -1962,14 +2012,23 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   }
   const startVitestExport = findExportByName(cliApiPackage, 'startVitest')
   shimmer.wrap(cliApiPackage, startVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
+  const createVitestExport = findExportByName(cliApiPackage, 'createVitest')
+  if (createVitestExport) {
+    shimmer.wrap(cliApiPackage, createVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
+  }
   wrapMessagePortOn()
 
-  const vitest = getVitestExport(cliApiPackage)
+  wrapVitestInternals(cliApiPackage, frameworkVersion)
+  return cliApiPackage
+}
+
+function wrapVitestInternals (vitestPackage, frameworkVersion) {
+  const vitest = getVitestExport(vitestPackage)
   if (vitest) {
     wrapVitestRunFiles(vitest.value, frameworkVersion)
   }
 
-  const forksPoolWorker = getForksPoolWorkerExport(cliApiPackage)
+  const forksPoolWorker = getForksPoolWorkerExport(vitestPackage)
   if (forksPoolWorker) {
     // function is async
     shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function (...args) {
@@ -1981,7 +2040,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     shimmer.wrap(forksPoolWorker.value.prototype, 'on', getWrappedOn)
   }
 
-  const threadsPoolWorker = getThreadsPoolWorkerExport(cliApiPackage)
+  const threadsPoolWorker = getThreadsPoolWorkerExport(vitestPackage)
   if (threadsPoolWorker) {
     // function is async
     shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function (...args) {
@@ -1991,7 +2050,6 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     })
     shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
   }
-  return cliApiPackage
 }
 
 addHook({
@@ -2079,6 +2137,32 @@ addHook({
     )
   }
   return coveragePackage
+})
+
+// Vitest 5 moved the core and pool worker exports out of cli-api into an index chunk.
+addHook({
+  name: 'vitest',
+  versions: ['>=5.0.0'],
+  filePattern: 'dist/chunks/index.*',
+}, (vitestPackage, frameworkVersion) => {
+  if (!getVitestExport(vitestPackage)) return vitestPackage
+
+  wrapVitestInternals(vitestPackage, frameworkVersion)
+
+  const typecheckPoolWorker = getTypecheckPoolWorkerExport(vitestPackage)
+  if (typecheckPoolWorker) {
+    wrapTypecheckPoolWorker(typecheckPoolWorker.value, frameworkVersion)
+  }
+
+  const baseSequencer = getBaseSequencerExport(vitestPackage)
+  if (baseSequencer) {
+    shimmer.wrap(
+      baseSequencer.value.prototype,
+      'sort',
+      sort => getSortWrapper(sort, frameworkVersion)
+    )
+  }
+  return vitestPackage
 })
 
 addHook({
