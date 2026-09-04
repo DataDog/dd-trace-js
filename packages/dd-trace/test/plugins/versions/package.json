@@ -38,7 +38,7 @@
     "@confluentinc/kafka-javascript": "1.10.0",
     "@cucumber/cucumber": "13.2.1",
     "@datadog/openfeature-node-server": "2.2.0",
-    "@elastic/elasticsearch": "9.5.0",
+    "@elastic/elasticsearch": "9.5.1",
     "@elastic/transport": "9.4.0",
     "@electron/packager": "20.3.0",
     "@fastify/cookie": "11.1.2",
