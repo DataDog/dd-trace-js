@@ -158,6 +158,7 @@ module.exports = {
   tinypool: { esmFirst: true, fn: () => require('../vitest') },
   undici: () => require('../undici'),
   vitest: { esmFirst: true, fn: () => require('../vitest') },
+  webdriverio: { esmFirst: true, fn: () => require('../webdriverio') },
   when: () => require('../when'),
   winston: () => require('../winston'),
   workerpool: () => require('../mocha'),
