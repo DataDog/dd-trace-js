@@ -2528,6 +2528,58 @@ describe('Config', () => {
     assert.strictEqual(config.spanAttributeSchema, 'v0')
   })
 
+  it('should accept valid port boundaries', () => {
+    process.env.DD_DOGSTATSD_PORT = '1'
+    process.env.DD_TRACE_AGENT_PORT = '1'
+
+    let config = getConfig()
+
+    assert.strictEqual(config.dogstatsd.port, 1)
+    assert.strictEqual(config.port, 1)
+
+    process.env.DD_DOGSTATSD_PORT = '65535'
+    process.env.DD_TRACE_AGENT_PORT = '65535'
+
+    config = getConfig()
+
+    assert.strictEqual(config.dogstatsd.port, 65535)
+    assert.strictEqual(config.port, 65535)
+  })
+
+  it('should reject invalid port boundaries', () => {
+    process.env.DD_DOGSTATSD_PORT = '0'
+    process.env.DD_TRACE_AGENT_PORT = '0'
+
+    let config = getConfig()
+
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 0 for DD_DOGSTATSD_PORT (source: env_var), picked default',
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 0 for DD_TRACE_AGENT_PORT (source: env_var), picked default',
+    )
+    assert.strictEqual(config.dogstatsd.port, 8125)
+    assert.strictEqual(config.port, 8126)
+
+    process.env.DD_DOGSTATSD_PORT = '65536'
+    process.env.DD_TRACE_AGENT_PORT = '65536'
+
+    config = getConfig()
+
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 65536 for DD_DOGSTATSD_PORT (source: env_var), picked default',
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 65536 for DD_TRACE_AGENT_PORT (source: env_var), picked default',
+    )
+    assert.strictEqual(config.dogstatsd.port, 8125)
+    assert.strictEqual(config.port, 8126)
+  })
+
   it('should parse integer range sets', () => {
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3,13,400-403'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '3,13,400-403'
