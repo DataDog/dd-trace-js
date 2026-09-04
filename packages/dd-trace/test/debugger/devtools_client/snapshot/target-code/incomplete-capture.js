@@ -12,4 +12,13 @@ function runWithHugeObject (propertyCount) {
   return 'my return value' // breakpoint at this line
 }
 
-module.exports = { run, runWithHugeObject }
+function runWithManyLocals () {
+  /* eslint-disable no-unused-vars */
+  const first = 1
+  const second = 2
+  const third = 3
+  /* eslint-enable no-unused-vars */
+  return 'my return value' // breakpoint at this line
+}
+
+module.exports = { run, runWithHugeObject, runWithManyLocals }

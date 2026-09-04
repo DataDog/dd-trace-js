@@ -4,6 +4,7 @@ const { INCOMPLETE_REASON } = require('../../guardrail-metrics')
 const session = require('../session')
 const { collectObjectProperties } = require('./collector')
 const { processRawState, processRemoteObject } = require('./processor')
+const { fieldCountSym } = require('./symbols')
 
 const BIGINT_MAX = (1n << 256n) - 1n
 
@@ -55,7 +56,11 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
       // This is why we can just call `collectObjectProperties` directly and expect it to return the in-scope variables
       // as an array.
       // eslint-disable-next-line no-await-in-loop
-      rawState.push(...await collectObjectProperties(objectId, opts))
+      const variables = await collectObjectProperties(objectId, opts)
+      // A scope with more variables than the field count limit is trimmed like any other object, but since the scope
+      // itself is not part of the snapshot, the marker would be lost once its variables are spread into the state
+      if (variables[fieldCountSym] !== undefined) incomplete.reasons |= INCOMPLETE_REASON.FIELD_COUNT
+      rawState.push(...variables)
     } catch (err) {
       incomplete.reasons |= INCOMPLETE_REASON.RUNTIME_ERROR
       ctx.fatalErrors.push(new Error(
