@@ -4,8 +4,20 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const { withDatadogTurbopack } = require('../../../next')
+
 /** @type {string[]} */
 const directories = []
+
+/**
+ * @param {object|Promise<object>|Function} [nextConfig]
+ * @param {{ projectDir?: string }} [options]
+ * @returns {Promise<object>}
+ */
+function applyDatadogTurbopack (nextConfig, options) {
+  const wrapped = withDatadogTurbopack(nextConfig, options)
+  return wrapped('phase-production-build')
+}
 
 /**
  * @param {string} [nextVersion]
@@ -17,11 +29,27 @@ function createProject (nextVersion = '16.0.0') {
   write(directory, 'package.json', '{}')
   const next = createPackage(directory, 'next', { main: 'index.js', version: nextVersion })
   write(next, 'index.js', 'module.exports = {}')
+  const major = Number(nextVersion.split('.')[0])
+  const findRoot = major >= 16
+    ? 'exports.findRootDirAndLockFiles = cwd => ({ lockFiles: [], rootDir: cwd })\n'
+    : 'exports.findRootDir = cwd => cwd\n'
+  write(next, 'dist/lib/find-root.js', findRoot)
   for (const name of ['generator', 'parser', 'traverse']) {
     const modulePath = require.resolve(`@babel/${name}`)
     write(next, `dist/compiled/babel/${name}.js`, `module.exports = require(${JSON.stringify(modulePath)})\n`)
   }
   return directory
+}
+
+/**
+ * @param {{ nextVersion?: string, source?: string }} [options]
+ * @returns {{ packageDir: string, projectDir: string, resourcePath: string }}
+ */
+function createIoredisProject (options = {}) {
+  const projectDir = createProject(options.nextVersion)
+  const packageDir = createPackage(projectDir, 'ioredis', { main: 'index.js', version: '5.0.0' })
+  const resourcePath = write(packageDir, 'index.js', options.source ?? 'module.exports = {}')
+  return { packageDir, projectDir, resourcePath }
 }
 
 /**
@@ -70,17 +98,24 @@ function collectDatadogLoaders (value, loaders) {
     return
   }
   if (!value || typeof value !== 'object') return
-  if (typeof value.loader === 'string' && value.loader.includes('datadog-turbopack')) loaders.push(value)
+  const candidate = /** @type {{ loader?: unknown, options?: unknown }} */ (value)
+  if (typeof candidate.loader === 'string' && candidate.loader.includes('datadog-turbopack')) {
+    loaders.push(value)
+  }
 
   for (const key of Object.keys(value)) collectDatadogLoaders(value[key], loaders)
 }
 
 function cleanup () {
-  while (directories.length > 0) fs.rmSync(directories.pop(), { force: true, recursive: true })
+  while (directories.length > 0) {
+    fs.rmSync(/** @type {string} */ (directories.pop()), { force: true, recursive: true })
+  }
 }
 
 module.exports = {
+  applyDatadogTurbopack,
   cleanup,
+  createIoredisProject,
   createPackage,
   createProject,
   findDatadogLoaders,

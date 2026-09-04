@@ -5,35 +5,20 @@ const Module = require('node:module')
 
 const sinon = require('sinon')
 
-const { BUNDLER_DC_GLOBAL } = require('../../src/helpers/bundler-constants')
 const instrumentationUtils = require('../../src/helpers/instrumentation-utils')
 
 const CHANNEL = 'dd-trace:bundler:load'
 
 describe('bundler register', () => {
-  const dcGlobal = Symbol.for(BUNDLER_DC_GLOBAL)
-  let originalDc
   let originalRequire
 
   beforeEach(() => {
-    originalDc = globalThis[dcGlobal]
     originalRequire = Module.prototype.require
   })
 
   afterEach(() => {
-    if (originalDc === undefined) {
-      delete globalThis[dcGlobal]
-    } else {
-      globalThis[dcGlobal] = originalDc
-    }
     Module.prototype.require = originalRequire
     sinon.restore()
-  })
-
-  it('shares the polyfilled diagnostics channel with generated bundles', () => {
-    const { dc } = loadBundlerRegister({ hooks: {}, instrumentations: {} })
-
-    assert.strictEqual(globalThis[dcGlobal], dc)
   })
 
   it('honors patchDefault when applying an ESM proxy update', () => {
@@ -235,7 +220,7 @@ describe('bundler register', () => {
   })
 
   it('contains non-Error loader and instrumentation failures', () => {
-    const loadHook = sinon.stub().callsFake(() => throwValue(Object.create(null)))
+    const loadHook = sinon.stub().callsFake(() => throwValue('load failed'))
     const integrationHook = sinon.stub().callsFake(() => throwValue('patch failed'))
     const { log, publish } = loadBundlerRegister({
       hooks: { 'test-hook-errors': loadHook },
@@ -251,7 +236,7 @@ describe('bundler register', () => {
       version: '1.0.0',
     })
 
-    sinon.assert.calledWithMatch(log.error, 'esbuild-wrapped %s hook failed: %s', 'test-hook-errors', 'Unknown error')
+    sinon.assert.calledWithMatch(log.error, 'esbuild-wrapped %s hook failed: %s', 'test-hook-errors', 'load failed')
     sinon.assert.calledWithMatch(log.error, 'Error executing bundler hook: %s', 'patch failed')
   })
 

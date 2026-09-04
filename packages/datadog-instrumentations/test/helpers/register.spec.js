@@ -194,4 +194,18 @@ describe('register', () => {
     assert.strictEqual(hook(namespace, 'mocha', '/path/to/mocha', '12.0.0', true), namespace)
     sinon.assert.calledOnceWithExactly(patch, Mocha)
   })
+
+  it('should not treat an empty file pattern as a wildcard', () => {
+    const patch = sinon.stub()
+    hooksMock.example = { fn: sinon.stub() }
+    instrumentationsMock.example = [{ filePattern: '', hook: patch }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'example')
+    const hook = hookCall.args[2]
+    const moduleExports = {}
+
+    assert.strictEqual(hook(moduleExports, 'example/internal.js', '/path/to/example', '1.0.0'), moduleExports)
+    sinon.assert.notCalled(patch)
+  })
 })

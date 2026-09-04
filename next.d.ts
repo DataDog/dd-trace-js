@@ -12,4 +12,4 @@ export function withDatadogTurbopack<TArguments extends unknown[]> (
 export function withDatadogTurbopack (
   nextConfig?: NextConfig | Promise<NextConfig>,
   options?: DatadogTurbopackOptions
-): Promise<NextConfig>
+): (phase?: string) => Promise<NextConfig>

@@ -45,6 +45,15 @@ describe('esbuild utils', () => {
       assert.strictEqual(moduleSources.get(nestedPath), fs.readFileSync(nestedPath, 'utf8'))
     })
 
+    it('should terminate cyclic star exports', async () => {
+      const setters = await processModule({
+        path: path.join(__dirname, 'resources', 'export-cycle-a.mjs'),
+        context: { format: 'module' },
+      })
+
+      assert.deepStrictEqual([...setters.keys()].sort(), ['fromA', 'fromB'])
+    })
+
     it('should set the native module exports', async () => {
       const setters = await processModule({
         path: 'http',
@@ -56,6 +65,29 @@ describe('esbuild utils', () => {
       assert.strictEqual(setters.has('default'), true)
       assert.strictEqual(setters.has('createServer'), true)
       assert.strictEqual(setters.has('METHODS'), true)
+    })
+
+    it('should generate distinct locals for export names that sanitize identically', async () => {
+      const modulePath = path.join(__dirname, 'resources', 'colliding-export-names.mjs')
+      const setters = await processModule({
+        path: modulePath,
+        context: { format: 'module' },
+        moduleSources: new Map([[
+          modulePath,
+          'const foo_bar = 1, fooBar = 2\nexport { foo_bar, fooBar as "foo-bar" }\n',
+        ]]),
+      })
+      const source = `
+        const namespace = { foo_bar: 1, 'foo-bar': 2 }
+        const _ = {}
+        const set = {}
+        const get = {}
+        ${[...setters.values()].join('\n')}
+      `
+      const namespace = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+
+      assert.strictEqual(namespace.foo_bar, 1)
+      assert.strictEqual(namespace['foo-bar'], 2)
     })
   })
 

@@ -7,18 +7,6 @@ const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper'
 const { isRelativeRequire } = require('./shared-utils')
 
 /**
- * @param {unknown} error
- * @returns {string}
- */
-function errorMessage (error) {
-  try {
-    return error instanceof Error ? error.message : String(error)
-  } catch {
-    return 'Unknown error'
-  }
-}
-
-/**
  * @param {string|undefined} version
  * @param {string[]|undefined} ranges
  * @returns {boolean}
@@ -48,7 +36,7 @@ function matchesInstrumentation (name, version, moduleName, instrumentation) {
   if (!matchVersion(version, versions)) return false
   if (isRelativeRequire(name)) return true
   if (moduleName === filename(name, file)) return true
-  return filePattern !== undefined && new RegExp(filename(name, filePattern)).test(moduleName)
+  return Boolean(filePattern) && new RegExp(filename(name, filePattern)).test(moduleName)
 }
 
 /**
@@ -58,6 +46,8 @@ function getDisabledInstrumentations () {
   const disabled = new Set(
     getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').filter(Boolean)
   )
+  if (disabled.size === 0) return disabled
+
   const expanded = new Set(disabled)
   const builtins = new Set(builtinModules)
 
@@ -73,7 +63,6 @@ function getDisabledInstrumentations () {
 }
 
 module.exports = {
-  errorMessage,
   filename,
   getDisabledInstrumentations,
   matchesInstrumentation,

@@ -14,27 +14,28 @@ const TYPESCRIPT_PATH_PATTERN = /\.(?:cts|mts|ts|tsx)$/
  * @param {string} source
  * @param {string} resourcePath
  * @param {{ parser: string, traverse: string }} compiler
+ * @param {'commonjs'|'module'|'unambiguous'} [sourceType]
  * @returns {{ ast: object, traverse: Function }}
  */
-function parseSource (source, resourcePath, compiler) {
+function parseSource (source, resourcePath, compiler, sourceType = 'unambiguous') {
   const { parse } = require(compiler.parser)
   const traverse = require(compiler.traverse).default
   const plugins = TYPESCRIPT_PATH_PATTERN.test(resourcePath)
     ? TYPESCRIPT_PARSER_PLUGINS
     : JAVASCRIPT_PARSER_PLUGINS
+  const parserOptions = sourceType === 'commonjs'
+    ? {
+        allowNewTargetOutsideFunction: true,
+        allowReturnOutsideFunction: true,
+        plugins,
+        sourceType: 'script',
+      }
+    : { plugins, sourceType }
 
   return {
-    ast: parse(source, { plugins, sourceType: 'unambiguous' }),
+    ast: parse(source, parserOptions),
     traverse,
   }
 }
 
-/**
- * @param {{ generator: string }} compiler
- * @returns {Function}
- */
-function getGenerator (compiler) {
-  return require(compiler.generator).default
-}
-
-module.exports = { getGenerator, parseSource }
+module.exports = { parseSource }

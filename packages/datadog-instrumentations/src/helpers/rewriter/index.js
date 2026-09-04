@@ -5,7 +5,6 @@ const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const log = require('../../../../dd-trace/src/log')
-const { BUNDLER_DC_GLOBAL } = require('../bundler-constants')
 const instrumentations = require('./instrumentations')
 const { getRewriteTarget } = require('./targets')
 
@@ -16,6 +15,9 @@ const { getRewriteTarget } = require('./targets')
  *
  * @typedef {object} Transformer
  * @property {(source: string, moduleType: 'cjs'|'esm') => { code: string, map?: string }} transform
+ *
+ * @typedef {object} CodeTransformer
+ * @property {(instrumentations: object, dcModule?: string) => InstrumentationMatcher} create
  */
 
 /**
@@ -34,74 +36,7 @@ let matcherCjs
 let matcherEsm
 /** @type {InstrumentationMatcher|undefined} */
 let matcherBundler
-
-/**
- * Reuses the process-wide polyfill installed by bundler-register while keeping
- * the native diagnostics channel as the inactive-tracer fallback.
- *
- * @param {{ transforms: { defaults: { tracingChannelImport: Function } } }} state
- * @param {{ body: object[] }} program
- */
-function addBundlerTracingChannelImport (state, program) {
-  const previousLength = program.body.length
-  state.transforms.defaults.tracingChannelImport(state, program)
-  if (program.body.length === previousLength) return
-
-  const index = program.body.findIndex(isNativeDcDeclaration)
-  const statement = program.body[index]
-  const identifier = statement.type === 'ImportDeclaration'
-    ? statement.specifiers[0].local
-    : statement.declarations[0].id
-
-  identifier.name = 'tr_ch_apm_native_dc'
-  program.body.splice(index + 1, 0, createBundlerDcDeclaration())
-}
-
-/**
- * @param {object} statement
- * @returns {boolean}
- */
-function isNativeDcDeclaration (statement) {
-  if (statement.type === 'ImportDeclaration') {
-    return statement.source?.value === 'node:diagnostics_channel'
-  }
-  const declaration = statement.declarations?.[0]
-  return declaration?.init?.arguments?.[0]?.value === 'node:diagnostics_channel'
-}
-
-/**
- * @returns {object}
- */
-function createBundlerDcDeclaration () {
-  return {
-    type: 'VariableDeclaration',
-    declarations: [{
-      type: 'VariableDeclarator',
-      id: { type: 'Identifier', name: 'tr_ch_apm_dc' },
-      init: {
-        type: 'LogicalExpression',
-        operator: '??',
-        left: {
-          type: 'MemberExpression',
-          computed: true,
-          object: { type: 'Identifier', name: 'globalThis' },
-          property: {
-            type: 'CallExpression',
-            arguments: [{ type: 'Literal', value: BUNDLER_DC_GLOBAL }],
-            callee: {
-              type: 'MemberExpression',
-              computed: false,
-              object: { type: 'Identifier', name: 'Symbol' },
-              property: { type: 'Identifier', name: 'for' },
-            },
-          },
-        },
-        right: { type: 'Identifier', name: 'tr_ch_apm_native_dc' },
-      },
-    }],
-    kind: 'const',
-  }
-}
+let matcherBundlerDcModule
 
 // Keep the marker split: source-map scanners can read a contiguous token in
 // string literals as this file's own inline map.
@@ -116,25 +51,16 @@ const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base6
  * @returns {string|Buffer|ArrayBuffer|Uint8Array}
  */
 function rewrite (content, filename, format, target) {
-  const { code, map } = rewriteWithMatcher(content, filename, format, target)
-  if (!map) return code
+  try {
+    const { code, map } = rewriteWithSourceMap(content, filename, format, target)
+    if (!map) return code
 
-  return code + '\n' + SOURCE_MAP_PREFIX + Buffer.from(map).toString('base64')
-}
+    return code + '\n' + SOURCE_MAP_PREFIX + Buffer.from(map).toString('base64')
+  } catch (error) {
+    log.error(error)
+  }
 
-/**
- * Rewrites source with a package specifier that bundlers can include in their
- * output.
- *
- * @param {string|Buffer|ArrayBuffer|Uint8Array} content
- * @param {string} filename
- * @param {string} [format]
- * @param {{ moduleName: string, filePath: string }} [target]
- * @param {string|object} [sourceMap]
- * @returns {{ code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }}
- */
-function rewriteBundledWithSourceMap (content, filename, format, target, sourceMap) {
-  return rewriteWithMatcher(content, filename, format, target, sourceMap, getMatcher('bundler'))
+  return content
 }
 
 /**
@@ -143,10 +69,10 @@ function rewriteBundledWithSourceMap (content, filename, format, target, sourceM
  * @param {string} [format]
  * @param {{ moduleName: string, filePath: string }} [target]
  * @param {string|object} [sourceMap]
- * @param {object} [bundlerMatcher]
+ * @param {string} [dcModule]
  * @returns {{ code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }}
  */
-function rewriteWithMatcher (content, filename, format, target, sourceMap, bundlerMatcher) {
+function rewriteWithSourceMap (content, filename, format, target, sourceMap, dcModule) {
   if (!content) return { code: content, map: sourceMap }
 
   target ||= getRewriteTarget(filename)
@@ -160,31 +86,29 @@ function rewriteWithMatcher (content, filename, format, target, sourceMap, bundl
 
   if (disabled.has(moduleName)) return { code: content, map: sourceMap }
 
-  const matcher = bundlerMatcher ?? getMatcher(moduleType)
+  const matcher = getMatcher(moduleType, dcModule)
   const transformer = matcher.getTransformer(moduleName, version, filePath)
 
   if (!transformer) return { code: content, map: sourceMap }
 
-  try {
-    const source = getSourceText(content)
-    const { code, map } = transformer.transform(source, moduleType, sourceMap)
-    return { code, map }
-  } catch (error) {
-    log.error(error)
-  }
-
-  return { code: content, map: sourceMap }
+  const source = getSourceText(content)
+  const { code, map } = transformer.transform(source, moduleType, sourceMap)
+  return { code, map }
 }
 
 /**
- * @param {'cjs'|'esm'|'bundler'} moduleType
+ * @param {'cjs'|'esm'} moduleType
+ * @param {string} [dcModule]
  * @returns {InstrumentationMatcher}
  */
-function getMatcher (moduleType) {
-  if (moduleType === 'bundler') {
-    matcherBundler ??= createMatcher(moduleType)
+function getMatcher (moduleType, dcModule) {
+  if (dcModule !== undefined) {
+    if (dcModule !== matcherBundlerDcModule) {
+      matcherBundler = createMatcher(moduleType, dcModule)
+      matcherBundlerDcModule = dcModule
+    }
 
-    return matcherBundler
+    return /** @type {InstrumentationMatcher} */ (matcherBundler)
   }
 
   if (moduleType === 'esm') {
@@ -199,11 +123,15 @@ function getMatcher (moduleType) {
 }
 
 /**
- * @param {'cjs'|'esm'|'bundler'} moduleType
+ * @param {'cjs'|'esm'} moduleType
+ * @param {string} [dcModule]
  * @returns {InstrumentationMatcher}
  */
-function createMatcher (moduleType) {
-  const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+function createMatcher (moduleType, dcModule) {
+  const transformer = /** @type {CodeTransformer} */ (
+    require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+  )
+  const { create } = transformer
   const {
     awaitContextCallback,
     awaitContextCallbackAtFunctionStart,
@@ -217,7 +145,12 @@ function createMatcher (moduleType) {
     waitForAsyncEnd,
   } = require('./transforms')
 
-  const dcModule = moduleType === 'bundler' ? 'node:diagnostics_channel' : getDcPolyfillSpecifier(moduleType)
+  if (dcModule === undefined) {
+    const resolvedDcPolyfill = require.resolve('dc-polyfill')
+    dcModule = moduleType === 'esm'
+      ? pathToFileURL(resolvedDcPolyfill).href
+      : resolvedDcPolyfill.replaceAll('\\', '/')
+  }
   const matcher = create(instrumentations, dcModule)
 
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
@@ -230,34 +163,7 @@ function createMatcher (moduleType) {
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
-  if (moduleType === 'bundler') {
-    matcher.addTransform('tracingChannelImport', addBundlerTracingChannelImport)
-  }
-
   return matcher
-}
-
-/**
- * `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
- * (ESM) statements that the transformer splices into the rewritten module.
- * `require()` accepts an absolute filesystem path; the ESM resolver rejects it
- * with `ERR_INVALID_MODULE_SPECIFIER` and needs a `file://` URL instead. Each
- * matcher therefore hands the transformer the form that is valid for the
- * module type it is rewriting.
- *
- * @param {'cjs'|'esm'} moduleType
- * @returns {string|undefined} `undefined` when `dc-polyfill` cannot be resolved
- */
-function getDcPolyfillSpecifier (moduleType) {
-  try {
-    const resolved = require.resolve('dc-polyfill')
-
-    return moduleType === 'esm' ? pathToFileURL(resolved).href : resolved.replaceAll('\\', '/')
-  } catch {
-    // The `dc-polyfill` module is unavailable for some reason (like bundling).
-    // Let's just keep the default of using `diagnostics-channel` as a fallback
-    // which works for most Node versions.
-  }
 }
 
 /** @typedef {{ buffer: ArrayBuffer | SharedArrayBuffer, byteLength: number, byteOffset: number }} BufferView */
@@ -296,4 +202,4 @@ function getVersion (filename, filePath) {
   return moduleVersions[basename]
 }
 
-module.exports = { rewrite, rewriteBundledWithSourceMap, disable }
+module.exports = { rewrite, rewriteWithSourceMap, disable }
