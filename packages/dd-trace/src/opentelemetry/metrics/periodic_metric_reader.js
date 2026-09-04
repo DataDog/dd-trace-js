@@ -28,15 +28,18 @@ const { nowUnixNano } = require('./time')
  *
  * @typedef {SumCumulativeState | HistogramCumulativeState} CumulativeStateValue
  *
+ * @typedef {{ value: number, timeUnixNano: number }} SumLastExportedState
+ *
  * @typedef {{
  *   count: number,
  *   sum: number,
  *   min?: number,
  *   max?: number,
- *   bucketCounts: number[]
+ *   bucketCounts: number[],
+ *   timeUnixNano: number
  * }} HistogramLastExportedState
  *
- * @typedef {number | HistogramLastExportedState} LastExportedStateValue
+ * @typedef {SumLastExportedState | HistogramLastExportedState} LastExportedStateValue
  */
 
 /**
@@ -431,7 +434,7 @@ class MetricAggregator {
       }
     }
 
-    this.#applyDeltaTemporality(metricsMap.values(), lastExportedState)
+    this.#applyDeltaTemporality(metricsMap.values(), lastExportedState, nowUnixNano())
     return metricsMap
   }
 
@@ -475,26 +478,31 @@ class MetricAggregator {
    *
    * @param {Iterable<AggregatedMetric>} metrics - The metrics to apply delta temporality to
    * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
+   * @param {number} collectionTime - The collection timestamp in nanoseconds
    * @returns {void}
    */
-  #applyDeltaTemporality (metrics, lastExportedState) {
+  #applyDeltaTemporality (metrics, lastExportedState, collectionTime) {
     for (const metric of metrics) {
       if (metric.temporality === TEMPORALITY.DELTA && this.#isDeltaType(metric.type)) {
         const scopeKey = this.#getScopeKey(metric.instrumentationScope)
 
         for (const dataPoint of metric.dataPointMap.values()) {
           const stateKey = this.#getStateKey(scopeKey, metric.name, metric.type, dataPoint.attrKey)
+          dataPoint.timeUnixNano = collectionTime
 
           if (metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER) {
-            const lastValue = lastExportedState.get(stateKey) || 0
+            const lastState = lastExportedState.get(stateKey)
             const currentValue = dataPoint.value
-            dataPoint.value = currentValue - lastValue
-            lastExportedState.set(stateKey, currentValue)
+            dataPoint.startTimeUnixNano = lastState?.timeUnixNano ??
+              dataPoint.startTimeUnixNano ?? dataPoint.timeUnixNano
+            dataPoint.value = currentValue - (lastState?.value ?? 0)
+            lastExportedState.set(stateKey, { value: currentValue, timeUnixNano: dataPoint.timeUnixNano })
           } else if (metric.type === METRIC_TYPES.HISTOGRAM) {
             const lastState = lastExportedState.get(stateKey) || {
               count: 0,
               sum: 0,
               bucketCounts: new Array(dataPoint.bucketCounts.length).fill(0),
+              timeUnixNano: dataPoint.startTimeUnixNano,
             }
             const currentState = {
               count: dataPoint.count,
@@ -502,7 +510,9 @@ class MetricAggregator {
               min: dataPoint.min,
               max: dataPoint.max,
               bucketCounts: [...dataPoint.bucketCounts],
+              timeUnixNano: dataPoint.timeUnixNano,
             }
+            dataPoint.startTimeUnixNano = lastState.timeUnixNano
             dataPoint.count = currentState.count - lastState.count
             dataPoint.sum = currentState.sum - lastState.sum
             dataPoint.bucketCounts = currentState.bucketCounts.map(

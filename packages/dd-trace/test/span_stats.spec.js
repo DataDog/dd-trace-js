@@ -634,6 +634,32 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(bucketSizeNs, p.bucketSizeNs)
   })
 
+  it('should keep an open OTLP bucket until it is complete', () => {
+    const clock = sinon.useFakeTimers({ now: 12_345_000 })
+    try {
+      otlpExporter.export.resetHistory()
+      const p = new SpanStatsProcessor(config, otlpExporter)
+      clearTimeout(p.timer)
+      p.onSpanFinished(topLevelSpan)
+
+      p.onInterval()
+
+      assert.ok(otlpExporter.export.notCalled)
+      assert.strictEqual(p.buckets.size, 1)
+
+      p.onSpanFinished(topLevelSpan)
+      clock.setSystemTime(12_350_000)
+      p.onInterval()
+
+      assert.ok(otlpExporter.export.calledOnce)
+      assert.strictEqual(p.buckets.size, 0)
+      const [drained] = otlpExporter.export.firstCall.args
+      assert.strictEqual(drained[0].bucket.values().next().value.topLevelOkDistribution.count, 2)
+    } finally {
+      clock.restore()
+    }
+  })
+
   it('should split OTLP trace roots when their attribute is exported', () => {
     const childSpan = { ...topLevelSpan, parent_id: { equals: () => false } }
     const processor = new SpanStatsProcessor(config, otlpExporter)
