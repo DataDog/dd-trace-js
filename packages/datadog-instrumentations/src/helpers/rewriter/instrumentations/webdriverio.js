@@ -61,6 +61,41 @@ module.exports = [
       filePath: 'build/index.js',
     },
     functionQuery: {
+      className: 'Runner',
+      methodName: 'run',
+      kind: 'Async',
+    },
+    channelName: 'Runner_run',
+  },
+  {
+    module: {
+      name: '@wdio/runner',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'VariableDeclarator[id.name="Runner"] > ClassExpression > ClassBody > ' +
+      'MethodDefinition[key.name="run"] IfStatement[test.operator="!"]' +
+      '[test.argument.object.name="args"][test.argument.property.name="watch"], ' +
+      'ClassDeclaration[id.name="Runner"] > ClassBody > MethodDefinition[key.name="run"] ' +
+      'IfStatement[test.operator="!"][test.argument.object.name="args"][test.argument.property.name="watch"], ' +
+      'VariableDeclarator[id.name="Runner"] > ClassExpression > ClassBody > ' +
+      'MethodDefinition[key.name="run"] IfStatement[test.object.type="ThisExpression"]' +
+      '[test.property.name="_sigintWasCalled"], ' +
+      'ClassDeclaration[id.name="Runner"] > ClassBody > MethodDefinition[key.name="run"] ' +
+      'IfStatement[test.object.type="ThisExpression"][test.property.name="_sigintWasCalled"]',
+    channelName: 'Runner_run',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumCleanupCallback',
+    },
+  },
+  {
+    module: {
+      name: '@wdio/runner',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    functionQuery: {
       className: 'BaseReporter',
       methodName: 'waitForSync',
       kind: 'Async',
@@ -190,6 +225,182 @@ module.exports = [
   },
   {
     module: {
+      name: 'webdriver',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="command_default"]',
+    functionQuery: {
+      kind: 'Sync',
+    },
+    channelName: 'command',
+  },
+  {
+    module: {
+      name: 'webdriver',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="initiateBidi"]',
+    functionQuery: {
+      kind: 'Sync',
+    },
+    channelName: 'initiateBidi',
+  },
+  {
+    module: {
+      name: 'webdriver',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="command_default"]',
+    functionQuery: {
+      kind: 'Sync',
+    },
+    channelName: 'command',
+  },
+  {
+    module: {
+      name: 'webdriver',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="initiateBidi"]',
+    functionQuery: {
+      kind: 'Sync',
+    },
+    channelName: 'initiateBidi',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^url[0-9]*$/]',
+    functionQuery: {
+      kind: 'Async',
+    },
+    channelName: 'url',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^url[0-9]*$/] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'url',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^url[0-9]*$/]',
+    functionQuery: {
+      kind: 'Async',
+    },
+    channelName: 'url',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^url[0-9]*$/] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'url',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[async=true][id.name=/^newWindow[0-9]*$/]',
+    functionQuery: {
+      kind: 'Async',
+    },
+    channelName: 'newWindow',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name=/^newWindow[0-9]*$/] ' +
+      'IfStatement[test.object.type="ThisExpression"][test.property.name="isBidi"], ' +
+      'FunctionDeclaration[id.name=/^newWindow[0-9]*$/] ' +
+      'IfStatement[test.operator="&&"][test.left.object.type="ThisExpression"]' +
+      '[test.left.property.name="isBidi"]',
+    channelName: 'newWindow',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumPreloadCallback',
+      callbackThis: true,
+    },
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^newWindow[0-9]*$/] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'newWindow',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[async=true][id.name=/^newWindow[0-9]*$/]',
+    functionQuery: {
+      kind: 'Async',
+    },
+    channelName: 'newWindow',
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name=/^newWindow[0-9]*$/] ' +
+      'IfStatement[test.object.type="ThisExpression"][test.property.name="isBidi"], ' +
+      'FunctionDeclaration[id.name=/^newWindow[0-9]*$/] ' +
+      'IfStatement[test.operator="&&"][test.left.object.type="ThisExpression"]' +
+      '[test.left.property.name="isBidi"]',
+    channelName: 'newWindow',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumPreloadCallback',
+      callbackThis: true,
+    },
+  },
+  {
+    module: {
+      name: 'webdriverio',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[async][id.name=/^newWindow[0-9]*$/] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'newWindow',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
       name: '@wdio/utils',
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
@@ -206,11 +417,50 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
+    astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'testFrameworkFnWrapper',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression ' +
+      'VariableDeclarator[id.name="__apm$wrapped"] > ' +
+      ':matches(FunctionDeclaration, FunctionExpression)[async=true] > BlockStatement',
+    channelName: 'testFrameworkFnWrapper',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumCleanupCallback',
+    },
+  },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
     functionQuery: {
       functionName: 'executeAsync',
       kind: 'Async',
     },
     channelName: 'executeAsync',
+  },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="executeAsync"] TryStatement > BlockStatement',
+    channelName: 'executeAsync',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumStartCallback',
+    },
   },
   {
     module: {

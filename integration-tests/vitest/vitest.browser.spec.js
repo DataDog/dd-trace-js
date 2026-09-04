@@ -47,8 +47,11 @@ const { NODE_MAJOR } = require('../../version')
 
 const latestVersions = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const isLegacyBrowserProvider = process.env.VITEST_BROWSER_LEGACY === '1' || NODE_MAJOR <= 18
-const vitestVersion = isLegacyBrowserProvider ? '3.2.6' : latestVersions.vitest
 const browserProvider = process.env.VITEST_BROWSER_PROVIDER || 'playwright'
+const latestVitestVersion = browserProvider === 'webdriverio'
+  ? latestVersions['@vitest/browser-webdriverio']
+  : latestVersions.vitest
+const vitestVersion = isLegacyBrowserProvider ? '3.2.6' : latestVitestVersion
 const browserName = browserProvider === 'webdriverio' ? 'chrome' : 'chromium'
 const browserProjectName = `browser-${browserName}`
 const browserProviderDescription = browserProvider === 'playwright' ? '' : ` with ${browserProvider}`
