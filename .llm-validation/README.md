@@ -20,60 +20,66 @@ file changed, and uses this directory's `default_level` (`gate`) unless `LLMVAL_
 |---|---|
 | [`config.yaml`](./config.yaml) | Monitored instruction files, model, `--level` presets, gate policy |
 | [`suites/dd-apm-sdk-review.yaml`](./suites/dd-apm-sdk-review.yaml) | Cases (auto-discovered; do not pass this path to the CLI) |
-| [`docker/`](./docker/) | Local runner image — not part of the platform suite contract |
 
 ## Prerequisites
 
-- A checkout of [`ddoghq/llm-validation-platform`](https://github.com/ddoghq/llm-validation-platform)
-  (internal; GitLab: `git@gitlab.ddbuild.io:ddoghq/llm-validation-platform.git`)
+- Docker (for the published platform image), **or** a .NET 8/10 SDK + `claude` on `PATH`
+- `ddtool` on the host for real (non-`--fake`) runs — to mint a gateway token
 - This `dd-trace-js` checkout, with `.llm-validation/` present
-- Either a .NET 8/10 SDK + `claude` on `PATH`, **or** Docker (see below)
 
-There is no global `llmval` binary. The CLI always runs from the platform checkout
-(or from the local Docker image, which still mounts that checkout).
+You do **not** need a checkout of `llm-validation-platform` when using Docker.
 
-## Run locally (Docker — no host .NET)
+## Run locally (Docker)
 
-The platform does not publish an image. [`docker/`](./docker/) is a local
-toolchain wrapper (SDK 10 + git + Node + `claude`). The private platform source is
-**mounted**, not baked in.
+The platform publishes the runner image (CLI + toolchain baked in):
+
+`registry.ddbuild.io/ci/llm-validation-platform/llmval`
+
+Use `:latest` or pin a pipeline id from the platform's manual `publish-llmval-image` job.
+Run from the **`dd-trace-js` repo root** (the directory that contains `.llm-validation/`):
 
 ```bash
-export LLMVAL_PLATFORM=/path/to/llm-validation-platform
-chmod +x .llm-validation/docker/run.sh
+export LLMVAL_IMAGE=registry.ddbuild.io/ci/llm-validation-platform/llmval:latest
+docker pull "$LLMVAL_IMAGE"
 
 # Offline smoke — no gateway, no Claude (1 case)
-.llm-validation/docker/run.sh --level minimum --fake
+docker run --rm -v "$PWD:/repo" "$LLMVAL_IMAGE" \
+  --repo /repo --base-sha master --level minimum --fake
 
 # Cheap real smoke — still 1 case (`minimum` is a case filter, not "run everything cheaply")
-.llm-validation/docker/run.sh --level minimum --runs 1 --base-sha main
+export LLMVAL_AUTH_HEADER="$(ddtool auth token rapid-ai-platform --datacenter us1.staging.dog --http-header)"
+docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
+  --repo /repo --base-sha master --level minimum --runs 1
 
 # All cases in suites/ (one repeat each)
-.llm-validation/docker/run.sh --level full --runs 1 --base-sha main
+docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
+  --repo /repo --base-sha master --level full --runs 1
 
 # CI-shaped set (10 cases)
-.llm-validation/docker/run.sh --level gate --runs 1 --base-sha main
+docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
+  --repo /repo --base-sha master --level gate --runs 1
 
 # One named case (id from suites/dd-apm-sdk-review.yaml)
-.llm-validation/docker/run.sh --case js-security-secret-into-log --runs 1 --base-sha main
+docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
+  --repo /repo --base-sha master --case js-security-secret-into-log --runs 1
 ```
 
 `--level` picks **which cases** run. `--runs` only changes how many times **those** cases
 repeat. `--case`, `--runs`, `--max-cases`, `--concurrency` override the `config.yaml`
 preset. Artifacts land in this directory (`results.json`, `report.md`, `details.json`).
 
-A real (non-`--fake`) run needs a gateway token. `run.sh` mints one on the host
-with `ddtool` (or `authanywhere`) and injects `LLMVAL_AUTH_HEADER` so the CLI
-does not look for `authanywhere` inside the container.
+`ANTHROPIC_BASE_URL` defaults to the staging gateway inside the image. Override if needed:
 
 ```bash
-.llm-validation/docker/run.sh --level minimum
-# override datacenter / gateway if needed:
-#   LLMVAL_DATACENTER=us1.ddbuild.io
-#   ANTHROPIC_BASE_URL=https://ai-gateway.us1.ddbuild.io
+docker run --rm \
+  -e LLMVAL_AUTH_HEADER \
+  -e ANTHROPIC_BASE_URL=https://ai-gateway.us1.ddbuild.io \
+  -v "$PWD:/repo" \
+  "$LLMVAL_IMAGE" \
+  --repo /repo --base-sha master --level minimum
 ```
 
-Rebuild the image after editing `docker/Dockerfile`: `docker rmi llmval-dd-apm-sdk-review`.
+Renew `LLMVAL_AUTH_HEADER` when it expires (typical symptom: Claude/`api_error_status`:401).
 
 ## Run locally (host .NET)
 
@@ -109,7 +115,8 @@ that level already selected.
 So this command runs **one** case once, not the whole suite:
 
 ```bash
-.llm-validation/docker/run.sh --level minimum --runs 1 --base-sha main
+docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
+  --repo /repo --base-sha master --level minimum --runs 1
 ```
 
 To run every case once, use `--level full`. To run the CI set once, use `--level gate`.
@@ -122,7 +129,8 @@ the preset’s case list; `--level` still supplies default `--runs` unless you p
 
 ```bash
 # Docker
-.llm-validation/docker/run.sh --case js-security-secret-into-log --runs 1 --base-sha main
+docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
+  --repo /repo --base-sha master --case js-security-secret-into-log --runs 1
 
 # Host .NET (from the platform repo)
 dotnet run --project src/Datadog.LlmValidation.Cli -- run \
