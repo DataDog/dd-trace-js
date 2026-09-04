@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = [
+const instrumentations = [
   {
     module: {
       name: 'graphql',
@@ -271,3 +271,15 @@ module.exports = [
     channelName: 'dd:graphql:utilities:load',
   },
 ]
+
+const fastPathInstrumentations = []
+for (const instrumentation of instrumentations) {
+  if (instrumentation.functionQuery?.functionName === '__module_export__') continue
+
+  fastPathInstrumentations.push({
+    ...instrumentation,
+    transform: 'configureGraphqlFastPath',
+  })
+}
+
+module.exports = [...instrumentations, ...fastPathInstrumentations]

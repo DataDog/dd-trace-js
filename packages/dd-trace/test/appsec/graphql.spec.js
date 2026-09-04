@@ -18,6 +18,18 @@ const {
   apolloServerCoreChannel,
 } = require('../../src/appsec/channels')
 
+/**
+ * @param {unknown} resolverInfo
+ * @param {object} [abortController]
+ * @returns {{ abortController?: object, createResolverInfo: sinon.SinonStub }}
+ */
+function createResolverMessage (resolverInfo, abortController) {
+  return {
+    abortController,
+    createResolverInfo: sinon.stub().returns(resolverInfo),
+  }
+}
+
 describe('GraphQL', () => {
   let graphql, blocking, telemetry
 
@@ -113,13 +125,13 @@ describe('GraphQL', () => {
     })
 
     it('Should not call waf if resolvers is undefined', () => {
-      startGraphqlResolver.publish({ resolverInfo: undefined })
+      startGraphqlResolver.publish(createResolverMessage(undefined))
 
       sinon.assert.notCalled(waf.run)
     })
 
     it('Should not call waf if resolvers is not an object', () => {
-      startGraphqlResolver.publish({ resolverInfo: '' })
+      startGraphqlResolver.publish(createResolverMessage(''))
 
       sinon.assert.notCalled(waf.run)
     })
@@ -131,9 +143,11 @@ describe('GraphQL', () => {
 
       storage('legacy').getStore.returns({})
 
-      startGraphqlResolver.publish({ resolverInfo })
+      const message = createResolverMessage(resolverInfo)
+      startGraphqlResolver.publish(message)
 
       sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(message.createResolverInfo)
     })
 
     it('Should call waf if resolvers is well formatted', () => {
@@ -141,8 +155,10 @@ describe('GraphQL', () => {
         user: [{ id: '1234' }],
       }
 
-      startGraphqlResolver.publish({ resolverInfo })
+      const message = createResolverMessage(resolverInfo)
+      startGraphqlResolver.publish(message)
 
+      sinon.assert.calledOnceWithExactly(message.createResolverInfo, message)
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
           [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo,
@@ -189,7 +205,7 @@ describe('GraphQL', () => {
 
       sinon.stub(waf, 'run').returns([''])
 
-      startGraphqlResolver.publish({ abortController, resolverInfo })
+      startGraphqlResolver.publish(createResolverMessage(resolverInfo, abortController))
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
@@ -215,7 +231,7 @@ describe('GraphQL', () => {
 
       sinon.stub(web, 'root').returns(rootSpan)
 
-      startGraphqlResolver.publish({ abortController, resolverInfo })
+      startGraphqlResolver.publish(createResolverMessage(resolverInfo, abortController))
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
@@ -247,7 +263,7 @@ describe('GraphQL', () => {
 
       sinon.stub(web, 'root').returns(rootSpan)
 
-      startGraphqlResolver.publish({ abortController, resolverInfo })
+      startGraphqlResolver.publish(createResolverMessage(resolverInfo, abortController))
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
@@ -284,7 +300,7 @@ describe('GraphQL', () => {
 
       sinon.stub(web, 'root').returns(rootSpan)
 
-      startGraphqlResolver.publish({ abortController, resolverInfo })
+      startGraphqlResolver.publish(createResolverMessage(resolverInfo, abortController))
 
       sinon.assert.called(context.abortController.abort)
 
