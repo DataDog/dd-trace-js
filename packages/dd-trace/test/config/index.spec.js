@@ -8,6 +8,7 @@ const path = require('node:path')
 const os = require('node:os')
 const { inspect } = require('node:util')
 
+const dc = require('dc-polyfill')
 const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
 const context = describe
@@ -5064,6 +5065,28 @@ rules:
         logInjection: true,
         sampleRate: 0.5,
       })
+    })
+  })
+
+  describe('config update channel', () => {
+    let subscriber
+    let configUpdateChannel
+
+    beforeEach(() => {
+      configUpdateChannel = dc.channel('datadog:config:update')
+      subscriber = sinon.spy()
+      configUpdateChannel.subscribe(subscriber)
+    })
+
+    afterEach(() => {
+      configUpdateChannel.unsubscribe(subscriber)
+    })
+
+    it('publishes the config on setRemoteConfig', () => {
+      const config = getConfig()
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      sinon.assert.calledOnce(subscriber)
+      assert.strictEqual(subscriber.firstCall.args[0], config)
     })
   })
 
