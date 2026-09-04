@@ -66,11 +66,17 @@ function processProperties (props, maxLength, incomplete) {
   return result
 }
 
+// Capture limits enforced while processing a value that ends up redacted never make it into the snapshot, so they are
+// not recorded as incomplete capture reasons either
+const discardedIncomplete = { reasons: 0 }
+
 // TODO: Improve performance of redaction algorithm.
 // This algorithm is probably slower than if we embedded the redaction logic inside the functions below.
 // That way we didn't have to traverse objects that will just be redacted anyway.
 function getPropertyValue (prop, maxLength, incomplete) {
-  return redact(prop, getPropertyValueRaw(prop, maxLength, incomplete))
+  return shouldRedactProperty(prop)
+    ? notCapturedRedacted(getPropertyValueRaw(prop, maxLength, discardedIncomplete).type)
+    : getPropertyValueRaw(prop, maxLength, incomplete)
 }
 
 function getPropertyValueRaw (prop, maxLength, incomplete) {
@@ -340,9 +346,8 @@ function arrayBufferToString (bytes, size) {
   return buf.toString()
 }
 
-function redact (prop, obj) {
-  const name = getNormalizedNameFromProp(prop)
-  return REDACTED_IDENTIFIERS.has(name) ? notCapturedRedacted(obj.type) : obj
+function shouldRedactProperty (prop) {
+  return REDACTED_IDENTIFIERS.has(getNormalizedNameFromProp(prop))
 }
 
 function shouldRedactMapValue (key) {
