@@ -92,15 +92,17 @@ function markProbeHandled () {
  * @param {Record<string, unknown> | undefined} dd
  * @param {DebuggerSnapshot} snapshot
  * @param {string | undefined} processTags
+ * @param {number} eventType
+ * @param {number} incompleteReasons
  * @returns {void}
  */
-function sendAndCount (message, logger, dd, snapshot, processTags) {
+function sendAndCount (message, logger, dd, snapshot, processTags, eventType, incompleteReasons) {
   const captureKind = getCaptureKind(snapshot)
   if (preflightPending) {
     preflightPending = false
     Atomics.store(probeCounts, CAPTURE_KIND_INDEX, captureKind)
   } else {
-    send(message, logger, dd, snapshot, processTags)
+    send(message, logger, dd, snapshot, processTags, eventType, incompleteReasons)
     if (captureKind === EXPECTED_CAPTURE_KIND) Atomics.add(probeCounts, MATCHED_CAPTURE_KIND_INDEX, 1)
   }
 

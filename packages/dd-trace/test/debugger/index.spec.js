@@ -3,11 +3,15 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/mocha')
+
+const telemetryMetrics = require('../../src/telemetry/metrics')
+const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('../../src/debugger/guardrail-metrics')
 
 describe('debugger/index', () => {
   let DynamicInstrumentation
@@ -337,6 +341,110 @@ describe('debugger/index', () => {
       // Should have created a new worker
       assert.strictEqual(Worker.callCount, firstWorkerCall + 1)
     })
+  })
+
+  describe('guardrail metrics', () => {
+    const appClosingChannel = dc.channel('datadog:telemetry:app-closing')
+    /** @type {sinon.SinonFakeTimers} */
+    let clock
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+      telemetryMetrics.manager.delete(TELEMETRY_NAMESPACE)
+    })
+
+    afterEach(() => {
+      clock.restore()
+      telemetryMetrics.manager.delete(TELEMETRY_NAMESPACE)
+    })
+
+    it('should share the guardrail counters with the worker', () => {
+      DynamicInstrumentation.start(config, rc)
+
+      const { workerData } = Worker.firstCall.args[1]
+      assert.ok(workerData.guardrailMetricsBuffer instanceof SharedArrayBuffer)
+    })
+
+    it('should periodically report the counters as telemetry metrics', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerMetrics = new GuardrailMetrics(Worker.firstCall.args[1].workerData.guardrailMetricsBuffer)
+
+      workerMetrics.eventDropped(0, 0, 3) // queueFull, snapshot
+      workerMetrics.captureIncomplete(0b100, 1) // depth, log
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [], 'should not report before the flush interval')
+
+      clock.tick(10_000)
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.dropped', tags: ['event_type:snapshot', 'reason:queueFull'], value: 3 },
+        { metric: 'capture.incomplete', tags: ['event_type:log', 'reason:depth'], value: 1 },
+      ])
+
+      workerMetrics.eventDropped(0, 0, 1)
+      clock.tick(10_000)
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.dropped', tags: ['event_type:snapshot', 'reason:queueFull'], value: 4 },
+        { metric: 'capture.incomplete', tags: ['event_type:log', 'reason:depth'], value: 1 },
+      ], 'should accumulate into the same telemetry counters')
+    })
+
+    it('should report the remaining counters and stop the timer when stopped', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerMetrics = new GuardrailMetrics(Worker.firstCall.args[1].workerData.guardrailMetricsBuffer)
+
+      workerMetrics.eventSkipped(1, 0) // rateLimitProbe, snapshot
+      DynamicInstrumentation.stop()
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.skipped', tags: ['event_type:snapshot', 'reason:rateLimitProbe'], value: 1 },
+      ])
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('should report the counters when telemetry is about to send its final metrics', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerMetrics = new GuardrailMetrics(Worker.firstCall.args[1].workerData.guardrailMetricsBuffer)
+
+      workerMetrics.eventDropped(0, 1, 2) // queueFull, log
+      appClosingChannel.publish()
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.dropped', tags: ['event_type:log', 'reason:queueFull'], value: 2 },
+      ], 'should report without waiting for the flush interval')
+
+      DynamicInstrumentation.stop()
+      workerMetrics.eventDropped(0, 1, 1)
+      appClosingChannel.publish()
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.dropped', tags: ['event_type:log', 'reason:queueFull'], value: 2 },
+      ], 'should stop listening once stopped')
+    })
+
+    it('should not keep the process alive', () => {
+      const setIntervalSpy = sinon.spy(global, 'setInterval')
+      try {
+        DynamicInstrumentation.start(config, rc)
+      } finally {
+        setIntervalSpy.restore()
+      }
+
+      sinon.assert.calledOnce(setIntervalSpy)
+      assert.strictEqual(setIntervalSpy.firstCall.returnValue.hasRef(), false)
+    })
+
+    /**
+     * @returns {Array<{ metric: string, tags: string[], value: number }>}
+     */
+    function getTelemetryMetrics () {
+      const namespace = telemetryMetrics.manager.get(TELEMETRY_NAMESPACE)
+      if (namespace === undefined) return []
+      return [...namespace.metrics.values()]
+        .filter((metric) => metric.hasPoints())
+        .map(({ metric, tags, points }) => ({ metric, tags, value: points[0][1] }))
+    }
   })
 
   describe('readProbeFile', () => {

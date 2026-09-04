@@ -5,6 +5,7 @@ const { workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
 const { INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('../constants')
+const { EVENT_TYPE, INCOMPLETE_REASON } = require('../guardrail-metrics')
 const {
   MAX_SAMPLED_PROBES_PER_PAUSE,
   SAMPLED_PROBE_COUNT_INDEX,
@@ -140,17 +141,14 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
-  let processLocalState
-  /** @type {Error[] | undefined} */
-  let fatalSnapshotErrors
+  /** @type {Awaited<ReturnType<typeof getLocalStateForCallFrame>> | undefined} */
+  let localState
   if (numberOfProbesWithSnapshots !== 0) {
-    const result = await getLocalStateForCallFrame(
+    localState = await getLocalStateForCallFrame(
       params.callFrames[0],
       { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength },
       start + config.dynamicInstrumentation.captureTimeoutNs
     )
-    processLocalState = result.processLocalState
-    fatalSnapshotErrors = result.fatalErrors
   }
 
   // Evaluate capture expressions for probes that have them
@@ -206,19 +204,30 @@ session.on('Debugger.paused', async ({ params }) => {
       language: 'javascript',
     }
 
+    // Which guardrail bucket the event belongs to, and which capture limits were enforced while producing it. The
+    // snapshot module records the reasons, including runtime errors: a fatal error does not necessarily mean one, as
+    // the collector also raises a fatal error to disable capture when it hits its large object safety threshold.
+    /** @type {number} */
+    let eventType = EVENT_TYPE.LOG
+    let incompleteReasons = 0
+
     if (probe.captureSnapshot) {
-      if (fatalSnapshotErrors && fatalSnapshotErrors.length > 0) {
+      eventType = EVENT_TYPE.SNAPSHOT
+      const { processLocalState, fatalErrors, incomplete } = /** @type {NonNullable<typeof localState>} */ (localState)
+      if (fatalErrors.length > 0) {
         // There was an error collecting the snapshot for this probe, let's not try again
         probe.captureSnapshot = false
-        probe.permanentEvaluationErrors = fatalSnapshotErrors.map(error => ({
+        probe.permanentEvaluationErrors = fatalErrors.map(error => ({
           expr: '',
           message: error.message,
         }))
       }
       snapshot.captures = {
-        lines: { [probe.location.lines[0]]: { locals: /** @type {Function} */ (processLocalState)() } },
+        lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
       }
+      incompleteReasons |= incomplete.reasons
     } else if (probe.compiledCaptureExpressions !== undefined) {
+      eventType = EVENT_TYPE.SNAPSHOT
       const expressionResult = /** @type {Map} */ (captureExpressionResults).get(probe.id)
       if (expressionResult) {
         // Handle fatal capture errors - disable capture expressions for this probe permanently
@@ -233,6 +242,7 @@ session.on('Debugger.paused', async ({ params }) => {
         snapshot.captures = {
           lines: { [probe.location.lines[0]]: { captureExpressions: expressionResult.processCaptureExpressions() } },
         }
+        incompleteReasons |= expressionResult.incomplete.reasons
 
         // Handle transient evaluation errors - include in snapshot for this capture
         if (expressionResult.evaluationErrors?.length > 0) {
@@ -249,6 +259,7 @@ session.on('Debugger.paused', async ({ params }) => {
           expr: '',
           message: 'Internal error: capture expression results not found',
         }]
+        incompleteReasons |= INCOMPLETE_REASON.RUNTIME_ERROR
       }
     }
 
@@ -283,7 +294,8 @@ session.on('Debugger.paused', async ({ params }) => {
     ackEmitting(probe)
 
     send(message, logger, dd, snapshot,
-      config.propagateProcessTags.enabled ? processTags.serialized : undefined)
+      config.propagateProcessTags.enabled ? processTags.serialized : undefined,
+      eventType, incompleteReasons)
   }
 })
 

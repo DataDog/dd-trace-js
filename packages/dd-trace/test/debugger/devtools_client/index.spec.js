@@ -9,6 +9,8 @@ const sinon = require('sinon')
 
 require('../../setup/mocha')
 
+const { LARGE_OBJECT_SKIP_THRESHOLD } = require('../../../src/debugger/devtools_client/snapshot/constants')
+const { EVENT_TYPE, GuardrailMetrics, INCOMPLETE_REASON } = require('../../../src/debugger/guardrail-metrics')
 const { installProbeSampler } = require('../../../src/debugger/probe_sampler')
 const { MAX_SAMPLED_PROBES_PER_PAUSE } = require('../../../src/debugger/probe_sampler_constants')
 
@@ -94,7 +96,7 @@ describe('onPause', function () {
 
     send = sinon.spy()
     send['@noCallThru'] = true
-    sampledProbeIndexes = new Int32Array(installProbeSampler())
+    sampledProbeIndexes = new Int32Array(installProbeSampler(new GuardrailMetrics(GuardrailMetrics.createBuffer())))
 
     state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })
     const loadStatus = proxyquire.noCallThru()
@@ -128,6 +130,18 @@ describe('onPause', function () {
     assert(onPausedCall, 'onPaused call should be found')
     onPaused = onPausedCall[1]
   })
+
+  /**
+   * Attach a probe to the hit breakpoint and mark it as sampled for the next pause.
+   *
+   * @param {ReturnType<typeof genProcessedProbe>} probe - The probe to sample.
+   */
+  function sampleProbe (probe) {
+    state.breakpointToProbes.set(breakpointId, new Map([[probe.id, probe]]))
+    state.samplingIndexToProbe.set(1, probe)
+    Atomics.store(sampledProbeIndexes, 0, 1)
+    Atomics.store(sampledProbeIndexes, 2, 1)
+  }
 
   it('should not fail if there is no probe for at the breakpoint', async function () {
     await onPaused(event)
@@ -178,6 +192,190 @@ describe('onPause', function () {
     sinon.assert.calledOnce(send)
     assert.strictEqual(send.firstCall.args[0], 'probe 2')
     assert.strictEqual(send.firstCall.args[2], undefined)
+  })
+
+  it('should send log probe results as log events', async function () {
+    const probe = genProcessedProbe('probe-1')
+    sampleProbe(probe)
+
+    await onPaused(event)
+
+    sinon.assert.calledOnce(send)
+    const [, , , , , eventType, incompleteReasons] = send.firstCall.args
+    assert.strictEqual(eventType, EVENT_TYPE.LOG)
+    assert.strictEqual(incompleteReasons, 0)
+  })
+
+  it('should send snapshot probe results as snapshot events with the enforced capture limits', async function () {
+    const probe = genProcessedProbe('probe-1')
+    probe.captureSnapshot = true
+    probe.capture = { maxReferenceDepth: 0, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 }
+    sampleProbe(probe)
+
+    session.post = sinon.stub().callsFake((method, params) => {
+      if (method === 'Debugger.evaluateOnCallFrame') return Promise.resolve({ result: { value: [{}] } })
+      if (method === 'Runtime.getProperties' && params.objectId === 'scope-object-id') {
+        return Promise.resolve({
+          result: [{ name: 'obj', value: { type: 'object', className: 'Object', objectId: 'nested-object-id' } }],
+        })
+      }
+      return Promise.resolve({})
+    })
+    const eventWithScope = {
+      params: {
+        ...event.params,
+        callFrames: [{
+          ...event.params.callFrames[0],
+          scopeChain: [{ type: 'local', object: { objectId: 'scope-object-id' } }],
+        }],
+      },
+    }
+
+    await onPaused(eventWithScope)
+
+    sinon.assert.calledOnce(send)
+    const [, , , snapshot, , eventType, incompleteReasons] = send.firstCall.args
+    assert.deepStrictEqual(snapshot.captures, {
+      lines: { 1: { locals: { obj: { type: 'Object', notCapturedReason: 'depth' } } } },
+    })
+    assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
+    assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.DEPTH)
+  })
+
+  it('should record a runtime error when the snapshot cannot be collected', async function () {
+    const probe = genProcessedProbe('probe-1')
+    probe.captureSnapshot = true
+    probe.capture = { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 }
+    sampleProbe(probe)
+
+    session.post = sinon.stub().callsFake((method) => {
+      if (method === 'Debugger.evaluateOnCallFrame') return Promise.resolve({ result: { value: [{}] } })
+      if (method === 'Runtime.getProperties') return Promise.reject(new Error('boom'))
+      return Promise.resolve({})
+    })
+    const eventWithScope = {
+      params: {
+        ...event.params,
+        callFrames: [{
+          ...event.params.callFrames[0],
+          scopeChain: [{ type: 'local', object: { objectId: 'scope-object-id' } }],
+        }],
+      },
+    }
+
+    await onPaused(eventWithScope)
+
+    sinon.assert.calledOnce(send)
+    const [, , , snapshot, , eventType, incompleteReasons] = send.firstCall.args
+    assert.strictEqual(snapshot.evaluationErrors.length, 1)
+    assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
+    assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.RUNTIME_ERROR)
+    assert.strictEqual(probe.captureSnapshot, false, 'should disable future snapshots for the probe')
+  })
+
+  it('should not record a runtime error when the large object safety threshold disables the snapshot',
+    async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.captureSnapshot = true
+      probe.capture = { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 }
+      sampleProbe(probe)
+
+      const hugeObjectProperties = Array.from({ length: LARGE_OBJECT_SKIP_THRESHOLD + 1 }, (_, i) => ({
+        name: `property${i}`, value: { type: 'number', value: i }, enumerable: true,
+      }))
+      session.post = sinon.stub().callsFake((method, params) => {
+        if (method === 'Debugger.evaluateOnCallFrame') return Promise.resolve({ result: { value: [{}] } })
+        if (method === 'Runtime.getProperties') {
+          return Promise.resolve(params.objectId === 'scope-object-id'
+            ? {
+                result: [{
+                  name: 'huge',
+                  value: { type: 'object', className: 'Object', description: 'Object', objectId: 'huge-object-id' },
+                  enumerable: true,
+                }],
+              }
+            : { result: hugeObjectProperties })
+        }
+        return Promise.resolve({})
+      })
+      const eventWithScope = {
+        params: {
+          ...event.params,
+          callFrames: [{
+            ...event.params.callFrames[0],
+            scopeChain: [{ type: 'local', object: { objectId: 'scope-object-id' } }],
+          }],
+        },
+      }
+
+      await onPaused(eventWithScope)
+
+      sinon.assert.calledOnce(send)
+      const [, , , snapshot, , eventType, incompleteReasons] = send.firstCall.args
+      assert.strictEqual(snapshot.captures.lines[1].locals.huge.notCapturedReason, 'fieldCount')
+      assert.strictEqual(snapshot.evaluationErrors.length, 1, 'should tell the user why future captures are skipped')
+      assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
+      assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.FIELD_COUNT, 'should not count it as a runtime error')
+      assert.strictEqual(probe.captureSnapshot, false, 'should disable future snapshots for the probe')
+    })
+
+  it('should send capture expression results as snapshot events', async function () {
+    const probe = genProcessedProbe('probe-1')
+    probe.compiledCaptureExpressions = [{
+      name: 'foo',
+      expression: 'foo',
+      limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+    }]
+    sampleProbe(probe)
+
+    session.post = sinon.stub().callsFake((method, params) => {
+      if (method === 'Debugger.evaluateOnCallFrame') {
+        return params.expression === 'foo'
+          ? Promise.resolve({ result: { type: 'string', value: 'x'.repeat(300) } })
+          : Promise.resolve({ result: { value: [{}] } })
+      }
+      return Promise.resolve({})
+    })
+
+    await onPaused(event)
+
+    sinon.assert.calledOnce(send)
+    const [, , , snapshot, , eventType, incompleteReasons] = send.firstCall.args
+    assert.deepStrictEqual(snapshot.captures.lines[1].captureExpressions.foo, {
+      type: 'string', value: 'x'.repeat(255), truncated: true, size: 300,
+    })
+    assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
+    assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.STRING_LENGTH)
+  })
+
+  it('should record a runtime error when a capture expression fails to evaluate', async function () {
+    const probe = genProcessedProbe('probe-1')
+    probe.compiledCaptureExpressions = [{
+      name: 'foo',
+      expression: 'foo',
+      limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+    }]
+    sampleProbe(probe)
+
+    session.post = sinon.stub().callsFake((method, params) => {
+      if (method === 'Debugger.evaluateOnCallFrame') {
+        return params.expression === 'foo'
+          ? Promise.resolve({
+            result: { type: 'object', subtype: 'error' },
+            exceptionDetails: { exception: { description: 'ReferenceError: foo is not defined' } },
+          })
+          : Promise.resolve({ result: { value: [{}] } })
+      }
+      return Promise.resolve({})
+    })
+
+    await onPaused(event)
+
+    sinon.assert.calledOnce(send)
+    const [, , , snapshot, , eventType, incompleteReasons] = send.firstCall.args
+    assert.deepStrictEqual(snapshot.evaluationErrors, [{ expr: 'foo', message: 'ReferenceError: foo is not defined' }])
+    assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
+    assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.RUNTIME_ERROR)
   })
 
   it('should log sampler overflow', async function () {

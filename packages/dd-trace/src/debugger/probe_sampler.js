@@ -1,6 +1,7 @@
 'use strict'
 
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./devtools_client/defaults')
+const { EVENT_TYPE, SKIPPED_REASON } = require('./guardrail-metrics')
 const {
   DD_TRACE_SYMBOL,
   MAX_SAMPLED_PROBES_PER_PAUSE,
@@ -22,9 +23,10 @@ module.exports = {
 /**
  * Install the runtime sampler in the debuggee context.
  *
+ * @param {import('./guardrail-metrics').GuardrailMetrics} guardrailMetrics - Counters for skipped probe hits.
  * @returns {SharedArrayBuffer} The shared sampler buffer to pass to the debugger worker.
  */
-function installProbeSampler () {
+function installProbeSampler (guardrailMetrics) {
   const buffer = createProbeSamplerBuffer()
 
   const lastCaptureNsByProbeId = new Map()
@@ -49,13 +51,20 @@ function installProbeSampler () {
     makeSampleDecision (probeIndex, probeId, nsBetweenSampling, isSnapshotProducingProbe) {
       const now = process.hrtime.bigint()
       const lastCaptureNs = lastCaptureNsByProbeId.get(probeId)
-      if (lastCaptureNs !== undefined && now - lastCaptureNs < nsBetweenSampling) return false
+      if (lastCaptureNs !== undefined && now - lastCaptureNs < nsBetweenSampling) {
+        guardrailMetrics.eventSkipped(
+          SKIPPED_REASON.RATE_LIMIT_PROBE,
+          isSnapshotProducingProbe === true ? EVENT_TYPE.SNAPSHOT : EVENT_TYPE.LOG
+        )
+        return false
+      }
 
       let shouldResetGlobalSnapshotRateWindow = false
       if (isSnapshotProducingProbe === true) {
         if (now - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
           shouldResetGlobalSnapshotRateWindow = true
         } else if (snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
+          guardrailMetrics.eventSkipped(SKIPPED_REASON.RATE_LIMIT_GLOBAL, EVENT_TYPE.SNAPSHOT)
           return false
         }
       }
