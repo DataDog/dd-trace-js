@@ -72,6 +72,7 @@ describe('debugger/index', () => {
       debug: false,
       dynamicInstrumentation: {
         enabled: true,
+        evaluationTimeoutMs: 10,
       },
       hostname: 'test-host',
       logLevel: 'info',
@@ -266,6 +267,7 @@ describe('debugger/index', () => {
         debug: false,
         dynamicInstrumentation: {
           enabled: true,
+          evaluationTimeoutMs: 10,
         },
         env: 'test-env',
         hostname: 'test-host',
@@ -279,6 +281,30 @@ describe('debugger/index', () => {
         url: 'http://localhost:8126/',
         version: '1.2.3',
       })
+    })
+
+    it('should apply the evaluation time budget to the probe sampler', () => {
+      DynamicInstrumentation.start(config, rc)
+      const sampler = globalThis[Symbol.for('dd-trace')][Symbol.for('dd-trace.debugger.probeSampler')]
+      const hrtime = sinon.stub(process.hrtime, 'bigint')
+      try {
+        // A 15ms evaluation is within the configured 10ms budget only once the budget is raised
+        hrtime.returns(15_000_000n)
+        assert.strictEqual(sampler.conditionEvaluated(0, 'probe-1', 0n, true, 0n, false), true)
+        assert.strictEqual(
+          sampler.takeConditionError('probe-1'),
+          'Condition evaluation exceeded its time budget of 10ms (took 15.0ms)'
+        )
+
+        config.dynamicInstrumentation.evaluationTimeoutMs = 20
+        DynamicInstrumentation.configure(config)
+        sampler.remove('probe-1')
+
+        assert.strictEqual(sampler.conditionEvaluated(0, 'probe-1', 0n, true, 0n, false), true)
+        assert.strictEqual(sampler.takeConditionError('probe-1'), undefined)
+      } finally {
+        hrtime.restore()
+      }
     })
 
     it('should ignore an invalid agentless site', () => {

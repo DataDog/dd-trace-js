@@ -59,7 +59,7 @@ describe('onPause', function () {
   let state
   /** @type {Int32Array} */
   let sampledProbeIndexes
-  /** @type {unknown} */
+  /** @type {{ error: sinon.SinonSpy, debug: sinon.SinonSpy, '@noCallThru': boolean }} */
   let log
 
   beforeEach(async function () {
@@ -93,6 +93,7 @@ describe('onPause', function () {
       parentThreadId,
       dynamicInstrumentation: {
         captureTimeoutNs: 15_000_000n, // Default value is 15ms
+        evaluationTimeoutNs: 10_000_000n, // Default value is 10ms
         redactedIdentifiers: [],
         redactionExcludedIdentifiers: [],
       },
@@ -102,7 +103,10 @@ describe('onPause', function () {
 
     send = sinon.spy()
     send['@noCallThru'] = true
-    sampledProbeIndexes = new Int32Array(installProbeSampler(new GuardrailMetrics(GuardrailMetrics.createBuffer())))
+    sampledProbeIndexes = new Int32Array(installProbeSampler(
+      new GuardrailMetrics(GuardrailMetrics.createBuffer()),
+      { dynamicInstrumentation: { evaluationTimeoutMs: 10 } }
+    ))
 
     state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })
     const loadStatus = proxyquire.noCallThru()
@@ -544,6 +548,145 @@ describe('onPause', function () {
       assert.deepStrictEqual(send.secondCall.args[3].evaluationErrors, [
         { expr: 'foo.bar == 42', message: 'TypeError: boom' },
       ])
+    })
+  })
+
+  describe('evaluation time budget', function () {
+    const evaluationTimedOutExpression = 'globalThis[Symbol.for("dd-trace")]?.' +
+      '[Symbol.for("dd-trace.debugger.probeSampler")]?.evaluationTimedOut("probe-1")'
+    /** @type {sinon.SinonStub} */
+    let hrtime
+
+    beforeEach(function () {
+      hrtime = sinon.stub(process.hrtime, 'bigint').returns(0n)
+    })
+
+    afterEach(function () {
+      hrtime.restore()
+    })
+
+    it('should not report templates evaluated within the budget', async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.templateRequiresEvaluation = true
+      probe.template = '["hello ", foo]'
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          hrtime.returns(10_000_000n) // exactly the 10ms budget
+          return Promise.resolve({ result: { value: [{}, ['hello ', 'world']] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      assert.strictEqual(send.firstCall.args[0], 'hello world')
+      assert.strictEqual(send.firstCall.args[3].evaluationErrors, undefined)
+      sinon.assert.neverCalledWith(session.post, 'Runtime.evaluate')
+    })
+
+    it('should report templates that exceed the budget and throttle the probe', async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.templateRequiresEvaluation = true
+      probe.template = '["hello ", foo]'
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          hrtime.returns(10_000_001n)
+          return Promise.resolve({ result: { value: [{}, ['hello ', 'world']] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      const [message, , , snapshot] = send.firstCall.args
+      assert.strictEqual(message, 'hello world', 'should still report the result')
+      assert.deepStrictEqual(snapshot.evaluationErrors, [
+        { expr: '', message: 'Template evaluation exceeded its time budget of 10ms' },
+      ])
+      sinon.assert.calledWith(session.post, 'Runtime.evaluate', { expression: evaluationTimedOutExpression })
+      assert.ok(
+        session.post.withArgs('Runtime.evaluate').firstCall.calledAfter(send.firstCall),
+        'should throttle after reporting the result'
+      )
+    })
+
+    it('should not attribute a slow evaluation to probes without templates', async function () {
+      const probe = genProcessedProbe('probe-1')
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          hrtime.returns(10_000_001n)
+          return Promise.resolve({ result: { value: [{}] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      assert.strictEqual(send.firstCall.args[3].evaluationErrors, undefined)
+      sinon.assert.neverCalledWith(session.post, 'Runtime.evaluate')
+    })
+
+    it('should report capture expressions that exceed the budget and throttle the probe', async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.compiledCaptureExpressions = [{
+        name: 'foo',
+        expression: 'foo',
+        limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+      }]
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method, params) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          if (params.expression === 'foo') {
+            hrtime.returns(10_000_001n)
+            return Promise.resolve({ result: { type: 'string', value: 'bar' } })
+          }
+          return Promise.resolve({ result: { value: [{}] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      const [, , , snapshot, , , incompleteReasons] = send.firstCall.args
+      assert.deepStrictEqual(snapshot.captures.lines[1].captureExpressions.foo, { type: 'string', value: 'bar' })
+      assert.deepStrictEqual(snapshot.evaluationErrors, [
+        { expr: 'foo', message: 'Expression evaluation exceeded its time budget of 10ms' },
+      ])
+      assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.TIMEOUT)
+      sinon.assert.calledWith(session.post, 'Runtime.evaluate', { expression: evaluationTimedOutExpression })
+    })
+
+    it('should log if throttling the probe fails', async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.templateRequiresEvaluation = true
+      probe.template = '["hello"]'
+      sampleProbe(probe)
+
+      const error = new Error('boom')
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          hrtime.returns(10_000_001n)
+          return Promise.resolve({ result: { value: [{}, ['hello']] } })
+        }
+        if (method === 'Runtime.evaluate') return Promise.reject(error)
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+      await new Promise((resolve) => setImmediate(resolve))
+
+      sinon.assert.calledWith(log.error, '[debugger:devtools_client] Error throttling probe %s', 'probe-1', error)
     })
   })
 
