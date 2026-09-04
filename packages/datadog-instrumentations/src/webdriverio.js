@@ -158,8 +158,10 @@ function retainRumBrowser (browser) {
   rumBrowsers.add(browser)
   if (rumBrowserSessionEndHandlers.has(browser) || typeof browser.on !== 'function') return
 
-  const sessionEndHandler = ({ command }) => {
-    if (command === 'deleteSession') releaseRumBrowser(browser)
+  const sessionEndHandler = ({ command, result }) => {
+    const closedFinalWindow = command === 'closeWindow' &&
+      Array.isArray(result?.value) && result.value.length === 0
+    if (command === 'deleteSession' || closedFinalWindow) releaseRumBrowser(browser)
   }
   rumBrowserSessionEndHandlers.set(browser, sessionEndHandler)
   browser.on('result', sessionEndHandler)
@@ -562,6 +564,25 @@ async function cleanupRumBrowserBeforeSessionEnd (browser) {
 }
 
 /**
+ * Stops and flushes RUM before closing the last window terminates its WebDriver session.
+ *
+ * @param {object} browser
+ * @returns {Promise<void>}
+ */
+async function cleanupRumBrowserBeforeLastWindowClose (browser) {
+  if (!rumBrowsers.has(browser) || typeof browser.getWindowHandles !== 'function') return
+
+  let windowHandles
+  try {
+    windowHandles = await browser.getWindowHandles()
+  } catch (error) {
+    log.error('WebdriverIO RUM window discovery error', error)
+    return
+  }
+  if (windowHandles.length === 1) await cleanupRumBrowserBeforeSessionEnd(browser)
+}
+
+/**
  * Prepares RUM around low-level WebDriver commands that bypass WebdriverIO's navigation helpers.
  *
  * @this {object}
@@ -571,6 +592,7 @@ async function cleanupRumBrowserBeforeSessionEnd (browser) {
 function handleRumProtocolCommand (command) {
   if (command === 'navigateTo') return preloadRumNavigation.call(this)
   if (command === 'deleteSession') return cleanupRumBrowserBeforeSessionEnd(this)
+  if (command === 'closeWindow') return cleanupRumBrowserBeforeLastWindowClose(this)
 }
 
 /**
@@ -582,7 +604,8 @@ function handleRumProtocolCommand (command) {
 function wrapRumProtocolCommand (context) {
   const command = context.arguments?.[2]?.command
   const protocolCommand = context.result
-  if ((command !== 'navigateTo' && command !== 'deleteSession') || typeof protocolCommand !== 'function') return
+  if ((command !== 'navigateTo' && command !== 'deleteSession' && command !== 'closeWindow') ||
+      typeof protocolCommand !== 'function') return
 
   context.result = async function (...args) {
     try {

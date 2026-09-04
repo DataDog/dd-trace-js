@@ -18,7 +18,7 @@ const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
 const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
-const { detectRum } = require('../src/rum-browser-scripts')
+const { detectRum, stopRumSession } = require('../src/rum-browser-scripts')
 const {
   adjustRunnerFailuresForTestOptimization,
   efdTests,
@@ -187,6 +187,32 @@ describe('webdriverio instrumentation', () => {
         isRumInstrumented: true,
         rumSamplingRate: null,
       })
+    } finally {
+      if (previousWindow === undefined) {
+        delete global.window
+      } else {
+        global.window = previousWindow
+      }
+    }
+  })
+
+  it('does not report an inactive RUM session as active when stopping it', () => {
+    const previousWindow = global.window
+    const getInternalContext = sinon.stub()
+      .onFirstCall().returns(undefined)
+      .onSecondCall().returns({ application_id: 'rum-app' })
+    const stopSession = sinon.stub()
+    global.window = {
+      DD_RUM: {
+        getInternalContext,
+        stopSession,
+      },
+    }
+
+    try {
+      assert.strictEqual(stopRumSession(), false)
+      assert.strictEqual(stopRumSession(), true)
+      assert.strictEqual(stopSession.callCount, 2)
     } finally {
       if (previousWindow === undefined) {
         delete global.window
@@ -1491,6 +1517,81 @@ describe('webdriverio instrumentation', () => {
 
       assert.strictEqual(browser.execute.callCount, 0)
       assert.strictEqual(browser.listenerCount('result'), 0)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('flushes RUM only when closeWindow terminates the final WebDriver session', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(webdriverFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, webdriverFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriver-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    const browser = Object.assign(new EventEmitter(), {
+      calls,
+      capabilities: {},
+      execute: sinon.stub().callsFake(() => {
+        calls.push('stop-rum')
+        return Promise.resolve(true)
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
+        calls.push('add-preload')
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push('remove-preload')
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete-cookies')
+        return Promise.resolve()
+      }),
+      windowHandles: ['window-a', 'window-b'],
+    })
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { closeWindow, getWindowHandles } = await import(pathToFileURL(outputPath))
+      browser.getWindowHandles = getWindowHandles
+
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+      await closeWindow.call(browser)
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'getWindowHandles',
+        'closeWindow',
+      ])
+
+      await closeWindow.call(browser)
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'getWindowHandles',
+        'closeWindow',
+        'getWindowHandles',
+        'remove-preload',
+        'stop-rum',
+        'delete-cookies',
+        'closeWindow',
+      ])
+
+      browser.execute.resetHistory()
+      const nextTestContext = {}
+      executeAsyncCh.start.runStores(nextTestContext, () => {})
+      await nextTestContext.rumStartCallback()
+      assert.strictEqual(browser.execute.callCount, 0)
     } finally {
       correlationCh.unsubscribe(correlate)
       await cleanupRumState()

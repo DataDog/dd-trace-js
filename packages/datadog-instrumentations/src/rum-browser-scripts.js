@@ -19,8 +19,11 @@ function detectRum () {
 /** @returns {boolean} */
 function stopRumSession () {
   if (window.DD_RUM && window.DD_RUM.stopSession) {
+    const isRumActive = window.DD_RUM.getInternalContext
+      ? !!window.DD_RUM.getInternalContext()
+      : false
     window.DD_RUM.stopSession()
-    return true
+    return isRumActive
   }
   return false
 }

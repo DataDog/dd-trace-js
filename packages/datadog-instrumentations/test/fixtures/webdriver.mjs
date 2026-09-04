@@ -7,8 +7,14 @@ function command_default (method, endpoint, commandInfo) {
     let runtimeOptions = {}
     runtimeOptions = args.at(-1) ?? runtimeOptions
     this.calls.push(command)
-    this.emit?.('result', { command })
-    return { args, endpoint, method, runtimeOptions }
+    let value = { args, endpoint, method, runtimeOptions }
+    if (command === 'getWindowHandles') value = this.windowHandles
+    if (command === 'closeWindow') {
+      this.windowHandles = this.windowHandles.slice(0, -1)
+      value = this.windowHandles
+    }
+    this.emit?.('result', { command, result: { value } })
+    return value
   }
 }
 
@@ -38,8 +44,10 @@ function initiateBidi () {
   }
 }
 
+const closeWindow = command_default('DELETE', '/session/:sessionId/window', { command: 'closeWindow' })
 const deleteSession = command_default('DELETE', '/session/:sessionId', { command: 'deleteSession' })
 const getTitle = command_default('GET', '/session/:sessionId/title', { command: 'getTitle' })
+const getWindowHandles = command_default('GET', '/session/:sessionId/window/handles', { command: 'getWindowHandles' })
 const navigateTo = command_default('POST', '/session/:sessionId/url', { command: 'navigateTo' })
 
-export { deleteSession, getTitle, initiateBidi, navigateTo }
+export { closeWindow, deleteSession, getTitle, getWindowHandles, initiateBidi, navigateTo }
