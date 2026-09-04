@@ -94,7 +94,7 @@ let hasReporterError = false
 let startedSuites = []
 
 // Browser-side callbacks live in a coverage-excluded file so coverage counters can't reach chromium.
-const { detectRum, stopRumSession } = require('./playwright-browser-scripts')
+const { detectRum, stopRumSession } = require('./rum-browser-scripts')
 
 const STATUS_TO_TEST_STATUS = {
   passed: 'pass',
