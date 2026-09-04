@@ -1,9 +1,10 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert/strict')
+const { setTimeout: delay } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
-const { assertObjectContains, assertUUID } = require('../helpers')
+const { assertObjectContains, assertUUID, stopProc } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const { pollInterval, setup } = require('./utils')
 
@@ -80,6 +81,54 @@ function expectProbeEvents (agent, configId, expectedPayloads, expectedAckUpdate
     agent.on('debugger-diagnostics', handleDiagnostics)
     agent.on('remote-config-ack-update', handleAckUpdate)
   })
+}
+
+/**
+ * @param {ReturnType<typeof setup>} t
+ * @param {Array<{ id: string, config: { id: string } }>} configs
+ * @param {string[]} expectedProbeIds
+ */
+async function captureEmittingProbesUntilExit (t, configs, expectedProbeIds) {
+  const configuredProbeIds = configs.map(config => config.config.id)
+  const probesInstalled = t.waitForProbeStatus(configuredProbeIds, 'INSTALLED')
+
+  for (const config of configs) {
+    t.agent.addRemoteConfig(config)
+  }
+  await probesInstalled
+
+  const emittingProbeIds = []
+  const pendingProbeIds = new Set(expectedProbeIds)
+  let resolveExpected
+  const expectedProbesReceived = new Promise(resolve => {
+    resolveExpected = resolve
+    if (pendingProbeIds.size === 0) resolve()
+  })
+
+  /** @param {{ payload: Array<{ debugger: { diagnostics: { probeId: string, status: string } } }> }} event */
+  function handleDiagnostics ({ payload }) {
+    for (const event of payload) {
+      const { diagnostics } = event.debugger
+      if (diagnostics.status !== 'EMITTING') continue
+
+      emittingProbeIds.push(diagnostics.probeId)
+      pendingProbeIds.delete(diagnostics.probeId)
+    }
+    if (pendingProbeIds.size === 0) resolveExpected()
+  }
+
+  t.agent.on('debugger-diagnostics', handleDiagnostics)
+  try {
+    const [response] = await Promise.all([
+      t.request(t.breakpoint.url),
+      expectedProbesReceived,
+    ])
+    if (expectedProbeIds.length === 0) await delay(2000)
+    await stopProc(t.proc)
+    return { emittingProbeIds, response }
+  } finally {
+    t.agent.removeListener('debugger-diagnostics', handleDiagnostics)
+  }
 }
 
 describe('Dynamic Instrumentation', function () {
@@ -249,235 +298,123 @@ describe('Dynamic Instrumentation', function () {
     }
 
     describe('multiple probes at the same location', function () {
-      it('should support adding multiple probes at the same location', function (done) {
-        const rcConfig1 = t.generateRemoteConfig()
-        const rcConfig2 = t.generateRemoteConfig()
+      it('should support adding multiple probes at the same location', async function () {
+        const configs = [t.generateRemoteConfig(), t.generateRemoteConfig()]
+        const probeIds = configs.map(config => config.config.id)
         const expectedPayloads = [{
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'RECEIVED' } },
+          debugger: { diagnostics: { probeId: probeIds[0], probeVersion: 0, status: 'RECEIVED' } },
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'RECEIVED' } },
+          debugger: { diagnostics: { probeId: probeIds[1], probeVersion: 0, status: 'RECEIVED' } },
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'INSTALLED' } },
+          debugger: { diagnostics: { probeId: probeIds[0], probeVersion: 0, status: 'INSTALLED' } },
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'INSTALLED' } },
+          debugger: { diagnostics: { probeId: probeIds[1], probeVersion: 0, status: 'INSTALLED' } },
         }]
+        const actualPayloads = []
+        const installedProbeIds = new Set()
+        let resolveInstalled
+        const probesInstalled = new Promise(resolve => { resolveInstalled = resolve })
 
-        t.agent.on('debugger-diagnostics', ({ payload }) => {
-          payload.forEach((event) => {
-            const expected = expectedPayloads.shift()
-            assertObjectContains(event, expected)
-          })
-          endIfDone()
-        })
+        /** @param {{ payload: Array<object> }} event */
+        function handleDiagnostics ({ payload }) {
+          for (const event of payload) {
+            actualPayloads.push(event)
+            const { probeId, status } = event.debugger?.diagnostics ?? {}
+            if (status === 'INSTALLED') installedProbeIds.add(probeId)
+          }
+          if (installedProbeIds.size === probeIds.length) resolveInstalled()
+        }
 
-        t.agent.addRemoteConfig(rcConfig1)
-        t.agent.addRemoteConfig(rcConfig2)
+        t.agent.on('debugger-diagnostics', handleDiagnostics)
+        try {
+          for (const config of configs) {
+            t.agent.addRemoteConfig(config)
+          }
+          await probesInstalled
+        } finally {
+          t.agent.removeListener('debugger-diagnostics', handleDiagnostics)
+        }
 
-        function endIfDone () {
-          if (expectedPayloads.length === 0) done()
+        assert.strictEqual(actualPayloads.length, expectedPayloads.length)
+        for (let i = 0; i < expectedPayloads.length; i++) {
+          assertObjectContains(actualPayloads[i], expectedPayloads[i])
+          assertUUID(actualPayloads[i].debugger.diagnostics.runtimeId)
         }
       })
 
-      it('should support triggering multiple probes added at the same location', function (done) {
-        let installed = 0
-        const rcConfig1 = t.generateRemoteConfig()
-        const rcConfig2 = t.generateRemoteConfig()
-        const expectedPayloads = new Map([
-          [rcConfig1.config.id, {
-            ddsource: 'dd_debugger',
-            service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'EMITTING' } },
-          }],
-          [rcConfig2.config.id, {
-            ddsource: 'dd_debugger',
-            service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } },
-          }],
-        ])
+      it('should support triggering multiple probes added at the same location', async function () {
+        const configs = [t.generateRemoteConfig(), t.generateRemoteConfig()]
+        const expectedProbeIds = configs.map(config => config.config.id)
+        const { emittingProbeIds, response } = await captureEmittingProbesUntilExit(t, configs, expectedProbeIds)
 
-        t.agent.on('debugger-diagnostics', ({ payload }) => {
-          payload.forEach((event) => {
-            const { diagnostics } = event.debugger
-            if (diagnostics.status === 'INSTALLED') {
-              if (++installed === 2) {
-                t.request(t.breakpoint.url).catch(done)
-              }
-            } else if (diagnostics.status === 'EMITTING') {
-              const expected = expectedPayloads.get(diagnostics.probeId)
-              assert.ok(expected, `expected payload not found for probe ${diagnostics.probeId}`)
-              expectedPayloads.delete(diagnostics.probeId)
-              assertObjectContains(event, expected)
-            }
-          })
-          endIfDone()
-        })
-
-        t.agent.addRemoteConfig(rcConfig1)
-        t.agent.addRemoteConfig(rcConfig2)
-
-        function endIfDone () {
-          if (expectedPayloads.size === 0) done()
-        }
+        assert.strictEqual(response.status, 200)
+        assert.deepStrictEqual(emittingProbeIds.sort(), expectedProbeIds.sort())
       })
 
-      it('should support not triggering any probes when all conditions are not met', function (done) {
-        let installed = 0
-        const rcConfig1 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } })
-        const rcConfig2 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'baz'] } } })
+      it('should support not triggering any probes when all conditions are not met', async function () {
+        const configs = [
+          t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } }),
+          t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'baz'] } } }),
+        ]
+        const { emittingProbeIds, response } = await captureEmittingProbesUntilExit(t, configs, [])
 
-        t.agent.on('debugger-diagnostics', ({ payload }) => {
-          payload.forEach((event) => {
-            const { diagnostics } = event.debugger
-            if (diagnostics.status === 'INSTALLED') {
-              if (++installed === 2) {
-                t.request(t.breakpoint.url).catch(done)
-                setTimeout(done, 2000)
-              }
-            } else if (diagnostics.status === 'EMITTING') {
-              assert.fail('should not trigger any probes when all conditions are not met')
-            }
-          })
-        })
-
-        t.agent.addRemoteConfig(rcConfig1)
-        t.agent.addRemoteConfig(rcConfig2)
+        assert.strictEqual(response.status, 200)
+        assert.deepStrictEqual(emittingProbeIds, [])
       })
 
-      it('should only trigger the probes whose conditions are met (all have conditions)', function (done) {
-        let installed = 0
-        const rcConfig1 = t.generateRemoteConfig({
-          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
-        })
-        const rcConfig2 = t.generateRemoteConfig({
-          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
-        })
-        const expectedPayloads = new Map([
-          [rcConfig2.config.id, {
-            ddsource: 'dd_debugger',
-            service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } },
-          }],
-        ])
+      it('should only trigger the probes whose conditions are met (all have conditions)', async function () {
+        const configs = [
+          t.generateRemoteConfig({
+            when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
+          }),
+          t.generateRemoteConfig({
+            when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
+          }),
+        ]
+        const expectedProbeIds = [configs[1].config.id]
+        const { emittingProbeIds, response } = await captureEmittingProbesUntilExit(t, configs, expectedProbeIds)
 
-        t.agent.on('debugger-diagnostics', ({ payload }) => {
-          payload.forEach((event) => {
-            const { diagnostics } = event.debugger
-            if (diagnostics.status === 'INSTALLED') {
-              if (++installed === 2) {
-                t.request(t.breakpoint.url).catch(done)
-              }
-            } else if (diagnostics.status === 'EMITTING') {
-              const expected = expectedPayloads.get(diagnostics.probeId)
-              assert.ok(expected, `expected payload not found for probe ${diagnostics.probeId}`)
-              expectedPayloads.delete(diagnostics.probeId)
-              assertObjectContains(event, expected)
-            }
-          })
-          endIfDone()
-        })
-
-        t.agent.addRemoteConfig(rcConfig1)
-        t.agent.addRemoteConfig(rcConfig2)
-
-        function endIfDone () {
-          if (expectedPayloads.size === 0) done()
-        }
+        assert.strictEqual(response.status, 200)
+        assert.deepStrictEqual(emittingProbeIds, expectedProbeIds)
       })
 
-      it('trigger on met condition, even if other condition throws (all have conditions)', function (done) {
-        let installed = 0
-        // this condition will throw because `foo` is not defined
-        const rcConfig1 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } })
-        const rcConfig2 = t.generateRemoteConfig({
-          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
-        })
-        const expectedPayloads = new Map([
-          [rcConfig2.config.id, {
-            ddsource: 'dd_debugger',
-            service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } },
-          }],
-        ])
+      it('trigger on met condition, even if other condition throws (all have conditions)', async function () {
+        const configs = [
+          t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } }),
+          t.generateRemoteConfig({
+            when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
+          }),
+        ]
+        const expectedProbeIds = [configs[1].config.id]
+        const { emittingProbeIds, response } = await captureEmittingProbesUntilExit(t, configs, expectedProbeIds)
 
-        t.agent.on('debugger-diagnostics', ({ payload }) => {
-          payload.forEach((event) => {
-            const { diagnostics } = event.debugger
-            if (diagnostics.status === 'INSTALLED') {
-              if (++installed === 2) {
-                t.request(t.breakpoint.url).catch(done)
-              }
-            } else if (diagnostics.status === 'EMITTING') {
-              const expected = expectedPayloads.get(diagnostics.probeId)
-              assert.ok(expected, `expected payload not found for probe ${diagnostics.probeId}`)
-              expectedPayloads.delete(diagnostics.probeId)
-              assertObjectContains(event, expected)
-            }
-          })
-          endIfDone()
-        })
-
-        t.agent.addRemoteConfig(rcConfig1)
-        t.agent.addRemoteConfig(rcConfig2)
-
-        function endIfDone () {
-          if (expectedPayloads.size === 0) done()
-        }
+        assert.strictEqual(response.status, 200)
+        assert.deepStrictEqual(emittingProbeIds, expectedProbeIds)
       })
 
-      it('should only trigger the probes whose conditions are met (not all have conditions)', function (done) {
-        let installed = 0
-        const rcConfig1 = t.generateRemoteConfig({
-          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
-        })
-        const rcConfig2 = t.generateRemoteConfig({
-          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
-        })
-        const rcConfig3 = t.generateRemoteConfig()
-        const expectedPayloads = new Map([
-          [rcConfig2.config.id, {
-            ddsource: 'dd_debugger',
-            service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } },
-          }],
-          [rcConfig3.config.id, {
-            ddsource: 'dd_debugger',
-            service: 'node',
-            debugger: { diagnostics: { probeId: rcConfig3.config.id, probeVersion: 0, status: 'EMITTING' } },
-          }],
-        ])
+      it('should only trigger the probes whose conditions are met (not all have conditions)', async function () {
+        const configs = [
+          t.generateRemoteConfig({
+            when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
+          }),
+          t.generateRemoteConfig({
+            when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
+          }),
+          t.generateRemoteConfig(),
+        ]
+        const expectedProbeIds = [configs[1].config.id, configs[2].config.id]
+        const { emittingProbeIds, response } = await captureEmittingProbesUntilExit(t, configs, expectedProbeIds)
 
-        t.agent.on('debugger-diagnostics', ({ payload }) => {
-          payload.forEach((event) => {
-            const { diagnostics } = event.debugger
-            if (diagnostics.status === 'INSTALLED') {
-              if (++installed === 3) {
-                t.request(t.breakpoint.url).catch(done)
-              }
-            } else if (diagnostics.status === 'EMITTING') {
-              const expected = expectedPayloads.get(diagnostics.probeId)
-              assert.ok(expected, `expected payload not found for probe ${diagnostics.probeId}`)
-              expectedPayloads.delete(diagnostics.probeId)
-              assertObjectContains(event, expected)
-            }
-          })
-          endIfDone()
-        })
-
-        t.agent.addRemoteConfig(rcConfig1)
-        t.agent.addRemoteConfig(rcConfig2)
-        t.agent.addRemoteConfig(rcConfig3)
-
-        function endIfDone () {
-          if (expectedPayloads.size === 0) done()
-        }
+        assert.strictEqual(response.status, 200)
+        assert.deepStrictEqual(emittingProbeIds.sort(), expectedProbeIds.sort())
       })
     })
   })
