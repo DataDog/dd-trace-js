@@ -57,6 +57,16 @@ describe('common Writer', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('reports a chunk overflow when requested', () => {
+    const error = new OverflowError(MAX_SIZE + 1)
+    encoder.makePayload.throws(error)
+    const done = sinon.stub()
+
+    writer.flush(done, { reportErrors: true })
+
+    sinon.assert.calledOnceWithExactly(done, error)
+  })
+
   it('rethrows non-overflow makePayload errors', () => {
     encoder.makePayload.throws(new Error('not an overflow'))
 
@@ -110,6 +120,18 @@ describe('common Writer', () => {
 
     sinon.assert.calledOnce(encoder.reset)
     sinon.assert.calledOnceWithExactly(done)
+  })
+
+  it('reports a dropped payload when the request buffer is full and errors are requested', () => {
+    request.writable = false
+    const done = sinon.stub()
+
+    writer.flush(done, { reportErrors: true })
+
+    sinon.assert.calledOnceWithMatch(done, {
+      code: 'ERR_DD_REQUEST_BUFFER_FULL',
+      message: 'Maximum active request buffer size reached: payload is discarded.',
+    })
   })
 
   it('retains a non-final payload under backpressure when configured', () => {

@@ -43,7 +43,7 @@ class AgentWriter extends BaseWriter {
    * Performs the writer flush without registering a serverless delivery.
    * Test Optimization owns its own request lifecycle tracking.
    * @param {(error?: Error) => void} [done]
-   * @param {{ deadline?: number }} [options]
+   * @param {{ deadline?: number, reportErrors?: boolean }} [options]
    * @returns {void}
    */
   flushDirect (done, options) {
@@ -73,7 +73,8 @@ class AgentWriter extends BaseWriter {
 
       if (err) {
         log.errorWithoutTelemetry('Error sending payload to the agent (status code: %s)', err.status, err)
-        done(flushOptions?.deadline === undefined ? undefined : err)
+        const reportError = flushOptions?.reportErrors || flushOptions?.deadline !== undefined
+        done(reportError ? err : undefined)
         return
       }
 
