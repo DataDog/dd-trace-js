@@ -23,18 +23,19 @@ default_level: gate
 presets:
   gate:
     cases:
-      - js-perf-lens-ungated-publish-001
-      - js-perf-pipeline-full-review-002
-      - js-coherence-comment-contradicts-code-003
-      - js-correctness-inverted-condition-009
-      - js-security-secret-into-log-004
-      - js-design-bypasses-config-registration-005
-      - js-maintainability-silent-catch-006
-      - js-conventions-async-in-production-path-007
-      - js-cross-sdk-new-env-var-not-verified-008
+      - js-perf-lens-ungated-publish
+      - js-perf-pipeline-full-review
+      - js-full-skill-simple-review
+      - js-coherence-comment-contradicts-code
+      - js-correctness-inverted-condition
+      - js-security-secret-into-log
+      - js-design-bypasses-config-registration
+      - js-maintainability-silent-catch
+      - js-conventions-async-in-production-path
+      - js-cross-sdk-new-env-var-not-verified
     runs: 5
   minimum:
-    cases: ["js-perf-lens-ungated-publish-001"]
+    cases: ["js-perf-lens-ungated-publish"]
     runs: 3
   full:
     runs: 3
@@ -47,5 +48,4 @@ policy:
 
 # The structural reference-integrity check (verify-skill-references.js) was removed:
 # it hand-duplicated a file list already kept in SKILL.md's roster table and
-# repo-context.md's references. Not reinstated pending the .llm-validation vs
-# .promptfoo consolidation decision.
+# repo-context.md's references, so it is not reinstated.

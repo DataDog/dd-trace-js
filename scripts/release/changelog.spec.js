@@ -387,7 +387,6 @@ describe('release changelog', () => {
 
     appendChangedPaths(internalFiles, [
       { filename: '.llm-validation/eval.json' },
-      { filename: '.promptfoo/dd-apm-sdk-review/config.yaml' },
       { filename: '.claude/settings.json' },
       { filename: '.cursor/skills/dd-apm-sdk-review/SKILL.md' },
       { filename: '.agents/dd-apm-sdk-review-overrides/reviewers/design.md' },
