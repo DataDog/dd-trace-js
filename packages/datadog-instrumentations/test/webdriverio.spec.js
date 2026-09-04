@@ -13,6 +13,7 @@ const MochaTest = require('mocha/lib/test')
 const sinon = require('sinon')
 
 const MochaPlugin = require('../../datadog-plugin-mocha/src')
+const { storage } = require('../../datadog-core')
 const log = require('../../dd-trace/src/log')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
@@ -1461,6 +1462,57 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('does not install a second BiDi preload when removing the previous one fails', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    let testExecutionId = 'first-test-id'
+    const browser = {
+      capabilities: {},
+      execute: sinon.stub().resolves(false),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub()
+        .onFirstCall().resolves({ script: 'first-preload' })
+        .onSecondCall().resolves({ script: 'second-preload' }),
+      scriptRemovePreloadScript: sinon.stub()
+        .onFirstCall().rejects(new Error('temporary BiDi failure'))
+        .onSecondCall().resolves(),
+      sessionId: 'session-a',
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => { context.testExecutionId = testExecutionId }
+    const prepareNavigation = (browser) => {
+      const context = { self: browser }
+      urlCh.start.runStores(context, () => {})
+      return context.rumPreloadCallback.call(browser)
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      await prepareNavigation(browser)
+      testExecutionId = 'second-test-id'
+      await prepareNavigation(browser)
+
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
+
+      await prepareNavigation(browser)
+
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 2)
+      assert.deepStrictEqual(browser.scriptRemovePreloadScript.args, [
+        [{ script: 'first-preload' }],
+        [{ script: 'first-preload' }],
+      ])
+      assert.deepStrictEqual(browser.scriptAddPreloadScript.secondCall.args[0].arguments, [{
+        type: 'string',
+        value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=second-test-id; path=/`,
+      }])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
   it('flushes RUM before a WebDriver session is deleted and then forgets the browser', async () => {
     require('../src/webdriverio')
 
@@ -2145,7 +2197,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('visits the top-level document before restoring a selected frame', async () => {
+  it('visits every child frame before restoring a selected frame', async () => {
     require('../src/webdriverio')
 
     const correlationCh = channel('ci:webdriverio:rum:page-navigate')
@@ -2153,6 +2205,15 @@ describe('webdriverio instrumentation', () => {
     const calls = []
     let currentContext = 'frame-a'
     const browser = {
+      browsingContextGetTree: sinon.stub().resolves({
+        contexts: [{
+          context: 'window-a',
+          children: [{
+            context: 'frame-a',
+            children: [{ context: 'frame-b', children: [] }],
+          }],
+        }],
+      }),
       capabilities: {},
       execute: sinon.stub().callsFake((script) => {
         if (script.name === 'getCurrentRumContext') return Promise.resolve({ context: currentContext })
@@ -2188,9 +2249,79 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(calls, [
         'switch:window-a',
         'stop:window-a',
+        'switch:window-a',
+        'frame:frame-a',
+        'stop:frame-a',
+        'switch:window-a',
+        'frame:frame-b',
+        'stop:frame-b',
+        'switch:window-a',
         'frame:frame-a',
       ])
+      assert.deepStrictEqual(browser.switchFrame.args, [['frame-a'], ['frame-b'], ['frame-a']])
       assert.strictEqual(currentContext, 'frame-a')
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('detects active RUM inside a child frame at test completion', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const rumStates = []
+    let currentContext = 'window-a'
+    const browser = {
+      browsingContextGetTree: sinon.stub().resolves({
+        contexts: [{
+          context: 'window-a',
+          children: [{ context: 'rum-frame', children: [] }],
+        }],
+      }),
+      capabilities: {},
+      execute: sinon.stub().callsFake((script) => {
+        if (script.name === 'getCurrentRumContext') return Promise.resolve({ context: currentContext })
+        if (script.name === 'detectRum') {
+          const isRumActive = currentContext === 'rum-frame'
+          return Promise.resolve({ isRumActive, isRumInstrumented: isRumActive, rumSamplingRate: 100 })
+        }
+        return Promise.resolve(false)
+      }),
+      getWindowHandle: sinon.stub().resolves('window-a'),
+      getWindowHandles: sinon.stub().resolves(['window-a']),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchFrame: sinon.stub().callsFake((context) => {
+        currentContext = context
+        return Promise.resolve()
+      }),
+      switchToWindow: sinon.stub().callsFake((context) => {
+        currentContext = context
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      rumStates.push(context.isRumActive)
+      context.testExecutionId = 'test-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runCallback(testContext.resolveCallback)
+
+      assert.deepStrictEqual(rumStates, [undefined, true])
+      assert.strictEqual(currentContext, 'window-a')
     } finally {
       correlationCh.unsubscribe(correlate)
       await cleanupRumState()
@@ -3202,6 +3333,35 @@ describe('webdriverio instrumentation', () => {
 
       assert.strictEqual(addDiProbe.callCount, 1)
       assert.strictEqual(test.hasFailedAttempt, true)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('preserves active RUM browser metadata when an inactive browser reports later', () => {
+    const { plugin, spans } = createJasminePlugin({})
+    const file = path.join(process.cwd(), 'multiple-browsers.spec.js')
+    const result = createJasmineResult('multiple browsers', file, 'passed')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      storage('legacy').run({ span: spans[0] }, () => {
+        correlationCh.publish({
+          browserName: 'chrome',
+          browserVersion: '123',
+          isRumActive: true,
+        })
+        correlationCh.publish({
+          browserName: 'firefox',
+          browserVersion: '122',
+          isRumActive: false,
+        })
+      })
+
+      assert.strictEqual(spans[0].context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+      assert.strictEqual(spans[0].context().getTag(TEST_BROWSER_NAME), 'chrome')
+      assert.strictEqual(spans[0].context().getTag(TEST_BROWSER_VERSION), '123')
     } finally {
       plugin.configure(false)
     }

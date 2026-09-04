@@ -194,7 +194,7 @@ async function installRumPreloadScript (browser, testExecutionId) {
     if (preloadScript && preloadScript.sessionId === browser.sessionId &&
         preloadScript.testExecutionId === testExecutionId) return
     if (preloadScript && preloadScript.sessionId === browser.sessionId) {
-      await removeRumPreloadScript(browser)
+      if (!await removeRumPreloadScript(browser)) return
     } else {
       rumBrowserPreloadScripts.delete(browser)
     }
@@ -214,19 +214,45 @@ async function installRumPreloadScript (browser, testExecutionId) {
  * Removes a browser-wide RUM correlation preload.
  *
  * @param {object} browser
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>}
  */
 async function removeRumPreloadScript (browser) {
   const preloadScript = rumBrowserPreloadScripts.get(browser)
-  rumBrowserPreloadScripts.delete(browser)
-  if (!preloadScript || preloadScript.sessionId !== browser.sessionId ||
-      typeof browser.scriptRemovePreloadScript !== 'function') return
+  if (!preloadScript) return true
+  if (preloadScript.sessionId !== browser.sessionId) {
+    if (rumBrowserPreloadScripts.get(browser) === preloadScript) rumBrowserPreloadScripts.delete(browser)
+    return true
+  }
+  if (typeof browser.scriptRemovePreloadScript !== 'function') return false
 
   try {
     await browser.scriptRemovePreloadScript({ script: preloadScript.script })
+    if (rumBrowserPreloadScripts.get(browser) === preloadScript) rumBrowserPreloadScripts.delete(browser)
+    return true
   } catch (error) {
     log.error('WebdriverIO RUM correlation preload cleanup error', error)
+    return false
   }
+}
+
+/**
+ * Returns every descendant browsing context in a BiDi context tree.
+ *
+ * @param {object[]} contexts
+ * @returns {string[]}
+ */
+function getRumChildContexts (contexts) {
+  const childContexts = []
+  const pendingContexts = [...contexts]
+  while (pendingContexts.length) {
+    const context = pendingContexts.shift()
+    if (!context?.children) continue
+    for (const child of context.children) {
+      childContexts.push(child.context)
+      pendingContexts.push(child)
+    }
+  }
+  return childContexts
 }
 
 /**
@@ -464,12 +490,41 @@ async function forEachRumWindow (browser, operation, value) {
     }
     // eslint-disable-next-line no-await-in-loop
     await operation(browser, value)
+
+    if (browser.isBidi &&
+        typeof browser.browsingContextGetTree === 'function' && typeof browser.switchFrame === 'function') {
+      let childContexts = []
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const contextTree = await browser.browsingContextGetTree({ root: windowHandle })
+        childContexts = getRumChildContexts(contextTree.contexts || [])
+      } catch (error) {
+        log.error('WebdriverIO RUM frame discovery error', error)
+      }
+
+      for (const childContext of childContexts) {
+        try {
+          // Reset to the window root so WebdriverIO can resolve nested frame paths consistently.
+          // eslint-disable-next-line no-await-in-loop
+          await browser.switchToWindow(windowHandle)
+          // eslint-disable-next-line no-await-in-loop
+          await browser.switchFrame(childContext)
+          isTopLevel = false
+        } catch (error) {
+          isTopLevel = true
+          log.error('WebdriverIO RUM frame switch error', error)
+          continue
+        }
+        // eslint-disable-next-line no-await-in-loop
+        await operation(browser, value)
+      }
+    }
   }
 
   const canRestoreWindow = windowHandles.includes(currentWindowHandle)
-  if (canRestoreWindow && (activeWindowHandle !== currentWindowHandle || currentFrameContext)) {
+  if (canRestoreWindow && (activeWindowHandle !== currentWindowHandle || !isTopLevel || currentFrameContext)) {
     try {
-      if (activeWindowHandle !== currentWindowHandle) await browser.switchToWindow(currentWindowHandle)
+      if (activeWindowHandle !== currentWindowHandle || !isTopLevel) await browser.switchToWindow(currentWindowHandle)
       if (currentFrameContext) await browser.switchFrame(currentFrameContext)
     } catch (error) {
       log.error('WebdriverIO RUM browsing context restore error', error)

@@ -63,6 +63,8 @@ const {
   isModifiedTest,
   setRumTestCorrelation,
   TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION,
+  TEST_IS_RUM_ACTIVE,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -152,6 +154,30 @@ function getJasmineError (result) {
     error.stack = failedExpectation.stack
   }
   return error
+}
+
+/**
+ * Applies WebdriverIO RUM correlation without replacing active-browser metadata with an inactive browser.
+ *
+ * @param {object} context
+ * @param {object|undefined} activeSpan
+ * @returns {object|undefined}
+ */
+function setWebdriverioRumTestCorrelation (context, activeSpan) {
+  const browserVersion = context.browserVersion
+  const correlationContext = {
+    isRumActive: context.isRumActive,
+    testExecutionId: context.testExecutionId,
+  }
+  const testSpan = setRumTestCorrelation(correlationContext, activeSpan)
+  context.testExecutionId = correlationContext.testExecutionId
+  if (!testSpan) return
+
+  const hasActiveRum = testSpan.context().getTag(TEST_IS_RUM_ACTIVE)
+  if (!context.isRumActive && hasActiveRum) return testSpan
+  if (context.browserName) testSpan.setTag(TEST_BROWSER_NAME, context.browserName)
+  if (browserVersion) testSpan.setTag(TEST_BROWSER_VERSION, browserVersion)
+  return testSpan
 }
 
 /**
@@ -297,11 +323,7 @@ class MochaPlugin extends CiPlugin {
       ctx.isTestOptimizationRunner = true
 
       const activeSpan = storage('legacy').getStore()?.span
-      const testSpan = setRumTestCorrelation(ctx, activeSpan)
-      if (!testSpan) return
-      if (ctx.browserName) {
-        testSpan.setTag(TEST_BROWSER_NAME, ctx.browserName)
-      }
+      setWebdriverioRumTestCorrelation(ctx, activeSpan)
     })
 
     this.addBind(jasmineTestFunctionStartCh, (ctx) => {
@@ -1286,19 +1308,13 @@ class MochaPlugin extends CiPlugin {
    */
   async #retryWebdriverioJasmineTestWithRumCorrelation (context, test, error) {
     const correlationContext = await context.rumRetryCallback?.() || {}
-    let testSpan = setRumTestCorrelation(correlationContext, test.span)
-    if (correlationContext.browserName) {
-      testSpan?.setTag(TEST_BROWSER_NAME, correlationContext.browserName)
-    }
+    setWebdriverioRumTestCorrelation(correlationContext, test.span)
 
     await this.#retryWebdriverioJasmineTest(test, error)
 
     const testExecutionId = test.span.context().toTraceId()
     await context.rumRetryCallback?.(testExecutionId)
-    testSpan = setRumTestCorrelation(correlationContext, test.span)
-    if (correlationContext.browserName) {
-      testSpan?.setTag(TEST_BROWSER_NAME, correlationContext.browserName)
-    }
+    setWebdriverioRumTestCorrelation(correlationContext, test.span)
   }
 
   /**
