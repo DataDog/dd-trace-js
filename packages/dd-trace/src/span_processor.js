@@ -40,6 +40,13 @@ class SpanProcessor {
     }
   }
 
+  /**
+   * A rule's reject decision can later be overridden (e.g. a product force-keeping the trace via
+   * `PrioritySampler.keepTrace()`), so `discard` only applies while the priority is still a reject.
+   *
+   * @param {import('./opentracing/span_context')} spanContext
+   * @returns {boolean}
+   */
   #isDiscarded (spanContext) {
     return spanContext._sampling.discard && spanContext._sampling.priority <= AUTO_REJECT
   }
