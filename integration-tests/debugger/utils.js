@@ -88,7 +88,8 @@ module.exports = {
  * Setup the integration test harness for live‑debugger scenarios.
  *
  * @param {object} [options] The options for the test environment.
- * @param {object} [options.env] The environment variables to set in the test environment.
+ * @param {object|((agent: import('../helpers').FakeAgent) => object)} [options.env] The environment variables to set
+ *   in the test environment, or a function that derives them from the started fake agent.
  * @param {string} [options.testApp] The path to the test application file.
  * @param {string} [options.testAppSource] The path to the test application source file.
  * @param {string[]} [options.dependencies] The dependencies to install in the test environment.
@@ -227,7 +228,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
         DD_TRACE_AGENT_PORT: t.agent.port,
         DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
         DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
-        ...env,
+        ...(typeof env === 'function' ? env(t.agent) : env),
       },
       silent: silent ?? false,
     }, stdioHandler, stderrHandler)
@@ -311,24 +312,39 @@ function testBasicInputWithoutRC (t, probe, done) {
  * @param {Function} done - The mocha done callback.
  * @param {import('../../packages/dd-trace/test/debugger/devtools_client/utils').ProbeConfig} [probe] - Optional probe
  *   config to use instead of t.rcConfig.config.
+ * @param {object} [traceOptions] - Options for reading the request span from the fake agent.
+ * @param {'message'|'otlp-traces'} [traceOptions.event] - Fake agent event carrying the request span.
+ * @param {(span: object) => void} [traceOptions.validateSpan] - Additional assertion for the matching request span.
  */
-function setupAssertionListeners (t, done, probe) {
+function setupAssertionListeners (t, done, probe, traceOptions = {}) {
   let traceId, spanId, dd
+  const { event = 'message', validateSpan = () => {} } = traceOptions
 
   const messageListener = ({ payload }) => {
-    const span = payload
-      .flat()
-      .find((span) => span.name === 'fastify.request' && (!dd || span.span_id.toString() === dd.span_id))
+    const spans = event === 'message'
+      ? payload.flat()
+      : payload.resourceSpans.flatMap(({ scopeSpans }) => scopeSpans.flatMap(({ spans }) => spans))
+    const span = spans.find((span) => {
+      if (event === 'message') {
+        return span.name === 'fastify.request' && (!dd || span.span_id.toString() === dd.span_id)
+      }
+
+      const isFastifyRequest = span.attributes?.some(({ key, value }) => (
+        key === 'operation.name' && value.stringValue === 'fastify.request'
+      ))
+      return isFastifyRequest && (!dd || BigInt(`0x${span.spanId}`).toString() === dd.span_id)
+    })
 
     if (!span) return
 
-    traceId = span.trace_id.toString()
-    spanId = span.span_id.toString()
+    validateSpan(span)
+    traceId = event === 'message' ? span.trace_id.toString() : BigInt(`0x${span.traceId.slice(-16)}`).toString()
+    spanId = event === 'message' ? span.span_id.toString() : BigInt(`0x${span.spanId}`).toString()
 
     assertDD()
   }
 
-  t.agent.on('message', messageListener)
+  t.agent.on(event, messageListener)
 
   t.agent.once('debugger-input', ({ payload }) => {
     assertBasicInputPayload(t, payload, probe)
@@ -352,7 +368,7 @@ function setupAssertionListeners (t, done, probe) {
     if (!traceId || !spanId || !dd) return
     assert.strictEqual(dd.trace_id, traceId)
     assert.strictEqual(dd.span_id, spanId)
-    t.agent.removeListener('message', messageListener)
+    t.agent.removeListener(event, messageListener)
     done()
   }
 }
