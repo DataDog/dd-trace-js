@@ -4704,6 +4704,12 @@ declare namespace tracer {
        * Each definition requires a `name` and optionally accepts `description`, `schema`, and `version`.
        * */
       toolDefinitions?: ToolDefinition[]
+
+      /**
+       * An Agent object identifying the versioned agent this span represents.
+       * Only used on `agent` spans.
+       */
+      agent?: Agent
     }
 
     interface AnnotationContextOptions {
@@ -4728,6 +4734,24 @@ declare namespace tracer {
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
+
+      /**
+       * An Agent object identifying the versioned agent running in this context. Sets the
+       * `agent_version` tag on `agent` spans created within the context; other span kinds
+       * are unaffected.
+       */
+      agent?: Agent,
+    }
+
+    /**
+     * An Agent object that identifies a versioned agent.
+     */
+    interface Agent {
+      /**
+       * User tag for the version of the agent. Set as an `agent_version` tag on the agent span
+       * only, never on its children.
+       */
+      version?: string,
     }
 
     interface RoutingContextOptions {
@@ -4785,6 +4809,12 @@ declare namespace tracer {
        * If not provided for LLM or embedding spans, a default value of 'custom' will be set.
        */
       modelProvider?: string,
+
+      /**
+       * The version of this agent. Set as an `agent_version` tag on this span, and not on its
+       * child spans. Only used on `agent` spans.
+       */
+      version?: string,
     }
 
     interface LLMObsNamedSpanOptions extends LLMObsSpanOptions {
