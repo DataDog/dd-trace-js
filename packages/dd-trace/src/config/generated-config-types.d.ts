@@ -408,6 +408,7 @@ export interface GeneratedConfig {
     captureTimeoutMs: number;
     enabled: boolean;
     probeFile: string | undefined;
+    queueMaxBytes: number;
     redactedIdentifiers: string[];
     redactionExcludedIdentifiers: string[];
     uploadIntervalSeconds: number;
@@ -692,6 +693,7 @@ export interface GeneratedEnvVarConfig {
   DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: number;
   DD_DYNAMIC_INSTRUMENTATION_ENABLED: boolean;
   DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: string | undefined;
+  DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: number;
   DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: string[];
   DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: string[];
   DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: number;

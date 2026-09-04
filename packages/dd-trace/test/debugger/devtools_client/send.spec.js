@@ -7,7 +7,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const { EVENT_TYPE, INCOMPLETE_REASON } = require('../../../src/debugger/guardrail-metrics')
+const { DROPPED_REASON, EVENT_TYPE, INCOMPLETE_REASON } = require('../../../src/debugger/guardrail-metrics')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { version: debuggerVersion } = require('../../../../../package.json')
 const { getRequestOptions } = require('./utils')
@@ -25,7 +25,7 @@ const hostname = getHostname()
 const message = 'my-message'
 const logger = { logger: true }
 const dd = { dd: true }
-const snapshot = { snapshot: true }
+const snapshot = { snapshot: true, probe: { id: 'my-probe-id' } }
 const MAX_MESSAGE_LENGTH = 8 * 1024 // Mirrors the limit in send.js
 
 describe('input message http requests', function () {
@@ -37,9 +37,13 @@ describe('input message http requests', function () {
   let request
   /** @type {sinon.SinonSpy} */
   let jsonBufferWrite
+  /** @type {JSONBuffer} */
+  let jsonBufferInstance
+  /** @type {typeof JSONBuffer} */
+  let JSONBufferSpy
   /** @type {sinon.SinonStub} */
   let pruneSnapshotStub
-  /** @type {{ captureIncomplete: sinon.SinonStub, '@noCallThru': boolean }} */
+  /** @type {{ captureIncomplete: sinon.SinonStub, eventDropped: sinon.SinonStub, '@noCallThru': boolean }} */
   let guardrailMetrics
 
   beforeEach(function () {
@@ -53,11 +57,13 @@ describe('input message http requests', function () {
     pruneSnapshotStub = sinon.stub()
     pruneSnapshotStub['@noCallThru'] = true
 
-    guardrailMetrics = { captureIncomplete: sinon.stub(), '@noCallThru': true }
+    guardrailMetrics = { captureIncomplete: sinon.stub(), eventDropped: sinon.stub(), '@noCallThru': true }
 
-    class JSONBufferSpy extends JSONBuffer {
+    JSONBufferSpy = class JSONBufferSpy extends JSONBuffer {
+      /** @param {ConstructorParameters<typeof JSONBuffer>} args */
       constructor (...args) {
         super(...args)
+        jsonBufferInstance = this
         jsonBufferWrite = sinon.spy(this, 'write')
       }
     }
@@ -246,7 +252,7 @@ describe('input message http requests', function () {
 
     const sendV2 = proxyquire('../../../src/debugger/devtools_client/send', {
       './config': configStub,
-      './json-buffer': JSONBuffer,
+      './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': requestWith404,
       './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
       './guardrail-metrics': guardrailMetrics,
@@ -274,6 +280,9 @@ describe('input message http requests', function () {
 
     // Verify config was updated to diagnostics
     assert.strictEqual(configStub.inputPath, '/debugger/v1/diagnostics')
+
+    // The payload is released from the upload queue once the fallback request completes
+    assert.strictEqual(jsonBufferInstance.queuedBytes, 0)
 
     done()
   })
@@ -450,6 +459,64 @@ describe('input message http requests', function () {
     })
   })
 
+  describe('upload queue', function () {
+    it('should bound the queue using the configured maximum', function () {
+      const boundedSend = proxyquire('../../../src/debugger/devtools_client/send', {
+        './config': createConfigMock({ dynamicInstrumentation: { queueMaxBytes: 1024, uploadIntervalSeconds: 1 } }),
+        './json-buffer': JSONBufferSpy,
+        '../../exporters/common/request': request,
+        './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+        './guardrail-metrics': guardrailMetrics,
+      })
+      const largeMessage = 'x'.repeat(2048)
+
+      boundedSend(largeMessage, logger, dd, snapshot, undefined, EVENT_TYPE.SNAPSHOT, INCOMPLETE_REASON.DEPTH)
+
+      sinon.assert.calledOnceWithExactly(guardrailMetrics.eventDropped, DROPPED_REASON.QUEUE_FULL, EVENT_TYPE.SNAPSHOT)
+      sinon.assert.notCalled(guardrailMetrics.captureIncomplete)
+      clock.tick(1000)
+      sinon.assert.notCalled(request)
+    })
+
+    it('should drop probe results while uploads still in flight fill the queue', function () {
+      const boundedSend = proxyquire('../../../src/debugger/devtools_client/send', {
+        './config': createConfigMock({ dynamicInstrumentation: { queueMaxBytes: 1024, uploadIntervalSeconds: 1 } }),
+        './json-buffer': JSONBufferSpy,
+        '../../exporters/common/request': request,
+        './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+        './guardrail-metrics': guardrailMetrics,
+      })
+      const largeMessage = 'x'.repeat(600)
+
+      boundedSend(largeMessage, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+      clock.tick(1000)
+      sinon.assert.calledOnce(request)
+
+      boundedSend(largeMessage, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+
+      sinon.assert.calledOnceWithExactly(guardrailMetrics.eventDropped, DROPPED_REASON.QUEUE_FULL, EVENT_TYPE.LOG)
+
+      // Completing the upload releases the queue
+      request.lastCall.args[2](null, '', 202)
+      boundedSend(largeMessage, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+      clock.tick(1000)
+
+      sinon.assert.calledOnce(guardrailMetrics.eventDropped)
+      sinon.assert.calledTwice(request)
+    })
+
+    it('should release the payload from the queue when the upload fails', function () {
+      send(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+      clock.tick(1000)
+      sinon.assert.calledOnce(request)
+      assert.ok(jsonBufferInstance.queuedBytes > 0, `Expected ${jsonBufferInstance.queuedBytes} > 0`)
+
+      request.lastCall.args[2](new Error('boom'))
+
+      assert.strictEqual(jsonBufferInstance.queuedBytes, 0)
+    })
+  })
+
   describe('guardrail metrics', function () {
     it('should not record complete captures', function () {
       send(message, logger, dd, snapshot, undefined, EVENT_TYPE.SNAPSHOT, 0)
@@ -522,6 +589,7 @@ function createConfigMock (overrides = {}) {
     inputPath: '/debugger/v2/input',
     maxTotalPayloadSize: 5 * 1024 * 1024,
     dynamicInstrumentation: {
+      queueMaxBytes: 10 * 1024 * 1024,
       uploadIntervalSeconds: 1,
     },
     ...overrides,

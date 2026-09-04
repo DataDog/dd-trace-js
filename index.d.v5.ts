@@ -1356,6 +1356,15 @@ declare namespace tracer {
       uploadIntervalSeconds?: number
 
       /**
+       * Maximum number of bytes of probe data held in memory while waiting to be uploaded, including uploads that are
+       * still in flight. Probe data produced while the limit is reached is dropped.
+       * @default 10485760
+       * @env DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      queueMaxBytes?: number
+
+      /**
        * List of identifier names to redact in captured data.
        * These are added to the built-in default list, which always applies.
        * See {@link https://github.com/DataDog/dd-trace-js/blob/master/packages/dd-trace/src/debugger/devtools_client/snapshot/redaction.js | redaction.js}
