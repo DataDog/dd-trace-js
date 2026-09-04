@@ -144,10 +144,12 @@ function createMatcher (dcModule) {
     configureGraphqlJitRuntime,
     configureMercuriusRequest,
     publishDurableOrchestrationFailure,
-    postgresQueryHandlers,
-    postgresQueryLifecycle,
     waitForAsyncEnd,
   } = require('./transforms')
+  const {
+    postgresQueryHandlers,
+    postgresQueryLifecycle,
+  } = require('./transforms/postgres')
 
   const matcher = create(instrumentations, dcModule)
 
