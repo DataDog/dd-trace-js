@@ -47,10 +47,11 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
   /** @type {ReturnType<typeof processRawState> | null} */
   let processedState = null
 
-  for (const scope of callFrame.scopeChain) {
-    if (scope.type === 'global') continue // The global scope is too noisy
-    const { objectId } = scope.object
-    if (objectId === undefined) continue // I haven't seen this happen, but according to the types it's possible
+  const { scopeChain } = callFrame
+  for (let i = 0; i < scopeChain.length; i++) {
+    const scope = scopeChain[i]
+    if (!isCollectable(scope)) continue
+    const objectId = /** @type {string} */ (scope.object.objectId)
     try {
       // The objectId for a scope points to a pseudo-object whose properties are the actual variables in the scope.
       // This is why we can just call `collectObjectProperties` directly and expect it to return the in-scope variables
@@ -69,11 +70,14 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
         { cause: err } // TODO: The cause is not used by the backend
       ))
     }
-    if (ctx.deadlineReached === true) break // TODO: Bad UX; Variables in remaining scopes are silently dropped
+    if (ctx.deadlineReached === true) {
+      // Nodes skipped within this scope carry the timeout marker and are recorded when processed (unless they end up
+      // redacted), but the remaining scopes are dropped without any marker.
+      // TODO: Bad UX; Variables in remaining scopes are silently dropped
+      if (hasCollectableScope(scopeChain, i + 1)) incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
+      break
+    }
   }
-
-  // Scopes remaining after the deadline is reached are dropped without any node carrying the timeout marker
-  if (ctx.deadlineReached === true) incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
 
   // Delay calling `processRawState` so caller can resume the main thread before processing `rawState`
   return {
@@ -84,6 +88,27 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
     fatalErrors: ctx.fatalErrors,
     incomplete,
   }
+}
+
+/**
+ * @param {import('inspector').Debugger.Scope} scope
+ * @returns {boolean} Whether the variables of the scope are collected into the snapshot
+ */
+function isCollectable (scope) {
+  // The global scope is too noisy, and a scope without an object id is possible according to the types
+  return scope.type !== 'global' && scope.object.objectId !== undefined
+}
+
+/**
+ * @param {import('inspector').Debugger.Scope[]} scopeChain
+ * @param {number} from - The index to start looking from
+ * @returns {boolean} Whether any of the scopes from `from` onwards would be collected into the snapshot
+ */
+function hasCollectableScope (scopeChain, from) {
+  for (let i = from; i < scopeChain.length; i++) {
+    if (isCollectable(scopeChain[i])) return true
+  }
+  return false
 }
 
 /**

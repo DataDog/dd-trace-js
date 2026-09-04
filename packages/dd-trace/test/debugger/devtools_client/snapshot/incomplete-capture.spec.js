@@ -20,7 +20,13 @@ const {
 } = require('./utils')
 
 const target = getTargetCodePath(__filename)
-const { runWithHugeObject, runWithManyLocals, runWithRedactedValues } = require(target)
+const {
+  runWithHugeObject,
+  runWithManyLocals,
+  runWithRedactedValues,
+  runWithRedactedObject,
+  runWithRedactedObjectAndClosure,
+} = require(target)
 
 // A deadline that has already passed, so the collector stops at the first opportunity
 const EXPIRED_DEADLINE_NS = 0n
@@ -84,6 +90,29 @@ describe('debugger -> devtools client -> snapshot incomplete capture reasons', f
         assert.deepStrictEqual(Object.keys(state), ['first', 'second', 'third'])
         assert.strictEqual(incomplete.reasons, 0)
       })
+
+    it('should not record a timeout that only cut short a value that ends up redacted', async function () {
+      const { processLocalState, incomplete } = await whilePaused((callFrame) => {
+        return getLocalStateForCallFrame(callFrame, DEFAULT_CAPTURE_LIMITS, EXPIRED_DEADLINE_NS)
+      }, { line: 35, trigger: runWithRedactedObject })
+
+      const state = processLocalState()
+
+      assert.deepStrictEqual(state, { password: { type: 'Object', notCapturedReason: 'redactedIdent' } })
+      assert.strictEqual(incomplete.reasons, 0)
+    })
+
+    it('should record a timeout that drops the remaining scopes', async function () {
+      const { processLocalState, incomplete } = await whilePaused((callFrame) => {
+        return getLocalStateForCallFrame(callFrame, DEFAULT_CAPTURE_LIMITS, EXPIRED_DEADLINE_NS)
+      }, { line: 43, trigger: runWithRedactedObjectAndClosure() })
+
+      const state = processLocalState()
+
+      // The closure scope holding `fromClosure` is never collected, which is only observable through the metric
+      assert.deepStrictEqual(state, { password: { type: 'Object', notCapturedReason: 'redactedIdent' } })
+      assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.TIMEOUT)
+    })
 
     it('should not record limits enforced on values that end up redacted', async function () {
       const { processLocalState, incomplete } = await whilePaused((callFrame) => {

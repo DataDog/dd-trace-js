@@ -29,4 +29,26 @@ function runWithRedactedValues () {
   return 'my return value' // breakpoint at this line
 }
 
-module.exports = { run, runWithHugeObject, runWithManyLocals, runWithRedactedValues }
+function runWithRedactedObject () {
+  // eslint-disable-next-line no-unused-vars
+  const password = { nested: { deeper: 42 } }
+  return 'my return value' // breakpoint at this line
+}
+
+function runWithRedactedObjectAndClosure () {
+  const fromClosure = { foo: 'bar' }
+  return function inner () {
+    // eslint-disable-next-line no-unused-vars
+    const password = { nested: { deeper: 42 } }
+    return fromClosure // breakpoint at this line
+  }
+}
+
+module.exports = {
+  run,
+  runWithHugeObject,
+  runWithManyLocals,
+  runWithRedactedValues,
+  runWithRedactedObject,
+  runWithRedactedObjectAndClosure,
+}
