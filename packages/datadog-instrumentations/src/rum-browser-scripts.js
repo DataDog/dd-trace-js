@@ -19,6 +19,15 @@ function detectRum () {
 /** @returns {boolean} */
 function stopRumSession () {
   if (window.DD_RUM && window.DD_RUM.stopSession) {
+    window.DD_RUM.stopSession()
+    return true
+  }
+  return false
+}
+
+/** @returns {boolean} */
+function stopRumSessionAndReportActivity () {
+  if (window.DD_RUM && window.DD_RUM.stopSession) {
     const isRumActive = window.DD_RUM.getInternalContext
       ? !!window.DD_RUM.getInternalContext()
       : false
@@ -28,4 +37,4 @@ function stopRumSession () {
   return false
 }
 
-module.exports = { detectRum, stopRumSession }
+module.exports = { detectRum, stopRumSession, stopRumSessionAndReportActivity }

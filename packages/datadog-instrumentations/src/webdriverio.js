@@ -36,7 +36,7 @@ const {
   WORKER_READY,
   WORKER_READY_RESPONSE,
 } = require('./mocha/webdriverio-protocol')
-const { detectRum, stopRumSession } = require('./rum-browser-scripts')
+const { detectRum, stopRumSessionAndReportActivity } = require('./rum-browser-scripts')
 
 const jasmineDoneCh = channel('ci:webdriverio:jasmine:done')
 const rumPageNavigateCh = channel('ci:webdriverio:rum:page-navigate')
@@ -363,7 +363,7 @@ async function handleRumNavigation (context) {
 async function stopRumWindow (browser) {
   let isRumActive
   try {
-    isRumActive = await browser.execute(stopRumSession)
+    isRumActive = await browser.execute(stopRumSessionAndReportActivity)
   } catch (error) {
     log.error('WebdriverIO RUM cleanup error', error)
   }

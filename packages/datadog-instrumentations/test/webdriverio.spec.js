@@ -18,7 +18,7 @@ const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
 const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
-const { detectRum, stopRumSession } = require('../src/rum-browser-scripts')
+const { detectRum, stopRumSession, stopRumSessionAndReportActivity } = require('../src/rum-browser-scripts')
 const {
   adjustRunnerFailuresForTestOptimization,
   efdTests,
@@ -196,7 +196,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('does not report an inactive RUM session as active when stopping it', () => {
+  it('keeps cleanup separate from RUM activity when stopping a session', () => {
     const previousWindow = global.window
     const getInternalContext = sinon.stub()
       .onFirstCall().returns(undefined)
@@ -210,9 +210,10 @@ describe('webdriverio instrumentation', () => {
     }
 
     try {
-      assert.strictEqual(stopRumSession(), false)
       assert.strictEqual(stopRumSession(), true)
-      assert.strictEqual(stopSession.callCount, 2)
+      assert.strictEqual(stopRumSessionAndReportActivity(), false)
+      assert.strictEqual(stopRumSessionAndReportActivity(), true)
+      assert.strictEqual(stopSession.callCount, 3)
     } finally {
       if (previousWindow === undefined) {
         delete global.window
