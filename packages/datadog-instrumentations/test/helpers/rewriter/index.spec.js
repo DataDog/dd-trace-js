@@ -12,6 +12,7 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { tracingChannel } = require('dc-polyfill')
+const { parse, query } = require('../../../src/helpers/rewriter/compiler')
 
 // TODO: Test actual functionality and not just the start channel.
 describe('check-require-cache', () => {
@@ -377,6 +378,31 @@ describe('check-require-cache', () => {
           astQuery: 'FunctionDeclaration[id.name="runAfterSetup"] TryStatement',
           channelName: 'trace_await_context_callback_at_try_start',
           transform: 'awaitContextCallbackAtTryStart',
+          transformOptions: {
+            callbackName: 'beforeStart',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          functionQuery: {
+            functionName: 'runFromStart',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_at_function_start',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runFromStart"]',
+          channelName: 'trace_await_context_callback_at_function_start',
+          transform: 'awaitContextCallbackAtFunctionStart',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -935,6 +961,34 @@ describe('check-require-cache', () => {
     assert.deepStrictEqual(steps, ['setup', 'setup done', 'task'])
   })
 
+  it('should await a context callback before starting an async function body', async () => {
+    const { runFromStart } = compileFile('trace-await-context-callback')
+    const steps = []
+
+    const [rewrittenFunction] = query(parse(content), 'FunctionDeclaration[id.name="runFromStart"] ' +
+      'VariableDeclarator[id.name="__apm$wrapped"] > FunctionExpression[async=true]')
+    assert.equal(rewrittenFunction.body.body[0].directive, 'use strict')
+
+    subs = {
+      start (ctx) {
+        ctx.beforeStart = async function () {
+          steps.push('callback')
+          await new Promise(resolve => setImmediate(resolve))
+          steps.push('callback done')
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_at_function_start')
+    ch.subscribe(subs)
+
+    assert.equal(await runFromStart((value) => {
+      steps.push('task')
+      return value
+    }), 'passed')
+    assert.deepStrictEqual(steps, ['callback', 'callback done', 'task'])
+  })
+
   it('should preserve a try block when context callback lookup throws', async () => {
     const { runAfterSetup } = compileFile('trace-await-context-callback')
 
@@ -1132,6 +1186,7 @@ describe('check-require-cache', () => {
       filePath: 'pregel-class.js',
     })
 
+    // eslint-disable-next-line regexp/no-super-linear-backtracking -- Generated fixture content is bounded.
     assert.match(content, /\bimport\s+.+\s+from\s+"file:\/\//)
     assert.match(content, /tr_ch_apm_tracingChannel/)
     assert.doesNotMatch(content, /require\("/)

@@ -12,6 +12,16 @@ Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog 
 Agentless mode disables features that require an Agent.
 
 Set the API key with `DD_API_KEY` or `DATADOG_API_KEY`.
+Agentless crash tracking requires this key and sends crash data directly to Datadog.
+
+Agentless mode uses the Datadog trace intake and ignores `OTEL_TRACES_EXPORTER`.
+Explicit `DD_TRACE_SAMPLE_RATE`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SPAN_METRICS_ENABLED`, and
+`DD_METRICS_OTEL_ENABLED` settings still apply.
+
+Agentless mode submits Bunyan, Pino, and Winston logs directly by default. Set
+`DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the
+OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
+`DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
 
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 

@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
+const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -8,6 +10,116 @@ const sinon = require('sinon')
 require('./setup/core')
 const id = require('../src/id')
 const SpanContext = require('../src/opentracing/span_context')
+
+/**
+ * @param {number} ruleSampleRate
+ * @returns {Record<string, string[]>}
+ */
+function runProgrammaticRegExpRules (ruleSampleRate) {
+  const tracerPath = path.resolve(__dirname, '../../..')
+  const script = `
+    'use strict'
+
+    const assert = require('node:assert/strict')
+    const vm = require('node:vm')
+
+    const ruleSampleRate = Number(process.env.DD_TEST_RULE_SAMPLE_RATE)
+    const prefix = ruleSampleRate === 0 ? 'drop' : 'keep'
+    const matchers = {
+      name: vm.runInNewContext('new RegExp("^" + prefix + "[.]name$", "g")', { prefix }),
+      service: new RegExp(prefix + '[.]service', 'y'),
+      resource: new RegExp('^' + prefix + '[.]resource$', 'g'),
+      tag: new RegExp('^' + prefix + '[.]tag$', 'y'),
+      emptyTag: /^$/,
+    }
+    const samplingRules = [
+      { name: matchers.name, sampleRate: ruleSampleRate },
+      { service: matchers.service, sampleRate: ruleSampleRate },
+      { resource: matchers.resource, sampleRate: ruleSampleRate },
+      { tags: { 'sampling.tag': matchers.tag }, sampleRate: ruleSampleRate },
+      { tags: { 'sampling.empty': matchers.emptyTag }, sampleRate: ruleSampleRate },
+    ]
+    const tracer = require(${JSON.stringify(tracerPath)}).init({
+      plugins: false,
+      remoteConfig: false,
+      startupLogs: false,
+      sampleRate: 1 - ruleSampleRate,
+      samplingRules,
+    })
+    const formats = require(${JSON.stringify(path.join(tracerPath, 'ext/formats'))})
+
+    /**
+     * @param {string} name
+     * @param {Record<string, string>} [tags]
+     * @returns {string}
+     */
+    function getPriority (name, tags = {}) {
+      const span = tracer.startSpan(name)
+      for (const [key, value] of Object.entries(tags)) {
+        span.setTag(key, value)
+      }
+      const carrier = {}
+      tracer.inject(span, formats.HTTP_HEADERS, carrier)
+      span.finish()
+      return carrier['x-datadog-sampling-priority']
+    }
+
+    const nameMatching = getPriority(prefix + '.name')
+    assert.strictEqual(matchers.name.lastIndex, 0)
+    const nameMatchingAgain = getPriority(prefix + '.name')
+    assert.strictEqual(matchers.name.lastIndex, 0)
+    const nameNonMatching = getPriority('other.name')
+    const serviceMatching = getPriority('service', { service: prefix + '.service' })
+    assert.strictEqual(matchers.service.lastIndex, 0)
+    const serviceMatchingAgain = getPriority('service', { service: prefix + '.service' })
+    assert.strictEqual(matchers.service.lastIndex, 0)
+    const serviceNonMatching = getPriority('service', { service: 'other.' + prefix + '.service' })
+    const resourceMatching = getPriority('resource', { resource: prefix + '.resource' })
+    assert.strictEqual(matchers.resource.lastIndex, 0)
+    const resourceMatchingAgain = getPriority('resource', { resource: prefix + '.resource' })
+    assert.strictEqual(matchers.resource.lastIndex, 0)
+    const resourceNonMatching = getPriority('resource', { resource: 'other.resource' })
+    const tagMatching = getPriority('tag', { 'sampling.tag': prefix + '.tag' })
+    assert.strictEqual(matchers.tag.lastIndex, 0)
+    const tagMatchingAgain = getPriority('tag', { 'sampling.tag': prefix + '.tag' })
+    assert.strictEqual(matchers.tag.lastIndex, 0)
+    const tagNonMatching = getPriority('tag', { 'sampling.tag': 'other.tag' })
+    const emptyTagMatching = getPriority('empty-tag', { 'sampling.empty': '' })
+    const emptyTagMissing = getPriority('empty-tag')
+
+    assert.strictEqual(samplingRules[0].name, matchers.name)
+    assert.strictEqual(samplingRules[1].service, matchers.service)
+    assert.strictEqual(samplingRules[2].resource, matchers.resource)
+    assert.strictEqual(samplingRules[3].tags['sampling.tag'], matchers.tag)
+    assert.strictEqual(samplingRules[4].tags['sampling.empty'], matchers.emptyTag)
+
+    process.stdout.write(JSON.stringify({
+      name: [nameMatching, nameMatchingAgain, nameNonMatching],
+      service: [serviceMatching, serviceMatchingAgain, serviceNonMatching],
+      resource: [resourceMatching, resourceMatchingAgain, resourceNonMatching],
+      tag: [tagMatching, tagMatchingAgain, tagNonMatching],
+      emptyTag: [emptyTagMatching, emptyTagMissing],
+    }), () => process.exit())
+  `
+  const env = {
+    ...process.env,
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+    DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+    DD_TEST_RULE_SAMPLE_RATE: String(ruleSampleRate),
+    DD_TRACE_STARTUP_LOGS: 'false',
+  }
+  delete env.OTEL_LOGS_EXPORTER
+  delete env.OTEL_METRICS_EXPORTER
+  delete env.OTEL_TRACES_EXPORTER
+  const result = spawnSync(process.execPath, ['--eval', script], {
+    encoding: 'utf8',
+    env,
+    timeout: 10_000,
+  })
+
+  assert.strictEqual(result.status, 0, result.stderr)
+  return JSON.parse(result.stdout)
+}
 
 function createDummySpans () {
   const operations = [
@@ -106,6 +218,26 @@ describe('sampling rule', () => {
   })
 
   describe('match', () => {
+    it('should not match unsupported matcher values', () => {
+      for (const pattern of [{}, null, false, 0, '']) {
+        rule = new SamplingRule({ name: pattern })
+
+        assert.strictEqual(rule.match(spans[0]), false)
+      }
+
+      rule = new SamplingRule({ tags: { tagged: {} } })
+
+      assert.strictEqual(rule.match(spans[9]), false)
+    })
+
+    it('should match wildcard strings', () => {
+      for (const pattern of ['*', '**', '***']) {
+        rule = new SamplingRule({ name: pattern })
+
+        assert.strictEqual(rule.match(spans[0]), true)
+      }
+    })
+
     it('should match with exact strings', () => {
       rule = new SamplingRule({
         service: 'test',
@@ -337,6 +469,44 @@ describe('sampling rule', () => {
       assert.strictEqual(rule.match(spans[8]), false)
       assert.strictEqual(rule.match(spans[9]), false)
       assert.strictEqual(rule.match(spans[10]), true)
+    })
+  })
+
+  describe('programmatic configuration', () => {
+    it('should apply RegExp matchers through tracer.init()', () => {
+      const drop = runProgrammaticRegExpRules(0)
+
+      assert.strictEqual(drop.name[0], '-1')
+      assert.strictEqual(drop.name[1], '-1')
+      assert.strictEqual(drop.name[2], '2')
+      assert.strictEqual(drop.service[0], '-1')
+      assert.strictEqual(drop.service[1], '-1')
+      assert.strictEqual(drop.service[2], '2')
+      assert.strictEqual(drop.resource[0], '-1')
+      assert.strictEqual(drop.resource[1], '-1')
+      assert.strictEqual(drop.resource[2], '2')
+      assert.strictEqual(drop.tag[0], '-1')
+      assert.strictEqual(drop.tag[1], '-1')
+      assert.strictEqual(drop.tag[2], '2')
+      assert.strictEqual(drop.emptyTag[0], '-1')
+      assert.strictEqual(drop.emptyTag[1], '2')
+
+      const keep = runProgrammaticRegExpRules(1)
+
+      assert.strictEqual(keep.name[0], '2')
+      assert.strictEqual(keep.name[1], '2')
+      assert.strictEqual(keep.name[2], '-1')
+      assert.strictEqual(keep.service[0], '2')
+      assert.strictEqual(keep.service[1], '2')
+      assert.strictEqual(keep.service[2], '-1')
+      assert.strictEqual(keep.resource[0], '2')
+      assert.strictEqual(keep.resource[1], '2')
+      assert.strictEqual(keep.resource[2], '-1')
+      assert.strictEqual(keep.tag[0], '2')
+      assert.strictEqual(keep.tag[1], '2')
+      assert.strictEqual(keep.tag[2], '-1')
+      assert.strictEqual(keep.emptyTag[0], '2')
+      assert.strictEqual(keep.emptyTag[1], '-1')
     })
   })
 

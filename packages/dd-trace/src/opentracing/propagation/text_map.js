@@ -88,6 +88,18 @@ let updateOtelTraceState
  */
 
 /**
+ * @param {Array<string | undefined>} traceTagReplacements
+ * @param {string} key
+ * @returns {boolean}
+ */
+function hasTraceTagReplacement (traceTagReplacements, key) {
+  for (let index = 0; index < traceTagReplacements.length; index += 2) {
+    if (traceTagReplacements[index] === key) return true
+  }
+  return false
+}
+
+/**
  * @param {string | undefined} traceId
  * @param {string | undefined} spanId
  * @param {number} radix
@@ -316,18 +328,31 @@ class TextMapPropagator {
 
     const injectTraceContext = this.#config.apmTracingEnabled !== false ||
       hasTraceSourcePropagationTag(spanContext._trace.tags)
+    let traceTagReplacements
+    let optionalTraceTagCount = 0
+    if (injectTraceContext && injectCh.hasSubscribers && (
+      this.#hasPropagationStyle('inject', 'datadog') || this.#hasPropagationStyle('inject', 'tracecontext')
+    )) {
+      const injection = { spanContext }
+      injectCh.publish(injection)
+      traceTagReplacements = injection.traceTagReplacements
+      optionalTraceTagCount = injection.optionalTraceTagCount ?? 0
+    }
     if (injectTraceContext) {
-      injectedCarrier = this.#injectDatadog(spanContext, injectedCarrier ?? carrier) ?? injectedCarrier
+      injectedCarrier = this.#injectDatadog(
+        spanContext, injectedCarrier ?? carrier, traceTagReplacements, optionalTraceTagCount
+      ) ?? injectedCarrier
       injectedCarrier = this.#injectB3MultipleHeaders(spanContext, injectedCarrier ?? carrier) ?? injectedCarrier
       injectedCarrier = this.#injectB3SingleHeader(spanContext, injectedCarrier ?? carrier) ?? injectedCarrier
     }
     injectedCarrier = this
-      .#injectTraceparent(spanContext, injectedCarrier ?? carrier, injectTraceContext) ?? injectedCarrier
+      .#injectTraceparent(
+        spanContext, injectedCarrier ?? carrier, injectTraceContext, traceTagReplacements
+      ) ?? injectedCarrier
 
     if (injectedCarrier === undefined) return
 
     carrier = injectedCarrier
-    if (injectCh.hasSubscribers) injectCh.publish({ spanContext, carrier })
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Inject into carrier: ${JSON.stringify(pickTextMap(carrier))}.`)
@@ -361,9 +386,11 @@ class TextMapPropagator {
   /**
    * @param {DatadogSpanContext} spanContext
    * @param {Record<string, string>} [carrier]
+   * @param {Array<string | undefined>} [traceTagReplacements]
+   * @param {number} optionalTraceTagCount
    * @returns {Record<string, string> | undefined}
    */
-  #injectDatadog (spanContext, carrier) {
+  #injectDatadog (spanContext, carrier, traceTagReplacements, optionalTraceTagCount) {
     if (!this.#hasPropagationStyle('inject', 'datadog')) return
 
     carrier ??= {}
@@ -376,7 +403,7 @@ class TextMapPropagator {
     const priority = spanContext._sampling.priority
     if (Number.isInteger(priority)) writeDatadogSamplingPriority(carrier, priority.toString())
 
-    this.#injectTags(spanContext, carrier)
+    this.#injectTags(carrier, spanContext._trace.tags, traceTagReplacements, optionalTraceTagCount)
 
     return carrier
   }
@@ -451,23 +478,27 @@ class TextMapPropagator {
   }
 
   /**
-   * @param {DatadogSpanContext} spanContext
    * @param {Record<string, string>} carrier
+   * @param {Record<string, string>} traceTags
+   * @param {Array<string | undefined>} [traceTagReplacements]
+   * @param {number} optionalTraceTagCount
    * @returns {void}
    */
-  #injectTags (spanContext, carrier) {
-    const trace = spanContext._trace
-
+  #injectTags (carrier, traceTags, traceTagReplacements, optionalTraceTagCount) {
     if (this.#config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) {
       log.debug('Trace tag propagation is disabled, skipping injection.')
       return
     }
 
+    const maxLength = this.#config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
     let header = ''
 
-    for (const key of Object.keys(trace.tags)) {
-      const value = trace.tags[key]
-      if (!value || !key.startsWith('_dd.p.')) continue
+    for (const key of Object.keys(traceTags)) {
+      const value = traceTags[key]
+      if (!value || !key.startsWith('_dd.p.') ||
+        traceTagReplacements && hasTraceTagReplacement(traceTagReplacements, key)) {
+        continue
+      }
       if (!tagKeyExpr.test(key) || !tagValueExpr.test(value)) {
         log.error('Trace tags from span are invalid, skipping injection.')
         return
@@ -477,7 +508,24 @@ class TextMapPropagator {
       header += `${key}=${value}`
     }
 
-    if (header.length > this.#config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
+    if (traceTagReplacements) {
+      const requiredEntryCount = traceTagReplacements.length - optionalTraceTagCount * 2
+      for (let index = 0; index < traceTagReplacements.length; index += 2) {
+        const key = traceTagReplacements[index]
+        const value = traceTagReplacements[index + 1]
+        if (!value || !key.startsWith('_dd.p.')) continue
+        if (!tagKeyExpr.test(key) || !tagValueExpr.test(value)) {
+          log.error('Trace tags from span are invalid, skipping injection.')
+          return
+        }
+
+        const entry = `${header ? ',' : ''}${key}=${value}`
+        if (index >= requiredEntryCount && header.length + entry.length > maxLength) break
+        header += entry
+      }
+    }
+
+    if (header.length > maxLength) {
       log.error('Trace tags from span are too large, skipping injection.')
     } else if (header) {
       writeDatadogTags(carrier, header)
@@ -540,9 +588,10 @@ class TextMapPropagator {
    * @param {DatadogSpanContext} spanContext
    * @param {Record<string, string> | undefined} carrier
    * @param {boolean} injectTraceContext
+   * @param {Array<string | undefined>} [traceTagReplacements]
    * @returns {Record<string, string> | undefined}
    */
-  #injectTraceparent (spanContext, carrier, injectTraceContext) {
+  #injectTraceparent (spanContext, carrier, injectTraceContext, traceTagReplacements) {
     if (!this.#hasPropagationStyle('inject', 'tracecontext')) return
 
     if (!injectTraceContext) {
@@ -558,9 +607,12 @@ class TextMapPropagator {
     carrier ??= {}
     const {
       _sampling: { priority, mechanism },
-      _tracestate: ts = new TraceState(),
-      _trace: { origin, tags: traceTags },
+      _tracestate,
+      _trace: { origin },
     } = spanContext
+    const ts = traceTagReplacements
+      ? TraceState.fromString(_tracestate?.toString())
+      : _tracestate ?? new TraceState()
 
     writeTraceparent(carrier, spanContext.toTraceparent())
 
@@ -589,8 +641,9 @@ class TextMapPropagator {
         state.set('o', originValue)
       }
 
-      for (const key of Object.keys(traceTags)) {
-        const tagValueRaw = traceTags[key]
+      for (const key of Object.keys(spanContext._trace.tags)) {
+        if (traceTagReplacements && hasTraceTagReplacement(traceTagReplacements, key)) continue
+        const tagValueRaw = spanContext._trace.tags[key]
         if (!tagValueRaw || !key.startsWith('_dd.p.')) continue
 
         const tagKey = 't.' + key.slice(6)
@@ -602,6 +655,28 @@ class TextMapPropagator {
           .replaceAll('=', '~')
 
         state.set(tagKey, tagValue)
+      }
+
+      if (traceTagReplacements) {
+        for (let index = 0; index < traceTagReplacements.length; index += 2) {
+          const key = traceTagReplacements[index]
+          if (!key.startsWith('_dd.p.')) continue
+
+          const tagKey = 't.' + key.slice(6)
+            .replaceAll(tracestateTagKeyFilter, '_')
+          const tagValueRaw = traceTagReplacements[index + 1]
+          if (!tagValueRaw) {
+            state.delete(tagKey)
+            continue
+          }
+
+          const tagValue = tagValueRaw
+            .toString()
+            .replaceAll(tracestateTagValueFilter, '_')
+            .replaceAll('=', '~')
+
+          state.set(tagKey, tagValue)
+        }
       }
     })
 
