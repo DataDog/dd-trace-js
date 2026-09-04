@@ -81,7 +81,7 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
 // i.e. the carrier says "drop". Format: version-traceId-spanId-flags.
 function sampledFlagCleared (traceparent) {
   if (typeof traceparent !== 'string') return false
-  const flags = traceparent.split('-')[3]
+  const flags = traceparent.slice(-2)
   return flags !== undefined && (Number.parseInt(flags, 16) & 1) === 0
 }
 
@@ -90,12 +90,11 @@ function sampledFlagCleared (traceparent) {
 // `s` value, so callers can distinguish "no propagated decision" from a drop.
 function propagatedSamplingPriority (tracestate) {
   if (typeof tracestate !== 'string' || !tracestate) return
-  let priority
-  TraceState.fromString(tracestate).forVendor('dd', state => {
-    const parsed = Number.parseInt(state.get('s'), 10)
-    if (Number.isInteger(parsed)) priority = parsed
+
+  return TraceState.fromString(tracestate).forVendor('dd', state => {
+    const priority = Number(state.get('s'))
+    return Number.isInteger(priority) ? priority : undefined
   })
-  return priority
 }
 
 module.exports = AzureDurableFunctionsPlugin

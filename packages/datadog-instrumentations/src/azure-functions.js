@@ -44,7 +44,7 @@ addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (a
 function wrapGeneric (method) {
   return function (name, options) {
     if (options?.trigger?.type === ORCHESTRATION_TRIGGER_TYPE && typeof options.handler === 'function') {
-      shimmer.wrap(options, 'handler', handler => traceOrchestrationHandler(handler, name))
+      options.handler = traceOrchestrationHandler(options.handler, name)
     }
     return method.apply(this, arguments)
   }
@@ -59,7 +59,6 @@ function traceOrchestrationHandler (handler, functionName) {
     const channelCtx = {
       trigger: 'Orchestration',
       functionName,
-      instanceId: orchestrationBinding?.instanceId,
       traceparent: traceContext?.traceParent,
       tracestate: traceContext?.traceState,
     }
@@ -81,16 +80,15 @@ function traceOrchestrationHandler (handler, functionName) {
   }
 }
 
-async function traceResumedOrchestrationErrors (handler, channelCtx, thisArg, args) {
+function traceResumedOrchestrationErrors (handler, channelCtx, thisArg, args) {
   const startTime = Date.now()
-
-  try {
-    return await handler.apply(thisArg, args)
-  } catch (error) {
+  return handler.apply(thisArg, args).then((value) => {
+    return value
+  }, (error) => {
     return azureDurableFunctionsChannel.traceSync(() => {
       throw error
     }, { ...channelCtx, startTime })
-  }
+  })
 }
 
 // The http methods are overloaded so we need to check which type of argument was passed in order to wrap the handler

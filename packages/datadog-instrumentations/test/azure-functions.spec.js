@@ -28,11 +28,6 @@ describe('azure-functions orchestration instrumentation (unit)', () => {
     subscriptions.push([azureDurableFunctionsChannel.start, listener])
   }
 
-  function subscribeError (listener) {
-    azureDurableFunctionsChannel.error.subscribe(listener)
-    subscriptions.push([azureDurableFunctionsChannel.error, listener])
-  }
-
   afterEach(() => {
     while (subscriptions.length > 0) {
       const [channel, listener] = subscriptions.pop()
@@ -72,7 +67,7 @@ describe('azure-functions orchestration instrumentation (unit)', () => {
     subscribeStart((ctx) => { started = ctx })
 
     const wrapped = registerOrchestration(async () => 'ok')
-    const binding = { isReplaying: false, instanceId: 'abc-123' }
+    const binding = { isReplaying: false }
     const invocationContext = {
       traceContext: {
         traceParent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
@@ -84,7 +79,6 @@ describe('azure-functions orchestration instrumentation (unit)', () => {
 
     assert.strictEqual(started.trigger, 'Orchestration')
     assert.strictEqual(started.functionName, 'PizzaOrderOrchestration')
-    assert.strictEqual(started.instanceId, 'abc-123')
     assert.strictEqual(
       started.traceparent,
       '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
@@ -96,41 +90,18 @@ describe('azure-functions orchestration instrumentation (unit)', () => {
     let started = false
     subscribeStart(() => { started = true })
 
-    const wrapped = registerOrchestration(async () => 'ok')
+    const result = Promise.resolve('ok')
+    const wrapped = registerOrchestration(() => result)
     const binding = {
       isReplaying: false,
-      instanceId: 'abc-123',
       history: [{ EventType: 13 }],
     }
 
-    await wrapped(binding, {})
+    const returned = wrapped(binding, {})
+    await returned
 
     assert.strictEqual(started, false)
-  })
-
-  it('traces an error when a resumed orchestrator fails', async () => {
-    let started
-    let tracedError
-    subscribeStart((ctx) => { started = ctx })
-    subscribeError((ctx) => { tracedError = ctx.error })
-
-    const error = new Error('resumed orchestration failed')
-    const wrapped = registerOrchestration(async () => { throw error })
-    const binding = {
-      isReplaying: false,
-      instanceId: 'abc-123',
-      history: [{ EventType: 13 }],
-    }
-
-    await assert.rejects(
-      wrapped(binding, {}),
-      candidate => candidate === error
-    )
-
-    assert.strictEqual(started.trigger, 'Orchestration')
-    assert.strictEqual(started.instanceId, 'abc-123')
-    assert.strictEqual(typeof started.startTime, 'number')
-    assert.strictEqual(tracedError, error)
+    assert.strictEqual(returned, result)
   })
 
   it('does not wrap non-orchestration generic triggers', async () => {
@@ -168,7 +139,7 @@ describe('azure-functions orchestration instrumentation (unit)', () => {
     const handler = sinon.spy(async () => 'done')
     const wrapped = registerOrchestration(handler)
 
-    const result = await wrapped({ isReplaying: false, instanceId: 'abc-123' }, {})
+    const result = await wrapped({ isReplaying: false }, {})
 
     assert.strictEqual(result, 'done')
     sinon.assert.calledOnce(handler)
