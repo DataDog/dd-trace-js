@@ -20,8 +20,6 @@ const identifierPattern = /^[$A-Z_a-z][$\w]*$/
 
 module.exports = {
   awaitContextCallback,
-  awaitContextCallbackAtFunctionStart,
-  awaitContextCallbackAtTryStart,
   configureGraphqlJitCompileObject,
   configureGraphqlJitDeferredField,
   configureGraphqlJitExecute,
@@ -31,55 +29,11 @@ module.exports = {
 }
 
 /**
- * Awaits an optional context callback at the start of the matched node's enclosing async function.
+ * Awaits an optional context callback at the start of a matched block or before continuing through a matched
+ * conditional branch.
  *
- * @param {Parameters<typeof awaitContextCallback>[0]} state
- * @param {import('estree').Node} node
- * @param {import('estree').Node} _parent
- * @param {import('estree').Node[]} ancestry
- * @returns {void}
- */
-function awaitContextCallbackAtFunctionStart (state, node, _parent, ancestry) {
-  let enclosingFunction = functionTypes.has(node.type)
-    ? node
-    : ancestry.find(ancestor => functionTypes.has(ancestor.type))
-  let callbackAncestry = ancestry
-
-  if (enclosingFunction === node) {
-    callbackAncestry = [node, ...ancestry]
-    if (!node.async) {
-      // Function queries create a synchronous trace wrapper before custom transforms run.
-      const [wrappedFunction] = query(node,
-        'VariableDeclarator[id.name="__apm$traced"] > ArrowFunctionExpression > BlockStatement > ' +
-        'VariableDeclaration > VariableDeclarator[id.name="__apm$wrapped"] > ' +
-        ':matches(FunctionDeclaration, FunctionExpression)[async=true]')
-      if (wrappedFunction) {
-        enclosingFunction = wrappedFunction
-        callbackAncestry.unshift(wrappedFunction)
-      }
-    }
-  }
-  assert(enclosingFunction?.async && enclosingFunction.body?.type === 'BlockStatement',
-    'awaitContextCallbackAtFunctionStart: expected an enclosing async function with a block body')
-
-  const generatedCallback = createAwaitedContextCallback(
-    state,
-    enclosingFunction.body,
-    callbackAncestry,
-    'awaitContextCallbackAtFunctionStart'
-  )
-  if (!generatedCallback) return
-
-  let insertionIndex = 0
-  while (typeof enclosingFunction.body.body[insertionIndex]?.directive === 'string') insertionIndex++
-  enclosingFunction.body.body.splice(insertionIndex, 0, ...generatedCallback.callbackStatements)
-}
-
-/**
- * Awaits an optional context callback before continuing through a matched conditional branch.
- *
- * The branch condition is checked again after the callback settles so the
- * original body does not run against state that changed while awaiting.
+ * A matched conditional branch is checked again after the callback settles so its original body does not run
+ * against state that changed while awaiting.
  *
  * @param {{
  *   transformOptions?: {
@@ -88,14 +42,24 @@ function awaitContextCallbackAtFunctionStart (state, node, _parent, ancestry) {
  *     callbackThis?: boolean
  *   }
  * }} state
- * @param {import('estree').IfStatement} node
+ * @param {import('estree').BlockStatement|import('estree').IfStatement} node
  * @param {import('estree').Node} _parent
  * @param {import('estree').Node[]} ancestry
  * @returns {void}
  */
 function awaitContextCallback (state, node, _parent, ancestry) {
+  if (node.type === 'BlockStatement') {
+    const generatedCallback = createAwaitedContextCallback(state, node, ancestry, 'awaitContextCallback')
+    if (!generatedCallback) return
+
+    let insertionIndex = 0
+    while (typeof node.body[insertionIndex]?.directive === 'string') insertionIndex++
+    node.body.splice(insertionIndex, 0, ...generatedCallback.callbackStatements)
+    return
+  }
+
   assert(node.type === 'IfStatement' && node.consequent?.type === 'BlockStatement',
-    'awaitContextCallback: expected an if statement with a block body')
+    'awaitContextCallback: expected a block or an if statement with a block body')
 
   const originalStatements = node.consequent.body
   const generatedCallback = createAwaitedContextCallback(
@@ -118,35 +82,6 @@ function awaitContextCallback (state, node, _parent, ancestry) {
     body: originalStatements,
   }
   node.consequent.body = [...callbackStatements, callbackBranch]
-}
-
-/**
- * Awaits an optional context callback before entering the matched node's enclosing try block.
- *
- * @param {Parameters<typeof awaitContextCallback>[0]} state
- * @param {import('estree').Node} node
- * @param {import('estree').Node} _parent
- * @param {import('estree').Node[]} ancestry
- * @returns {void}
- */
-function awaitContextCallbackAtTryStart (state, node, _parent, ancestry) {
-  let tryStatement = node.type === 'TryStatement' ? node : undefined
-  for (const ancestor of ancestry) {
-    if (tryStatement || functionTypes.has(ancestor.type)) break
-    if (ancestor.type === 'TryStatement') tryStatement = ancestor
-  }
-  assert(tryStatement?.block?.type === 'BlockStatement',
-    'awaitContextCallbackAtTryStart: expected an enclosing try statement with a block body')
-
-  const generatedCallback = createAwaitedContextCallback(
-    state,
-    tryStatement.block,
-    ancestry,
-    'awaitContextCallbackAtTryStart'
-  )
-  if (!generatedCallback) return
-
-  tryStatement.block.body.unshift(...generatedCallback.callbackStatements)
 }
 
 /**

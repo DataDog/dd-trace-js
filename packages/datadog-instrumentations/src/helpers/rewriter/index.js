@@ -103,8 +103,6 @@ function createMatcher (moduleType) {
   const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
   const {
     awaitContextCallback,
-    awaitContextCallbackAtFunctionStart,
-    awaitContextCallbackAtTryStart,
     configureGraphqlJitCompileObject,
     configureGraphqlJitDeferredField,
     configureGraphqlJitExecute,
@@ -116,8 +114,6 @@ function createMatcher (moduleType) {
   const matcher = create(instrumentations, getDcPolyfillSpecifier(moduleType))
 
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
-  matcher.addTransform('awaitContextCallbackAtFunctionStart', awaitContextCallbackAtFunctionStart)
-  matcher.addTransform('awaitContextCallbackAtTryStart', awaitContextCallbackAtTryStart)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
   matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
   matcher.addTransform('configureGraphqlJitDeferredField', configureGraphqlJitDeferredField)
