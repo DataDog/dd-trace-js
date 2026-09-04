@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const LOAD_OPERATION = 0
 const RESOLVE_OPERATION = 1
+const IMPORT_CONDITIONS = new Set(['import'])
 
 const getExportsImporting = (url) => import(url).then(Object.keys)
 let getExportsModulePromise
@@ -62,9 +63,6 @@ function isBareSpecifier (specifier) {
  * @returns {{ format: string, url: URL }}
  */
 function resolveModule (specifier, context) {
-  // This comes from an import, that is why import makes preference
-  const conditions = ['import']
-
   if (specifier.startsWith('file://')) {
     specifier = fileURLToPath(specifier)
   }
@@ -72,7 +70,7 @@ function resolveModule (specifier, context) {
   const resolved = require.resolve(specifier, {
     paths: [fileURLToPath(context.parentURL)],
     // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
-    conditions,
+    conditions: IMPORT_CONDITIONS,
   })
 
   return {

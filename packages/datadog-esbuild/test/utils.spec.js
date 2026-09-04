@@ -45,6 +45,17 @@ describe('esbuild utils', () => {
       assert.strictEqual(moduleSources.get(nestedPath), fs.readFileSync(nestedPath, 'utf8'))
     })
 
+    it('should resolve bare star exports with import conditions', async () => {
+      const modulePath = path.join(__dirname, 'resources', 'export-bare-star.mjs')
+      const setters = await processModule({
+        path: modulePath,
+        context: { format: 'module' },
+        moduleSources: new Map([[modulePath, "export * from '@actions/core'\n"]]),
+      })
+
+      assert.strictEqual(setters.has('setSecret'), true)
+    })
+
     it('should terminate cyclic star exports', async () => {
       const setters = await processModule({
         path: path.join(__dirname, 'resources', 'export-cycle-a.mjs'),
