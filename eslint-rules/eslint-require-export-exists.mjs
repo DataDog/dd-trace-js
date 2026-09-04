@@ -4,8 +4,30 @@ import path from 'node:path'
 import { Linter } from 'eslint'
 
 const SCRIPT_EXTENSIONS = ['.js', '.mjs', '.cjs']
+const MAX_EXPORT_CACHE_SIZE = 2048
 const UNKNOWN_EXPORTS = Symbol('UNKNOWN_EXPORTS')
 const parserLinter = new Linter()
+
+/**
+ * @typedef {{
+ *   dev: number
+ *   ino: number
+ *   size: number
+ *   mtimeMs: number
+ *   ctimeMs: number
+ *   exports: Set<string> | typeof UNKNOWN_EXPORTS
+ * }} ExportCacheEntry
+ */
+
+/**
+ * @typedef {{
+ *   filePath: string
+ *   stats: import('node:fs').Stats
+ * }} ResolvedModule
+ */
+
+/** @type {Map<string, ExportCacheEntry>} */
+const exportCache = new Map()
 
 /**
  * @typedef {import('eslint').Rule.Node} EslintNode
@@ -41,7 +63,7 @@ function isFirstPartySpecifier (specifier) {
  * @param {string} importerPath
  * @param {string} specifier
  * @param {string} cwd
- * @returns {string | undefined}
+ * @returns {ResolvedModule | undefined}
  */
 function resolveFirstPartyModulePath (importerPath, specifier, cwd) {
   if (!isFirstPartySpecifier(specifier)) return undefined
@@ -55,27 +77,30 @@ function resolveFirstPartyModulePath (importerPath, specifier, cwd) {
 
   const resolved = resolveAsFileOrDirectory(basePath)
   if (!resolved) return undefined
-  if (!resolved.startsWith(cwd)) return undefined
+  if (!resolved.filePath.startsWith(cwd)) return undefined
 
   return resolved
 }
 
 /**
  * @param {string} basePath
- * @returns {string | undefined}
+ * @returns {ResolvedModule | undefined}
  */
 function resolveAsFileOrDirectory (basePath) {
-  if (isFile(basePath)) return basePath
+  let stats = getFileStats(basePath)
+  if (stats) return { filePath: basePath, stats }
 
   for (const extension of SCRIPT_EXTENSIONS) {
     const filePath = `${basePath}${extension}`
-    if (isFile(filePath)) return filePath
+    stats = getFileStats(filePath)
+    if (stats) return { filePath, stats }
   }
 
   if (isDirectory(basePath)) {
     for (const extension of SCRIPT_EXTENSIONS) {
       const indexPath = path.join(basePath, `index${extension}`)
-      if (isFile(indexPath)) return indexPath
+      stats = getFileStats(indexPath)
+      if (stats) return { filePath: indexPath, stats }
     }
   }
 
@@ -84,13 +109,14 @@ function resolveAsFileOrDirectory (basePath) {
 
 /**
  * @param {string} filePath
- * @returns {boolean}
+ * @returns {import('node:fs').Stats | undefined}
  */
-function isFile (filePath) {
+function getFileStats (filePath) {
   try {
-    return fs.statSync(filePath).isFile()
+    const stats = fs.statSync(filePath)
+    return stats.isFile() ? stats : undefined
   } catch {
-    return false
+    return undefined
   }
 }
 
@@ -298,13 +324,50 @@ function collectExportsFromAst (ast) {
 
 /**
  * @param {string} targetFilePath
+ * @param {import('node:fs').Stats} stats
  * @returns {Set<string> | typeof UNKNOWN_EXPORTS}
  */
-function collectExportsFromFile (targetFilePath) {
-  if (path.extname(targetFilePath) === '.json') {
-    return collectExportsFromJsonFile(targetFilePath)
+function collectExportsFromFile (targetFilePath, stats) {
+  const cached = exportCache.get(targetFilePath)
+  if (
+    cached?.dev === stats.dev &&
+    cached.ino === stats.ino &&
+    cached.size === stats.size &&
+    cached.mtimeMs === stats.mtimeMs &&
+    cached.ctimeMs === stats.ctimeMs
+  ) {
+    return cached.exports
   }
 
+  let exports
+  if (path.extname(targetFilePath) === '.json') {
+    exports = collectExportsFromJsonFile(targetFilePath)
+  } else {
+    exports = collectExportsFromScriptFile(targetFilePath)
+  }
+
+  if (!cached && exportCache.size === MAX_EXPORT_CACHE_SIZE) {
+    const oldestTargetFilePath = exportCache.keys().next().value
+    exportCache.delete(oldestTargetFilePath)
+  }
+
+  exportCache.set(targetFilePath, {
+    dev: stats.dev,
+    ino: stats.ino,
+    size: stats.size,
+    mtimeMs: stats.mtimeMs,
+    ctimeMs: stats.ctimeMs,
+    exports,
+  })
+
+  return exports
+}
+
+/**
+ * @param {string} targetFilePath
+ * @returns {Set<string> | typeof UNKNOWN_EXPORTS}
+ */
+function collectExportsFromScriptFile (targetFilePath) {
   let source
   try {
     source = fs.readFileSync(targetFilePath, 'utf8')
@@ -320,7 +383,7 @@ function collectExportsFromFile (targetFilePath) {
         sourceType: 'script',
       },
       rules: {},
-    }, targetFilePath)
+    })
     ast = parserLinter.getSourceCode()?.ast
   } catch {
     return UNKNOWN_EXPORTS
@@ -371,7 +434,7 @@ export default {
   create (context) {
     const currentFile = context.filename
     const cwd = context.cwd
-    const exportCache = new Map()
+    /** @type {Map<string, ResolvedModule | undefined>} */
     const resolutionCache = new Map()
 
     /**
@@ -389,15 +452,11 @@ export default {
         )
       }
 
-      const resolvedPath = resolutionCache.get(resolutionCacheKey)
-      if (!resolvedPath) return undefined
+      const resolved = resolutionCache.get(resolutionCacheKey)
+      if (!resolved) return undefined
 
-      if (!exportCache.has(resolvedPath)) {
-        exportCache.set(resolvedPath, collectExportsFromFile(resolvedPath))
-      }
-
-      const exports = exportCache.get(resolvedPath)
-      if (!exports || exports === UNKNOWN_EXPORTS) return undefined
+      const exports = collectExportsFromFile(resolved.filePath, resolved.stats)
+      if (exports === UNKNOWN_EXPORTS) return undefined
 
       return { specifier, exports }
     }
@@ -424,6 +483,7 @@ export default {
     return {
       VariableDeclarator (node) {
         if (
+          node.id.type !== 'ObjectPattern' ||
           node.init?.type !== 'CallExpression' ||
           node.init.callee?.type !== 'Identifier' ||
           node.init.callee.name !== 'require' ||
@@ -438,13 +498,11 @@ export default {
         const moduleInfo = getResolvedExportSet(specifier)
         if (!moduleInfo) return
 
-        if (node.id.type === 'ObjectPattern') {
-          for (const property of node.id.properties) {
-            if (property.type !== 'Property') continue
-            if (property.key.type !== 'Identifier') continue
+        for (const property of node.id.properties) {
+          if (property.type !== 'Property') continue
+          if (property.key.type !== 'Identifier') continue
 
-            reportIfMissingExport(property.key, specifier, moduleInfo.exports, property.key.name)
-          }
+          reportIfMissingExport(property.key, specifier, moduleInfo.exports, property.key.name)
         }
       },
     }
