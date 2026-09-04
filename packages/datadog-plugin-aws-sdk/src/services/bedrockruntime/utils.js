@@ -500,6 +500,8 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
       if (block == null || typeof block !== 'object') continue
       if (typeof block.text === 'string') {
         content += block.text
+      } else if (typeof block.guardContent?.text?.text === 'string') {
+        content += block.guardContent.text.text
       } else if (block.toolUse) {
         toolCalls.push(buildToolCall(block.toolUse))
       } else if (block.toolResult) {

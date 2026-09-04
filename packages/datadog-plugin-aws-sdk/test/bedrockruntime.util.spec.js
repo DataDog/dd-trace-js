@@ -73,6 +73,19 @@ describe('bedrockruntime utils', () => {
     })
   })
 
+  it('reads the text of Converse guardContent blocks', () => {
+    const message = extractMessagesFromConverseContent('user', [
+      { text: 'Context: ' },
+      { guardContent: { text: { text: 'What is the dose?', qualifiers: ['guard_content'] } } },
+      { text: ' Cite sources.' },
+    ])
+
+    assert.deepStrictEqual(message, {
+      role: 'user',
+      content: 'Context: What is the dose? Cite sources.',
+    })
+  })
+
   describe('converse stream extractor', () => {
     it('returns an empty message when the stream fails before yielding a chunk', () => {
       const generation = extractTextAndResponseReasonConverseFromStream()
