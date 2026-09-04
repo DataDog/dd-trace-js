@@ -6,4 +6,10 @@ function run () {
   return 'my return value' // breakpoint at this line
 }
 
-module.exports = { run }
+function runWithHugeObject (propertyCount) {
+  // eslint-disable-next-line no-unused-vars
+  const huge = Object.fromEntries(Array.from({ length: propertyCount }, (_, i) => [`property${i}`, i]))
+  return 'my return value' // breakpoint at this line
+}
+
+module.exports = { run, runWithHugeObject }
