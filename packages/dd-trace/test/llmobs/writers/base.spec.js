@@ -440,6 +440,41 @@ describe('BaseLLMObsWriter', () => {
     )
   })
 
+  describe('_encode', () => {
+    beforeEach(() => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+    })
+
+    it('encodes an ascii payload exactly like JSON.stringify', () => {
+      const payload = { spans: [{ name: 'chat', input: 'hello world' }] }
+
+      assert.strictEqual(writer._encode(payload), JSON.stringify(payload))
+    })
+
+    it('escapes non-ascii values and round-trips them', () => {
+      const payload = { input: 'café', output: '你好' }
+      const encoded = writer._encode(payload)
+
+      assert.doesNotMatch(encoded, /[\u0080-\uFFFF]/)
+      assert.deepStrictEqual(JSON.parse(encoded), payload)
+    })
+
+    it('preserves a literal backslash-u sequence in a string value', () => {
+      const payload = { input: String.raw`print("\u0041")` }
+
+      assert.strictEqual(JSON.parse(writer._encode(payload)).input, payload.input)
+    })
+
+    it('escapes an emoji as a surrogate pair and round-trips it', () => {
+      const payload = { input: '😀' }
+      const encoded = writer._encode(payload)
+
+      assert.strictEqual(encoded, String.raw`{"input":"\ud83d\ude00"}`)
+      assert.deepStrictEqual(JSON.parse(encoded), payload)
+    })
+  })
+
   describe('destroy', () => {
     it('destroys the writer', () => {
       sinon.spy(global, 'clearInterval')
