@@ -455,7 +455,9 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'FunctionDeclaration[id.name="executeAsync"] TryStatement > BlockStatement',
+    astQuery: 'FunctionDeclaration[id.name="executeAsync"] ' +
+      'VariableDeclarator[id.name="__apm$wrapped"] > ' +
+      ':matches(FunctionDeclaration, FunctionExpression)[async=true] > BlockStatement > TryStatement > BlockStatement',
     channelName: 'executeAsync',
     transform: 'awaitContextCallback',
     transformOptions: {
