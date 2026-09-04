@@ -6,6 +6,7 @@ const https = require('node:https')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const { markEndpointReached } = require('../../exporters/common/retry')
+const { getHttpsProxyAgent } = require('../../exporters/common/proxy')
 const { isLoopbackHost, parseUrl } = require('../../exporters/common/url')
 
 const legacyStorage = storage('legacy')
@@ -128,6 +129,9 @@ function getRequestOptions (options) {
     )
     delete requestOptions.headers['dd-api-key']
     delete requestOptions.headers['DD-API-KEY']
+  }
+  if (hasApiKey && requestOptions.protocol === 'https:') {
+    requestOptions.agent = getHttpsProxyAgent(requestOptions, requestOptions.agent)
   }
 
   delete requestOptions.deadline

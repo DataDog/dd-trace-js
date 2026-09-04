@@ -8,19 +8,12 @@ const sinon = require('sinon')
 
 describe('direct EVP route', () => {
   let createDirectEVPRoute
-  let getHttpsProxyAgent
-  let getProxyForUrl
-  let HttpsProxyAgent
   let log
 
   beforeEach(() => {
-    getProxyForUrl = sinon.stub().returns('')
-    HttpsProxyAgent = sinon.stub().callsFake(proxyUrl => ({ proxyUrl }))
     log = { debug: sinon.spy() }
 
-    ;({ createDirectEVPRoute, getHttpsProxyAgent } = proxyquire('../../src/evp_proxy/direct', {
-      '../../../../vendor/dist/https-proxy-agent': { HttpsProxyAgent },
-      '../../../../vendor/dist/proxy-from-env': { getProxyForUrl },
+    ;({ createDirectEVPRoute } = proxyquire('../../src/evp_proxy/direct', {
       '../log': log,
     }))
   })
@@ -53,33 +46,6 @@ describe('direct EVP route', () => {
         'DD-API-KEY': 'test-api-key',
       },
     })
-  })
-
-  it('uses the standard HTTPS proxy for direct intake', () => {
-    const proxyUrl = 'http://proxy:8202'
-    getProxyForUrl.returns(proxyUrl)
-
-    const route = createDirectEVPRoute({
-      DD_API_KEY: 'test-api-key',
-      site: 'datadoghq.com',
-    }, 'event-platform-intake')
-
-    assert.deepStrictEqual(route.agent, { proxyUrl })
-    sinon.assert.calledOnceWithExactly(
-      getProxyForUrl,
-      'https://event-platform-intake.datadoghq.com/'
-    )
-    sinon.assert.calledOnceWithExactly(HttpsProxyAgent, proxyUrl)
-  })
-
-  it('reuses the HTTPS agent for the same proxy', () => {
-    getProxyForUrl.returns('http://proxy:8202')
-
-    const first = getHttpsProxyAgent('https://debugger-intake.datadoghq.com/')
-    const second = getHttpsProxyAgent('https://event-platform-intake.datadoghq.com/')
-
-    assert.strictEqual(second, first)
-    sinon.assert.calledOnce(HttpsProxyAgent)
   })
 
   it('does not create a route without an API key', () => {

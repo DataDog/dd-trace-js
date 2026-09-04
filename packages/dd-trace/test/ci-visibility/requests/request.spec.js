@@ -2,20 +2,28 @@
 
 const assert = require('node:assert/strict')
 const http = require('node:http')
+const https = require('node:https')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/core')
 
-const request = require('../../../src/ci-visibility/requests/request')
+const { httpsAgent } = require('../../../src/exporters/common/agents')
 
 describe('ci-visibility/requests/request', () => {
   let clock
+  let getHttpsProxyAgent
+  let request
   let timeoutStub
 
   beforeEach(() => {
+    getHttpsProxyAgent = sinon.stub().callsFake((url, agent) => agent)
+    request = proxyquire('../../../src/ci-visibility/requests/request', {
+      '../../exporters/common/proxy': { getHttpsProxyAgent },
+    })
     clock = sinon.useFakeTimers({ now: 1_700_000_000_000, toFake: ['Date'] })
 
     // Collapse retry delays (5–7.5 s) to 0 ms so tests don't wait for real time,
@@ -24,6 +32,52 @@ describe('ci-visibility/requests/request', () => {
     timeoutStub = sinon.stub(global, 'setTimeout').callsFake((fn, delay, ...args) => {
       return realSetTimeout(fn, delay > 100 ? 0 : delay, ...args)
     })
+  })
+
+  it('selects an HTTPS proxy agent for authenticated requests', (done) => {
+    const url = new URL('https://intake.example/path')
+    const options = {
+      url,
+      headers: {
+        'DD-API-KEY': 'test-api-key',
+      },
+    }
+    nock('https://intake.example').post('/path').reply(200, 'ok')
+
+    request('{}', options, (error) => {
+      sinon.assert.calledOnceWithExactly(getHttpsProxyAgent, sinon.match({
+        ...options,
+        headers: sinon.match.object,
+      }), httpsAgent)
+      done(error)
+    })
+  })
+
+  it('keeps HTTPS requests without an API key direct', (done) => {
+    nock('https://intake.example').post('/path').reply(200, 'ok')
+
+    request('{}', { url: 'https://intake.example/path' }, (error) => {
+      sinon.assert.notCalled(getHttpsProxyAgent)
+      done(error)
+    })
+  })
+
+  it('reports proxy selection errors without starting a request', () => {
+    const error = new Error('invalid proxy URL')
+    const requestSpy = sinon.spy(https, 'request')
+    const callback = sinon.spy()
+    getHttpsProxyAgent.throws(error)
+
+    request('{}', {
+      url: 'https://intake.example/path',
+      headers: {
+        'DD-API-KEY': 'test-api-key',
+      },
+    }, callback)
+
+    requestSpy.restore()
+    sinon.assert.calledOnceWithExactly(callback, error)
+    sinon.assert.notCalled(requestSpy)
   })
 
   afterEach(() => {
