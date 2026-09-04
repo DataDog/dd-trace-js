@@ -1279,6 +1279,50 @@ describe('check-require-cache', () => {
     assert.strictEqual(map.sources.includes('test-trace-sync/index.js'), true)
   })
 
+  it('should cache bundler matchers by diagnostic channel module', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test-trace-sync', 'index.js')
+    const source = readFileSync(filename, 'utf8')
+    const target = { moduleName: 'test-trace-sync', filePath: 'index.js' }
+    const codeTransformer = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+    const create = sinon.spy(codeTransformer, 'create')
+
+    try {
+      rewriter.rewriteWithSourceMap(source, filename, 'commonjs', target, undefined, '../dc-polyfill.js')
+      rewriter.rewriteWithSourceMap(source, filename, 'commonjs', target, undefined, '../../dc-polyfill.js')
+      rewriter.rewriteWithSourceMap(source, filename, 'commonjs', target, undefined, '../dc-polyfill.js')
+
+      assert.strictEqual(create.callCount, 2)
+    } finally {
+      create.restore()
+    }
+  })
+
+  it('should preserve regular sources that cannot be rewritten', () => {
+    const source = 'module.exports = true'
+
+    assert.strictEqual(rewriter.rewrite('', '/project/empty.js', 'module'), '')
+    assert.strictEqual(rewriter.rewrite(
+      source,
+      '/project/node_modules/missing/index.js',
+      'commonjs',
+      { moduleName: 'missing', filePath: 'index.js' }
+    ), source)
+    assert.strictEqual(rewriter.rewrite(
+      source,
+      '/project/node_modules/test-trace-sync/index.js',
+      'commonjs',
+      { moduleName: 'test-trace-sync', filePath: 'index.js' }
+    ), source)
+
+    rewriter.disable('test-disabled')
+    assert.strictEqual(rewriter.rewrite(
+      source,
+      '/project/node_modules/test-disabled/index.js',
+      'commonjs',
+      { moduleName: 'test-disabled', filePath: 'index.js' }
+    ), source)
+  })
+
   it('should preserve bundled sources that cannot be rewritten', () => {
     const sourceMap = { mappings: '', version: 3 }
     assert.deepStrictEqual(

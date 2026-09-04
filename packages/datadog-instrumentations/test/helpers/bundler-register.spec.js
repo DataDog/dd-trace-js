@@ -80,7 +80,7 @@ describe('bundler register', () => {
   it('does not activate explicitly disabled bundled integrations', () => {
     const hook = sinon.stub()
     const integrationHook = sinon.stub()
-    const { publish } = loadBundlerRegister({
+    const { loadChannel, publish } = loadBundlerRegister({
       disabled: new Set(['test-disabled-integration']),
       hooks: { 'test-disabled-integration': hook },
       instrumentations: {
@@ -95,6 +95,7 @@ describe('bundler register', () => {
       version: '1.0.0',
     })
 
+    sinon.assert.notCalled(loadChannel.publish)
     sinon.assert.notCalled(hook)
     sinon.assert.notCalled(integrationHook)
   })
@@ -148,26 +149,35 @@ describe('bundler register', () => {
   })
 
   it('disables relative hooks through their owning integration', () => {
+    const previous = process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+    process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = '@prisma/client'
     const hook = sinon.stub()
     const integrationHook = sinon.stub()
-    const { publish } = loadBundlerRegister({
-      disabled: new Set(['@prisma/client']),
-      hooks: { '@prisma/client': hook },
-      instrumentations: {
-        './runtime/library.js': [{ file: 'runtime/library.js', hook: integrationHook }],
-      },
-    })
 
-    publish({
-      integration: '@prisma/client',
-      module: {},
-      package: './runtime/library.js',
-      path: './runtime/library.js',
-      version: '6.1.0',
-    })
+    try {
+      const { loadChannel, publish } = loadBundlerRegister({
+        disabled: instrumentationUtils.getDisabledInstrumentations(),
+        hooks: { '@prisma/client': hook },
+        instrumentations: {
+          './runtime/library.js': [{ file: 'runtime/library.js', hook: integrationHook }],
+        },
+      })
 
-    sinon.assert.notCalled(hook)
-    sinon.assert.notCalled(integrationHook)
+      publish({
+        integration: '@prisma/client',
+        module: {},
+        package: './runtime/library.js',
+        path: './runtime/library.js',
+        version: '6.1.0',
+      })
+
+      sinon.assert.notCalled(loadChannel.publish)
+      sinon.assert.notCalled(hook)
+      sinon.assert.notCalled(integrationHook)
+    } finally {
+      if (previous === undefined) delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+      else process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = previous
+    }
   })
 
   it('matches current hook metadata instead of stale build-plan positions', () => {
