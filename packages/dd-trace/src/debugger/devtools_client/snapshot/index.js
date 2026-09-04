@@ -205,10 +205,11 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
         }
 
         if (ctx.deadlineReached) {
-          incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
-          // Add the current expression (properties may be incomplete due to timeout)
+          // Add the current expression (properties may be incomplete due to timeout). Those carry the timeout marker
+          // and are recorded when processed, unless they end up redacted.
           rawResults.push({ name, remoteObject: result, maxLength })
-          // Add stub entries for remaining uncaptured expressions
+          // Add stub entries for remaining uncaptured expressions. The stubs are used as-is, so record them here.
+          if (i + 1 < expressions.length) incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
           for (let j = i + 1; j < expressions.length; j++) {
             rawResults.push({
               name: expressions[j].name,

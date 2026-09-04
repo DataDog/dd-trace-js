@@ -185,6 +185,36 @@ describe('debugger -> devtools client -> snapshot incomplete capture reasons', f
       assert.deepStrictEqual(captured.skipped, { notCapturedReason: 'timeout' })
       assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.TIMEOUT)
     })
+
+    it('should not record a timeout that only cut short a value that ends up redacted', async function () {
+      const { processCaptureExpressions, incomplete } = await whilePaused((callFrame) => {
+        return evaluateCaptureExpressions(callFrame, [
+          { name: 'wrapped', expression: '({ password: nested })', limits: DEFAULT_CAPTURE_LIMITS },
+        ], EXPIRED_DEADLINE_NS)
+      })
+
+      const captured = processCaptureExpressions()
+
+      assert.deepStrictEqual(captured.wrapped, {
+        type: 'Object',
+        fields: { password: { type: 'Object', notCapturedReason: 'redactedIdent' } },
+      })
+      assert.strictEqual(incomplete.reasons, 0)
+    })
+
+    it('should record a timeout that skips the remaining expressions', async function () {
+      const { processCaptureExpressions, incomplete } = await whilePaused((callFrame) => {
+        return evaluateCaptureExpressions(callFrame, [
+          { name: 'wrapped', expression: '({ password: nested })', limits: DEFAULT_CAPTURE_LIMITS },
+          { name: 'skipped', expression: 'nested', limits: DEFAULT_CAPTURE_LIMITS },
+        ], EXPIRED_DEADLINE_NS)
+      })
+
+      const captured = processCaptureExpressions()
+
+      assert.deepStrictEqual(captured.skipped, { notCapturedReason: 'timeout' })
+      assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.TIMEOUT)
+    })
   })
 })
 
