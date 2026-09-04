@@ -18,6 +18,7 @@ describe('Plugin', () => {
   let child
   let listener
   let port
+  let undefinedExtractCount
 
   before(done => {
     const server = http.createServer((req, res) => {
@@ -37,6 +38,7 @@ describe('Plugin', () => {
 
   withVersions('electron', ['electron'], version => {
     const startApp = done => {
+      undefinedExtractCount = 0
       const electron = require(`../../../versions/electron@${version}`).get()
 
       const args = [join(__dirname, 'app', 'main')]
@@ -54,7 +56,13 @@ describe('Plugin', () => {
       })
 
       child.on('error', done)
-      child.on('message', msg => msg === 'ready' && done())
+      child.on('message', msg => {
+        if (msg === 'ready') {
+          undefinedExtractCount = 0
+          return done()
+        }
+        if (msg?.name === 'extract-with-undefined') undefinedExtractCount++
+      })
     }
 
     describe('electron', () => {
@@ -147,6 +155,32 @@ describe('Plugin', () => {
             .catch(done)
 
           child.send({ name: 'receive' })
+        })
+
+        it('should not extract an absent carrier for uninstrumented renderer IPC', done => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const span = traces.flat().find(s => s.name === 'electron.main.receive')
+            assert.ok(span, 'expected electron.main.receive span')
+            assert.strictEqual(span.resource, 'set-title-untraced')
+          }, { timeoutMs: TRACE_TIMEOUT_MS })
+          const completionPromise = new Promise(resolve => {
+            const onMessage = msg => {
+              if (msg?.name !== 'receive-untraced-complete') return
+              child.off('message', onMessage)
+              resolve()
+            }
+
+            child.on('message', onMessage)
+          })
+
+          child.send({ name: 'receive-untraced' })
+
+          Promise.all([tracePromise, completionPromise])
+            .then(() => {
+              assert.strictEqual(undefinedExtractCount, 0)
+              done()
+            })
+            .catch(done)
         })
 
         it('should do automatic instrumentation for main IPC when handling', done => {
