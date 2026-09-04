@@ -20,7 +20,7 @@ const {
 } = require('./utils')
 
 const target = getTargetCodePath(__filename)
-const { runWithHugeObject, runWithManyLocals } = require(target)
+const { runWithHugeObject, runWithManyLocals, runWithRedactedValues } = require(target)
 
 // A deadline that has already passed, so the collector stops at the first opportunity
 const EXPIRED_DEADLINE_NS = 0n
@@ -84,6 +84,20 @@ describe('debugger -> devtools client -> snapshot incomplete capture reasons', f
         assert.deepStrictEqual(Object.keys(state), ['first', 'second', 'third'])
         assert.strictEqual(incomplete.reasons, 0)
       })
+
+    it('should not record limits enforced on values that end up redacted', async function () {
+      const { processLocalState, incomplete } = await whilePaused((callFrame) => {
+        return getLocalStateForCallFrame(callFrame, { ...DEFAULT_CAPTURE_LIMITS, maxReferenceDepth: 1 })
+      }, { line: 29, trigger: runWithRedactedValues })
+
+      const state = processLocalState()
+
+      assert.deepStrictEqual(state, {
+        password: { type: 'string', notCapturedReason: 'redactedIdent' },
+        secret: { type: 'Object', notCapturedReason: 'redactedIdent' },
+      })
+      assert.strictEqual(incomplete.reasons, 0)
+    })
 
     it('should not record a runtime error when the large object safety threshold disables the capture',
       async function () {

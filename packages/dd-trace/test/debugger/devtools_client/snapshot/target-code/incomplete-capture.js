@@ -21,4 +21,12 @@ function runWithManyLocals () {
   return 'my return value' // breakpoint at this line
 }
 
-module.exports = { run, runWithHugeObject, runWithManyLocals }
+function runWithRedactedValues () {
+  /* eslint-disable no-unused-vars */
+  const password = 'x'.repeat(300)
+  const secret = { nested: { deeper: { deepest: 42 } } }
+  /* eslint-enable no-unused-vars */
+  return 'my return value' // breakpoint at this line
+}
+
+module.exports = { run, runWithHugeObject, runWithManyLocals, runWithRedactedValues }
