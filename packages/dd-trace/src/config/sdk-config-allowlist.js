@@ -15,8 +15,10 @@ const sdkConfigAllowlist = new Set([
   'DD_DYNAMIC_INSTRUMENTATION_ENABLED',
   'DD_CODE_ORIGIN_FOR_SPANS_ENABLED',
 
-  // Profiling (follow-up PR):
-  // 'DD_PROFILING_ENABLED',
+  // Profiling: enabled here for the SDK-configuration profiling demo. Upstream this lands with
+  // the profiling follow-up PR (DataDog/dd-trace-js#9626); the consumer side is the
+  // 'datadog:config:update' subscriber in packages/dd-trace/src/profiler.js.
+  'DD_PROFILING_ENABLED',
 ])
 
 module.exports = { sdkConfigAllowlist }
