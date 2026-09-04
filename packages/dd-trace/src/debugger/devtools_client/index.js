@@ -13,6 +13,7 @@ const {
   SAMPLED_PROBE_OVERFLOW_INDEX,
 } = require('../probe_sampler_constants')
 const { breakpointToProbes, samplingIndexToProbe } = require('./state')
+const { refreshBreakpoint } = require('./breakpoints')
 const session = require('./session')
 const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./snapshot')
 const send = require('./send')
@@ -190,6 +191,9 @@ session.on('Debugger.paused', async ({ params }) => {
   const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the probe template results
   let messageIndex = 1
 
+  // A probe whose capture got permanently disabled during this pause, if any
+  let captureDisabledProbe
+
   // TODO: Send multiple probes in one HTTP request as an array (DEBUG-2848)
   for (const probe of probes) {
     const snapshot = {
@@ -221,6 +225,7 @@ session.on('Debugger.paused', async ({ params }) => {
           expr: '',
           message: error.message,
         }))
+        captureDisabledProbe ??= probe
       }
       snapshot.captures = {
         lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
@@ -237,6 +242,7 @@ session.on('Debugger.paused', async ({ params }) => {
             expr: '',
             message: error.message,
           }))
+          captureDisabledProbe ??= probe
         }
 
         snapshot.captures = {
@@ -296,6 +302,18 @@ session.on('Debugger.paused', async ({ params }) => {
     send(message, logger, dd, snapshot,
       config.propagateProcessTags.enabled ? processTags.serialized : undefined,
       eventType, incompleteReasons)
+  }
+
+  if (captureDisabledProbe !== undefined) {
+    // The breakpoint condition bakes in whether each probe produces snapshots, which decides if a hit counts against
+    // the global snapshot rate limit and how a skipped hit is classified. Rebuild it now that this changed. All probes
+    // at the location share the breakpoint, so one refresh covers every probe disabled during this pause.
+    refreshBreakpoint(captureDisabledProbe).catch((err) => {
+      log.error(
+        '[debugger:devtools_client] Error refreshing breakpoint after disabling capture for probe %s (version: %s)',
+        captureDisabledProbe.id, captureDisabledProbe.version, err
+      )
+    })
   }
 })
 
