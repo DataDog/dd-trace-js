@@ -34,9 +34,8 @@ const disabled = new Set()
 let matcherCjs
 /** @type {InstrumentationMatcher|undefined} */
 let matcherEsm
-/** @type {InstrumentationMatcher|undefined} */
-let matcherBundler
-let matcherBundlerDcModule
+/** @type {Map<string, InstrumentationMatcher>} */
+const matcherBundlerByDcModule = new Map()
 
 // Keep the marker split: source-map scanners can read a contiguous token in
 // string literals as this file's own inline map.
@@ -51,8 +50,26 @@ const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base6
  * @returns {string|Buffer|ArrayBuffer|Uint8Array}
  */
 function rewrite (content, filename, format, target) {
+  if (!content) return content
+
+  target ||= getRewriteTarget(filename)
+  if (!target) return content
+
+  filename = filename.replace('file://', '')
+
+  const moduleType = format === 'module' ? 'esm' : 'cjs'
+  const { moduleName, filePath } = target
+  const version = getVersion(filename, filePath)
+
+  if (disabled.has(moduleName)) return content
+
   try {
-    const { code, map } = rewriteWithSourceMap(content, filename, format, target)
+    const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
+    if (!transformer) return content
+
+    const source = getSourceText(content)
+    const { code, map } = transformer.transform(source, moduleType)
+
     if (!map) return code
 
     return code + '\n' + SOURCE_MAP_PREFIX + Buffer.from(map).toString('base64')
@@ -103,12 +120,13 @@ function rewriteWithSourceMap (content, filename, format, target, sourceMap, dcM
  */
 function getMatcher (moduleType, dcModule) {
   if (dcModule !== undefined) {
-    if (dcModule !== matcherBundlerDcModule) {
-      matcherBundler = createMatcher(moduleType, dcModule)
-      matcherBundlerDcModule = dcModule
+    let matcher = matcherBundlerByDcModule.get(dcModule)
+    if (matcher === undefined) {
+      matcher = createMatcher(moduleType, dcModule)
+      matcherBundlerByDcModule.set(dcModule, matcher)
     }
 
-    return /** @type {InstrumentationMatcher} */ (matcherBundler)
+    return matcher
   }
 
   if (moduleType === 'esm') {

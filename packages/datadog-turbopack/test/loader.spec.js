@@ -709,6 +709,7 @@ describe('datadog-turbopack loader', () => {
     const unrelatedSource = fs.readFileSync(unrelated, 'utf8')
 
     assert.match(matchingResult, /dd-trace:bundler:load/)
+    assert.match(matchingResult, /integration: "@prisma\/client"/)
     assert.match(matchingResult, /package: "\.\/runtime\/library\.js"/)
     assert.equal(await runLoader(unrelated, unrelatedSource, options), unrelatedSource)
     assert.equal(await runLoader(otherFile, source, options), source)
