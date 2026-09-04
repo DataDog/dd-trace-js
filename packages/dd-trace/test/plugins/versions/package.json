@@ -214,6 +214,7 @@
     "playwright": "1.62.1",
     "playwright-core": "1.62.1",
     "pnpm": "11.25.0",
+    "postgres": "3.4.9",
     "prisma": "7.10.0",
     "promise": "8.3.0",
     "promise-js": "0.0.7",

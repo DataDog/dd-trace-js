@@ -113,6 +113,10 @@ function createMatcher (moduleType) {
     configureMercuriusRequest,
     waitForAsyncEnd,
   } = require('./transforms')
+  const {
+    postgresQueryHandlers,
+    postgresQueryLifecycle,
+  } = require('./transforms/postgres')
 
   const matcher = create(instrumentations, getDcPolyfillSpecifier(moduleType))
 
@@ -126,6 +130,8 @@ function createMatcher (moduleType) {
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
+  matcher.addTransform('postgresQueryHandlers', postgresQueryHandlers)
+  matcher.addTransform('postgresQueryLifecycle', postgresQueryLifecycle)
 
   return matcher
 }
