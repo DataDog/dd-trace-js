@@ -68,7 +68,7 @@ const finishWrappedContexts = new WeakSet()
 const runFilesWrappedPrototypes = new WeakSet()
 const activeRunFilesContexts = new WeakSet()
 const runErrorsByContext = new WeakMap()
-const typecheckPoolWorkerMethods = new WeakMap()
+const typecheckPoolWorkerRequests = new WeakMap()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
@@ -1695,9 +1695,9 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
   })
 }
 
-async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker) {
+async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker, files = result?.files) {
   if (!testSuiteFinishCh.hasSubscribers) return
-  if (!Array.isArray(result?.files)) return
+  if (!Array.isArray(result?.files) || !Array.isArray(files)) return
 
   const setupState = ctx && mainProcessSetupStates.get(ctx)
   if (
@@ -1707,7 +1707,7 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
     await ensureMainProcessSetup(
       ctx,
       frameworkVersion,
-      result.files,
+      files,
       false,
       !setupState || setupState.disableTestImpactAnalysis
     )
@@ -1717,7 +1717,7 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
     ? await getChannelPromise(testSessionConfigurationCh, { frameworkVersion }) || {}
     : {}
 
-  await Promise.all(result.files.map(file => reportTypecheckFile(
+  await Promise.all(files.map(file => reportTypecheckFile(
     file,
     sessionConfiguration,
     frameworkVersion,
@@ -1750,7 +1750,10 @@ function wrapTypecheckPoolWorker (TypecheckPoolWorker, frameworkVersion) {
   if (!TypecheckPoolWorker?.prototype?.send || !TypecheckPoolWorker.prototype.on) return
 
   shimmer.wrap(TypecheckPoolWorker.prototype, 'send', send => function (message) {
-    typecheckPoolWorkerMethods.set(this, message?.type)
+    typecheckPoolWorkerRequests.set(this, {
+      type: message?.type,
+      filepaths: new Set(message?.context?.files?.map(file => file.filepath)),
+    })
     return send.apply(this, arguments)
   })
   shimmer.wrap(TypecheckPoolWorker.prototype, 'on', on => function (event, callback) {
@@ -1759,19 +1762,23 @@ function wrapTypecheckPoolWorker (TypecheckPoolWorker, frameworkVersion) {
     const worker = this
     arguments[1] = shimmer.wrapFunction(callback, callback => function (message) {
       const typechecker = worker.project?.typechecker
+      const request = typecheckPoolWorkerRequests.get(worker)
       if (
         message?.type !== 'testfileFinished' ||
-        typecheckPoolWorkerMethods.get(worker) !== 'run' ||
+        request?.type !== 'run' ||
         !typechecker
       ) {
         return callback.apply(this, arguments)
       }
 
+      const result = typechecker.getResult?.()
+      const files = result?.files?.filter(file => request.filepaths.has(file.filepath))
       return reportTypecheckResults(
-        typechecker.getResult?.(),
+        result,
         frameworkVersion,
         worker.project?.vitest,
-        typechecker
+        typechecker,
+        files
       ).then(
         () => callback.apply(this, arguments),
         (error) => {

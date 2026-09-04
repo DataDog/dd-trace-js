@@ -24,6 +24,7 @@ const isRumCorrelationEnabled = providedContext.isRumCorrelationEnabled !== fals
 const rumTestExecutionIdCookieName = providedContext.rumTestExecutionIdCookieName
 const testPropertiesByFilepath = providedContext.testPropertiesByFilepath || {}
 const setVitestTaskFn = globalThis[Symbol.for('dd-trace.vitest.set-fn')]
+const skipVitestTask = globalThis[Symbol.for('dd-trace.vitest.skip-task')]
 const importVitestBrowserContext = globalThis[Symbol.for('dd-trace.vitest.browser-context-importer')]
 const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
@@ -94,7 +95,7 @@ if (isNoWorkerInitActive) {
     } else if (isAttemptToFixTest && attemptIndex > 0) {
       task.result.state = 'run'
     } else if (isEarlyFlakeDetectionTestAttempt) {
-      const isSkippedRepeat = prepareEarlyFlakeDetectionAttempt(task, attemptIndex)
+      const isSkippedRepeat = prepareEarlyFlakeDetectionAttempt(task, attemptIndex, skip)
       if (!isSkippedRepeat && attemptIndex > 0) {
         task.result.state = 'run'
       }
@@ -618,7 +619,7 @@ function getPreviousErrorCount (errorCounts, repeatCount) {
   return 0
 }
 
-function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
+function prepareEarlyFlakeDetectionAttempt (task, attemptIndex, skip) {
   if (attemptIndex === 0) {
     earlyFlakeDetectionStartByTask.set(task, now())
     return false
@@ -640,7 +641,8 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     return false
   }
 
-  if (!canReplaceVitestTaskFn()) {
+  const canReplaceTaskFn = canReplaceVitestTaskFn()
+  if (!canReplaceTaskFn && typeof skipVitestTask !== 'function') {
     earlyFlakeDetectionStartByTask.set(task, now())
     return false
   }
@@ -652,7 +654,11 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     })
   }
   task.meta.__ddTestOptEfdSkipCurrentAttempt = true
-  replaceVitestTaskFn(task, noopTest)
+  if (canReplaceTaskFn) {
+    replaceVitestTaskFn(task, noopTest)
+  } else {
+    skipVitestTask(skip)
+  }
   return true
 }
 
