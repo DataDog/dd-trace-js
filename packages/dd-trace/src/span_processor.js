@@ -1,5 +1,6 @@
 'use strict'
 
+const { AUTO_REJECT } = require('../../../ext/priority')
 const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
@@ -7,7 +8,6 @@ const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
 const { APM_TRACING_ENABLED_KEY } = require('./constants')
-const { AUTO_REJECT } = require('../../../ext/priority')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
