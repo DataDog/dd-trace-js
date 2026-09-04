@@ -239,6 +239,18 @@ module.exports = [
     module: {
       name: 'webdriver',
       versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="initiateBidi"]',
+    functionQuery: {
+      kind: 'Sync',
+    },
+    channelName: 'initiateBidi',
+  },
+  {
+    module: {
+      name: 'webdriver',
+      versionRange: '>=9.0.0',
       filePath: 'build/node.js',
     },
     astQuery: 'FunctionDeclaration[id.name="command_default"]',
@@ -246,6 +258,18 @@ module.exports = [
       kind: 'Sync',
     },
     channelName: 'command',
+  },
+  {
+    module: {
+      name: 'webdriver',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="initiateBidi"]',
+    functionQuery: {
+      kind: 'Sync',
+    },
+    channelName: 'initiateBidi',
   },
   {
     module: {

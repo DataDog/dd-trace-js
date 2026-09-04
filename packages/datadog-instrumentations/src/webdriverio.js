@@ -10,6 +10,7 @@ const { EMPTY_EFD_RETRY_POLICY } = require('../../dd-trace/src/ci-visibility/efd
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
+const shimmer = require('../../datadog-shimmer')
 const {
   collectTestOptimizationSummariesFromTraces,
   getIsFaultyEarlyFlakeDetection,
@@ -66,6 +67,7 @@ const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRun
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
 const testFrameworkFnWrapperCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
 const newWindowCh = tracingChannel('orchestrion:webdriverio:newWindow')
+const webdriverBidiInitCh = tracingChannel('orchestrion:webdriver:initiateBidi')
 const webdriverCommandCh = tracingChannel('orchestrion:webdriver:command')
 const urlCh = tracingChannel('orchestrion:webdriverio:url')
 
@@ -431,7 +433,7 @@ async function forEachRumWindow (browser, operation, value) {
   }
 
   let currentFrameContext
-  if (windowHandles.length > 1 && browser.isBidi &&
+  if (browser.isBidi &&
       typeof browser.execute === 'function' && typeof browser.switchFrame === 'function') {
     try {
       const currentContext = await browser.execute(getCurrentRumContext)
@@ -443,12 +445,16 @@ async function forEachRumWindow (browser, operation, value) {
     }
   }
 
+  let activeWindowHandle = currentWindowHandle
+  let isTopLevel = !currentFrameContext
   for (const windowHandle of windowHandles) {
-    if (windowHandle !== currentWindowHandle) {
+    if (windowHandle !== activeWindowHandle || !isTopLevel) {
       try {
         // WebDriver window commands must run in order because each one changes the active window.
         // eslint-disable-next-line no-await-in-loop
         await browser.switchToWindow(windowHandle)
+        activeWindowHandle = windowHandle
+        isTopLevel = true
       } catch (error) {
         log.error('WebdriverIO RUM window switch error', error)
         continue
@@ -459,9 +465,9 @@ async function forEachRumWindow (browser, operation, value) {
   }
 
   const canRestoreWindow = windowHandles.includes(currentWindowHandle)
-  if (windowHandles.length > 1 && canRestoreWindow) {
+  if (canRestoreWindow && (activeWindowHandle !== currentWindowHandle || currentFrameContext)) {
     try {
-      await browser.switchToWindow(currentWindowHandle)
+      if (activeWindowHandle !== currentWindowHandle) await browser.switchToWindow(currentWindowHandle)
       if (currentFrameContext) await browser.switchFrame(currentFrameContext)
     } catch (error) {
       log.error('WebdriverIO RUM browsing context restore error', error)
@@ -589,6 +595,31 @@ function wrapRumProtocolCommand (context) {
 }
 
 /**
+ * Wraps the runtime-created BiDi navigation handler so RUM preparation can finish before it sends the command.
+ * A tracing-channel start subscriber is synchronous and cannot delay the static async handler itself.
+ *
+ * @param {{result?: {_bidiHandler?: {value?: object}}}} context
+ * @returns {void}
+ */
+function wrapRumBidiNavigation (context) {
+  const bidiHandler = context.result?._bidiHandler?.value
+  if (typeof bidiHandler?.browsingContextNavigate !== 'function') return
+
+  try {
+    shimmer.wrap(bidiHandler, 'browsingContextNavigate', navigate => async function (...args) {
+      try {
+        await preloadRumNavigation.call(this.client)
+      } catch (error) {
+        log.error('WebdriverIO RUM BiDi navigation error', error)
+      }
+      return navigate.apply(this, args)
+    })
+  } catch (error) {
+    log.error('WebdriverIO RUM BiDi instrumentation error', error)
+  }
+}
+
+/**
  * Reapplies RUM correlation to every open browser window for a retry.
  *
  * @param {object} browser
@@ -635,7 +666,7 @@ async function startRumTest () {
     await forEachRumWindow(browser, async (browser) => {
       try {
         const rumState = await browser.execute(detectRum)
-        if (!rumState || isRumSampledOut(rumState)) return
+        if (!rumState) return
         if (rumState.isRumActive) isRumActive = true
         shouldCorrelateRum = true
       } catch (error) {
@@ -1851,6 +1882,10 @@ newWindowCh.asyncEnd.subscribe(
 
 webdriverCommandCh.end.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (wrapRumProtocolCommand)
+)
+
+webdriverBidiInitCh.end.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (wrapRumBidiNavigation)
 )
 
 testFrameworkFnWrapperCh.asyncEnd.subscribe(
