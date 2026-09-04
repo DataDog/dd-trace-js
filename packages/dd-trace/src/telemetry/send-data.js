@@ -76,9 +76,10 @@ let getTestOptimizationAgent
  * @param {import('../config/config-base')} config
  * @param {TelemetryApplication} application
  * @param {TelemetryRequestType} reqType
+ * @param {string} [apiKey]
  * @returns {Record<string, string>}
  */
-function getHeaders (config, application, reqType) {
+function getHeaders (config, application, reqType, apiKey) {
   const headers = {
     'DD-Client-Library-Language': application.language_name,
     'DD-Client-Library-Version': application.tracer_version,
@@ -94,8 +95,8 @@ function getHeaders (config, application, reqType) {
   if (debug) {
     headers['dd-telemetry-debug-enabled'] = 'true'
   }
-  if (config.DD_API_KEY) {
-    headers['dd-api-key'] = config.DD_API_KEY
+  if (apiKey) {
+    headers['dd-api-key'] = apiKey
   }
   return headers
 }
@@ -161,7 +162,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     port,
     method: 'POST',
     path: isAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
-    headers: getHeaders(config, application, reqType),
+    headers: getHeaders(config, application, reqType, isAgentlessMode ? config.DD_API_KEY : undefined),
   }
   if (isCiVisibility) options.agent = getTestOptimizationAgent(url)
 
