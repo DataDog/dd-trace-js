@@ -35,17 +35,17 @@ esbuildVersions.forEach((version) => {
 
     before(() => {
       process.chdir(TEST_DIR)
-      execSync('npm install', {
+      execSync('npm install --no-audit', {
         timeout,
       })
-      execSync(`npm install esbuild@${version}`, {
+      execSync(`npm install esbuild@${version} --no-audit`, {
         timeout,
       })
     })
 
     after(() => {
       process.chdir(originalDir)
-      execSync('npm remove esbuild', {
+      execSync('npm remove esbuild --no-audit', {
         timeout,
       })
     })

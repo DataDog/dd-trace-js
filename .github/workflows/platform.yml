@@ -29,7 +29,7 @@ jobs:
       matrix:
         manager:
           - name: npm
-            install: npm install
+            install: npm install --no-audit
           - name: pnpm
             install: >-
               pnpm
@@ -43,7 +43,7 @@ jobs:
             install: yarn add
           - name: yarn-berry
             install: >-
-              (command -v corepack >/dev/null 2>&1 || npm install -g corepack)
+              (command -v corepack >/dev/null 2>&1 || npm install -g corepack --no-audit)
               && yarn set version stable
               && yarn config set nodeLinker node-modules
               && yarn config set enableScripts true
@@ -58,7 +58,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv "/tmp/$FILENAME" /tmp/dd-trace.tgz
       - run: mkdir -p /tmp/app
-      - run: npm i -g pnpm
+      - run: npm i -g pnpm --no-audit
         if: matrix.manager.name == 'pnpm'
       - name: Install packed package
         shell: bash

@@ -73,10 +73,10 @@ async function setup (modName, repoName, commitish) {
   }
 
   try {
-    await execOrError('npm install --legacy-peer-deps', { cwd })
+    await execOrError('npm install --legacy-peer-deps --no-audit', { cwd })
   } catch (e) {
     console.error(e)
-    await execOrError('npm install --legacy-peer-deps', { cwd })
+    await execOrError('npm install --legacy-peer-deps --no-audit', { cwd })
   }
 }
 

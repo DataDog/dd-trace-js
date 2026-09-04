@@ -43,7 +43,7 @@ describe('Electron integration', function () {
     )
 
     // Install dd-trace and its transitive dependencies into the app directory.
-    execFileSync('npm', ['install'], { cwd: appDir, stdio: 'pipe' })
+    execFileSync('npm', ['install', '--no-audit'], { cwd: appDir, stdio: 'pipe' })
 
     // Use the electron version already installed in the sandbox so that
     // electron-packager finds the cached binary and does not re-download it.

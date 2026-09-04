@@ -11,7 +11,7 @@ runs:
       with:
         path: ~/.npm
         key: ${{ github.workflow }}-branch-diff-3.1.1
-    - run: npm i -g branch-diff@3.1.1
+    - run: npm i -g branch-diff@3.1.1 --no-audit
       shell: bash
     - run: |
         mkdir -p ~/.config/changelog-maker

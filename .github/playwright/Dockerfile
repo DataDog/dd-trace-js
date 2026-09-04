@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Playwright 1.18.x tries obsolete Ubuntu package names on Debian Bookworm
 # (`ttf-unifont`, `xfonts-cyrillic`, `ttf-ubuntu-font-family`) and exits 0
 # even though apt fails. Install Chromium's runtime dependencies directly.
-RUN npm install --prefix /tmp/pw @playwright/test@${PLAYWRIGHT_VERSION} \
+RUN npm install --prefix /tmp/pw @playwright/test@${PLAYWRIGHT_VERSION} --no-audit \
     && case "$PLAYWRIGHT_VERSION" in \
       1.18|1.18.*) \
         echo "Installing Playwright 1.18 Chromium dependencies for Debian Bookworm" \

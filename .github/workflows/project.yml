@@ -84,7 +84,7 @@ jobs:
             .github
             scripts/verify-workflow-job-names.js
       - uses: ./.github/actions/node/latest
-      - run: npm install yaml
+      - run: npm install yaml --no-audit
       - run: node scripts/verify-workflow-job-names.js
 
   # The package size is especially useful in constrained environments, so the

@@ -21,7 +21,7 @@ esbuildVersions.forEach((version) => {
       // TODO add this in createSandbox if it's need in more places
       execSync(`rm -rf ${path.join(cwd, 'node_modules')}`, { cwd })
       execSync(`rm -rf ${path.join(cwd, 'bun.lock')}`, { cwd })
-      execSync('npm install -g yarn', { cwd })
+      execSync('npm install -g yarn --no-audit', { cwd })
 
       execSync('yarn --ignore-engines', { cwd })
     })

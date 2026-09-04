@@ -8,7 +8,7 @@ npm pack
 
 mkdir -p packaging/sources
 
-npm install --prefix ./packaging/sources/ dd-trace-*.tgz
+npm install --prefix ./packaging/sources/ dd-trace-*.tgz --no-audit
 
 rm packaging/sources/*.json # package.json and package-lock.json are unneeded
 

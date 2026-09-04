@@ -63,7 +63,7 @@ RUN git clone --depth 1 https://github.com/hdiv/insecure-bank-js.git /opt/insecu
 WORKDIR /opt/insecure-bank-js
 RUN git checkout 5755d091e6a5dc965a8e7c6d4fb79b2f0ea06d9a
 RUN . $NVM_DIR/nvm.sh \
-    && npm ci \
+    && npm ci --no-audit \
     && npm cache clean --force
 
 WORKDIR /app

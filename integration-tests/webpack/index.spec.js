@@ -32,13 +32,13 @@ webpackVersions.forEach((version) => {
 
     before(() => {
       process.chdir(TEST_DIR)
-      execSync('npm install', { timeout })
-      execSync(`npm install webpack@${version}`, { timeout })
+      execSync('npm install --no-audit', { timeout })
+      execSync(`npm install webpack@${version} --no-audit`, { timeout })
     })
 
     after(() => {
       process.chdir(originalDir)
-      execSync('npm remove webpack', { timeout })
+      execSync('npm remove webpack --no-audit', { timeout })
     })
 
     it('works', () => {
