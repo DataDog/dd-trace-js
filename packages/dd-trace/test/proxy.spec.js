@@ -1358,6 +1358,7 @@ describe('TracerProxy', () => {
   describe('MicroVM identity reset', () => {
     let channelMock
     let diagnosticsChannelMock
+    let configUpdateChannelMock
     let microProxy
     let storeConfig
     let uuidStub
@@ -1372,8 +1373,19 @@ describe('TracerProxy', () => {
         publish: sinon.stub(),
       }
 
+      // Tracer.init() also publishes the boot-time config on 'datadog:config:update' (the channel
+      // the profiler subscribes to). That is unrelated to the identity handshake asserted on here,
+      // so route it to its own mock instead of letting it inflate channelMock.publish's count.
+      configUpdateChannelMock = {
+        subscribe: sinon.stub(),
+        unsubscribe: sinon.stub(),
+        publish: sinon.stub(),
+      }
+
       diagnosticsChannelMock = {
-        channel: sinon.stub().returns(channelMock),
+        channel: sinon.stub().callsFake(
+          (name) => name === 'datadog:config:update' ? configUpdateChannelMock : channelMock
+        ),
       }
       storeConfig = sinon.stub().returns({})
 
