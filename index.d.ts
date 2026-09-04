@@ -3287,6 +3287,11 @@ declare namespace tracer {
   }
 
   export namespace opentelemetry {
+    export interface MeterProvider {
+      forceFlush(callback?: (error?: Error) => void): void;
+      shutdown(callback?: (error?: Error) => void): void;
+    }
+
     /**
      * A registry for creating named {@link Tracer}s.
      */

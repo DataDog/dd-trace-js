@@ -518,7 +518,8 @@ dd-trace-js includes experimental support for OpenTelemetry metrics, designed as
 require('dd-trace').init()
 const { metrics } = require('@opentelemetry/api')
 
-const meter = metrics.getMeter('my-service', '1.0.0')
+const meterProvider = metrics.getMeterProvider()
+const meter = meterProvider.getMeter('my-service', '1.0.0')
 
 // Counter - monotonically increasing values
 const requestCounter = meter.createCounter('http.requests', {
@@ -552,6 +553,11 @@ cpuGauge.addCallback((result) => {
   result.observe(cpuUsage.system / 1000000, { core: '0' })
 })
 ```
+
+Short-lived processes can use the callback-based `meterProvider.forceFlush(callback)` extension to wait for export.
+Call `meterProvider.shutdown(callback)` after the final measurement to export once more and stop collection. The optional
+callbacks receive an error when the operation fails. These methods aren't part of the OpenTelemetry Metrics API.
+In TypeScript, intersect the provider type with `import('dd-trace').opentelemetry.MeterProvider` to use them.
 
 #### Supported Configuration
 

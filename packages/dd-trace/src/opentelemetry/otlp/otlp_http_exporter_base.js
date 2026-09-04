@@ -172,7 +172,9 @@ class OtlpHttpExporterBase {
     this.telemetryTags[0] = `protocol:${this.#transport === https ? 'https' : 'http'}`
   }
 
-  shutdown () {}
+  shutdown (done) {
+    done?.()
+  }
 }
 
 module.exports = OtlpHttpExporterBase
