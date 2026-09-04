@@ -466,6 +466,13 @@ declare namespace tracer {
      * Maximum number of traces matching this rule to sample per second.
      */
     maxPerSecond?: number
+
+    /**
+     * When `true`, a trace chunk rejected by this rule is fully dropped:
+     * it is excluded from client-side stats and never sent to the Agent.
+     * @default false
+     */
+    discard?: boolean
   }
 
   /**
@@ -650,6 +657,7 @@ declare namespace tracer {
      * Sampling rules to apply to priority sampling. Each rule matches against a trace's
      * `service`, `name`, `resource`, and `tags`, and applies the rule's `sampleRate`. Use a
      * `sampleRate` of `0` to drop matching traces (for example to filter out unwanted resources).
+     * Specify `"discard": true` to fully drop it from stats as well.
      * If not specified, will defer to global sampling rate for all spans.
      * @default []
      * @env DD_TRACE_SAMPLING_RULES
