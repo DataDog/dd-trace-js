@@ -1,0 +1,139 @@
+name: dd-trace-js-agent
+version: "0.1"
+
+# All inputs are answer-only: the agent may inspect the repository to ground an explanation, but no case asks it
+# to modify files, execute commands, or complete an implementation. Content cases exercise always-loaded guidance
+# or the on-demand APM skill. Prompts bound the response size so omissions remain easy for the judge to identify.
+# Every repository-specific command and path is verified here because the comparative judge has no repository access.
+cases:
+  - id: dd-trace-js-package-manager-001
+    files: [AGENTS.md, CLAUDE.md]
+    input: |
+      I changed one dd-trace-js unit spec and need to install dependencies and run just that test.
+      Which package manager and commands should I use? Should I run the root test script too?
+      Answer in at most 4 bullets.
+    expected_criteria:
+      - Uses yarn to install dependencies, such as yarn install.
+      - Runs the specific spec with ./node_modules/.bin/mocha path/to/test.spec.js.
+      - Uses npm, not yarn, for any repository test script it recommends.
+      - >
+        Warns that the root npm test command is intentionally disabled and recommends a specific spec or targeted
+        npm run test:<area> script.
+    bad_signals:
+      - Uses yarn to run lint, build, or test scripts other than yarn services.
+      - Recommends the root npm test command as a useful validation step.
+      - Runs the entire test suite before the affected spec.
+
+  - id: dd-trace-js-plugin-tests-002
+    files: [AGENTS.md, CLAUDE.md]
+    input: |
+      I changed the amqplib plugin. Show me how to run only its tests when RabbitMQ is required,
+      and call out the environment issue that can make span assertions time out in instrumented shells.
+      Answer with only the required commands and one short explanation.
+    expected_criteria:
+      - Starts RabbitMQ with docker compose and uses SERVICES="rabbitmq" where required.
+      - Runs yarn services to install plugin test dependencies.
+      - Selects only amqplib with PLUGINS="amqplib" and runs npm run test:plugins.
+      - >
+        Unsets OTEL_TRACES_EXPORTER, OTEL_LOGS_EXPORTER, and OTEL_METRICS_EXPORTER before the tests so spans reach
+        the local mock agent.
+    bad_signals:
+      - Uses yarn to run the plugin test script.
+      - Raises the timeout without diagnosing spans being routed through the OTLP exporter.
+      - Runs every plugin's tests instead of selecting amqplib.
+
+  - id: dd-trace-js-test-boundaries-004
+    files: [AGENTS.md, CLAUDE.md]
+    input: |
+      I fixed a limit that accepts up to 32 entries and rejects additional entries with ERR_LIMIT.
+      What boundary tests and assertion style should cover it? Answer in at most 3 bullets.
+    expected_criteria:
+      - Tests both 32 as the last accepted value and 33 as the first rejected value.
+      - Uses node:assert/strict and assert.rejects with the ERR_LIMIT code instead of manual try/catch plus assert.fail.
+      - Checks existing specs and adds the failure plus uncovered sibling cases sharing the fixed path.
+    bad_signals:
+      - Tests only values comfortably below and above the boundary.
+      - Uses manual try/catch plus assert.fail for the rejected promise.
+      - Duplicates a sibling case that an existing spec already covers.
+
+  - id: dd-trace-js-new-cache-integration-005
+    files:
+      - .agents/skills/apm-integrations/SKILL.md
+      - .agents/skills/apm-integrations/references/new-integration-guide.md
+      - .agents/skills/apm-integrations/references/orchestrion.md
+      - .agents/skills/apm-integrations/references/plugin-patterns.md
+      - .agents/skills/apm-integrations/references/reference-plugins.md
+      - .agents/skills/apm-integrations/references/testing.md
+    input: |
+      We are evaluating automatic tracing for acme-cache >=2. Client.execute(command, ...args) is an async source
+      method duplicated in dist/cjs/client.js and dist/esm/client.js, and it calls a cache service. In at most
+      6 bullets, explain the recommended instrumentation, plugin lifecycle, and focused tests. Do not cover
+      plugin/product registration, documentation, or CI setup.
+    expected_criteria:
+      - Chooses Orchestrion rather than shimmer because execute exists as a source method.
+      - >
+        Adds Async function-query entries for Client.execute in both dist/cjs/client.js and dist/esm/client.js with
+        the same channel, plus the required Orchestrion config and hook registration.
+      - Keeps tracing out of the instrumentation layer and creates packages/datadog-plugin-acme-cache using CachePlugin.
+      - >
+        Uses a prefix matching the Orchestrion channel, creates the span in bindStart from ctx.arguments or ctx.self,
+        and finishes promise spans in asyncEnd rather than finish.
+      - Covers successful and failed commands in plugin specs and native ESM import variants.
+      - Validates with PLUGINS="acme-cache" npm run test:plugins:ci.
+    bad_signals:
+      - Implements only a plugin or only instrumentation instead of both diagnostic-channel layers.
+      - Uses shimmer without identifying a concrete pattern Orchestrion cannot support.
+      - Creates spans directly in packages/datadog-instrumentations or instruments only one module format.
+      - Finishes the promise span in finish or omits its asyncEnd lifecycle.
+      - Uses yarn instead of npm to run test scripts.
+
+  - id: dd-trace-js-real-path-tests-007
+    files: [AGENTS.md, CLAUDE.md]
+    input: |
+      A plugin regression test bypasses the normal loader, replaces the tracer with a small stub, invokes a plugin
+      method directly, and only asserts calls to the stub. Is this sufficient, and what should replace it?
+      Answer in at most 3 bullets.
+    expected_criteria:
+      - Rejects the loader-bypassing stub test because it can exercise states production never reaches.
+      - Uses the real plugin entry point through agent.load with the mock agent or a real service.
+      - Asserts observable output such as spans, span metadata, propagation, pathway hashes, or DSM statistics.
+    bad_signals:
+      - Accepts invoking a plugin method against a stub tracer as sufficient.
+      - Adds a production export, getter, or method solely to make the test possible.
+      - Changes production behavior to satisfy the fake test.
+
+  - id: dd-trace-js-channel-cardinality-008
+    files:
+      - .agents/skills/apm-integrations/SKILL.md
+    input: |
+      We want to move a diagnostic channel's only publish behind a seen-path gate to reduce duplicate tracing work.
+      Is that safe? Explain what must be checked and how the notifications should be structured. Answer in at most 3 bullets.
+    expected_criteria:
+      - >
+        Makes the answer conditional on the subscriber search: if IAST, AppSec, or another per-call subscriber is
+        present, moving the only publish behind the gate drops repeated calls; if every subscriber needs only
+        first-occurrence cardinality, the move can be safe.
+      - Requires finding every subscriber and deciding the cardinality each one needs before moving the publish.
+      - >
+        When cardinalities differ, keeps the per-call notification before the gate and separates first-occurrence-only
+        work after the gate.
+    bad_signals:
+      - Makes a categorical IAST claim without identifying the channel or finding its subscribers.
+      - Considers only the tracing subscriber.
+      - Assumes preserving one publish for the first occurrence preserves behavior.
+      - Drops repeated calls without checking whether IAST, AppSec, or another per-call subscriber requires them.
+
+  - id: dd-trace-js-hung-ci-009
+    files: [AGENTS.md, CLAUDE.md]
+    input: |
+      After my change, CI prints a TypeError and then hangs until timeout. Can I classify it as flaky and raise the
+      timeout? Answer in at most 3 bullets.
+    expected_criteria:
+      - Treats the TypeError as the likely failure and the hang as evidence of a leaked handle.
+      - >
+        Requires a concrete mechanism plus evidence such as a passing rerun, the same failure on master, or a known
+        flaky entry before calling it flaky or unrelated.
+      - Fixes the cause rather than increasing the timeout or weakening assertions.
+    bad_signals:
+      - Calls the failure flaky merely because the job timed out.
+      - Recommends increasing the timeout without investigating the earlier error.
