@@ -1683,6 +1683,66 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('uses the active browser metadata for Mocha and Jasmine retries', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const correlationContexts = []
+    const createBrowser = (browserName, browserVersion, isRumActive) => ({
+      capabilities: { browserName, browserVersion },
+      execute: sinon.stub().resolves({
+        isRumActive,
+        isRumInstrumented: true,
+        rumSamplingRate: isRumActive ? 100 : 50,
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: `rum-preload-${browserName}` }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+    })
+    const inactiveBrowser = createBrowser('firefox', '122', false)
+    const activeBrowser = createBrowser('chrome', '123', true)
+    const correlate = context => {
+      correlationContexts.push({
+        browserName: context.browserName,
+        browserVersion: context.browserVersion,
+        isRumActive: context.isRumActive,
+      })
+      context.testExecutionId = 'retry-execution-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      for (const browser of [inactiveBrowser, activeBrowser]) {
+        const navigationContext = { self: browser }
+        urlCh.start.runStores(navigationContext, () => {})
+        await navigationContext.rumPreloadCallback.call(browser)
+      }
+      correlationContexts.length = 0
+
+      const executeAsyncContext = {}
+      channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
+
+      assert.deepStrictEqual(await executeAsyncContext.rumRetryCallback(), {
+        browserName: 'chrome',
+        browserVersion: '123',
+        isRumActive: true,
+      })
+
+      await executeAsyncContext.retryCallback()
+      assert.deepStrictEqual(correlationContexts, [{
+        browserName: 'chrome',
+        browserVersion: '123',
+        isRumActive: true,
+      }])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
   it('checks RUM before marking a Mocha retry as RUM-active', async () => {
     require('../src/webdriverio')
 

@@ -697,10 +697,10 @@ async function prepareNextRumTest () {
  * Detects active RUM browsers and optionally updates the active test without ending their sessions.
  *
  * @param {boolean} [updateTest]
- * @returns {Promise<boolean>}
+ * @returns {Promise<object|undefined>}
  */
 async function detectActiveRumBrowsers (updateTest = true) {
-  let isRumActive = false
+  let activeRumBrowser
   for (const browser of rumCorrelationBrowsers) {
     let isBrowserRumActive = false
     // WebDriver commands are intentionally sequential for each browser.
@@ -714,11 +714,11 @@ async function detectActiveRumBrowsers (updateTest = true) {
       }
     })
     if (isBrowserRumActive) {
-      isRumActive = true
+      activeRumBrowser ??= browser
       if (updateTest) getRumTestExecutionId(browser, true)
     }
   }
-  return isRumActive
+  return activeRumBrowser
 }
 
 /**
@@ -730,8 +730,8 @@ async function retryRumTest () {
   const browsers = [...rumCorrelationBrowsers]
   if (browsers.length === 0) return
 
-  const isRumActive = await detectActiveRumBrowsers(false)
-  const testExecutionId = getRumTestExecutionId(browsers[0], isRumActive)
+  const activeRumBrowser = await detectActiveRumBrowsers(false)
+  const testExecutionId = getRumTestExecutionId(activeRumBrowser || browsers[0], !!activeRumBrowser)
   if (!testExecutionId) return
 
   await correlateRumBrowsers(browsers, testExecutionId)
@@ -749,18 +749,18 @@ async function retryRumTest () {
  */
 async function retryRumBrowsers (testExecutionId) {
   const browsers = [...rumCorrelationBrowsers]
-  let isRumActive = false
+  let activeRumBrowser
   if (testExecutionId) {
     await correlateRumBrowsers(browsers, testExecutionId)
   } else {
-    isRumActive = await detectActiveRumBrowsers(false)
+    activeRumBrowser = await detectActiveRumBrowsers(false)
   }
 
-  const browser = browsers[0]
+  const browser = activeRumBrowser || browsers[0]
   return {
     browserName: browser?.capabilities?.browserName,
     browserVersion: browser?.capabilities?.browserVersion,
-    isRumActive,
+    isRumActive: !!activeRumBrowser,
   }
 }
 
