@@ -20,7 +20,7 @@ const {
 } = require('./utils')
 
 const target = getTargetCodePath(__filename)
-const { runWithHugeObject } = require(target)
+const { runWithHugeObject, runWithManyLocals } = require(target)
 
 // A deadline that has already passed, so the collector stops at the first opportunity
 const EXPIRED_DEADLINE_NS = 0n
@@ -61,6 +61,29 @@ describe('debugger -> devtools client -> snapshot incomplete capture reasons', f
       assert.deepStrictEqual(state.nested, { type: 'Object', notCapturedReason: 'timeout' })
       assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.TIMEOUT)
     })
+
+    it('should record the field count limit when a scope has more variables than allowed', async function () {
+      const { processLocalState, incomplete } = await whilePaused((callFrame) => {
+        return getLocalStateForCallFrame(callFrame, { ...DEFAULT_CAPTURE_LIMITS, maxFieldCount: 2 })
+      }, { line: 21, trigger: runWithManyLocals })
+
+      const state = processLocalState()
+
+      assert.deepStrictEqual(Object.keys(state), ['first', 'second'], 'should drop the variables over the limit')
+      assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.FIELD_COUNT)
+    })
+
+    it('should not record the field count limit when a scope has exactly as many variables as allowed',
+      async function () {
+        const { processLocalState, incomplete } = await whilePaused((callFrame) => {
+          return getLocalStateForCallFrame(callFrame, { ...DEFAULT_CAPTURE_LIMITS, maxFieldCount: 3 })
+        }, { line: 21, trigger: runWithManyLocals })
+
+        const state = processLocalState()
+
+        assert.deepStrictEqual(Object.keys(state), ['first', 'second', 'third'])
+        assert.strictEqual(incomplete.reasons, 0)
+      })
 
     it('should not record a runtime error when the large object safety threshold disables the capture',
       async function () {
