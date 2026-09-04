@@ -11,7 +11,7 @@ const { USER_KEEP, AUTO_KEEP } = require('../../../../ext/priority')
 const getConfig = require('../../src/config')
 const DatadogSpan = require('../../src/opentracing/span')
 const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_priority_sampler')
-const { TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')
+const { SAMPLING_MECHANISM_DEFAULT, TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')
 const { ASM } = require('../../src/standalone/product')
 
 describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () => {
@@ -72,6 +72,8 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
       context._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
 
       assert.strictEqual(prioritySampler._getPriorityFromAuto(span), USER_KEEP)
+      assert.strictEqual(context._sampling.priority, undefined)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_DEFAULT)
     })
 
     it('should use rate limiter if it does not contain _dd.p.ts tag', () => {
@@ -82,6 +84,21 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
       sinon.stub(prioritySampler, '_isSampledByRateLimit').returns(true)
 
       assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_KEEP)
+      assert.strictEqual(context._sampling.priority, undefined)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_DEFAULT)
+    })
+
+    it('should record a committed automatic decision', () => {
+      const span = {
+        _trace: {},
+      }
+
+      context._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
+
+      assert.strictEqual(prioritySampler._decideFromAuto(span), USER_KEEP)
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_DEFAULT)
+      assert.strictEqual(context._sampling.isProbabilityDecision, false)
     })
   })
 

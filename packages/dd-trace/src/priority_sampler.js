@@ -116,15 +116,46 @@ class PrioritySampler {
     const tag = this._getPriorityFromTags(context.getTags(), context)
 
     if (this.validate(tag)) {
-      context._sampling.priority = tag
       context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
+      this._recordDecision(context, tag)
     } else if (auto) {
-      context._sampling.priority = this._getPriorityFromAuto(root)
+      this._decideFromAuto(root)
     } else {
       return
     }
 
     this.#addDecisionMaker(root)
+  }
+
+  /**
+   * Applies one manual sampling tag without rereading the span's complete tag map.
+   *
+   * @param {DatadogSpan} span
+   * @param {string} key
+   * @param {unknown} value
+   * @returns {void}
+   */
+  setPriorityFromTag (span, key, value) {
+    if (!span) return
+
+    const context = this._getContext(span)
+    const priority = this._getPriorityFromTag(key, value, context)
+    if (this.validate(priority)) this.setPriority(span, priority)
+  }
+
+  /**
+   * Applies manual sampling tags from a supplied tag collection using their defined precedence.
+   *
+   * @param {DatadogSpan} span
+   * @param {Record<string, unknown>} tags
+   * @returns {void}
+   */
+  setPriorityFromTags (span, tags) {
+    if (!span) return
+
+    const context = this._getContext(span)
+    const priority = this._getPriorityFromTags(tags, context)
+    if (this.validate(priority)) this.setPriority(span, priority)
   }
 
   /**
@@ -183,14 +214,13 @@ class PrioritySampler {
       return // noop span
     }
 
-    context._sampling.priority = samplingPriority
-
     const mechanism = product?.mechanism ?? SAMPLING_MECHANISM_MANUAL
     context._sampling.mechanism = mechanism
+    this._recordDecision(context, samplingPriority)
 
     log.trace(span, samplingPriority, mechanism)
 
-    this.#addDecisionMaker(root)
+    this.#addDecisionMaker(root, product === undefined)
   }
 
   /**
@@ -206,6 +236,30 @@ class PrioritySampler {
   }
 
   /**
+   * Evaluates and records an automatic sampling decision.
+   *
+   * @param {DatadogSpan} span
+   * @returns {SamplingPriority}
+   */
+  _decideFromAuto (span) {
+    const context = this._getContext(span)
+    const rule = this.#findRule(span)
+    const priority = rule
+      ? this.#getPriorityByRule(context, rule, true)
+      : this.#getPriorityByAgent(context)
+
+    if (context._sampling.isProbabilityDecision !== false) {
+      const probabilityRate = rule
+        ? context._trace[SAMPLING_RULE_DECISION]
+        : context._trace[SAMPLING_AGENT_DECISION]
+      this._recordDecisionMetadata(context, probabilityRate)
+    }
+
+    context._sampling.priority = priority
+    return priority
+  }
+
+  /**
    * Computes priority using rules and agent rates when no manual tag is present.
    *
    * @param {DatadogSpan} span
@@ -216,27 +270,25 @@ class PrioritySampler {
     const rule = this.#findRule(span)
 
     return rule
-      ? this.#getPriorityByRule(context, rule)
+      ? this.#getPriorityByRule(context, rule, false)
       : this.#getPriorityByAgent(context)
   }
 
   /**
-   * Computes priority from manual sampling tags if present.
-   * Included for compatibility with {@link import('./standalone/tracesource_priority_sampler')._getPriorityFromTags}
+   * Converts one sampling tag into a user priority.
    *
-   * @param {Record<string, unknown>} tags
+   * @param {string} key
+   * @param {unknown} value
    * @param {DatadogSpanContext} _context
    * @returns {SamplingPriority|undefined}
    */
-  _getPriorityFromTags (tags, _context) {
-    if (Object.hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
+  _getPriorityFromTag (key, value, _context) {
+    if (key === MANUAL_KEEP && value !== false) {
       return USER_KEEP
-    } else if (Object.hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
+    } else if (key === MANUAL_DROP && value !== false) {
       return USER_REJECT
-    }
-    const rawPriority = tags[SAMPLING_PRIORITY]
-    if (rawPriority !== undefined) {
-      const priority = Math.trunc(rawPriority)
+    } else if (key === SAMPLING_PRIORITY) {
+      const priority = Math.trunc(/** @type {number} */ (value))
 
       if (priority === 1 || priority === 2) {
         return USER_KEEP
@@ -247,13 +299,35 @@ class PrioritySampler {
   }
 
   /**
+   * Computes priority from manual sampling tags if present.
+   * Calls the overridable single-tag conversion so specialized samplers retain their filtering rules.
+   *
+   * @param {Record<string, unknown>} tags
+   * @param {DatadogSpanContext} _context
+   * @returns {SamplingPriority|undefined}
+   */
+  _getPriorityFromTags (tags, _context) {
+    if (Object.hasOwn(tags, MANUAL_KEEP)) {
+      const priority = this._getPriorityFromTag(MANUAL_KEEP, tags[MANUAL_KEEP], _context)
+      if (priority !== undefined) return priority
+    }
+    if (Object.hasOwn(tags, MANUAL_DROP)) {
+      const priority = this._getPriorityFromTag(MANUAL_DROP, tags[MANUAL_DROP], _context)
+      if (priority !== undefined) return priority
+    }
+    const priority = tags[SAMPLING_PRIORITY]
+    if (priority !== undefined) return this._getPriorityFromTag(SAMPLING_PRIORITY, priority, _context)
+  }
+
+  /**
    * Applies a matching rule and rate limit to compute the sampling priority.
    *
    * @param {DatadogSpanContext} context
    * @param {import('./sampling_rule')} rule
+   * @param {boolean} recordDecision
    * @returns {SamplingPriority}
    */
-  #getPriorityByRule (context, rule) {
+  #getPriorityByRule (context, rule, recordDecision) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rule.sampleRate)
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
@@ -263,9 +337,18 @@ class PrioritySampler {
       context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
     }
 
-    return rule.sample(context) && this._isSampledByRateLimit(context)
-      ? USER_KEEP
-      : USER_REJECT
+    const sampled = rule.sample(context, true)
+    if (sampled !== true) {
+      if (recordDecision && sampled === undefined) this._recordDecisionMetadata(context)
+      return USER_REJECT
+    }
+
+    if (!this._isSampledByRateLimit(context)) {
+      if (recordDecision) this._recordDecisionMetadata(context)
+      return USER_REJECT
+    }
+
+    return USER_KEEP
   }
 
   /**
@@ -309,19 +392,45 @@ class PrioritySampler {
   }
 
   /**
+   * Records whether a sampling decision represents a probability.
+   *
+   * @param {DatadogSpanContext} context
+   * @param {number} [probabilityRate]
+   * @returns {void}
+   */
+  _recordDecisionMetadata (context, probabilityRate) {
+    context._sampling.probabilityRate = probabilityRate
+    context._sampling.isProbabilityDecision = probabilityRate !== undefined
+  }
+
+  /**
+   * Records a local non-probability sampling decision.
+   *
+   * @param {DatadogSpanContext} context
+   * @param {SamplingPriority} priority
+   * @returns {SamplingPriority}
+   */
+  _recordDecision (context, priority) {
+    context._sampling.priority = priority
+    this._recordDecisionMetadata(context)
+    return priority
+  }
+
+  /**
    * Tags the trace with a decision maker when priority is keep, or removes it otherwise.
    *
    * @param {DatadogSpan} span
+   * @param {boolean} [overwrite]
    * @returns {void}
    */
-  #addDecisionMaker (span) {
+  #addDecisionMaker (span, overwrite = false) {
     const context = span.context()
     const trace = context._trace
     const priority = context._sampling.priority
     const mechanism = context._sampling.mechanism
 
     if (priority >= AUTO_KEEP) {
-      if (!trace.tags[DECISION_MAKER_KEY]) {
+      if (overwrite || !trace.tags[DECISION_MAKER_KEY]) {
         trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
       }
     } else if (trace.tags[DECISION_MAKER_KEY] !== undefined) {

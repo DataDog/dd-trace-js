@@ -46,6 +46,8 @@ describe('Span', () => {
 
     prioritySampler = {
       sample: sinon.stub(),
+      setPriorityFromTag: sinon.stub(),
+      setPriorityFromTags: sinon.stub(),
     }
 
     tagger = {
@@ -594,7 +596,7 @@ describe('Span', () => {
       span.setTag(MANUAL_KEEP, true)
 
       assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
-      sinon.assert.calledWith(prioritySampler.sample, span, false)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTag, span, MANUAL_KEEP, true)
     })
 
     it('should be published via dd-trace:span:tags:update channel', () => {
@@ -658,10 +660,11 @@ describe('Span', () => {
     })
 
     it('should sample based on manual sampling tags', () => {
-      span.addTags({ [MANUAL_KEEP]: true })
+      const tags = { [MANUAL_KEEP]: true }
+      span.addTags(tags)
 
       assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
-      sinon.assert.calledWith(prioritySampler.sample, span, false)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, tags)
     })
 
     it('should be published via dd-trace:span:tags:update channel', () => {

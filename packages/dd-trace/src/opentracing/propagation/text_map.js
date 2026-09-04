@@ -77,6 +77,8 @@ const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
 const percentByte = /%([0-9A-Fa-f]{2})/g
 
+let updateOtelTraceState
+
 /**
  * @typedef {object} B3Context
  * @property {string} [flags]
@@ -614,6 +616,9 @@ class TextMapPropagator {
 
     writeTraceparent(carrier, spanContext.toTraceparent())
 
+    updateOtelTraceState ??= require('../../otel-sampling').updateOtelTraceState
+    updateOtelTraceState(spanContext, ts)
+
     ts.forVendor('dd', state => {
       if (!spanContext._isRemote) {
         // SpanContext was created by a ddtrace span.
@@ -698,10 +703,20 @@ class TextMapPropagator {
    */
   #resolveTraceContextConflicts (w3cSpanContext, firstSpanContext, carrier, datadogContext) {
     if (w3cSpanContext === undefined ||
-        firstSpanContext.toTraceId(true) !== w3cSpanContext.toTraceId(true) ||
-        firstSpanContext.toSpanId() === w3cSpanContext.toSpanId()) {
+        firstSpanContext.toTraceId(true) !== w3cSpanContext.toTraceId(true)) {
       return firstSpanContext
     }
+
+    const selectedPriority = firstSpanContext._sampling.priority
+    if (selectedPriority !== undefined &&
+        (selectedPriority >= AUTO_KEEP) !== (w3cSpanContext._sampling.priority >= AUTO_KEEP)) {
+      // The W3C threshold describes its sampled bit, not the conflicting decision selected from another style.
+      firstSpanContext._sampling.isProbabilityDecision = false
+    }
+
+    firstSpanContext._tracestate = w3cSpanContext._tracestate
+    if (firstSpanContext.toSpanId() === w3cSpanContext.toSpanId()) return firstSpanContext
+
     if (tags.DD_PARENT_ID in w3cSpanContext._trace.tags) {
       // tracecontext headers contain a p value, ensure this value is sent to backend
       firstSpanContext._trace.tags[tags.DD_PARENT_ID] = w3cSpanContext._trace.tags[tags.DD_PARENT_ID]

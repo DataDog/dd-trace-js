@@ -21,9 +21,9 @@ class TraceSourcePrioritySampler extends PrioritySampler {
    * @override
    * @returns {import('../priority_sampler').SamplingPriority|undefined}
    */
-  _getPriorityFromTags (tags, context) {
-    if (Object.hasOwn(tags, MANUAL_KEEP) &&
-      tags[MANUAL_KEEP] !== false &&
+  _getPriorityFromTag (key, value, context) {
+    if (key === MANUAL_KEEP &&
+      value !== false &&
       hasTraceSourcePropagationTag(context._trace.tags)
     ) {
       return USER_KEEP
@@ -32,17 +32,35 @@ class TraceSourcePrioritySampler extends PrioritySampler {
 
   /**
    * @override
+   * @param {import('../opentracing/span')} span
+   * @param {boolean} [recordDecision]
+   * @returns {import('../priority_sampler').SamplingPriority}
    */
-  _getPriorityFromAuto (span) {
+  _getPriorityFromAuto (span, recordDecision = false) {
     const context = this._getContext(span)
 
     context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+    if (recordDecision) this._recordDecisionMetadata(context)
 
     if (hasTraceSourcePropagationTag(context._trace.tags)) {
       return USER_KEEP
     }
 
     return this._isSampledByRateLimit(context) ? AUTO_KEEP : AUTO_REJECT
+  }
+
+  /**
+   * Evaluates and records the standalone automatic sampling decision.
+   *
+   * @override
+   * @param {import('../opentracing/span')} span
+   * @returns {import('../priority_sampler').SamplingPriority}
+   */
+  _decideFromAuto (span) {
+    const context = this._getContext(span)
+    const priority = this._getPriorityFromAuto(span, true)
+    context._sampling.priority = priority
+    return priority
   }
 
   /**

@@ -1473,6 +1473,62 @@ describe('TextMapPropagator', () => {
       assert.strictEqual(spanContext._tracestate.get('other'), 'bleh')
     })
 
+    it('should propagate tracecontext tracestate when matching B3 headers take precedence', () => {
+      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+      const spanId = '5555eeee6666ffff'
+      textMap = {
+        b3: `${traceId}-${spanId}-1`,
+        traceparent: `00-${traceId}-${spanId}-01`,
+        tracestate: 'ot=rv:123456789abcde;th:8',
+      }
+      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'tracecontext']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._tracestate.get('ot'), 'rv:123456789abcde;th:8')
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:123456789abcde;th:8(?:,|$)/)
+    })
+
+    it('should clear the W3C threshold when a selected B3 keep conflicts with tracecontext', () => {
+      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+      const spanId = '5555eeee6666ffff'
+      textMap = {
+        b3: `${traceId}-${spanId}-1`,
+        traceparent: `00-${traceId}-${spanId}-00`,
+        tracestate: 'ot=rv:00000000000000;th:8;vendor:value',
+      }
+      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'tracecontext']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
+      assert.match(carrier.traceparent, /-01$/)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:00000000000000;vendor:value(?:,|$)/)
+    })
+
+    it('should clear the W3C threshold when a selected Datadog drop conflicts with tracecontext', () => {
+      textMap = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        'x-datadog-sampling-priority': '0',
+        traceparent: '00-0000000000000000000000000000007b-00000000000001c8-01',
+        tracestate: 'ot=rv:ffffffffffffff;th:8;vendor:value',
+      }
+      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
+      assert.match(carrier.traceparent, /-00$/)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;vendor:value(?:,|$)/)
+    })
+
     it('should read tracecontext once while resolving multiple propagation styles', () => {
       for (const extract of [['datadog', 'tracecontext'], ['tracecontext', 'datadog']]) {
         let reads = 0

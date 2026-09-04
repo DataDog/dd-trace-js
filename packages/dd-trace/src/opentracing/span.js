@@ -213,8 +213,8 @@ class DatadogSpan {
   setTag (key, value) {
     this._spanContext.setTag(key, value)
 
-    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
-      this._prioritySampler.sample(this, false)
+    if (isSamplingPriorityTag(key)) {
+      this._prioritySampler.setPriorityFromTag(this, key, value)
     }
 
     if (tagsUpdateCh.hasSubscribers) {
@@ -232,9 +232,11 @@ class DatadogSpan {
     // `options.tags` callers that pass `'key:val,key:val'` strings.
     const tags = this._spanContext.getTags()
     let mayChangeSamplingPriority
+    let samplingTags
 
     if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
       Object.assign(tags, keyValueMap)
+      samplingTags = keyValueMap
       mayChangeSamplingPriority =
         MANUAL_KEEP in keyValueMap ||
         MANUAL_DROP in keyValueMap ||
@@ -243,14 +245,15 @@ class DatadogSpan {
       /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
       if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
         tagger.add(tags, keyValueMap)
+        samplingTags = tags
         mayChangeSamplingPriority = true
       } else {
         return this
       }
     }
 
-    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
-      this._prioritySampler.sample(this, false)
+    if (mayChangeSamplingPriority) {
+      this._prioritySampler.setPriorityFromTags(this, samplingTags)
     }
 
     if (tagsUpdateCh.hasSubscribers) {

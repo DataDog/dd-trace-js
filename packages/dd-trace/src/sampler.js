@@ -5,10 +5,7 @@
 // as it is cast into a float64 when computing the threshold
 const MAX_TRACE_ID = 2 ** 64 - 1
 
-const UINT64_MODULO = 2n ** 64n
-
-// Knuth's factor for the sampling algorithm
-const SAMPLING_KNUTH_FACTOR = 1_111_111_111_111_111_111n
+const knuthHash = require('./knuth-hash')
 
 /**
  * `Sampler` determines whether or not to sample a trace/span based on the trace ID.
@@ -56,7 +53,7 @@ class Sampler {
 
     span = typeof span.context === 'function' ? span.context() : span
 
-    return (span._traceId.toBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this.#threshold
+    return knuthHash(span._traceId.toBigInt()) <= this.#threshold
   }
 }
 
