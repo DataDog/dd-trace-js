@@ -92,6 +92,7 @@
     "@smithy/core": "3.33.3",
     "@smithy/smithy-client": "4.15.2",
     "@types/node": "26.4.0",
+    "@vitest/browser-webdriverio": "4.1.11",
     "@vitest/coverage-istanbul": "5.0.0",
     "@vitest/coverage-v8": "5.0.0",
     "@vitest/runner": "4.1.11",
