@@ -1,5 +1,6 @@
 'use strict'
 
+const { Stats } = require('node:fs')
 const { isProxy } = require('node:util/types')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
@@ -21,6 +22,7 @@ const startSetHeaderCh = channel('datadog:http:server:response:set-header:start'
 const startInformationalResponseCh = channel('datadog:http:server:informational-response:start')
 const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 
+const HTTP2_HEADER_CONTENT_LENGTH = 'content-length'
 const HTTP2_HEADER_DATE = 'date'
 const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
@@ -78,6 +80,8 @@ const SUPPORTS_RAW_RESPONSE_HEADERS = NODE_MAJOR >= 25 ||
 const SUPPORTS_RELAXED_SINGLE_VALUE_FIELDS = NODE_MAJOR >= 26 ||
   (NODE_MAJOR === 25 && NODE_MINOR >= 7) ||
   (NODE_MAJOR === 24 && NODE_MINOR >= 15)
+const READS_RESPONSE_OPTIONS_DIRECTLY = NODE_MAJOR === 24 && NODE_MINOR >= 20
+const UNSAFE_PROPERTY = { __proto__: null }
 
 const responseContexts = new WeakMap()
 const blockedResponses = new WeakSet()
@@ -352,6 +356,8 @@ function instrumentStreamResponse (stream, ctx) {
     shimmer.wrap(prototype, 'respondWithFD', wrapStreamRespondWithFD)
     shimmer.wrap(prototype, 'respondWithFile', wrapStreamRespondWithFile)
     shimmer.wrap(prototype, 'additionalHeaders', wrapStreamAdditionalHeaders)
+    shimmer.wrap(prototype, '_write', writeChunk => wrapStreamWriteChunk(writeChunk, 2))
+    shimmer.wrap(prototype, '_writev', writeChunks => wrapStreamWriteChunk(writeChunks, 1))
     shimmer.wrap(prototype, 'end', wrapStreamEnd)
     shimmer.wrap(prototype, 'write', wrapStreamWrite)
   }
@@ -369,17 +375,25 @@ function wrapStreamRespond (respond) {
     }
 
     if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return
+    if (!hasSubscribers) return Reflect.apply(respond, this, arguments)
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
-    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
+    if (ctx.blockingResponse) return Reflect.apply(respond, this, arguments)
+    if (this.destroyed || this.closed || this.headersSent) {
       return Reflect.apply(respond, this, arguments)
     }
 
-    const options = copyResponseOptions(arguments, 1)
+    const options = READS_RESPONSE_OPTIONS_DIRECTLY ? arguments[1] : copyResponseOptions(arguments, 1)
     if (!hasValidResponseOptions(options)) return Reflect.apply(respond, this, arguments)
+    if (READS_RESPONSE_OPTIONS_DIRECTLY && options !== undefined &&
+      (getDataProperty(options, 'endStream') === UNSAFE_PROPERTY ||
+       getDataProperty(options, 'waitForTrailers') === UNSAFE_PROPERTY ||
+       getDataProperty(options, 'sendDate') === UNSAFE_PROPERTY)) {
+      return Reflect.apply(respond, this, arguments)
+    }
 
     const responseHeaders = getValidatedResponseHeaders(
-      arguments[0], arguments, 0, ctx.strictSingleValueFields, options?.sendDate)
+      arguments[0], arguments, 0, ctx.strictSingleValueFields, options?.sendDate, true)
     if (!responseHeaders) return Reflect.apply(respond, this, arguments)
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
@@ -405,9 +419,10 @@ function wrapStreamRespondWithFD (respond) {
     }
 
     if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return
+    if (!hasSubscribers) return Reflect.apply(respond, this, arguments)
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
-    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
+    if (this.destroyed || this.closed || this.headersSent) {
       return Reflect.apply(respond, this, arguments)
     }
 
@@ -428,7 +443,7 @@ function wrapStreamRespondWithFD (respond) {
     if (typeof arguments[0] !== 'number') assertFileHandle(respond, this, arguments[0])
 
     const responseHeaders = getValidatedResponseHeaders(
-      arguments[1], arguments, 1, ctx.strictSingleValueFields, options?.sendDate)
+      arguments[1], arguments, 1, ctx.strictSingleValueFields, options?.sendDate, false)
     if (!responseHeaders) return Reflect.apply(respond, this, arguments)
 
     const statusCode = getResponseStatusCode(responseHeaders)
@@ -475,9 +490,10 @@ function wrapStreamRespondWithFile (respond) {
     }
 
     if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return
+    if (!hasSubscribers) return Reflect.apply(respond, this, arguments)
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, arguments)
-    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
+    if (this.destroyed || this.closed || this.headersSent) {
       return Reflect.apply(respond, this, arguments)
     }
 
@@ -487,11 +503,10 @@ function wrapStreamRespondWithFile (respond) {
     }
 
     const statCheck = getEnumerableDataProperty(options, 'statCheck')
+    const fileOptions = { ...options }
     const args = [...arguments]
-    args[2] = {
-      ...options,
-      statCheck: wrapStreamStatCheck(statCheck, ctx, this, options?.sendDate),
-    }
+    args[2] = fileOptions
+    fileOptions.statCheck = wrapStreamStatCheck(statCheck, ctx, this, options?.sendDate, fileOptions)
     return Reflect.apply(respond, this, args)
   }
 }
@@ -507,9 +522,10 @@ function wrapStreamAdditionalHeaders (additionalHeaders) {
     }
 
     if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return
+    if (!hasSubscribers) return Reflect.apply(additionalHeaders, this, arguments)
     const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(additionalHeaders, this, arguments)
-    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
+    if (this.destroyed || this.closed || this.headersSent) {
       return Reflect.apply(additionalHeaders, this, arguments)
     }
 
@@ -529,8 +545,9 @@ function wrapStreamAdditionalHeaders (additionalHeaders) {
  * @param {StreamRequestContext} ctx
  * @param {import('node:http2').ServerHttp2Stream} stream
  * @param {unknown} sendDate
+ * @param {{ offset?: number, length?: number }} [fileOptions]
  */
-function wrapStreamStatCheck (statCheck, ctx, stream, sendDate) {
+function wrapStreamStatCheck (statCheck, ctx, stream, sendDate, fileOptions) {
   return function () {
     const result = statCheck ? Reflect.apply(statCheck, this, arguments) : true
     if (result === false || stream.destroyed || stream.closed || stream.headersSent ||
@@ -538,9 +555,20 @@ function wrapStreamStatCheck (statCheck, ctx, stream, sendDate) {
       return result
     }
 
+    const stat = arguments[0]
+    const isFile = fileOptions && getDataProperty(stat, 'isFile') === Stats.prototype.isFile &&
+      getDataProperty(stat, 'mode') !== UNSAFE_PROPERTY && Reflect.apply(Stats.prototype.isFile, stat, [])
     const responseHeaders = getValidatedResponseHeaders(
-      arguments[1], undefined, 0, ctx.strictSingleValueFields, sendDate)
+      arguments[1], undefined, 0, ctx.strictSingleValueFields, sendDate, false,
+      isFile ? HTTP2_HEADER_CONTENT_LENGTH : undefined)
     if (!responseHeaders) return result
+    if (isFile) {
+      const offset = fileOptions.offset ?? 0
+      const length = fileOptions.length ?? -1
+      responseHeaders[HTTP2_HEADER_CONTENT_LENGTH] = length < 0
+        ? stat.size - Number(offset)
+        : Math.min(stat.size - Number(offset), length)
+    }
 
     const responseAllowed = publishStreamResponseStart(ctx, responseHeaders)
     if (!responseAllowed) {
@@ -558,18 +586,7 @@ function wrapStreamStatCheck (statCheck, ctx, stream, sendDate) {
  */
 function wrapStreamWrite (write) {
   return function () {
-    const hasSubscribers = startWriteHeadCh.hasSubscribers
-    if (!hasSubscribers && activeBlockedResponseCount === 0) {
-      return Reflect.apply(write, this, arguments)
-    }
-
     if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return true
-    const ctx = responseContexts.get(this)
-    if (!ctx) return Reflect.apply(write, this, arguments)
-    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
-      return Reflect.apply(write, this, arguments)
-    }
-    if (publishImplicitStreamResponse(ctx, this)) return true
     return Reflect.apply(write, this, arguments)
   }
 }
@@ -579,19 +596,43 @@ function wrapStreamWrite (write) {
  */
 function wrapStreamEnd (end) {
   return function () {
+    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return this
+    return Reflect.apply(end, this, arguments)
+  }
+}
+
+/**
+ * @param {Function} writeChunk
+ * @param {1 | 2} callbackIndex
+ */
+function wrapStreamWriteChunk (writeChunk, callbackIndex) {
+  return function () {
     const hasSubscribers = startWriteHeadCh.hasSubscribers
     if (!hasSubscribers && activeBlockedResponseCount === 0) {
-      return Reflect.apply(end, this, arguments)
+      return Reflect.apply(writeChunk, this, arguments)
+    }
+    const ctx = responseContexts.get(this)
+    if (ctx?.blockingResponse) {
+      const callback = arguments[callbackIndex]
+      if (callbackIndex === 1) {
+        const chunks = arguments[0]
+        const lastChunk = chunks.at(-1)
+        if (lastChunk.chunk !== ctx.blockingResponseBody) return callback()
+        arguments[0] = [lastChunk]
+      } else if (arguments[0] !== ctx.blockingResponseBody) {
+        return callback()
+      }
+      ctx.blockingResponseBody = undefined
+      return Reflect.apply(writeChunk, this, arguments)
     }
 
-    if (activeBlockedResponseCount !== 0 && blockedResponses.has(this)) return this
-    const ctx = responseContexts.get(this)
-    if (!ctx) return Reflect.apply(end, this, arguments)
-    if (this.destroyed || this.closed || this.headersSent || !hasSubscribers) {
-      return Reflect.apply(end, this, arguments)
+    if (hasSubscribers && ctx && !this.destroyed && !this.closed && !this.headersSent &&
+      publishImplicitStreamResponse(ctx, this)) {
+      arguments[callbackIndex]()
+      return
     }
-    if (publishImplicitStreamResponse(ctx, this)) return this
-    return Reflect.apply(end, this, arguments)
+
+    return Reflect.apply(writeChunk, this, arguments)
   }
 }
 
@@ -641,6 +682,20 @@ function getEnumerableDataProperty (value, name) {
 }
 
 /**
+ * @param {object} value
+ * @param {string} name
+ */
+function getDataProperty (value, name) {
+  let owner = value
+  while (owner !== null) {
+    if (isProxy(owner)) return UNSAFE_PROPERTY
+    const descriptor = Object.getOwnPropertyDescriptor(owner, name)
+    if (descriptor) return Object.hasOwn(descriptor, 'value') ? descriptor.value : UNSAFE_PROPERTY
+    owner = Object.getPrototypeOf(owner)
+  }
+}
+
+/**
  * @param {unknown} value
  * @returns {boolean}
  */
@@ -683,10 +738,13 @@ function getResponseStatusCode (responseHeaders) {
  * @param {number} [headerIndex]
  * @param {boolean} [strictSingleValueFields]
  * @param {unknown} [sendDate]
+ * @param {boolean} [allowRawHeaders]
+ * @param {string} [automaticHeaderName]
  * @returns {Record<string, unknown> | undefined}
  */
 function getValidatedResponseHeaders (
-  headers, argumentsObject, headerIndex = 0, strictSingleValueFields = true, sendDate = true
+  headers, argumentsObject, headerIndex, strictSingleValueFields = true, sendDate, allowRawHeaders,
+  automaticHeaderName
 ) {
   if (headers === undefined) return {}
 
@@ -699,7 +757,7 @@ function getValidatedResponseHeaders (
 
   if (headers === null || typeof headers !== 'object') return
 
-  const headersAreRaw = Array.isArray(headers)
+  const headersAreRaw = allowRawHeaders && Array.isArray(headers)
   if (headersAreRaw) {
     if (!SUPPORTS_RAW_RESPONSE_HEADERS ||
       isProxy(headers) ||
@@ -708,6 +766,7 @@ function getValidatedResponseHeaders (
     }
     let rawHeaderName
     let rawStatusCode
+    let hasRawStatusValue = false
     let hasRawDate = false
     for (let i = 0; i < headers.length; i++) {
       const descriptor = Object.getOwnPropertyDescriptor(headers, String(i))
@@ -721,6 +780,7 @@ function getValidatedResponseHeaders (
           typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
           return
         }
+        if (value !== undefined) hasRawStatusValue = true
         rawStatusCode = value | 0
       } else if (rawHeaderName === HTTP2_HEADER_DATE) {
         hasRawDate = true
@@ -728,6 +788,8 @@ function getValidatedResponseHeaders (
     }
 
     const needsStatus = !rawStatusCode
+    if (strictSingleValueFields && needsStatus && hasRawStatusValue) return
+
     const needsDate = !hasRawDate && (sendDate == null || sendDate)
     if ((needsStatus && headers.unshift !== Array.prototype.unshift) ||
       (needsDate && headers.push !== Array.prototype.push) ||
@@ -768,6 +830,7 @@ function getValidatedResponseHeaders (
         }
       }
       if (normalizedName !== undefined && rawName !== normalizedName) {
+        if (normalizedName === automaticHeaderName) return
         const collidesWithDefault = normalizedName === HTTP2_HEADER_STATUS ||
           (normalizedName === HTTP2_HEADER_DATE && (sendDate == null || sendDate))
         if (strictSingleValueFields && collidesWithDefault) return
@@ -876,7 +939,7 @@ function publishStreamResponseStart (ctx, responseHeaders) {
   const abortController = new AbortController()
   startWriteHeadCh.publish({
     req: ctx.req,
-    res: ctx.res,
+    res: getStreamResponse(ctx, ctx.req.stream),
     abortController,
     statusCode: getResponseStatusCode(responseHeaders),
     responseHeaders,
@@ -893,10 +956,12 @@ function publishStreamResponseFinish (ctx, responseHeaders) {
   if (!finishSetHeaderCh.hasSubscribers) return
   if (publishedResponseHeaders) ctx.publishedResponseHeaders = undefined
 
+  let streamResponse
   for (const name of Object.keys(responseHeaders)) {
     const value = responseHeaders[name]
     if (publishedResponseHeaders?.get(name) === value) continue
-    finishSetHeaderCh.publish({ name, value, res: ctx.res })
+    streamResponse ??= getStreamResponse(ctx, ctx.req.stream)
+    finishSetHeaderCh.publish({ name, value, res: streamResponse })
   }
 }
 
@@ -906,12 +971,13 @@ function publishStreamResponseFinish (ctx, responseHeaders) {
  * @param {unknown} value
  */
 function publishCompatibilityResponseHeader (res, name, value) {
-  finishSetHeaderCh.publish({ name, value, res })
-
+  const normalizedName = name.trim().toLowerCase()
   const ctx = responseContexts.get(res.stream)
+  let response = res
+  if (ctx) response = getStreamResponse(ctx, res.stream)
+  finishSetHeaderCh.publish({ name: normalizedName, value, res: response })
   if (!ctx) return
 
-  const normalizedName = name.trim().toLowerCase()
   const storedValue = res.getHeader(name)
   if (Array.isArray(storedValue)) {
     ctx.publishedResponseHeaders?.delete(normalizedName)
@@ -932,7 +998,7 @@ function publishImplicitStreamResponse (ctx, stream) {
   const abortController = new AbortController()
   startWriteHeadCh.publish({
     req: ctx.req,
-    res: ctx.res,
+    res: getStreamResponse(ctx, stream),
     abortController,
     statusCode: responseHeaders[HTTP2_HEADER_STATUS] ?? 200,
     responseHeaders,
@@ -941,6 +1007,20 @@ function publishImplicitStreamResponse (ctx, stream) {
 
   markStreamResponseBlocked(ctx)
   return true
+}
+
+/**
+ * @param {StreamRequestContext} ctx
+ * @param {import('node:http2').ServerHttp2Stream} stream
+ * @returns {Http2StreamResponse}
+ */
+function getStreamResponse (ctx, stream) {
+  let { streamResponse } = ctx
+  if (!streamResponse) {
+    streamResponse = new Http2StreamResponse(stream, ctx.req)
+    ctx.streamResponse = streamResponse
+  }
+  return streamResponse
 }
 
 /**
@@ -1079,10 +1159,17 @@ class Http2StreamResponse {
    * @param {Record<string, string | string[]>} [headers]
    */
   writeHead (statusCode, headers) {
-    this.#stream.respond({
-      ...headers,
-      [HTTP2_HEADER_STATUS]: statusCode,
-    })
+    const ctx = responseContexts.get(this.#stream)
+    if (ctx) ctx.blockingResponse = true
+    try {
+      this.#stream.respond({
+        ...headers,
+        [HTTP2_HEADER_STATUS]: statusCode,
+      })
+    } catch (error) {
+      if (ctx) ctx.blockingResponse = undefined
+      throw error
+    }
     return this
   }
 
@@ -1090,6 +1177,11 @@ class Http2StreamResponse {
    * @param {string | Buffer} [body]
    */
   end (body) {
+    const ctx = responseContexts.get(this.#stream)
+    if (ctx?.blockingResponse) {
+      if (typeof body === 'string') body = Buffer.from(body)
+      ctx.blockingResponseBody = body
+    }
     this.#stream.end(body)
     return this
   }
@@ -1113,8 +1205,11 @@ class Http2StreamResponse {
  * @property {object} res.req back-reference used by `wrapResponseEmit`/finish
  * @property {number} res.statusCode read at finish from `stream.sentHeaders`
  * @property {(name: string) => string | number | string[] | undefined} res.getHeader response-header tagging
+ * @property {Http2StreamResponse} [streamResponse] stable response adapter for core stream events
  * @property {Map<string, unknown>} [publishedResponseHeaders] compatibility sink values already published
  * @property {false} [strictSingleValueFields] mirrors relaxed Node response validation
+ * @property {boolean} [blockingResponse] AppSec is writing the replacement response
+ * @property {Buffer | undefined} [blockingResponseBody] replacement body identity for queued-write filtering
  */
 
 // Present the core-API stream + pseudo-header map as the minimal req/res pair
@@ -1136,7 +1231,7 @@ function createStreamAdapter (stream, headers, strictSingleValueFields) {
     socket: stream.session?.socket,
   }
   const res = new Http2StreamResponse(stream, req)
-  const ctx = { req, res, isStream: true }
+  const ctx = { req, res, streamResponse: res }
   if (!strictSingleValueFields) ctx.strictSingleValueFields = false
 
   return ctx

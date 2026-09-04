@@ -55,7 +55,7 @@ class Http2ServerPlugin extends ServerPlugin {
     // Skip the map write for the common request-only path, which never adopts.
     if (ctx.adoptable) web.linkContextToStream(req.stream, context)
 
-    if (!ctx.isStream) instrumentWriteHead(context)
+    if (!ctx.streamResponse) instrumentWriteHead(context)
 
     if (incomingHttpRequestStart.hasSubscribers) {
       // AppSec and IAST observe both HTTP/2 APIs through the same bridge the

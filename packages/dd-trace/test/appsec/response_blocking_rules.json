@@ -107,6 +107,47 @@
       ]
     },
     {
+      "id": "implicit-http2-response",
+      "name": "implicit HTTP/2 response",
+      "tags": {
+        "type": "security_scanner5",
+        "category": "attack_attempt5"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "regex": "^/implicit-response$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        },
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.status"
+              }
+            ],
+            "regex": "^200$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        }
+      ],
+      "on_match": [
+        "block"
+      ]
+    },
+    {
       "id": "mixed-http2-context",
       "name": "mixed HTTP/2 context continuity",
       "tags": {
@@ -238,6 +279,106 @@
       "on_match": [
         "block"
       ]
+    },
+    {
+      "id": "corked-http2-redirect",
+      "name": "corked HTTP/2 redirect",
+      "tags": {
+        "type": "security_scanner6",
+        "category": "attack_attempt6"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "regex": "^/corked-redirect(?:-writev)?$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        },
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.status"
+              }
+            ],
+            "regex": "^404$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        }
+      ],
+      "on_match": [
+        "redirect"
+      ]
+    },
+    {
+      "id": "invalid-http2-redirect",
+      "name": "invalid HTTP/2 redirect",
+      "tags": {
+        "type": "security_scanner7",
+        "category": "attack_attempt7"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "regex": "^/invalid-block-response$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        },
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.status"
+              }
+            ],
+            "regex": "^404$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        }
+      ],
+      "on_match": [
+        "invalid-block"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "redirect",
+      "type": "redirect_request",
+      "parameters": {
+        "status_code": 302,
+        "location": "/blocked"
+      }
+    },
+    {
+      "id": "invalid-block",
+      "type": "block_request",
+      "parameters": {
+        "status_code": 101,
+        "type": "auto"
+      }
     }
   ]
 }

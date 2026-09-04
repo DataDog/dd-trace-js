@@ -6,6 +6,7 @@ const { open } = require('node:fs/promises')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
+const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
@@ -24,9 +25,10 @@ const {
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_URI,
 } = require('../../../src/appsec/iast/taint-tracking/source-types')
+const { isTrue } = require('../../../src/guardrails/util')
 const { getConfigFresh } = require('../../helpers/config')
 
-const runtimeSupported = Boolean(process.env.DD_INJECT_FORCE) ||
+const runtimeSupported = isTrue(process.env.DD_INJECT_FORCE) ||
   semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
 const describeSupported = runtimeSupported ? describe : describe.skip
 const supportsRawResponseHeaders = NODE_MAJOR >= 25 ||
@@ -35,6 +37,8 @@ const supportsRawResponseHeaders = NODE_MAJOR >= 25 ||
 const describeRawResponseHeaders = supportsRawResponseHeaders ? describe : describe.skip
 const serverKey = readFileSync(path.join(__dirname, '../../../../datadog-plugin-http2/test/ssl/test.key'))
 const serverCert = readFileSync(path.join(__dirname, '../../../../datadog-plugin-http2/test/ssl/test.crt'))
+const responseSetHeaderFinishChannel = dc.channel('datadog:http:server:response:set-header:finish')
+const setCookieChannel = dc.channel('datadog:iast:set-cookie')
 
 function sourceTypeOf (value) {
   const iastContext = getIastContext(storage('legacy').getStore())
@@ -192,6 +196,11 @@ describeSupported('IAST HTTP/2 server', () => {
       await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
     })
 
+    it('normalizes response header names before sink publication', async () => {
+      handler = (req, res) => res.setHeader(' Set-Cookie ', 'session=abc')
+      await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+    })
+
     it('analyzes in-place response header array mutations before commit', async () => {
       handler = (req, res) => {
         const cookies = ['first=1; HttpOnly']
@@ -251,6 +260,33 @@ describeSupported('IAST HTTP/2 server', () => {
       enableIast(100, 0)
 
       await assertSource('/an-unacquired-path', req => req.url, undefined, {}, 0)
+    })
+
+    it('analyzes only newly appended response cookies after adoption', async () => {
+      const analyzedCookies = []
+      const onSetCookie = ({ cookieString }) => analyzedCookies.push(cookieString)
+      const publishedHeaders = []
+      const onSetHeader = data => {
+        if (data.name === 'set-cookie') publishedHeaders.push(data)
+      }
+      const cookies = ['first=1; HttpOnly']
+      handler = (req, res) => {
+        res.setHeader('set-cookie', cookies)
+        cookies.push('second=2; HttpOnly')
+      }
+      responseSetHeaderFinishChannel.subscribe(onSetHeader)
+      setCookieChannel.subscribe(onSetCookie)
+
+      try {
+        await request('/')
+      } finally {
+        responseSetHeaderFinishChannel.unsubscribe(onSetHeader)
+        setCookieChannel.unsubscribe(onSetCookie)
+      }
+
+      assert.strictEqual(publishedHeaders.length, 2)
+      assert.strictEqual(publishedHeaders[0].res, publishedHeaders[1].res)
+      assert.deepStrictEqual(analyzedCookies, cookies)
     })
   })
 
