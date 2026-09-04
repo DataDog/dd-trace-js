@@ -29,12 +29,18 @@ describe('profiler', function () {
   let mapperInstance
   let interval
   let flushInterval
+  let buildProfilingRuntimeError
 
   // Stubs the profiling config assembly so the lifecycle tests run against the test's
   // profiler/exporter doubles instead of real native profilers, while still exercising
   // the compression and tag derivation.
   const configStub = {
     buildProfilingRuntime: (config) => {
+      if (buildProfilingRuntimeError) {
+        const error = buildProfilingRuntimeError
+        buildProfilingRuntimeError = undefined
+        throw error
+      }
       const compression = process.env.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'off'
       const [method, level0] = compression.split('-')
       const level = level0 ? Number.parseInt(level0, 10) : undefined
@@ -62,6 +68,7 @@ describe('profiler', function () {
   }
 
   function setUpProfiler () {
+    buildProfilingRuntimeError = undefined
     flushInterval = 65 * 1000
     interval = flushInterval
     clock = sinon.useFakeTimers({
@@ -205,7 +212,12 @@ describe('profiler', function () {
       profiler.stop()
 
       wallProfiler.setCustomLabelKeys.resetHistory()
-      await profiler.start(makeStartOptions())
+      profiler.start(makeStartOptions())
+
+      // stop()'s shutdown collection is still in flight, so this start() is deferred until it
+      // settles (see the '#stopping' chaining in Profiler#start/#stop).
+      await waitForExport()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
 
       sinon.assert.calledOnce(wallProfiler.setCustomLabelKeys)
       assert.deepStrictEqual(
@@ -327,6 +339,89 @@ describe('profiler', function () {
       await waitForExport()
 
       sinon.assert.calledOnce(exporter.export)
+    })
+
+    it('should defer a restart until a pending shutdown collection has finished', async () => {
+      await profiler.start(makeStartOptions())
+
+      let resolveEncode
+      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
+      wallProfiler.encode.returns(wallProfilePromise)
+
+      profiler.stop()
+      wallProfiler.start.resetHistory()
+      spaceProfiler.start.resetHistory()
+
+      const restarted = profiler.start(makeStartOptions())
+      assert.strictEqual(restarted, true)
+      await Promise.resolve()
+
+      sinon.assert.notCalled(wallProfiler.start)
+      sinon.assert.notCalled(spaceProfiler.start)
+
+      resolveEncode(wallProfile)
+      await waitForExport()
+      // The chained restart resolves a few more microtask ticks after the shutdown export
+      // (submit -> _collect's returned promise settling -> .finally() -> .then()).
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      sinon.assert.calledOnce(wallProfiler.start)
+      sinon.assert.calledOnce(spaceProfiler.start)
+    })
+
+    it('should cancel a deferred restart if stopped again before the shutdown collection finishes', async () => {
+      await profiler.start(makeStartOptions())
+
+      let resolveEncode
+      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
+      wallProfiler.encode.returns(wallProfilePromise)
+
+      profiler.stop()
+      wallProfiler.start.resetHistory()
+      spaceProfiler.start.resetHistory()
+
+      const restarted = profiler.start(makeStartOptions())
+      assert.strictEqual(restarted, true)
+      await Promise.resolve()
+
+      // A second stop() arrives before the first shutdown collection settles - it reflects the
+      // latest desired state, so it must cancel the queued restart above.
+      profiler.stop()
+
+      resolveEncode(wallProfile)
+      await waitForExport()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      sinon.assert.notCalled(wallProfiler.start)
+      sinon.assert.notCalled(spaceProfiler.start)
+      assert.strictEqual(profiler.enabled, false)
+    })
+
+    it('logs and does not crash when a deferred restart fails during setup', async () => {
+      await profiler.start(makeStartOptions())
+
+      let resolveEncode
+      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
+      wallProfiler.encode.returns(wallProfilePromise)
+
+      profiler.stop()
+
+      const restarted = profiler.start(makeStartOptions())
+      assert.strictEqual(restarted, true)
+      await Promise.resolve()
+
+      // The deferred restart calls start() again once the shutdown collection settles; make that
+      // call fail during setup, outside of start()'s own try/catch, the way buildProfilingRuntime()
+      // or the pprof initialization could.
+      const setupError = new Error('boom')
+      buildProfilingRuntimeError = setupError
+
+      resolveEncode(wallProfile)
+      await waitForExport()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      sinon.assert.calledOnce(consoleLogger.error)
+      assert.strictEqual(consoleLogger.error.firstCall.args[0], setupError)
     })
 
     async function shouldExportProfiles (compression, magicBytes) {
