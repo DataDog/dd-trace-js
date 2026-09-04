@@ -4,6 +4,7 @@ module.exports = {
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
+  dataloader: () => require('../dataloader'),
   dns: () => require('../dns'),
   'dns/promises': () => require('../dns'),
   fs: { serverless: false, fn: () => require('../fs') },

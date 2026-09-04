@@ -1412,6 +1412,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_DATALOADER_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_LOG_LEVEL": [
       {
         "implementation": "C",

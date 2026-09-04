@@ -322,6 +322,7 @@ tracer.use('connect', httpServerOptions);
 tracer.use('cypress');
 tracer.use('cucumber')
 tracer.use('cucumber', { service: 'cucumber-service' });
+tracer.use('dataloader');
 tracer.use('dns');
 tracer.use('elasticsearch');
 tracer.use('elasticsearch', elasticsearchOptions);

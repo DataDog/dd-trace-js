@@ -90,6 +90,7 @@ tracer.use('openai', {
 <h5 id="couchbase"></h5>
 <h5 id="cucumber"></h5>
 <h5 id="cypress"></h5>
+<h5 id="dataloader"></h5>
 <h5 id="dns"></h5>
 <h5 id="elasticsearch"></h5>
 <h5 id="electron"></h5>
@@ -176,6 +177,7 @@ tracer.use('openai', {
 * [couchbase](./interfaces/export_.plugins.couchbase.html)
 * [cucumber](./interfaces/export_.plugins.cucumber.html)
 * [cypress](./interfaces/export_.plugins.cypress.html)
+* [dataloader](./interfaces/export_.plugins.dataloader.html)
 * [dns](./interfaces/export_.plugins.dns.html)
 * [elasticsearch](./interfaces/export_.plugins.elasticsearch.html)
 * [electron](./interfaces/export_.plugins.electron.html)
