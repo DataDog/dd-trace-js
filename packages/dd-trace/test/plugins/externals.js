@@ -767,4 +767,26 @@ module.exports = {
       versions: ['1.20.1'],
     },
   ],
+  '@supabase/supabase-js': [
+    {
+      name: '@supabase/auth-js',
+      versions: ['>=2.112.2 <3'],
+    },
+    {
+      name: '@supabase/functions-js',
+      versions: ['>=2.112.2 <3'],
+    },
+    {
+      name: '@supabase/postgrest-js',
+      versions: ['>=2.112.2 <3'],
+    },
+    {
+      name: '@supabase/realtime-js',
+      versions: ['>=2.112.2 <3'],
+    },
+    {
+      name: '@supabase/storage-js',
+      versions: ['>=2.112.2 <3'],
+    },
+  ],
 }
