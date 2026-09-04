@@ -2,36 +2,16 @@ import { pathToFileURL } from 'node:url'
 
 import { ESLint } from 'eslint'
 
-import { carrierFieldsConfig, carrierFieldsFilePatterns } from '../eslint-rules/carrier-fields-policy.mjs'
-import carrierFieldsRule from '../eslint-rules/eslint-carrier-fields.mjs'
+import { carrierFieldsFilePatterns } from '../eslint-rules/carrier-fields-policy.mjs'
 
 /**
  * @param {string} cwd
- * @returns {ESLint}
+ * @returns {Promise<ESLint>}
  */
 export function createCarrierFieldsEslint (cwd = process.cwd()) {
-  return new ESLint({
-    allowInlineConfig: false,
-    cwd,
-    overrideConfigFile: true,
-    overrideConfig: [
-      {
-        plugins: {
-          'eslint-rules': {
-            rules: { 'eslint-carrier-fields': carrierFieldsRule },
-          },
-        },
-      },
-      {
-        files: ['packages/*/src/**/*.js'],
-        languageOptions: {
-          ecmaVersion: 2022,
-          sourceType: 'commonjs',
-        },
-      },
-      ...carrierFieldsConfig,
-    ],
-  })
+  const optionsURL = new URL('verify-carrier-fields-eslint-options.mjs', import.meta.url)
+  optionsURL.searchParams.set('cwd', cwd)
+  return ESLint.fromOptionsModule(optionsURL)
 }
 
 /**
@@ -39,7 +19,7 @@ export function createCarrierFieldsEslint (cwd = process.cwd()) {
  * @returns {Promise<number>}
  */
 export async function verifyCarrierFields (cwd = process.cwd()) {
-  const eslint = createCarrierFieldsEslint(cwd)
+  const eslint = await createCarrierFieldsEslint(cwd)
   const results = await eslint.lintFiles(carrierFieldsFilePatterns)
   const errors = ESLint.getErrorResults(results)
 
