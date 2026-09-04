@@ -4,47 +4,9 @@ const assert = require('node:assert')
 
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
-const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const {
-  supportedConfigurations,
-} = require('../../dd-trace/src/config/supported-configurations.json')
-
 const SELF = Symbol('self')
-
-// The dd-trace-api plugin is not released yet (the `before` hook fires its load event
-// manually below), so its DD_TRACE_DD_TRACE_API_ENABLED flag is intentionally absent from
-// the shipped supported-configurations.json and must never be added there. Register it in an
-// in-memory copy and reload both consumers of that file — config/helper and the config/defaults
-// table it reads — against the copy, so plugin_manager's getEnabled() resolves the flag through
-// real production code instead of throwing on an unknown DD_-prefixed name. Reloading helper
-// alone would leave the defaults table without the entry and only pass while getEnabled keeps
-// short-circuiting before the default lookup.
-const stubbedConfigurations = {
-  supportedConfigurations: {
-    ...supportedConfigurations,
-    DD_TRACE_DD_TRACE_API_ENABLED: [
-      {
-        implementation: 'A',
-        type: 'boolean',
-        default: 'true',
-      },
-    ],
-  },
-}
-
-const configHelperPath = require.resolve('../../dd-trace/src/config/helper')
-const loadDefaults = proxyquire.noPreserveCache()
-const reloadedDefaults = loadDefaults(require.resolve('../../dd-trace/src/config/defaults'), {
-  './supported-configurations.json': stubbedConfigurations,
-})
-const loadConfigHelper = proxyquire.noPreserveCache()
-const reloadedConfigHelper = loadConfigHelper(configHelperPath, {
-  './supported-configurations.json': stubbedConfigurations,
-  './defaults': reloadedDefaults,
-})
-Object.assign(require(configHelperPath), reloadedConfigHelper)
 
 const agent = require('../../dd-trace/test/plugins/agent')
 
@@ -62,9 +24,7 @@ describe('Plugin', () => {
       await agent.load('dd-trace-api')
 
       tracer = require('../../dd-trace')
-
-      // TODO: Use the real module when it's released.
-      dc.channel('dd-trace:instrumentation:load').publish({ name: 'dd-trace-api' })
+      require('../../../versions/dd-trace-api').get()
 
       sinon.spy(tracer)
       sinon.spy(tracer.appsec)

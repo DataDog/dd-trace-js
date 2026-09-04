@@ -2,7 +2,11 @@
 
 const { channel } = require('dc-polyfill')
 
-const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
+const {
+  getEnvironmentVariable,
+  getValueFromEnvSources,
+  isSupportedConfiguration,
+} = require('./config/helper')
 const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
@@ -59,12 +63,14 @@ function maybeEnable (Plugin) {
 }
 
 function getEnabled (Plugin) {
-  const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
+  const envName = normalizePluginEnvName(`DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`)
+  if (!isSupportedConfiguration(envName)) return
+
   // skipDefault: only an explicitly configured value should drive enablement here. A registered
   // default of `false` (e.g. an opt-in plugin like `nats`) must not be read as an explicit
   // "disabled via configuration option" — that path both logs a misleading line and nulls the
   // plugin class, bypassing the opt-in handled by `loadPlugin`.
-  return getValueFromEnvSources(normalizePluginEnvName(envName), true)
+  return getValueFromEnvSources(envName, true)
 }
 
 // TODO this must always be a singleton.
