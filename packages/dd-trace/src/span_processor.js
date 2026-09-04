@@ -7,6 +7,7 @@ const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
 const { APM_TRACING_ENABLED_KEY } = require('./constants')
+const { AUTO_REJECT } = require('../../../ext/priority')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -34,9 +35,13 @@ class SpanProcessor {
   sample (span) {
     const spanContext = span.context()
     this._prioritySampler.sample(spanContext)
-    if (!spanContext._sampling.discard) {
+    if (!this.#isDiscarded(spanContext)) {
       this._spanSampler.sample(spanContext)
     }
+  }
+
+  #isDiscarded (spanContext) {
+    return spanContext._sampling.discard && spanContext._sampling.priority <= AUTO_REJECT
   }
 
   process (span) {
@@ -58,7 +63,7 @@ class SpanProcessor {
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
-      const discard = spanContext._sampling.discard
+      const discard = this.#isDiscarded(spanContext)
 
       for (const span of started) {
         if (span._duration === undefined) {

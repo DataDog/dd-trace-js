@@ -10,6 +10,7 @@ const proxyquire = require('proxyquire')
 require('./setup/core')
 
 const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
+const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -101,12 +102,25 @@ describe('SpanProcessor', () => {
   it('should skip span sampling when the priority sampler marks the trace for discard', () => {
     prioritySampler.sample = sinon.stub().callsFake((context) => {
       context._sampling.discard = true
+      context._sampling.priority = AUTO_REJECT
     })
 
     processor.sample(finishedSpan)
 
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
     sinon.assert.notCalled(sample)
+  })
+
+  it('should still span sample when discard was set but the priority was later force-kept', () => {
+    // e.g. a product forcing the trace to be kept via PrioritySampler.keepTrace() after a
+    // sampling rule already rejected it and flagged it for discard.
+    finishedSpan.context()._sampling.discard = true
+    finishedSpan.context()._sampling.priority = AUTO_REJECT
+    finishedSpan.context()._sampling.priority = USER_KEEP
+
+    processor.sample(finishedSpan)
+
+    sinon.assert.calledWith(sample, finishedSpan.context())
   })
 
   it('should erase the trace once finished', () => {
@@ -164,6 +178,7 @@ describe('SpanProcessor', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
     finishedSpan.context()._sampling.discard = true
+    finishedSpan.context()._sampling.priority = AUTO_REJECT
 
     processor.process(finishedSpan)
 
@@ -178,6 +193,7 @@ describe('SpanProcessor', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
     finishedSpan.context()._sampling.discard = true
+    finishedSpan.context()._sampling.priority = AUTO_REJECT
 
     processor.process(finishedSpan)
 
@@ -188,12 +204,24 @@ describe('SpanProcessor', () => {
     trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
     trace.finished = [finishedSpan, finishedSpan, finishedSpan]
     finishedSpan.context()._sampling.discard = true
+    finishedSpan.context()._sampling.priority = AUTO_REJECT
 
     processor.process(finishedSpan)
 
     sinon.assert.notCalled(exporter.export)
     assert.deepStrictEqual(trace.started, [activeSpan])
     assert.deepStrictEqual(trace.finished, [])
+  })
+
+  it('should still export the chunk when discard was set but the priority was later force-kept', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._sampling.discard = true
+    finishedSpan.context()._sampling.priority = USER_KEEP
+
+    processor.process(finishedSpan)
+
+    sinon.assert.calledWith(exporter.export, [{ formatted: true }])
   })
 
   it('should configure span sampler correctly', () => {
