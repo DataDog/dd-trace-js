@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "apm_tracing_config",
+    "attributes": {
+      "action": "enable",
+      "lib_config": {},
+      "service_target": { "service": "sdk-config-demo", "env": "demo" },
+      "sdk_config": {
+        "service_name": "sdk-config-demo",
+        "env": "demo",
+        "config": {
+          "DD_PROFILING_ENABLED": "true"
+        }
+      }
+    }
+  }
+}

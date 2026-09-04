@@ -1,0 +1,14 @@
+{
+  "action": "enable",
+  "lib_config": {},
+  "service_target": { "service": "sdk-config-demo", "env": "demo" },
+  "sdk_config": {
+    "service_name": "sdk-config-demo",
+    "env": "demo",
+    "config": {
+      "DD_PROFILING_ENABLED": "true",
+      "DD_TRACE_ENABLED": "false",
+      "DD_API_KEY": "not-a-real-key"
+    }
+  }
+}
