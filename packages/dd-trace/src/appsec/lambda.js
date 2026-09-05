@@ -175,16 +175,14 @@ function parseResponseBody (rawBody, headers, isBase64Encoded) {
   const mime = extractMimeType(headers?.['content-type'])
   if (!mime?.includes('json')) return
 
+  if (isOverSizeCap(rawBody, isBase64Encoded)) {
+    log.debug('[ASM] Lambda response body larger than %d bytes, skipping schema extraction',
+      MAX_RESPONSE_BODY_SIZE)
+    return
+  }
+
   try {
-    const body = isBase64Encoded ? Buffer.from(rawBody, 'base64').toString('utf8') : rawBody
-
-    if (body.length >= MAX_RESPONSE_BODY_SIZE) {
-      log.debug('[ASM] Lambda response body larger than %d bytes, skipping schema extraction',
-        MAX_RESPONSE_BODY_SIZE)
-      return
-    }
-
-    const parsed = JSON.parse(body)
+    const parsed = JSON.parse(isBase64Encoded ? Buffer.from(rawBody, 'base64').toString('utf8') : rawBody)
 
     // A JSON scalar carries no schema worth extracting.
     if (parsed === null || typeof parsed !== 'object') return
@@ -193,6 +191,21 @@ function parseResponseBody (rawBody, headers, isBase64Encoded) {
   } catch (err) {
     log.debug('[ASM] Failed to parse Lambda response body', err)
   }
+}
+
+/**
+ * Tells whether a raw body exceeds the size cap, without decoding or measuring it when avoidable
+ *
+ * @param {string} rawBody
+ * @param {boolean | undefined} isBase64Encoded
+ * @returns {boolean}
+ */
+function isOverSizeCap (rawBody, isBase64Encoded) {
+  if (isBase64Encoded) return Math.floor(rawBody.length * 3 / 4) >= MAX_RESPONSE_BODY_SIZE
+  if (rawBody.length >= MAX_RESPONSE_BODY_SIZE) return true
+  if (rawBody.length * 3 < MAX_RESPONSE_BODY_SIZE) return false
+
+  return Buffer.byteLength(rawBody, 'utf8') >= MAX_RESPONSE_BODY_SIZE
 }
 
 module.exports = {

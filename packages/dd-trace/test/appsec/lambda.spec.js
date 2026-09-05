@@ -616,6 +616,26 @@ describe('AppSec Lambda handler', () => {
         assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
       })
 
+      it('should measure the cap in bytes, not in code units', () => {
+        const responseBody = `{"payload":"${'デ'.repeat(6 * 1024 * 1024)}"}`
+        assert.ok(responseBody.length < 16 * 1024 * 1024)
+
+        const persistent = invokeWithBody({ responseBody })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.calledWithMatch(log.debug, sinon.match(/larger than/))
+      })
+
+      it('should reject an oversized base64 body from its encoded length alone', () => {
+        const persistent = invokeWithBody({
+          responseBody: 'A'.repeat(Math.ceil(16 * 1024 * 1024 * 4 / 3)),
+          isBase64Encoded: true,
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.calledWithMatch(log.debug, sinon.match(/larger than/))
+      })
+
       it('should ignore an empty body', () => {
         const persistent = invokeWithBody({ responseBody: '' })
 
