@@ -21,6 +21,7 @@ describe('Plugin', () => {
   let ApolloGateway
   let LocalGraphQLDataSource
   let buildSubgraphSchema
+  let legacySubgraphInput
   let ApolloServer
   let startStandaloneServer
   let gql
@@ -34,8 +35,10 @@ describe('Plugin', () => {
   function setupApollo (version) {
     require('../../dd-trace/index.js')
     const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
-    const subgraph = require('../../../versions/@apollo/subgraph').get()
+    const subgraphPackage = require('../../../versions/@apollo/subgraph')
+    const subgraph = subgraphPackage.get()
     buildSubgraphSchema = subgraph.buildSubgraphSchema
+    legacySubgraphInput = semver.lt(subgraphPackage.version(), '2.15.0')
     ApolloGateway = apollo.ApolloGateway
     LocalGraphQLDataSource = apollo.LocalGraphQLDataSource
   }
@@ -44,7 +47,7 @@ describe('Plugin', () => {
     const localDataSources = Object.fromEntries(
       fixtures.map((f) => [
         f.name,
-        new LocalGraphQLDataSource(buildSubgraphSchema(f)),
+        new LocalGraphQLDataSource(buildSubgraphSchema(legacySubgraphInput ? f : [f])),
       ])
     )
 
