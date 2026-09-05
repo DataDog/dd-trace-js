@@ -352,9 +352,9 @@ describe('TracerProxy', () => {
       it('only loads Test Optimization startup modules through ci/init', () => {
         const repoRoot = path.resolve(__dirname, '../../..')
         const testOptimizationRoot = path.join(repoRoot, 'packages/dd-trace/src/ci-visibility') + path.sep
+        const logSubmissionModule = require.resolve('../src/log-submission/log-submission-plugin')
         const modules = [
           require.resolve('../src/ci-visibility/test-api-manual/test-api-manual-plugin'),
-          require.resolve('../src/ci-visibility/log-submission/log-submission-plugin'),
           require.resolve('../src/ci-visibility/dynamic-instrumentation'),
         ]
         const script = `
@@ -364,25 +364,36 @@ describe('TracerProxy', () => {
           }
           const modules = ${JSON.stringify(modules)}
           const loaded = modules.map(module => require.cache[module] !== undefined)
+          const logSubmissionLoaded = require.cache[${JSON.stringify(logSubmissionModule)}] !== undefined
           const testOptimizationModuleCount = Object.keys(require.cache)
             .filter(module => module.startsWith(${JSON.stringify(testOptimizationRoot)}))
             .length
-          process.stdout.write(JSON.stringify({ loaded, testOptimizationModuleCount }), () => process.exit())
+          process.stdout.write(
+            JSON.stringify({ loaded, logSubmissionLoaded, testOptimizationModuleCount }),
+            () => process.exit()
+          )
         `
         const cases = [
           {
             entrypoint: repoRoot,
             callInit: 'true',
             environment: { DD_AGENTLESS_LOG_SUBMISSION_ENABLED: 'true' },
-            expected: [false, false, false],
+            expected: [false, false],
+            expectedLogSubmissionLoaded: true,
             expectedTestOptimizationModuleCount: 0,
           },
-          { entrypoint: path.join(repoRoot, 'ci/init'), callInit: 'false', expected: [true, false, true] },
+          {
+            entrypoint: path.join(repoRoot, 'ci/init'),
+            callInit: 'false',
+            expected: [true, true],
+            expectedLogSubmissionLoaded: false,
+          },
           {
             entrypoint: path.join(repoRoot, 'ci/init'),
             callInit: 'false',
             environment: { DD_AGENTLESS_LOG_SUBMISSION_ENABLED: 'true' },
-            expected: [true, true, true],
+            expected: [true, true],
+            expectedLogSubmissionLoaded: true,
           },
           {
             entrypoint: path.join(repoRoot, 'ci/init'),
@@ -391,7 +402,8 @@ describe('TracerProxy', () => {
               DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false',
               DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
             },
-            expected: [false, false, false],
+            expected: [false, false],
+            expectedLogSubmissionLoaded: false,
           },
         ]
 
@@ -417,8 +429,9 @@ describe('TracerProxy', () => {
           })
 
           assert.strictEqual(result.status, 0, result.stderr)
-          const { loaded, testOptimizationModuleCount } = JSON.parse(result.stdout)
+          const { loaded, logSubmissionLoaded, testOptimizationModuleCount } = JSON.parse(result.stdout)
           assert.deepStrictEqual(loaded, testCase.expected)
+          assert.strictEqual(logSubmissionLoaded, testCase.expectedLogSubmissionLoaded)
           if (testCase.expectedTestOptimizationModuleCount !== undefined) {
             assert.strictEqual(testOptimizationModuleCount, testCase.expectedTestOptimizationModuleCount)
           }

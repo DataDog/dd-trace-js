@@ -81,6 +81,19 @@ describe('sendData', () => {
     })
   })
 
+  it('does not send the API key to the Agent', () => {
+    sendDataModule.sendData({
+      DD_API_KEY: 'secret-key',
+      url: new URL('https://agent.example:8126'),
+      tags: { 'runtime-id': '123' },
+    }, application, host, 'req-type')
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+
+    assert.strictEqual(options.headers['dd-api-key'], undefined)
+  })
+
   it('adds the debug header when telemetry debug mode is enabled', () => {
     sendDataModule.sendData({
       url: '/test',
@@ -162,6 +175,7 @@ describe('sendData', () => {
   it('uses the CI Visibility agentless intake when agentless mode is enabled', () => {
     sendDataModule.sendData(
       {
+        DD_API_KEY: 'secret-key',
         isCiVisibility: true,
         testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: true },
         tags: { 'runtime-id': '123' },
@@ -181,6 +195,7 @@ describe('sendData', () => {
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
     assert.strictEqual(options.agent, getAgent(url))
+    assert.strictEqual(options.headers['dd-api-key'], 'secret-key')
   })
 
   it('uses DD_CIVISIBILITY_AGENTLESS_URL for telemetry when the agentless intake is overridden', () => {
@@ -269,6 +284,40 @@ describe('sendData', () => {
     assert.strictEqual(options.path, '/api/v2/apmtelemetry')
     assert.deepStrictEqual(options.url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
     assert.strictEqual(options.headers['dd-api-key'], 'secret-key')
+  })
+
+  it('uses the staging telemetry intake for APM agentless mode', () => {
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        experimental: { exporter: 'agentless' },
+        tags: { 'runtime-id': '123' },
+        site: 'datad0g.com',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+    assert.deepStrictEqual(options.url, new URL('https://all-http-intake.logs.datad0g.com'))
+  })
+
+  it('rejects an APM agentless site that could redirect the API key', () => {
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        experimental: { exporter: 'agentless' },
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.com@evil.example',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.notCalled(request)
   })
 
   it('does not fall back to the Agent after an APM agentless telemetry failure', () => {

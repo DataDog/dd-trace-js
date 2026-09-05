@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { fork } = require('node:child_process')
+const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
 const { inspect } = require('node:util')
@@ -18,20 +19,87 @@ const describeNotWindows = os.platform() !== 'win32' ? describe : describe.skip
  *
  * @param {string} fixture
  * @param {number} agentPort
+ * @param {Record<string, string|undefined>} [environment]
+ * @param {(chunk: Buffer) => void} [onStderr]
  * @returns {Promise<void>}
  */
-function spawnCrashFixture (fixture, agentPort) {
+function spawnCrashFixture (fixture, agentPort, environment = {}, onStderr) {
   const proc = fork(path.join(__dirname, fixture), [], {
     stdio: 'pipe',
     env: {
       ...process.env,
       DD_TRACE_AGENT_PORT: String(agentPort),
       DD_TRACE_STARTUP_LOGS: 'false',
+      ...environment,
     },
   })
+  if (onStderr) proc.stderr.on('data', onStderr)
 
   return new Promise((resolve) => {
     proc.once('exit', resolve)
+  })
+}
+
+/**
+ * Collect the native receiver's agentless requests until both direct intakes receive crash data.
+ *
+ * @param {http.Server} server
+ * @param {string} expectedApiKey
+ * @param {number} [timeout]
+ * @returns {Promise<object[]>}
+ */
+function collectAgentlessCrashRequests (server, expectedApiKey, timeout = 10_000) {
+  const requestUrls = []
+  const telemetry = []
+  let receivedErrorTracking = false
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(new Error(`Timeout waiting for agentless crash requests; received: ${requestUrls.join(', ')}`))
+    }, timeout)
+
+    function cleanup () {
+      clearTimeout(timer)
+      server.removeListener('request', onRequest)
+    }
+
+    function onRequest (request, response) {
+      const chunks = []
+      request.on('data', chunk => chunks.push(chunk))
+      request.on('end', () => {
+        response.writeHead(202)
+        response.end()
+
+        requestUrls.push(request.url)
+
+        if (request.url === '/api/v2/apmtelemetry') {
+          const payload = JSON.parse(Buffer.concat(chunks).toString())
+          if (payload.origin === 'Crashtracker') {
+            if (request.headers['dd-api-key'] !== expectedApiKey) {
+              cleanup()
+              reject(new Error('Crash telemetry request has an invalid API key'))
+              return
+            }
+            telemetry.push(payload)
+          }
+        } else if (request.url === '/api/v2/errorsintake') {
+          if (request.headers['dd-api-key'] !== expectedApiKey) {
+            cleanup()
+            reject(new Error('Errors Tracking request has an invalid API key'))
+            return
+          }
+          receivedErrorTracking = true
+        }
+
+        if (telemetry.length >= 2 && receivedErrorTracking) {
+          cleanup()
+          resolve(telemetry)
+        }
+      })
+    }
+
+    server.on('request', onRequest)
   })
 }
 
@@ -131,6 +199,36 @@ describeNotWindows('crashtracking integration', () => {
         topFrame.function && topFrame.function.toLowerCase().includes('kill'),
         `expected top frame to be the kill syscall, got: ${JSON.stringify(topFrame)}`
       )
+    })
+
+    it('sends native crash data directly to both agentless intakes', async function () {
+      if (os.platform() !== 'linux') this.skip()
+
+      const server = http.createServer()
+      await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+
+      try {
+        let stderr = ''
+        const { port } = server.address()
+        const intakeUrl = `http://127.0.0.1:${port}`
+        const requestsPromise = collectAgentlessCrashRequests(server, 'test-api-key')
+        const exitPromise = spawnCrashFixture('fixtures/agentless-signal-crash.js', agent.port, {
+          DD_AGENTLESS_ENABLED: 'true',
+          DD_API_KEY: 'test-api-key',
+          DD_TEST_AGENTLESS_TELEMETRY_URL: intakeUrl,
+        }, chunk => { stderr += chunk })
+
+        let requests
+        try {
+          [requests] = await Promise.all([requestsPromise, exitPromise])
+        } catch (error) {
+          error.message += `\nFixture stderr: ${stderr}`
+          throw error
+        }
+        assert.ok(requests.every(payload => payload.request_type === 'logs'))
+      } finally {
+        await new Promise(resolve => server.close(resolve))
+      }
     })
   })
 

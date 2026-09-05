@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const { isRegExp } = require('node:util').types
 
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const tagger = require('../tagger')
@@ -72,6 +73,9 @@ const transformers = {
   toUpperCase (value) {
     return toCase(value, 'toUpperCase')
   },
+  /**
+   * @param {unknown} value
+   */
   toCamelCase (value) {
     if (Array.isArray(value)) {
       return value.map(item => {
@@ -79,6 +83,10 @@ const transformers = {
       })
     }
     if (typeof value === 'object' && value !== null) {
+      // RegExp matchers are supported configuration leaves and need their own clone.
+      if (isRegExp(value)) {
+        return new RegExp(value)
+      }
       const result = {}
       for (const [key, innerValue] of Object.entries(value)) {
         const camelCaseKey = key.replaceAll(/_(\w)/g, (_, letter) => letter.toUpperCase())

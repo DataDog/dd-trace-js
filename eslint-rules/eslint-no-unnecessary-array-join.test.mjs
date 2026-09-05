@@ -33,6 +33,9 @@ ruleTester.run('eslint-no-unnecessary-array-join', /** @type {import('eslint').R
       options: [{ reportLiteralArrayJoins: true }],
     },
     "const parts = []; parts.push('a'); consume(parts); parts.join('')",
+    "const parts = []; parts.push('a'); consume(parts.length); parts.join('')",
+    "const parts = []; parts.push('a'); if (parts.length > 1) consume(parts.join(', '))",
+    "const parts = []; parts.push('a'); parts.length = 0; parts.join('')",
     "const parts = []; parts.push('a'); parts.join(separator)",
     "const parts = []; parts.push('a'); parts.join(`$" + '{separator}`)',
     "const parts = []; parts.push('a'); parts.join(''); parts.join('')",
@@ -257,6 +260,24 @@ ruleTester.run('eslint-no-unnecessary-array-join', /** @type {import('eslint').R
         }
       `,
       errors: [{ messageId: 'buildStringDirectly', data: { name: 'parts' } }],
+    },
+    {
+      code: `
+        function build (values) {
+          const aliases = []
+          for (const value of values) {
+            aliases.push(\`\${value} = source\`)
+          }
+          if (aliases.length > 0) {
+            consume(aliases.join(', '))
+          }
+        }
+      `,
+      errors: [{ messageId: 'buildStringDirectly', data: { name: 'aliases' } }],
+    },
+    {
+      code: "const aliases = []; aliases.push('value'); if (0 < aliases.length) consume(aliases.join(', '))",
+      errors: [{ messageId: 'buildStringDirectly', data: { name: 'aliases' } }],
     },
     {
       code: `

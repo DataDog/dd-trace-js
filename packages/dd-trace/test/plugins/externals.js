@@ -384,6 +384,15 @@ module.exports = {
   ],
   knex: [
     {
+      name: 'mysql',
+      dep: true,
+      versions: ['2.18.1'],
+    },
+    {
+      name: 'mysql2',
+      dep: true,
+    },
+    {
       name: 'sqlite3',
       versions: ['^5.0.8'],
     },
@@ -397,6 +406,7 @@ module.exports = {
     },
     {
       name: 'pg',
+      dep: true,
       versions: [
         '8.7.3',
       ],
@@ -719,8 +729,24 @@ module.exports = {
       versions: ['>=4'],
     },
     {
+      name: 'mysql',
+      dep: true,
+      versions: ['2.18.1'],
+    },
+    {
       name: 'mysql2',
       dep: true,
+      versions: ['3.9.3', '>=3.9.4'],
+    },
+    {
+      name: 'mariadb',
+      dep: true,
+      versions: ['2.5.6'],
+    },
+    {
+      name: 'pg',
+      dep: true,
+      versions: ['8.7.3'],
     },
     {
       name: 'sqlite3',

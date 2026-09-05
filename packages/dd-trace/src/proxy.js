@@ -311,10 +311,10 @@ class Tracer extends NoopProxy {
         // are lazily configured when the library is imported.
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
-      if (config.isCiVisibility && config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
+      if (config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
         if (config.DD_API_KEY) {
-          const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
-          const automaticLogPlugin = new LogSubmissionPlugin(this)
+          const LogSubmissionPlugin = require('./log-submission/log-submission-plugin')
+          const automaticLogPlugin = new LogSubmissionPlugin(this, config)
           automaticLogPlugin.configure({ ...config, enabled: true })
         } else {
           log.warn(

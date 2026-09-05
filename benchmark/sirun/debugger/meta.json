@@ -20,7 +20,7 @@
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
         "STARTUP_GUARD_MAX_SHARE": "0.15",
-        "OPERATIONS": "17000",
+        "OPERATIONS": "11300",
         "BREAKPOINT_FILE": "app.js",
         "BREAKPOINT_LINE": "152",
         "EXPECTED_CAPTURE_KIND": "none",
@@ -47,7 +47,7 @@
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
         "STARTUP_GUARD_MAX_SHARE": "0.15",
-        "OPERATIONS": "12000",
+        "OPERATIONS": "8000",
         "DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS": "1000",
         "BREAKPOINT_FILE": "app.js",
         "BREAKPOINT_LINE": "152",
