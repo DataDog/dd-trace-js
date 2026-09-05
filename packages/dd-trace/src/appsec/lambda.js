@@ -6,6 +6,7 @@ const log = require('../log')
 const { isEmpty } = require('../util')
 const addresses = require('./addresses')
 const apiSecurity = require('./api_security')
+const { extractMimeType } = require('./downstream_requests')
 const Reporter = require('./reporter')
 const waf = require('./waf')
 
@@ -171,8 +172,8 @@ function parseResponseBody (rawBody, headers, isBase64Encoded) {
 
   if (typeof rawBody !== 'string') return
 
-  const contentType = headers?.['content-type']
-  if (!contentType?.includes('json')) return
+  const mime = extractMimeType(headers?.['content-type'])
+  if (!mime?.includes('json')) return
 
   try {
     const body = isBase64Encoded ? Buffer.from(rawBody, 'base64').toString('utf8') : rawBody

@@ -544,6 +544,42 @@ describe('AppSec Lambda handler', () => {
         assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: [1, 2] })
       })
 
+      it('should accept a differently cased media type', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'Application/JSON' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept a media type with parameters', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/json; charset=utf-8' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept a structured JSON suffix media type', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/problem+json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should not be fooled by json appearing in a media type parameter', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'text/plain; filename=data.json' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
       it('should not parse the body when the content type is not JSON', () => {
         const persistent = invokeWithBody({
           responseBody: '{"payload":1}',
