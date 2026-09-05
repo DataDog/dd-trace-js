@@ -571,6 +571,33 @@ describe('AppSec Lambda handler', () => {
         assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
       })
 
+      it('should accept text/json', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'text/json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should reject a subtype that merely contains json', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/notjson' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should reject a JSON sequence, which is not a single document', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/json-seq' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
       it('should not be fooled by json appearing in a media type parameter', () => {
         const persistent = invokeWithBody({
           responseBody: '{"payload":1}',

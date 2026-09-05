@@ -14,6 +14,8 @@ const activeInvocations = new WeakMap()
 
 const MAX_RESPONSE_BODY_SIZE = 16 * 1024 * 1024
 
+const JSON_MIME_TYPES = new Set(['application/json', 'text/json'])
+
 /**
  * Maps pre-extracted HTTP data from the Lambda event to WAF addresses,
  * runs the WAF, and reports results on the span.
@@ -173,7 +175,7 @@ function parseResponseBody (rawBody, headers, isBase64Encoded) {
   if (typeof rawBody !== 'string') return
 
   const mime = extractMimeType(headers?.['content-type'])
-  if (!mime?.includes('json')) return
+  if (!mime || !(JSON_MIME_TYPES.has(mime) || mime.endsWith('+json'))) return
 
   if (isOverSizeCap(rawBody, isBase64Encoded)) {
     log.debug('[ASM] Lambda response body larger than %d bytes, skipping schema extraction',
