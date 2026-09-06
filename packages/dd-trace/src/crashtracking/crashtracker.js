@@ -8,10 +8,10 @@ const binding = libdatadogExtras.load('crashtracker')
 
 const { channel } = require('dc-polyfill')
 const { getEnvironmentVariable } = require('../config/helper')
+const getAgentlessTelemetryUrl = require('../telemetry/agentless-url')
 const log = require('../log')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
-const getAgentlessTelemetryUrl = require('../telemetry/agentless-url')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
 const INHERITED_RECEIVER_ENVIRONMENT_VARIABLES = [
@@ -38,16 +38,12 @@ function getAgentlessReceiverEnvironment (config) {
   }
 
   const site = config.site.toLowerCase()
-  const telemetryUrl = getAgentlessTelemetryUrl(site).origin
 
   const environment = /** @type {Array<[string, string]>} */ ([
     ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
     ['DD_API_KEY', config.DD_API_KEY],
     ['DD_SITE', site],
-    ['DD_APM_TELEMETRY_DD_URL', telemetryUrl],
-    // libdatadog v43 parses the dedicated URL above but does not use it when constructing the
-    // endpoint. Keep this compatibility fallback until its telemetry config honors that setting.
-    ['DD_TRACE_AGENT_URL', telemetryUrl],
+    ['DD_CRASHTRACKING_ERRORS_INTAKE_ENABLED', 'true'],
   ])
 
   // The receiver environment does not inherit from this process.
@@ -117,8 +113,23 @@ class Crashtracker {
    * @param {import('../config/config-base')} config - Tracer configuration
    */
   #getConfig (config) {
-    let endpoint = null
-    if (!config.DD_AGENTLESS_ENABLED) {
+    let endpoint
+    if (config.DD_AGENTLESS_ENABLED) {
+      // Crash reports ride the telemetry intake, so agentless points at the same host the
+      // telemetry writer uses (matches dd-trace-py's _agentless_endpoint_url).
+      const url = getAgentlessTelemetryUrl(config.site.toLowerCase())
+      endpoint = {
+        url: {
+          scheme: url.protocol.slice(0, -1),
+          authority: url.host,
+          path_and_query: '',
+        },
+        // Direct submission is only selected when the endpoint carries an API key; without
+        // it, the receiver falls back to the agent's EvP proxy path.
+        api_key: config.DD_API_KEY,
+        timeout_ms: 3000,
+      }
+    } else {
       const url = config.url
       endpoint = {
         // TODO: Use the string directly when deserialization is fixed.

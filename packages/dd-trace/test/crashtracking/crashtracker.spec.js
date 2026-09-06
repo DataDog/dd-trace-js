@@ -7,7 +7,6 @@ const { inspect } = require('node:util')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const actualGetAgentlessTelemetryUrl = require('../../src/telemetry/agentless-url')
 require('../setup/core')
 
 const describeNotWindows = os.platform() !== 'win32' ? describe : describe.skip
@@ -19,7 +18,6 @@ describeNotWindows('crashtracker', () => {
   let identityRefreshChannel
   let libdatadogExtras
   let log
-  let getAgentlessTelemetryUrl
 
   before(() => {
     require('../../src/process-tags').initialize()
@@ -44,7 +42,6 @@ describeNotWindows('crashtracker', () => {
     identityRefreshChannel = {
       subscribe: sinon.stub(),
     }
-    getAgentlessTelemetryUrl = sinon.stub().callsFake(actualGetAgentlessTelemetryUrl)
 
     sinon.stub(binding, 'init')
     sinon.stub(binding, 'updateConfig')
@@ -54,7 +51,6 @@ describeNotWindows('crashtracker', () => {
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
       'dc-polyfill': { channel: sinon.stub().returns(identityRefreshChannel) },
       '../log': log,
-      '../telemetry/agentless-url': getAgentlessTelemetryUrl,
     })
   })
 
@@ -128,30 +124,20 @@ describeNotWindows('crashtracker', () => {
       crashtracker.start(config)
 
       sinon.assert.calledOnce(binding.init)
-      assert.strictEqual(binding.init.firstCall.args[0].endpoint, null)
+      assert.deepStrictEqual(binding.init.firstCall.args[0].endpoint, {
+        url: {
+          scheme: 'https',
+          authority: 'instrumentation-telemetry-intake.us3.datadoghq.com',
+          path_and_query: '',
+        },
+        api_key: 'test-api-key',
+        timeout_ms: 3000,
+      })
       assert.deepStrictEqual(binding.init.firstCall.args[1].env, [
         ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
         ['DD_API_KEY', 'test-api-key'],
         ['DD_SITE', 'us3.datadoghq.com'],
-        ['DD_APM_TELEMETRY_DD_URL', 'https://instrumentation-telemetry-intake.us3.datadoghq.com'],
-        ['DD_TRACE_AGENT_URL', 'https://instrumentation-telemetry-intake.us3.datadoghq.com'],
-      ])
-      sinon.assert.notCalled(log.error)
-    })
-
-    it('should use the staging telemetry intake in agentless mode', () => {
-      config.DD_AGENTLESS_ENABLED = true
-      config.DD_API_KEY = 'test-api-key'
-      config.site = 'datad0g.com'
-
-      crashtracker.start(config)
-
-      assert.deepStrictEqual(binding.init.firstCall.args[1].env, [
-        ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
-        ['DD_API_KEY', 'test-api-key'],
-        ['DD_SITE', 'datad0g.com'],
-        ['DD_APM_TELEMETRY_DD_URL', 'https://all-http-intake.logs.datad0g.com'],
-        ['DD_TRACE_AGENT_URL', 'https://all-http-intake.logs.datad0g.com'],
+        ['DD_CRASHTRACKING_ERRORS_INTAKE_ENABLED', 'true'],
       ])
       sinon.assert.notCalled(log.error)
     })
@@ -160,7 +146,6 @@ describeNotWindows('crashtracker', () => {
       config.DD_AGENTLESS_ENABLED = true
       config.DD_API_KEY = 'test-api-key'
       config.site = 'datadoghq.com'
-      getAgentlessTelemetryUrl.returns(new URL('http://127.0.0.1:1234'))
       const environment = {
         HTTP_PROXY: 'http://uppercase-http-proxy',
         HTTPS_PROXY: 'http://uppercase-https-proxy',
@@ -193,8 +178,7 @@ describeNotWindows('crashtracker', () => {
         ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
         ['DD_API_KEY', 'test-api-key'],
         ['DD_SITE', 'datadoghq.com'],
-        ['DD_APM_TELEMETRY_DD_URL', 'http://127.0.0.1:1234'],
-        ['DD_TRACE_AGENT_URL', 'http://127.0.0.1:1234'],
+        ['DD_CRASHTRACKING_ERRORS_INTAKE_ENABLED', 'true'],
         ['HTTP_PROXY', 'http://uppercase-http-proxy'],
         ['HTTPS_PROXY', 'http://uppercase-https-proxy'],
         ['NO_PROXY', 'uppercase-no-proxy'],
