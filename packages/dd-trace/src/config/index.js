@@ -24,6 +24,7 @@ const {
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
+const { createSiteUrl } = require('../exporters/common/url')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -699,13 +700,30 @@ class Config extends ConfigBase {
 
     // TODO: This could likely be moved to the base class and allow easier GRPC handling
     // Default OTLP endpoints follow the configured agent host so users who point DD at a custom
-    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host.
-    const defaultOtlpBase = this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
+    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host. In agentless mode
+    // there is no agent to relay through, so OTLP goes straight to the per-site intake instead.
+    const otlpAgentlessOrigin = agentlessTracingEnabled && !this.isCiVisibility && !this.OTEL_EXPORTER_OTLP_ENDPOINT
+      ? createSiteUrl(this.site, 'otlp')?.origin
+      : undefined
+    const defaultOtlpBase = otlpAgentlessOrigin ??
+      this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
     if (!this.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', `${defaultOtlpBase}/v1/logs`)
+      if (otlpAgentlessOrigin && !trackedConfigOrigins.has('OTEL_EXPORTER_OTLP_LOGS_HEADERS')) {
+        setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_HEADERS', {
+          ...this.OTEL_EXPORTER_OTLP_LOGS_HEADERS,
+          'dd-api-key': this.DD_API_KEY,
+        })
+      }
     }
     if (!this.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', `${defaultOtlpBase}/v1/metrics`)
+      if (otlpAgentlessOrigin && !trackedConfigOrigins.has('OTEL_EXPORTER_OTLP_METRICS_HEADERS')) {
+        setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_HEADERS', {
+          ...this.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
+          'dd-api-key': this.DD_API_KEY,
+        })
+      }
     }
     if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
