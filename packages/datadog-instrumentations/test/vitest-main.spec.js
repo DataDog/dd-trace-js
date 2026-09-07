@@ -265,6 +265,42 @@ describe('vitest main instrumentation', () => {
     assert.strictEqual(testSuiteFinishPayloads.length, 1)
     assert.strictEqual(testSuiteFinishPayloads[0].deferFlush, true)
 
+    const typecheckFiles = [
+      { filepath: '/repo/first-typecheck.ts', result: { state: 'pass' }, tasks: [] },
+      { filepath: '/repo/second-typecheck.ts', result: { state: 'pass' }, tasks: [] },
+    ]
+    class TypecheckPoolWorker {
+      constructor () {
+        this.project = {
+          typechecker: {
+            getResult () {
+              return { files: typecheckFiles }
+            },
+          },
+          vitest: ctx,
+        }
+      }
+
+      send () {}
+
+      on (event, callback) {
+        this[event] = callback
+      }
+    }
+    const VitestV5 = class Vitest {}
+    const vitestV5IndexHook = hooks.find(({ target }) =>
+      target.filePattern === 'dist/chunks/index.*' && target.versions[0] === '>=5.0.0'
+    ).hook
+    vitestV5IndexHook({ TypecheckPoolWorker, Vitest: VitestV5 }, '5.0.0')
+
+    const typecheckPoolWorker = new TypecheckPoolWorker()
+    typecheckPoolWorker.on('message', () => {})
+    for (const file of typecheckFiles) {
+      typecheckPoolWorker.send({ type: 'run', context: { files: [{ filepath: file.filepath }] } })
+      await typecheckPoolWorker.message({ type: 'testfileFinished' })
+    }
+    assert.strictEqual(testSuiteFinishPayloads.length, 3)
+
     const customPoolTypechecker = new Typechecker()
     customPoolTypechecker.ctx = {
       ...ctx,

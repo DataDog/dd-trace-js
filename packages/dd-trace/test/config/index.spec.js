@@ -1545,7 +1545,7 @@ describe('Config', () => {
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_SAMPLING_RULES = `[
-      {"service":"usersvc","name":"healthcheck","sample_rate":0.0 },
+      {"service":"usersvc","name":"healthcheck","sample_rate":0.0,"discard":true },
       {"service":"usersvc","sample_rate":0.5},
       {"service":"authsvc","sample_rate":1.0},
       {"sample_rate":0.1}
@@ -1702,7 +1702,7 @@ describe('Config', () => {
       sampleRate: 0.5,
       rateLimit: -1,
       rules: [
-        { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
+        { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0, discard: true },
         { service: 'usersvc', sampleRate: 0.5 },
         { service: 'authsvc', sampleRate: 1.0 },
         { sampleRate: 0.1 },
@@ -2526,6 +2526,58 @@ describe('Config', () => {
       "Invalid value: 'foo' for DD_TRACE_SPAN_ATTRIBUTE_SCHEMA (source: env_var), picked default",
     )
     assert.strictEqual(config.spanAttributeSchema, 'v0')
+  })
+
+  it('should accept valid port boundaries', () => {
+    process.env.DD_DOGSTATSD_PORT = '1'
+    process.env.DD_TRACE_AGENT_PORT = '1'
+
+    let config = getConfig()
+
+    assert.strictEqual(config.dogstatsd.port, 1)
+    assert.strictEqual(config.port, 1)
+
+    process.env.DD_DOGSTATSD_PORT = '65535'
+    process.env.DD_TRACE_AGENT_PORT = '65535'
+
+    config = getConfig()
+
+    assert.strictEqual(config.dogstatsd.port, 65535)
+    assert.strictEqual(config.port, 65535)
+  })
+
+  it('should reject invalid port boundaries', () => {
+    process.env.DD_DOGSTATSD_PORT = '0'
+    process.env.DD_TRACE_AGENT_PORT = '0'
+
+    let config = getConfig()
+
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 0 for DD_DOGSTATSD_PORT (source: env_var), picked default',
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 0 for DD_TRACE_AGENT_PORT (source: env_var), picked default',
+    )
+    assert.strictEqual(config.dogstatsd.port, 8125)
+    assert.strictEqual(config.port, 8126)
+
+    process.env.DD_DOGSTATSD_PORT = '65536'
+    process.env.DD_TRACE_AGENT_PORT = '65536'
+
+    config = getConfig()
+
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 65536 for DD_DOGSTATSD_PORT (source: env_var), picked default',
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 65536 for DD_TRACE_AGENT_PORT (source: env_var), picked default',
+    )
+    assert.strictEqual(config.dogstatsd.port, 8125)
+    assert.strictEqual(config.port, 8126)
   })
 
   it('should parse integer range sets', () => {
