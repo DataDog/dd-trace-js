@@ -8,6 +8,7 @@ const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
 
 const { canSendApiKey } = require('../common/url')
+const { getHttpsProxyAgent } = require('../common/proxy')
 const BaseWriter = require('../common/writer')
 const { AgentEncoder } = require('../../encode/0.4')
 const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
@@ -153,6 +154,7 @@ class AgentlessWriter extends BaseWriter {
 
     this.#closeExporter()
     const config = getConfig()
+    const agent = this._url.protocol === 'https:' ? getHttpsProxyAgent(this._url) : undefined
     this.#exporter = createAgentlessExporter({
       endpoint: this.#endpoint(),
       apiKey,
@@ -165,7 +167,7 @@ class AgentlessWriter extends BaseWriter {
       tracerVersion,
       languageVersion: process.version,
       languageInterpreter: process.versions.bun ? 'JavaScriptCore' : 'v8',
-    })
+    }, { agent })
     this.#exporterApiKey = apiKey
     this.#exporterEnv = env
     this.#exporterRuntimeId = runtimeID

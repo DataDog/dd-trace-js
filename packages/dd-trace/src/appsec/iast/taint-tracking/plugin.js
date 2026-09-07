@@ -178,12 +178,12 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   addGraphQLSubscriptions () {
     this.addSub(
       { channelName: 'apm:graphql:resolve:start', tag: HTTP_REQUEST_BODY },
-      (data) => {
+      ({ rootCtx, args }) => {
         const iastContext = getIastContext(storage('legacy').getStore())
-        const source = data.rootCtx?.source
+        const source = rootCtx?.source
         const ranges = source && getRanges(iastContext, source)
         if (ranges?.length) {
-          this._taintTrackingHandler(ranges[0].iinfo.type, data.args, null, iastContext)
+          this._taintTrackingHandler(ranges[0].iinfo.type, args, null, iastContext)
         }
       }
     )
