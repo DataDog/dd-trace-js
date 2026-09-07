@@ -10,7 +10,7 @@ const { getCiVisAgentlessConfig } = require('../../../../integration-tests/helpe
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(__dirname, '../../../..')
-const fixtures = path.join(__dirname, 'fixtures')
+const fixtures = path.join(root, 'integration-tests/ci-visibility')
 const setup = path.join(fixtures, 'mocha-global-setup.js')
 const testFile = path.join(fixtures, 'mocha-global-setup-test.js')
 
