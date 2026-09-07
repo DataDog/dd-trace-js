@@ -707,6 +707,7 @@ class Config extends ConfigBase {
     if (!this.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', `${defaultOtlpBase}/v1/logs`)
       if (otlpAgentlessOrigin) {
+        this.OTEL_EXPORTER_OTLP_LOGS_HEADERS ??= {}
         this.OTEL_EXPORTER_OTLP_LOGS_HEADERS['dd-api-key'] = this.DD_API_KEY
         setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_HEADERS', this.OTEL_EXPORTER_OTLP_LOGS_HEADERS)
       }
@@ -714,12 +715,23 @@ class Config extends ConfigBase {
     if (!this.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', `${defaultOtlpBase}/v1/metrics`)
       if (otlpAgentlessOrigin) {
+        this.OTEL_EXPORTER_OTLP_METRICS_HEADERS ??= {}
         this.OTEL_EXPORTER_OTLP_METRICS_HEADERS['dd-api-key'] = this.DD_API_KEY
         setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_HEADERS', this.OTEL_EXPORTER_OTLP_METRICS_HEADERS)
       }
     }
     if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
+      if (otlpAgentlessOrigin) {
+        this.OTEL_EXPORTER_OTLP_TRACES_HEADERS ??= {}
+        this.OTEL_EXPORTER_OTLP_TRACES_HEADERS['dd-api-key'] = this.DD_API_KEY
+        setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_HEADERS', this.OTEL_EXPORTER_OTLP_TRACES_HEADERS)
+      }
+    }
+    if (otlpAgentlessOrigin) {
+      this.OTEL_EXPORTER_OTLP_HEADERS ??= {}
+      this.OTEL_EXPORTER_OTLP_HEADERS['dd-api-key'] = this.DD_API_KEY
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_HEADERS', this.OTEL_EXPORTER_OTLP_HEADERS)
     }
 
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
