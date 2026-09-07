@@ -113,35 +113,20 @@ class Crashtracker {
    * @param {import('../config/config-base')} config - Tracer configuration
    */
   #getConfig (config) {
-    let endpoint
+    const url = config.DD_AGENTLESS_ENABLED ? getAgentlessTelemetryUrl(config.site) : config.url
+    const endpoint = {
+      // TODO: Use the string directly when deserialization is fixed.
+      url: {
+        scheme: url.protocol.slice(0, -1),
+        authority: url.protocol === 'unix:'
+          ? Buffer.from(url.pathname).toString('hex')
+          : url.host,
+        path_and_query: '',
+      },
+      timeout_ms: 3000,
+    }
     if (config.DD_AGENTLESS_ENABLED) {
-      // Crash reports ride the telemetry intake, so agentless points at the same host the
-      // telemetry writer uses (matches dd-trace-py's _agentless_endpoint_url).
-      const url = getAgentlessTelemetryUrl(config.site.toLowerCase())
-      endpoint = {
-        url: {
-          scheme: url.protocol.slice(0, -1),
-          authority: url.host,
-          path_and_query: '',
-        },
-        // Direct submission is only selected when the endpoint carries an API key; without
-        // it, the receiver falls back to the agent's EvP proxy path.
-        api_key: config.DD_API_KEY,
-        timeout_ms: 3000,
-      }
-    } else {
-      const url = config.url
-      endpoint = {
-        // TODO: Use the string directly when deserialization is fixed.
-        url: {
-          scheme: url.protocol.slice(0, -1),
-          authority: url.protocol === 'unix:'
-            ? Buffer.from(url.pathname).toString('hex')
-            : url.host,
-          path_and_query: '',
-        },
-        timeout_ms: 3000,
-      }
+      endpoint.api_key = config.DD_API_KEY
     }
 
     // Out-of-process symbolication currently works on
