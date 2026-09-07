@@ -132,6 +132,7 @@ if (process.env.VITEST_BROWSER_MODE) {
 if (process.env.VITEST_MIXED_BROWSER_MODE) {
   config.test.projects = [
     {
+      extends: false,
       test: {
         include: ['ci-visibility/vitest-browser-tests/mixed-node.mjs'],
         name: 'node-project',
@@ -139,6 +140,7 @@ if (process.env.VITEST_MIXED_BROWSER_MODE) {
       },
     },
     {
+      extends: false,
       test: {
         browser: {
           enabled: true,
@@ -180,7 +182,7 @@ if (process.env.PROJECT_POOL_CONFIG) {
       },
     }
   }
-  projectConfigs.push({ test: firstProjectConfig })
+  projectConfigs.push({ extends: false, test: firstProjectConfig })
 
   if (process.env.SECOND_PROJECT_CONFIG_FILE) {
     projectConfigs.push('vitest.second-project.config.mjs')
@@ -200,7 +202,7 @@ if (process.env.PROJECT_POOL_CONFIG) {
     if (process.env.SECOND_PROJECT_UNNAMED) {
       delete secondProjectConfig.name
     }
-    projectConfigs.push({ test: secondProjectConfig })
+    projectConfigs.push({ extends: false, test: secondProjectConfig })
   }
 
   config.test.projects = projectConfigs

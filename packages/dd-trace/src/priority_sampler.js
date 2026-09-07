@@ -337,6 +337,10 @@ class PrioritySampler {
       context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
     }
 
+    if (rule.discard) {
+      context._sampling.discard = true
+    }
+
     const sampled = rule.sample(context, true)
     if (sampled !== true) {
       if (recordDecision && sampled === undefined) this._recordDecisionMetadata(context)

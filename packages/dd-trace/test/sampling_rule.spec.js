@@ -542,6 +542,20 @@ describe('sampling rule', () => {
     })
   })
 
+  describe('discard', () => {
+    it('should default to false', () => {
+      rule = new SamplingRule({ service: 'test' })
+
+      assert.strictEqual(rule.discard, false)
+    })
+
+    it('should coerce a truthy value to a boolean', () => {
+      rule = new SamplingRule({ service: 'test', discard: true })
+
+      assert.strictEqual(rule.discard, true)
+    })
+  })
+
   describe('maxPerSecond', () => {
     it('should not create limiter without finite maxPerSecond', () => {
       rule = new SamplingRule({
