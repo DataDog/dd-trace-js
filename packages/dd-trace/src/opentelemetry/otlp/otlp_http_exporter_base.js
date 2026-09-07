@@ -6,7 +6,9 @@ const { URL } = require('node:url')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const { createServerlessDeliveryTracker } = require('../../serverless')
+const { getHttpsProxyAgent } = require('../../exporters/common/proxy')
 const telemetryMetrics = require('../../telemetry/metrics')
+const { version: tracerVersion } = require('../../../../../package.json')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 const legacyStorage = storage('legacy')
@@ -48,8 +50,10 @@ class OtlpHttpExporterBase {
       hostname: parsedUrl.hostname,
       port: parsedUrl.port,
       path: parsedUrl.pathname + parsedUrl.search,
+      agent: parsedUrl.protocol === 'https:' ? getHttpsProxyAgent(parsedUrl) : undefined,
       headers: {
         'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
+        'User-Agent': `dd-trace-js/${tracerVersion}`,
         ...headers,
       },
     }
@@ -169,6 +173,7 @@ class OtlpHttpExporterBase {
     this.options.hostname = parsedUrl.hostname
     this.options.port = parsedUrl.port
     this.options.path = parsedUrl.pathname + parsedUrl.search
+    this.options.agent = parsedUrl.protocol === 'https:' ? getHttpsProxyAgent(parsedUrl) : undefined
     this.telemetryTags[0] = `protocol:${this.#transport === https ? 'https' : 'http'}`
   }
 
