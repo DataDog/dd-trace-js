@@ -122,7 +122,10 @@ describe('profiler', function () {
   }
 
   describe('not serverless', function () {
-    function initProfiler () {
+    /**
+     * @param {Record<string, object>} [stubs]
+     */
+    function initProfiler (stubs = {}) {
       Profiler = proxyquire('../../src/profiling/profiler', {
         '../log': consoleLogger,
         './config': configStub,
@@ -130,6 +133,7 @@ describe('profiler', function () {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),
         },
+        ...stubs,
       }).Profiler
 
       profiler = new Profiler()
@@ -381,6 +385,21 @@ describe('profiler', function () {
 
     it('should export zstd profiles with a level', async function () {
       await shouldExportProfiles('zstd-4', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
+    })
+
+    it('should use the libdatadog zstd fallback', async () => {
+      profiler.stop()
+      const compressed = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
+      const zstdCompress = sinon.stub().returns(compressed)
+      initProfiler({
+        '@datadog/libdatadog': { zstd_compress: zstdCompress },
+        zlib: { zstdCompress: undefined },
+      })
+
+      await shouldExportProfiles('zstd-4', compressed)
+
+      sinon.assert.callCount(zstdCompress, 2)
+      sinon.assert.alwaysCalledWithExactly(zstdCompress, sinon.match.instanceOf(Buffer), 4)
     })
 
     it('should log exporter errors', async () => {

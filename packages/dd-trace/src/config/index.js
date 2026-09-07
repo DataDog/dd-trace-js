@@ -8,7 +8,6 @@ const { channel } = require('dc-polyfill')
 
 const exporters = require('../../../../ext/exporters')
 const createRfdc = require('../../../../vendor/dist/rfdc')
-const rfdc = createRfdc({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
@@ -44,6 +43,12 @@ const {
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
+
+const rfdc = createRfdc({
+  proto: false,
+  circles: false,
+  constructorHandlers: [[RegExp, transformers.toCamelCase]],
+})
 
 const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
   exporters.CUCUMBER_WORKER,
@@ -407,11 +412,6 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('dogstatsd.hostname')) {
       setAndTrack(this, 'dogstatsd.hostname', agentHostname)
     }
-    // Disable log injection when OTEL logs are enabled
-    // OTEL logs and DD log injection are mutually exclusive
-    if (this.DD_LOGS_OTEL_ENABLED) {
-      setAndTrack(this, 'logInjection', false)
-    }
     if (this.DD_METRICS_OTEL_ENABLED &&
         trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
         this.OTEL_METRICS_EXPORTER === 'none') {
@@ -491,6 +491,12 @@ class Config extends ConfigBase {
 
     if (!trackedConfigOrigins.has('runtimeMetrics.enabled') && this.OTEL_METRICS_EXPORTER === 'none') {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
+    }
+
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
     }
 
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
@@ -639,11 +645,30 @@ class Config extends ConfigBase {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 
-    // Experimental agentless APM span intake
-    // When enabled, sends spans directly to Datadog intake without an agent
-    // TODO: Replace this with a proper configuration
-    const agentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessEnabled) {
+    if (this.DD_AGENTLESS_ENABLED) {
+      if (!trackedConfigOrigins.has('DD_AGENTLESS_LOG_SUBMISSION_ENABLED') && !this.DD_LOGS_OTEL_ENABLED) {
+        setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
+      }
+      setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
+      setAndTrack(this, 'llmobs.agentlessEnabled', true)
+      setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
+      if (this.DD_API_KEY === undefined) {
+        setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+      }
+      setAndTrack(this, 'runtimeMetrics.enabled', false)
+      setAndTrack(this, 'dsmEnabled', false)
+      const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
+      setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
+      if (profilingExporters.length === 0) {
+        setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
+      }
+    }
+
+    if (this.DD_AGENTLESS_LOG_SUBMISSION_ENABLED && this.DD_LOGS_OTEL_ENABLED) {
+      setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
+    }
+
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
@@ -657,6 +682,12 @@ class Config extends ConfigBase {
       if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
         setAndTrack(this, 'traceId128BitGenerationEnabled', false)
       }
+    }
+
+    // Disable log injection when OTEL logs are enabled
+    // OTEL logs and DD log injection are mutually exclusive
+    if (this.DD_LOGS_OTEL_ENABLED) {
+      setAndTrack(this, 'logInjection', false)
     }
 
     // Apply all fallbacks to the calculated config.

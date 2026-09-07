@@ -22,6 +22,8 @@ function describeWriter (protocolVersion) {
   let url
   let prioritySampler
   let log
+  let AgentEncoder
+  let createAgentEncoder
 
   beforeEach((done) => {
     span = 'formatted'
@@ -51,14 +53,14 @@ function describeWriter (protocolVersion) {
       errorWithoutTelemetry: sinon.spy(),
     }
 
-    const AgentEncoder = function () {
-      return encoder
-    }
+    AgentEncoder = sinon.stub().returns(encoder)
+    createAgentEncoder = sinon.stub().returns(encoder)
 
     Writer = proxyquire('../../../src/exporters/agent/writer', {
       '../common/request': request,
       '../../ci-visibility/exporters/request': request,
       '../../encode/0.4': { AgentEncoder },
+      '../../encode/0.4-cross-payload': { createAgentEncoder },
       '../../encode/0.5': { AgentEncoder },
       '../../../../../package.json': { version: 'tracerVersion' },
       '../../log': log,
@@ -67,6 +69,50 @@ function describeWriter (protocolVersion) {
 
     process.nextTick(done)
   })
+
+  if (protocolVersion === '0.4') {
+    it('should use the cross-payload encoder for a zero flush interval', () => {
+      AgentEncoder.resetHistory()
+      createAgentEncoder.resetHistory()
+
+      writer = new Writer({ url, prioritySampler, protocolVersion, flushInterval: 0 })
+
+      sinon.assert.calledOnceWithExactly(createAgentEncoder, writer, sinon.match.func)
+      sinon.assert.notCalled(AgentEncoder)
+    })
+
+    it('should switch to the regular encoder when cross-payload caching is disabled', () => {
+      AgentEncoder.resetHistory()
+      createAgentEncoder.resetHistory()
+
+      writer = new Writer({ url, prioritySampler, protocolVersion, flushInterval: 0 })
+      const disableCrossPayloadCache = createAgentEncoder.firstCall.args[1]
+      disableCrossPayloadCache()
+
+      sinon.assert.calledOnceWithExactly(AgentEncoder, writer)
+      assert.strictEqual(writer._encoder, encoder)
+    })
+
+    it('should keep the regular encoder for a nonzero flush interval', () => {
+      AgentEncoder.resetHistory()
+      createAgentEncoder.resetHistory()
+
+      writer = new Writer({ url, prioritySampler, protocolVersion, flushInterval: 2000 })
+
+      sinon.assert.notCalled(createAgentEncoder)
+      sinon.assert.calledOnceWithExactly(AgentEncoder, writer)
+    })
+  } else {
+    it('should keep the 0.5 encoder independent of the flush interval', () => {
+      AgentEncoder.resetHistory()
+      createAgentEncoder.resetHistory()
+
+      writer = new Writer({ url, prioritySampler, protocolVersion, flushInterval: 0 })
+
+      sinon.assert.notCalled(createAgentEncoder)
+      sinon.assert.calledOnceWithExactly(AgentEncoder, writer)
+    })
+  }
 
   describe('append', () => {
     it('should append a trace', () => {
@@ -287,7 +333,7 @@ describe('Writer', () => {
     assert.strictEqual(writerOptions[1].retainOnBackpressure, true)
   })
 
-  describe('0.4', () => describeWriter(0.4))
+  describe('0.4', () => describeWriter('0.4'))
 
-  describe('0.5', () => describeWriter(0.5))
+  describe('0.5', () => describeWriter('0.5'))
 })

@@ -86,17 +86,40 @@
  *   path: (string | number)[] | undefined
  * ) => unknown} ReadDefaultInScope
  * @typedef {(variableValues: Record<string, unknown> | undefined) => object | undefined} StartExecution
+ * @typedef {(rootCtx: object, descriptorId: number, error: unknown) => void} RecordResolverError
+ * @typedef {(
+ *   rootCtx: object,
+ *   descriptorId: number,
+ *   resolver: import('graphql').GraphQLFieldResolver<unknown, unknown>,
+ *   self: unknown,
+ *   source: unknown,
+ *   args: Record<string, unknown>,
+ *   contextValue: unknown,
+ *   info: import('graphql').GraphQLResolveInfo
+ * ) => unknown} ResolveField
+ * @typedef {(
+ *   resolver: import('graphql').GraphQLFieldResolver<unknown, unknown>
+ * ) => import('graphql').GraphQLFieldResolver<unknown, unknown>} UnwrapResolver
  * @typedef {(
  *   resolver: import('graphql').GraphQLFieldResolver<unknown, unknown>
  * ) => import('graphql').GraphQLFieldResolver<unknown, unknown>} WrapResolver
  * @typedef {{
  *   createFieldMetadata: CreateFieldMetadata,
  *   readDefaultInScope: ReadDefaultInScope,
+ *   recordResolverError: RecordResolverError,
  *   resolveDefaultInvocation: ResolveDefaultInvocation,
+ *   resolveField: ResolveField,
  *   startExecution: StartExecution,
+ *   unwrapResolver: UnwrapResolver,
  *   wrapResolver: WrapResolver
  * }} GraphqlJitRuntimeOptions
  * @typedef {{
+ *   compileResolverCall: (
+ *     context: JitCompilationContext,
+ *     resolverCall: string,
+ *     resolverName: string,
+ *     descriptorId: number | undefined
+ *   ) => string,
  *   compileDefaultField: (
  *     context: ConfiguredJitCompilationContext,
  *     responsePath: unknown,
@@ -121,7 +144,9 @@
  *     input: DescriptorInput
  *   ) => number | undefined,
  *   readDefaultInScope: ReadDefaultInScope,
+ *   recordResolverError: RecordResolverError,
  *   resolveDefaultInvocation: ResolveDefaultInvocation,
+ *   resolveField: ResolveField,
  *   startExecution: StartExecution
  * }} GraphqlJitRuntime
  */
@@ -136,16 +161,22 @@
 function createGraphqlJitRuntime ({
   createFieldMetadata,
   readDefaultInScope,
+  recordResolverError,
   resolveDefaultInvocation,
+  resolveField,
   startExecution,
+  unwrapResolver,
   wrapResolver,
 }) {
   const runtime = {
     compileDefaultField,
+    compileResolverCall,
     finalizeCompilation,
+    recordResolverError,
     registerField,
     readDefaultInScope,
     resolveDefaultInvocation,
+    resolveField,
     startExecution,
   }
 
@@ -179,25 +210,34 @@ function createGraphqlJitRuntime ({
   }
 
   /**
-   * @param {JitCompilationContext & { ddTracePlan: BuildingJitPlan }} context
-   * @returns {JitPlan}
+   * @param {JitCompilationContext} context
+   * @param {string} resolverCall
+   * @param {string} resolverName
+   * @param {number | undefined} descriptorId
+   * @returns {string}
    */
-  function finalizeCompilation (context) {
-    const plan = context.ddTracePlan
+  function compileResolverCall (context, resolverCall, resolverName, descriptorId) {
+    const openParenthesis = resolverCall.indexOf('(')
+    const resolver = resolverCall.slice(0, openParenthesis)
+    if (descriptorId === undefined) {
+      context.resolvers[resolverName] = wrapResolver(context.resolvers[resolverName])
+      return resolverCall
+    }
+    context.resolvers[resolverName] = unwrapResolver(context.resolvers[resolverName])
 
-    for (const field of plan.fields) {
-      if (field.parentPathKey !== undefined) {
-        field.parentId = plan.fieldsByPath.get(field.parentPathKey)?.id
-        field.parentPathKey = undefined
-      }
-    }
-    for (const name of Object.keys(context.resolvers)) {
-      context.resolvers[name] = wrapResolver(context.resolvers[name])
-    }
-
-    return {
-      fields: plan.fields,
-    }
+    const args = resolverCall.slice(openParenthesis + 1, -1)
+    return `__context.ddTrace !== undefined &&
+      (!__context.ddTrace.depthDisabled ||
+        __context.ddTrace.hasIastSub ||
+        __context.ddTrace.hasResolverSub)
+      ? __context.ddTrace.jitRuntime.resolveField(
+        __context.ddTrace,
+        ${descriptorId},
+        ${resolver},
+        __context.resolvers,
+        ${args}
+      )
+      : ${resolverCall}`
   }
 
   /**
@@ -269,6 +309,24 @@ function createGraphqlJitRuntime ({
   }
 
   return { configureCompilationContext, runtime }
+}
+
+/**
+ * @param {JitCompilationContext & { ddTracePlan: BuildingJitPlan }} context
+ * @returns {JitPlan}
+ */
+function finalizeCompilation (context) {
+  const plan = context.ddTracePlan
+
+  for (const field of plan.fields) {
+    if (field.parentPathKey !== undefined) {
+      field.parentId = plan.fieldsByPath.get(field.parentPathKey)?.id
+      field.parentPathKey = undefined
+    }
+  }
+  return {
+    fields: plan.fields,
+  }
 }
 
 /**

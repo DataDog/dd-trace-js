@@ -47,6 +47,8 @@
   "graphql-jit/dist/esm/execution.js": "graphql-jit",
   "graphql-jit/dist/execution.js": "graphql-jit",
   "graphql-jit/dist/execution.mjs": "graphql-jit",
+  "graphql/error/locatedError.js": "graphql",
+  "graphql/error/locatedError.mjs": "graphql",
   "graphql/execution/execute.js": "graphql",
   "graphql/execution/execute.mjs": "graphql",
   "graphql/language/parser.js": "graphql",
@@ -63,5 +65,9 @@
   "mercurius/index.js": "mercurius",
   "playwright-core/lib/coreBundle.js": "playwright-core",
   "playwright/lib/index.js": "playwright",
-  "playwright/lib/runner/index.js": "playwright"
+  "playwright/lib/runner/index.js": "playwright",
+  "webdriver/build/index.js": "webdriver",
+  "webdriver/build/node.js": "webdriver",
+  "webdriverio/build/index.js": "webdriverio",
+  "webdriverio/build/node.js": "webdriverio"
 }

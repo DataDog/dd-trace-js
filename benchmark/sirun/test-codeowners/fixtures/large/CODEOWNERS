@@ -101,7 +101,6 @@
 /packages/dd-trace/test/plugins/util/test.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/test-environment.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/encode/agentless-ci-visibility.js @DataDog/ci-app-libraries
-/packages/dd-trace/src/encode/agentless-json.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/encode/coverage-ci-visibility.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/encode/tags-processors.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/exporters/agentless/ @DataDog/ci-app-libraries

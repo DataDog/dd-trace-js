@@ -547,17 +547,28 @@ jobs:
           flags: test-optimization-vitest-${{ matrix.version }}
 
   integration-vitest-browser:
-    needs: playwright-image
+    needs: [playwright-image, selenium-image]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
     strategy:
       fail-fast: false
       matrix:
-        version: [oldest, latest]
-    name: integration-vitest-browser (node-${{ matrix.version }})
+        include:
+          - version: oldest
+            browser-provider: playwright
+            container-image: ${{ fromJson(needs.playwright-image.outputs.images).oldest.latest }}
+          - version: latest
+            browser-provider: playwright
+            container-image: ${{ fromJson(needs.playwright-image.outputs.images).latest.latest }}
+          - version: latest
+            browser-provider: webdriverio
+            container-image: ${{ needs.selenium-image.outputs.image }}
+            browser-binary: /usr/bin/google-chrome
+            browser-driver-binary: /usr/bin/chromedriver
+    name: integration-vitest-browser (${{ matrix.browser-provider }}, node-${{ matrix.version }})
     container:
-      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.version].latest }}
+      image: ${{ matrix.container-image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -588,6 +599,9 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
           SPEC: vitest.browser
+          VITEST_BROWSER_PROVIDER: ${{ matrix.browser-provider }}
+          VITEST_BROWSER_BINARY: ${{ matrix.browser-binary }}
+          VITEST_BROWSER_DRIVER_BINARY: ${{ matrix.browser-driver-binary }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-browser-${{ matrix.version }}

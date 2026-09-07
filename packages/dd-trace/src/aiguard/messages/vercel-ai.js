@@ -75,13 +75,13 @@ function convertVercelPromptToMessages (prompt) {
       }
 
       case 'assistant': {
-        const textParts = []
+        let text
         const toolCalls = []
         if (!Array.isArray(msg.content)) break
 
         for (const part of msg.content) {
           if (part.type === 'text') {
-            textParts.push(part.text)
+            text = text === undefined ? part.text : `${text}\n${part.text}`
           } else if (part.type === 'tool-call') {
             toolCalls.push({
               id: part.toolCallId,
@@ -95,8 +95,8 @@ function convertVercelPromptToMessages (prompt) {
 
         if (toolCalls.length > 0) {
           messages.push({ role: 'assistant', tool_calls: toolCalls })
-        } else if (textParts.length > 0) {
-          messages.push({ role: 'assistant', content: textParts.join('\n') })
+        } else if (text !== undefined) {
+          messages.push({ role: 'assistant', content: text })
         }
         break
       }

@@ -5,7 +5,6 @@ const os = require('node:os')
 
 const log = require('../../log')
 const { containerId } = require('../common/docker')
-const tracerVersion = require('../../../../../package.json').version
 const Writer = require('./writer')
 const { computeIntakeUrl } = require('./intake')
 
@@ -40,15 +39,12 @@ class AgentlessExporter {
 
     const metadata = {
       hostname: os.hostname(),
-      languageName: 'nodejs',
-      languageVersion: process.version,
-      tracerVersion,
       // Read live off `config` (instead of copying the value) so a later change
-      // (e.g. a MicroVM clone resume) is picked up by the next `JSON.stringify` in the encoder.
+      // (e.g. a MicroVM clone resume) is picked up by the next data-pipeline export.
       get env () { return config.env },
       get runtimeID () { return config.tags['runtime-id'] },
     }
-    if (containerId) metadata.containerID = containerId
+    if (containerId) metadata.containerId = containerId
 
     this._writer = new Writer({
       url: this._url,

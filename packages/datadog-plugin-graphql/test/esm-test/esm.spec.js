@@ -38,6 +38,19 @@ describe('Plugin (ESM)', () => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
+
+          let resolveSpan
+          for (const trace of payload) {
+            for (const span of trace) {
+              if (span.meta?.['graphql.field.path'] === 'items.*.value') {
+                resolveSpan = span
+                break
+              }
+            }
+          }
+          assert.ok(resolveSpan)
+          assert.strictEqual(resolveSpan.error, 1)
+          assert.strictEqual(resolveSpan.meta['error.message'], 'ESM resolver failed')
         })
 
         proc = await spawnPluginIntegrationTestProc(
@@ -51,6 +64,9 @@ describe('Plugin (ESM)', () => {
         const query = `
           query MyQuery {
             hello(name: "world")
+            items {
+              value
+            }
           }
         `
 

@@ -1,6 +1,7 @@
 'use strict'
 
-const { mkdtempSync, readFileSync, writeFileSync } = require('node:fs')
+const { spawnSync } = require('node:child_process')
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { resolve, join, dirname } = require('node:path')
 const Module = require('node:module')
@@ -11,6 +12,7 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { tracingChannel } = require('dc-polyfill')
+const { parse, query } = require('../../../src/helpers/rewriter/compiler')
 
 // TODO: Test actual functionality and not just the start channel.
 describe('check-require-cache', () => {
@@ -55,7 +57,20 @@ describe('check-require-cache', () => {
     return mod.exports
   }
 
+  /** @param {string} source */
+  function assertInactiveFastPath (source) {
+    const guardIndex = source.indexOf('if (!tr_ch_apm_hasSubscribers')
+    const argumentsIndex = source.indexOf('const __apm$arguments =')
+
+    assert.notStrictEqual(guardIndex, -1)
+    assert.ok(argumentsIndex > guardIndex)
+    assert.doesNotMatch(source, /const __apm\$traced =/)
+  }
+
   beforeEach(() => {
+    ch = undefined
+    subs = undefined
+
     rewriter = proxyquire('../../../src/helpers/rewriter', {
       './instrumentations': [
         {
@@ -68,6 +83,18 @@ describe('check-require-cache', () => {
             functionName: 'test',
             kind: 'Sync',
           },
+          channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test-trace-sync',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+          },
+          transform: 'configureGraphqlFastPath',
           channelName: 'test_invoke',
         },
         {
@@ -93,6 +120,18 @@ describe('check-require-cache', () => {
             functionName: 'test',
             kind: 'Async',
           },
+          channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test-trace-async',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+          },
+          transform: 'configureGraphqlFastPath',
           channelName: 'test_invoke',
         },
         {
@@ -384,6 +423,31 @@ describe('check-require-cache', () => {
           module: {
             name: 'test',
             versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          functionQuery: {
+            functionName: 'runFromStart',
+            kind: 'Async',
+          },
+          channelName: 'trace_await_context_callback_at_function_start',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runFromStart"]',
+          channelName: 'trace_await_context_callback_at_function_start',
+          transform: 'awaitContextCallbackAtFunctionStart',
+          transformOptions: {
+            callbackName: 'beforeStart',
+          },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
             filePath: 'trace-await-context-callback-outer-try.js',
           },
           functionQuery: {
@@ -497,16 +561,41 @@ describe('check-require-cache', () => {
           },
           channelName: 'pregel_stream',
         },
+        {
+          module: {
+            name: 'test-esm',
+            versionRange: '>=0.1',
+            filePath: 'exported-function.mjs',
+          },
+          functionQuery: {
+            functionName: 'execute',
+            kind: 'Sync',
+          },
+          channelName: 'execute',
+        },
+        {
+          module: {
+            name: 'test-esm',
+            versionRange: '>=0.1',
+            filePath: 'exported-function.mjs',
+          },
+          functionQuery: {
+            functionName: 'execute',
+          },
+          transform: 'configureGraphqlFastPath',
+          channelName: 'execute',
+        },
       ],
     })
   })
 
   afterEach(() => {
-    ch.unsubscribe(subs)
+    if (ch && subs) ch.unsubscribe(subs)
   })
 
   it('should auto instrument sync functions', done => {
     const { test } = compile('test-trace-sync')
+    assertInactiveFastPath(content)
 
     subs = {
       start: () => setImmediate(done),
@@ -533,6 +622,7 @@ describe('check-require-cache', () => {
 
   it('should auto instrument async functions', done => {
     const { test } = compile('test-trace-async')
+    assertInactiveFastPath(content)
 
     subs = {
       start: () => setImmediate(done),
@@ -934,6 +1024,34 @@ describe('check-require-cache', () => {
     assert.deepStrictEqual(steps, ['setup', 'setup done', 'task'])
   })
 
+  it('should await a context callback before starting an async function body', async () => {
+    const { runFromStart } = compileFile('trace-await-context-callback')
+    const steps = []
+
+    const [rewrittenFunction] = query(parse(content), 'FunctionDeclaration[id.name="runFromStart"] ' +
+      'VariableDeclarator[id.name="__apm$wrapped"] > FunctionExpression[async=true]')
+    assert.equal(rewrittenFunction.body.body[0].directive, 'use strict')
+
+    subs = {
+      start (ctx) {
+        ctx.beforeStart = async function () {
+          steps.push('callback')
+          await new Promise(resolve => setImmediate(resolve))
+          steps.push('callback done')
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_await_context_callback_at_function_start')
+    ch.subscribe(subs)
+
+    assert.equal(await runFromStart((value) => {
+      steps.push('task')
+      return value
+    }), 'passed')
+    assert.deepStrictEqual(steps, ['callback', 'callback done', 'task'])
+  })
+
   it('should preserve a try block when context callback lookup throws', async () => {
     const { runAfterSetup } = compileFile('trace-await-context-callback')
 
@@ -1131,9 +1249,33 @@ describe('check-require-cache', () => {
       filePath: 'pregel-class.js',
     })
 
+    // eslint-disable-next-line regexp/no-super-linear-backtracking -- Generated fixture content is bounded.
     assert.match(content, /\bimport\s+.+\s+from\s+"file:\/\//)
     assert.match(content, /tr_ch_apm_tracingChannel/)
     assert.doesNotMatch(content, /require\("/)
+  })
+
+  it('should apply the inactive fast path to exported ESM functions', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test-esm', 'exported-function.mjs')
+    const source = 'export function execute (value) { return value }\n'
+    const rewritten = rewriter.rewrite(source, filename, 'module', {
+      moduleName: 'test-esm',
+      filePath: 'exported-function.mjs',
+    })
+
+    assertInactiveFastPath(rewritten)
+    const originalIndex = rewritten.indexOf('const __apm$original_execute =')
+    const exportIndex = rewritten.indexOf('export function execute')
+    assert.notStrictEqual(originalIndex, -1)
+    assert.ok(exportIndex > originalIndex)
+
+    const dir = mkdtempSync(join(tmpdir(), 'dd-rewriter-esm-fast-path-'))
+    writeFileSync(join(dir, 'package.json'), '{"type":"module"}')
+    const outFile = join(dir, 'pregel-class.mjs')
+    writeFileSync(outFile, rewritten)
+
+    const mod = await import(pathToFileURL(outFile).href)
+    assert.equal(mod.execute('result'), 'result')
   })
 
   it('should rewrite ESM modules with returnKind: AsyncIterator without injecting require()', async () => {
@@ -1198,5 +1340,63 @@ describe('rewriter source-map trailer', () => {
       sourceMapSupport.resetRetrieveHandlers()
       delete require.cache[require.resolve('source-map-support')]
     }
+  })
+})
+
+describe('rewriter initialization', () => {
+  const repositoryRoot = resolve(__dirname, '../../../../..')
+  const transformerPath = join(repositoryRoot, 'vendor', 'dist', '@apm-js-collab', 'code-transformer')
+  const loaderPath = resolve(__dirname, '../../../src/helpers/rewriter/loader')
+
+  it('loads the code transformer on the first rewrite instead of at startup', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-defer-'))
+    const targetDirectory = join(root, 'node_modules', 'ai')
+    const untargetedDirectory = join(root, 'node_modules', 'untargeted')
+
+    mkdirSync(join(targetDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(targetDirectory, 'package.json'), '{"version":"4.0.0","main":"dist/index.js"}')
+    writeFileSync(join(targetDirectory, 'dist', 'index.js'), `
+      function getTracer () { return 'tracer' }
+      module.exports = { getTracer }
+    `)
+
+    mkdirSync(untargetedDirectory, { recursive: true })
+    writeFileSync(join(untargetedDirectory, 'package.json'), '{"version":"1.0.0"}')
+    writeFileSync(join(untargetedDirectory, 'index.js'), 'module.exports = {}\n')
+
+    writeFileSync(join(root, 'main.js'), `
+      const transformerPath = require.resolve(${JSON.stringify(transformerPath)})
+
+      require(${JSON.stringify(loaderPath)})
+
+      const loadedAfterHook = require.cache[transformerPath] !== undefined
+
+      require('untargeted')
+
+      const loadedAfterUntargetedModule = require.cache[transformerPath] !== undefined
+
+      const { tracingChannel } = require(${JSON.stringify(require.resolve('dc-polyfill'))})
+      let starts = 0
+
+      tracingChannel('orchestrion:ai:getTracer').subscribe({ start () { starts++ } })
+      require('ai').getTracer()
+
+      console.log(JSON.stringify({
+        loadedAfterHook,
+        loadedAfterUntargetedModule,
+        loadedAfterTargetModule: require.cache[transformerPath] !== undefined,
+        starts,
+      }))
+    `)
+
+    const result = spawnSync(process.execPath, [join(root, 'main.js')], { cwd: root, encoding: 'utf8' })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.deepStrictEqual(JSON.parse(result.stdout), {
+      loadedAfterHook: false,
+      loadedAfterUntargetedModule: false,
+      loadedAfterTargetModule: true,
+      starts: 1,
+    })
   })
 })

@@ -124,6 +124,8 @@ function reportUnnecessaryArrayJoin (node, sourceCode, arrayAppenders, context) 
       return
     }
 
+    if (member.property.name === 'length' && isNonEmptyCheck(member)) continue
+
     const call = member.parent
     if (call.type !== 'CallExpression' || call.callee !== member || call.optional) return
 
@@ -167,6 +169,26 @@ function reportUnnecessaryArrayJoin (node, sourceCode, arrayAppenders, context) 
     messageId: 'buildStringDirectly',
     data: { name: node.id.name },
   })
+}
+
+/**
+ * @param {import('estree').MemberExpression} member
+ * @returns {boolean}
+ */
+function isNonEmptyCheck (member) {
+  const comparison = member.parent
+  if (comparison.type !== 'BinaryExpression') return false
+
+  return (comparison.operator === '>' && comparison.left === member && isZero(comparison.right)) ||
+    (comparison.operator === '<' && comparison.right === member && isZero(comparison.left))
+}
+
+/**
+ * @param {import('estree').Expression | import('estree').PrivateIdentifier} node
+ * @returns {boolean}
+ */
+function isZero (node) {
+  return node.type === 'Literal' && node.value === 0
 }
 
 /**
