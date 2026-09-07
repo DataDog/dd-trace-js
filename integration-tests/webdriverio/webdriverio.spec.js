@@ -468,6 +468,8 @@ for (const version of versions) {
         )
         assert.strictEqual(tests.length, 2)
         assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
+        const nonEmptySuites = suites.filter(suite => suite.meta[TEST_STATUS] !== 'skip')
+        assertOneTestPerSuiteExecution(nonEmptySuites, tests)
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
         assert.deepStrictEqual(
           tests.map(test => test.meta['test.webdriverio.worker']).sort(),
