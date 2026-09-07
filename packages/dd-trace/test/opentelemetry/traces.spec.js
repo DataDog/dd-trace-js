@@ -229,6 +229,21 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(otlpSpan.parentSpanId.length, 16, 'parentSpanId must be 16 hex chars (8 bytes)')
     })
 
+    it('exports W3C tracestate and the sampled flag as first-class OTLP fields', () => {
+      const transformer = new OtlpTraceTransformer({})
+      const traceState = 'dd=s:1,ot=rv:ef284ace7a91e1;th:e6666666666668'
+      const span = createMockSpan({
+        trace_state: traceState,
+        metrics: { _sampling_priority_v1: 1 },
+      })
+
+      const decoded = decodePayload(transformer.transformSpans([span]))
+      const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+      assert.strictEqual(otlpSpan.traceState, traceState)
+      assert.strictEqual(otlpSpan.flags, 1)
+    })
+
     it('maps span kind correctly', () => {
       const transformer = new OtlpTraceTransformer({})
 

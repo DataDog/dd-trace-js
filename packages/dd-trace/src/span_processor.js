@@ -6,17 +6,40 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
+const { formatTraceState } = require('./opentracing/propagation/tracecontext')
 const { APM_TRACING_ENABLED_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
+/**
+ * Adds first-class OTLP trace context to a DD-formatted span.
+ *
+ * @param {import('./opentracing/span')} span
+ * @param {boolean} isFirstSpanInChunk
+ * @param {string | false} processTagsValue
+ * @returns {import('./span_format').FormattedSpan}
+ */
+function formatOtlpSpan (span, isFirstSpanInChunk, processTagsValue) {
+  const formattedSpan = spanFormat(span, isFirstSpanInChunk, processTagsValue)
+  formattedSpan.trace_state = formatTraceState(span.context())
+  return formattedSpan
+}
+
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
+  /**
+   * @param {object} exporter
+   * @param {import('./priority_sampler')} prioritySampler
+   * @param {object} config
+   * @param {import('./opentelemetry/metrics/otlp_span_stats_exporter').OtlpStatsExporter} [otlpStatsExporter]
+   * @param {boolean} [exportOtlpTraces]
+   */
+  constructor (exporter, prioritySampler, config, otlpStatsExporter, exportOtlpTraces) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
+    this._formatSpan = exportOtlpTraces ? formatOtlpSpan : spanFormat
 
     if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
@@ -56,12 +79,13 @@ class SpanProcessor {
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
+      const formatSpan = this._formatSpan
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          const formattedSpan = formatSpan(span, isFirstSpanInChunk, this._processTags)
           if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
           }

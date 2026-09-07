@@ -23,6 +23,7 @@ describe('SpanProcessor', () => {
   let spanFormat
   let config
   let SpanSampler
+  let formatTraceState
   let sample
 
   before(() => {
@@ -67,6 +68,7 @@ describe('SpanProcessor', () => {
       appsec: {},
     }
     spanFormat = sinon.stub().returns({ formatted: true })
+    formatTraceState = sinon.stub().returns('dd=s:1,ot=rv:ef284ace7a91e1;th:e6666666666668')
 
     sample = sinon.stub()
     SpanSampler = sinon.stub().returns({
@@ -76,6 +78,7 @@ describe('SpanProcessor', () => {
     SpanProcessor = proxyquire('../src/span_processor', {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
+      './opentracing/propagation/tracecontext': { formatTraceState },
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
   })
@@ -233,6 +236,32 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
+  })
+
+  it('should add live tracestate to spans exported through OTLP', () => {
+    const formattedSpan = { metrics: {} }
+    spanFormat.returns(formattedSpan)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, true)
+
+    processor.process(finishedSpan)
+
+    assert.strictEqual(formattedSpan.trace_state, 'dd=s:1,ot=rv:ef284ace7a91e1;th:e6666666666668')
+    sinon.assert.calledWith(formatTraceState, finishedSpan.context())
+    sinon.assert.calledWith(exporter.export, [formattedSpan])
+  })
+
+  it('should not build tracestate for the Datadog exporter', () => {
+    const formattedSpan = { metrics: {} }
+    spanFormat.returns(formattedSpan)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+
+    processor.process(finishedSpan)
+
+    assert.ok(!Object.hasOwn(formattedSpan, 'trace_state'))
+    sinon.assert.notCalled(formatTraceState)
   })
 
   it('should add APM disabled marker to every span in a chunk when APM tracing is disabled', () => {
