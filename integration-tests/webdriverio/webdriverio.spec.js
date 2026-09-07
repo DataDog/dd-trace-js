@@ -342,7 +342,8 @@ for (const version of versions) {
         childProcess,
         undefined,
         payloads => assertEvents(getReportingEvents(payloads, version, framework)),
-        { hardTimeout: 45_000 }
+        // WebdriverIO coordinator shutdown waits for the final Test Optimization export.
+        { gracePeriod: 0, hardTimeout: 45_000 }
       )
 
       let exitCode
@@ -453,28 +454,25 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
-    it('reports grouped Jasmine specs from one worker', async () => {
-      await runScenario('grouped', 1, ({ suites, tests }) => {
-        assert.strictEqual(suites.length, 2)
-        assert.strictEqual(tests.length, 2)
-        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
-        assertOneTestPerSuiteExecution(suites, tests)
-      }, 0, { framework: 'jasmine' })
-    })
-
-    it('reports an empty grouped Jasmine spec as skipped', async () => {
+    it('reports grouped Jasmine specs, including an empty spec, from one worker', async () => {
       await runScenario('groupedEmpty', 1, ({ session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(suites.length, 3)
         assert.deepStrictEqual(
           suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
           [
             ['empty.e2e.js', 'skip'],
             ['first.e2e.js', 'pass'],
+            ['second.e2e.js', 'pass'],
           ]
         )
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+        assert.strictEqual(tests.length, 2)
+        assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
+        assert.deepStrictEqual(
+          tests.map(test => test.meta['test.webdriverio.worker']).sort(),
+          ['first', 'second']
+        )
       }, 0, { framework: 'jasmine' })
     })
 
@@ -493,33 +491,24 @@ for (const version of versions) {
       }, 1, { framework: 'jasmine' })
     })
 
-    it('reports a Jasmine afterAll failure on its suite', async () => {
-      await runScenario('jasmineAfterAllFailure', 1, ({ session, suites, tests }) => {
-        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
-        assert.strictEqual(suites.length, 1)
-        assert.strictEqual(suites[0].meta[TEST_STATUS], 'fail')
-        assert.strictEqual(suites[0].meta[TEST_SUITE], 'jasmine-after-all-fail.e2e.js')
-        assert.match(suites[0].meta['error.message'], /expected WebdriverIO Jasmine afterAll failure/)
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
-      }, 0, { framework: 'jasmine' })
-    })
-
-    it('reports a Jasmine global afterAll failure on its suite', async () => {
+    it('reports Jasmine suite and global afterAll failures on their suites', async () => {
       await runScenario('jasmineGlobalAfterAllFailure', 1, ({ session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'fail')
-        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(suites.length, 3)
         assert.deepStrictEqual(
           suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
           [
             ['first.e2e.js', 'pass'],
+            ['jasmine-after-all-fail.e2e.js', 'fail'],
             ['jasmine-global-after-all-fail.e2e.js', 'fail'],
           ]
         )
-        const failedSuite = suites.find(suite => suite.meta[TEST_STATUS] === 'fail')
-        assert.match(failedSuite.meta['error.message'], /expected WebdriverIO Jasmine global afterAll failure/)
-        assert.strictEqual(tests.length, 2)
-        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'pass'])
+        const suiteAfterAll = suites.find(suite => suite.meta[TEST_SUITE] === 'jasmine-after-all-fail.e2e.js')
+        const globalAfterAll = suites.find(suite => suite.meta[TEST_SUITE] === 'jasmine-global-after-all-fail.e2e.js')
+        assert.match(suiteAfterAll.meta['error.message'], /expected WebdriverIO Jasmine afterAll failure/)
+        assert.match(globalAfterAll.meta['error.message'], /expected WebdriverIO Jasmine global afterAll failure/)
+        assert.strictEqual(tests.length, 3)
+        assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
       }, 0, { framework: 'jasmine' })
     })
 

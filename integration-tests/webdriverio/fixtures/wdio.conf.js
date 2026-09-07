@@ -34,7 +34,10 @@ const baseConfig = {
 const scenarioConfig = {
   automaticLogSubmission: {
     after () {
-      require('./automatic-log-submission-logger').info('Hello from WebdriverIO after hook!')
+      const loggers = require('./automatic-log-submission-logger')
+      for (const [loggerName, logger] of Object.entries(loggers)) {
+        logger.info(`Hello from WebdriverIO ${loggerName} after hook!`)
+      }
     },
     maxInstances: 1,
     specs: ['./automatic-log-submission.e2e.js'],
@@ -129,6 +132,7 @@ const scenarioConfig = {
     specs: [[
       './empty.e2e.js',
       './first.e2e.js',
+      './second.e2e.js',
     ]],
   },
   hookFailure: {
@@ -149,10 +153,6 @@ const scenarioConfig = {
     injectGlobals: false,
     maxInstances: 1,
     specs: ['./jasmine-statuses.e2e.js'],
-  },
-  jasmineAfterAllFailure: {
-    maxInstances: 1,
-    specs: ['./jasmine-after-all-fail.e2e.js'],
   },
   jasmineAttemptToFixSkipped: {
     maxInstances: 1,
@@ -180,6 +180,7 @@ const scenarioConfig = {
   jasmineGlobalAfterAllFailure: {
     maxInstances: 1,
     specs: [[
+      './jasmine-after-all-fail.e2e.js',
       './jasmine-global-after-all-fail.e2e.js',
       './first.e2e.js',
     ]],
@@ -224,11 +225,10 @@ const scenarioConfig = {
   },
   rum: {
     maxInstances: 1,
-    specs: ['./rum.e2e.js'],
-  },
-  rumNoAfterEach: {
-    maxInstances: 1,
-    specs: ['./rum-no-after-each.e2e.js'],
+    specs: [[
+      './rum.e2e.js',
+      './rum-no-after-each.e2e.js',
+    ]],
   },
   runnerEnvNodeOptions: {
     maxInstances: 1,
