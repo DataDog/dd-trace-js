@@ -83,7 +83,7 @@
     "@opentelemetry/instrumentation-express": "0.69.0",
     "@opentelemetry/instrumentation-http": "0.221.0",
     "@opentelemetry/sdk-node": "0.221.0",
-    "@playwright/test": "1.62.1",
+    "@playwright/test": "1.63.0",
     "@prisma/adapter-mariadb": "7.10.0",
     "@prisma/adapter-mssql": "7.10.0",
     "@prisma/adapter-pg": "7.10.0",

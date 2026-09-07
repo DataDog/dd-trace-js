@@ -199,6 +199,7 @@ versions.forEach((version) => {
 
       const runRumTest = async (receiver, { isRedirecting }, extraEnvVars) => {
         const testAssertionsPromise = getTestAssertions(receiver, { isRedirecting })
+        let testOutput = ''
         let proc
         try {
           proc = exec(
@@ -213,10 +214,13 @@ versions.forEach((version) => {
               },
             }
           )
+          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
           const [[exitCode]] = await Promise.all([once(proc, 'exit'), testAssertionsPromise])
 
           assert.strictEqual(exitCode, isRedirecting ? 1 : 0)
+          assert.doesNotMatch(testOutput, /Failed to find injection points/)
         } finally {
           proc?.kill()
         }
