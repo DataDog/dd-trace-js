@@ -766,6 +766,18 @@ describe('OpenTelemetry Traces', () => {
         'Exporter should be the OTLP exporter when OTEL_TRACES_EXPORTER=otlp')
     })
 
+    for (const agentlessEnv of ['DD_AGENTLESS_ENABLED', '_DD_APM_TRACING_AGENTLESS_ENABLED']) {
+      it(`DatadogTracer uses the OTLP exporter when ${agentlessEnv}=true`, () => {
+        process.env[agentlessEnv] = 'true'
+        process.env.OTEL_TRACES_EXPORTER = 'otlp'
+        const loadTracer = proxyquire.noPreserveCache()
+        const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+        const tracer = new DatadogTracer(getConfigFresh())
+        assert(tracer._exporter instanceof OtlpHttpTraceExporter,
+          'Exporter should be the OTLP exporter when explicitly enabled')
+      })
+    }
+
     it('DatadogTracer does not use the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp', () => {
       delete process.env.OTEL_TRACES_EXPORTER
       const loadTracer = proxyquire.noPreserveCache()
@@ -784,6 +796,18 @@ describe('OpenTelemetry Traces', () => {
       const tracer = new DatadogTracer(config)
       assert(tracer._exporter instanceof ElectronExporter,
         'Exporter should be the Electron exporter even when OTEL_TRACES_EXPORTER=otlp')
+    })
+
+    it('DatadogTracer prefers the Electron exporter over agentless and OTLP export', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+      const ElectronExporter = require('../../src/exporters/electron')
+      const config = getConfigFresh({ experimental: { exporter: 'electron' } })
+      const tracer = new DatadogTracer(config)
+      assert(tracer._exporter instanceof ElectronExporter,
+        'Exporter should be the Electron exporter when agentless and OTLP export are enabled')
     })
   })
 

@@ -14,9 +14,12 @@ Agentless mode disables features that require an Agent.
 Set the API key with `DD_API_KEY` or `DATADOG_API_KEY`.
 Agentless crash tracking requires this key and sends crash data directly to Datadog.
 
-Agentless mode uses the Datadog trace intake and ignores `OTEL_TRACES_EXPORTER`.
+Agentless mode uses the Datadog trace intake by default. Set `OTEL_TRACES_EXPORTER=otlp` to use OTLP trace export
+instead. `OTEL_TRACES_EXPORTER=none` does not disable the Datadog trace intake.
 Explicit `DD_TRACE_SAMPLE_RATE`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SPAN_METRICS_ENABLED`, and
 `DD_METRICS_OTEL_ENABLED` settings still apply.
+
+Set `DD_RUNTIME_METRICS_ENABLED=true` with `DD_METRICS_OTEL_ENABLED=true` to export runtime metrics through OTLP.
 
 Agentless mode submits Bunyan, Pino, and Winston logs directly by default. Set
 `DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the

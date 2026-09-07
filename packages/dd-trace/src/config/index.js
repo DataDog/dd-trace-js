@@ -11,6 +11,7 @@ const createRfdc = require('../../../../vendor/dist/rfdc')
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
+const isOtlpTraceExporterEnabled = require('../opentelemetry/trace/exporter-selection')
 const log = require('../log')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
@@ -495,9 +496,7 @@ class Config extends ConfigBase {
 
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
       isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessTracingEnabled && !this.isCiVisibility) {
-      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
-    }
+    const otlpTraceExporterEnabled = isOtlpTraceExporterEnabled(this)
 
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
     // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
@@ -507,7 +506,7 @@ class Config extends ConfigBase {
     // dd-trace's own sampling policy in that case.
     if (!trackedConfigOrigins.has('sampleRate') &&
         (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          (this.OTEL_TRACES_EXPORTER === 'otlp' && this.experimental.exporter !== 'electron'))) {
+          otlpTraceExporterEnabled)) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
@@ -655,7 +654,9 @@ class Config extends ConfigBase {
       if (this.DD_API_KEY === undefined) {
         setAndTrack(this, 'dynamicInstrumentation.enabled', false)
       }
-      setAndTrack(this, 'runtimeMetrics.enabled', false)
+      if (!this.DD_METRICS_OTEL_ENABLED) {
+        setAndTrack(this, 'runtimeMetrics.enabled', false)
+      }
       setAndTrack(this, 'dsmEnabled', false)
       const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
       setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
@@ -668,7 +669,10 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
     }
 
-    if (agentlessTracingEnabled && !this.isCiVisibility) {
+    if (agentlessTracingEnabled &&
+        !this.isCiVisibility &&
+        this.experimental.exporter !== exporters.ELECTRON &&
+        !otlpTraceExporterEnabled) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
@@ -711,7 +715,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
     }
 
-    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
+    const autoTraceMetrics = otlpTraceExporterEnabled && this.DD_METRICS_OTEL_ENABLED === true
     setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
 
     if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {

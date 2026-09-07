@@ -929,8 +929,10 @@ describe('Config', () => {
 
   it('should not default OTEL_TRACES_SAMPLER when OTEL_TRACES_EXPORTER is otlp but the exporter is electron', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
     const config = getConfig({ experimental: { exporter: 'electron' } })
     assert.strictEqual(config.sampleRate, undefined)
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
   })
 
   it('should still respect an explicit OTEL_TRACES_SAMPLER when the exporter is electron', () => {
@@ -5341,20 +5343,20 @@ rules:
       process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
       const config = getConfig()
 
-      assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
       assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED, true)
       assert.strictEqual(config.llmobs.agentlessEnabled, true)
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
       assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, true)
-      assert.strictEqual(config.runtimeMetrics.enabled, false)
+      assert.strictEqual(config.runtimeMetrics.enabled, true)
       assert.strictEqual(config.dsmEnabled, false)
       assert.strictEqual(config.dynamicInstrumentation.enabled, true)
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
       assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
       assert.strictEqual(config.logInjection, false)
       assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
@@ -5380,18 +5382,55 @@ rules:
 
       const config = getConfig()
 
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       assert.strictEqual(config.sampleRate, 0.25)
     })
 
-    it('should not infer an OTel sample rate from a disabled trace exporter', () => {
+    it('should apply the default OTel sampler when OTLP trace export is enabled', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
 
       const config = getConfig()
 
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
-      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.strictEqual(config.sampleRate, 1)
+    })
+
+    it('should preserve trace configuration when OTLP trace export is enabled', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
+      process.env.DD_TRACE_REPORT_HOSTNAME = 'false'
+      process.env.DD_TRACE_RATE_LIMIT = '42'
+      process.env.DD_TRACE_SAMPLING_RULES = '[{"service":"web","sample_rate":0.5}]'
+
+      const config = getConfig()
+
+      assert.notStrictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+      assert.strictEqual(config.reportHostname, false)
+      assert.strictEqual(config.sampler.rateLimit, 42)
+      assert.deepStrictEqual(config.sampler.rules, [{ service: 'web', sampleRate: 0.5 }])
+      assert.strictEqual(config.traceId128BitGenerationEnabled, true)
+    })
+
+    it('should disable Agent-backed runtime metrics in agentless mode', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.runtimeMetrics.enabled, false)
+    })
+
+    it('should preserve OTLP runtime metrics in agentless mode', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+      process.env.DD_METRICS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.runtimeMetrics.enabled, true)
     })
 
     it('should preserve explicit OTel span metrics', () => {
@@ -5484,6 +5523,7 @@ rules:
     for (const exporter of ['datadog', 'jest_worker']) {
       it(`should preserve the Test Optimization ${exporter} exporter and the OTLP traces exporter`, () => {
         process.env.DD_AGENTLESS_ENABLED = 'true'
+        process.env.DD_METRICS_OTEL_ENABLED = 'true'
         process.env.OTEL_TRACES_EXPORTER = 'otlp'
         const config = getConfig({
           isCiVisibility: true,
@@ -5493,6 +5533,8 @@ rules:
         assert.strictEqual(config.experimental.exporter, exporter)
         assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
         assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+        assert.strictEqual(config.sampleRate, undefined)
+        assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
       })
     }
 

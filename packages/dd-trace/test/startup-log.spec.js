@@ -377,6 +377,12 @@ describe('otlp export flags', () => {
     assert.strictEqual(startupLogObj({ isCiVisibility: true }).otlp_traces_export_enabled, false)
   })
 
+  it('otlp_traces_export_enabled should be false for the Electron exporter', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    const options = { experimental: { exporter: 'electron' } }
+    assert.strictEqual(startupLogObj(options).otlp_traces_export_enabled, false)
+  })
+
   it('otlp_metrics_export_enabled should be true when DD_METRICS_OTEL_ENABLED is true', () => {
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
     assert.strictEqual(startupLogObj().otlp_metrics_export_enabled, true)
