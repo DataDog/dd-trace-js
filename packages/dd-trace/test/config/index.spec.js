@@ -5354,7 +5354,7 @@ rules:
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
       assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
       assert.strictEqual(config.logInjection, false)
       assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
@@ -5380,18 +5380,18 @@ rules:
 
       const config = getConfig()
 
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       assert.strictEqual(config.sampleRate, 0.25)
     })
 
-    it('should not infer an OTel sample rate from a disabled trace exporter', () => {
+    it('should infer an OTel sample rate from the OTLP trace exporter in agentless mode', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
 
       const config = getConfig()
 
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
-      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.strictEqual(config.sampleRate, 1)
     })
 
     it('should preserve explicit OTel span metrics', () => {
@@ -5482,7 +5482,7 @@ rules:
     })
 
     for (const exporter of ['datadog', 'jest_worker']) {
-      it(`should preserve the Test Optimization ${exporter} exporter and the OTLP traces exporter`, () => {
+      it(`should apply agentless mode to Test Optimization when the ${exporter} exporter is set`, () => {
         process.env.DD_AGENTLESS_ENABLED = 'true'
         process.env.OTEL_TRACES_EXPORTER = 'otlp'
         const config = getConfig({
@@ -5490,7 +5490,7 @@ rules:
           experimental: { exporter },
         })
 
-        assert.strictEqual(config.experimental.exporter, exporter)
+        assert.strictEqual(config.experimental.exporter, 'agentless')
         assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
         assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       })
@@ -5567,8 +5567,11 @@ rules:
       const config = getConfig()
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'https://otlp.datadoghq.eu/v1/logs')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'https://otlp.datadoghq.eu/v1/metrics')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'https://otlp.datadoghq.eu/v1/traces')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS['dd-api-key'], 'agentless-api-key')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS['dd-api-key'], 'agentless-api-key')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS['dd-api-key'], 'agentless-api-key')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS['dd-api-key'], 'agentless-api-key')
     })
 
     it('should preserve an explicit OTLP endpoint when agentless is enabled', () => {
@@ -5577,7 +5580,11 @@ rules:
       const config = getConfig()
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://custom-collector:4318/v1/logs')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://custom-collector:4318/v1/metrics')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://custom-collector:4318/v1/traces')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS, undefined)
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS, undefined)
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS, undefined)
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS, undefined)
     })
   })
 
