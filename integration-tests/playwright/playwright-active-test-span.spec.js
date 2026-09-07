@@ -208,6 +208,8 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                DD_TRACE_DEBUG: 'true',
+                DD_TRACE_LOG_LEVEL: 'error',
                 PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-rum',
                 ...extraEnvVars,
