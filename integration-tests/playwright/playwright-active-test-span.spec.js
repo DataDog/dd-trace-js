@@ -371,6 +371,7 @@ const RUM_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 
 describe('playwright instrumentation (unit)', () => {
   let pageHook
+  let pageGotoSubscriber
   let subscriber
   const testPageGotoCh = {
     get hasSubscribers () {
@@ -392,6 +393,16 @@ describe('playwright instrumentation (unit)', () => {
         channel: name => name === 'ci:playwright:test:page-goto'
           ? testPageGotoCh
           : realInstrument.channel(name),
+        tracingChannel: name => {
+          if (name === 'orchestrion:playwright-core:Page_goto') {
+            return {
+              subscribe (handlers) {
+                pageGotoSubscriber = handlers
+              },
+            }
+          }
+          return realInstrument.tracingChannel(name)
+        },
       },
     })
 
@@ -409,6 +420,16 @@ describe('playwright instrumentation (unit)', () => {
   function subscribe (listener) {
     subscriber = listener
   }
+
+  it('does not inspect pages outside Playwright workers', () => {
+    const evaluate = sinon.spy()
+    const ctx = { self: { evaluate } }
+
+    pageGotoSubscriber.asyncEnd(ctx)
+
+    assert.strictEqual(evaluate.callCount, 0)
+    assert.ok(!Object.hasOwn(ctx, 'resolveCallback'))
+  })
 
   function createPage ({
     addCookies = async () => {},
