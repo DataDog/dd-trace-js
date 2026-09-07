@@ -666,7 +666,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
     }
 
-    if (agentlessTracingEnabled) {
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
@@ -707,7 +707,7 @@ class Config extends ConfigBase {
 
     const assignOtlpHeaderApiKey = (configName) => {
       if (otlpAgentlessOrigin) {
-        this[configName] ??= {}
+        this[configName] ??= { ...this.OTEL_EXPORTER_OTLP_HEADERS }
         this[configName]['dd-api-key'] = this.DD_API_KEY
         setAndTrack(this, configName, this[configName])
       }
@@ -725,7 +725,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
       assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
-    assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_HEADERS')
 
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
     setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
