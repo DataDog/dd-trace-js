@@ -331,6 +331,7 @@ for (const version of versions) {
           ...env,
         },
       })
+      const childClosed = once(childProcess, 'close')
       childProcess.stdout?.on('data', chunk => {
         testOutput += chunk.toString()
       })
@@ -342,16 +343,20 @@ for (const version of versions) {
         childProcess,
         undefined,
         payloads => assertEvents(getReportingEvents(payloads, version, framework)),
-        { hardTimeout: 45_000 }
+        // WebdriverIO coordinator shutdown waits for the final Test Optimization export.
+        { gracePeriod: 0, hardTimeout: 45_000 }
       )
 
       let exitCode
       try {
         [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
+          childClosed,
           payloadsPromise,
         ])
       } catch (error) {
+        if (childProcess.exitCode !== null || childProcess.signalCode != null) {
+          await childClosed.catch(() => {})
+        }
         error.message += `\n${testOutput}`
         throw error
       }
@@ -453,28 +458,27 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
-    it('reports grouped Jasmine specs from one worker', async () => {
-      await runScenario('grouped', 1, ({ suites, tests }) => {
-        assert.strictEqual(suites.length, 2)
-        assert.strictEqual(tests.length, 2)
-        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
-        assertOneTestPerSuiteExecution(suites, tests)
-      }, 0, { framework: 'jasmine' })
-    })
-
-    it('reports an empty grouped Jasmine spec as skipped', async () => {
+    it('reports grouped Jasmine specs, including an empty spec, from one worker', async () => {
       await runScenario('groupedEmpty', 1, ({ session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(suites.length, 3)
         assert.deepStrictEqual(
           suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
           [
             ['empty.e2e.js', 'skip'],
             ['first.e2e.js', 'pass'],
+            ['second.e2e.js', 'pass'],
           ]
         )
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+        assert.strictEqual(tests.length, 2)
+        assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
+        const nonEmptySuites = suites.filter(suite => suite.meta[TEST_STATUS] !== 'skip')
+        assertOneTestPerSuiteExecution(nonEmptySuites, tests)
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
+        assert.deepStrictEqual(
+          tests.map(test => test.meta['test.webdriverio.worker']).sort(),
+          ['first', 'second']
+        )
       }, 0, { framework: 'jasmine' })
     })
 
