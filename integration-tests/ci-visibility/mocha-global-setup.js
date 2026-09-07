@@ -10,6 +10,11 @@ exports.mochaGlobalSetup = async () => {
     // callbacks have drained, so configuration completes before global setup.
     await new Promise(resolve => process.once('beforeExit', () => resolve()))
   }
+  if (process.env.MOCHA_DISABLE_PLUGIN === 'true') {
+    // Let Mocha#run initiate configuration before disabling the plugin.
+    await Promise.resolve()
+    require('dd-trace').use('mocha', false)
+  }
   if (process.env.MOCHA_SETUP_ERROR === 'true') throw new Error('global setup failed')
   global.mochaSetupFinished = true
   process.stdout.write('GLOBAL SETUP FINISHED\n')

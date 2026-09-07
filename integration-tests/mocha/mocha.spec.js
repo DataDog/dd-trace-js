@@ -260,6 +260,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
                 MOCHA_SETUP_ORDER: order,
                 MOCHA_SETUP_ERROR: 'false',
+                MOCHA_DISABLE_PLUGIN: 'false',
               },
             })
             childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
@@ -293,6 +294,45 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.match(testOutput, /1 passing/)
             assert.match(testOutput, /GLOBAL TEARDOWN FINISHED/)
           })
+
+          globalFixturesIt(`runs after disabling the plugin: ${entrypoint}, ${order}, settingsError=${settingsError}`,
+            async () => {
+              receiver.setSettings({ itr_enabled: false })
+              if (settingsError) receiver.setSettingsResponseCode(404)
+              const events = []
+              let settingsRequests = 0
+              receiver.on('message', ({ url, payload }) => {
+                if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
+                if (url.endsWith('/libraries/tests/services/setting')) settingsRequests++
+              })
+
+              const setup = './ci-visibility/mocha-global-setup.js'
+              const suite = './ci-visibility/mocha-global-setup-test.js'
+              const command = entrypoint === 'cli'
+                ? `node node_modules/mocha/bin/mocha --no-config --no-package --require ${setup} ${suite}`
+                : `node ${setup}`
+              childProcess = exec(command, {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  DD_INJECT_FORCE: 'true',
+                  DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+                  MOCHA_SETUP_ORDER: order,
+                  MOCHA_SETUP_ERROR: 'false',
+                  MOCHA_DISABLE_PLUGIN: 'true',
+                },
+              })
+              childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+              childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+              const [exitCode] = await once(childProcess, 'close')
+              assert.strictEqual(exitCode, 0, testOutput)
+              assert.strictEqual(settingsRequests, 1)
+              assert.match(testOutput, /GLOBAL SETUP FINISHED/)
+              assert.match(testOutput, /1 passing/)
+              assert.match(testOutput, /GLOBAL TEARDOWN FINISHED/)
+              assert.deepStrictEqual(events, [], 'disabled plugin must not report test events')
+            })
         }
       }
     }

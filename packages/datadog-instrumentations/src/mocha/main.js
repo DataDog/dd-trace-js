@@ -1084,6 +1084,24 @@ function startMochaRunner (runner) {
   }
 }
 
+/**
+ * @param {import('mocha').Runner['run']} run
+ * @param {import('mocha').Runner} runner
+ * @param {Parameters<import('mocha').Runner['run']>} args
+ * @returns {import('mocha').Runner}
+ */
+function runMochaRunner (run, runner, args) {
+  const result = run.apply(runner, args)
+  // Once delay mode is enabled, startup must complete even if the plugin is disabled during global setup.
+  readyRunners.add(runner)
+  const start = pendingRunnerStarts.get(runner)
+  if (start) {
+    pendingRunnerStarts.delete(runner)
+    start()
+  }
+  return result
+}
+
 // In this hook we delay the execution with options.delay to grab library configuration,
 // skippable and known tests.
 // It is called but skipped in parallel mode.
@@ -1196,7 +1214,7 @@ addHook({
 
   shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, args)
+      return runMochaRunner(run, this, args)
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
@@ -1529,14 +1547,7 @@ addHook({
       }
     })
 
-    const result = run.apply(this, args)
-    readyRunners.add(this)
-    const start = pendingRunnerStarts.get(this)
-    if (start) {
-      pendingRunnerStarts.delete(this)
-      start()
-    }
-    return result
+    return runMochaRunner(run, this, args)
   })
 
   return Runner
