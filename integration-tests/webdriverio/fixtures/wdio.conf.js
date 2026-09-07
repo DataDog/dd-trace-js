@@ -154,6 +154,10 @@ const scenarioConfig = {
     maxInstances: 1,
     specs: ['./jasmine-statuses.e2e.js'],
   },
+  jasmineAfterAllFailure: {
+    maxInstances: 1,
+    specs: ['./jasmine-after-all-fail.e2e.js'],
+  },
   jasmineAttemptToFixSkipped: {
     maxInstances: 1,
     specs: ['./jasmine-attempt-to-fix-skipped.e2e.js'],
@@ -180,7 +184,6 @@ const scenarioConfig = {
   jasmineGlobalAfterAllFailure: {
     maxInstances: 1,
     specs: [[
-      './jasmine-after-all-fail.e2e.js',
       './jasmine-global-after-all-fail.e2e.js',
       './first.e2e.js',
     ]],

@@ -295,6 +295,7 @@ for (const version of versions) {
           ...extraEnvironment,
         },
       })
+      const childClosed = once(childProcess, 'close')
       childProcess.stdout?.on('data', chunk => {
         testOutput += chunk.toString()
       })
@@ -316,10 +317,13 @@ for (const version of versions) {
       let exitCode
       try {
         [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
+          childClosed,
           payloadsPromise,
         ])
       } catch (error) {
+        if (childProcess.exitCode !== null || childProcess.signalCode != null) {
+          await childClosed.catch(() => {})
+        }
         error.message += `\n${testOutput}`
         throw error
       }

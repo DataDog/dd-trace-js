@@ -331,6 +331,7 @@ for (const version of versions) {
           ...env,
         },
       })
+      const childClosed = once(childProcess, 'close')
       childProcess.stdout?.on('data', chunk => {
         testOutput += chunk.toString()
       })
@@ -349,10 +350,13 @@ for (const version of versions) {
       let exitCode
       try {
         [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
+          childClosed,
           payloadsPromise,
         ])
       } catch (error) {
+        if (childProcess.exitCode !== null || childProcess.signalCode != null) {
+          await childClosed.catch(() => {})
+        }
         error.message += `\n${testOutput}`
         throw error
       }
@@ -493,24 +497,33 @@ for (const version of versions) {
       }, 1, { framework: 'jasmine' })
     })
 
-    it('reports Jasmine suite and global afterAll failures on their suites', async () => {
+    it('reports a Jasmine afterAll failure on its suite', async () => {
+      await runScenario('jasmineAfterAllFailure', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(suites[0].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites[0].meta[TEST_SUITE], 'jasmine-after-all-fail.e2e.js')
+        assert.match(suites[0].meta['error.message'], /expected WebdriverIO Jasmine afterAll failure/)
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('reports a Jasmine global afterAll failure on its suite', async () => {
       await runScenario('jasmineGlobalAfterAllFailure', 1, ({ session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'fail')
-        assert.strictEqual(suites.length, 3)
+        assert.strictEqual(suites.length, 2)
         assert.deepStrictEqual(
           suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
           [
             ['first.e2e.js', 'pass'],
-            ['jasmine-after-all-fail.e2e.js', 'fail'],
             ['jasmine-global-after-all-fail.e2e.js', 'fail'],
           ]
         )
-        const suiteAfterAll = suites.find(suite => suite.meta[TEST_SUITE] === 'jasmine-after-all-fail.e2e.js')
-        const globalAfterAll = suites.find(suite => suite.meta[TEST_SUITE] === 'jasmine-global-after-all-fail.e2e.js')
-        assert.match(suiteAfterAll.meta['error.message'], /expected WebdriverIO Jasmine afterAll failure/)
-        assert.match(globalAfterAll.meta['error.message'], /expected WebdriverIO Jasmine global afterAll failure/)
-        assert.strictEqual(tests.length, 3)
-        assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
+        const failedSuite = suites.find(suite => suite.meta[TEST_STATUS] === 'fail')
+        assert.match(failedSuite.meta['error.message'], /expected WebdriverIO Jasmine global afterAll failure/)
+        assert.strictEqual(tests.length, 2)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'pass'])
       }, 0, { framework: 'jasmine' })
     })
 
