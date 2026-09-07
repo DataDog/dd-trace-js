@@ -24,7 +24,7 @@ describe('spawnProcAndExpectExit', () => {
   it('returns the process before it exits', async () => {
     const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const noopLoader = path.join(process.cwd(), 'integration-tests/appsec/esm-app/custom-noop-hooks.mjs')
-    const spawned = spawnPluginIntegrationTestProcAndExpectExit(
+    const completed = spawnPluginIntegrationTestProcAndExpectExit(
       process.cwd(),
       'unused',
       0,
@@ -33,25 +33,25 @@ describe('spawnProcAndExpectExit', () => {
       undefined,
       100
     )
-    proc = spawned.proc
+    proc = completed.proc
 
     assert.notStrictEqual(proc.pid, undefined)
-    await spawned.completed
+    await completed
     assert.strictEqual(clock.countTimers(), 0)
   })
 
   it('stops a process that does not exit before its deadline', async () => {
     const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const timeoutMs = 100
-    const spawned = spawnProcAndExpectExit('unused', {
+    const completed = spawnProcAndExpectExit('unused', {
       execArgv: ['-e', 'setInterval(() => {}, 1_000)'],
       silent: true,
     }, undefined, undefined, timeoutMs)
-    proc = spawned.proc
+    proc = completed.proc
 
     await once(proc, 'spawn')
 
-    const rejected = assert.rejects(spawned.completed, {
+    const rejected = assert.rejects(completed, {
       code: 'ERR_PROCESS_TIMEOUT',
       message: `Process did not exit within ${timeoutMs} ms.`,
     })
@@ -62,35 +62,35 @@ describe('spawnProcAndExpectExit', () => {
   })
 
   it('rejects when the process cannot start', async () => {
-    const spawned = spawnProcAndExpectExit('unused', {
+    const completed = spawnProcAndExpectExit('unused', {
       cwd: path.join(__dirname, 'does-not-exist'),
       silent: true,
     })
-    proc = spawned.proc
+    proc = completed.proc
 
-    await assert.rejects(spawned.completed, { code: 'ENOENT' })
+    await assert.rejects(completed, { code: 'ENOENT' })
     proc = undefined
   })
 
   it('rejects when the process exits with a nonzero status', async () => {
-    const spawned = spawnProcAndExpectExit('unused', {
+    const completed = spawnProcAndExpectExit('unused', {
       execArgv: ['-e', 'process.exit(1)'],
       silent: true,
     })
-    proc = spawned.proc
+    proc = completed.proc
 
-    await assert.rejects(spawned.completed, {
+    await assert.rejects(completed, {
       message: 'Process exited with status code 1.',
     })
   })
 
   it('rejects when a timed out process cannot be stopped', async () => {
     const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const spawned = spawnProcAndExpectExit('unused', {
+    const completed = spawnProcAndExpectExit('unused', {
       execArgv: ['-e', 'setInterval(() => {}, 1_000)'],
       silent: true,
     }, undefined, undefined, 100)
-    proc = spawned.proc
+    proc = completed.proc
 
     await once(proc, 'spawn')
     const kill = sinon.stub(proc, 'kill')
@@ -99,7 +99,7 @@ describe('spawnProcAndExpectExit', () => {
       return true
     })
     kill.onSecondCall().returns(true)
-    const rejected = assert.rejects(spawned.completed, {
+    const rejected = assert.rejects(completed, {
       message: `Process ${proc.pid} did not exit after SIGKILL`,
     })
     await clock.tickAsync(4_100)

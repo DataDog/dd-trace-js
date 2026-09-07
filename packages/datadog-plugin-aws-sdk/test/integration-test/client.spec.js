@@ -45,12 +45,10 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'aws.request'), true)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
           AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
           AWS_ACCESS_KEY_ID: '00000000000000000000',
         })
-        proc = spawned.proc
-        await spawned.completed
 
         await res
       }).timeout(20000)

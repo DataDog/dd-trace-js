@@ -52,11 +52,7 @@ describe('esm', () => {
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(
-          sandboxCwd(), variants[variant], agent.port, spawnEnv
-        )
-        proc = spawned.proc
-        await spawned.completed
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, spawnEnv)
 
         await res
       }).timeout(20000)
@@ -239,11 +235,7 @@ describe('esm', () => {
           assert.strictEqual(parseLinks(payload[22][0]).length, 2)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(
-          sandboxCwd(), variants[variant], agent.port, spawnEnv
-        )
-        proc = spawned.proc
-        await spawned.completed
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, spawnEnv)
 
         await res
       }).timeout(60000)

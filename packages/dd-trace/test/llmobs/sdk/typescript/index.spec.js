@@ -107,12 +107,10 @@ describe('typescript', () => {
             { cwd, stdio: 'inherit' }
           )
 
-          const spawned = spawnProcAndExpectExit(
+          proc = await spawnProcAndExpectExit(
             path.join(cwd, `${file}.js`),
             { cwd, env: { DD_TRACE_AGENT_PORT: agent.port, DD_TAGS: 'foo:bar, bar:baz' } }
           )
-          proc = spawned.proc
-          await spawned.completed
 
           await Promise.all(waiters)
 

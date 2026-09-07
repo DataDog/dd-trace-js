@@ -46,9 +46,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
-        proc = spawned.proc
-        await spawned.completed
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(30000)
@@ -84,9 +82,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
-        proc = spawned.proc
-        await spawned.completed
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(30000)

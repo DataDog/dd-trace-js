@@ -50,12 +50,10 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'google_genai.request'), true)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
           NODE_OPTIONS: '--import dd-trace/initialize.mjs',
           GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '<not-a-real-key>',
         })
-        proc = spawned.proc
-        await spawned.completed
 
         await res
       }).timeout(20000)

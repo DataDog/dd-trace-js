@@ -185,9 +185,9 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
  *   stdout: import('node:stream').Readable,
  *   stderr: import('node:stream').Readable
  * }} SpawnedProcess
- * @typedef {object} ExpectedExitProcess
- * @property {SpawnedProcess} proc
- * @property {Promise<void>} completed
+ * @typedef {Promise<void> & {
+ *   proc: SpawnedProcess
+ * }} ExpectedExitPromise
  */
 
 class ProcessTimeoutError extends Error {
@@ -255,7 +255,7 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 /**
  * Spawns a Node.js script in a child process that is expected to run and exit cleanly.
  *
- * This function expects the process to complete and exit with code 0, in which case `completed` resolves.
+ * This function expects the process to complete and exit with code 0, in which case the returned promise resolves.
  * Use this for short-lived processes like validation scripts or tests that run to completion.
  *
  * For long-running processes (like servers) that should not exit, use `spawnProc` instead.
@@ -267,12 +267,12 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
  * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
  *   standard error of the child process. If not provided, the error will be logged to the console.
  * @param {number} [timeoutMs] - Maximum time to wait for the process to exit.
- * @returns {ExpectedExitProcess}
+ * @returns {ExpectedExitPromise}
  */
 function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHandler, timeoutMs) {
   const proc = spawnProcImpl(filename, options, stdioHandler, stderrHandler)
 
-  const completed = new Promise((resolve, reject) => {
+  const completed = /** @type {ExpectedExitPromise} */ (new Promise((resolve, reject) => {
     let timeout
     let timedOut = false
 
@@ -324,9 +324,10 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
       proc.removeListener('error', onError)
       proc.removeListener('exit', onExit)
     }
-  })
+  }))
 
-  return { proc, completed }
+  completed.proc = proc
+  return completed
 }
 
 /**

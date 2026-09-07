@@ -72,9 +72,7 @@ describe('esm', () => {
           assert.deepStrictEqual(resources.sort(), expectedResources)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
-        proc = spawned.proc
-        await spawned.completed
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

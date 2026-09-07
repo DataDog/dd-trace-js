@@ -36,12 +36,10 @@ describe('recursion regression test', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'aws.request'), true)
       })
 
-      const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'recursion.mjs', agent.port, {
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'recursion.mjs', agent.port, {
         AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
         AWS_ACCESS_KEY_ID: '00000000000000000000',
       }, ['--stack-size=128'])
-      proc = spawned.proc
-      await spawned.completed
 
       await res
     }).timeout(20000)

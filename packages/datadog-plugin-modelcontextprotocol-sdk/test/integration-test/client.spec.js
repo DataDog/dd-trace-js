@@ -54,11 +54,9 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(traces, 'mcp.server.tool.call'), true)
       })
 
-      const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port, {
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port, {
         NODE_OPTIONS: nodeOptions,
       })
-      proc = spawned.proc
-      await spawned.completed
 
       await res
     }).timeout(20000)

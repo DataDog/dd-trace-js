@@ -47,11 +47,9 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'pubsub.request'), true)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
           PUBSUB_EMULATOR_HOST: 'localhost:8081',
         })
-        proc = spawned.proc
-        await spawned.completed
 
         await res
       }).timeout(20000)

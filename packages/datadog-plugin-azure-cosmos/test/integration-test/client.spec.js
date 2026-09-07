@@ -48,14 +48,12 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'cosmosdb.query'), true)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           variants[variant],
           agent.port,
           spawnEnv
         )
-        proc = spawned.proc
-        await spawned.completed
 
         await res
       }).timeout(20000)

@@ -52,11 +52,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'azure.eventhubs.send'), true)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(
-          sandboxCwd(), variants[variant], agent.port, spawnEnv
-        )
-        proc = spawned.proc
-        await spawned.completed
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, spawnEnv)
         await res
       }).timeout(20000)
 
@@ -123,11 +119,7 @@ describe('esm', () => {
           assert.strictEqual(parseLinks(payload[4][0]).length, 2)
         })
 
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(
-          sandboxCwd(), variants[variant], agent.port, spawnEnv
-        )
-        proc = spawned.proc
-        await spawned.completed
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, spawnEnv)
         await res
       }).timeout(60000)
 
@@ -136,9 +128,7 @@ describe('esm', () => {
           assert.ok(!('_dd.span_links' in payload[2][0]))
         })
         const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false', ...spawnEnv }
-        const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, envVar)
-        proc = spawned.proc
-        await spawned.completed
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, envVar)
         await res
       }).timeout(60000)
     }
