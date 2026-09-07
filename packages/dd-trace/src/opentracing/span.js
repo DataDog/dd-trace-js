@@ -244,9 +244,13 @@ class DatadogSpan {
     } else {
       /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
       if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
-        tagger.add(tags, keyValueMap)
-        samplingTags = tags
-        mayChangeSamplingPriority = true
+        samplingTags = {}
+        tagger.add(samplingTags, keyValueMap)
+        Object.assign(tags, samplingTags)
+        mayChangeSamplingPriority =
+          MANUAL_KEEP in samplingTags ||
+          MANUAL_DROP in samplingTags ||
+          SAMPLING_PRIORITY in samplingTags
       } else {
         return this
       }

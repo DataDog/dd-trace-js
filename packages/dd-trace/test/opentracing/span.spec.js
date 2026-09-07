@@ -10,7 +10,7 @@ const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-const { MANUAL_KEEP } = require('../../../../ext/tags')
+const { MANUAL_DROP, MANUAL_KEEP } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
 const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
@@ -639,13 +639,34 @@ describe('Span', () => {
       sinon.assert.notCalled(prioritySampler.sample)
     })
 
-    const legacyAddTagsShape = DD_MAJOR < 6 ? it : it.skip
-    legacyAddTagsShape('still accepts string and array inputs via tagger on v5', () => {
-      span.addTags('foo:bar')
-      span.addTags([{ baz: 'qux' }])
+    it('only reapplies sampling tags parsed from the current legacy v5 input', () => {
+      const legacyTagger = { add: sinon.spy(require('../../src/tagger').add) }
+      const LegacySpan = proxyquire('../../src/opentracing/span', {
+        perf_hooks: { performance: { now } },
+        '../id': sinon.stub().returns('789'),
+        '../log': log,
+        '../tagger': legacyTagger,
+        '../../../../version': { DD_MAJOR: 5 },
+      })
+      const legacySpan = new LegacySpan(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-      sinon.assert.calledWith(tagger.add, span.context().getTags(), 'foo:bar')
-      sinon.assert.calledWith(tagger.add, span.context().getTags(), [{ baz: 'qux' }])
+      legacySpan.addTags(`${MANUAL_KEEP}:true`)
+
+      assert.strictEqual(legacySpan.context().getTag(MANUAL_KEEP), 'true')
+      sinon.assert.calledOnceWithExactly(
+        prioritySampler.setPriorityFromTags,
+        legacySpan,
+        { [MANUAL_KEEP]: 'true' }
+      )
+
+      prioritySampler.setPriorityFromTags.resetHistory()
+      legacySpan.setTag(MANUAL_DROP, true)
+      legacySpan.addTags('foo:bar')
+      legacySpan.addTags([{ baz: 'qux' }])
+
+      assert.strictEqual(legacySpan.context().getTag('foo'), 'bar')
+      assert.strictEqual(legacySpan.context().getTag('baz'), 'qux')
+      sinon.assert.notCalled(prioritySampler.setPriorityFromTags)
     })
 
     const v6AddTagsShape = DD_MAJOR >= 6 ? it : it.skip
