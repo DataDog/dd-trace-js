@@ -496,9 +496,6 @@ class Config extends ConfigBase {
 
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
       isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessTracingEnabled && !this.isCiVisibility) {
-      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
-    }
 
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
     // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
@@ -669,7 +666,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
     }
 
-    if (agentlessTracingEnabled && !this.isCiVisibility) {
+    if (agentlessTracingEnabled) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
@@ -716,7 +713,7 @@ class Config extends ConfigBase {
     }
     if (!this.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', `${defaultOtlpBase}/v1/metrics`)
-      if (otlpAgentlessOrigin && !trackedConfigOrigins.has('OTEL_EXPORTER_OTLP_METRICS_HEADERS')) {
+      if (otlpAgentlessOrigin) {
         this.OTEL_EXPORTER_OTLP_METRICS_HEADERS['dd-api-key'] = this.DD_API_KEY
         setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_HEADERS', this.OTEL_EXPORTER_OTLP_METRICS_HEADERS)
       }
