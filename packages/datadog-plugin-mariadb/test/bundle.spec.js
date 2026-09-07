@@ -89,7 +89,7 @@ describe('Plugin', () => {
   describe('mariadb CommonJS bundle', () => {
     if (semver.lt(process.version, '20.0.0')) return
 
-    withVersions('mariadb', 'mariadb', '3.5.3', version => {
+    withVersions('mariadb', 'mariadb', '>=3.5.3', version => {
       const versionModule = `../../../versions/mariadb@${version}`
       let importFilePath
       let temporaryDirectory
