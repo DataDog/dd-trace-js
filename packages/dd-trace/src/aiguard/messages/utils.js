@@ -29,18 +29,18 @@ function stringifyOrEmpty (value) {
 }
 
 /**
- * Runs `decode`, returning its value. On failure, logs and returns `fallback` instead of
+ * Runs `attempt`, returning its value. On failure, logs and returns `fallback` instead of
  * throwing — this runs inside the caller's promise chain, so a bad payload must not break them.
  *
  * @template T
- * @param {() => T} decode
+ * @param {() => T} attempt
  * @param {T} fallback
  * @param {string} logMessage printf-style, with a single %s for the error message
  * @returns {T}
  */
-function decodeOrLog (decode, fallback, logMessage) {
+function decode (attempt, fallback, logMessage) {
   try {
-    return decode()
+    return attempt()
   } catch (error) {
     log.error(logMessage, error.message)
     return fallback
@@ -52,5 +52,5 @@ module.exports = {
   IMAGE_FALLBACK,
   stringifyIfNeeded,
   stringifyOrEmpty,
-  decodeOrLog,
+  decode,
 }

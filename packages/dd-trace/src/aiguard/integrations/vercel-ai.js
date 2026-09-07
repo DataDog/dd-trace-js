@@ -7,7 +7,7 @@ const {
   convertVercelPromptToMessages,
   getStreamedContent,
 } = require('../messages/vercel-ai')
-const { decodeOrLog } = require('../messages/utils')
+const { decode } = require('../messages/utils')
 const { SOURCE_AUTO } = require('../tags')
 const { evaluate } = require('./evaluate')
 
@@ -54,7 +54,7 @@ function onModelIntercept (ctx) {
   ctx.onResult = ctx.method === 'doStream'
     ? result => interceptStreamedResult(ctx, result, inputMessages)
     : result => {
-      const outputMessages = decodeOrLog(
+      const outputMessages = decode(
         () => buildOutputMessages(inputMessages, result?.content ?? []),
         null,
         'AIGuard: unable to decode the model result: %s'
@@ -93,7 +93,7 @@ function interceptStreamedResult (ctx, result, inputMessages) {
     // A stream that failed part-way has no complete output to judge; the replay carries the error.
     if (error) return replayed
 
-    const outputMessages = decodeOrLog(
+    const outputMessages = decode(
       () => buildOutputMessages(inputMessages, getStreamedContent(chunks)),
       null,
       'AIGuard: unable to decode the streamed model result: %s'

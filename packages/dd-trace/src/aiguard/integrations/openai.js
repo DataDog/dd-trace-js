@@ -8,7 +8,7 @@ const {
   getResponsesInputMessages,
   getResponsesOutputMessages,
 } = require('../messages/openai')
-const { decodeOrLog } = require('../messages/utils')
+const { decode } = require('../messages/utils')
 const { SOURCE_AUTO } = require('../tags')
 const { evaluate } = require('./evaluate')
 
@@ -59,7 +59,7 @@ function onChatCompletions (ctx) {
   // One model call has one output however many readers observe it.
   let outputEvaluation
   ctx.onResult = body => {
-    const conversations = decodeOrLog(
+    const conversations = decode(
       () => getChatCompletionsOutputMessages(body).map(message => [...inputMessages, message]),
       null,
       'AIGuard: unable to decode OpenAI response body: %s'
@@ -81,7 +81,7 @@ function onResponses (ctx) {
 
   let outputEvaluation
   ctx.onResult = body => {
-    const outputMessages = decodeOrLog(
+    const outputMessages = decode(
       () => getResponsesOutputMessages(body),
       null,
       'AIGuard: unable to decode OpenAI response body: %s'

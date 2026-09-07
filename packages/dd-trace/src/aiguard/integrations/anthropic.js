@@ -3,7 +3,7 @@
 const { channel } = require('dc-polyfill')
 
 const { getMessagesInputMessages, getMessagesOutputMessages } = require('../messages/anthropic')
-const { decodeOrLog } = require('../messages/utils')
+const { decode } = require('../messages/utils')
 const { SOURCE_AUTO } = require('../tags')
 const { evaluate } = require('./evaluate')
 
@@ -76,7 +76,7 @@ function onMessagesIntercept (ctx) {
   // and every `clone()` of the raw response share this callback.
   let outputEvaluation
   ctx.onResult = body => {
-    const outputMessages = decodeOrLog(
+    const outputMessages = decode(
       () => getMessagesOutputMessages(body),
       null,
       'AIGuard: unable to decode Anthropic response body: %s'
