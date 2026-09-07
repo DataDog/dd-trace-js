@@ -5482,7 +5482,7 @@ rules:
     })
 
     for (const exporter of ['datadog', 'jest_worker']) {
-      it(`should apply agentless mode to Test Optimization when the ${exporter} exporter is set`, () => {
+      it(`should preserve the Test Optimization ${exporter} exporter and the OTLP traces exporter`, () => {
         process.env.DD_AGENTLESS_ENABLED = 'true'
         process.env.OTEL_TRACES_EXPORTER = 'otlp'
         const config = getConfig({
@@ -5490,7 +5490,7 @@ rules:
           experimental: { exporter },
         })
 
-        assert.strictEqual(config.experimental.exporter, 'agentless')
+        assert.strictEqual(config.experimental.exporter, exporter)
         assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
         assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       })
@@ -5571,7 +5571,7 @@ rules:
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS['dd-api-key'], 'agentless-api-key')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS['dd-api-key'], 'agentless-api-key')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS['dd-api-key'], 'agentless-api-key')
-      assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS['dd-api-key'], 'agentless-api-key')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS, undefined)
     })
 
     it('should preserve an explicit OTLP endpoint when agentless is enabled', () => {
