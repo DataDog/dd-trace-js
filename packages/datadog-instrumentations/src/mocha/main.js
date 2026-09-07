@@ -1,5 +1,7 @@
 'use strict'
 
+const { AsyncResource } = require('node:async_hooks')
+
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../../version')
@@ -80,6 +82,8 @@ const runnerTestEndHandlers = new WeakMap()
 const runnerFailuresAdjusted = new WeakSet()
 const runnerFrameworkErrors = new WeakMap()
 const runnerStarted = new WeakSet()
+const readyRunners = new WeakSet()
+const pendingRunnerStarts = new WeakMap()
 const runnerRecoveryStates = new WeakMap()
 const runnersWithPendingCoverageReset = new WeakSet()
 const parallelRunners = new WeakSet()
@@ -1066,6 +1070,38 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
   runStoresWithCompletion(libraryConfigurationCh, ctx, onReceivedConfiguration)
 }
 
+/**
+ * @param {import('mocha').Runner} runner
+ * @returns {void}
+ */
+function startMochaRunner (runner) {
+  if (readyRunners.has(runner)) {
+    runner.suite.run()
+  } else {
+    // Global setup can finish after configuration. Preserve the configuration
+    // context until Runner#run has installed its delayed-start listener.
+    pendingRunnerStarts.set(runner, AsyncResource.bind(() => runner.suite.run()))
+  }
+}
+
+/**
+ * @param {import('mocha').Runner['run']} run
+ * @param {import('mocha').Runner} runner
+ * @param {Parameters<import('mocha').Runner['run']>} args
+ * @returns {import('mocha').Runner}
+ */
+function runMochaRunner (run, runner, args) {
+  const result = run.apply(runner, args)
+  // Once delay mode is enabled, startup must complete even if the plugin is disabled during global setup.
+  readyRunners.add(runner)
+  const start = pendingRunnerStarts.get(runner)
+  if (start) {
+    pendingRunnerStarts.delete(runner)
+    start()
+  }
+  return result
+}
+
 // In this hook we delay the execution with options.delay to grab library configuration,
 // skippable and known tests.
 // It is called but skipped in parallel mode.
@@ -1118,11 +1154,11 @@ function wrapMochaRun (Mocha, frameworkVersion) {
         getCodeCoverageCh.publish({
           onDone: (receivedCodeCoverage) => {
             untestedCoverage = receivedCodeCoverage
-            global.run()
+            startMochaRunner(runner)
           },
         })
       } else {
-        global.run()
+        startMochaRunner(runner)
       }
     })
 
@@ -1146,7 +1182,7 @@ addHook({
     const mocha = args[0]
 
     /**
-     * This attaches `run` to the global context, which we'll call after
+     * This enables the delayed root suite, which we'll release after
      * our configuration and skippable suites requests.
      * You need this both here and in Mocha#run hook: the programmatic API
      * does not call `runMocha`, so it needs to be in Mocha#run. When using
@@ -1178,7 +1214,7 @@ addHook({
 
   shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, args)
+      return runMochaRunner(run, this, args)
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
@@ -1511,7 +1547,7 @@ addHook({
       }
     })
 
-    return run.apply(this, args)
+    return runMochaRunner(run, this, args)
   })
 
   return Runner
