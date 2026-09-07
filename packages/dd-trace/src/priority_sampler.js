@@ -287,7 +287,7 @@ class PrioritySampler {
       return USER_KEEP
     } else if (key === MANUAL_DROP && value !== false) {
       return USER_REJECT
-    } else if (key === SAMPLING_PRIORITY) {
+    } else if (key === SAMPLING_PRIORITY && (typeof value === 'number' || typeof value === 'string')) {
       const priority = Math.trunc(/** @type {number} */ (value))
 
       if (priority === 1 || priority === 2) {

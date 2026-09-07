@@ -554,6 +554,16 @@ describe('PrioritySampler', () => {
 
       assert.strictEqual(context._sampling.priority, undefined)
     })
+
+    it('should ignore invalid sampling priority values after an automatic decision', () => {
+      prioritySampler.sample(span)
+
+      for (const value of [1n, Symbol('priority')]) {
+        prioritySampler.setPriorityFromTag(span, SAMPLING_PRIORITY, value)
+      }
+
+      assert.strictEqual(context._sampling.priority, AUTO_KEEP)
+    })
   })
 
   describe('setPriorityFromTags', () => {
