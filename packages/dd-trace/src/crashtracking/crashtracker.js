@@ -8,7 +8,6 @@ const binding = libdatadogExtras.load('crashtracker')
 
 const { channel } = require('dc-polyfill')
 const { getEnvironmentVariable } = require('../config/helper')
-const getAgentlessTelemetryUrl = require('../telemetry/agentless-url')
 const log = require('../log')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
@@ -113,21 +112,19 @@ class Crashtracker {
    * @param {import('../config/config-base')} config - Tracer configuration
    */
   #getConfig (config) {
-    const url = config.DD_AGENTLESS_ENABLED ? getAgentlessTelemetryUrl(config.site) : config.url
-    const endpoint = {
-      // TODO: Use the string directly when deserialization is fixed.
-      url: {
-        scheme: url.protocol.slice(0, -1),
-        authority: url.protocol === 'unix:'
-          ? Buffer.from(url.pathname).toString('hex')
-          : url.host,
-        path_and_query: '',
-      },
-      timeout_ms: 3000,
-    }
-    if (config.DD_AGENTLESS_ENABLED) {
-      endpoint.api_key = config.DD_API_KEY
-    }
+    const endpoint = config.DD_AGENTLESS_ENABLED
+      ? undefined
+      : {
+        // TODO: Use the string directly when deserialization is fixed.
+        url: {
+          scheme: config.url.protocol.slice(0, -1),
+          authority: config.url.protocol === 'unix:'
+            ? Buffer.from(config.url.pathname).toString('hex')
+            : config.url.host,
+          path_and_query: '',
+        },
+        timeout_ms: 3000,
+      }
 
     // Out-of-process symbolication currently works on
     // Linux only, does not work on Mac.
