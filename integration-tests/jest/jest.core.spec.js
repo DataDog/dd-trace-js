@@ -67,8 +67,9 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
-const esmIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28 ? it : it.skip
-const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
+const isJest28OrNewer = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
+const esmIt = isJest28OrNewer ? it : it.skip
+const shouldInstallJestEnvironmentJsdom = isJest28OrNewer
 
 describe(`jest@${JEST_VERSION} commonJS`, () => {
   let receiver
@@ -1695,7 +1696,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
       }
 
-      it(`instruments ${loggerName} after another suite mocks it`, async () => {
+      // Modern Pino releases use node: specifiers, which Jest <28 cannot resolve.
+      const mockIsolationIt = loggerName === 'pino' && !isJest28OrNewer ? it.skip : it
+      mockIsolationIt(`instruments ${loggerName} after another suite mocks it`, async () => {
         let testOutput = ''
         const logsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
