@@ -259,7 +259,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 DD_INJECT_FORCE: 'true',
                 DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
                 MOCHA_SETUP_ORDER: order,
-                MOCHA_SETUP_COVERAGE: 'false',
                 MOCHA_SETUP_ERROR: 'false',
               },
             })
