@@ -2,13 +2,13 @@
 
 const { channel } = require('dc-polyfill')
 
-const log = require('../../log')
 const {
   getChatCompletionsInputMessages,
   getChatCompletionsOutputMessages,
   getResponsesInputMessages,
   getResponsesOutputMessages,
 } = require('../messages/openai')
+const { decodeOrLog } = require('../messages/utils')
 const { SOURCE_AUTO } = require('../tags')
 const { evaluate } = require('./evaluate')
 
@@ -59,15 +59,12 @@ function onChatCompletions (ctx) {
   // One model call has one output however many readers observe it.
   let outputEvaluation
   ctx.onResult = body => {
-    let conversations
-    try {
-      conversations = getChatCompletionsOutputMessages(body).map(message => [...inputMessages, message])
-    } catch (error) {
-      // This runs in the caller's promise chain, so an unexpected payload must not fail their call.
-      log.error('AIGuard: unable to decode OpenAI response body: %s', error.message)
-      return body
-    }
-
+    const conversations = decodeOrLog(
+      () => getChatCompletionsOutputMessages(body).map(message => [...inputMessages, message]),
+      null,
+      'AIGuard: unable to decode OpenAI response body: %s'
+    )
+    if (conversations === null) return body
     if (conversations.length === 0) return body
 
     outputEvaluation ??= evaluate(ctx, aiguard, conversations, opts)
@@ -84,14 +81,12 @@ function onResponses (ctx) {
 
   let outputEvaluation
   ctx.onResult = body => {
-    let outputMessages
-    try {
-      outputMessages = getResponsesOutputMessages(body)
-    } catch (error) {
-      log.error('AIGuard: unable to decode OpenAI response body: %s', error.message)
-      return body
-    }
-
+    const outputMessages = decodeOrLog(
+      () => getResponsesOutputMessages(body),
+      null,
+      'AIGuard: unable to decode OpenAI response body: %s'
+    )
+    if (outputMessages === null) return body
     if (!outputMessages.length) return body
 
     outputEvaluation ??= evaluate(ctx, aiguard, [[...inputMessages, ...outputMessages]], opts)

@@ -2,12 +2,12 @@
 
 const { channel } = require('dc-polyfill')
 
-const log = require('../../log')
 const {
   buildOutputMessages,
   convertVercelPromptToMessages,
   getStreamedContent,
 } = require('../messages/vercel-ai')
+const { decodeOrLog } = require('../messages/utils')
 const { SOURCE_AUTO } = require('../tags')
 const { evaluate } = require('./evaluate')
 
@@ -54,15 +54,12 @@ function onModelIntercept (ctx) {
   ctx.onResult = ctx.method === 'doStream'
     ? result => interceptStreamedResult(ctx, result, inputMessages)
     : result => {
-      let outputMessages
-      try {
-        outputMessages = buildOutputMessages(inputMessages, result?.content ?? [])
-      } catch (error) {
-        // This runs in the caller's promise chain, so an unexpected payload must not fail their call.
-        log.error('AIGuard: unable to decode the model result: %s', error.message)
-        return result
-      }
-
+      const outputMessages = decodeOrLog(
+        () => buildOutputMessages(inputMessages, result?.content ?? []),
+        null,
+        'AIGuard: unable to decode the model result: %s'
+      )
+      if (outputMessages === null) return result
       if (!outputMessages.length) return result
 
       return evaluate(ctx, aiguard, [outputMessages], opts).then(() => result)
@@ -96,14 +93,12 @@ function interceptStreamedResult (ctx, result, inputMessages) {
     // A stream that failed part-way has no complete output to judge; the replay carries the error.
     if (error) return replayed
 
-    let outputMessages
-    try {
-      outputMessages = buildOutputMessages(inputMessages, getStreamedContent(chunks))
-    } catch (error) {
-      log.error('AIGuard: unable to decode the streamed model result: %s', error.message)
-      return replayed
-    }
-
+    const outputMessages = decodeOrLog(
+      () => buildOutputMessages(inputMessages, getStreamedContent(chunks)),
+      null,
+      'AIGuard: unable to decode the streamed model result: %s'
+    )
+    if (outputMessages === null) return replayed
     if (!outputMessages.length) return replayed
 
     return evaluate(ctx, aiguard, [outputMessages], opts).then(() => replayed)

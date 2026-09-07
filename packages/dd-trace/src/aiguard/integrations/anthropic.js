@@ -2,8 +2,8 @@
 
 const { channel } = require('dc-polyfill')
 
-const log = require('../../log')
 const { getMessagesInputMessages, getMessagesOutputMessages } = require('../messages/anthropic')
+const { decodeOrLog } = require('../messages/utils')
 const { SOURCE_AUTO } = require('../tags')
 const { evaluate } = require('./evaluate')
 
@@ -76,15 +76,12 @@ function onMessagesIntercept (ctx) {
   // and every `clone()` of the raw response share this callback.
   let outputEvaluation
   ctx.onResult = body => {
-    let outputMessages
-    try {
-      outputMessages = getMessagesOutputMessages(body)
-    } catch (error) {
-      // This runs in the caller's promise chain, so an unexpected payload must not fail their call.
-      log.error('AIGuard: unable to decode Anthropic response body: %s', error.message)
-      return body
-    }
-
+    const outputMessages = decodeOrLog(
+      () => getMessagesOutputMessages(body),
+      null,
+      'AIGuard: unable to decode Anthropic response body: %s'
+    )
+    if (outputMessages === null) return body
     if (!outputMessages.length) return body
 
     outputEvaluation ??= evaluate(ctx, aiguard, [[...inputMessages, ...outputMessages]], opts)
