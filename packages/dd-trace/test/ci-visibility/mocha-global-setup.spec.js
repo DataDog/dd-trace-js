@@ -25,7 +25,8 @@ describe('Mocha global setup with Test Optimization', function () {
     receiver.setSettings({ itr_enabled: false })
     env = {
       ...getCiVisAgentlessConfig(receiver.port),
-      NODE_OPTIONS: `--require "${path.join(root, 'ci/init.js')}"`,
+      // Children run from root; a relative path avoids NODE_OPTIONS consuming Windows backslashes.
+      NODE_OPTIONS: '--require ./ci/init.js',
       DD_INJECT_FORCE: 'true',
       DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
     }
