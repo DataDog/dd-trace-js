@@ -24,6 +24,8 @@ function getHttpsProxyAgent (url, directAgent) {
   const proxyUrl = getProxyForUrl(target)
   if (!proxyUrl) return directAgent
 
+  directAgent ??= require('node:https').globalAgent
+
   if (proxyAgents === undefined) {
     defaultAgentKey = {}
     proxyAgents = new WeakMap()
