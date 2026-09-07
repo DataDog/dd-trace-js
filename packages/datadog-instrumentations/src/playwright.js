@@ -81,7 +81,6 @@ const testsToTestStatuses = new Map()
 const activeRumPages = new Set()
 
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
-const isPlaywrightWorker = getValueFromEnvSources('DD_PLAYWRIGHT_WORKER') === '1'
 const DD_PROPERTIES_TIMEOUT = 5000
 const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
@@ -1713,9 +1712,6 @@ createRootSuiteCh.subscribe({
 
 pageGotoCh.subscribe({
   asyncEnd (ctx) {
-    // Playwright library consumers such as Vitest have no Playwright test span and may navigate during page startup.
-    if (!isPlaywrightWorker) return
-
     // The Page.goto rewriter waits for this so tests closing immediately after navigation still get RUM tags.
     const rumDetectionPromise = handlePageGoto(ctx.self)
     ctx.resolveCallback = onDone => rumDetectionPromise.then(onDone, onDone)
